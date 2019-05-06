@@ -44,7 +44,6 @@ def _normalize_name(name: str) -> str:
 
 
 class LenientConfigParser(ConfigParser):
-
     def optionxform(self, name: str) -> str:
         name = _normalize_name(name)
         return super(LenientConfigParser, self).optionxform(name)
@@ -65,8 +64,7 @@ class Config(object):
         """
         config = LenientConfigParser(interpolation=Interpolation())
 
-        files = ["/etc/inmanta.cfg", os.path.expanduser("~/.inmanta.cfg"), ".inmanta",
-                 ".inmanta.cfg"]
+        files = ["/etc/inmanta.cfg", os.path.expanduser("~/.inmanta.cfg"), ".inmanta", ".inmanta.cfg"]
         if config_file is not None:
             files.append(config_file)
 
@@ -137,8 +135,10 @@ class Config(object):
             return
         opt = cls.__config_definition[section][name]
         if default_value is not None and opt.get_default_value() != default_value:
-            LOGGER.warning("Inconsistent default value for option %s.%s: defined as %s, got %s" %
-                        (section, name, opt.default, default_value))
+            LOGGER.warning(
+                "Inconsistent default value for option %s.%s: defined as %s, got %s"
+                % (section, name, opt.default, default_value)
+            )
 
         return opt
 
@@ -203,6 +203,7 @@ def is_uuid_opt(value: str) -> uuid.UUID:
 
 T = TypeVar("T")
 
+
 class Option(Generic[T]):
     """
     Defines an option and exposes it for use
@@ -230,7 +231,7 @@ class Option(Generic[T]):
         default: Union[str, bool, int, None, Callable],
         documentation: str,
         validator: Callable[[str], T] = is_str,
-        predecessor_option: "Option" = None
+        predecessor_option: "Option" = None,
     ) -> None:
         self.section = section
         self.name = _normalize_name(name)
@@ -246,8 +247,10 @@ class Option(Generic[T]):
             has_deprecated_option = cfg.has_option(self.predecessor_option.section, self.predecessor_option.name)
             has_new_option = cfg.has_option(self.section, self.name)
             if has_deprecated_option and not has_new_option:
-                warnings.warn("Config option %s is deprecated. Use %s instead." % (self.predecessor_option.name, self.name),
-                              category=DeprecationWarning)
+                warnings.warn(
+                    "Config option %s is deprecated. Use %s instead." % (self.predecessor_option.name, self.name),
+                    category=DeprecationWarning,
+                )
                 return self.predecessor_option.get()
         out = cfg.get(self.section, self.name, fallback=self.get_default_value())
         return self.validate(out)
@@ -279,17 +282,21 @@ class Option(Generic[T]):
         cfg = Config._get_instance()
         cfg.set(self.section, self.name, value)
 
+
 #############################
 # Config
 #
 # Global config options are defined here
 #############################
 # flake8: noqa: H904
-state_dir = Option("config", "state_dir", "/var/lib/inmanta",
-                   "The directory where the server stores its state")
+state_dir = Option("config", "state_dir", "/var/lib/inmanta", "The directory where the server stores its state")
 
-log_dir = Option("config", "log_dir", "/var/log/inmanta",
-                 "The directory where the resource action log is stored and the logs of auto-started agents.")
+log_dir = Option(
+    "config",
+    "log_dir",
+    "/var/log/inmanta",
+    "The directory where the resource action log is stored and the logs of auto-started agents.",
+)
 
 
 def get_executable():
@@ -303,11 +310,11 @@ def get_executable():
 def get_default_nodename():
     """ socket.gethostname() """
     import socket
+
     return socket.gethostname()
 
 
-nodename = Option("config", "node-name", get_default_nodename,
-                  "Force the hostname of this machine to a specific value", is_str)
+nodename = Option("config", "node-name", get_default_nodename, "Force the hostname of this machine to a specific value", is_str)
 
 
 ###############################
@@ -317,15 +324,19 @@ class TransportConfig(object):
     """
         A class to register the config options for Client classes
     """
+
     def __init__(self, name: str, port: int = 8888) -> None:
         self.prefix = "%s_rest_transport" % name
         self.host = Option(self.prefix, "host", "localhost", "IP address or hostname of the server", is_str)
         self.port = Option(self.prefix, "port", port, "Server port", is_int)
         self.ssl = Option(self.prefix, "ssl", False, "Connect using SSL?", is_bool)
-        self.ssl_ca_cert_file = Option(self.prefix, "ssl_ca_cert_file", None,
-                                       "CA cert file used to validate the server certificate against", is_str_opt)
+        self.ssl_ca_cert_file = Option(
+            self.prefix, "ssl_ca_cert_file", None, "CA cert file used to validate the server certificate against", is_str_opt
+        )
         self.token = Option(self.prefix, "token", None, "The bearer token to use to connect to the API", is_str_opt)
-        self.request_timeout = Option(self.prefix, "request_timeout", 120, "The time before a request times out in seconds", is_int)
+        self.request_timeout = Option(
+            self.prefix, "request_timeout", 120, "The time before a request times out in seconds", is_int
+        )
 
 
 compiler_transport = TransportConfig("compiler")
@@ -340,10 +351,12 @@ service_api_transport = TransportConfig("service_api", port=8889)
 #############################
 AUTH_JWT_PREFIX = "auth_jwt_"
 
+
 class AuthJWTConfig(object):
     """
         Auth JWT configuration manager
     """
+
     sections: Dict[str, "AuthJWTConfig"] = {}
     issuers: Dict[str, "AuthJWTConfig"] = {}
 
@@ -486,8 +499,7 @@ class AuthJWTConfig(object):
         numbers = RSAPublicNumbers(ei, ni)
         public_key = numbers.public_key(backend=default_backend())
         pem = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
+            encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo
         )
         return pem
 
@@ -513,12 +525,13 @@ class AuthJWTConfig(object):
 
         try:
             with request.urlopen(self.jwks_uri, context=ctx) as response:
-                key_data = json.loads(response.read().decode('utf-8'))
+                key_data = json.loads(response.read().decode("utf-8"))
         except error.URLError as e:
             # HTTPError is raised for non-200 responses; the response
             # can be found in e.response.
-            raise ValueError("Unable to load key data for %s using the provided jwks_uri. Got error: %s" %
-                             (self.section, e.response))
+            raise ValueError(
+                "Unable to load key data for %s using the provided jwks_uri. Got error: %s" % (self.section, e.response)
+            )
         except Exception as e:
             # Other errors are possible, such as IOError.
             raise ValueError("Unable to load key data for %s using the provided jwks_uri." % (self.section))

@@ -89,7 +89,8 @@ async def test_validate_rs256(jwks, tmp_path):
     port = str(list(jwks._sockets.values())[0].getsockname()[1])
     config_file = os.path.join(tmp_path, "auth.cfg")
     with open(config_file, "w+") as fd:
-        fd.write("""
+        fd.write(
+            """
 [auth_jwt_default]
 algorithm=HS256
 sign=true
@@ -107,9 +108,13 @@ issuer=https://localhost:{0}/auth/realms/inmanta
 audience=sodev
 jwks_uri=http://localhost:{0}/auth/realms/inmanta/protocol/openid-connect/certs
 validate_cert=false
-""".format(port))
+""".format(
+                port
+            )
+        )
 
     from inmanta.config import Config, AuthJWTConfig
+
     Config.load_config(config_file)
 
     cfg_list = await asyncio.get_event_loop().run_in_executor(None, AuthJWTConfig.list)

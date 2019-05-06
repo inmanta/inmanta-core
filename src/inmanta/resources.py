@@ -49,6 +49,7 @@ class resource(object):  # noqa: N801
                       but it can navigate relations (this value cannot be mapped). For example, the agent argument could be
                       ``host.name``
     """
+
     _resources: Dict[str, Tuple[Type["Resource"], Dict[str, str]]] = {}
 
     def __init__(self, name: str, id_attribute: str, agent: str):
@@ -135,7 +136,6 @@ def to_id(entity: runtime.Instance) -> Optional[str]:
 
 
 class ResourceMeta(type):
-
     @classmethod
     def _get_parent_fields(cls, bases: Type["Resource"]) -> List[str]:
         fields: List[str] = []
@@ -184,6 +184,7 @@ class Resource(metaclass=ResourceMeta):
         itself and all superclasses. If a field it not available directly in the model object the serializer will look for
         static methods in the class with the name "get_$fieldname".
     """
+
     fields: Tuple[str, ...] = ("send_event",)
     model: DynamicProxy
     map: Dict[str, Callable[["export.Exporter", DynamicProxy], Any]]
@@ -218,9 +219,12 @@ class Resource(metaclass=ResourceMeta):
                         initial_requires.remove(r)
 
                 if len(initial_requires) > 0:
-                    LOGGER.warning("The resource %s had requirements before flattening, but not after flattening."
-                                   " Initial set was %s. Perhaps provides relation is not wired through correctly?",
-                                   res, initial_requires)
+                    LOGGER.warning(
+                        "The resource %s had requirements before flattening, but not after flattening."
+                        " Initial set was %s. Perhaps provides relation is not wired through correctly?",
+                        res,
+                        initial_requires,
+                    )
 
             res.requires = final_requires
 
@@ -250,8 +254,10 @@ class Resource(metaclass=ResourceMeta):
             except UnknownException as e:
                 raise e
             except Exception:
-                raise Exception("Unable to get the name of agent %s belongs to. In path %s, '%s' does not exist"
-                                % (model_object, agent_attribute, el))
+                raise Exception(
+                    "Unable to get the name of agent %s belongs to. In path %s, '%s' does not exist"
+                    % (model_object, agent_attribute, el)
+                )
 
         attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
         if isinstance(attribute_value, util.Unknown):
@@ -336,8 +342,9 @@ class Resource(metaclass=ResourceMeta):
             if field.startswith("_"):
                 raise ResourceException("Resource field names can not start with _, reported in %s" % cls.__name__)
             if field in RESERVED_FOR_RESOURCE:
-                raise ResourceException("Resource %s is a reserved keyword and not a valid field name, reported in %s" %
-                                        (field, cls.__name__))
+                raise ResourceException(
+                    "Resource %s is a reserved keyword and not a valid field name, reported in %s" % (field, cls.__name__)
+                )
 
     def __init__(self, _id: "Id") -> None:
         self.id = _id
@@ -406,6 +413,7 @@ class PurgeableResource(Resource):
     """
         See :inmanta:entity:`std::PurgeableResource` for more information.
     """
+
     fields = ("purged", "purge_on_delete")
 
 
@@ -413,6 +421,7 @@ class ManagedResource(Resource):
     """
         See :inmanta:entity:`std::ManagedResource` for more information.
     """
+
     fields = ("managed",)
 
     @staticmethod
@@ -435,12 +444,13 @@ class Id(object):
         self._version = version
 
     def to_dict(self) -> JsonType:
-        return {"entity_type": self._entity_type,
-                "agent_name": self.agent_name,
-                "attribute": self.attribute,
-                "attribute_value": self.attribute_value,
-                "version": self.version
-                }
+        return {
+            "entity_type": self._entity_type,
+            "agent_name": self.agent_name,
+            "attribute": self.attribute,
+            "attribute_value": self.attribute_value,
+            "version": self.version,
+        }
 
     def get_entity_type(self) -> str:
         return self._entity_type
@@ -512,8 +522,11 @@ class Id(object):
             Parse the resource id and return the type, the hostname and the
             resource identifier.
         """
-        result = re.search(r"^(?P<id>(?P<type>(?P<ns>[\w-]+::)+(?P<class>[\w-]+))\[(?P<hostname>[^,]+),"
-                           r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\])(,v=(?P<version>[0-9]+))?$", resource_id)
+        result = re.search(
+            r"^(?P<id>(?P<type>(?P<ns>[\w-]+::)+(?P<class>[\w-]+))\[(?P<hostname>[^,]+),"
+            r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\])(,v=(?P<version>[0-9]+))?$",
+            resource_id,
+        )
 
         if result is None:
             raise Exception("Invalid id for resource %s" % resource_id)
@@ -555,6 +568,7 @@ class HostNotFoundException(Exception):
 
     def to_action(self):
         from inmanta.data import ResourceAction
+
         ra = ResourceAction()  # @UndefinedVariable
         ra.message = "Failed to access host %s as user %s over ssh." % (self.hostname, self.user)
         ra.data = {"host": self.hostname, "user": self.user, "error": self.error}

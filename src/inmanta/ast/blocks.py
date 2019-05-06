@@ -24,8 +24,7 @@ from inmanta.execute.runtime import Resolver, QueueScheduler
 
 
 class BasicBlock(object):
-
-    def __init__(self, namespace: Namespace, stmts: List[DynamicStatement]=[]) -> None:
+    def __init__(self, namespace: Namespace, stmts: List[DynamicStatement] = []) -> None:
         self.__stmts = []  # type: List[DynamicStatement]
         self.variables = []  # type: List[str]
         self.namespace = namespace
@@ -65,8 +64,8 @@ class BasicBlock(object):
 
         # self.external_not_global = [x for x in self.external if "::" not in x]
 
-#     def get_requires(self) -> List[str]:
-#         return self.external
+    #     def get_requires(self) -> List[str]:
+    #         return self.external
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         for s in self.__stmts:

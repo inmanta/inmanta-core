@@ -21,36 +21,47 @@ from inmanta.ast.variables import Reference
 from inmanta.ast.constraint.expression import Regex
 from inmanta.ast import LocatableString, Range
 
-states = (
-    ('mls', 'exclusive'),
-)
+states = (("mls", "exclusive"),)
 
-keyworldlist = ['typedef', 'as', 'matching', 'entity', 'extends', 'end', 'in',
-                'implementation', 'for', 'index', 'implement', 'using', 'when', 'and', 'or', 'not', 'true', 'false', 'import',
-                'is', 'defined', 'dict', 'null', 'undef', "parents"]
-literals = [':', '[', ']', '(', ')', '=', ',', '.', '{', '}', '?']
+keyworldlist = [
+    "typedef",
+    "as",
+    "matching",
+    "entity",
+    "extends",
+    "end",
+    "in",
+    "implementation",
+    "for",
+    "index",
+    "implement",
+    "using",
+    "when",
+    "and",
+    "or",
+    "not",
+    "true",
+    "false",
+    "import",
+    "is",
+    "defined",
+    "dict",
+    "null",
+    "undef",
+    "parents",
+]
+literals = [":", "[", "]", "(", ")", "=", ",", ".", "{", "}", "?"]
 reserved = {k: k.upper() for k in keyworldlist}
 
 # List of token names.   This is always required
-tokens = [
-    'INT',
-    'FLOAT',
-    'ID',
-    'CID',
-    'SEP',
-    'STRING',
-    'MLS',
-    'MLS_END',
-    'CMP_OP',
-    'REGEX',
-    'REL',
-    'PEQ'
-] + sorted(list(reserved.values()))
+tokens = ["INT", "FLOAT", "ID", "CID", "SEP", "STRING", "MLS", "MLS_END", "CMP_OP", "REGEX", "REL", "PEQ"] + sorted(
+    list(reserved.values())
+)
 
 
 def t_ID(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r'[a-zA-Z_][a-zA-Z_0-9-]*'
-    t.type = reserved.get(t.value, 'ID')  # Check for reserved words
+    r"[a-zA-Z_][a-zA-Z_0-9-]*"
+    t.type = reserved.get(t.value, "ID")  # Check for reserved words
     if t.value[0].isupper():
         t.type = "CID"
     lexer = t.lexer
@@ -59,40 +70,41 @@ def t_ID(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     (s, e) = lexer.lexmatch.span()
     start = end - (e - s)
 
-    t.value = LocatableString(t.value, Range(lexer.inmfile, lexer.lineno, start,
-                                             lexer.lineno, end), lexer.lexpos, lexer.namespace)
+    t.value = LocatableString(
+        t.value, Range(lexer.inmfile, lexer.lineno, start, lexer.lineno, end), lexer.lexpos, lexer.namespace
+    )
     return t
 
 
 def t_SEP(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r'[:]{2}'
+    r"[:]{2}"
     return t
 
 
 def t_REL(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r'--|->|<-'
+    r"--|->|<-"
     return t
 
 
 def t_CMP_OP(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r'!=|==|>=|<=|<|>'
+    r"!=|==|>=|<=|<|>"
     return t
 
 
 def t_PEQ(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r'[+]='
+    r"[+]="
     return t
 
 
 def t_COMMENT(t: lex.LexToken) -> None:  # noqa: N802
-    r'\#.*?\n'
+    r"\#.*?\n"
     t.lexer.lineno += 1
     t.lexer.linestart = t.lexer.lexpos
     pass
 
 
 def t_JCOMMENT(t: lex.LexToken) -> None:  # noqa: N802
-    r'\//.*?\n'
+    r"\//.*?\n"
     t.lexer.lineno += 1
     t.lexer.linestart = t.lexer.lexpos
     pass
@@ -100,7 +112,7 @@ def t_JCOMMENT(t: lex.LexToken) -> None:  # noqa: N802
 
 def t_begin_mls(t: lex.LexToken) -> lex.LexToken:
     r'["]{3}'
-    t.lexer.begin('mls')
+    t.lexer.begin("mls")
     t.type = "MLS"
 
     lexer = t.lexer
@@ -109,15 +121,14 @@ def t_begin_mls(t: lex.LexToken) -> lex.LexToken:
     (s, e) = lexer.lexmatch.span()
     start = end - (e - s)
 
-    t.value = LocatableString("", Range(lexer.inmfile, lexer.lineno, start,
-                                        lexer.lineno, end), lexer.lexpos, lexer.namespace)
+    t.value = LocatableString("", Range(lexer.inmfile, lexer.lineno, start, lexer.lineno, end), lexer.lexpos, lexer.namespace)
 
     return t
 
 
 def t_mls_end(t: lex.LexToken) -> lex.LexToken:
     r'.*["]{3}'
-    t.lexer.begin('INITIAL')
+    t.lexer.begin("INITIAL")
     t.type = "MLS_END"
     value = t.value[:-3]
 
@@ -127,38 +138,39 @@ def t_mls_end(t: lex.LexToken) -> lex.LexToken:
     (s, e) = lexer.lexmatch.span()
     start = end - (e - s)
 
-    t.value = LocatableString(value, Range(lexer.inmfile, lexer.lineno, start,
-                                           lexer.lineno, end), lexer.lexpos, lexer.namespace)
+    t.value = LocatableString(
+        value, Range(lexer.inmfile, lexer.lineno, start, lexer.lineno, end), lexer.lexpos, lexer.namespace
+    )
 
     return t
 
 
 def t_mls_MLS(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r'.+'
+    r".+"
     return t
 
 
 def t_FLOAT(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r'[-]?[0-9]*[.][0-9]+'
+    r"[-]?[0-9]*[.][0-9]+"
     t.value = float(t.value)
     return t
 
 
 def t_INT(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r'[-]?[0-9]+'
+    r"[-]?[0-9]+"
     t.value = int(t.value)
     return t
 
 
 def t_STRING_EMPTY(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r'(\"\")|(\'\')'
+    r"(\"\")|(\'\')"
     t.type = "STRING"
     t.value = ""
     return t
 
 
 def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r'(\".*?[^\\]\")|(\'.*?[^\\]\')'
+    r"(\".*?[^\\]\")|(\'.*?[^\\]\')"
     t.value = bytes(t.value[1:-1], "utf-8").decode("unicode_escape")
     lexer = t.lexer
 
@@ -166,14 +178,15 @@ def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     (s, e) = lexer.lexmatch.span()
     start = end - (e - s)
 
-    t.value = LocatableString(t.value, Range(lexer.inmfile, lexer.lineno, start,
-                                             lexer.lineno, end), lexer.lexpos, lexer.namespace)
+    t.value = LocatableString(
+        t.value, Range(lexer.inmfile, lexer.lineno, start, lexer.lineno, end), lexer.lexpos, lexer.namespace
+    )
 
     return t
 
 
 def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r'/([^/]|\\/)*?[^\\]/'
+    r"/([^/]|\\/)*?[^\\]/"
     value = Reference("self")  # anonymous value
     expr = Regex(value, t.value[1:-1])
     t.value = expr
@@ -182,13 +195,13 @@ def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 
 # Define a rule so we can track line numbers
 def t_newline(t: lex.LexToken) -> None:  # noqa: N802
-    r'\n+'
+    r"\n+"
     t.lexer.lineno += len(t.value)
     t.lexer.linestart = t.lexer.lexpos
 
 
 def t_mls_newline(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r'\n+'
+    r"\n+"
     t.lexer.lineno += len(t.value)
     t.lexer.linestart = t.lexer.lexpos
     t.type = "MLS"
@@ -196,8 +209,8 @@ def t_mls_newline(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 
 
 # A string containing ignored characters (spaces and tabs)
-t_ignore = ' \t'
-t_mls_ignore = ''
+t_ignore = " \t"
+t_mls_ignore = ""
 
 # Error handling rule
 

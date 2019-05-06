@@ -79,7 +79,6 @@ class ProjectNotFoundExcpetion(Exception):
 
 
 class GitProvider(object):
-
     def clone(self, src: str, dest: str) -> None:
         pass
 
@@ -95,7 +94,7 @@ class GitProvider(object):
     def checkout_tag(self, repo: str, tag: str) -> None:
         pass
 
-    def commit(self, repo: str, message: str, commit_all: bool, add: List[str]=[]) -> None:
+    def commit(self, repo: str, message: str, commit_all: bool, add: List[str] = []) -> None:
         pass
 
     def tag(self, repo: str, tag: str) -> None:
@@ -106,18 +105,17 @@ class GitProvider(object):
 
 
 class CLIGitProvider(GitProvider):
-
     def clone(self, src: str, dest: str) -> None:
         env = os.environ.copy()
         env["GIT_ASKPASS"] = "true"
-        subprocess.check_call(["git", "clone", src, dest], stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL, env=env)
+        subprocess.check_call(["git", "clone", src, dest], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
 
     def fetch(self, repo: str) -> None:
         env = os.environ.copy()
         env["GIT_ASKPASS"] = "true"
-        subprocess.check_call(["git", "fetch", "--tags"], cwd=repo, stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL, env=env)
+        subprocess.check_call(
+            ["git", "fetch", "--tags"], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env
+        )
 
     def status(self, repo: str) -> str:
         return subprocess.check_output(["git", "status", "--porcelain"], cwd=repo).decode("utf-8")
@@ -128,30 +126,36 @@ class CLIGitProvider(GitProvider):
     def checkout_tag(self, repo: str, tag: str) -> None:
         subprocess.check_call(["git", "checkout", tag], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    def commit(self, repo: str, message: str, commit_all: bool, add: List[str]=[]) -> None:
+    def commit(self, repo: str, message: str, commit_all: bool, add: List[str] = []) -> None:
         for file in add:
             subprocess.check_call(["git", "add", file], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if not commit_all:
-            subprocess.check_call(["git", "commit", "-m", message], cwd=repo,
-                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.check_call(
+                ["git", "commit", "-m", message], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         else:
-            subprocess.check_call(["git", "commit", "-a", "-m", message], cwd=repo,
-                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.check_call(
+                ["git", "commit", "-a", "-m", message], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
 
     def tag(self, repo: str, tag: str) -> None:
-        subprocess.check_call(["git", "tag", "-a", "-m", "auto tag by module tool", tag], cwd=repo,
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.check_call(
+            ["git", "tag", "-a", "-m", "auto tag by module tool", tag],
+            cwd=repo,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     def pull(self, repo: str) -> str:
         return subprocess.check_output(["git", "pull"], cwd=repo, stderr=subprocess.DEVNULL).decode("utf-8")
 
     def push(self, repo: str) -> str:
-        return subprocess.check_output(["git", "push", "--follow-tags", "--porcelain"],
-                                       cwd=repo, stderr=subprocess.DEVNULL).decode("utf-8")
+        return subprocess.check_output(
+            ["git", "push", "--follow-tags", "--porcelain"], cwd=repo, stderr=subprocess.DEVNULL
+        ).decode("utf-8")
 
     def get_file_for_version(self, repo: str, tag: str, file: str) -> str:
-        data = subprocess.check_output(["git", "archive", "--format=tar", tag, file],
-                                       cwd=repo, stderr=subprocess.DEVNULL)
+        data = subprocess.check_output(["git", "archive", "--format=tar", tag, file], cwd=repo, stderr=subprocess.DEVNULL)
         tf = TarFile(fileobj=BytesIO(data))
         tfile = tf.next()
         assert tfile is not None
@@ -164,7 +168,6 @@ gitprovider = CLIGitProvider()
 
 
 class ModuleRepo(object):
-
     def clone(self, name: str, dest: str) -> bool:
         raise NotImplementedError("Abstract method")
 
@@ -174,7 +177,6 @@ class ModuleRepo(object):
 
 
 class CompositeModuleRepo(ModuleRepo):
-
     def __init__(self, children: List[ModuleRepo]) -> None:
         self.children = children
 
@@ -193,7 +195,6 @@ class CompositeModuleRepo(ModuleRepo):
 
 
 class LocalFileRepo(ModuleRepo):
-
     def __init__(self, root: str, parent_root: Optional[str] = None) -> None:
         if parent_root is None:
             self.root = os.path.abspath(root)
@@ -216,7 +217,6 @@ class LocalFileRepo(ModuleRepo):
 
 
 class RemoteRepo(ModuleRepo):
-
     def __init__(self, baseurl: str) -> None:
         self.baseurl = baseurl
 
@@ -324,6 +324,7 @@ class Project(ModuleLike):
     """
         An inmanta project
     """
+
     PROJECT_FILE = "project.yml"
     _project = None
 
@@ -374,8 +375,7 @@ class Project(ModuleLike):
 
         self.downloadpath = None
         if "downloadpath" in self._meta:
-            self.downloadpath = os.path.abspath(os.path.join(
-                path, self._meta["downloadpath"]))
+            self.downloadpath = os.path.abspath(os.path.join(path, self._meta["downloadpath"]))
             if self.downloadpath not in self.modulepath:
                 LOGGER.warning("Downloadpath is not in module path! Module install will not work as expected")
 
@@ -394,7 +394,7 @@ class Project(ModuleLike):
         if "install_mode" in self._meta:
             mode = self._meta["install_mode"]
             if mode not in INSTALL_OPTS:
-                LOGGER.warning("Invallid value for install_mode, should be one of [%s]" % ','.join(INSTALL_OPTS))
+                LOGGER.warning("Invallid value for install_mode, should be one of [%s]" % ",".join(INSTALL_OPTS))
             else:
                 self._install_mode = mode
 
@@ -526,7 +526,7 @@ class Project(ModuleLike):
                 module = self.get_module(module_name)
                 # get NS
                 for i in range(1, len(parts) + 1):
-                    subs = '::'.join(parts[0:i])
+                    subs = "::".join(parts[0:i])
                     if subs in done:
                         continue
                     (nstmt, nb) = module.get_ast(subs)
@@ -551,10 +551,9 @@ class Project(ModuleLike):
                 if module_name in reqs:
                     module = Module.install(self, module_name, reqs[module_name], install_mode=self._install_mode)
                 else:
-                    module = Module.install(self,
-                                            module_name,
-                                            list(parse_requirements(module_name)),
-                                            install_mode=self._install_mode)
+                    module = Module.install(
+                        self, module_name, list(parse_requirements(module_name)), install_mode=self._install_mode
+                    )
             self.modules[module_name] = module
             return module
         except Exception:
@@ -648,7 +647,7 @@ class Project(ModuleLike):
             Collect the list of all python requirements off all modules in this project
         """
         pyreq = [x.strip() for x in [mod.get_python_requirements() for mod in self.modules.values()] if x is not None]
-        pyreqa = '\n'.join(pyreq).split("\n")
+        pyreqa = "\n".join(pyreq).split("\n")
         pyreqb = [x for x in pyreqa if len(x.strip()) > 0]
         return list(set(pyreqb))
 
@@ -682,6 +681,7 @@ class Module(ModuleLike):
     """
         This class models an inmanta configuration module
     """
+
     MODEL_DIR = "model"
     requires_fields = ["name", "license", "version"]
 
@@ -699,8 +699,13 @@ class Module(ModuleLike):
         self._plugin_namespaces = []  # type: List[str]
 
         if not Module.is_valid_module(self._path):
-            raise InvalidModuleException(("Module %s is not a valid inmanta configuration module. Make sure that a "
-                                          "model/_init.cf file exists and a module.yml definition file.") % self._path)
+            raise InvalidModuleException(
+                (
+                    "Module %s is not a valid inmanta configuration module. Make sure that a "
+                    "model/_init.cf file exists and a module.yml definition file."
+                )
+                % self._path
+            )
 
         self.load_module_file()
         self.is_versioned()
@@ -718,8 +723,9 @@ class Module(ModuleLike):
         if current_version == new_version:
             LOGGER.debug("Current version is the same as the new version: %s", current_version)
 
-        new_module_def = re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)",
-                                r"\g<1>" + new_version + r"\g<2>", module_def)
+        new_module_def = re.sub(
+            r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", r"\g<1>" + new_version + r"\g<2>", module_def
+        )
 
         try:
             new_info = yaml.safe_load(new_module_def)
@@ -727,8 +733,9 @@ class Module(ModuleLike):
             raise Exception("Unable to rewrite module definition %s" % self.get_config_file_name())
 
         if str(new_info["version"]) != new_version:
-            raise Exception("Unable to write module definition, should be %s got %s instead." %
-                            (new_version, new_info["version"]))
+            raise Exception(
+                "Unable to write module definition, should be %s got %s instead." % (new_version, new_info["version"])
+            )
 
         with open(self.get_config_file_name(), "w+") as fd:
             fd.write(new_module_def)
@@ -768,12 +775,14 @@ class Module(ModuleLike):
         return None
 
     @classmethod
-    def install(cls,
-                project: Project,
-                modulename: str,
-                requirements: "List[Requirement]",
-                install: bool = True,
-                install_mode: str = INSTALL_RELEASES) -> "Module":
+    def install(
+        cls,
+        project: Project,
+        modulename: str,
+        requirements: "List[Requirement]",
+        install: bool = True,
+        install_mode: str = INSTALL_RELEASES,
+    ) -> "Module":
         """
            Install a module, return module object
         """
@@ -793,13 +802,15 @@ class Module(ModuleLike):
         return cls.update(project, modulename, requirements, path, False, install_mode=install_mode)
 
     @classmethod
-    def update(cls,
-               project: Project,
-               modulename: str,
-               requirements: "List[Requirement]",
-               path: str = None,
-               fetch: bool = True,
-               install_mode: str = INSTALL_RELEASES) -> "Module":
+    def update(
+        cls,
+        project: Project,
+        modulename: str,
+        requirements: "List[Requirement]",
+        path: str = None,
+        fetch: bool = True,
+        install_mode: str = INSTALL_RELEASES,
+    ) -> "Module":
         """
            Update a module, return module object
         """
@@ -815,7 +826,7 @@ class Module(ModuleLike):
             if fetch:
                 gitprovider.pull(path)
         else:
-            release_only = (install_mode == INSTALL_RELEASES)
+            release_only = install_mode == INSTALL_RELEASES
             version = cls.get_suitable_version_for(modulename, requirements, path, release_only=release_only)
 
             if version is None:
@@ -826,11 +837,9 @@ class Module(ModuleLike):
         return Module(project, path)
 
     @classmethod
-    def get_suitable_version_for(cls,
-                                 modulename: str,
-                                 requirements: "List[Requirement]",
-                                 path: str,
-                                 release_only: bool = True) -> "Optional[Version]":
+    def get_suitable_version_for(
+        cls, modulename: str, requirements: "List[Requirement]", path: str, release_only: bool = True
+    ) -> "Optional[Version]":
         versions = gitprovider.get_all_tags(path)
 
         def try_parse(x: str) -> "Version":
@@ -856,11 +865,9 @@ class Module(ModuleLike):
             return versions[0] if len(versions) > 0 else None
 
     @classmethod
-    def __best_for_compiler_version(cls,
-                                    modulename: str,
-                                    versions: "List[Version]",
-                                    path: str,
-                                    comp_version: "Version") -> "Optional[Version]":
+    def __best_for_compiler_version(
+        cls, modulename: str, versions: "List[Version]", path: str, comp_version: "Version"
+    ) -> "Optional[Version]":
         def get_cv_for(best: "Version") -> "Optional[Version]":
             cfg = gitprovider.get_file_for_version(path, str(best), "module.yml")
             cfg = yaml.safe_load(cfg)
@@ -901,8 +908,9 @@ class Module(ModuleLike):
             version should match the tag
         """
         if not os.path.exists(os.path.join(self._path, ".git")):
-            LOGGER.warning("Module %s is not version controlled, we recommend you do this as soon as possible."
-                           % self._meta["name"])
+            LOGGER.warning(
+                "Module %s is not version controlled, we recommend you do this as soon as possible." % self._meta["name"]
+            )
             return False
         return True
 
@@ -925,20 +933,23 @@ class Module(ModuleLike):
             mod_def = yaml.safe_load(fd)
 
             if mod_def is None or len(mod_def) < len(Module.requires_fields):
-                raise InvalidModuleFileException("The module file of %s does not have the required fields: %s" %
-                                                 (self._path, ", ".join(Module.requires_fields)))
+                raise InvalidModuleFileException(
+                    "The module file of %s does not have the required fields: %s"
+                    % (self._path, ", ".join(Module.requires_fields))
+                )
 
             for name, value in mod_def.items():
                 self._meta[name] = value
 
         for req_field in Module.requires_fields:
             if req_field not in self._meta:
-                raise InvalidModuleFileException(
-                    "%s is required in module file of module %s" % (req_field, self._path))
+                raise InvalidModuleFileException("%s is required in module file of module %s" % (req_field, self._path))
 
         if self._meta["name"] != os.path.basename(self._path):
-            LOGGER.warning("The name in the module file (%s) does not match the directory name (%s)"
-                           % (self._meta["name"], os.path.basename(self._path)))
+            LOGGER.warning(
+                "The name in the module file (%s) does not match the directory name (%s)"
+                % (self._meta["name"], os.path.basename(self._path))
+            )
 
     def get_config_file_name(self) -> str:
         return os.path.join(self._path, "module.yml")
@@ -1026,7 +1037,7 @@ class Module(ModuleLike):
         files = self._get_model_files(cur_dir)
 
         for f in files:
-            name = f[len(cur_dir) + 1:-3]
+            name = f[len(cur_dir) + 1 : -3]
             parts = name.split("/")
             if parts[-1] == "_init":
                 parts = parts[:-1]
@@ -1049,7 +1060,8 @@ class Module(ModuleLike):
 
         if not os.path.exists(os.path.join(plugin_dir, "__init__.py")):
             raise CompilerException(
-                "The plugin directory %s should be a valid python package with a __init__.py file" % plugin_dir)
+                "The plugin directory %s should be a valid python package with a __init__.py file" % plugin_dir
+            )
 
         try:
             mod_name = self._meta["name"]
@@ -1127,7 +1139,7 @@ class Module(ModuleLike):
         """
         file = os.path.join(self._path, "requirements.txt")
         if os.path.exists(file):
-            with open(file, 'r') as fd:
+            with open(file, "r") as fd:
                 return fd.read()
         else:
             return None

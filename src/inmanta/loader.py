@@ -83,8 +83,7 @@ class SourceInfo(object):
         if module_parts[0] != const.PLUGINS_PACKAGE:
             raise Exception(
                 "All instances from which the source is loaded, should be defined in the inmanta plugins package. "
-                "%s does not match"
-                % self.module_name
+                "%s does not match" % self.module_name
             )
 
         return module_parts[1]
@@ -179,7 +178,7 @@ class CodeLoader(object):
 
         for py in glob.glob(os.path.join(mod_dir, "*.py")):
             if mod_dir in py:
-                mod_name = py[len(mod_dir) + 1: -3]
+                mod_name = py[len(mod_dir) + 1 : -3]
             else:
                 mod_name = py[:-3]
 

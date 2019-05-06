@@ -40,7 +40,7 @@ class Attribute(Locatable):
         @param entity: The entity this attribute belongs to
     """
 
-    def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool=False, nullable: bool=False) -> None:
+    def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool = False, nullable: bool = False) -> None:
         Locatable.__init__(self)
         self.__name: str = name
         entity.add_attribute(self)
@@ -95,13 +95,13 @@ class Attribute(Locatable):
 
     def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
         if self.__multi:
-            mytype = (TypedList(self.__type))
+            mytype = TypedList(self.__type)
         else:
-            mytype = (self.__type)
+            mytype = self.__type
 
         out: ResultVariable["Instance"]
 
-        if(self.__nullallble):
+        if self.__nullallble:
             # be a 0-1 relation
             self.end = None
             self.low = 0
@@ -128,6 +128,7 @@ class RelationAttribute(Attribute):
     """
         An attribute that is a relation
     """
+
     def __init__(self, entity: "Entity", value_type: "Type", name: str) -> None:
         Attribute.__init__(self, entity, value_type, name)
         self.end: Optional[RelationAttribute] = None

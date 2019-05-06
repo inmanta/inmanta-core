@@ -342,8 +342,10 @@ f1h1=File(host=h1,name="f1")
 f2h1=File(host=h1,name="f2")
 
 z = h1.files[name="f1"]
-""", "short index lookup is only possible on bi-drectional relations, __config__::Host.files is unidirectional"
-     " (reported in h1.files[[('name', 'f1')]] ({dir}/main.cf:31))")
+""",
+        "short index lookup is only possible on bi-drectional relations, __config__::Host.files is unidirectional"
+        " (reported in h1.files[[('name', 'f1')]] ({dir}/main.cf:31))",
+    )
 
 
 def test_511_index_on_default(snippetcompiler):

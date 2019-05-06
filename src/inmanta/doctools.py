@@ -27,7 +27,6 @@ from inmanta.config import Config
 
 
 class CompilerFixture(object):
-
     def __init__(self):
         self.libs = tempfile.mkdtemp()
         self.env = tempfile.mkdtemp()
@@ -46,7 +45,8 @@ class CompilerFixture(object):
             downloadpath: %s
             version: 1.0
             repo: ['git@git.inmanta.com:modules/', 'git@git.inmanta.com:config/']"""
-                % (self.libs, self.libs))
+                % (self.libs, self.libs)
+            )
 
         with open(os.path.join(project_dir, "main.cf"), "w") as x:
             x.write(snippet)
@@ -72,7 +72,8 @@ class CompilerFixture(object):
             downloadpath: %s
             version: 1.0
             repo: ['git@git.inmanta.com:modules/', 'git@git.inmanta.com:config/']"""
-                % (self.libs, self.libs))
+                % (self.libs, self.libs)
+            )
 
         Project.set(Project(project_dir))
         compiler.do_compile()
@@ -112,6 +113,6 @@ def test_snippets():
     return fail
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     if not test_snippets():
         sys.exit(1)

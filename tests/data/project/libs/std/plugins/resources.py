@@ -52,7 +52,7 @@ def store_file(exporter, obj):
         return content
 
     elif content.startswith(FILE_SOURCE):
-        parts = urllib.parse.urlparse(content[len(FILE_SOURCE):])
+        parts = urllib.parse.urlparse(content[len(FILE_SOURCE) :])
 
         if parts.scheme == "file":
             with open(parts.path, "rb") as fd:
@@ -63,8 +63,7 @@ def store_file(exporter, obj):
                 content = fd.read()
 
         else:
-            raise Exception("%s scheme not support for file %s" %
-                            (parts.scheme, parts.path))
+            raise Exception("%s scheme not support for file %s" % (parts.scheme, parts.path))
 
     if len(obj.prefix_content) > 0:
         content = generate_content(obj.prefix_content, obj.content_seperator) + obj.content_seperator + content
@@ -79,6 +78,7 @@ class Service(Resource):
     """
         This class represents a service on a system.
     """
+
     fields = ("onboot", "state", "name", "reload")
 
 
@@ -87,6 +87,7 @@ class File(PurgeableResource):
     """
         A file on a filesystem
     """
+
     fields = ("path", "owner", "hash", "group", "permissions", "reload")
     map = {"hash": store_file, "permissions": lambda y, x: int(x.mode)}
 
@@ -96,6 +97,7 @@ class Directory(PurgeableResource):
     """
         A directory on a filesystem
     """
+
     fields = ("path", "owner", "group", "permissions", "reload")
     map = {"permissions": lambda y, x: int(x.mode)}
 
@@ -105,6 +107,7 @@ class Package(Resource):
     """
         A software package installed on an operating system.
     """
+
     fields = ("name", "state", "reload")
 
 
@@ -113,6 +116,7 @@ class Symlink(PurgeableResource):
     """
         A symbolic link on the filesystem
     """
+
     fields = ("source", "target", "reload")
 
 
@@ -121,6 +125,7 @@ class AgentConfig(PurgeableResource):
     """
         A resource that can modify the agentmap for autostarted agents
     """
+
     fields = ("agentname", "uri", "autostart")
 
     @staticmethod
@@ -139,6 +144,7 @@ class PosixFileProvider(ResourceHandler):
     """
         This handler can deploy files on a unix system
     """
+
     def check_resource(self, ctx: HandlerContext, resource: File) -> File:
         current = resource.clone(purged=False, reload=resource.reload, hash=0)
 
@@ -213,6 +219,7 @@ class SystemdService(ResourceHandler):
     """
         A handler for services on systems that use systemd
     """
+
     def __init__(self, agent, io=None):
         super().__init__(agent, io)
 
@@ -232,7 +239,7 @@ class SystemdService(ResourceHandler):
 
         exists = self._io.run(self._systemd_path, ["status", "%s.service" % resource.name])[0]
 
-        if re.search('Loaded: error', exists):
+        if re.search("Loaded: error", exists):
             raise ResourceNotFoundExcpetion("The %s service does not exist" % resource.name)
 
         running = self._io.run(self._systemd_path, ["is-active", "%s.service" % resource.name])[2] == 0
@@ -291,15 +298,19 @@ class ServiceService(ResourceHandler):
     """
         A handler for services on systems that use service
     """
+
     def available(self, resource):
-        return (self._io.file_exists("/sbin/chkconfig") and self._io.file_exists("/sbin/service") and
-                not self._io.file_exists("/usr/bin/systemctl"))
+        return (
+            self._io.file_exists("/sbin/chkconfig")
+            and self._io.file_exists("/sbin/service")
+            and not self._io.file_exists("/usr/bin/systemctl")
+        )
 
     def check_resource(self, ctx, resource):
         current = resource.clone()
         exists = self._io.run("/sbin/chkconfig", ["--list", resource.name])[0]
 
-        if re.search('error reading information on service', exists):
+        if re.search("error reading information on service", exists):
             raise ResourceNotFoundExcpetion("The %s service does not exist" % resource.name)
 
         enabled = ":on" in self._io.run("/sbin/chkconfig", ["--list", resource.name])[0]
@@ -357,9 +368,11 @@ class YumPackage(ResourceHandler):
     """
         A Package handler that uses yum
     """
+
     def available(self, resource):
-        return (self._io.file_exists("/usr/bin/rpm") or self._io.file_exists("/bin/rpm")) \
-            and (self._io.file_exists("/usr/bin/yum") or self._io.file_exists("/usr/bin/dnf"))
+        return (self._io.file_exists("/usr/bin/rpm") or self._io.file_exists("/bin/rpm")) and (
+            self._io.file_exists("/usr/bin/yum") or self._io.file_exists("/usr/bin/dnf")
+        )
 
     def _parse_fields(self, lines):
         props = {}
@@ -412,8 +425,7 @@ class YumPackage(ResourceHandler):
         yum_output = self._run_yum(["check-update", resource.name])
         lines = yum_output[0].split("\n")
 
-        data = {"state": state, "version": output["Version"],
-                "release": output["Release"], "update": None}
+        data = {"state": state, "version": output["Version"], "release": output["Release"], "update": None}
 
         if len(lines) > 0:
             parts = re.search("([^\s]+)\s+([^\s]+)\s+([^\s]+)", lines[0])
@@ -470,6 +482,7 @@ class DirectoryHandler(ResourceHandler):
 
         TODO: add recursive operations
     """
+
     def check_resource(self, ctx, resource):
         current = resource.clone(purged=False)
 
@@ -514,6 +527,7 @@ class SymlinkProvider(ResourceHandler):
     """
         This handler can deploy symlinks on unix systems
     """
+
     def available(self, resource):
         return self._io.file_exists("/usr/bin/ln") or self._io.file_exists("/bin/ln")
 

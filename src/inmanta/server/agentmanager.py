@@ -83,13 +83,11 @@ set_parameters
 """
 
 
-async def wait_for_proc_bounded(procs: List[process.Subprocess], timeout: float=1.0) -> None:
+async def wait_for_proc_bounded(procs: List[process.Subprocess], timeout: float = 1.0) -> None:
     try:
         await asyncio.wait_for(
-            asyncio.gather(
-                *[asyncio.shield(proc.wait_for_exit(raise_error=False)) for proc in procs]
-            ),
-            timeout)
+            asyncio.gather(*[asyncio.shield(proc.wait_for_exit(raise_error=False)) for proc in procs]), timeout
+        )
     except asyncio.TimeoutError:
         LOGGER.warning("Agent processes did not close in time (%s)", procs)
 
@@ -99,7 +97,7 @@ class AgentManager(ServerSlice, SessionListener):
     This class contains all server functionality related to the management of agents
     """
 
-    def __init__(self, restserver: protocol.Server, closesessionsonstart: bool=True, fact_back_off: int=None) -> None:
+    def __init__(self, restserver: protocol.Server, closesessionsonstart: bool = True, fact_back_off: int = None) -> None:
         super(AgentManager, self).__init__(SLICE_AGENT_MANAGER)
         self.restserver = restserver
 
@@ -142,8 +140,10 @@ class AgentManager(ServerSlice, SessionListener):
 
     def seen(self, session: protocol.Session, endpoint_names: List[str]) -> None:
         if set(session.endpoint_names) != set(endpoint_names):
-            LOGGER.warning("Agent endpoint set changed, this should not occur, update ignored (was %s is %s)" %
-                           (set(session.endpoint_names), set(endpoint_names)))
+            LOGGER.warning(
+                "Agent endpoint set changed, this should not occur, update ignored (was %s is %s)"
+                % (set(session.endpoint_names), set(endpoint_names))
+            )
         # start async, let it run free
         self.add_background_task(self.flush_agent_presence(session, datetime.now()))
 
@@ -240,8 +240,9 @@ class AgentManager(ServerSlice, SessionListener):
 
             if env is not None:
                 for endpoint in session.endpoint_names:
-                    if ((tid, endpoint) in self.tid_endpoint_to_session
-                            and self.tid_endpoint_to_session[(tid, endpoint)] == session):
+                    if (tid, endpoint) in self.tid_endpoint_to_session and self.tid_endpoint_to_session[
+                        (tid, endpoint)
+                    ] == session:
                         del self.tid_endpoint_to_session[(tid, endpoint)]
 
                 await self.verify_reschedule(env, session.endpoint_names)
@@ -283,9 +284,7 @@ class AgentManager(ServerSlice, SessionListener):
             return
         tid = env.id
         no_primary = [endpoint for endpoint in enpoints if (tid, endpoint) not in self.tid_endpoint_to_session]
-        agents = await asyncio.gather(
-            *[data.Agent.get(env.id, endpoint) for endpoint in no_primary]
-        )
+        agents = await asyncio.gather(*[data.Agent.get(env.id, endpoint) for endpoint in no_primary])
         needswork = [agent for agent in agents if agent is not None and not agent.paused]
         for agent in needswork:
             await self.reschedule(env, agent)
@@ -310,11 +309,7 @@ class AgentManager(ServerSlice, SessionListener):
         await agent.update_fields(primary=None, last_failover=datetime.now())
 
     async def _set_primary(
-        self,
-        env: data.Environment,
-        agent: data.Agent,
-        instance: data.AgentInstance,
-        session: protocol.Session
+        self, env: data.Environment, agent: data.Agent, instance: data.AgentInstance, session: protocol.Session
     ) -> None:
         LOGGER.debug("set session %s as primary for agent %s in env %s" % (session.get_id(), agent.name, env.id))
         self.tid_endpoint_to_session[(env.id, agent.name)] = session
@@ -345,11 +340,9 @@ class AgentManager(ServerSlice, SessionListener):
                 await agent.update_fields(primary=None)
 
     # utils
-    def _fork_inmanta(self,
-                      args: List[str],
-                      outfile: Optional[str],
-                      errfile: Optional[str],
-                      cwd: Optional[str]=None) -> process.Subprocess:
+    def _fork_inmanta(
+        self, args: List[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
+    ) -> process.Subprocess:
         """
             Fork an inmanta process from the same code base as the current code
         """
@@ -374,7 +367,7 @@ class AgentManager(ServerSlice, SessionListener):
     # External APIS
     @protocol.handle(methods.get_agent_process, agent_sid="id")
     async def get_agent_process(self, agent_sid: str) -> Apireturn:
-        return (await self.get_agent_process_report(agent_sid))
+        return await self.get_agent_process_report(agent_sid)
 
     @protocol.handle(methods.trigger_agent, agent_id="id", env="tid")
     async def trigger_agent(self, env: UUID, agent_id: str) -> Apireturn:
@@ -420,7 +413,7 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             ags = await data.Agent.get_list()
 
-        return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec='microseconds')}
+        return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec="microseconds")}
 
     @protocol.handle(methods.get_state, env="tid")
     async def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str) -> Apireturn:
@@ -446,7 +439,7 @@ class AgentManager(ServerSlice, SessionListener):
         return result.code, result.get_result()
 
     # Start/stop agents
-    async def _ensure_agents(self, env: data.Environment, agents: List[str], restart: bool=False) -> bool:
+    async def _ensure_agents(self, env: data.Environment, agents: List[str], restart: bool = False) -> bool:
         """
             Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
 
@@ -499,8 +492,9 @@ class AgentManager(ServerSlice, SessionListener):
             err = None
 
         agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
-        proc = self._fork_inmanta(["-vvvv", "--timed-logs", "--config", config_path, "--log-file", agent_log, "agent"],
-                                  out, err)
+        proc = self._fork_inmanta(
+            ["-vvvv", "--timed-logs", "--config", config_path, "--log-file", agent_log, "agent"], out, err
+        )
 
         if env.id in self._agent_procs and self._agent_procs[env.id] is not None:
             LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].proc.pid)
@@ -561,17 +555,26 @@ agent-repair-interval=%(agent_repair_interval)d
 [agent_rest_transport]
 port=%(port)s
 host=%(serveradress)s
-""" % {"agents": ",".join(agent_names), "env_id": environment_id, "port": port,
+""" % {
+            "agents": ",".join(agent_names),
+            "env_id": environment_id,
+            "port": port,
             "agent_map": ",".join(["%s=%s" % (k, v) for (k, v) in agent_map.items()]),
-            "statedir": privatestatedir, "agent_deploy_splay": agent_deploy_splay,
-            "agent_deploy_interval": agent_deploy_interval, "agent_repair_splay": agent_repair_splay,
-            "agent_repair_interval": agent_repair_interval, "serveradress": server_config.server_address.get()}
+            "statedir": privatestatedir,
+            "agent_deploy_splay": agent_deploy_splay,
+            "agent_deploy_interval": agent_deploy_interval,
+            "agent_repair_splay": agent_repair_splay,
+            "agent_repair_interval": agent_repair_interval,
+            "serveradress": server_config.server_address.get(),
+        }
 
         if server_config.server_enable_auth.get():
             token = encode_token(["agent"], environment_id)
             config += """
 token=%s
-    """ % (token)
+    """ % (
+                token
+            )
 
         ssl_cert: Optional[str] = server_config.server_ssl_key.get()
         ssl_ca: Optional[str] = server_config.server_ssl_ca_cert.get()
@@ -581,7 +584,9 @@ token=%s
             config += """
 ssl=True
 ssl_ca_cert_file=%s
-    """ % (ssl_ca)
+    """ % (
+                ssl_ca
+            )
         elif ssl_cert is not None:
             # system CA
             config += """
@@ -610,8 +615,10 @@ ssl=True
 
             # only request facts of a resource every _fact_resource_block time
             now = time.time()
-            if (resource_id not in self._fact_resource_block_set
-                    or (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now):
+            if (
+                resource_id not in self._fact_resource_block_set
+                or (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now
+            ):
 
                 agents = await data.ConfigurationModel.get_agents(env.id, version)
                 await self._ensure_agents(env, agents)
@@ -623,8 +630,11 @@ ssl=True
                 self._fact_resource_block_set[resource_id] = now
 
             else:
-                LOGGER.debug("Ignore fact request for %s, last request was sent %d seconds ago.",
-                             resource_id, now - self._fact_resource_block_set[resource_id])
+                LOGGER.debug(
+                    "Ignore fact request for %s, last request was sent %d seconds ago.",
+                    resource_id,
+                    now - self._fact_resource_block_set[resource_id],
+                )
 
             return 503, {"message": "Agents queried for resource parameter."}
         else:

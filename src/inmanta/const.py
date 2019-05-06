@@ -40,17 +40,30 @@ TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying, ResourceSt
 # not counting as done
 NOT_DONE_STATES = TRANSIENT_STATES
 # counts as done
-DONE_STATES = [ResourceState.unavailable, ResourceState.skipped, ResourceState.deployed, ResourceState.failed,
-               ResourceState.cancelled] + UNDEPLOYABLE_STATES
+DONE_STATES = [
+    ResourceState.unavailable,
+    ResourceState.skipped,
+    ResourceState.deployed,
+    ResourceState.failed,
+    ResourceState.cancelled,
+] + UNDEPLOYABLE_STATES
 
 # starting states
 INITIAL_STATES = [ResourceState.available]
 # states one can't transition out off
 TERMINAL_STATES = UNDEPLOYABLE_STATES
 # states on can transition to
-VALID_STATES_ON_STATE_UPDATE = [ResourceState.unavailable, ResourceState.skipped, ResourceState.deployed,
-                                ResourceState.failed, ResourceState.deploying, ResourceState.cancelled, ResourceState.undefined,
-                                ResourceState.skipped_for_undefined, ResourceState.processing_events]
+VALID_STATES_ON_STATE_UPDATE = [
+    ResourceState.unavailable,
+    ResourceState.skipped,
+    ResourceState.deployed,
+    ResourceState.failed,
+    ResourceState.deploying,
+    ResourceState.cancelled,
+    ResourceState.undefined,
+    ResourceState.skipped_for_undefined,
+    ResourceState.processing_events,
+]
 
 UNKNOWN_STRING = "<<undefined>>"
 

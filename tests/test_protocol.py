@@ -233,7 +233,6 @@ async def test_gzip_encoding(server):
 
 
 class MainHandler(web.RequestHandler):
-
     def get(self):
         time.sleep(1.1)
 
@@ -278,6 +277,7 @@ async def test_method_properties():
     """
         Test method properties decorator and helper functions
     """
+
     @protocol.method(method_name="test", operation="PUT", client_types=["api"])
     def test_method(name):
         """
@@ -296,11 +296,13 @@ async def test_invalid_client_type():
         Test invalid client ype
     """
     with pytest.raises(Exception) as e:
+
         @protocol.method(method_name="test", operation="PUT", client_types=["invalid"])
         def test_method(name):
             """
                 Create a new project
             """
+
         assert "Invalid client type invalid specified for function" in str(e)
 
 
@@ -309,6 +311,7 @@ async def test_call_arguments_defaults():
     """
         Test processing RPC messages
     """
+
     @protocol.method(method_name="test", operation="PUT", client_types=["api"])
     def test_method(name: str, value: int = 10):
         """

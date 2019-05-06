@@ -37,6 +37,7 @@ class VirtualEnv(object):
     """
         Creates and uses a virtual environment for this process
     """
+
     _egg_fragment_re = re.compile(r"#egg=(?P<name>[^&]*)")
     _at_fragment_re = re.compile(r"^(?P<name>[^@]+)@(?P<req>.+)")
 

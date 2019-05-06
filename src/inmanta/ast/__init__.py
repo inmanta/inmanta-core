@@ -39,7 +39,6 @@ if TYPE_CHECKING:
 
 
 class Location(object):
-
     def __init__(self, file: str, lnr: int) -> None:
         self.file = file
         self.lnr = lnr
@@ -63,7 +62,6 @@ class Location(object):
 
 
 class Range(Location):
-
     def __init__(self, file: str, start_lnr: int, start_char: int, end_lnr: int, end_char: int) -> None:
         Location.__init__(self, file, start_lnr)
         self.start_char = start_char
@@ -160,7 +158,6 @@ class LocatableString(object):
 
 
 class Anchor(object):
-
     def __init__(self, range: Range) -> None:
         self.range = range
 
@@ -176,7 +173,6 @@ class Anchor(object):
 
 
 class TypeReferenceAnchor(Anchor):
-
     def __init__(self, range: Range, namespace: "Namespace", type: str) -> None:
         Anchor.__init__(self, range=range)
         self.namespace = namespace
@@ -188,7 +184,6 @@ class TypeReferenceAnchor(Anchor):
 
 
 class AttributeReferenceAnchor(Anchor):
-
     def __init__(self, range: Range, namespace: "Namespace", type: str, attribute: str) -> None:
         Anchor.__init__(self, range=range)
         self.namespace = namespace
@@ -203,28 +198,24 @@ class AttributeReferenceAnchor(Anchor):
 
 
 class Namespaced(Locatable):
-
     @abstractmethod
     def get_namespace(self) -> "Namespace":
         raise NotImplementedError()
 
 
 class Named(Namespaced):
-
     @abstractmethod
     def get_full_name(self) -> str:
         raise NotImplementedError()
 
 
 class Import(Locatable):
-
     def __init__(self, target: "Namespace") -> None:
         Locatable.__init__(self)
         self.target = target
 
 
 class MockImport(Import):
-
     def __init__(self, target: "Namespace") -> None:
         Locatable.__init__(self)
         self.target = target
@@ -322,7 +313,7 @@ class Namespace(Namespaced):
         """
             Get the fully qualified name of this namespace
         """
-        if(self.__parent is None):
+        if self.__parent is None:
             raise Exception("Should not occur, compiler corrupt")
         if self.__parent.__parent is None:
             return self.get_name()
@@ -369,7 +360,7 @@ class Namespace(Namespaced):
 
         return self.__name
 
-    def children(self, recursive: bool=False) -> "List[Namespace]":
+    def children(self, recursive: bool = False) -> "List[Namespace]":
         """
             Get the children of this namespace
         """
@@ -486,7 +477,7 @@ class CompilerException(Exception):
         else:
             return self.get_message()
 
-    def format_trace(self, indent: str="", indent_level: int=0) -> str:
+    def format_trace(self, indent: str = "", indent_level: int = 0) -> str:
         """Make a representation of this exception and its causes"""
         out = indent * indent_level + self.format()
 
@@ -556,7 +547,7 @@ class ExternalException(RuntimeException):
     def get_causes(self) -> List[CompilerException]:
         return []
 
-    def format_trace(self, indent: str="", indent_level: int=0) -> str:
+    def format_trace(self, indent: str = "", indent_level: int = 0) -> str:
         """Make a representation of this exception and its causes"""
         out = indent * indent_level + self.format()
 
@@ -588,7 +579,8 @@ class AttributeException(WrappingRuntimeException):
 
     def __init__(self, stmt: "Locatable", instance: "Instance", attribute: str, cause: RuntimeException) -> None:
         WrappingRuntimeException.__init__(
-            self, stmt=stmt, msg="Could not set attribute `%s` on instance `%s`" % (attribute, str(instance)), cause=cause)
+            self, stmt=stmt, msg="Could not set attribute `%s` on instance `%s`" % (attribute, str(instance)), cause=cause
+        )
         self.attribute = attribute
         self.instance = instance
 
@@ -597,19 +589,22 @@ class OptionalValueException(RuntimeException):
     """Exception raised when an optional value is accessed that has no value (and is frozen)"""
 
     def __init__(self, instance: "Instance", attribute: "Attribute") -> None:
-        RuntimeException.__init__(self, instance, "Optional variable accessed that has no value (%s.%s)" %
-                                  (instance, attribute))
+        RuntimeException.__init__(
+            self, instance, "Optional variable accessed that has no value (%s.%s)" % (instance, attribute)
+        )
         self.instance = instance
         self.attribute = attribute
 
 
 class IndexException(RuntimeException):
     """Exception raised when an index definition is invalid"""
+
     pass
 
 
 class TypingException(RuntimeException):
     """Base class for exceptions raised during the typing phase of compilation"""
+
     pass
 
 
@@ -628,7 +623,7 @@ class CycleExcpetion(TypingException):
 
     def add(self, element: "DefineEntity") -> None:
         """Collect parent entities while traveling up the stack"""
-        if(self.complete):
+        if self.complete:
             return
         if element.get_full_name() == self.final_name:
             self.complete = True
@@ -640,8 +635,7 @@ class CycleExcpetion(TypingException):
 
 
 class ModuleNotFoundException(RuntimeException):
-
-    def __init__(self, name: str, stmt: "Statement", msg: str=None) -> None:
+    def __init__(self, name: str, stmt: "Statement", msg: str = None) -> None:
         if msg is None:
             msg = "could not find module %s" % name
         RuntimeException.__init__(self, stmt, msg)
@@ -649,8 +643,7 @@ class ModuleNotFoundException(RuntimeException):
 
 
 class NotFoundException(RuntimeException):
-
-    def __init__(self, stmt: "Optional[Statement]", name: str, msg: "Optional[str]"=None) -> None:
+    def __init__(self, stmt: "Optional[Statement]", name: str, msg: "Optional[str]" = None) -> None:
         if msg is None:
             msg = "could not find value %s" % name
         RuntimeException.__init__(self, stmt, msg)
@@ -658,31 +651,32 @@ class NotFoundException(RuntimeException):
 
 
 class DoubleSetException(RuntimeException):
-
-    def __init__(self,
-                 stmt: "Optional[Statement]",
-                 value: object,
-                 location: Location,
-                 newvalue: object,
-                 newlocation: Location) -> None:
+    def __init__(
+        self, stmt: "Optional[Statement]", value: object, location: Location, newvalue: object, newlocation: Location
+    ) -> None:
         self.value = value  # type: object
         self.location = location
         self.newvalue = newvalue  # type: object
         self.newlocation = newlocation
-        msg = ("value set twice:\n\told value: %s\n\t\tset at %s\n\tnew value: %s\n\t\tset at %s\n"
-               % (self.value, self.location, self.newvalue, self.newlocation))
+        msg = "value set twice:\n\told value: %s\n\t\tset at %s\n\tnew value: %s\n\t\tset at %s\n" % (
+            self.value,
+            self.location,
+            self.newvalue,
+            self.newlocation,
+        )
         RuntimeException.__init__(self, stmt, msg)
 
 
 class ModifiedAfterFreezeException(RuntimeException):
-
-    def __init__(self,
-                 rv: "DelayedResultVariable",
-                 instance: "Instance",
-                 attribute: "Attribute",
-                 value: object,
-                 location: Location,
-                 reverse: bool) -> None:
+    def __init__(
+        self,
+        rv: "DelayedResultVariable",
+        instance: "Instance",
+        attribute: "Attribute",
+        value: object,
+        location: Location,
+        reverse: bool,
+    ) -> None:
         RuntimeException.__init__(self, None, "List modified after freeze")
         self.instance = instance
         self.attribute = attribute
@@ -722,4 +716,4 @@ class MultiException(CompilerException):
         return "Reported %d errors" % len(self.others)
 
     def __str__(self) -> str:
-        return "Reported %d errors:\n\t" % len(self.others) + '\n\t'.join([str(e) for e in self.others])
+        return "Reported %d errors:\n\t" % len(self.others) + "\n\t".join([str(e) for e in self.others])

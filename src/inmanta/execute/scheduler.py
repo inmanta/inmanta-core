@@ -90,11 +90,9 @@ class Scheduler(object):
             self.do_sort_entities(entity_map, workon, out, loopstack)
         return out
 
-    def do_sort_entities(self,
-                         entity_map: Dict[str, DefineEntity],
-                         name: str,
-                         acc: List[DefineEntity],
-                         loopstack: Set[str]) -> None:
+    def do_sort_entities(
+        self, entity_map: Dict[str, DefineEntity], name: str, acc: List[DefineEntity], loopstack: Set[str]
+    ) -> None:
         nexte = entity_map[name]
         try:
             del entity_map[name]
@@ -128,8 +126,9 @@ class Scheduler(object):
         compiler.get_ns().set_primitives(TYPES)
 
         # all stmts contributing types and impls
-        newtypes = [k for k in [t.register_types()
-                                for t in definitions if isinstance(t, TypeDefinitionStatement)] if k is not None]
+        newtypes = [
+            k for k in [t.register_types() for t in definitions if isinstance(t, TypeDefinitionStatement)] if k is not None
+        ]
 
         for (name, type_symbol) in newtypes:
             types_and_impl[name] = type_symbol
@@ -183,8 +182,12 @@ class Scheduler(object):
 
         # relations are also in blocks
         statements = (s for s in statements if not isinstance(s, DefineRelation))
-        anchors = (anchor for container in itertools.chain(statements, blocks)
-                   for anchor in container.get_anchors() if anchor is not None)
+        anchors = (
+            anchor
+            for container in itertools.chain(statements, blocks)
+            for anchor in container.get_anchors()
+            if anchor is not None
+        )
 
         rangetorange = [(anchor.get_location(), anchor.resolve()) for anchor in anchors]
         rangetorange = [(f, t) for f, t in rangetorange if t is not None]
@@ -241,8 +244,15 @@ class Scheduler(object):
             else:
                 i += 1
 
-            LOGGER.debug("Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)", i,
-                         len(basequeue), len(waitqueue), len(zerowaiters), count, now - prev)
+            LOGGER.debug(
+                "Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)",
+                i,
+                len(basequeue),
+                len(waitqueue),
+                len(zerowaiters),
+                count,
+                now - prev,
+            )
             prev = now
 
             # evaluate all that is ready
@@ -298,8 +308,15 @@ class Scheduler(object):
                     next.freeze()
 
         now = time.time()
-        LOGGER.debug("Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)", i,
-                     len(basequeue), len(waitqueue), len(zerowaiters), count, now - prev)
+        LOGGER.debug(
+            "Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)",
+            i,
+            len(basequeue),
+            len(waitqueue),
+            len(zerowaiters),
+            count,
+            now - prev,
+        )
 
         if i == MAX_ITERATIONS:
             print("could not complete model")

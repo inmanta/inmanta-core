@@ -84,11 +84,11 @@ def test():
     hv = sha1sum.hexdigest()
 
     with pytest.raises(ImportError):
-        import inmanta_unit_test # NOQA
+        import inmanta_unit_test  # NOQA
 
     cl.deploy_version(hv, "inmanta_unit_test", code)
 
-    import inmanta_unit_test # NOQA
+    import inmanta_unit_test  # NOQA
 
     assert inmanta_unit_test.test() == 10
 
@@ -111,7 +111,7 @@ def test():
     hv = sha1sum.hexdigest()
 
     with pytest.raises(ImportError):
-        import inmanta_bad_unit_test # NOQA
+        import inmanta_bad_unit_test  # NOQA
 
     cl.deploy_version(hv, "inmanta_bad_unit_test", code)
 

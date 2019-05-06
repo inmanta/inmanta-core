@@ -38,7 +38,7 @@ def test_bad_module():
 
 
 class TestModuleName(unittest.TestCase):
-    def __init__(self, methodName='runTest'):  # noqa: N803
+    def __init__(self, methodName="runTest"):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
 
         self.stream = None
@@ -60,7 +60,7 @@ class TestModuleName(unittest.TestCase):
         module.Module(project=mock.Mock(), path=mod_dir)
 
         self.handler.flush()
-        assert("The name in the module file (mod1) does not match the directory name (mod3)" in self.stream.getvalue().strip())
+        assert "The name in the module file (mod1) does not match the directory name (mod3)" in self.stream.getvalue().strip()
 
     def tearDown(self):
         self.log.removeHandler(self.handler)
