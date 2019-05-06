@@ -151,6 +151,18 @@ def install_project(modules_dir, name, config=True):
     return coroot
 
 
+def clone_repo(source_dir, repo_name, destination_dir):
+    subprocess.check_output(["git", "clone", os.path.join(source_dir, repo_name)],
+                            cwd=destination_dir,
+                            stderr=subprocess.STDOUT)
+    subprocess.check_output(["git", "config", "user.email", '"test@test.example"'],
+                            cwd=os.path.join(destination_dir, repo_name),
+                            stderr=subprocess.STDOUT)
+    subprocess.check_output(["git", "config", "user.name", 'Tester test'],
+                            cwd=os.path.join(destination_dir, repo_name),
+                            stderr=subprocess.STDOUT)
+
+
 class BadModProvider(object):
 
     def __init__(self, parent, badname):
@@ -280,6 +292,13 @@ def modules_repo(modules_dir):
 
     masterproject = makemodule(reporoot, "masterproject", project=True, imports=["mod8"], install_mode=INSTALL_MASTER)
     commitmodule(masterproject, "first commit")
+
+    masterproject_multi_mod = makemodule(reporoot,
+                                         "masterproject_multi_mod",
+                                         project=True,
+                                         imports=["mod2", "mod8"],
+                                         install_mode=INSTALL_MASTER)
+    commitmodule(masterproject_multi_mod, "first commit")
 
     nover = makemodule(reporoot, "nover", [])
     commitmodule(nover, "first commit")
@@ -587,8 +606,8 @@ def test_project_freeze_bad(modules_dir, modules_repo, capsys, caplog):
 
     out, err = capsys.readouterr()
 
-    assert len(err) == 0
-    assert len(out) == 0
+    assert len(err) == 0, err
+    assert len(out) == 0, out
     assert "requirement mod2<2016 on module mod2 not fullfilled, now at version 2016.1" in caplog.text
 
     assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
@@ -602,7 +621,7 @@ def test_project_freeze(modules_dir, modules_repo, capsys):
     out, err = capsys.readouterr()
 
     assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
-    assert len(err) == 0
+    assert len(err) == 0, err
     assert out == """name: modA
 license: Apache 2.0
 version: 0.0.1
@@ -625,7 +644,7 @@ def test_project_freeze_odd_opperator(modules_dir, modules_repo, capsys, caplog)
     out, err = capsys.readouterr()
 
     assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
-    assert len(err) == 0
+    assert len(err) == 0, err
     assert out == """name: modA
 license: Apache 2.0
 version: 0.0.1
@@ -659,8 +678,8 @@ freeze_operator: ==
         out, err = capsys.readouterr()
 
         assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
-        assert len(err) == 0
-        assert len(out) == 0
+        assert len(err) == 0, err
+        assert len(out) == 0, out
 
         with open("project.yml", "r") as fh:
             assert fh.read() == ("""name: modA
@@ -696,7 +715,7 @@ def test_module_freeze(modules_dir, modules_repo, capsys):
         out, err = capsys.readouterr()
 
         assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
-        assert len(err) == 0
+        assert len(err) == 0, err
         assert out == ("""name: modC
 license: Apache 2.0
 version: '3.2'
@@ -718,7 +737,7 @@ def test_module_freeze_self(modules_dir, modules_repo, capsys):
         out, err = capsys.readouterr()
 
         assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
-        assert len(err) == 0
+        assert len(err) == 0, err
         assert out == ("""name: modC
 license: Apache 2.0
 version: '3.2'
@@ -734,3 +753,47 @@ requires:
     os.curdir = modp
     app(["module", "freeze", "-o", "-"])
     verify()
+
+
+@pytest.mark.parametrize("kwargs_update_method, mod2_should_be_updated, mod8_should_be_updated",
+                         [({}, True, True),
+                          ({"module": "mod2"}, True, False),
+                          ({"module": "mod8"}, False, True)])
+def test_module_update_with_install_mode_master(tmpdir, modules_dir, modules_repo,
+                                                kwargs_update_method, mod2_should_be_updated, mod8_should_be_updated):
+    # Make a copy of masterproject_multi_mod
+    masterproject_multi_mod = tmpdir.join("masterproject_multi_mod")
+    clone_repo(modules_repo, "masterproject_multi_mod", tmpdir)
+    libs_folder = os.path.join(masterproject_multi_mod, "libs")
+    os.mkdir(libs_folder)
+
+    # Set masterproject_multi_mod as current project
+    os.chdir(masterproject_multi_mod)
+    os.curdir = masterproject_multi_mod
+    Config.load_config()
+
+    # Dependencies masterproject_multi_mod
+    for mod in ["mod2", "mod8"]:
+        # Clone mod in root tmpdir
+        clone_repo(modules_repo, mod, tmpdir)
+
+        # Clone mod from root of tmpdir into libs folder of masterproject_multi_mod
+        clone_repo(tmpdir, mod, libs_folder)
+
+        # Update module in root of tmpdir by adding an extra file
+        file_name_extra_file = "test_file"
+        path_mod = os.path.join(tmpdir, mod)
+        add_file(path_mod, file_name_extra_file, "test", "Second commit")
+
+        # Assert test_file not present in libs folder of masterproject_multi_mod
+        path_extra_file = os.path.join(libs_folder, mod, file_name_extra_file)
+        assert not os.path.exists(path_extra_file)
+
+    # Update module(s) of masterproject_multi_mod
+    ModuleTool().update(**kwargs_update_method)
+
+    # Assert availability of test_file in masterproject_multi_mod
+    extra_file_mod2 = os.path.join(libs_folder, "mod2", file_name_extra_file)
+    assert os.path.exists(extra_file_mod2) == mod2_should_be_updated
+    extra_file_mod8 = os.path.join(libs_folder, "mod8", file_name_extra_file)
+    assert os.path.exists(extra_file_mod8) == mod8_should_be_updated

@@ -1,13 +1,12 @@
 from setuptools import setup, find_packages
 
 requires = [
+    "asyncpg",
     "click",
     "colorlog",
     "execnet",
-    "motor >= 1.1",
     "netifaces",
     "ply",
-    "pymongo",
     "python-dateutil",
     "pyyaml",
     "texttable",
@@ -16,10 +15,12 @@ requires = [
     "PyJWT",
     "cryptography",
     "jinja2",
+    "pyformance",
+    "pymongo",
 ]
 
 setup(
-    version="2019.1.2",
+    version="2019.2",
     python_requires='>=3.6', # also update classifiers
     # Meta data
     name="inmanta",
@@ -54,6 +55,7 @@ setup(
         "console_scripts": [
             "inmanta-cli = inmanta.main:main",
             "inmanta = inmanta.app:app",
+            "inmanta-migrate-db = inmanta.db.migrate_to_postgresql:main",
         ]
     },
 

@@ -99,9 +99,8 @@ to the libs directory.
 
 Deploy a file
 -------------
-With the deploy command, Inmanta can deploy a file to a machine with an embedded server and agent.
 
-The main.cf below creates a file:
+The main.cf below is a small project that creates a file on a machine:
 
 .. code-block:: none
     :linenos:
@@ -115,4 +114,6 @@ The main.cf below creates a file:
     command is not executed as root, make sure that user and group have the value of the current
     user.
 
-Deploy the configuration model above with ``inmanta deploy``
+Deploy the configuration by exporting the model to an orchestration server. Either commit the code to the git repository and
+configure an inmanta instance to deploy the model (see :ref:`autonomous-server`)
+or export the compiled model to an orchestrator (see :ref:`push-to-server`)

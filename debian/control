@@ -7,6 +7,6 @@ Standards-Version: 3.9.1
 
 Package: python3-inmanta
 Architecture: all
-Depends: ${misc:Depends}, ${python3:Depends}, python3-execnet, python3-blitzdb, python3-colorlog, python3-yaml, python3-tornado, python3-amqp, git, python-virtualenv, python3-antlr3, python3-urllib3, python3-pymongo, apt-utils
+Depends: ${misc:Depends}, ${python3:Depends}, python3-execnet, python3-blitzdb, python3-colorlog, python3-yaml, python3-tornado, python3-amqp, git, python-virtualenv, python3-antlr3, python3-urllib3, apt-utils
 Description: inmanta tool
 	The inmanta configuration management tool and all of its components

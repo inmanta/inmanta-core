@@ -29,12 +29,10 @@ import logging
 import pytest
 
 import utils
-from inmanta import config, data, mongoproc
+from inmanta import data, config
 import inmanta.compiler as compiler
-import pymongo
-from motor import motor_asyncio
 from inmanta.module import Project
-from inmanta import resources, export
+from inmanta import resources
 import inmanta.agent
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
@@ -46,34 +44,43 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.export import cfg_env, unknown_parameters
 import traceback
-from tornado import process
+from tornado import process, netutil
 import asyncio
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
+import asyncpg
+from asyncpg.exceptions import DuplicateDatabaseError
+from inmanta.postgresproc import PostgresProc
 import sys
 import pkg_resources
 from typing import Optional, Dict
 from inmanta import protocol
+import pyformance
+from pyformance.registry import MetricsRegistry
 
+from inmanta.util import get_free_tcp_port
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
-DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
-
 
 @pytest.fixture(scope="session", autouse=True)
-def mongo_db():
-    db_path = tempfile.mkdtemp(dir="/dev/shm")
-    mproc = mongoproc.MongoProc(db_path=db_path, port=get_free_tcp_port())
-    port_envvar = DEFAULT_PORT_ENVVAR
+def postgres_db(postgresql_proc):
+    yield postgresql_proc
 
-    mproc.start()
-    os.environ[port_envvar] = str(mproc.port)
 
-    yield mproc
+@pytest.fixture(scope="function")
+async def postgresql_client(postgres_db, database_name):
+    client = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name)
+    try:
+        yield client
+    finally:
+        await client.close()
 
-    mproc.stop()
-    del os.environ[port_envvar]
-    shutil.rmtree(db_path)
+
+@pytest.fixture(scope="function")
+async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_reset):
+    await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None)
+    yield
+    await data.disconnect()
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -90,11 +97,24 @@ def deactive_venv():
     pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
 
-def reset_all():
+def reset_metrics():
+    pyformance.set_global_registry(MetricsRegistry())
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def clean_reset(create_db, clean_db):
+    reset_all_objects()
+    config.Config._reset()
+    yield
+    config.Config._reset()
+    reset_all_objects()
+
+
+def reset_all_objects():
     resources.resource.reset()
-    export.Exporter.reset()
     process.Subprocess.uninitialize()
     asyncio.set_child_watcher(None)
+    reset_metrics()
     # No dynamic loading of commands at the moment, so no need to reset/reload
     # command.Commander.reset()
     handler.Commander.reset()
@@ -102,48 +122,46 @@ def reset_all():
     unknown_parameters.clear()
 
 
+@pytest.fixture(scope="function")
+async def create_db(postgres_db, database_name):
+    connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
+    try:
+        await connection.execute("CREATE DATABASE " + database_name)
+    except DuplicateDatabaseError:
+        pass
+    finally:
+        await connection.close()
+
+
+@pytest.fixture(scope="function")
+async def clean_db(postgresql_client, create_db):
+    """
+        1) Truncated tables: All tables which are part of the inmanta schema, except for the schemaversion table. The version
+                             number stored in the schemaversion table is read by the Inmanta server during startup.
+        2) Dropped tables: All tables which are not part of the inmanta schema. Some tests create additional tables, which are
+                           not part of the Inmanta schema. These should be cleaned-up before running a new test.
+    """
+    tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+    tables_in_db = [x["table_name"] for x in tables_in_db]
+    tables_to_preserve = [x.table_name() for x in data._classes]
+    tables_to_truncate = [x for x in tables_in_db if x != data.SchemaVersion.table_name() and x in tables_to_preserve]
+    tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
+    if tables_to_drop:
+        drop_query = "DROP TABLE %s CASCADE" % ', '.join(tables_to_drop)
+        await postgresql_client.execute(drop_query)
+    if tables_to_truncate:
+        truncate_query = "TRUNCATE %s CASCADE" % ', '.join(tables_to_truncate)
+        await postgresql_client.execute(truncate_query)
+
+
 @pytest.fixture(scope="function", autouse=True)
-def clean_reset(mongo_client):
+def restore_cwd():
+    """
+        Restore the current working directory after search test.
+    """
     cwd = os.getcwd()
-
-    reset_all()
     yield
-    reset_all()
-
-    # reset cwd
     os.chdir(cwd)
-
-    for db_name in mongo_client.list_database_names():
-        if db_name != "admin":
-            try:
-                mongo_client.drop_database(db_name)
-            except Exception:
-                pass
-
-
-@pytest.fixture(scope="session")
-def mongo_client(mongo_db):
-    '''Returns an instance of :class:`pymongo.MongoClient` connected
-    to MongoBox database instance.
-    '''
-    port = int(mongo_db.port)
-    return pymongo.MongoClient(port=port)
-
-
-@pytest.fixture(scope="function")
-def motor(mongo_db, mongo_client, event_loop):
-    """
-    Event_loop argument ensures this fixture is started after the eventloop is started
-    """
-    client = motor_asyncio.AsyncIOMotorClient('localhost', int(mongo_db.port))
-    db = client["inmanta"]
-    yield db
-
-
-@pytest.fixture(scope="function")
-async def data_module(motor):
-    data.use_motor(motor)
-    await data.create_indexes()
 
 
 @pytest.fixture(scope="function")
@@ -154,15 +172,11 @@ def no_agent_backoff():
     inmanta.agent.agent.GET_RESOURCE_BACKOFF = backoff
 
 
-def get_free_tcp_port():
-    """
-        Semi safe method for getting a random port. This may contain a race condition.
-    """
-    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tcp.bind(('', 0))
-    _addr, port = tcp.getsockname()
-    tcp.close()
-    return str(port)
+@pytest.fixture()
+def free_socket():
+    sock = netutil.bind_sockets(0, "127.0.0.1", family=socket.AF_INET)[0]
+    yield sock
+    sock.close()
 
 
 @pytest.fixture()
@@ -183,7 +197,12 @@ def inmanta_config():
     config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
 
     yield config.Config._get_instance()
-    config.Config._reset()
+
+
+@pytest.fixture(scope="session")
+def database_name():
+    ten_random_digits = ''.join(random.choice(string.digits) for _ in range(10))
+    yield "inmanta" + ten_random_digits
 
 
 @pytest.fixture(scope="function")
@@ -219,16 +238,22 @@ async def agent(server, environment):
 
 
 @pytest.fixture(scope="function")
-async def server(inmanta_config, mongo_db, mongo_client, motor):
+async def server(event_loop, inmanta_config, postgres_db, database_name, clean_reset):
+    """
+    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
+    May not be required
+    """
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
+
+    reset_metrics()
 
     state_dir = tempfile.mkdtemp()
 
     port = get_free_tcp_port()
-    config.Config.set("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
-    config.Config.set("database", "port", str(mongo_db.port))
+    config.Config.set("database", "port", str(postgres_db.port))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("server_rest_transport", "port", port)
@@ -238,16 +263,15 @@ async def server(inmanta_config, mongo_db, mongo_client, motor):
     config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "10")
-
-    data.use_motor(motor)
-    await data.create_indexes()
+    config.Config.set("server", "auto-recompile-wait", "0")
+    config.Config.set("agent", "agent-repair-interval", "0")
 
     ibl = InmantaBootloader()
     await ibl.start()
 
     yield ibl.restserver
 
-    await ibl.stop()
+    await asyncio.wait_for(ibl.stop(), 10)
     shutil.rmtree(state_dir)
 
 
@@ -255,7 +279,11 @@ async def server(inmanta_config, mongo_db, mongo_client, motor):
                 params=[(True, True, False), (True, False, False), (False, True, False),
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
-async def server_multi(inmanta_config, mongo_db, mongo_client, request, motor):
+async def server_multi(event_loop, inmanta_config, postgres_db, database_name, request, clean_reset):
+    """
+    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
+    May not be required
+    """
     state_dir = tempfile.mkdtemp()
 
     ssl, auth, ca = request.param
@@ -288,9 +316,9 @@ async def server_multi(inmanta_config, mongo_db, mongo_client, request, motor):
             config.Config.set(x, "token", token)
 
     port = get_free_tcp_port()
-    config.Config.set("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
-    config.Config.set("database", "port", str(mongo_db.port))
+    config.Config.set("database", "port", str(postgres_db.port))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("server_rest_transport", "port", port)
@@ -300,16 +328,15 @@ async def server_multi(inmanta_config, mongo_db, mongo_client, request, motor):
     config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "2")
-
-    data.use_motor(motor)
-    await data.create_indexes()
+    config.Config.set("agent", "agent-repair-interval", "0")
+    config.Config.set("server", "auto-recompile-wait", "0")
 
     ibl = InmantaBootloader()
     await ibl.start()
 
     yield ibl.restserver
 
-    await ibl.stop()
+    await asyncio.wait_for(ibl.stop(), 10)
 
     shutil.rmtree(state_dir)
 
@@ -344,17 +371,11 @@ async def environment(client, server):
     """
         Create a project and environment. This fixture returns the uuid of the environment
     """
-    def create_project():
-        return client.create_project("env-test")
-
-    result = await create_project()
+    result = await client.create_project("env-test")
     assert(result.code == 200)
     project_id = result.result["project"]["id"]
 
-    def create_env():
-        return client.create_environment(project_id=project_id, name="dev")
-
-    result = await create_env()
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     cfg_env.set(env_id)
@@ -367,20 +388,39 @@ async def environment_multi(client_multi, server_multi):
     """
         Create a project and environment. This fixture returns the uuid of the environment
     """
-    def create_project():
-        return client_multi.create_project("env-test")
-
-    result = await create_project()
+    result = await client_multi.create_project("env-test")
     assert(result.code == 200)
     project_id = result.result["project"]["id"]
 
-    def create_env():
-        return client_multi.create_environment(project_id=project_id, name="dev")
-
-    result = await create_env()
+    result = await client_multi.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
+    cfg_env.set(env_id)
+
     yield env_id
+
+
+@pytest.fixture(scope="session")
+def write_db_update_file():
+
+    def _write_db_update_file(schema_dir, schema_version, content_file):
+        schema_updates_dir = os.path.join(schema_dir, data.DBSchema.DIR_NAME_INCREMENTAL_UPDATES)
+        if not os.path.exists(schema_updates_dir):
+            os.mkdir(schema_updates_dir)
+        schema_update_file = os.path.join(schema_updates_dir, str(schema_version) + ".sql")
+        with open(schema_update_file, 'w+') as f:
+            f.write(content_file)
+    yield _write_db_update_file
+
+
+@pytest.fixture(scope="function")
+def get_columns_in_db_table(postgresql_client):
+    async def _get_columns_in_db_table(table_name):
+        result = await postgresql_client.fetch("SELECT column_name "
+                                               "FROM information_schema.columns "
+                                               "WHERE table_schema='public' AND table_name='" + table_name + "'")
+        return [r["column_name"] for r in result]
+    return _get_columns_in_db_table
 
 
 class KeepOnFail(object):
@@ -447,6 +487,11 @@ class SnippetCompilationTest(KeepOnFail):
         return {"env": self.env, "libs": self.libs, "project": self.project_dir}
 
     def setup_for_snippet(self, snippet, autostd=True):
+        self.setup_for_snippet_external(snippet)
+
+        Project.set(Project(self.project_dir, autostd=autostd))
+
+    def setup_for_snippet_external(self, snippet):
         with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
             cfg.write(
                 """
@@ -456,14 +501,11 @@ class SnippetCompilationTest(KeepOnFail):
             version: 1.0
             repo: ['https://github.com/inmanta/']"""
                 % (self.libs,
-                    os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"),
-                    self.libs))
-
+                   os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"),
+                   self.libs))
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w") as x:
             x.write(snippet)
-
-        Project.set(Project(self.project_dir, autostd=autostd))
 
     def do_export(self, include_status=False, do_raise=True):
         return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)
@@ -567,3 +609,29 @@ class CLI(object):
 def cli():
     o = CLI()
     yield o
+
+
+@pytest.fixture
+def postgres_proc(free_port):
+    proc = PostgresProc(int(free_port))
+    yield proc
+    proc.stop()
+
+
+class AsyncCleaner(object):
+
+    def __init__(self):
+        self.register = []
+
+    def add(self, method):
+        self.register.append(method)
+
+    def __call__(self, method):
+        self.add(method)
+
+
+@pytest.fixture
+async def async_finalizer():
+    cleaner = AsyncCleaner()
+    yield cleaner
+    await asyncio.gather(*[item() for item in cleaner.register])

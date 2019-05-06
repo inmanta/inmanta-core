@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import logging
 import time
 import asyncio
 import inspect
@@ -66,3 +67,76 @@ def assert_graph(graph, expected):
     elines = sorted(elines)
 
     assert elines == lines, (lines, elines)
+
+
+class AsyncClosing(object):
+
+    def __init__(self, awaitable):
+        self.awaitable = awaitable
+
+    async def __aenter__(self):
+        self.closable = await self.awaitable
+        return object
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.closable.stop()
+
+
+def no_error_in_logs(caplog, levels=[logging.ERROR]):
+    for logger_name, log_level, message in caplog.record_tuples:
+        assert log_level not in levels, message
+
+
+def log_contains(caplog, loggerpart, level, msg):
+    close = []
+    for logger_name, log_level, message in caplog.record_tuples:
+        if msg in message:
+            if loggerpart in logger_name and level == log_level:
+                return
+            else:
+                close.append((logger_name, log_level, message))
+    if close:
+        print("found nearly matching log entry")
+        for logger_name, log_level, message in close:
+            print(logger_name, log_level, message)
+        print("------------")
+
+    assert False
+
+
+def log_doesnt_contain(caplog, loggerpart, level, msg):
+    for logger_name, log_level, message in caplog.record_tuples:
+        if loggerpart in logger_name and level == log_level and msg in message:
+            assert False
+
+
+def log_index(caplog, loggerpart, level, msg, after=0):
+    """Find a log in line in the captured log, return the index of the first occurrence
+
+       :param after: only consider records after the given index"""
+    close = []
+    for i, (logger_name, log_level, message) in enumerate(caplog.record_tuples[after:]):
+        if msg in message:
+            if loggerpart in logger_name and level == log_level:
+                return i + after
+            else:
+                close.append((logger_name, log_level, message))
+
+    if close:
+        print("found nearly matching")
+        for logger_name, log_level, message in close:
+            print(logger_name, log_level, message)
+        print("------------")
+
+    assert False
+
+
+class LogSequence(object):
+
+    def __init__(self, caplog, index=0):
+        self.caplog = caplog
+        self.index = index
+
+    def log_contains(self, loggerpart, level, msg):
+        index = log_index(self.caplog, loggerpart, level, msg, self.index)
+        return LogSequence(self.caplog, index)

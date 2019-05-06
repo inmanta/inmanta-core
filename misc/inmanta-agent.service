@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/inmanta -c /etc/inmanta/agent.cfg --log-file /var/log/inmanta/agent.log --timed-logs -vv agent
+ExecStart=/usr/bin/inmanta -c /etc/inmanta/agent.cfg --log-file /var/log/inmanta/agent.log --log-file-level 2 --timed-logs agent
 Restart=on-failure
 User=root
 Group=root

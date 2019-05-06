@@ -1,3 +1,5 @@
+.. _arch:
+
 Architecture
 ============
 
@@ -8,8 +10,8 @@ The Inmanta orchestrator consists of several components:
    :alt: Overview of the Inmanta platform
 
 * The Inmanta **server**: This server manages the deployment process, it keeps track of all agents and the current state of all
-  projects. The server stores it state in mongodb. All other state can be recovered after a server restart or failover.
-* A mongodb database: The Inmanta server stores it state in a mongo database.
+  projects. The server stores it state in PostgreSQL. All other state can be recovered after a server restart or failover.
+* A PostgreSQL database: The Inmanta server stores its state in a PostgreSQL database.
 * The git server: The source code of the configuration models is stored in (one or more) git repositories.
 * The **compiler**: The compiler converts the source code into deployable resources and exports it to the server.
 * CLI and Dashboard: To control the server, you can use either the web dashboard or the command line tools. Both communicate
@@ -18,7 +20,7 @@ The Inmanta orchestrator consists of several components:
   or cloud service. An agent can manage local and remote resources. This provides the flexibility to work in an agent based or
   agent-less architecture, depending on the requirements.
 
-  
+
 Usage modes
 -----------
 
@@ -31,23 +33,28 @@ Inmanta can be used in three modes:
 The last two modes support agents on same machine as the server and automatically started, or deployed as an external
 process.
 
-Embedded
-********
+All in one
+**********
 
 .. image:: _static/embedded.*
    :width: 90%
    :alt: Embedded deployment
 
 
-In a embedded deployment, all components (server, agent and mongo) are started embedded in the compiler and terminated after
+In a all in one deployment, all components (server, agent and postgres) are started embedded in the compiler and terminated after
 the deploy is complete. No specific setup is required. To deploy the current model, use::
 
    inmanta deploy
 
 
-State related to orchestration is stored locally in data/deploy. This model is ideal of testing, development and one-off
-deployments.
+The `--dashboard` option disable CLI reporting and sets up the dashboard. The embedded server is setup in such a way that
+the current project is also availble for server compilation. After the first deploy finshes, the command keeps running for
+additional deploys until ctrl+c is used to terminate the command.
 
+The all in one deployment is ideal of testing, development and one-off deployments. State related to orchestration is stored
+locally in data/deploy.
+
+.. _push-to-server:
 
 Push to server
 **************
@@ -60,6 +67,28 @@ In a push to server model, the server is deployed on an external machine, but mo
 machine. This gives faster feedback to developers, but makes the compilation less reproducible. It also complicates
 collaboration.
 
+Both the developer machine and the server need to have Inmanta installed. To compile and export models to the server from the
+developer machine a `.inmanta` file is required in the project directory (where you find the main.cf and the project.yaml file)
+to connect the compiler with the server.
+
+Create a `.inmanta` file in the project directory and include the following configuration::
+
+    [config]
+    environment=$ENV_ID
+
+    [compiler_rest_transport]
+    host=$SERVER_ADDRESS
+    port=$SERVER_PORT
+
+Replace ``$ENV_ID``, ``$SERVER_ADDRESS`` and ``$SERVER_PORT`` with the correct values (See :inmanta.config:group:`compiler_rest_transport`
+for more details when using ssl and or auth, :inmanta.config:option:`config.environment` explains the environment setting). A best
+practice is to not add the .inmanta to the git repository. Because different developer may use different orchestration servers.
+
+ * ``inmanta compile`` compiles the current project but does not upload the result to the orchestration server.
+ * ``inmanta export`` compiles and uploads the current project to the orchestration server. Depending on the environment settings the server will release and deploy the model or it becomes available in the `new` state.
+ * ``inmanta export -d`` compiles, uploads and releases the current project. The result will start deploying immediately.
+
+.. _autonomous-server:
 
 Autonomous server
 *****************
@@ -108,4 +137,4 @@ For very interactive changes the server pushes changes to the agent. The server 
  * **incremental** only deploys resource for which the orchestrator knows there are changes, based on the last known deploy status of the resource.
  * **full** always deploys all resources even if the last know status of the resource already matches desired state.
 
-    
+
