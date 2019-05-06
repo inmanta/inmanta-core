@@ -271,10 +271,12 @@ async def test_get_facts_extended(server, client, resource_container, environmen
 
     await agent.stop()
 
-    LogSequence(caplog, allow_errors=False, ignore=["tornado.access"])\
-        .contains("inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact") \
-        .contains("inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact") \
-        .contains("inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact") \
-        .contains("inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact") \
-        .contains("inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact") \
-        .no_more_errors()
+    LogSequence(caplog, allow_errors=False, ignore=["tornado.access"]).contains(
+        "inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact"
+    ).contains("inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact").contains(
+        "inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact"
+    ).contains(
+        "inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact"
+    ).contains(
+        "inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact"
+    ).no_more_errors()
