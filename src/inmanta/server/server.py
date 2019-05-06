@@ -1562,13 +1562,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         # this ra is finishing
         is_resource_action_finished = finished is not None
 
-        if is_resource_action_finished:
-            # this resource action is finished
-            if status is None:
-                error_and_log(
-                    "Cannot finish an action without a status.", resource_ids=resource_ids, action=action, action_id=action_id
-                )
-
         if is_resource_state_update:
             # if status update, status is required
             if status is None:

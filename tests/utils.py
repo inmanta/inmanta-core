@@ -83,9 +83,11 @@ class AsyncClosing(object):
         await self.closable.stop()
 
 
-def no_error_in_logs(caplog, levels=[logging.ERROR]):
+def no_error_in_logs(caplog, levels=[logging.ERROR], ignore_namespaces=["tornado.access"]):
     for logger_name, log_level, message in caplog.record_tuples:
-        assert log_level not in levels, message
+        if logger_name in ignore_namespaces:
+            continue
+        assert log_level not in levels, f"{logger_name} {log_level} {message}"
 
 
 def log_contains(caplog, loggerpart, level, msg):
@@ -133,10 +135,41 @@ def log_index(caplog, loggerpart, level, msg, after=0):
 
 
 class LogSequence(object):
-    def __init__(self, caplog, index=0):
+
+    def __init__(self, caplog, index=0, allow_errors=True, ignore=[]):
+        """
+
+        :param caplog: caplog fixture
+        :param index: start index in the log
+        :param allow_errors: allow errors between log entries that are requested by log_contains
+        :param ignore: ignore following namespaces
+        """
         self.caplog = caplog
         self.index = index
+        self.allow_errors = allow_errors
+        self.ignore = ignore
 
-    def log_contains(self, loggerpart, level, msg):
-        index = log_index(self.caplog, loggerpart, level, msg, self.index)
-        return LogSequence(self.caplog, index)
+    def _find(self, loggerpart, level, msg, after=0):
+        for i, (logger_name, log_level, message) in enumerate(self.caplog.record_tuples[after:]):
+            if msg in message:
+                if loggerpart in logger_name and level == log_level:
+                    if any(i in logger_name for i in self.ignore):
+                        continue
+                    return i + after
+        return -1
+
+    def contains(self, loggerpart, level, msg):
+        index = self._find(loggerpart, level, msg, self.index)
+        if not self.allow_errors:
+            # first error is later
+            idxe = self._find("", logging.ERROR, "", self.index)
+            assert idxe == -1 or idxe >= index
+        assert index >= 0
+        return LogSequence(self.caplog, index+1, self.allow_errors, self.ignore)
+
+    def assert_not(self, loggerpart, level, msg):
+        idx = self._find(loggerpart, level, msg, self.index)
+        assert idx == -1, f"{idx}, {self.caplog.record_tuples[idx]}"
+
+    def no_more_errors(self):
+        self.assert_not("", logging.ERROR, "")
