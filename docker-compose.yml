@@ -1,8 +1,17 @@
-server:
-    build: .
-    ports:
-        - "8888:8888"
-    links:
-        - mongo
-mongo:
-    image: mongo:3.2
+version: '3'
+services:
+    inmanta:
+        build:
+            context: .
+        ports:
+            - "8888:8888"
+        links:
+            - postgres
+        volumes:
+            - inmanta-data:/var/lib/inmanta
+
+    postgres:
+        image: postgres:10
+
+volumes:
+    inmanta-data:
