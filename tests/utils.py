@@ -135,7 +135,6 @@ def log_index(caplog, loggerpart, level, msg, after=0):
 
 
 class LogSequence(object):
-
     def __init__(self, caplog, index=0, allow_errors=True, ignore=[]):
         """
 
@@ -165,7 +164,7 @@ class LogSequence(object):
             idxe = self._find("", logging.ERROR, "", self.index)
             assert idxe == -1 or idxe >= index
         assert index >= 0
-        return LogSequence(self.caplog, index+1, self.allow_errors, self.ignore)
+        return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
     def assert_not(self, loggerpart, level, msg):
         idx = self._find(loggerpart, level, msg, self.index)

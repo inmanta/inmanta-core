@@ -138,10 +138,8 @@ async def test_ensure_future_and_handle_exception(caplog):
 
     LogSequence(caplog).contains("test_util", logging.INFO, "Success")
     final = (
-        LogSequence(caplog)
-        .contains("test_util", logging.INFO, "Fail")
-        .contains("test_util", logging.ERROR, "marker 2")
-        .index - 1
+        LogSequence(caplog).contains("test_util", logging.INFO, "Fail").contains("test_util", logging.ERROR, "marker 2").index
+        - 1
     )
     exception = caplog.get_records("call")[final].exc_info[1]
     assert str(exception) == "message F"
