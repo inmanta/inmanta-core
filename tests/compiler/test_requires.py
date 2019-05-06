@@ -117,8 +117,7 @@ post.requires = inter
     warning = [
         x
         for x in caplog.records
-        if x.msg
-        == "The resource %s had requirements before flattening, but not after flattening."
+        if x.msg == "The resource %s had requirements before flattening, but not after flattening."
         " Initial set was %s. Perhaps provides relation is not wired through correctly?"
     ]
     assert len(warning) == 1
@@ -144,10 +143,4 @@ f4.requires = f1
         snippetcompiler.do_export()
 
     cyclenames = [r.id.resource_str() for r in e.value.cycle]
-    assert set(cyclenames) == set(
-        [
-            "std::File[Test,path=/f3]",
-            "std::File[Test,path=/f2]",
-            "std::File[Test,path=/f1]",
-        ]
-    )
+    assert set(cyclenames) == set(["std::File[Test,path=/f3]", "std::File[Test,path=/f2]", "std::File[Test,path=/f1]"])

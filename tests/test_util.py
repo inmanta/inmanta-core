@@ -95,12 +95,7 @@ async def test_scheduler_async_run_fail(caplog):
 
     print(caplog.messages)
 
-    log_contains(
-        caplog,
-        "inmanta.util",
-        logging.ERROR,
-        "Uncaught exception while executing scheduled action",
-    )
+    log_contains(caplog, "inmanta.util", logging.ERROR, "Uncaught exception while executing scheduled action")
 
 
 @pytest.mark.asyncio

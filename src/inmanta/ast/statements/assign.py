@@ -23,8 +23,15 @@ from inmanta.ast.type import List, Dict
 from inmanta.ast.statements import AssignStatement, ExpressionStatement, Statement, Resumer
 from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance, Resolver, QueueScheduler
 from inmanta.execute.util import Unknown
-from inmanta.ast import RuntimeException, AttributeException, DuplicateException, TypingException, LocatableString,\
-    TypeReferenceAnchor, KeyException
+from inmanta.ast import (
+    RuntimeException,
+    AttributeException,
+    DuplicateException,
+    TypingException,
+    LocatableString,
+    TypeReferenceAnchor,
+    KeyException,
+)
 from inmanta.ast.attribute import RelationAttribute
 import typing
 
@@ -47,10 +54,7 @@ class CreateList(ReferenceStatement):
         ReferenceStatement.__init__(self, items)
         self.items = items
 
-    def execute(self,
-                requires: typing.Dict[object, object],
-                resolver: Resolver,
-                queue: QueueScheduler) -> object:
+    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
             Create this list
         """
@@ -76,7 +80,6 @@ class CreateList(ReferenceStatement):
 
 
 class CreateDict(ReferenceStatement):
-
     def __init__(self, items: typing.List[typing.Tuple[str, ReferenceStatement]]) -> None:
         ReferenceStatement.__init__(self, [x[1] for x in items])
         self.items = items
@@ -107,7 +110,7 @@ class SetAttribute(AssignStatement, Resumer):
         Set an attribute of a given instance to a given value
     """
 
-    def __init__(self, instance: "Reference", attribute_name: str, value: ExpressionStatement, list_only: bool=False) -> None:
+    def __init__(self, instance: "Reference", attribute_name: str, value: ExpressionStatement, list_only: bool = False) -> None:
         AssignStatement.__init__(self, instance, value)
         self.instance = instance
         self.attribute_name = attribute_name
@@ -118,15 +121,14 @@ class SetAttribute(AssignStatement, Resumer):
         reqs = self.instance.requires_emit(resolver, queue)
         HangUnit(queue, resolver, reqs, ResultVariable(), self)
 
-    def resume(self,
-               requires: typing.Dict[object, object],
-               resolver: Resolver,
-               queue: QueueScheduler,
-               target: ResultVariable) -> None:
+    def resume(
+        self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
+    ) -> None:
         instance = self.instance.execute(requires, resolver, queue)
         if not isinstance(instance, Instance):
-            raise TypingException(self, "The object at %s is not an Entity but a %s with value %s" %
-                                  (self.instance, type(instance), instance))
+            raise TypingException(
+                self, "The object at %s is not an Entity but a %s with value %s" % (self.instance, type(instance), instance)
+            )
         var = instance.get_attribute(self.attribute_name)
         if self.list_only and not var.is_multi():
             raise TypingException(self, "Can not use += on relations with multiplicity 1")
@@ -138,16 +140,17 @@ class SetAttribute(AssignStatement, Resumer):
 
 
 class SetAttributeHelper(ExecutionUnit):
-
-    def __init__(self,
-                 queue_scheduler: QueueScheduler,
-                 resolver: Resolver,
-                 result: ResultVariable,
-                 requires: typing.Dict[object, ResultVariable],
-                 expression: ExpressionStatement,
-                 stmt: Statement,
-                 instance: Instance,
-                 attribute_name: str) -> None:
+    def __init__(
+        self,
+        queue_scheduler: QueueScheduler,
+        resolver: Resolver,
+        result: ResultVariable,
+        requires: typing.Dict[object, ResultVariable],
+        expression: ExpressionStatement,
+        stmt: Statement,
+        instance: Instance,
+        attribute_name: str,
+    ) -> None:
         ExecutionUnit.__init__(self, queue_scheduler, resolver, result, requires, expression)
         self.stmt = stmt
         self.instance = instance
@@ -198,10 +201,7 @@ class MapLookup(ReferenceStatement):
         Lookup a value in a dict
     """
 
-    def __init__(self,
-                 themap: ExpressionStatement,
-                 key: ExpressionStatement
-                 ):
+    def __init__(self, themap: ExpressionStatement, key: ExpressionStatement):
         super(MapLookup, self).__init__([themap, key])
         self.themap = themap
         self.key = key
@@ -230,9 +230,9 @@ class IndexLookup(ReferenceStatement, Resumer):
         Lookup a value in a dictionary
     """
 
-    def __init__(self,
-                 index_type: LocatableString,
-                 query: typing.List[typing.Tuple[LocatableString, ExpressionStatement]]) -> None:
+    def __init__(
+        self, index_type: LocatableString, query: typing.List[typing.Tuple[LocatableString, ExpressionStatement]]
+    ) -> None:
         ReferenceStatement.__init__(self, [v for (_, v) in query])
         self.index_type = str(index_type)
         self.anchors.append(TypeReferenceAnchor(index_type.get_location(), index_type.namespace, str(index_type)))
@@ -250,11 +250,9 @@ class IndexLookup(ReferenceStatement, Resumer):
         HangUnit(queue, resolver, sub, temp, self)
         return {self: temp}
 
-    def resume(self,
-               requires: typing.Dict[object, object],
-               resolver: Resolver,
-               queue: QueueScheduler,
-               target: ResultVariable) -> None:
+    def resume(
+        self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
+    ) -> None:
         self.type.lookup_index([(k, v.execute(requires, resolver, queue)) for (k, v) in self.query], self, target)
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
@@ -275,9 +273,12 @@ file = std::File(host=vm, path="/etc/motd", ...)
 vm.files[path="/etc/motd"]
     """
 
-    def __init__(self, rootobject: ExpressionStatement,
-                 relation: LocatableString, query:
-                 typing.List[typing.Tuple[LocatableString, ExpressionStatement]]):
+    def __init__(
+        self,
+        rootobject: ExpressionStatement,
+        relation: LocatableString,
+        query: typing.List[typing.Tuple[LocatableString, ExpressionStatement]],
+    ):
         ReferenceStatement.__init__(self, [v for (_, v) in query] + [rootobject])
         self.rootobject = rootobject
         self.relation = str(relation)
@@ -288,11 +289,9 @@ vm.files[path="/etc/motd"]
         # currently there is no way to get the type of an expression prior to evaluation
         self.type = None
 
-    def resume(self,
-               requires: typing.Dict[object, object],
-               resolver: Resolver,
-               queue: QueueScheduler,
-               target: ResultVariable) -> None:
+    def resume(
+        self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
+    ) -> None:
         root_object = self.rootobject.execute(requires, resolver, queue)
 
         if not isinstance(root_object, Instance):
@@ -306,8 +305,8 @@ vm.files[path="/etc/motd"]
 
         if relation.end is None:
             raise TypingException(
-                self,
-                "short index lookup is only possible on bi-drectional relations, %s is unidirectional" % relation)
+                self, "short index lookup is only possible on bi-drectional relations, %s is unidirectional" % relation
+            )
 
         self.type = relation.get_type()
 

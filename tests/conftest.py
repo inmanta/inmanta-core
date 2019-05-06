@@ -149,10 +149,10 @@ async def clean_db(postgresql_client, create_db):
     tables_to_truncate = [x for x in tables_in_db if x != data.SchemaVersion.table_name() and x in tables_to_preserve]
     tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
     if tables_to_drop:
-        drop_query = "DROP TABLE %s CASCADE" % ', '.join(tables_to_drop)
+        drop_query = "DROP TABLE %s CASCADE" % ", ".join(tables_to_drop)
         await postgresql_client.execute(drop_query)
     if tables_to_truncate:
-        truncate_query = "TRUNCATE %s CASCADE" % ', '.join(tables_to_truncate)
+        truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
         await postgresql_client.execute(truncate_query)
 
 
@@ -203,7 +203,7 @@ def inmanta_config():
 
 @pytest.fixture(scope="session")
 def database_name():
-    ten_random_digits = ''.join(random.choice(string.digits) for _ in range(10))
+    ten_random_digits = "".join(random.choice(string.digits) for _ in range(10))
     yield "inmanta" + ten_random_digits
 
 
@@ -282,10 +282,11 @@ async def server(event_loop, inmanta_config, postgres_db, database_name, clean_r
     shutil.rmtree(state_dir)
 
 
-@pytest.fixture(scope="function",
-                params=[(True, True, False), (True, False, False), (False, True, False),
-                        (False, False, False), (True, True, True)],
-                ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
+@pytest.fixture(
+    scope="function",
+    params=[(True, True, False), (True, False, False), (False, True, False), (False, False, False), (True, True, True)],
+    ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"],
+)
 async def server_multi(event_loop, inmanta_config, postgres_db, database_name, request, clean_reset):
     """
     :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
@@ -300,12 +301,14 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
     if auth:
         config.Config.set("server", "auth", "true")
 
-    for x, ct in [("server", None),
-                  ("server_rest_transport", None),
-                  ("agent_rest_transport", ["agent"]),
-                  ("compiler_rest_transport", ["compiler"]),
-                  ("client_rest_transport", ["api", "compiler"]),
-                  ("cmdline_rest_transport", ["api"])]:
+    for x, ct in [
+        ("server", None),
+        ("server_rest_transport", None),
+        ("agent_rest_transport", ["agent"]),
+        ("compiler_rest_transport", ["compiler"]),
+        ("client_rest_transport", ["api", "compiler"]),
+        ("cmdline_rest_transport", ["api"]),
+    ]:
         if ssl and not ca:
             config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
             config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
@@ -381,7 +384,7 @@ async def environment(client, server):
         Create a project and environment. This fixture returns the uuid of the environment
     """
     result = await client.create_project("env-test")
-    assert(result.code == 200)
+    assert result.code == 200
     project_id = result.result["project"]["id"]
 
     result = await client.create_environment(project_id=project_id, name="dev")
@@ -398,7 +401,7 @@ async def environment_multi(client_multi, server_multi):
         Create a project and environment. This fixture returns the uuid of the environment
     """
     result = await client_multi.create_project("env-test")
-    assert(result.code == 200)
+    assert result.code == 200
     project_id = result.result["project"]["id"]
 
     result = await client_multi.create_environment(project_id=project_id, name="dev")
@@ -411,29 +414,31 @@ async def environment_multi(client_multi, server_multi):
 
 @pytest.fixture(scope="session")
 def write_db_update_file():
-
     def _write_db_update_file(schema_dir, schema_version, content_file):
         schema_updates_dir = os.path.join(schema_dir, data.DBSchema.DIR_NAME_INCREMENTAL_UPDATES)
         if not os.path.exists(schema_updates_dir):
             os.mkdir(schema_updates_dir)
         schema_update_file = os.path.join(schema_updates_dir, str(schema_version) + ".sql")
-        with open(schema_update_file, 'w+') as f:
+        with open(schema_update_file, "w+") as f:
             f.write(content_file)
+
     yield _write_db_update_file
 
 
 @pytest.fixture(scope="function")
 def get_columns_in_db_table(postgresql_client):
     async def _get_columns_in_db_table(table_name):
-        result = await postgresql_client.fetch("SELECT column_name "
-                                               "FROM information_schema.columns "
-                                               "WHERE table_schema='public' AND table_name='" + table_name + "'")
+        result = await postgresql_client.fetch(
+            "SELECT column_name "
+            "FROM information_schema.columns "
+            "WHERE table_schema='public' AND table_name='" + table_name + "'"
+        )
         return [r["column_name"] for r in result]
+
     return _get_columns_in_db_table
 
 
 class KeepOnFail(object):
-
     def keep(self) -> "Optional[Dict[str, str]]":
         pass
 
@@ -456,8 +461,9 @@ def pytest_runtest_makereport(item, call):
 
         if resources:
             # we are behind report formatting, so write to report, not item
-            rep.sections.append(("Resources Kept", "\n".join(
-                ["%s %s" % (label, resource) for label, resource in resources.items()])))
+            rep.sections.append(
+                ("Resources Kept", "\n".join(["%s %s" % (label, resource) for label, resource in resources.items()]))
+            )
 
 
 async def off_main_thread(func):
@@ -465,7 +471,6 @@ async def off_main_thread(func):
 
 
 class SnippetCompilationTest(KeepOnFail):
-
     def setUpClass(self):
         self.libs = tempfile.mkdtemp()
         self.env = tempfile.mkdtemp()
@@ -509,9 +514,8 @@ class SnippetCompilationTest(KeepOnFail):
             downloadpath: %s
             version: 1.0
             repo: ['https://github.com/inmanta/']"""
-                % (self.libs,
-                   os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"),
-                   self.libs))
+                % (self.libs, os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"), self.libs)
+            )
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w") as x:
             x.write(snippet)
@@ -602,11 +606,7 @@ class CLI(object):
         cmd_args.extend(args)
 
         def invoke():
-            return runner.invoke(
-                cli=inmanta.main.cmd,
-                args=cmd_args,
-                catch_exceptions=False
-            )
+            return runner.invoke(cli=inmanta.main.cmd, args=cmd_args, catch_exceptions=False)
 
         result = await asyncio.get_event_loop().run_in_executor(None, invoke)
         # reset to default again
@@ -628,7 +628,6 @@ def postgres_proc(free_port):
 
 
 class AsyncCleaner(object):
-
     def __init__(self):
         self.register = []
 

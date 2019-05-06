@@ -46,16 +46,15 @@ GET_RESOURCE_BACKOFF = 5
 
 
 class ResourceActionResult(object):
-
     def __init__(self, success: bool, receive_events: bool, cancel: bool) -> None:
         self.success = success
         self.receive_events = receive_events
         self.cancel = cancel
 
     def __add__(self, other: "ResourceActionResult") -> "ResourceActionResult":
-        return ResourceActionResult(self.success and other.success,
-                                    self.receive_events or other.receive_events,
-                                    self.cancel or other.cancel)
+        return ResourceActionResult(
+            self.success and other.success, self.receive_events or other.receive_events, self.cancel or other.cancel
+        )
 
     def __str__(self) -> str:
         return "%r %r %r" % (self.success, self.receive_events, self.cancel)
@@ -105,10 +104,7 @@ class ResourceAction(object):
             self.future.set_result(ResourceActionResult(False, False, True))
 
     async def send_in_progress(
-        self,
-        action_id: uuid.UUID,
-        start: float,
-        status: const.ResourceState = const.ResourceState.deploying
+        self, action_id: uuid.UUID, start: float, status: const.ResourceState = const.ResourceState.deploying
     ) -> None:
         await self.scheduler.get_client().resource_action_update(
             tid=self.scheduler._env_id,
@@ -116,16 +112,11 @@ class ResourceAction(object):
             action_id=action_id,
             action=const.ResourceAction.deploy,
             started=start,
-            status=status
+            status=status,
         )
 
     async def _execute(
-        self,
-        ctx: handler.HandlerContext,
-        events: dict,
-        cache: AgentCache,
-        start: float,
-        event_only: bool=False
+        self, ctx: handler.HandlerContext, events: dict, cache: AgentCache, start: float, event_only: bool = False
     ) -> Tuple[bool, bool]:
         """
             :param ctx The context to use during execution of this deploy
@@ -136,8 +127,7 @@ class ResourceAction(object):
             :return (success, send_event) Return whether the execution was successful and whether a change event should be sent
                                           to provides of this resource.
         """
-        ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s",
-                  deploy_id=self.gid, resource_id=self.resource_id)
+        ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
         provider: Optional[ResourceHandler] = None
 
         if not event_only:
@@ -163,7 +153,7 @@ class ResourceAction(object):
 
         # main execution
         if not event_only:
-            send_event = (hasattr(self.resource, "send_event") and self.resource.send_event)
+            send_event = hasattr(self.resource, "send_event") and self.resource.send_event
 
             try:
                 await asyncio.get_event_loop().run_in_executor(
@@ -172,8 +162,11 @@ class ResourceAction(object):
 
             except Exception as e:
                 ctx.set_status(const.ResourceState.failed)
-                ctx.exception("An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
-                              resource_id=self.resource.id, exception=repr(e))
+                ctx.exception(
+                    "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
+                    resource_id=self.resource.id,
+                    exception=repr(e),
+                )
 
             if ctx.status is not const.ResourceState.deployed:
                 success = False
@@ -184,17 +177,16 @@ class ResourceAction(object):
                 await self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
             try:
                 ctx.info(
-                    "Sending events to %(resource_id)s because of modified dependencies",
-                    resource_id=str(self.resource.id)
+                    "Sending events to %(resource_id)s because of modified dependencies", resource_id=str(self.resource.id)
                 )
 
                 await asyncio.get_event_loop().run_in_executor(
                     self.scheduler.agent.thread_pool, provider.process_events, ctx, self.resource, events
                 )
             except Exception:
-                ctx.exception("Could not send events for %(resource_id)s",
-                              resource_id=str(self.resource.id),
-                              events=str(events))
+                ctx.exception(
+                    "Could not send events for %(resource_id)s", resource_id=str(self.resource.id), events=str(events)
+                )
 
         provider.close()
         cache.close_version(self.resource_id.version)
@@ -202,8 +194,9 @@ class ResourceAction(object):
         return success, send_event
 
     def skipped_because(self, results):
-        return [resource.resource_id.resource_str()
-                for resource, result in zip(self.dependencies, results) if not result.success]
+        return [
+            resource.resource_id.resource_str() for resource, result in zip(self.dependencies, results) if not result.success
+        ]
 
     async def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> None:
         self.logger.log(const.LogLevel.TRACE.value, "Entering %s %s", self.gid, self.resource)
@@ -223,7 +216,7 @@ class ResourceAction(object):
                 resource=str(self.resource.id),
                 deploy_id=self.gid,
                 agent=self.scheduler.agent.name,
-                reason=self.reason
+                reason=self.reason,
             )
 
             self.running = True
@@ -251,9 +244,10 @@ class ResourceAction(object):
                 return
 
             if result.receive_events:
-                received_events = {x.resource_id: dict(status=x.status, change=x.change,
-                                                       changes=x.changes.get(str(x.resource_id), {}))
-                                   for x in self.dependencies}
+                received_events = {
+                    x.resource_id: dict(status=x.status, change=x.change, changes=x.changes.get(str(x.resource_id), {}))
+                    for x in self.dependencies
+                }
             else:
                 received_events = {}
 
@@ -266,7 +260,7 @@ class ResourceAction(object):
                 ctx.info(
                     "Resource %(resource)s skipped due to failed dependency %(failed)s",
                     resource=str(self.resource.id),
-                    failed=self.skipped_because(results)
+                    failed=self.skipped_because(results),
                 )
                 success = False
                 send_event = False
@@ -280,14 +274,19 @@ class ResourceAction(object):
 
             end = datetime.datetime.now()
             changes = {str(self.resource.id): ctx.changes}
-            result = await self.scheduler.get_client().resource_action_update(tid=self.scheduler._env_id,
-                                                                              resource_ids=[str(self.resource.id)],
-                                                                              action_id=ctx.action_id,
-                                                                              action=const.ResourceAction.deploy,
-                                                                              started=start, finished=end, status=ctx.status,
-                                                                              changes=changes,
-                                                                              messages=ctx.logs, change=ctx.change,
-                                                                              send_events=send_event)
+            result = await self.scheduler.get_client().resource_action_update(
+                tid=self.scheduler._env_id,
+                resource_ids=[str(self.resource.id)],
+                action_id=ctx.action_id,
+                action=const.ResourceAction.deploy,
+                started=start,
+                finished=end,
+                status=ctx.status,
+                changes=changes,
+                messages=ctx.logs,
+                change=ctx.change,
+                send_events=send_event,
+            )
             if result.code != 200:
                 LOGGER.error("Resource status update failed %s", result.result)
 
@@ -314,7 +313,6 @@ class ResourceAction(object):
 
 
 class RemoteResourceAction(ResourceAction):
-
     def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str):
         super(RemoteResourceAction, self).__init__(scheduler, None, gid, reason)
         self.resource_id = resource_id
@@ -322,12 +320,15 @@ class RemoteResourceAction(ResourceAction):
     async def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> None:
         await dummy.future
         try:
-            result = await self.scheduler.get_client().get_resource(self.scheduler.agent._env_id, str(self.resource_id),
-                                                                    logs=True, log_action=const.ResourceAction.deploy,
-                                                                    log_limit=1)
+            result = await self.scheduler.get_client().get_resource(
+                self.scheduler.agent._env_id,
+                str(self.resource_id),
+                logs=True,
+                log_action=const.ResourceAction.deploy,
+                log_limit=1,
+            )
             if result.code != 200:
-                LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id),
-                             result.result)
+                LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id), result.result)
 
             status = const.ResourceState[result.result["resource"]["status"]]
             if status in const.TRANSIENT_STATES or self.future.done():
@@ -361,11 +362,13 @@ class RemoteResourceAction(ResourceAction):
         except Exception:
             LOGGER.exception("could not get status for remote resource")
 
-    def notify(self,
-               send_events: bool,
-               status: const.ResourceState,
-               change: const.Change,
-               changes: Dict[str, Dict[str, Dict[str, str]]]) -> None:
+    def notify(
+        self,
+        send_events: bool,
+        status: const.ResourceState,
+        change: const.Change,
+        changes: Dict[str, Dict[str, Dict[str, str]]],
+    ) -> None:
         if not self.future.done():
             self.status = status
             self.change = change
@@ -383,12 +386,9 @@ class ResourceScheduler(object):
     2 - we don't need to figure out exactly when a run is done
     """
 
-    def __init__(self,
-                 agent: "AgentInstance",
-                 env_id: uuid.UUID,
-                 name: str,
-                 cache: AgentCache,
-                 ratelimiter: locks.Semaphore) -> None:
+    def __init__(
+        self, agent: "AgentInstance", env_id: uuid.UUID, name: str, cache: AgentCache, ratelimiter: locks.Semaphore
+    ) -> None:
         self.generation: Dict[str, ResourceAction] = {}
         self.cad: Dict[str, RemoteResourceAction] = {}
         self._env_id = env_id
@@ -418,7 +418,7 @@ class ResourceScheduler(object):
     def is_normal_deploy_running(self) -> bool:
         return not self.finished() and not self.is_repair
 
-    def reload(self, resources, undeployable={}, reason: str="RELOAD", is_repair=False) -> None:
+    def reload(self, resources, undeployable={}, reason: str = "RELOAD", is_repair=False) -> None:
         """
         Schedule a new set of resources for execution.
 
@@ -436,8 +436,7 @@ class ResourceScheduler(object):
                 else:
                     # increment interrupts repair
                     self.logger.info("Interrupting run '%s' for '%s'", self.reason, reason)
-                    self._resume_reason = "Restarting run '%s', interrupted for '%s'" % (self.reason,
-                                                                                         reason)
+                    self._resume_reason = "Restarting run '%s', interrupted for '%s'" % (self.reason, reason)
             else:
                 # now running increment
                 if is_repair:
@@ -522,7 +521,6 @@ class ResourceScheduler(object):
 
 
 class AgentInstance(object):
-
     def __init__(self, process: "Agent", name: str, uri: str) -> None:
         self.process = process
         self.name = name
@@ -604,35 +602,38 @@ class AgentInstance(object):
         return 200, "paused"
 
     def _enable_time_triggers(self):
-
         async def deploy_action():
             now = datetime.datetime.now()
             await self.get_latest_version_for_agent(
                 reason="Periodic deploy started at %s" % (now.strftime(const.TIME_LOGFMT)),
                 incremental_deploy=True,
-                is_repair_run=False)
+                is_repair_run=False,
+            )
 
         async def repair_action():
             now = datetime.datetime.now()
             await self.get_latest_version_for_agent(
                 reason="Repair run started at %s" % (now.strftime(const.TIME_LOGFMT)),
                 incremental_deploy=False,
-                is_repair_run=True)
+                is_repair_run=True,
+            )
 
         now = datetime.datetime.now()
         if self._deploy_interval > 0:
-            self.logger.info("Scheduling periodic deploy with interval %d and splay %d (first run at %s)",
-                             self._deploy_interval,
-                             self._deploy_splay_value,
-                             (now + datetime.timedelta(seconds=self._deploy_splay_value)).strftime(const.TIME_LOGFMT)
-                             )
+            self.logger.info(
+                "Scheduling periodic deploy with interval %d and splay %d (first run at %s)",
+                self._deploy_interval,
+                self._deploy_splay_value,
+                (now + datetime.timedelta(seconds=self._deploy_splay_value)).strftime(const.TIME_LOGFMT),
+            )
             self._enable_time_trigger(deploy_action, self._deploy_interval, self._deploy_splay_value)
         if self._repair_interval > 0:
-            self.logger.info("Scheduling repair with interval %d and splay %d (first run at %s)",
-                             self._repair_interval,
-                             self._repair_splay_value,
-                             (now + datetime.timedelta(seconds=self._repair_splay_value)).strftime(const.TIME_LOGFMT)
-                             )
+            self.logger.info(
+                "Scheduling repair with interval %d and splay %d (first run at %s)",
+                self._repair_interval,
+                self._repair_splay_value,
+                (now + datetime.timedelta(seconds=self._repair_splay_value)).strftime(const.TIME_LOGFMT),
+            )
             self._enable_time_trigger(repair_action, self._repair_interval, self._repair_splay_value)
 
     def _enable_time_trigger(self, action, interval, splay):
@@ -652,8 +653,11 @@ class AgentInstance(object):
             self.logger.info("Attempting to get resource while get is in progress")
             return False
         if time.time() < self._get_resource_timeout:
-            self.logger.info("Attempting to get resources during backoff %g seconds left, last download took %d seconds",
-                             self._get_resource_timeout - time.time(), self._get_resource_duration)
+            self.logger.info(
+                "Attempting to get resources during backoff %g seconds left, last download took %d seconds",
+                self._get_resource_timeout - time.time(),
+                self._get_resource_duration,
+            )
             return False
         return True
 
@@ -682,8 +686,9 @@ class AgentInstance(object):
             self._getting_resources = True
             start = time.time()
             try:
-                result = await self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name,
-                                                                         incremental_deploy=incremental_deploy)
+                result = await self.get_client().get_resources_for_agent(
+                    tid=self._env_id, agent=self.name, incremental_deploy=incremental_deploy
+                )
             finally:
                 self._getting_resources = False
             end = time.time()
@@ -694,9 +699,7 @@ class AgentInstance(object):
             elif result.code == 409:
                 self.logger.warning("We are not currently primary during %s: %s", reason, result.result)
             elif result.code != 200:
-                self.logger.warning("Got an error while pulling resources for %s. %s",
-                                    reason,
-                                    result.result)
+                self.logger.warning("Got an error while pulling resources for %s. %s", reason, result.result)
 
             else:
                 restypes = set([res["resource_type"] for res in result.result["resources"]])
@@ -752,10 +755,14 @@ class AgentInstance(object):
                     provider = None
                     try:
                         if const.ResourceState[res["status"]] in const.UNDEPLOYABLE_STATES:
-                            ctx.exception("Skipping %(resource_id)s because in undeployable state %(status)s",
-                                          resource_id=res["id"], status=res["status"])
-                            await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
-                                                                  changes={})
+                            ctx.exception(
+                                "Skipping %(resource_id)s because in undeployable state %(status)s",
+                                resource_id=res["id"],
+                                status=res["status"],
+                            )
+                            await self.get_client().dryrun_update(
+                                tid=self._env_id, id=dry_run_id, resource=res["id"], changes={}
+                            )
                             continue
 
                         data = res["attributes"]
@@ -766,11 +773,17 @@ class AgentInstance(object):
                         try:
                             provider = await self.get_provider(resource)
                         except Exception as e:
-                            ctx.exception("Unable to find a handler for %(resource_id)s (exception: %(exception)s",
-                                          resource_id=str(resource.id), exception=str(e))
-                            await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
-                                                                  changes={"handler": {"current": "FAILED",
-                                                                                       "desired": "Unable to find a handler"}})
+                            ctx.exception(
+                                "Unable to find a handler for %(resource_id)s (exception: %(exception)s",
+                                resource_id=str(resource.id),
+                                exception=str(e),
+                            )
+                            await self.get_client().dryrun_update(
+                                tid=self._env_id,
+                                id=dry_run_id,
+                                resource=res["id"],
+                                changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
+                            )
                         else:
                             try:
                                 await asyncio.get_event_loop().run_in_executor(
@@ -780,38 +793,47 @@ class AgentInstance(object):
                                 changes = ctx.changes
                                 if changes is None:
                                     changes = {}
-                                if(ctx.status == const.ResourceState.failed):
+                                if ctx.status == const.ResourceState.failed:
                                     changes["handler"] = {"current": "FAILED", "desired": "Handler failed"}
-                                await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
-                                                                      changes=changes)
+                                await self.get_client().dryrun_update(
+                                    tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
+                                )
                             except Exception as e:
-                                ctx.exception("Exception during dryrun for %(resource_id)s (exception: %(exception)s",
-                                              resource_id=str(resource.id), exception=str(e))
+                                ctx.exception(
+                                    "Exception during dryrun for %(resource_id)s (exception: %(exception)s",
+                                    resource_id=str(resource.id),
+                                    exception=str(e),
+                                )
                                 changes = ctx.changes
                                 if changes is None:
                                     changes = {}
                                 changes["handler"] = {"current": "FAILED", "desired": "Handler failed"}
-                                await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
-                                                                      changes=changes)
+                                await self.get_client().dryrun_update(
+                                    tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
+                                )
 
                     except Exception:
                         ctx.exception("Unable to process resource for dryrun.")
                         changes = {}
                         changes["handler"] = {"current": "FAILED", "desired": "Resource Deserialization Failed"}
-                        await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
-                                                              changes=changes)
+                        await self.get_client().dryrun_update(
+                            tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
+                        )
                     finally:
                         if provider is not None:
                             provider.close()
 
                         finished = datetime.datetime.now()
-                        await self.get_client().resource_action_update(tid=self._env_id, resource_ids=[res["id"]],
-                                                                       action_id=ctx.action_id,
-                                                                       action=const.ResourceAction.dryrun,
-                                                                       started=started,
-                                                                       finished=finished,
-                                                                       messages=ctx.logs,
-                                                                       status=const.ResourceState.dry)
+                        await self.get_client().resource_action_update(
+                            tid=self._env_id,
+                            resource_ids=[res["id"]],
+                            action_id=ctx.action_id,
+                            action=const.ResourceAction.dryrun,
+                            started=started,
+                            finished=finished,
+                            messages=ctx.logs,
+                            status=const.ResourceState.dry,
+                        )
 
                 self._cache.close_version(version)
 
@@ -834,17 +856,21 @@ class AgentInstance(object):
                         self.thread_pool, provider.check_facts, ctx, resource_obj
                     )
 
-                    parameters = [{"id": name, "value": value, "resource_id": resource_obj.id.resource_str(), "source": "fact"}
-                                  for name, value in result.items()]
+                    parameters = [
+                        {"id": name, "value": value, "resource_id": resource_obj.id.resource_str(), "source": "fact"}
+                        for name, value in result.items()
+                    ]
                     await self.get_client().set_parameters(tid=self._env_id, parameters=parameters)
                     finished = datetime.datetime.now()
-                    await self.get_client().resource_action_update(tid=self._env_id,
-                                                                   resource_ids=[resource_obj.id.resource_str()],
-                                                                   action_id=ctx.action_id,
-                                                                   action=const.ResourceAction.getfact,
-                                                                   started=started,
-                                                                   finished=finished,
-                                                                   messages=ctx.logs)
+                    await self.get_client().resource_action_update(
+                        tid=self._env_id,
+                        resource_ids=[resource_obj.id.resource_str()],
+                        action_id=ctx.action_id,
+                        action=const.ResourceAction.getfact,
+                        started=started,
+                        finished=finished,
+                        messages=ctx.logs,
+                    )
 
                 except Exception:
                     self.logger.exception("Unable to retrieve fact")
@@ -866,8 +892,7 @@ class Agent(SessionEndpoint):
         message bus for changes.
     """
 
-    def __init__(self, hostname=None, agent_map=None, code_loader=True, environment=None, poolsize=1,
-                 cricital_pool_size=5):
+    def __init__(self, hostname=None, agent_map=None, code_loader=True, environment=None, poolsize=1, cricital_pool_size=5):
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.poolsize = poolsize
@@ -1012,35 +1037,40 @@ class Agent(SessionEndpoint):
             return 500, "Agent is not _enabled"
 
         LOGGER.info("Agent %s got a trigger to update in environment %s", agent, env)
-        self.add_background_task(self._instances[agent].get_latest_version_for_agent(
-            reason="call to trigger_update",
-            incremental_deploy=incremental_deploy)
+        self.add_background_task(
+            self._instances[agent].get_latest_version_for_agent(
+                reason="call to trigger_update", incremental_deploy=incremental_deploy
+            )
         )
         return 200
 
     @protocol.handle(methods.resource_event, env="tid", agent="id")
     async def resource_event(
-        self,
-        env,
-        agent: str,
-        resource: str,
-        send_events: bool,
-        state: const.ResourceState,
-        change: const.Change,
-        changes: dict
+        self, env, agent: str, resource: str, send_events: bool, state: const.ResourceState, change: const.Change, changes: dict
     ):
         if env != self._env_id:
-            LOGGER.warning("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
-                           env, agent, resource, state)
+            LOGGER.warning(
+                "received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
+                env,
+                agent,
+                resource,
+                state,
+            )
             return 200
 
         if agent not in self._instances:
-            LOGGER.warning("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
-                           env, agent, resource, state)
+            LOGGER.warning(
+                "received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
+                env,
+                agent,
+                resource,
+                state,
+            )
             return 200
 
-        LOGGER.debug("Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s",
-                     agent, env, agent, resource, state)
+        LOGGER.debug(
+            "Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s", agent, env, agent, resource, state
+        )
         self._instances[agent].notify_ready(resource, send_events, state, change, changes)
 
         return 200
@@ -1055,10 +1085,9 @@ class Agent(SessionEndpoint):
         if agent not in self._instances:
             return 200
 
-        LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s",
-                    agent, dry_run_id, version, env)
+        LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s", agent, dry_run_id, version, env)
 
-        return (await self._instances[agent].dryrun(dry_run_id, version))
+        return await self._instances[agent].dryrun(dry_run_id, version)
 
     def check_storage(self):
         """
@@ -1094,7 +1123,7 @@ class Agent(SessionEndpoint):
         if agent not in self._instances:
             return 200
 
-        return (await self._instances[agent].get_facts(resource))
+        return await self._instances[agent].get_facts(resource)
 
     @protocol.handle(methods.get_status)
     async def get_status(self):

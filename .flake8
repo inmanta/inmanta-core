@@ -10,8 +10,9 @@
 # E252 missing whitespace around parameter equals
 # w503 line break occurred before a binary operator
 # E402 module level import not at top of file
+# E203 whitespaces and the slice operator. black and flake disagree
 
 [flake8]
-ignore = H405,H404,H302,H306,H301,H101,H801,E402,W503,E252
+ignore = H405,H404,H302,H306,H301,H101,H801,E402,W503,E252,E203
 max-line-length = 128
 exclude = **/.env,.venv,.git,.tox,dist,doc,**egg,src/inmanta/parser/parsetab.py,src/inmanta/parser/plyInmantaParser.py,tests/data/**

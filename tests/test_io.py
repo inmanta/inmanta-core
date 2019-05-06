@@ -62,7 +62,7 @@ def test_check_read(io, testdir):
 
 @pytest.mark.parametrize("io", io_list)
 def test_check_read_binary(io, testdir):
-    test_str = b'\1\2\3\4\5\6'
+    test_str = b"\1\2\3\4\5\6"
     filename = os.path.join(testdir, "readbinaryfile")
     with open(filename, "wb+") as fd:
         fd.write(test_str)
@@ -76,7 +76,7 @@ def test_check_read_binary(io, testdir):
 @pytest.mark.parametrize("io", io_list, ids=io_names)
 def test_check_run_pipe_actual(io, testdir):
     filename = os.path.join(testdir, "testfile")
-    result = io.run('sh', ['-c', 'export PATH=$PATH:/usr/lib/jvm/jre-1.7.0-openjdk/bin; env >' + filename + ' 2>&1'])
+    result = io.run("sh", ["-c", "export PATH=$PATH:/usr/lib/jvm/jre-1.7.0-openjdk/bin; env >" + filename + " 2>&1"])
     print(result)
     assert "/usr/lib/jvm/jre-1.7.0-openjdk/bin" not in result[0]
     assert result[2] == 0
@@ -157,12 +157,12 @@ def test_check_mkdir(io, testdir):
 def test_check_rmdir(io, testdir):
     path = os.path.join(testdir, "rmdir" + str(io))
     os.mkdir(path)
-    assert(os.path.exists(path))
+    assert os.path.exists(path)
 
     path2 = os.path.join(path, "testfile" + str(io))
     with open(path2, "w+") as fd:
         fd.write("")
-    assert(os.path.exists(path2))
+    assert os.path.exists(path2)
 
     io.rmdir(path)
 

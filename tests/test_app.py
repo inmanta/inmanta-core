@@ -29,9 +29,7 @@ import signal
 from subprocess import TimeoutExpired
 
 
-def get_command(
-    tmp_dir, stdout_log_level=None, log_file=None, log_level_log_file=None, timed=False
-):
+def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_file=None, timed=False):
     root_dir = tmp_dir.mkdir("root").strpath
     log_dir = os.path.join(root_dir, "log")
     state_dir = os.path.join(root_dir, "data")
@@ -65,9 +63,7 @@ def get_command(
 def do_run(args, env={}, cwd=None):
     baseenv = os.environ.copy()
     baseenv.update(env)
-    process = subprocess.Popen(
-        args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=baseenv
-    )
+    process = subprocess.Popen(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=baseenv)
     return process
 
 
@@ -148,10 +144,7 @@ def test_verify_that_colorama_package_is_not_present():
             3,
             False,
             False,
-            [
-                r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint",
-                r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint",
-            ],
+            [r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint", r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint"],
             [],
         ),
         (
@@ -175,21 +168,14 @@ def test_verify_that_colorama_package_is_not_present():
             2,
             False,
             True,
-            [
-                r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint"
-            ],
-            [
-                r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint"
-            ],
+            [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint"],
+            [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint"],
         ),
         (
             3,
             True,
             False,
-            [
-                r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint",
-                r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint",
-            ],
+            [r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint", r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint"],
             [],
         ),
         (
@@ -213,19 +199,13 @@ def test_verify_that_colorama_package_is_not_present():
             2,
             True,
             True,
-            [
-                r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint"
-            ],
-            [
-                r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint"
-            ],
+            [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint"],
+            [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint"],
         ),
     ],
 )
 @pytest.mark.timeout(20)
-def test_no_log_file_set(
-    tmpdir, log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines
-):
+def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines):
     if is_colorama_package_available() and with_tty:
         pytest.skip("Colorama is present")
 
@@ -276,19 +256,12 @@ def test_no_log_file_set(
     ],
 )
 @pytest.mark.timeout(60)
-def test_log_file_set(
-    tmpdir, log_level, with_tty, regexes_required_lines, regexes_forbidden_lines
-):
+def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regexes_forbidden_lines):
     if is_colorama_package_available() and with_tty:
         pytest.skip("Colorama is present")
 
     log_file = "server.log"
-    (args, log_dir) = get_command(
-        tmpdir,
-        stdout_log_level=log_level,
-        log_file=log_file,
-        log_level_log_file=log_level,
-    )
+    (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, log_file=log_file, log_level_log_file=log_level)
     if with_tty:
         (stdout, _) = run_with_tty(args)
     else:
@@ -303,28 +276,20 @@ def test_log_file_set(
 
 
 def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed):
-    compiled_regexes_requires_lines = get_compiled_regexes(
-        regexes_required_lines, timed
-    )
-    compiled_regexes_forbidden_lines = get_compiled_regexes(
-        regexes_forbidden_lines, timed
-    )
+    compiled_regexes_requires_lines = get_compiled_regexes(regexes_required_lines, timed)
+    compiled_regexes_forbidden_lines = get_compiled_regexes(regexes_forbidden_lines, timed)
     for line in log_lines:
         print(line)
     for regex in compiled_regexes_requires_lines:
         if not any(regex.match(line) for line in log_lines):
-            pytest.fail(
-                "Required pattern was not found in log lines: %s" % (regex.pattern,)
-            )
+            pytest.fail("Required pattern was not found in log lines: %s" % (regex.pattern,))
     for regex in compiled_regexes_forbidden_lines:
         if any(regex.match(line) for line in log_lines):
             pytest.fail("Forbidden pattern found in log lines: %s" % (regex.pattern,))
 
 
 def test_check_shutdown():
-    process = do_run(
-        [sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py")]
-    )
+    process = do_run([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py")])
     # wait for handler to be in place
     try:
         process.communicate(timeout=2)
@@ -339,12 +304,8 @@ def test_check_shutdown():
 
 
 def test_check_bad_shutdown():
-    print(
-        [sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"]
-    )
-    process = do_run(
-        [sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"]
-    )
+    print([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"])
+    process = do_run([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"])
     out, err = do_kill(process, killtime=5, termtime=2)
     print(out, err)
     assert "----- Thread Dump ----" in out
@@ -365,17 +326,16 @@ o = Test(attr="1234")
 """
     )
 
-    output = """Could not set attribute `attr` on instance `__config__::Test (instantiated at ./main.cf:8)` """ \
+    output = (
+        """Could not set attribute `attr` on instance `__config__::Test (instantiated at ./main.cf:8)` """
         """(reported in Construct(Test) (./main.cf:8))
 caused by:
   Invalid value '1234', expected Number (reported in Construct(Test) (./main.cf:8))
 """
+    )
 
     def exec(*cmd):
-        process = do_run(
-            [sys.executable, "-m", "inmanta.app"] + list(cmd),
-            cwd=snippetcompiler.project_dir,
-        )
+        process = do_run([sys.executable, "-m", "inmanta.app"] + list(cmd), cwd=snippetcompiler.project_dir)
         out, err = process.communicate(timeout=5)
         assert out.decode() == ""
         assert err.decode() == output

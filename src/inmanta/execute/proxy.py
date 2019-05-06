@@ -146,7 +146,6 @@ class DynamicProxy(object):
 
 
 class SequenceProxy(DynamicProxy):
-
     def __init__(self, iterator):
         DynamicProxy.__init__(self, iterator)
 
@@ -167,7 +166,6 @@ class SequenceProxy(DynamicProxy):
 
 
 class DictProxy(DynamicProxy, Mapping):
-
     def __init__(self, mydict):
         DynamicProxy.__init__(self, mydict)
 

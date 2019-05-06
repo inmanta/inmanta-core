@@ -27,7 +27,6 @@ from utils import assert_equal_ish, UNKWN
 
 
 class Collector(object):
-
     def __init__(self):
         self.values = []
 
@@ -202,44 +201,80 @@ async def test_api(init_dataclasses_and_load_schema):
     code, all_agents = await am.list_agent_processes(None, None)
     assert code == 200
 
-    shouldbe = {'processes': [{'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
-                               'last_seen': UNKWN, 'endpoints':
-                               [{'id': UNKWN, 'name': 'agent1', 'process': UNKWN},
-                                {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
-                               'environment': env.id},
-                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
-                               'last_seen': UNKWN, 'endpoints':
-                               [{'id': UNKWN, 'name': 'agent2', 'process': UNKWN},
-                                {'id': UNKWN, 'name': 'agent3', 'process': UNKWN}],
-                               'environment': env.id},
-                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts3',
-                               'last_seen': UNKWN, 'endpoints':
-                               [{'id': UNKWN, 'name': 'agentx', 'process': UNKWN}],
-                               'environment': env3.id}]}
+    shouldbe = {
+        "processes": [
+            {
+                "first_seen": UNKWN,
+                "expired": None,
+                "hostname": "ts1",
+                "last_seen": UNKWN,
+                "endpoints": [
+                    {"id": UNKWN, "name": "agent1", "process": UNKWN},
+                    {"id": UNKWN, "name": "agent2", "process": UNKWN},
+                ],
+                "environment": env.id,
+            },
+            {
+                "first_seen": UNKWN,
+                "expired": None,
+                "hostname": "ts2",
+                "last_seen": UNKWN,
+                "endpoints": [
+                    {"id": UNKWN, "name": "agent2", "process": UNKWN},
+                    {"id": UNKWN, "name": "agent3", "process": UNKWN},
+                ],
+                "environment": env.id,
+            },
+            {
+                "first_seen": UNKWN,
+                "expired": None,
+                "hostname": "ts3",
+                "last_seen": UNKWN,
+                "endpoints": [{"id": UNKWN, "name": "agentx", "process": UNKWN}],
+                "environment": env3.id,
+            },
+        ]
+    }
 
     assert_equal_ish(shouldbe, all_agents, sortby=["hostname", "name"])
-    agentid = all_agents['processes'][0]['sid']
+    agentid = all_agents["processes"][0]["sid"]
 
     code, all_agents = await am.list_agent_processes(env.id, None)
     assert code == 200
 
-    shouldbe = {'processes': [{'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
-                               'last_seen': UNKWN, 'endpoints':
-                               [{'id': UNKWN, 'name': 'agent1', 'process': UNKWN},
-                                {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
-                               'environment': env.id},
-                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
-                               'last_seen': UNKWN, 'endpoints':
-                               [{'id': UNKWN, 'name': 'agent2', 'process': UNKWN},
-                                {'id': UNKWN, 'name': 'agent3', 'process': UNKWN}],
-                               'environment': env.id}]}
+    shouldbe = {
+        "processes": [
+            {
+                "first_seen": UNKWN,
+                "expired": None,
+                "hostname": "ts1",
+                "last_seen": UNKWN,
+                "endpoints": [
+                    {"id": UNKWN, "name": "agent1", "process": UNKWN},
+                    {"id": UNKWN, "name": "agent2", "process": UNKWN},
+                ],
+                "environment": env.id,
+            },
+            {
+                "first_seen": UNKWN,
+                "expired": None,
+                "hostname": "ts2",
+                "last_seen": UNKWN,
+                "endpoints": [
+                    {"id": UNKWN, "name": "agent2", "process": UNKWN},
+                    {"id": UNKWN, "name": "agent3", "process": UNKWN},
+                ],
+                "environment": env.id,
+            },
+        ]
+    }
 
     assert_equal_ish(shouldbe, all_agents, sortby=["hostname", "name"])
 
     code, all_agents = await am.list_agent_processes(env2.id, None)
     assert code == 200
 
-    shouldbe = {'processes': []}
+    shouldbe = {"processes": []}
 
     assert_equal_ish(shouldbe, all_agents)
 
@@ -255,21 +290,23 @@ async def test_api(init_dataclasses_and_load_schema):
 
     code, all_agents = await am.list_agents(None)
     assert code == 200
-    shouldbe = {'agents': [{'name': 'agent1', 'paused': True, 'last_failover': '', 'primary': '',
-                            'environment': env.id, "state": "paused"},
-                           {'name': 'agent2', 'paused': False, 'last_failover': UNKWN,
-                               'primary': UNKWN, 'environment': env.id, "state": "up"},
-                           {'name': 'agent3', 'paused': False, 'last_failover': UNKWN,
-                               'primary': UNKWN, 'environment': env.id, "state": "up"},
-                           {'name': 'agent4', 'paused': False, 'last_failover': '', 'primary': '',
-                            'environment': env2.id, "state": "down"}]}
+    shouldbe = {
+        "agents": [
+            {"name": "agent1", "paused": True, "last_failover": "", "primary": "", "environment": env.id, "state": "paused"},
+            {"name": "agent2", "paused": False, "last_failover": UNKWN, "primary": UNKWN, "environment": env.id, "state": "up"},
+            {"name": "agent3", "paused": False, "last_failover": UNKWN, "primary": UNKWN, "environment": env.id, "state": "up"},
+            {"name": "agent4", "paused": False, "last_failover": "", "primary": "", "environment": env2.id, "state": "down"},
+        ]
+    }
     assert_equal_ish(shouldbe, all_agents, sortby=["name"])
 
     code, all_agents = await am.list_agents(env2)
     assert code == 200
     shouldbe = {
-        'agents': [{'name': 'agent4', 'paused': False, 'last_failover': '', 'primary': '',
-                    'environment': env2.id, "state": "down"}]}
+        "agents": [
+            {"name": "agent4", "paused": False, "last_failover": "", "primary": "", "environment": env2.id, "state": "down"}
+        ]
+    }
     assert_equal_ish(shouldbe, all_agents)
 
 

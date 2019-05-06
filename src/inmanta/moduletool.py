@@ -15,8 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from inmanta.module import INSTALL_MASTER, Project, Module,\
-    INSTALL_RELEASES, gitprovider
+from inmanta.module import INSTALL_MASTER, Project, Module, INSTALL_RELEASES, gitprovider
 import inspect
 import logging
 import os
@@ -69,7 +68,7 @@ class ModuleLikeTool(object):
         """
             Execute the given subcommand
         """
-        if cmd is not None and cmd != '' and hasattr(self, cmd):
+        if cmd is not None and cmd != "" and hasattr(self, cmd):
             method = getattr(self, cmd)
             margs = inspect.getfullargspec(method).args
             margs.remove("self")
@@ -127,7 +126,7 @@ class ModuleLikeTool(object):
                     parts[0] += 1
                     parts[1] = 0
                     parts[2] = 0
-                outversion = '.'.join([str(x) for x in parts])
+                outversion = ".".join([str(x) for x in parts])
 
             if dev:
                 outversion = "%s.dev%d" % (outversion, time.time())
@@ -141,23 +140,30 @@ class ModuleLikeTool(object):
 
 
 class ProjectTool(ModuleLikeTool):
-
     @classmethod
     def parser_config(cls, parser: ArgumentParser):
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
         freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml")
-        freeze.add_argument("-o", "--outfile",
-                            help="File in which to put the new project.yml, default is the existing project.yml",
-                            default=None)
-        freeze.add_argument("-r", "--recursive",
-                            help="Freeze dependencies recursively. If not set, freeze_recursive option in project.yml is used,"
-                            "which defaults to False",
-                            action="store_true",
-                            default=None)
-        freeze.add_argument("--operator",
-                            help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
-                            " project.yml is used which defaults to ~=",
-                            default=None)
+        freeze.add_argument(
+            "-o",
+            "--outfile",
+            help="File in which to put the new project.yml, default is the existing project.yml",
+            default=None,
+        )
+        freeze.add_argument(
+            "-r",
+            "--recursive",
+            help="Freeze dependencies recursively. If not set, freeze_recursive option in project.yml is used,"
+            "which defaults to False",
+            action="store_true",
+            default=None,
+        )
+        freeze.add_argument(
+            "--operator",
+            help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
+            " project.yml is used which defaults to ~=",
+            default=None,
+        )
 
     def freeze(self, outfile, recursive, operator):
         """
@@ -188,11 +194,11 @@ class ProjectTool(ModuleLikeTool):
         newconfig["requires"] = requires
 
         if outfile is None:
-            outfile = open(project.get_config_file_name(), "w", encoding='UTF-8')
+            outfile = open(project.get_config_file_name(), "w", encoding="UTF-8")
         elif outfile == "-":
             outfile = sys.stdout
         else:
-            outfile = open(outfile, "w", encoding='UTF-8')
+            outfile = open(outfile, "w", encoding="UTF-8")
 
         outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
 
@@ -212,11 +218,12 @@ class ModuleTool(ModuleLikeTool):
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
         lst = subparser.add_parser("list", help="List all modules used in this project in a table")
-        lst.add_argument("-r", help="Output a list of requires that can be included in project.yml", dest="requires",
-                         action="store_true")
+        lst.add_argument(
+            "-r", help="Output a list of requires that can be included in project.yml", dest="requires", action="store_true"
+        )
 
         do = subparser.add_parser("do", help="Execute a command on all loaded modules")
-        do.add_argument("command", metavar='command', help='the command to  execute')
+        do.add_argument("command", metavar="command", help="the command to  execute")
 
         subparser.add_parser("update", help="Update all modules used in this project")
 
@@ -230,16 +237,23 @@ class ModuleTool(ModuleLikeTool):
         subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
 
         validate = subparser.add_parser(
-            "validate", help="Validate the module we are currently in. i.e. try to compile it against an empty main model")
+            "validate", help="Validate the module we are currently in. i.e. try to compile it against an empty main model"
+        )
         validate.add_argument("-r", "--repo", help="Additional repo to load modules from", action="append")
-        validate.add_argument("-n", "--no-clean", help="Do not remove the validation project when finished",
-                              action="store_true")
+        validate.add_argument(
+            "-n", "--no-clean", help="Do not remove the validation project when finished", action="store_true"
+        )
         validate.add_argument("-s", "--parse-only", help="Only parse the module", action="store_true")
-        validate.add_argument("-i", "--isolate", help="Move the module to another directory before cloning."
-                              " I.e. remove all other modules in the current directory from the search path",
-                              action="store_true")
-        validate.add_argument("-w", "--workingcopy", help="Use the actual state of the module instead of the latest tag",
-                              action="store_true")
+        validate.add_argument(
+            "-i",
+            "--isolate",
+            help="Move the module to another directory before cloning."
+            " I.e. remove all other modules in the current directory from the search path",
+            action="store_true",
+        )
+        validate.add_argument(
+            "-w", "--workingcopy", help="Use the actual state of the module instead of the latest tag", action="store_true"
+        )
 
         commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
         commit.add_argument("-m", "--message", help="Commit message", required=True)
@@ -254,18 +268,26 @@ class ModuleTool(ModuleLikeTool):
         create.add_argument("name", help="The name of the module")
 
         freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml")
-        freeze.add_argument("-o", "--outfile",
-                            help="File in which to put the new project.yml, default is the existing project.yml",
-                            default=None)
-        freeze.add_argument("-r", "--recursive",
-                            help="Freeze dependencies recursively. If not set, freeze_recursive option in project.yml is used,"
-                            "which defaults to False",
-                            action="store_true",
-                            default=None)
-        freeze.add_argument("--operator",
-                            help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
-                                 " project.yml is used which defaults to ~=",
-                            default=None)
+        freeze.add_argument(
+            "-o",
+            "--outfile",
+            help="File in which to put the new project.yml, default is the existing project.yml",
+            default=None,
+        )
+        freeze.add_argument(
+            "-r",
+            "--recursive",
+            help="Freeze dependencies recursively. If not set, freeze_recursive option in project.yml is used,"
+            "which defaults to False",
+            action="store_true",
+            default=None,
+        )
+        freeze.add_argument(
+            "--operator",
+            help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
+            " project.yml is used which defaults to ~=",
+            default=None,
+        )
 
     def get_project_for_module(self, module):
         try:
@@ -274,7 +296,7 @@ class ModuleTool(ModuleLikeTool):
             # see #721
             return None
 
-    def get_module(self, module: str=None, project=None) -> Module:
+    def get_module(self, module: str = None, project=None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
             module = Module(self.get_project_for_module(module), os.path.realpath(os.curdir))
@@ -283,7 +305,7 @@ class ModuleTool(ModuleLikeTool):
             project = self.get_project(load=True)
             return project.get_module(module)
 
-    def get_modules(self, module: str=None):
+    def get_modules(self, module: str = None):
         if module is not None:
             return [self.get_module(module)]
         else:
@@ -302,20 +324,25 @@ class ModuleTool(ModuleLikeTool):
 
         os.mkdir(mod_path)
         with open(os.path.join(mod_path, "module.yml"), "w+") as fd:
-            fd.write("""name: %(name)s
+            fd.write(
+                """name: %(name)s
 license: ASL 2.0
-version: 0.0.1dev0""" % {"name": name})
+version: 0.0.1dev0"""
+                % {"name": name}
+            )
 
         os.mkdir(os.path.join(mod_path, "model"))
         with open(os.path.join(mod_path, "model", "_init.cf"), "w+") as fd:
             fd.write("\n")
 
         with open(os.path.join(mod_path, ".gitignore"), "w+") as fd:
-            fd.write("""*.swp
+            fd.write(
+                """*.swp
 *.pyc
 *~
 .cache
-            """)
+            """
+            )
 
         subprocess.check_output(["git", "init"], cwd=mod_path)
         subprocess.check_output(["git", "add", ".gitignore", "module.yml", "model/_init.cf"], cwd=mod_path)
@@ -355,8 +382,7 @@ version: 0.0.1dev0""" % {"name": name})
                     reqv = "master"
                 else:
                     release_only = project._install_mode == INSTALL_RELEASES
-                    versions = Module.get_suitable_version_for(
-                        name, specs[name], mod._path, release_only=release_only)
+                    versions = Module.get_suitable_version_for(name, specs[name], mod._path, release_only=release_only)
                     if versions is None:
                         reqv = "None"
                     else:
@@ -514,24 +540,29 @@ version: 0.0.1dev0""" % {"name": name})
 
             repo.insert(0, search_root)
             allrepos = ["'%s'" % x for x in repo]
-            allrepos = ','.join(allrepos)
+            allrepos = ",".join(allrepos)
 
             if len(module.versions()) > 0:
-                version_constraint = "%(name)s: %(name)s == %(version)s" % \
-                                     {"name": module.name, "version": str(module.versions()[0])}
+                version_constraint = "%(name)s: %(name)s == %(version)s" % {
+                    "name": module.name,
+                    "version": str(module.versions()[0]),
+                }
             else:
                 version_constraint = module.name
 
             LOGGER.info("Setting up project")
             with open(os.path.join(project_dir, "project.yml"), "w+") as fd:
-                fd.write("""name: test
+                fd.write(
+                    """name: test
 description: Project to validate module %(name)s
 repo: [%(repo)s]
 modulepath: libs
 downloadpath: libs
 requires:
     %(version)s
-""" % {"name": module.name, "version": version_constraint, "repo": allrepos})
+"""
+                    % {"name": module.name, "version": version_constraint, "repo": allrepos}
+                )
 
             LOGGER.info("Installing dependencies")
             test_project = Project(project_dir)
@@ -613,10 +644,10 @@ requires:
         newconfig["requires"] = requires
 
         if outfile is None:
-            outfile = open(module.get_config_file_name(), "w", encoding='UTF-8')
+            outfile = open(module.get_config_file_name(), "w", encoding="UTF-8")
         elif outfile == "-":
             outfile = sys.stdout
         else:
-            outfile = open(outfile, "w", encoding='UTF-8')
+            outfile = open(outfile, "w", encoding="UTF-8")
 
         outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))

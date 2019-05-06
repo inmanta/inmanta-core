@@ -416,7 +416,7 @@ def gzipped_json(value: JsonType) -> Tuple[bool, Union[bytes, str]]:
 def shorten(msg: str, max_len: int = 10) -> str:
     if len(msg) < max_len:
         return msg
-    return msg[0:max_len - 3] + "..."
+    return msg[0 : max_len - 3] + "..."
 
 
 def encode_token(client_types: List[str], environment: str = None, idempotent: bool = False, expire: float = None) -> str:

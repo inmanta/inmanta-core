@@ -112,14 +112,13 @@ class FunctionCall(ReferenceStatement):
                 raise ExternalException(self, "Exception in plugin %s" % self.name, e)
 
     def __repr__(self):
-        return "%s(%s)" % (self.name, ','.join([repr(a) for a in self.arguments]))
+        return "%s(%s)" % (self.name, ",".join([repr(a) for a in self.arguments]))
 
     def pretty_print(self):
-        return "%s(%s)" % (self.name, ','.join([a.pretty_print() for a in self.arguments]))
+        return "%s(%s)" % (self.name, ",".join([a.pretty_print() for a in self.arguments]))
 
 
 class FunctionUnit(Waiter):
-
     def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall):
         Waiter.__init__(self, queue_scheduler)
         self.result = result

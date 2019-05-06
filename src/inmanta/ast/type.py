@@ -23,7 +23,6 @@ from typing import Optional
 
 
 class BasicResolver(object):
-
     def __init__(self, types):
         self.types = types
 
@@ -48,7 +47,6 @@ class BasicResolver(object):
 
 
 class NameSpacedResolver(object):
-
     def __init__(self, ns):
         self.ns = ns
 
@@ -126,14 +124,12 @@ class Type(Locatable):
 
 
 class NamedType(Type, Named):
-
     def get_double_defined_exception(self, other: "NamedType") -> DuplicateException:
         """produce a customized error message for this type"""
         raise NotImplementedError()
 
 
 class NullableType(Type):
-
     def __init__(self, basetype):
         Type.__init__(self)
         self.basetype = basetype
@@ -254,10 +250,10 @@ class Bool(Type):
             Convert the given value to value that can be used by the operators
             defined on this type.
         """
-        if (value == "true" or value == "True" or value == 1 or value == "1" or value is True):
+        if value == "true" or value == "True" or value == 1 or value == "1" or value is True:
             return True
 
-        if (value == "false" or value == "False" or value == 0 or value == "0" or value is False):
+        if value == "false" or value == "False" or value == 0 or value == "0" or value is False:
             return False
 
         raise CastException()
@@ -320,7 +316,6 @@ class String(Type, str):
 
 
 class TypedList(Type):
-
     def __init__(self, basetype):
         Type.__init__(self)
         self.basetype = basetype
@@ -392,9 +387,9 @@ class List(Type, list):
 
         return True
 
-#     @classmethod
-#     def __str__(cls):
-#         return "list"
+    #     @classmethod
+    #     def __str__(cls):
+    #         return "list"
 
     @classmethod
     def type_string(cls):
@@ -462,6 +457,7 @@ class ConstraintType(NamedType):
 
         The constraint on this type is defined by a regular expression.
     """
+
     comment: Optional[str]
 
     def __init__(self, namespace, name):
@@ -524,8 +520,7 @@ class ConstraintType(NamedType):
         return self.namespace
 
     def get_double_defined_exception(self, other: "NamedType") -> DuplicateException:
-        return DuplicateException(
-            self, other, "TypeConstraint %s is already defined" % (self.get_full_name()))
+        return DuplicateException(self, other, "TypeConstraint %s is already defined" % (self.get_full_name()))
 
 
 def create_function(expression):
@@ -534,6 +529,7 @@ def create_function(expression):
         The generated function accepts the unbound variables in the expression
         as arguments.
     """
+
     def function(*args, **kwargs):
         """
             A function that evaluates the expression
@@ -541,7 +537,7 @@ def create_function(expression):
         if len(args) != 1:
             raise NotImplementedError()
 
-        return expression.execute_direct({'self': args[0]})
+        return expression.execute_direct({"self": args[0]})
 
     return function
 

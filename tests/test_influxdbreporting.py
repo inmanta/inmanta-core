@@ -83,9 +83,7 @@ def influxdb(event_loop, free_socket):
 
 @pytest.mark.asyncio
 async def test_influxdb(influxdb):
-    rep = InfluxReporter(
-        port=influxdb.port, tags={"mark": "X"}, autocreate_database=True
-    )
+    rep = InfluxReporter(port=influxdb.port, tags={"mark": "X"}, autocreate_database=True)
     with timer("test").time():
         pass
 

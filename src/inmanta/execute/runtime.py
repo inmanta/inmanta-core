@@ -18,9 +18,17 @@
 
 from inmanta.execute.util import Unknown
 from inmanta.execute.proxy import UnsetException
-from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException, \
-    AttributeException, \
-    Locatable, Location, ModifiedAfterFreezeException, Namespace
+from inmanta.ast import (
+    RuntimeException,
+    NotFoundException,
+    DoubleSetException,
+    OptionalValueException,
+    AttributeException,
+    Locatable,
+    Location,
+    ModifiedAfterFreezeException,
+    Namespace,
+)
 from inmanta.ast.type import Type
 from typing import List, Dict, Optional, TypeVar, Generic, Union, Set
 from abc import abstractmethod
@@ -40,7 +48,7 @@ if TYPE_CHECKING:
     from inmanta.ast.entity import Implementation
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class ResultCollector(Generic[T]):
@@ -56,9 +64,8 @@ class ResultCollector(Generic[T]):
 
 
 class IPromise(Generic[T]):
-
     @abstractmethod
-    def set_value(self, value: T, location: Location, recur: bool=True) -> None:
+    def set_value(self, value: T, location: Location, recur: bool = True) -> None:
         pass
 
 
@@ -74,9 +81,10 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
 
         In order to assist heuristic evaluation, result variables keep track of any statement that will assign a value to it
     """
+
     location: Location
 
-    def __init__(self, value: Optional[T]=None) -> None:
+    def __init__(self, value: Optional[T] = None) -> None:
         self.provider: "Optional[Statement]" = None
         self.waiters: "List[Waiter]" = []
         self.value: Optional[T] = value
@@ -104,7 +112,7 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
         else:
             self.waiters.append(waiter)
 
-    def set_value(self, value: T, location: Location, recur: bool=True) -> None:
+    def set_value(self, value: T, location: Location, recur: bool = True) -> None:
         if self.hasValue:
             if self.value != value:
                 raise DoubleSetException(None, self.value, self.location, value, location)
@@ -155,7 +163,7 @@ class AttributeVariable(ResultVariable["Instance"]):
         self.myself: "Instance" = instance
         ResultVariable.__init__(self)
 
-    def set_value(self, value: "Instance", location: Location, recur: bool=True) -> None:
+    def set_value(self, value: "Instance", location: Location, recur: bool = True) -> None:
         if self.hasValue:
             if self.value != value:
                 raise DoubleSetException(None, self.value, self.location, value, location)
@@ -192,7 +200,7 @@ class DelayedResultVariable(ResultVariable[T]):
             (a queue variable can be dequeued by the scheduler when a provider is added)
     """
 
-    def __init__(self, queue: "QueueScheduler", value: T=None) -> None:
+    def __init__(self, queue: "QueueScheduler", value: T = None) -> None:
         ResultVariable.__init__(self, value)
         self.queued = False
         self.queues = queue
@@ -229,12 +237,11 @@ ListValue = Union["Instance", List["Instance"]]
 
 
 class Promise(IPromise[ListValue]):
-
     def __init__(self, owner: "ListVariable", provider: "Statement"):
         self.provider: "Optional[Statement]" = provider
         self.owner: "ListVariable" = owner
 
-    def set_value(self, value: ListValue, location: Location, recur: bool=True) -> None:
+    def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
         self.owner.set_promised_value(self, value, location, recur)
 
 
@@ -255,7 +262,7 @@ class ListVariable(DelayedResultVariable[ListValue]):
         self.promisses.append(out)
         return out
 
-    def set_promised_value(self, promis: Promise, value: ListValue, location: Location, recur: bool=True) -> None:
+    def set_promised_value(self, promis: Promise, value: ListValue, location: Location, recur: bool = True) -> None:
         self.done_promisses.append(promis)
         self.set_value(value, location, recur)
 
@@ -266,7 +273,7 @@ class ListVariable(DelayedResultVariable[ListValue]):
             raise Exception("SEVERE: COMPILER STATE CORRUPT: provide count negative")
         return out
 
-    def set_value(self, value: ListValue, location: Location, recur: bool=True) -> None:
+    def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
         if self.hasValue:
             if isinstance(value, list):
                 if len(value) == 0:
@@ -280,18 +287,13 @@ class ListVariable(DelayedResultVariable[ListValue]):
                             attribute=self.attribute,
                             value=value,
                             location=location,
-                            reverse=not recur
+                            reverse=not recur,
                         )
             elif value in self.value:
                 return
             else:
                 raise ModifiedAfterFreezeException(
-                    self,
-                    instance=self.myself,
-                    attribute=self.attribute,
-                    value=value,
-                    location=location,
-                    reverse=not recur
+                    self, instance=self.myself, attribute=self.attribute, value=value, location=location, reverse=not recur
                 )
 
         if isinstance(value, list):
@@ -321,15 +323,13 @@ class ListVariable(DelayedResultVariable[ListValue]):
 
         # set counterpart
         if self.attribute.end is not None and recur:
-            value.set_attribute(self.attribute.end.name,
-                                self.myself,
-                                location,
-                                False)
+            value.set_attribute(self.attribute.end.name, self.myself, location, False)
 
         if self.attribute.high is not None:
             if len(self.value) > self.attribute.high:
-                raise RuntimeException(None, "List over full: max nr of items is %d, content is %s" %
-                                       (self.attribute.high, self.value))
+                raise RuntimeException(
+                    None, "List over full: max nr of items is %d, content is %s" % (self.attribute.high, self.value)
+                )
 
             if self.attribute.high == len(self.value):
                 self.freeze()
@@ -360,7 +360,6 @@ class ListVariable(DelayedResultVariable[ListValue]):
 
 
 class OptionVariable(DelayedResultVariable["Instance"]):
-
     def __init__(self, attribute: "Attribute", instance: "Instance", queue: "QueueScheduler") -> None:
         DelayedResultVariable.__init__(self, queue)
         self.value = None
@@ -368,17 +367,12 @@ class OptionVariable(DelayedResultVariable["Instance"]):
         self.myself = instance
         self.location = None
 
-    def set_value(self, value: "Instance", location: Location, recur: bool=True) -> None:
+    def set_value(self, value: "Instance", location: Location, recur: bool = True) -> None:
         assert location is not None
         if self.hasValue:
             if self.value is None:
                 raise ModifiedAfterFreezeException(
-                    self,
-                    instance=self.myself,
-                    attribute=self.attribute,
-                    value=value,
-                    location=location,
-                    reverse=not recur
+                    self, instance=self.myself, attribute=self.attribute, value=value, location=location, reverse=not recur
                 )
             if self.value != value:
                 raise DoubleSetException(None, self.value, self.location, value, location)
@@ -422,12 +416,14 @@ class QueueScheduler(object):
         MUTABLE!
     """
 
-    def __init__(self,
-                 compiler: "Compiler",
-                 runqueue: "List[Waiter]",
-                 waitqueue: List[ResultVariable],
-                 types: Dict[str, Type],
-                 allwaiters: "List[Waiter]") -> None:
+    def __init__(
+        self,
+        compiler: "Compiler",
+        runqueue: "List[Waiter]",
+        waitqueue: List[ResultVariable],
+        types: Dict[str, Type],
+        allwaiters: "List[Waiter]",
+    ) -> None:
         self.compiler = compiler
         self.runqueue = runqueue
         self.waitqueue = waitqueue
@@ -457,7 +453,6 @@ class QueueScheduler(object):
 
 
 class DelegateQueueScheduler(QueueScheduler):
-
     def __init__(self, delegate: QueueScheduler, tracker: Tracker):
         self.__delegate = delegate
         self.__tracker = tracker
@@ -520,12 +515,14 @@ class ExecutionUnit(Waiter):
         @param provides: Whether to register this XU as provider to the result variable
     """
 
-    def __init__(self,
-                 queue_scheduler: QueueScheduler,
-                 resolver: "Resolver",
-                 result: ResultVariable,
-                 requires: Dict[object, ResultVariable],
-                 expression: "ExpressionStatement"):
+    def __init__(
+        self,
+        queue_scheduler: QueueScheduler,
+        resolver: "Resolver",
+        result: ResultVariable,
+        requires: Dict[object, ResultVariable],
+        expression: "ExpressionStatement",
+    ):
         Waiter.__init__(self, queue_scheduler)
         self.result = result.get_promise(expression)
         self.requires = requires
@@ -558,12 +555,14 @@ class HangUnit(Waiter):
         Wait for a dict of requirements, call the resume method on the resumer, with a map of the resulting values
     """
 
-    def __init__(self,
-                 queue_scheduler: QueueScheduler,
-                 resolver: "Resolver",
-                 requires: Dict[object, ResultVariable],
-                 target: Optional[ResultVariable],
-                 resumer: "Resumer") -> None:
+    def __init__(
+        self,
+        queue_scheduler: QueueScheduler,
+        resolver: "Resolver",
+        requires: Dict[object, ResultVariable],
+        target: Optional[ResultVariable],
+        resumer: "Resumer",
+    ) -> None:
         Waiter.__init__(self, queue_scheduler)
         self.queue_scheduler = queue_scheduler
         self.resolver = resolver
@@ -576,11 +575,9 @@ class HangUnit(Waiter):
 
     def execute(self) -> None:
         try:
-            self.resumer.resume({k: v.get_value()
-                                 for (k, v) in self.requires.items()},
-                                self.resolver,
-                                self.queue_scheduler,
-                                self.target)
+            self.resumer.resume(
+                {k: v.get_value() for (k, v) in self.requires.items()}, self.resolver, self.queue_scheduler, self.target
+            )
         except RuntimeException as e:
             e.set_statement(self.resumer)
             raise e
@@ -593,11 +590,13 @@ class RawUnit(Waiter):
         but with a map of ResultVariables instead of their values
     """
 
-    def __init__(self,
-                 queue_scheduler: QueueScheduler,
-                 resolver: "Resolver",
-                 requires: Dict[object, ResultVariable],
-                 resumer: "RawResumer") -> None:
+    def __init__(
+        self,
+        queue_scheduler: QueueScheduler,
+        resolver: "Resolver",
+        requires: Dict[object, ResultVariable],
+        resumer: "RawResumer",
+    ) -> None:
         Waiter.__init__(self, queue_scheduler)
         self.queue_scheduler = queue_scheduler
         self.resolver = resolver
@@ -635,11 +634,10 @@ Typeorvalue = Union[Type, ResultVariable]
 
 
 class Resolver(object):
-
     def __init__(self, namespace: Namespace) -> None:
         self.namespace = namespace
 
-    def lookup(self, name: str, root: Namespace=None) -> Typeorvalue:
+    def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
         # override lexial root
         # i.e. delegate to parent, until we get to the root, then either go to our root or lexical root of our caller
         if root is not None:
@@ -657,12 +655,11 @@ class Resolver(object):
 
 
 class NamespaceResolver(Resolver):
-
     def __init__(self, parent: Resolver, lecial_root: Namespace) -> None:
         self.parent = parent
         self.root = lecial_root
 
-    def lookup(self, name: str, root: Namespace=None) -> Typeorvalue:
+    def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
         if root is not None:
             return self.parent.lookup(name, root)
         return self.parent.lookup(name, self.root)
@@ -675,13 +672,12 @@ class NamespaceResolver(Resolver):
 
 
 class ExecutionContext(Resolver):
-
     def __init__(self, block: "BasicBlock", resolver: Resolver):
         self.block = block
         self.slots: Dict[str, ResultVariable] = {n: ResultVariable() for n in block.get_variables()}
         self.resolver = resolver
 
-    def lookup(self, name: str, root: Namespace=None) -> Typeorvalue:
+    def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
         if "::" in name:
             return self.resolver.lookup(name, root)
         if name in self.slots:
@@ -705,14 +701,14 @@ class ExecutionContext(Resolver):
 
 
 class Instance(ExecutionContext, Locatable, Resolver):
-
     def __init__(self, mytype: "Entity", resolver: Resolver, queue: QueueScheduler) -> None:
         Locatable.__init__(self)
         # ExecutionContext, Resolver -> this class only uses it as an "interface", so no constructor call!
         self.resolver = resolver.get_root_resolver()
         self.type = mytype
-        self.slots: Dict[str, ResultVariable] = {n: mytype.get_attribute(n).get_new_result_variable(self, queue)
-                                                 for n in mytype.get_all_attribute_names()}
+        self.slots: Dict[str, ResultVariable] = {
+            n: mytype.get_attribute(n).get_new_result_variable(self, queue) for n in mytype.get_all_attribute_names()
+        }
         self.slots["self"] = ResultVariable()
         self.slots["self"].set_value(self, None)
         self.sid = id(self)
@@ -726,7 +722,7 @@ class Instance(ExecutionContext, Locatable, Resolver):
     def get_type(self) -> "Entity":
         return self.type
 
-    def set_attribute(self, name: str, value: object, location: Location, recur: bool=True) -> None:
+    def set_attribute(self, name: str, value: object, location: Location, recur: bool = True) -> None:
         if name not in self.slots:
             raise NotFoundException(None, name, "cannot set attribute with name %s on type %s" % (name, str(self.type)))
         try:
@@ -757,8 +753,7 @@ class Instance(ExecutionContext, Locatable, Resolver):
             The object should be complete, freeze all attributes
         """
         if len(self.implemenations) == 0:
-            excns.append(RuntimeException(self, "Unable to select implementation for entity %s" %
-                                          self.type.name))
+            excns.append(RuntimeException(self, "Unable to select implementation for entity %s" % self.type.name))
 
         for k, v in self.slots.items():
             if not v.is_ready():
@@ -771,19 +766,29 @@ class Instance(ExecutionContext, Locatable, Resolver):
                         # none for list attributes
                         # list for n-ary relations
                         length = 0 if v.value is None else len(v.value)
-                        excns.append(UnsetException(
-                            "The object %s is not complete: attribute %s (%s) requires %d values but only %d are set" %
-                            (self, k, attr.location, low, length), self, attr))
+                        excns.append(
+                            UnsetException(
+                                "The object %s is not complete: attribute %s (%s) requires %d values but only %d are set"
+                                % (self, k, attr.location, low, length),
+                                self,
+                                attr,
+                            )
+                        )
                     else:
-                        excns.append(UnsetException("The object %s is not complete: attribute %s (%s) is not set" %
-                                                    (self, k, attr.location), self, attr))
+                        excns.append(
+                            UnsetException(
+                                "The object %s is not complete: attribute %s (%s) is not set" % (self, k, attr.location),
+                                self,
+                                attr,
+                            )
+                        )
 
     def dump(self) -> None:
         print("------------ ")
         print(str(self))
         print("------------ ")
         for (n, v) in self.slots.items():
-            if(v.can_get()):
+            if v.can_get():
 
                 value = v.value
                 print("%s\t\t%s" % (n, value))

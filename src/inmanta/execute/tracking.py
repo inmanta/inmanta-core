@@ -34,7 +34,6 @@ class Tracker(object):
 
 
 class ModuleTracker(Tracker):
-
     def __init__(self, block):
         self.block = block
         self.namespace = block.namespace
@@ -44,7 +43,6 @@ class ModuleTracker(Tracker):
 
 
 class ImplementsTracker(Tracker):
-
     def __init__(self, subc, instance):
         self.instance = instance
         self.subc = subc

@@ -30,14 +30,7 @@ from inmanta.ast.statements.define import (
     DefineEntity,
     DefineImplementInherits,
 )
-from inmanta.ast.constraint.expression import (
-    GreaterThan,
-    Regex,
-    Not,
-    And,
-    IsDefined,
-    In,
-)
+from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined, In
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.assign import (
@@ -457,9 +450,7 @@ a = /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}
     assert len(statements) == 1
     stmt = statements[0].value
     assert isinstance(stmt, Regex)
-    assert stmt.children[1].value == re.compile(
-        r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
-    )
+    assert stmt.children[1].value == re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")
 
 
 def test_regex_escape():
@@ -563,10 +554,7 @@ File(host = 5, path = "Jos")
     stmt = statements[0]
     assert isinstance(stmt, Constructor)
     assert str(stmt.class_type) == "File"
-    assert {k: v.value for k, v in stmt.attributes.items()} == {
-        "host": 5,
-        "path": "Jos",
-    }
+    assert {k: v.value for k, v in stmt.attributes.items()} == {"host": 5, "path": "Jos"}
 
 
 def test_indexlookup():
@@ -953,13 +941,7 @@ end"""
     assert len(stmt.attributes) == 5
 
     compare_attr(stmt.attributes[0], "bar", "bool", assert_is_none, multi=True)
-    compare_attr(
-        stmt.attributes[2],
-        "floom",
-        "string",
-        lambda x: assert_equals([], x.items),
-        multi=True,
-    )
+    compare_attr(stmt.attributes[2], "floom", "string", lambda x: assert_equals([], x.items), multi=True)
 
     def compare_default(list):
         def comp(x):
@@ -970,20 +952,9 @@ end"""
 
         return comp
 
-    compare_attr(
-        stmt.attributes[1], "ips", "ip::ip", compare_default(["a"]), multi=True
-    )
-    compare_attr(
-        stmt.attributes[3], "floomx", "string", compare_default(["a", "b"]), multi=True
-    )
-    compare_attr(
-        stmt.attributes[4],
-        "floomopt",
-        "string",
-        assert_is_non_value,
-        opt=True,
-        multi=True,
-    )
+    compare_attr(stmt.attributes[1], "ips", "ip::ip", compare_default(["a"]), multi=True)
+    compare_attr(stmt.attributes[3], "floomx", "string", compare_default(["a", "b"]), multi=True)
+    compare_attr(stmt.attributes[4], "floomopt", "string", assert_is_non_value, opt=True, multi=True)
 
 
 def test_define_dict_attribute():
@@ -1004,9 +975,7 @@ end"""
     assert len(stmt.attributes) == 5
 
     compare_attr(stmt.attributes[0], "bar", "dict", assert_is_none)
-    compare_attr(
-        stmt.attributes[1], "foo", "dict", lambda x: assert_equals([], x.items)
-    )
+    compare_attr(stmt.attributes[1], "foo", "dict", lambda x: assert_equals([], x.items))
 
     def compare_default(list):
         def comp(x):
@@ -1018,9 +987,7 @@ end"""
         return comp
 
     compare_attr(stmt.attributes[2], "blah", "dict", compare_default([("a", "a")]))
-    compare_attr(
-        stmt.attributes[3], "xxx", "dict", compare_default([("a", "a")]), opt=True
-    )
+    compare_attr(stmt.attributes[3], "xxx", "dict", compare_default([("a", "a")]), opt=True)
     compare_attr(stmt.attributes[4], "xxxx", "dict", assert_is_non_value, opt=True)
 
 

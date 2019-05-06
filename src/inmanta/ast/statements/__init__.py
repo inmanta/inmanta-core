@@ -82,7 +82,6 @@ class DynamicStatement(Statement):
 
 
 class ExpressionStatement(DynamicStatement):
-
     def __init__(self) -> None:
         DynamicStatement.__init__(self)
 
@@ -110,21 +109,12 @@ class ExpressionStatement(DynamicStatement):
 
 
 class Resumer(ExpressionStatement):
-
-    def resume(self,
-               requires: Dict[object, object],
-               resolver: Resolver,
-               queue: QueueScheduler,
-               target: ResultVariable) -> None:
+    def resume(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         pass
 
 
 class RawResumer(ExpressionStatement):
-
-    def resume(self,
-               equires: Dict[object, ResultVariable],
-               resolver: Resolver,
-               queue_scheduler: QueueScheduler) -> None:
+    def resume(self, equires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
         pass
 
 
@@ -181,7 +171,6 @@ class GeneratorStatement(ExpressionStatement):
 
 
 class Literal(ExpressionStatement):
-
     def __init__(self, value: object) -> None:
         ExpressionStatement.__init__(self)
         self.value = value
@@ -237,6 +226,5 @@ class TypeDefinitionStatement(DefinitionStatement, Named):
 
 
 class BiStatement(DefinitionStatement, DynamicStatement):
-
     def __init__(self):
         Statement.__init__(self)

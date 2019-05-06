@@ -46,6 +46,7 @@ class SshIO(local.IOBase):
          * retries: The number of retries before giving up. The default number of retries 10
          * retry_wait: The time to wait between retries for the remote target to become available. The default wait is 30s
     """
+
     def is_remote(self):
         return True
 
@@ -89,8 +90,9 @@ class SshIO(local.IOBase):
                         self._group.terminate(0.1)
                         raise resources.HostNotFoundException(hostname=self._host, user=self._user, error=e)
 
-                    LOGGER.info("Failed to login to %s, waiting %d seconds and %d attempts left.",
-                                self.uri, self._retry_wait, attempts)
+                    LOGGER.info(
+                        "Failed to login to %s, waiting %d seconds and %d attempts left.", self.uri, self._retry_wait, attempts
+                    )
                     time.sleep(self._retry_wait)
 
         except BrokenPipeError as e:
@@ -128,8 +130,9 @@ class SshIO(local.IOBase):
 
         # check if we got an exception
         if isinstance(result, dict) and "__type__" in result and result["__type__"] == "RemoteException":
-            raise RemoteException(exception_type=result["exception_type"], msg=result["exception_string"],
-                                  traceback=result["traceback"])
+            raise RemoteException(
+                exception_type=result["exception_type"], msg=result["exception_string"], traceback=result["traceback"]
+            )
 
         return result
 
@@ -144,6 +147,7 @@ class SshIO(local.IOBase):
         """
             Proxy a function call to the local version on the other side of the channel.
         """
+
         def call(*args, **kwargs):
             result = self._execute(name, *args, **kwargs)
             return result

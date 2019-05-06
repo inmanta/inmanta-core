@@ -48,7 +48,6 @@ from inmanta import protocol  # NOQA
 
 
 class SessionSpy(SessionListener, ServerSlice):
-
     def __init__(self):
         ServerSlice.__init__(self, "sessionspy")
         self.expires = 0
@@ -78,7 +77,6 @@ class SessionSpy(SessionListener, ServerSlice):
 
 
 class Agent(protocol.SessionEndpoint):
-
     def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
         super(Agent, self).__init__(name, timeout, reconnect_delay)
         self.reconnect = 0

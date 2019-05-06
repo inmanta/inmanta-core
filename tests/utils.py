@@ -24,7 +24,7 @@ import inspect
 async def retry_limited(fun, timeout):
     async def fun_wrapper():
         if inspect.iscoroutinefunction(fun):
-            return (await fun())
+            return await fun()
         else:
             return fun()
 
@@ -45,11 +45,13 @@ def assert_equal_ish(minimal, actual, sortby=[]):
     elif isinstance(minimal, list):
         assert len(minimal) == len(actual), "list not equal %s != %s" % (minimal, actual)
         if len(sortby) > 0:
+
             def keyfunc(val):
                 if not isinstance(val, dict):
                     return val
                 key = [str(val[x]) for x in sortby if x in val]
-                return '_'.join(key)
+                return "_".join(key)
+
             actual = sorted(actual, key=keyfunc)
         for (m, a) in zip(minimal, actual):
             assert_equal_ish(m, a, sortby)
@@ -70,7 +72,6 @@ def assert_graph(graph, expected):
 
 
 class AsyncClosing(object):
-
     def __init__(self, awaitable):
         self.awaitable = awaitable
 
@@ -132,7 +133,6 @@ def log_index(caplog, loggerpart, level, msg, after=0):
 
 
 class LogSequence(object):
-
     def __init__(self, caplog, index=0):
         self.caplog = caplog
         self.index = index

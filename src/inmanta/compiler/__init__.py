@@ -173,12 +173,15 @@ class Compiler(object):
         # add the entity type (hack?)
         ns = self.__root_ns.get_child_or_create("std")
         nullrange = Range("internal", 1, 0, 0, 0)
-        entity = DefineEntity(ns, LocatableString("Entity", nullrange, 0, ns),
-                              "The entity all other entities inherit from.", [], [])
+        entity = DefineEntity(
+            ns, LocatableString("Entity", nullrange, 0, ns), "The entity all other entities inherit from.", [], []
+        )
         str_std_entity = LocatableString("std::Entity", nullrange, 0, ns)
 
-        requires_rel = DefineRelation((str_std_entity, LocatableString("requires", nullrange, 0, ns), [0, None], False),
-                                      (str_std_entity, LocatableString("provides", nullrange, 0, ns), [0, None], False))
+        requires_rel = DefineRelation(
+            (str_std_entity, LocatableString("requires", nullrange, 0, ns), [0, None], False),
+            (str_std_entity, LocatableString("provides", nullrange, 0, ns), [0, None], False),
+        )
         requires_rel.namespace = self.__root_ns.get_ns_from_string("std")
 
         statements.append(entity)

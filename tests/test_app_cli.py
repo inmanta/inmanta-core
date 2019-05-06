@@ -84,9 +84,7 @@ def test_help_sub(inmanta_config, capsys):
     assert "update" in out
 
 
-@pytest.mark.parametrize("push_method", [([]),
-                                         (["-d"]),
-                                         (["-d", "--full"])])
+@pytest.mark.parametrize("push_method", [([]), (["-d"]), (["-d", "--full"])])
 @pytest.mark.asyncio
 async def test_export(tmpdir, server, client, push_method):
     server_port = Config.get("client_rest_transport", "port")
@@ -94,10 +92,10 @@ async def test_export(tmpdir, server, client, push_method):
 
     result = await client.create_project("test")
     assert result.code == 200
-    proj_id = result.result['project']['id']
+    proj_id = result.result["project"]["id"]
     result = await client.create_environment(proj_id, "test", None, None)
     assert result.code == 200
-    env_id = result.result['environment']['id']
+    env_id = result.result["environment"]["id"]
 
     workspace = tmpdir.mkdir("tmp")
     path_main_file = workspace.join("main.cf")
@@ -109,7 +107,10 @@ name: testproject
 modulepath: %s
 downloadpath: %s
 repo: https://github.com/inmanta/
-""" % (libs_dir, libs_dir)
+""" % (
+        libs_dir,
+        libs_dir,
+    )
     path_project_yml_file.write(content_project_yml_file)
 
     content_main_file = """
@@ -122,8 +123,18 @@ vm1=ip::Host(name="non-existing-machine", os=redhat::centos7, ip="127.0.0.1")
 
     os.chdir(workspace)
 
-    args = [sys.executable, "-m", "inmanta.app", "export", "-e", str(env_id), "--server_port", str(server_port),
-            "--server_address", str(server_host)]
+    args = [
+        sys.executable,
+        "-m",
+        "inmanta.app",
+        "export",
+        "-e",
+        str(env_id),
+        "--server_port",
+        str(server_port),
+        "--server_address",
+        str(server_host),
+    ]
     args += push_method
 
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -139,12 +150,12 @@ vm1=ip::Host(name="non-existing-machine", os=redhat::centos7, ip="127.0.0.1")
 
     result = await client.list_versions(env_id)
     assert result.code == 200
-    assert len(result.result['versions']) == 1
+    assert len(result.result["versions"]) == 1
 
-    details_exported_version = result.result['versions'][0]
+    details_exported_version = result.result["versions"][0]
     if push_method:
-        assert details_exported_version['result'] == VersionState.deploying.name
+        assert details_exported_version["result"] == VersionState.deploying.name
     else:
-        assert details_exported_version['result'] == VersionState.pending.name
+        assert details_exported_version["result"] == VersionState.pending.name
 
     shutil.rmtree(workspace)

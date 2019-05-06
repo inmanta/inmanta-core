@@ -24,8 +24,17 @@ from inmanta.ast.statements import GeneratorStatement
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.util import Unknown
 from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable, ResultCollector
-from inmanta.ast import RuntimeException, TypingException, NotFoundException, Location, Namespace, DuplicateException,\
-    LocatableString, TypeReferenceAnchor, AttributeReferenceAnchor
+from inmanta.ast import (
+    RuntimeException,
+    TypingException,
+    NotFoundException,
+    Location,
+    Namespace,
+    DuplicateException,
+    LocatableString,
+    TypeReferenceAnchor,
+    AttributeReferenceAnchor,
+)
 from inmanta.execute.tracking import ImplementsTracker
 from typing import List, Dict, Tuple, Set  # noqa: F401
 from inmanta.ast.statements import ExpressionStatement
@@ -183,11 +192,13 @@ class Constructor(GeneratorStatement):
             constructor call.
     """
 
-    def __init__(self,
-                 class_type: LocatableString,
-                 attributes: List[Tuple[LocatableString, ExpressionStatement]],
-                 location: Location,
-                 namespace: Namespace) -> None:
+    def __init__(
+        self,
+        class_type: LocatableString,
+        attributes: List[Tuple[LocatableString, ExpressionStatement]],
+        location: Location,
+        namespace: Namespace,
+    ) -> None:
         GeneratorStatement.__init__(self)
         self.class_type = str(class_type)
         self.__attributes = {}  # type: Dict[str,ExpressionStatement]
@@ -245,11 +256,9 @@ class Constructor(GeneratorStatement):
         direct = [x for x in self._direct_attributes.items()]
 
         direct_requires = {rk: rv for (k, v) in direct for (rk, rv) in v.requires_emit(resolver, queue).items()}
-        LOGGER.log(LOG_LEVEL_TRACE,
-                   "emitting constructor for %s at %s with %s",
-                   self.class_type,
-                   self.location,
-                   direct_requires)
+        LOGGER.log(
+            LOG_LEVEL_TRACE, "emitting constructor for %s at %s with %s", self.class_type, self.location, direct_requires
+        )
 
         return direct_requires
 
@@ -327,8 +336,9 @@ class Constructor(GeneratorStatement):
             self.anchors.append(AttributeReferenceAnchor(lname.get_location(), lname.namespace, self.class_type, name))
             self.anchors.extend(value.get_anchors())
         else:
-            raise RuntimeException(self, "The attribute %s in the constructor call of %s is already set."
-                                   % (name, self.class_type))
+            raise RuntimeException(
+                self, "The attribute %s in the constructor call of %s is already set." % (name, self.class_type)
+            )
 
     def get_attributes(self) -> Dict[str, ExpressionStatement]:
         """

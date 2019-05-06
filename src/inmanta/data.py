@@ -53,7 +53,6 @@ def json_encode(value: JsonType) -> str:
 
 
 class Field(object):
-
     def __init__(self, field_type, required=False, unique=False, reference=False, part_of_primary_key=False, **kwargs):
 
         self._field_type = field_type
@@ -154,7 +153,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         return cls.__name__.lower()
 
-    def __init__(self, from_postgres: bool=False, **kwargs: Any) -> None:
+    def __init__(self, from_postgres: bool = False, **kwargs: Any) -> None:
         self.__fields = self._create_dict_wrapper(from_postgres, kwargs)
 
     @classmethod
@@ -172,8 +171,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
             if value is None and fields[name].required:
                 raise TypeError("%s field is required" % name)
 
-            if not fields[name].reference and value is not None and not (value.__class__ is fields[name].field_type
-                                                                         or isinstance(value, fields[name].field_type)):
+            if (
+                not fields[name].reference
+                and value is not None
+                and not (value.__class__ is fields[name].field_type or isinstance(value, fields[name].field_type))
+            ):
                 # pgasync does not convert a jsonb field to a dict
                 if from_postgres and isinstance(value, str) and fields[name].field_type is dict:
                     value = json.loads(value)
@@ -181,8 +183,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 elif from_postgres and isinstance(value, str) and issubclass(fields[name].field_type, enum.Enum):
                     value = fields[name].field_type[value]
                 else:
-                    raise TypeError("Field %s should have the correct type (%s instead of %s)" %
-                                    (name, fields[name].field_type.__name__, type(value).__name__))
+                    raise TypeError(
+                        "Field %s should have the correct type (%s instead of %s)"
+                        % (name, fields[name].field_type.__name__, type(value).__name__)
+                    )
 
             if value is not None:
                 result[name] = value
@@ -210,7 +214,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         fields = cls._fields.copy()
         return [name for name, value in fields.items() if value.is_part_of_primary_key()]
 
-    def _get_filter_on_primary_key_fields(self, offset: int=1) -> Tuple[str, List[Any]]:
+    def _get_filter_on_primary_key_fields(self, offset: int = 1) -> Tuple[str, List[Any]]:
         names_primary_key_fields = self._get_names_of_primary_key_fields()
         query = {field_name: self.__getattribute__(field_name) for field_name in names_primary_key_fields}
         return self._get_composed_filter(offset=offset, **query)
@@ -305,10 +309,18 @@ class BaseDocument(object, metaclass=DocumentMeta):
             Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
         (column_names, values) = self._get_column_names_and_values()
-        column_names_as_sql_string = ','.join(column_names)
-        values_as_parameterize_sql_string = ','.join(["$" + str(i) for i in range(1, len(values) + 1)])
-        query = "INSERT INTO " + self.table_name() + " (" + column_names_as_sql_string + ") " + \
-                "VALUES (" + values_as_parameterize_sql_string + ")"
+        column_names_as_sql_string = ",".join(column_names)
+        values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
+        query = (
+            "INSERT INTO "
+            + self.table_name()
+            + " ("
+            + column_names_as_sql_string
+            + ") "
+            + "VALUES ("
+            + values_as_parameterize_sql_string
+            + ")"
+        )
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
@@ -351,9 +363,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             records.append(current_record)
 
         async with cls._connection_pool.acquire() as con:
-            await con.copy_records_to_table(table_name=cls.table_name(),
-                                            columns=columns,
-                                            records=records)
+            await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records)
 
     def add_default_values_when_undefined(self, **kwargs):
         result = dict(kwargs)
@@ -372,7 +382,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         for name, value in kwargs.items():
             setattr(self, name, value)
         (column_names, values) = self._get_column_names_and_values()
-        values_as_parameterize_sql_string = ','.join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
+        values_as_parameterize_sql_string = ",".join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
         (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(column_names) + 1)
         values = values + values_for_filter
         query = "UPDATE " + self.table_name() + " SET " + values_as_parameterize_sql_string + " WHERE " + filter_statement
@@ -387,7 +397,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             parts_of_set_statement.append(name + "=$" + str(counter))
             values.append(self._get_value(value))
             counter += 1
-        set_statement = ','.join(parts_of_set_statement)
+        set_statement = ",".join(parts_of_set_statement)
         return (set_statement, values)
 
     async def update_fields(self, **kwargs):
@@ -454,11 +464,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if filter_statement:
             query += " WHERE " + filter_statement
         result = await cls._execute_query(query, *values, connection=connection)
-        record_count = int(result.split(' ')[1])
+        record_count = int(result.split(" ")[1])
         return record_count
 
     @classmethod
-    def _get_composed_filter(cls, offset: int=1, col_name_prefix: str=None, **query: Any) -> Tuple[str, List[Any]]:
+    def _get_composed_filter(cls, offset: int = 1, col_name_prefix: str = None, **query: Any) -> Tuple[str, List[Any]]:
         filter_statements = []
         values = []
         index_count = max(1, offset)
@@ -468,16 +478,16 @@ class BaseDocument(object, metaclass=DocumentMeta):
             if value is not None:
                 values.append(value)
                 index_count += 1
-        filter_as_string = ' AND '.join(filter_statements)
+        filter_as_string = " AND ".join(filter_statements)
         return (filter_as_string, values)
 
     @classmethod
-    def _get_filter(cls, name: str, value: Any, index: int, col_name_prefix: str=None) -> Tuple[str, Any]:
+    def _get_filter(cls, name: str, value: Any, index: int, col_name_prefix: str = None) -> Tuple[str, Any]:
         if value is None:
             return (name + " IS NULL", None)
         filter_statement = name + "=$" + str(index)
         if col_name_prefix is not None:
-            filter_statement = col_name_prefix + '.' + filter_statement
+            filter_statement = col_name_prefix + "." + filter_statement
         value = cls._get_value(value)
         return (filter_statement, value)
 
@@ -554,6 +564,7 @@ class Project(BaseDocument):
 
         :param name The name of the configuration project.
     """
+
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     name = Field(field_type=str, required=True, unique=True)
 
@@ -563,7 +574,7 @@ def convert_boolean(value: Any) -> bool:
         return value
 
     if value.lower() not in RawConfigParser.BOOLEAN_STATES:
-        raise ValueError('Not a boolean: %s' % value)
+        raise ValueError("Not a boolean: %s" % value)
     return RawConfigParser.BOOLEAN_STATES[value.lower()]
 
 
@@ -595,7 +606,7 @@ def convert_agent_map(value: Dict[str, str]) -> Dict[str, str]:
 
 def translate_to_postgres_type(type):
     if type not in TYPE_MAP:
-        raise Exception("Type \'" + type + "\' is not a valid type for a settings entry")
+        raise Exception("Type '" + type + "' is not a valid type for a settings entry")
     return TYPE_MAP[type]
 
 
@@ -605,7 +616,7 @@ def convert_agent_trigger_method(value):
     value = str(value)
     valid_values = [x.name for x in const.AgentTriggerMethod]
     if value not in valid_values:
-        raise ValueError("%s is not a valid agent trigger method. Valid value: %s" % (value, ','.join(valid_values)))
+        raise ValueError("%s is not a valid agent trigger method. Valid value: %s" % (value, ",".join(valid_values)))
     return value
 
 
@@ -632,8 +643,9 @@ class Setting(object):
         A class to define a new environment setting.
     """
 
-    def __init__(self, name, typ, default=None, doc=None, validator=None, recompile=False, update_model=False,
-                 agent_restart=False):
+    def __init__(
+        self, name, typ, default=None, doc=None, validator=None, recompile=False, update_model=False, agent_restart=False
+    ):
         """
             :param name: The name of the setting.
             :param type: The type of the value. This type is mainly used for documentation purpose.
@@ -655,8 +667,14 @@ class Setting(object):
         self.agent_restart = agent_restart
 
     def to_dict(self):
-        return {"type": self.typ, "default": self.default, "doc": self.doc, "recompile": self.recompile, "update": self.update,
-                "agent_restart": self.agent_restart}
+        return {
+            "type": self.typ,
+            "default": self.default,
+            "doc": self.doc,
+            "recompile": self.recompile,
+            "update": self.update,
+            "agent_restart": self.agent_restart,
+        }
 
 
 class Environment(BaseDocument):
@@ -670,6 +688,7 @@ class Environment(BaseDocument):
         :param repo_url The repository branch that contains the configuration model code for this environment
         :param settings Key/value settings for this environment
     """
+
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     name = Field(field_type=str, required=True)
     project = Field(field_type=uuid.UUID, required=True)
@@ -678,48 +697,111 @@ class Environment(BaseDocument):
     settings = Field(field_type=dict, default={})
 
     _settings = {
-        AUTO_DEPLOY: Setting(name=AUTO_DEPLOY, typ="bool", default=False,
-                             doc="When this boolean is set to true, the orchestrator will automatically release a new version "
-                                 "that was compiled by the orchestrator itself.", validator=convert_boolean),
-        PUSH_ON_AUTO_DEPLOY: Setting(name=PUSH_ON_AUTO_DEPLOY, typ="bool", default=False,
-                                     doc="Push a new version when it has been autodeployed.",
-                                     validator=convert_boolean),
-        AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY: Setting(name=AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, typ="str",
-                                                     default=const.AgentTriggerMethod.push_full_deploy.name,
-                                                     validator=convert_agent_trigger_method,
-                                                     doc="The agent trigger method to use when "
-                                                         + PUSH_ON_AUTO_DEPLOY + " is enabled"),
-        AUTOSTART_SPLAY: Setting(name=AUTOSTART_SPLAY, typ="int", default=10,
-                                 doc="[DEPRECATED] Splay time for autostarted agents.", validator=convert_int),
-        AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(name=AUTOSTART_AGENT_DEPLOY_INTERVAL, typ="int", default=600,
-                                                 doc="The deployment interval of the autostarted agents.",
-                                                 validator=convert_int, agent_restart=True),
-        AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: Setting(name=AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, typ="int", default=600,
-                                                   doc="The splay time on the deployment interval of the autostarted agents.",
-                                                   validator=convert_int, agent_restart=True),
-        AUTOSTART_AGENT_REPAIR_INTERVAL: Setting(name=AUTOSTART_AGENT_REPAIR_INTERVAL, typ="int", default=86400,
-                                                 doc="The repair interval of the autostarted agents.",
-                                                 validator=convert_int, agent_restart=True),
-        AUTOSTART_AGENT_REPAIR_SPLAY_TIME: Setting(name=AUTOSTART_AGENT_REPAIR_SPLAY_TIME, typ="int", default=600,
-                                                   doc="The splay time on the repair interval of the autostarted agents.",
-                                                   validator=convert_int, agent_restart=True),
-        AUTOSTART_ON_START: Setting(name=AUTOSTART_ON_START, default=True, typ="bool", validator=convert_boolean,
-                                    doc="Automatically start agents when the server starts instead of only just in time."),
-        AUTOSTART_AGENT_MAP: Setting(name=AUTOSTART_AGENT_MAP, default={"internal": "local:"}, typ="dict",
-                                     validator=convert_agent_map,
-                                     doc="A dict with key the name of agents that should be automatically started. The value "
-                                     "is either an empty string or an agent map string.", agent_restart=True),
-        AUTOSTART_AGENT_INTERVAL: Setting(name=AUTOSTART_AGENT_INTERVAL, default=600, typ="int", validator=convert_int,
-                                          doc="[DEPRECATED] Agent interval for autostarted agents in seconds",
-                                          agent_restart=True),
-        SERVER_COMPILE: Setting(name=SERVER_COMPILE, default=True, typ="bool",
-                                validator=convert_boolean, doc="Allow the server to compile the configuration model."),
-        RESOURCE_ACTION_LOGS_RETENTION: Setting(name=RESOURCE_ACTION_LOGS_RETENTION, default=7, typ="int",
-                                                validator=convert_int, doc="The number of days to retain resource-action logs"),
+        AUTO_DEPLOY: Setting(
+            name=AUTO_DEPLOY,
+            typ="bool",
+            default=False,
+            doc="When this boolean is set to true, the orchestrator will automatically release a new version "
+            "that was compiled by the orchestrator itself.",
+            validator=convert_boolean,
+        ),
+        PUSH_ON_AUTO_DEPLOY: Setting(
+            name=PUSH_ON_AUTO_DEPLOY,
+            typ="bool",
+            default=False,
+            doc="Push a new version when it has been autodeployed.",
+            validator=convert_boolean,
+        ),
+        AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY: Setting(
+            name=AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY,
+            typ="str",
+            default=const.AgentTriggerMethod.push_full_deploy.name,
+            validator=convert_agent_trigger_method,
+            doc="The agent trigger method to use when " + PUSH_ON_AUTO_DEPLOY + " is enabled",
+        ),
+        AUTOSTART_SPLAY: Setting(
+            name=AUTOSTART_SPLAY,
+            typ="int",
+            default=10,
+            doc="[DEPRECATED] Splay time for autostarted agents.",
+            validator=convert_int,
+        ),
+        AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(
+            name=AUTOSTART_AGENT_DEPLOY_INTERVAL,
+            typ="int",
+            default=600,
+            doc="The deployment interval of the autostarted agents.",
+            validator=convert_int,
+            agent_restart=True,
+        ),
+        AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: Setting(
+            name=AUTOSTART_AGENT_DEPLOY_SPLAY_TIME,
+            typ="int",
+            default=600,
+            doc="The splay time on the deployment interval of the autostarted agents.",
+            validator=convert_int,
+            agent_restart=True,
+        ),
+        AUTOSTART_AGENT_REPAIR_INTERVAL: Setting(
+            name=AUTOSTART_AGENT_REPAIR_INTERVAL,
+            typ="int",
+            default=86400,
+            doc="The repair interval of the autostarted agents.",
+            validator=convert_int,
+            agent_restart=True,
+        ),
+        AUTOSTART_AGENT_REPAIR_SPLAY_TIME: Setting(
+            name=AUTOSTART_AGENT_REPAIR_SPLAY_TIME,
+            typ="int",
+            default=600,
+            doc="The splay time on the repair interval of the autostarted agents.",
+            validator=convert_int,
+            agent_restart=True,
+        ),
+        AUTOSTART_ON_START: Setting(
+            name=AUTOSTART_ON_START,
+            default=True,
+            typ="bool",
+            validator=convert_boolean,
+            doc="Automatically start agents when the server starts instead of only just in time.",
+        ),
+        AUTOSTART_AGENT_MAP: Setting(
+            name=AUTOSTART_AGENT_MAP,
+            default={"internal": "local:"},
+            typ="dict",
+            validator=convert_agent_map,
+            doc="A dict with key the name of agents that should be automatically started. The value "
+            "is either an empty string or an agent map string.",
+            agent_restart=True,
+        ),
+        AUTOSTART_AGENT_INTERVAL: Setting(
+            name=AUTOSTART_AGENT_INTERVAL,
+            default=600,
+            typ="int",
+            validator=convert_int,
+            doc="[DEPRECATED] Agent interval for autostarted agents in seconds",
+            agent_restart=True,
+        ),
+        SERVER_COMPILE: Setting(
+            name=SERVER_COMPILE,
+            default=True,
+            typ="bool",
+            validator=convert_boolean,
+            doc="Allow the server to compile the configuration model.",
+        ),
+        RESOURCE_ACTION_LOGS_RETENTION: Setting(
+            name=RESOURCE_ACTION_LOGS_RETENTION,
+            default=7,
+            typ="int",
+            validator=convert_int,
+            doc="The number of days to retain resource-action logs",
+        ),
     }
 
-    _renamed_settings_map = {AUTOSTART_AGENT_DEPLOY_INTERVAL: AUTOSTART_AGENT_INTERVAL,
-                             AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY}  # name new_option -> name deprecated_option
+    _renamed_settings_map = {
+        AUTOSTART_AGENT_DEPLOY_INTERVAL: AUTOSTART_AGENT_INTERVAL,
+        AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
+    }  # name new_option -> name deprecated_option
 
     async def get(self, key):
         """
@@ -733,8 +815,10 @@ class Environment(BaseDocument):
         if key in self._renamed_settings_map:
             name_deprecated_setting = self._renamed_settings_map[key]
             if name_deprecated_setting in self.settings and key not in self.settings:
-                warnings.warn("Config option %s is deprecated. Use %s instead." % (name_deprecated_setting, key),
-                              category=DeprecationWarning)
+                warnings.warn(
+                    "Config option %s is deprecated. Use %s instead." % (name_deprecated_setting, key),
+                    category=DeprecationWarning,
+                )
                 return self.settings[name_deprecated_setting]
 
         if key in self.settings:
@@ -762,9 +846,15 @@ class Environment(BaseDocument):
 
         type = translate_to_postgres_type(self._settings[key].typ)
         (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=3)
-        query = "UPDATE " + self.table_name() + \
-                " SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::" + type + "), TRUE)" + \
-                " WHERE " + filter_statement
+        query = (
+            "UPDATE "
+            + self.table_name()
+            + " SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::"
+            + type
+            + "), TRUE)"
+            + " WHERE "
+            + filter_statement
+        )
         values = [self._get_value([key]), self._get_value(value)] + values
         await self._execute_query(query, *values)
         self.settings[key] = value
@@ -780,9 +870,7 @@ class Environment(BaseDocument):
 
         if self._settings[key].default is None:
             (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=2)
-            query = "UPDATE " + self.table_name() + \
-                    " SET settings=settings - $1" + \
-                    " WHERE " + filter_statement
+            query = "UPDATE " + self.table_name() + " SET settings=settings - $1" + " WHERE " + filter_statement
             values = [self._get_value(key)] + values
             await self._execute_query(query, *values)
             del self.settings[key]
@@ -830,6 +918,7 @@ class Parameter(BaseDocument):
 
         :todo Add history
     """
+
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     name = Field(field_type=str, required=True, part_of_primary_key=True)
     value = Field(field_type=str, default="", required=True)
@@ -870,6 +959,7 @@ class UnknownParameter(BaseDocument):
         :param environment
         :param version The version id of the configuration model on which this parameter was reported
     """
+
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     name = Field(field_type=str, required=True)
     environment = Field(field_type=uuid.UUID, required=True)
@@ -888,6 +978,7 @@ class AgentProcess(BaseDocument):
         :prama environment To what environment is this process bound
         :param last_seen When did the server receive data from the node for the last time.
     """
+
     hostname = Field(field_type=str, required=True)
     environment = Field(field_type=uuid.UUID, required=True)
     first_seen = Field(field_type=datetime.datetime, default=None)
@@ -898,16 +989,11 @@ class AgentProcess(BaseDocument):
     @classmethod
     async def get_live(cls, environment=None):
         if environment is not None:
-            result = await cls.get_list(limit=DBLIMIT,
-                                        environment=environment,
-                                        expired=None,
-                                        order_by_column="last_seen",
-                                        order="ASC NULLS LAST")
+            result = await cls.get_list(
+                limit=DBLIMIT, environment=environment, expired=None, order_by_column="last_seen", order="ASC NULLS LAST"
+            )
         else:
-            result = await cls.get_list(limit=DBLIMIT,
-                                        expired=None,
-                                        order_by_column="last_seen",
-                                        order="ASC NULLS LAST")
+            result = await cls.get_list(limit=DBLIMIT, expired=None, order_by_column="last_seen", order="ASC NULLS LAST")
         return result
 
     @classmethod
@@ -917,9 +1003,7 @@ class AgentProcess(BaseDocument):
 
     @classmethod
     async def get_by_env(cls, env):
-        nodes = await cls.get_list(environment=env,
-                                   order_by_column="last_seen",
-                                   order="ASC NULLS LAST")
+        nodes = await cls.get_list(environment=env, order_by_column="last_seen", order="ASC NULLS LAST")
         return nodes
 
     @classmethod
@@ -947,6 +1031,7 @@ class AgentInstance(BaseDocument):
         :param hostname The hostname of the device.
         :param last_seen When did the server receive data from the node for the last time.
     """
+
     # TODO: add env to speed up cleanup
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     process = Field(field_type=uuid.UUID, required=True)
@@ -975,6 +1060,7 @@ class Agent(BaseDocument):
         :param paused is this agent paused (if so, skip it)
         :param primary what is the current active instance (if none, state is down)
     """
+
     environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     name = Field(field_type=str, required=True, part_of_primary_key=True)
     last_failover = Field(field_type=datetime.datetime)
@@ -1043,6 +1129,7 @@ class Report(BaseDocument):
         :param errstream what was reported on system err
         :param outstream what was reported on system out
     """
+
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     started = Field(field_type=datetime.datetime, required=True)
     completed = Field(field_type=datetime.datetime, required=True)
@@ -1063,6 +1150,7 @@ class Compile(BaseDocument):
         :param completed Time to compile was completed
         :param reports Per stage reports
     """
+
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     environment = Field(field_type=uuid.UUID, required=True)
     started = Field(field_type=datetime.datetime)
@@ -1080,7 +1168,7 @@ class Compile(BaseDocument):
             conditions_in_where_clause.append("started < $" + str(len(values) + 1))
             values.append(cls._get_value(end))
         if len(conditions_in_where_clause) > 0:
-            query += " WHERE " + ' AND '.join(conditions_in_where_clause)
+            query += " WHERE " + " AND ".join(conditions_in_where_clause)
         query += " ORDER BY started DESC"
         if limit:
             query += " LIMIT $" + str(len(values) + 1)
@@ -1114,6 +1202,7 @@ class Form(BaseDocument):
     """
         A form in the dashboard defined by the configuration model
     """
+
     environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     form_type = Field(field_type=str, required=True, part_of_primary_key=True)
     options = Field(field_type=dict)
@@ -1142,6 +1231,7 @@ class FormRecord(BaseDocument):
     """
         A form record
     """
+
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     environment = Field(field_type=uuid.UUID, required=True)
     form = Field(field_type=str, required=True)
@@ -1150,7 +1240,6 @@ class FormRecord(BaseDocument):
 
 
 class LogLine(DataDocument):
-
     @property
     def msg(self):
         return self._data["msg"]
@@ -1198,6 +1287,7 @@ class ResourceAction(BaseDocument):
                        was changed but not data was provided by the agent.
         :param change The change result of an action
     """
+
     resource_version_ids = Field(field_type=list, required=True, reference=True, default=[])
 
     action_id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1223,21 +1313,22 @@ class ResourceAction(BaseDocument):
 
     async def insert(self):
         async with self._connection_pool.acquire() as con:
-            records = ((self._environment, resource_version_id, self.action_id)
-                       for resource_version_id in self.resource_version_ids)
+            records = (
+                (self._environment, resource_version_id, self.action_id) for resource_version_id in self.resource_version_ids
+            )
             async with con.transaction():
                 await super(ResourceAction, self).insert(connection=con)
                 await con.copy_records_to_table(
-                    ResourceVersionId.table_name(),
-                    columns=["environment", "resource_version_id", "action_id"],
-                    records=records
+                    ResourceVersionId.table_name(), columns=["environment", "resource_version_id", "action_id"], records=records
                 )
 
     @classmethod
     async def get_by_id(cls, doc_id: uuid.UUID):
-        query = "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "\
-                "as resource_version_ids, action_id, action, started, finished, messages, status, changes, change, "\
-                "send_event from resourceaction r where r.action_id = $1;"
+        query = (
+            "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "
+            "as resource_version_ids, action_id, action, started, finished, messages, status, changes, change, "
+            "send_event from resourceaction r where r.action_id = $1;"
+        )
         async with cls._connection_pool.acquire() as con:
             result = await con.fetchrow(query, cls._get_value(doc_id))
             if result is None:
@@ -1247,10 +1338,12 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     async def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
-        sql_query = "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "\
-                    "as resource_version_ids, action_id, action, started, finished, messages, status, changes, change, "\
-                    "send_event from resourceaction r"
-        (filter_statement, values) = cls._get_composed_filter(**query, col_name_prefix='r')
+        sql_query = (
+            "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "
+            "as resource_version_ids, action_id, action, started, finished, messages, status, changes, change, "
+            "send_event from resourceaction r"
+        )
+        (filter_statement, values) = cls._get_composed_filter(**query, col_name_prefix="r")
         if filter_statement:
             sql_query += " WHERE " + filter_statement
         async with cls._connection_pool.acquire() as con:
@@ -1274,11 +1367,14 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     async def get_log(cls, environment, resource_version_id, action=None, limit=0):
-        query = "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "\
-                "as resource_version_ids, r.action_id as action_id, action, started, finished, messages, status, changes,"\
-                " change, send_event from resourceaction r "\
-                "RIGHT OUTER JOIN resourceversionid rvid on (rvid.action_id=r.action_id) """ \
-                "where rvid.environment=$1 and  rvid.resource_version_id=$2 "
+        query = (
+            "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "
+            "as resource_version_ids, r.action_id as action_id, action, started, finished, messages, status, changes,"
+            " change, send_event from resourceaction r "
+            "RIGHT OUTER JOIN resourceversionid rvid on (rvid.action_id=r.action_id) "
+            ""
+            "where rvid.environment=$1 and  rvid.resource_version_id=$2 "
+        )
         values = [cls._get_value(environment), cls._get_value(resource_version_id)]
         if action is not None:
             query += " AND action=$3"
@@ -1369,17 +1465,26 @@ class ResourceAction(BaseDocument):
                 dollarmark_resource = "$" + str(offset)
                 dollarmark_resource_and_field = "$" + str(offset + 1)
                 dollarmark_change = "$" + str(offset + 2)
-                set_statement = "jsonb_set(" + \
-                                "CASE" + \
-                                " WHEN " + jsonb_to_update + " ? " + dollarmark_resource + "::text" +  \
-                                " THEN " + jsonb_to_update + \
-                                " ELSE jsonb_build_object(" + dollarmark_resource + ", jsonb_build_object())" + \
-                                " END," + \
-                                dollarmark_resource_and_field + ", " + dollarmark_change + ", TRUE)"
-                values = values + [self._get_value(resource),
-                                   self._get_value([resource, field]),
-                                   self._get_as_jsonb(change)
-                                   ]
+                set_statement = (
+                    "jsonb_set("
+                    + "CASE"
+                    + " WHEN "
+                    + jsonb_to_update
+                    + " ? "
+                    + dollarmark_resource
+                    + "::text"
+                    + " THEN "
+                    + jsonb_to_update
+                    + " ELSE jsonb_build_object("
+                    + dollarmark_resource
+                    + ", jsonb_build_object())"
+                    + " END,"
+                    + dollarmark_resource_and_field
+                    + ", "
+                    + dollarmark_change
+                    + ", TRUE)"
+                )
+                values = values + [self._get_value(resource), self._get_value([resource, field]), self._get_as_jsonb(change)]
                 offset += 3
         set_statement = "changes=" + set_statement
         return (set_statement, values)
@@ -1404,9 +1509,7 @@ class ResourceAction(BaseDocument):
         (set_statement, values_set_statement) = self._get_set_statement_for_updates()
         (filter_statement, values_of_filter) = self._get_filter_on_primary_key_fields(offset=len(values_set_statement) + 1)
         values = values_set_statement + values_of_filter
-        query = "UPDATE " + self.table_name() + \
-                " SET " + set_statement + \
-                " WHERE " + filter_statement
+        query = "UPDATE " + self.table_name() + " SET " + set_statement + " WHERE " + filter_statement
         await self._execute_query(query, *values)
         self._updates = {}
 
@@ -1424,7 +1527,7 @@ class ResourceAction(BaseDocument):
                 new_values = [self._get_value(update)]
             values += new_values
             parts_set_statement.append(new_statement)
-        set_statement = ','.join(parts_set_statement)
+        set_statement = ",".join(parts_set_statement)
         return (set_statement, values)
 
     @classmethod
@@ -1441,8 +1544,10 @@ class ResourceAction(BaseDocument):
     async def delete_all(cls, environment):
         ra_table_name = cls.table_name()
         rvid_table_name = ResourceVersionId.table_name()
-        subquery = "SELECT r.action_id FROM %s r LEFT OUTER JOIN %s i ON (r.action_id = i.action_id) WHERE i.environment=$1" \
-                   % (ra_table_name, rvid_table_name)
+        subquery = "SELECT r.action_id FROM %s r LEFT OUTER JOIN %s i ON (r.action_id = i.action_id) WHERE i.environment=$1" % (
+            ra_table_name,
+            rvid_table_name,
+        )
         query = "DELETE FROM %s WHERE action_id=ANY(%s)" % (ra_table_name, subquery)
         await cls._execute_query(query, cls._get_value(environment))
 
@@ -1459,6 +1564,7 @@ class Resource(BaseDocument):
         :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                                used to determine if a resource describes the same state across versions
     """
+
     environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     model = Field(field_type=int, required=True)
 
@@ -1491,8 +1597,9 @@ class Resource(BaseDocument):
         self._resource_type = parsed_id.entity_type
 
     def make_hash(self):
-        character = "|".join(sorted([str(k) + "||" + str(v)
-                                     for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]]))
+        character = "|".join(
+            sorted([str(k) + "||" + str(v) for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]])
+        )
         m = hashlib.md5()
         m.update(self.resource_id.encode())
         m.update(character.encode())
@@ -1503,7 +1610,7 @@ class Resource(BaseDocument):
         """
             Get all resources listed in resource_version_ids
         """
-        hashes_as_str = "(" + ','.join(["$" + str(i) for i in range(2, len(hashes) + 2)]) + ")"
+        hashes_as_str = "(" + ",".join(["$" + str(i) for i in range(2, len(hashes) + 2)]) + ")"
         query = "SELECT * FROM " + cls.table_name() + " WHERE environment=$1 AND attribute_hash IN " + hashes_as_str
         values = [cls._get_value(environment)] + [cls._get_value(h) for h in hashes]
         result = await cls._fetch_query(query, *values)
@@ -1519,20 +1626,33 @@ class Resource(BaseDocument):
         """
         if resource_version_ids == []:
             return []
-        resource_version_ids_statement = ', '.join(["$" + str(i) for i in range(2, len(resource_version_ids) + 2)])
+        resource_version_ids_statement = ", ".join(["$" + str(i) for i in range(2, len(resource_version_ids) + 2)])
         (filter_statement, values) = cls._get_composed_filter(environment=environment)
         values = values + cls._get_value(resource_version_ids)
-        query = "SELECT * FROM " + cls.table_name() + " WHERE " + filter_statement + \
-                " AND resource_version_id IN (" + resource_version_ids_statement + ")"
+        query = (
+            "SELECT * FROM "
+            + cls.table_name()
+            + " WHERE "
+            + filter_statement
+            + " AND resource_version_id IN ("
+            + resource_version_ids_statement
+            + ")"
+        )
         resources = await cls.select_query(query, values)
         return resources
 
     async def delete_cascade(self):
         ra_table_name = ResourceAction.table_name()
         rvid_table_name = ResourceVersionId.table_name()
-        sub_query = "SELECT r.action_id FROM " + ra_table_name + " r INNER JOIN " + rvid_table_name + " i" + \
-                    " ON (r.action_id=i.action_id)" + \
-                    " WHERE i.environment=$1 AND i.resource_version_id=$2"
+        sub_query = (
+            "SELECT r.action_id FROM "
+            + ra_table_name
+            + " r INNER JOIN "
+            + rvid_table_name
+            + " i"
+            + " ON (r.action_id=i.action_id)"
+            + " WHERE i.environment=$1 AND i.resource_version_id=$2"
+        )
         query = "DELETE FROM " + ra_table_name + " WHERE action_id=ANY(" + sub_query + ")"
         await self._execute_query(query, self.environment, self.resource_version_id)
         await self.delete()
@@ -1543,10 +1663,11 @@ class Resource(BaseDocument):
             Returns a list of resources with an undeployable state
         """
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
-        undeployable_states = ', '.join(['$' + str(i + 3) for i in range(len(const.UNDEPLOYABLE_STATES))])
+        undeployable_states = ", ".join(["$" + str(i + 3) for i in range(len(const.UNDEPLOYABLE_STATES))])
         values = values + [cls._get_value(s) for s in const.UNDEPLOYABLE_STATES]
-        query = "SELECT * FROM " + cls.table_name() + \
-                " WHERE " + filter_statement + " AND status IN (" + undeployable_states + ")"
+        query = (
+            "SELECT * FROM " + cls.table_name() + " WHERE " + filter_statement + " AND status IN (" + undeployable_states + ")"
+        )
         resources = await cls.select_query(query, values)
         return resources
 
@@ -1592,20 +1713,20 @@ class Resource(BaseDocument):
                 async for record in con.cursor(query, *values):
                     resource_id = record["resource_id"]
                     parsed_id = Id.parse_id(resource_id)
-                    result.append({"resource_id": resource_id,
-                                   "resource_type": parsed_id.entity_type,
-                                   "agent": record["latest_agent"],
-                                   "latest_version": record["latest_version"],
-                                   "deployed_version": record["deployed_version"] if "deployed_version" in record else None,
-                                   "last_deploy": record["last_deploy"] if "last_deploy" in record else None})
+                    result.append(
+                        {
+                            "resource_id": resource_id,
+                            "resource_type": parsed_id.entity_type,
+                            "agent": record["latest_agent"],
+                            "latest_version": record["latest_version"],
+                            "deployed_version": record["deployed_version"] if "deployed_version" in record else None,
+                            "last_deploy": record["last_deploy"] if "last_deploy" in record else None,
+                        }
+                    )
         return result
 
     @classmethod
-    async def get_resources_for_version(cls,
-                                        environment,
-                                        version,
-                                        agent=None,
-                                        no_obj=False):
+    async def get_resources_for_version(cls, environment, version, agent=None, no_obj=False):
         if agent:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version, agent=agent)
         else:
@@ -1628,14 +1749,11 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    async def get_resources_for_version_raw(cls,
-                                            environment,
-                                            version,
-                                            projection):
+    async def get_resources_for_version_raw(cls, environment, version, projection):
         if not projection:
             projection = "*"
         else:
-            projection = ','.join(projection)
+            projection = ",".join(projection)
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
         resource_records = await cls._fetch_query(query, *values)
@@ -1647,8 +1765,9 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_latest_version(cls, environment, resource_id):
-        resources = await cls.get_list(order_by_column="model", order="DESC", limit=1,
-                                       environment=environment, resource_id=resource_id)
+        resources = await cls.get_list(
+            order_by_column="model", order="DESC", limit=1, environment=environment, resource_id=resource_id
+        )
         if len(resources) > 0:
             return resources[0]
 
@@ -1664,8 +1783,13 @@ class Resource(BaseDocument):
     def new(cls, environment, resource_version_id, **kwargs):
         vid = Id.parse_id(resource_version_id)
 
-        attr = dict(environment=environment, model=vid.version, resource_id=vid.resource_str(),
-                    resource_version_id=resource_version_id, agent=vid.agent_name)
+        attr = dict(
+            environment=environment,
+            model=vid.version,
+            resource_id=vid.resource_str(),
+            resource_version_id=resource_version_id,
+            agent=vid.agent_name,
+        )
 
         attr.update(kwargs)
 
@@ -1684,8 +1808,12 @@ class Resource(BaseDocument):
         LOGGER.debug("Starting purge_on_delete queries")
 
         # get all models that have been released
-        query = "SELECT version FROM " + ConfigurationModel.table_name() + \
-                " WHERE environment=$1 AND released=TRUE ORDER BY version DESC LIMIT " + str(DBLIMIT)
+        query = (
+            "SELECT version FROM "
+            + ConfigurationModel.table_name()
+            + " WHERE environment=$1 AND released=TRUE ORDER BY version DESC LIMIT "
+            + str(DBLIMIT)
+        )
         versions = set()
         latest_version = None
         async with cls._connection_pool.acquire() as con:
@@ -1701,9 +1829,14 @@ class Resource(BaseDocument):
 
         # find all resources in previous versions that have "purge_on_delete" set
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=latest_version)
-        query = "SELECT DISTINCT resource_id FROM " + cls.table_name() + \
-                " WHERE " + filter_statement + \
-                " AND attributes @> $" + str(len(values) + 1)
+        query = (
+            "SELECT DISTINCT resource_id FROM "
+            + cls.table_name()
+            + " WHERE "
+            + filter_statement
+            + " AND attributes @> $"
+            + str(len(values) + 1)
+        )
         values.append(cls._get_value({"purge_on_delete": True}))
         resources = await cls._fetch_query(query, *values)
         resources = [r["resource_id"] for r in resources]
@@ -1725,11 +1858,16 @@ class Resource(BaseDocument):
         for deleted_resource in deleted:
             # get the full resource history, and determine the purge status of this resource
             (filter_statement, values) = cls._get_composed_filter(environment=environment, resource_id=deleted_resource)
-            query = "SELECT *" + \
-                    " FROM " + cls.table_name() + \
-                    " WHERE " + filter_statement + \
-                    " AND model < $" + str(len(values) + 1) + \
-                    " ORDER BY model DESC"
+            query = (
+                "SELECT *"
+                + " FROM "
+                + cls.table_name()
+                + " WHERE "
+                + filter_statement
+                + " AND model < $"
+                + str(len(values) + 1)
+                + " ORDER BY model DESC"
+            )
             values.append(cls._get_value(current_version))
 
             async with cls._connection_pool.acquire() as con:
@@ -1785,6 +1923,7 @@ class ConfigurationModel(BaseDocument):
         :param version_info: Version metadata
         :param total: The total number of resources
     """
+
     version = Field(field_type=int, required=True, part_of_primary_key=True)
     environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     date = Field(field_type=datetime.datetime)
@@ -1821,15 +1960,15 @@ class ConfigurationModel(BaseDocument):
         result = {}
         values = json.loads(values)
         for value_entry in values:
-            entry_uuid = str(uuid.uuid5(environment, value_entry['id']))
+            entry_uuid = str(uuid.uuid5(environment, value_entry["id"]))
             result[entry_uuid] = value_entry
         return result
 
     @classmethod
     async def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
-        transient_states = ','.join(["$" + str(i) for i in range(1, len(const.TRANSIENT_STATES) + 1)])
+        transient_states = ",".join(["$" + str(i) for i in range(1, len(const.TRANSIENT_STATES) + 1)])
         transient_states_values = [cls._get_value(s) for s in const.TRANSIENT_STATES]
-        (filterstr, values) = cls._get_composed_filter(col_name_prefix='c', offset=len(transient_states_values) + 1, **query)
+        (filterstr, values) = cls._get_composed_filter(col_name_prefix="c", offset=len(transient_states_values) + 1, **query)
         values = transient_states_values + values
         where_statement = f"WHERE {filterstr} " if filterstr else ""
         order_by_statement = f"ORDER BY {order_by_column} {order} " if order_by_column else ""
@@ -1854,7 +1993,7 @@ class ConfigurationModel(BaseDocument):
         for record in query_result:
             record = dict(record)
             if no_obj:
-                record['status'] = await cls._get_status_field(record["environment"], record['status'])
+                record["status"] = await cls._get_status_field(record["environment"], record["status"])
                 result.append(record)
             else:
                 done = record.pop("done")
@@ -1894,8 +2033,7 @@ class ConfigurationModel(BaseDocument):
         """
             Get the latest released (most recent) version for the given environment
         """
-        versions = await cls.get_list(order_by_column="version", order="DESC", limit=1,
-                                      environment=environment, released=True)
+        versions = await cls.get_list(order_by_column="version", order="DESC", limit=1, environment=environment, released=True)
         if len(versions) == 0:
             return None
 
@@ -1936,8 +2074,9 @@ class ConfigurationModel(BaseDocument):
         """
             Get all versions for an environment ordered descending
         """
-        versions = await cls.get_list(order_by_column="version", order="DESC", limit=limit, offset=start,
-                                      environment=environment)
+        versions = await cls.get_list(
+            order_by_column="version", order="DESC", limit=limit, offset=start, environment=environment
+        )
         return versions
 
     async def delete_cascade(self):
@@ -1961,20 +2100,26 @@ class ConfigurationModel(BaseDocument):
 
     async def mark_done(self):
         """ mark this deploy as done """
-        subquery = f"(EXISTS(" + \
-                   f"SELECT 1 " + \
-                   f"FROM {Resource.table_name()} " + \
-                   f"WHERE environment=$1 AND model=$2 AND status != $3" + \
-                   f"))::boolean"
-        query = f"UPDATE {self.table_name()} " + \
-                f"SET " + \
-                f"deployed=True, result=(CASE WHEN {subquery} THEN $4::versionstate ELSE $5::versionstate END) " \
-                f"WHERE environment=$1 AND version=$2 RETURNING result"
-        values = [self._get_value(self.environment),
-                  self._get_value(self.version),
-                  self._get_value(const.ResourceState.deployed),
-                  self._get_value(const.VersionState.failed),
-                  self._get_value(const.VersionState.success)]
+        subquery = (
+            f"(EXISTS("
+            + f"SELECT 1 "
+            + f"FROM {Resource.table_name()} "
+            + f"WHERE environment=$1 AND model=$2 AND status != $3"
+            + f"))::boolean"
+        )
+        query = (
+            f"UPDATE {self.table_name()} "
+            + f"SET "
+            + f"deployed=True, result=(CASE WHEN {subquery} THEN $4::versionstate ELSE $5::versionstate END) "
+            f"WHERE environment=$1 AND version=$2 RETURNING result"
+        )
+        values = [
+            self._get_value(self.environment),
+            self._get_value(self.version),
+            self._get_value(const.ResourceState.deployed),
+            self._get_value(const.VersionState.failed),
+            self._get_value(const.VersionState.success),
+        ]
         result = await self._fetchval(query, *values)
         self.result = const.VersionState[result]
         self.deployed = True
@@ -1996,12 +2141,14 @@ class ConfigurationModel(BaseDocument):
                                      FROM Resource
                                      WHERE environment=$1 AND model=$2 AND status = any($6::resourcestate[])
                     )"""
-        values = [cls._get_value(environment),
-                  cls._get_value(version),
-                  cls._get_value(ResourceState.deployed),
-                  cls._get_value(const.VersionState.failed),
-                  cls._get_value(const.VersionState.success),
-                  cls._get_value(DONE_STATES)]
+        values = [
+            cls._get_value(environment),
+            cls._get_value(version),
+            cls._get_value(ResourceState.deployed),
+            cls._get_value(const.VersionState.failed),
+            cls._get_value(const.VersionState.success),
+            cls._get_value(DONE_STATES),
+        ]
         await cls._execute_query(query, *values)
 
     @classmethod
@@ -2017,25 +2164,11 @@ class ConfigurationModel(BaseDocument):
         Deployed and same hash -> not increment
         deployed and different hash -> increment
          """
-        projection_a = [
-            "resource_version_id",
-            "resource_id",
-            "status",
-            "attribute_hash",
-            "attributes"
-        ]
-        projection = [
-            "resource_version_id",
-            "resource_id",
-            "status",
-            "attribute_hash"
-        ]
+        projection_a = ["resource_version_id", "resource_id", "status", "attribute_hash", "attributes"]
+        projection = ["resource_version_id", "resource_id", "status", "attribute_hash"]
 
         # get resources for agent
-        resources = await Resource.get_resources_for_version_raw(
-            environment,
-            version,
-            projection_a)
+        resources = await Resource.get_resources_for_version_raw(environment, version, projection_a)
 
         # to increment
         increment = []
@@ -2067,16 +2200,16 @@ class ConfigurationModel(BaseDocument):
 
                 status = ores["status"]
                 # available/skipped/unavailable -> next version
-                if status in [ResourceState.available.name,
-                              ResourceState.skipped.name,
-                              ResourceState.unavailable.name]:
+                if status in [ResourceState.available.name, ResourceState.skipped.name, ResourceState.unavailable.name]:
                     next.append(res)
 
                 # error -> increment
-                elif status in [ResourceState.failed.name,
-                                ResourceState.cancelled.name,
-                                ResourceState.deploying.name,
-                                ResourceState.processing_events.name]:
+                elif status in [
+                    ResourceState.failed.name,
+                    ResourceState.cancelled.name,
+                    ResourceState.deploying.name,
+                    ResourceState.processing_events.name,
+                ]:
                     increment.append(res)
 
                 elif status == ResourceState.deployed.name:
@@ -2146,6 +2279,7 @@ class Code(BaseDocument):
         :param source_refs file hashes refering to files in the file store
             {code_hash:(file_name, provider.__module__, [req])}
     """
+
     environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     resource = Field(field_type=str, required=True, part_of_primary_key=True)
     version = Field(field_type=int, required=True, part_of_primary_key=True)
@@ -2177,6 +2311,7 @@ class DryRun(BaseDocument):
         :param resource_todo The number of resources left to do
         :param resources Changes for each of the resources in the version
     """
+
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     environment = Field(field_type=uuid.UUID, required=True)
     model = Field(field_type=int, required=True)
@@ -2192,12 +2327,18 @@ class DryRun(BaseDocument):
             if the resource has not been saved yet.
         """
         jsonb_key = uuid.uuid5(dryrun_id, resource_id)
-        query = "UPDATE " + cls.table_name() + " SET todo = todo - 1, resources=jsonb_set(resources, $1::text[], $2) " + \
-                "WHERE id=$3 and NOT resources ? $4"
-        values = [cls._get_value([jsonb_key]),
-                  cls._get_value(dryrun_data),
-                  cls._get_value(dryrun_id),
-                  cls._get_value(jsonb_key)]
+        query = (
+            "UPDATE "
+            + cls.table_name()
+            + " SET todo = todo - 1, resources=jsonb_set(resources, $1::text[], $2) "
+            + "WHERE id=$3 and NOT resources ? $4"
+        )
+        values = [
+            cls._get_value([jsonb_key]),
+            cls._get_value(dryrun_data),
+            cls._get_value(dryrun_id),
+            cls._get_value(jsonb_key),
+        ]
         await cls._execute_query(query, *values)
 
     @classmethod
@@ -2219,6 +2360,7 @@ class SchemaVersion(BaseDocument):
 
        :param current_version The current version of the database schema.
     """
+
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     current_version = Field(field_type=int, required=True, unique=True)
 
@@ -2247,8 +2389,26 @@ class SchemaVersion(BaseDocument):
         await new_version.insert(connection=connection)
 
 
-_classes = [Project, Environment, UnknownParameter, AgentProcess, AgentInstance, Agent, Resource, ResourceAction,
-            ResourceVersionId, ConfigurationModel, Code, Parameter, DryRun, Form, FormRecord, Compile, Report, SchemaVersion]
+_classes = [
+    Project,
+    Environment,
+    UnknownParameter,
+    AgentProcess,
+    AgentInstance,
+    Agent,
+    Resource,
+    ResourceAction,
+    ResourceVersionId,
+    ConfigurationModel,
+    Code,
+    Parameter,
+    DryRun,
+    Form,
+    FormRecord,
+    Compile,
+    Report,
+    SchemaVersion,
+]
 
 
 class DBSchema(object):
@@ -2276,8 +2436,9 @@ class DBSchema(object):
 
     @classmethod
     async def _get_dct_with_update_functions(cls, versions_higher_than=None):
-        module_names = [modname for _, modname, ispkg in pkgutil.iter_modules(DBSchema.PACKAGE_WITH_UPDATE_FILES.__path__)
-                        if not ispkg]
+        module_names = [
+            modname for _, modname, ispkg in pkgutil.iter_modules(DBSchema.PACKAGE_WITH_UPDATE_FILES.__path__) if not ispkg
+        ]
         version_to_update_function = {}
         for mod_name in module_names:
             schema_version = int(mod_name[1:])

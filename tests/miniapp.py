@@ -29,7 +29,6 @@ inmanta.const.SHUTDOWN_GRACE_HARD = 2
 
 
 class MiniApp:
-
     def __init__(self):
         self.running = True
         self.lock = threading.Semaphore(0)
@@ -61,7 +60,7 @@ class MiniApp:
         print("DONE")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print("Start")
     a = MiniApp()
     setup_signal_handlers(a.stop)

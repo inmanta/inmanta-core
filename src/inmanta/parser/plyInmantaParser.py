@@ -26,8 +26,18 @@ from inmanta.parser.plyInmantaLex import tokens, reserved
 from inmanta.ast.statements import Literal, Statement
 from inmanta.ast import Location, LocatableString, Range, Namespace
 from inmanta.ast.statements.generator import For, Constructor
-from inmanta.ast.statements.define import DefineEntity, DefineAttribute, DefineImplement, DefineImplementation, DefineRelation, \
-    DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineImport, DefineImplementInherits
+from inmanta.ast.statements.define import (
+    DefineEntity,
+    DefineAttribute,
+    DefineImplement,
+    DefineImplementation,
+    DefineRelation,
+    DefineTypeConstraint,
+    DefineTypeDefault,
+    DefineIndex,
+    DefineImport,
+    DefineImplementInherits,
+)
 from inmanta.ast.constraint.expression import Operator, Not, IsDefined
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.assign import CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup, MapLookup
@@ -46,13 +56,7 @@ LOGGER = logging.getLogger()
 file = "NOFILE"
 namespace = None
 
-precedence = (
-    ('left', 'OR'),
-    ('left', 'AND'),
-    ('right', 'NOT'),
-    ('right', 'MLS'),
-    ('right', 'MLS_END')
-)
+precedence = (("left", "OR"), ("left", "AND"), ("right", "NOT"), ("right", "MLS"), ("right", "MLS_END"))
 
 
 def attach_lnr(p: YaccProduction, token: int = 1) -> None:
@@ -102,12 +106,12 @@ def p_main_collect(p: YaccProduction) -> None:
 
 
 def p_main_term(p: YaccProduction) -> None:
-    'main : top_stmt'
+    "main : top_stmt"
     p[0] = [p[1]]
 
 
 def p_top_stmt(p: YaccProduction) -> None:
-    '''top_stmt : mls
+    """top_stmt : mls
                 | entity_def
                 | implement_def
                 | implementation_def
@@ -115,7 +119,7 @@ def p_top_stmt(p: YaccProduction) -> None:
                 | statement
                 | typedef
                 | index
-                | import '''
+                | import """
     p[0] = p[1]
 
 
@@ -123,26 +127,29 @@ def p_top_stmt(p: YaccProduction) -> None:
 # IMPORT
 #######################
 
+
 def p_import(p: YaccProduction) -> None:
-    '''import : IMPORT ns_ref'''
+    """import : IMPORT ns_ref"""
     p[0] = DefineImport(str(p[2]), str(p[2]))
     attach_lnr(p, 1)
 
 
 def p_import_1(p: YaccProduction) -> None:
-    '''import : IMPORT ns_ref AS ID'''
+    """import : IMPORT ns_ref AS ID"""
     p[0] = DefineImport(str(p[2]), p[4])
     attach_lnr(p, 1)
+
+
 #######################
 # STMTS
 #######################
 
 
 def p_stmt(p: YaccProduction) -> None:
-    '''statement : assign
+    """statement : assign
                 | constructor
                 | function_call
-                | for'''
+                | for"""
     p[0] = p[1]
 
 
@@ -163,7 +170,7 @@ def p_stmt_list_collect(p: YaccProduction) -> None:
 
 
 def p_stmt_list_term(p: YaccProduction) -> None:
-    'stmt_list : statement'
+    "stmt_list : statement"
     p[0] = [p[1]]
 
 
@@ -183,6 +190,8 @@ def p_for(p: YaccProduction) -> None:
     "for : FOR ID IN operand ':' block"
     p[0] = For(p[4], p[2], BasicBlock(namespace, p[6]))
     attach_lnr(p, 1)
+
+
 #######################
 # DEFINITIONS
 #######################
@@ -211,38 +220,38 @@ def p_entity_extends_err(p: YaccProduction) -> None:
 
 
 def p_entity_body_outer(p: YaccProduction) -> None:
-    '''entity_body_outer : mls entity_body END'''
+    """entity_body_outer : mls entity_body END"""
     p[0] = (p[1], p[2])
 
 
 def p_entity_body_outer_1(p: YaccProduction) -> None:
-    '''entity_body_outer : entity_body END '''
+    """entity_body_outer : entity_body END """
     p[0] = (None, p[1])
 
 
 def p_entity_body_outer_none(p: YaccProduction) -> None:
-    '''entity_body_outer : END '''
+    """entity_body_outer : END """
     p[0] = (None, [])
 
 
 def p_entity_body_outer_4(p: YaccProduction) -> None:
-    '''entity_body_outer : mls END'''
+    """entity_body_outer : mls END"""
     p[0] = (p[1], [])
 
 
 def p_entity_body_collect(p: YaccProduction) -> None:
-    ''' entity_body : entity_body attr'''
+    """ entity_body : entity_body attr"""
     p[1].append(p[2])
     p[0] = p[1]
 
 
 def p_entity_body(p: YaccProduction) -> None:
-    ''' entity_body : attr'''
+    """ entity_body : attr"""
     p[0] = [p[1]]
 
 
 def p_attribute_type(p: YaccProduction) -> None:
-    '''attr_type : ns_ref'''
+    """attr_type : ns_ref"""
     p[0] = (p[1], False)
 
 
@@ -325,7 +334,7 @@ def p_attr_list_dict(p: YaccProduction) -> None:
 
 def p_attr_list_dict_null_err(p: YaccProduction) -> None:
     "attr : DICT ID '=' NULL"
-    raise ParserException(p[2].location, str(p[2]), "null can not be assigned to dict, did you mean \"dict? %s = null\"" % p[2])
+    raise ParserException(p[2].location, str(p[2]), 'null can not be assigned to dict, did you mean "dict? %s = null"' % p[2])
 
 
 def p_attr_dict_nullable(p: YaccProduction) -> None:
@@ -342,7 +351,7 @@ def p_attr_list_dict_nullable(p: YaccProduction) -> None:
 
 def p_attr_list_dict_null(p: YaccProduction) -> None:
     "attr : DICT '?'  ID '=' NULL"
-    p[0] = DefineAttribute(p[1], p[3],  make_none(p, 5), nullable=True)
+    p[0] = DefineAttribute(p[1], p[3], make_none(p, 5), nullable=True)
     attach_lnr(p, 1)
 
 
@@ -398,6 +407,7 @@ def p_implementation_def(p: YaccProduction) -> None:
 #     p[0] = DefineImplementation(namespace, p[2], None, BasicBlock(namespace, p[3]))
 #     attach_lnr(p)
 
+
 def p_implementation(p: YaccProduction) -> None:
     "implementation : ':' mls block"
     p[0] = (p[2], p[3])
@@ -417,23 +427,26 @@ def p_block_empty(p: YaccProduction) -> None:
     "block : END"
     p[0] = []
 
+
 # RELATION
 
 
 def p_relation(p: YaccProduction) -> None:
     "relation : class_ref ID multi REL multi class_ref ID"
-    if not(p[4] == '--'):
-        LOGGER.warning("DEPRECATION: use of %s in relation definition is deprecated, use -- (in %s)" %
-                       (p[4], Location(file, p.lineno(4))))
+    if not (p[4] == "--"):
+        LOGGER.warning(
+            "DEPRECATION: use of %s in relation definition is deprecated, use -- (in %s)" % (p[4], Location(file, p.lineno(4)))
+        )
     p[0] = DefineRelation((p[1], p[2], p[3]), (p[6], p[7], p[5]))
     attach_lnr(p, 2)
 
 
 def p_relation_comment(p: YaccProduction) -> None:
     "relation : class_ref ID multi REL multi class_ref ID mls"
-    if not(p[4] == '--'):
-        LOGGER.warning("DEPRECATION: use of %s in relation definition is deprecated, use -- (in %s)" %
-                       (p[4], Location(file, p.lineno(4))))
+    if not (p[4] == "--"):
+        LOGGER.warning(
+            "DEPRECATION: use of %s in relation definition is deprecated, use -- (in %s)" % (p[4], Location(file, p.lineno(4)))
+        )
     rel = DefineRelation((p[1], p[2], p[3]), (p[6], p[7], p[5]))
     rel.comment = str(p[8])
     p[0] = rel
@@ -495,6 +508,7 @@ def p_multi_4(p: YaccProduction) -> None:
     "multi : '['  ':' INT ']' "
     p[0] = (None, p[3])
 
+
 # typedef
 
 
@@ -521,6 +535,8 @@ def p_typedef_cls(p: YaccProduction) -> None:
     """typedef_inner : TYPEDEF CID AS constructor"""
     p[0] = DefineTypeDefault(namespace, p[2], p[4])
     attach_lnr(p, 2)
+
+
 # index
 
 
@@ -528,6 +544,7 @@ def p_index(p: YaccProduction) -> None:
     """index : INDEX class_ref '(' id_list ')' """
     p[0] = DefineIndex(p[2], p[4])
     attach_lnr(p, 1)
+
 
 #######################
 # CONDITIONALS
@@ -569,7 +586,7 @@ def p_condition_is_defined(p: YaccProduction) -> None:
 
 def p_condition_is_defined_short(p: YaccProduction) -> None:
     """condition : ID IS DEFINED"""
-    ref = Reference('self')
+    ref = Reference("self")
     ref.location = p[1].get_location()
     p[0] = IsDefined(ref, p[1])
     attach_lnr(p)
@@ -580,6 +597,7 @@ def p_condition_term_1(p: YaccProduction) -> None:
                 | FALSE"""
     p[0] = Literal(p[1])
     attach_lnr(p)
+
 
 #######################
 # EXPRESSIONS
@@ -661,6 +679,8 @@ def p_short_index_lookup(p: YaccProduction) -> None:
     attref = p[1]
     p[0] = ShortIndexLookup(attref.instance, attref.attribute, p[3])
     attach_lnr(p, 2)
+
+
 #######################
 # HELPERS
 
@@ -791,7 +811,7 @@ def p_operand_list_collect(p: YaccProduction) -> None:
 
 
 def p_operand_list_term(p: YaccProduction) -> None:
-    'operand_list : operand'
+    "operand_list : operand"
     p[0] = [p[1]]
 
 
@@ -807,7 +827,7 @@ def p_ns_list_collect(p: YaccProduction) -> None:
 
 
 def p_ns_list_term(p: YaccProduction) -> None:
-    'ns_list : ns_ref'
+    "ns_list : ns_ref"
     p[0] = [p[1]]
 
 
@@ -869,12 +889,12 @@ def p_class_ref_list_collect_err(p: YaccProduction) -> None:
 
 
 def p_class_ref_list_term(p: YaccProduction) -> None:
-    'class_ref_list : class_ref'
+    "class_ref_list : class_ref"
     p[0] = [p[1]]
 
 
 def p_class_ref_list_term_err(p: YaccProduction) -> None:
-    'class_ref_list : var_ref'
+    "class_ref_list : var_ref"
 
     raise ParserException(p[1].location, str(p[1]), "Invalid identifier: Entity names must start with a capital")
 
@@ -897,7 +917,7 @@ def p_id_list_collect(p: YaccProduction) -> None:
 
 
 def p_id_list_term(p: YaccProduction) -> None:
-    'id_list : ID'
+    "id_list : ID"
     p[0] = [p[1]]
 
 
@@ -930,8 +950,9 @@ def p_error(p: YaccProduction) -> None:
     if parser.symstack[-1].type in reserved.values():
         if hasattr(parser.symstack[-1].value, "location"):
             r = parser.symstack[-1].value.location
-        raise ParserException(r, str(parser.symstack[-1].value),
-                              "invalid identifier, %s is a reserved keyword" % parser.symstack[-1].value)
+        raise ParserException(
+            r, str(parser.symstack[-1].value), "invalid identifier, %s is a reserved keyword" % parser.symstack[-1].value
+        )
 
     raise ParserException(r, p.value)
 
@@ -948,10 +969,10 @@ def myparse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statement
     global namespace
     namespace = ns
     lexer.namespace = ns
-    lexer.begin('INITIAL')
+    lexer.begin("INITIAL")
 
     if content is None:
-        with open(tfile, 'r') as myfile:
+        with open(tfile, "r") as myfile:
             data = myfile.read()
             if len(data) == 0:
                 return []

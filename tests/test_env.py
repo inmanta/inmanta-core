@@ -35,6 +35,7 @@ def test_basic_install(tmpdir):
     venv1.use_virtual_env()
     venv1._install(["lorem"])
     import lorem  # NOQA
+
     lorem.sentence()
 
     with pytest.raises(ImportError):
@@ -54,7 +55,8 @@ def test_basic_install(tmpdir):
     venv1.use_virtual_env()
     try:
         venv1.install_from_list(
-            ["lorem == 0.1.1", "dummy-yummy", "iplib@git+https://github.com/bartv/python3-iplib", "lorem", "iplib >=0.0.1"])
+            ["lorem == 0.1.1", "dummy-yummy", "iplib@git+https://github.com/bartv/python3-iplib", "lorem", "iplib >=0.0.1"]
+        )
     except CalledProcessError as ep:
         print(ep.stdout)
         raise
@@ -68,16 +70,16 @@ def test_req_parser(tmpdir):
 
     e = env.VirtualEnv(tmpdir)
     name, u = e._parse_line(url)
-    assert(name is None)
-    assert(u == url)
+    assert name is None
+    assert u == url
 
     name, u = e._parse_line(at_url)
-    assert(name == "iplib")
-    assert(u == egg_url)
+    assert name == "iplib"
+    assert u == egg_url
 
     e._parse_line(egg_url)
-    assert(name == "iplib")
-    assert(u == egg_url)
+    assert name == "iplib"
+    assert u == egg_url
 
 
 def test_gen_req_file(tmpdir):
@@ -85,4 +87,4 @@ def test_gen_req_file(tmpdir):
     req = ["lorem == 0.1.1", "lorem > 0.1", "dummy-yummy", "iplib@git+https://github.com/bartv/python3-iplib", "lorem"]
 
     req_lines = [x for x in e._gen_requirements_file(req).split("\n") if len(x) > 0]
-    assert(len(req_lines) == 3)
+    assert len(req_lines) == 3
