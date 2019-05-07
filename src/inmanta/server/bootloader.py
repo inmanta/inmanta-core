@@ -29,7 +29,7 @@ from inmanta.server.agentmanager import AgentManager
 
 from typing import List, Callable, Dict, Generator, Optional
 
-from inmanta.util import stable_depth_first
+from inmanta.util import stable_depth_first, CycleException
 
 LOGGER = logging.getLogger(__name__)
 
@@ -126,7 +126,10 @@ class InmantaBootloader(object):
         slices: Dict[str, ServerSlice] = {slice.name: slice for slice in appctx.get_slices()}
         edges: Dict[str, List[str]] = {slice.name: slice.get_dependencies() for slice in appctx.get_slices()}
         names = list(edges.keys())
-        order = stable_depth_first(names, edges)
+        try:
+            order = stable_depth_first(names, edges)
+        except CycleException as e:
+            raise PluginLoadFailed("Dependency cycle between server slices " + ",".join(e.nodes)) from e
 
         def resolve(name: str) -> Optional[ServerSlice]:
             if name in slices:
