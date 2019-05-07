@@ -21,7 +21,7 @@ import logging
 import pytest
 
 from inmanta import util
-from inmanta.util import ensure_future_and_handle_exception
+from inmanta.util import ensure_future_and_handle_exception, stable_depth_first, CycleException
 from utils import LogSequence, log_contains, no_error_in_logs
 
 LOGGER = logging.getLogger(__name__)
@@ -145,3 +145,75 @@ async def test_ensure_future_and_handle_exception(caplog):
     )
     exception = caplog.get_records("call")[final].exc_info[1]
     assert str(exception) == "message F"
+
+
+def test_stable_dfs():
+    def expand_graph(gs):
+        """ expand a graph od the form
+        a: a b c d
+        """
+        nodes = set()
+        edges = {}
+
+        for line in gs.split("\n"):
+            if not line.strip():
+                continue
+            f, t = line.split(":")
+            f = f.strip()
+            if not f:
+                continue
+            nodes.add(f)
+            t = t.strip()
+            if not t:
+                continue
+            ts = [target.strip() for target in t.split(" ") if target.strip()]
+            for target in ts:
+                nodes.add(target)
+            edges[f] = ts
+        return list(nodes), edges
+
+    graph = expand_graph(
+        """
+    e: f
+    a: b c
+    b: c d
+    h: i
+    0:
+    """
+    )
+    seq = stable_depth_first(*graph)
+    assert seq == ["0", "c", "d", "b", "a", "f", "e", "i", "h"]
+
+    graph = expand_graph(
+        """
+        e: f
+        b: c d
+        a: c b
+        h: i
+        0:
+        """
+    )
+    seq = stable_depth_first(*graph)
+    assert seq == ["0", "c", "d", "b", "a", "f", "e", "i", "h"]
+
+    with pytest.raises(CycleException) as e:
+        stable_depth_first(*expand_graph("a: a"))
+
+    assert e.value.nodes == ["a"]
+
+    with pytest.raises(CycleException) as e:
+        stable_depth_first(
+            *expand_graph(
+                """a: b
+        b: a"""
+            )
+        )
+
+    assert e.value.nodes == ["b", "a"]
+
+    # missing nodes
+    graph, edges = expand_graph("""a: b""")
+    graph.remove("b")
+
+    seq = stable_depth_first(graph, edges)
+    assert seq == ["b", "a"]

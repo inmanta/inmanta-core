@@ -293,7 +293,7 @@ class TaskHandler(object):
         return task
 
     async def stop(self) -> None:
-        """ Stop all background tasks by requestinng a cancel
+        """ Stop all background tasks by requesting a cancel
         """
         self._stopped = True
         await gather(*self._await_tasks)
@@ -309,3 +309,42 @@ class TaskHandler(object):
             pass
 
         await gather(*cancelled_tasks, return_exceptions=True)
+
+
+class CycleException(Exception):
+    def __init__(self, node):
+        self.nodes = [node]
+        self.done = False
+
+    def add(self, node):
+        if not self.done:
+            if node not in self.nodes:
+                self.nodes.insert(0, node)
+            else:
+                self.done = True
+
+
+def stable_depth_first(nodes: List[str], edges: Dict[str, List[str]]) -> List[str]:
+    """Creates a linear sequence based on a set of "comes after" edges, same graph yields the same solution,
+    independent of order given to this function"""
+    nodes = sorted(nodes)
+    out = []
+
+    def dfs(node: str, seen: Set[str] = set()) -> None:
+        if node in out:
+            return
+        if node in seen:
+            raise CycleException(node)
+        try:
+            if node in edges:
+                for edge in sorted(edges[node]):
+                    dfs(edge, seen | set(node))
+            out.append(node)
+        except CycleException as e:
+            e.add(node)
+            raise e
+
+    while nodes:
+        dfs(nodes.pop(0))
+
+    return out

@@ -19,9 +19,11 @@ requires = [
     "pymongo",
 ]
 
+namespace_packages = ["inmanta_ext.core"]
+
 setup(
     version="2019.3",
-    python_requires='>=3.6', # also update classifiers
+    python_requires=">=3.6",  # also update classifiers
     # Meta data
     name="inmanta",
     description="Inmanta deployment tool",
@@ -38,7 +40,7 @@ setup(
         "Topic :: Utilities",
         "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
-        "Programming Language :: Python :: 3.7"
+        "Programming Language :: Python :: 3.7",
     ],
     keywords="orchestrator orchestration configurationmanagement",
     project_urls={
@@ -47,7 +49,7 @@ setup(
     },
     # Packaging
     package_dir={"": "src"},
-    packages=find_packages("src"),
+    packages=find_packages("src") + namespace_packages,
     package_data={"": ["misc/*", "docs/*"]},
     include_package_data=True,
     install_requires=requires,
@@ -58,5 +60,4 @@ setup(
             "inmanta-migrate-db = inmanta.db.migrate_to_postgresql:main",
         ]
     },
-
 )

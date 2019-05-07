@@ -196,3 +196,8 @@ TIME_ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
 TIME_LOGFMT = "%Y-%m-%d %H:%M:%S"
 
 PLUGINS_PACKAGE = "inmanta_plugins"
+
+# namespace in which extensions are discovered
+EXTENSION_NAMESPACE = "inmanta_ext"
+# module inside the extension package that contains the setup function
+EXTENSION_MODULE = "extension"

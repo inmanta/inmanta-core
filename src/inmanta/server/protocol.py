@@ -192,6 +192,9 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
     name = property(lambda self: self._name)
 
+    def get_dependencies(self) -> List[str]:
+        return []
+
     def get_handlers(self) -> List[routing.Rule]:
         return self._handlers
 
