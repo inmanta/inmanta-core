@@ -160,7 +160,16 @@ password for the inmanta database.
   sudo -u postgres -i sh -c "createuser --pwprompt inmanta; createdb -O inmanta inmanta"
 
 Change the authentication method for local connections to md5 by changing the following lines in the
-``/var/lib/pgsql/10/data/pg_hba.conf`` file.
+``/var/lib/pgsql/10/data/pg_hba.conf`` file
+
+.. code-block:: text
+
+  # IPv4 local connections:
+  host    all             all             127.0.0.1/32            ident
+  # IPv6 local connections:
+  host    all             all             ::1/128                 ident
+
+to
 
 .. code-block:: text
 
@@ -168,6 +177,7 @@ Change the authentication method for local connections to md5 by changing the fo
   host    all             all             127.0.0.1/32            md5
   # IPv6 local connections:
   host    all             all             ::1/128                 md5
+
 
 Restart the PostgreSQL server to apply the changes made in the ``pg_hba.conf`` file:
 
