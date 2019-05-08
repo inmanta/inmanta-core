@@ -1,3 +1,8 @@
+v 2019.2.1 (2019-05-08)
+Changes in this release:
+- Various bugfixes (#1144)
+- Updated mongo to postgres upgrade documentation
+
 v 2019.2 (2019-04-30)
 Changes in this release:
 - Various bugfixes (#1046, #968, #1045)
