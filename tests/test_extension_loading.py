@@ -23,6 +23,7 @@ from utils import log_contains
 
 @contextmanager
 def splice_extension_in(name: str) -> Generator[Any, Any, None]:
+    """Context manager to all extensions in tests/data/{name}/inmanta_ext/ to the interpreter and unload them again"""
     oldpath = sys.path
     try:
         sys.path = sys.path + [os.path.join(os.path.dirname(__file__), "data", name)]

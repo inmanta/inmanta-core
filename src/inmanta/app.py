@@ -73,7 +73,7 @@ def start_server(options):
     # handle startup exceptions
     def _handle_startup_done(fut):
         if fut.cancelled():
-            ensure_future(ibl.stop())
+            safe_shutdown(ioloop, ibl.stop)
         else:
             exc = fut.exception()
             if exc is not None:
