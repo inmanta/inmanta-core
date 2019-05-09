@@ -212,7 +212,7 @@ class RESTServer(RESTBase):
         A tornado based rest server
     """
 
-    _http_server: httpserver.HTTPServer
+    _http_server: Optional[httpserver.HTTPServer]
 
     def __init__(self, session_manager: common.SessionManagerInterface, id: str) -> None:
         super().__init__()
@@ -226,6 +226,7 @@ class RESTServer(RESTBase):
         self.idle_event = asyncio.Event()
         self.idle_event.set()
         self.running = False
+        self._http_server = None
 
     def start_request(self):
         self.idle_event.clear()
@@ -292,4 +293,5 @@ class RESTServer(RESTBase):
 
     async def join(self) -> None:
         await self.idle_event.wait()
-        await self._http_server.close_all_connections()
+        if self._http_server is not None:
+            await self._http_server.close_all_connections()

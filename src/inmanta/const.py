@@ -191,6 +191,9 @@ SHUTDOWN_GRACE_IOLOOP = 10
 SHUTDOWN_GRACE_HARD = 15
 # Hard shutdown exit code
 EXIT_HARD = 3
+# Startup failed exit code
+EXIT_START_FAILED = 4
+
 
 TIME_ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
 TIME_LOGFMT = "%Y-%m-%d %H:%M:%S"

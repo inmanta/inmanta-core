@@ -38,6 +38,7 @@ import json
 import os
 import socket
 import signal
+from asyncio import ensure_future
 
 import colorlog
 
@@ -48,6 +49,7 @@ from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 from tornado import gen
 from inmanta import protocol, module, moduletool, const
+from inmanta.const import EXIT_START_FAILED
 from inmanta.export import cfg_env, ModelExporter
 import yaml
 
@@ -65,9 +67,29 @@ LOGGER = logging.getLogger()
 def start_server(options):
     ibl = InmantaBootloader()
     setup_signal_handlers(ibl.stop)
-    IOLoop.current().add_callback(ibl.start)
-    IOLoop.current().start()
+
+    ioloop = IOLoop.current()
+
+    # handle startup exceptions
+    def _handle_startup_done(fut):
+        if fut.cancelled():
+            ensure_future(ibl.stop())
+        else:
+            exc = fut.exception()
+            if exc is not None:
+                print("Server setup failed")
+                print(exc)
+                traceback.print_exception(type(exc), exc, exc.__traceback__)
+                safe_shutdown(ioloop, ibl.stop)
+            else:
+                print("Server Startup complete")
+
+    ensure_future(ibl.start()).add_done_callback(_handle_startup_done)
+
+    ioloop.start()
     print("Server Shutdown complete")
+    if not ibl.started:
+        exit(EXIT_START_FAILED)
 
 
 @command("agent", help_msg="Start the inmanta agent")
@@ -135,6 +157,22 @@ def setup_signal_handlers(shutdown_function):
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGUSR1, handle_signal_dump)
+
+
+def safe_shutdown(ioloop, shutdown_function):
+    def hard_exit():
+        context_dump(ioloop)
+        sys.stdout.flush()
+        # Hard exit, not sys.exit
+        # ensure shutdown when the ioloop is stuck
+        os._exit(const.EXIT_HARD)
+
+    # force shutdown, even when the ioloop is stuck
+    # schedule off the loop
+    t = Timer(const.SHUTDOWN_GRACE_HARD, hard_exit)
+    t.daemon = True
+    t.start()
+    ioloop.add_callback(safe_shutdown_wrapper, shutdown_function)
 
 
 async def safe_shutdown_wrapper(shutdown_function):

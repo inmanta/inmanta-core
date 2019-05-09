@@ -19,7 +19,7 @@ from _asyncio import Task
 
 import inmanta.protocol.endpoints
 from inmanta.types import JsonType
-from inmanta.util import Scheduler, TaskHandler
+from inmanta.util import Scheduler, TaskHandler, stable_depth_first, CycleException
 from inmanta.protocol import Client, handle, methods
 from inmanta.protocol import common, endpoints
 from inmanta.protocol.rest import server
@@ -40,6 +40,20 @@ import abc
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+class ServerStartFailure(Exception):
+    pass
+
+
+class SliceStartupException(ServerStartFailure):
+    def __init__(self, slice_name: str, cause: Exception):
+        super(SliceStartupException, self).__init__()
+        self.__cause__ = cause
+        self.in_slice = slice_name
+
+    def __str__(self):
+        return f"Slice {self.in_slice} failed to start because: {str(self.__cause__)}"
 
 
 class ReturnClient(Client):
@@ -68,6 +82,7 @@ class Server(endpoints.Endpoint):
         super().__init__("server")
 
         self._slices: Dict[str, ServerSlice] = {}
+        self._slice_sequence: List[ServerSlice] = None
         self._handlers: List[routing.Rule] = []
         self.token: Optional[str] = inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout = connection_timout
@@ -82,6 +97,7 @@ class Server(endpoints.Endpoint):
             Add new endpoints to this rest transport
         """
         self._slices[slice.name] = slice
+        self._slice_sequence = None
 
     def get_slices(self) -> Dict[str, "ServerSlice"]:
         return self._slices
@@ -96,6 +112,28 @@ class Server(endpoints.Endpoint):
         return "server_rest_transport"
 
     id = property(get_id)
+
+    def _order_slices(self) -> List["ServerSlice"]:
+        edges: Dict[str, List[str]] = {slice.name: slice.get_dependencies() for slice in self.get_slices().values()}
+        names = list(edges.keys())
+        try:
+            order = stable_depth_first(names, edges)
+        except CycleException as e:
+            raise ServerStartFailure("Dependency cycle between server slices " + ",".join(e.nodes)) from e
+
+        def resolve(name: str) -> Optional["ServerSlice"]:
+            if name in self._slices:
+                return self._slices[name]
+            LOGGER.debug("Slice %s is depended on but does not exist", name)
+            return None
+
+        return [s for s in (resolve(name) for name in order) if s is not None]
+
+    def _get_slice_sequence(self):
+        if self._slice_sequence is not None:
+            return self._slice_sequence
+        self._slice_sequence = self._order_slices()
+        return self._slice_sequence
 
     async def start(self) -> None:
         """
@@ -113,11 +151,17 @@ class Server(endpoints.Endpoint):
         await self.connect_database()
 
         for slice in self.get_slices().values():
-            await slice.prestart(self)
+            try:
+                await slice.prestart(self)
+            except Exception as e:
+                raise SliceStartupException(slice.name, e)
 
         for slice in self.get_slices().values():
-            await slice.start()
-            self._handlers.extend(slice.get_handlers())
+            try:
+                await slice.start()
+                self._handlers.extend(slice.get_handlers())
+            except Exception as e:
+                raise SliceStartupException(slice.name, e)
 
         await self._transport.start(self.get_slices().values(), self._handlers)
 

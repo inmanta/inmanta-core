@@ -64,6 +64,7 @@ class InmantaBootloader(object):
     def __init__(self, agent_no_log: bool = False) -> None:
         self.restserver = Server()
         self.agent_no_log = agent_no_log
+        self.started = False
 
     def get_server_slice(self) -> server.Server:
         return server.Server(agent_no_log=self.agent_no_log)
@@ -78,6 +79,7 @@ class InmantaBootloader(object):
         for mypart in self.load_slices():
             self.restserver.add_slice(mypart)
         await self.restserver.start()
+        self.started = True
 
     async def stop(self) -> None:
         await self.restserver.stop()
@@ -97,7 +99,7 @@ class InmantaBootloader(object):
             mod = importlib.import_module(f"{name}.{EXTENSION_MODULE}")
             return mod.setup
         except Exception as e:
-            raise PluginLoadFailed(f"Could not load module {name}.extension") from e
+            raise PluginLoadFailed(f"Could not load module {name}.{EXTENSION_MODULE}") from e
 
     def _load_extensions(self) -> Dict[str, Callable[[ApplicationContext], None]]:
         plugins: Dict[str, Callable[[ApplicationContext], None]] = {}
@@ -121,25 +123,7 @@ class InmantaBootloader(object):
             setup(myctx)
         return ctx
 
-    # Extension loading Phase III: order slices
-    def _order_slices(self, appctx: ApplicationContext) -> List[ServerSlice]:
-        slices: Dict[str, ServerSlice] = {slice.name: slice for slice in appctx.get_slices()}
-        edges: Dict[str, List[str]] = {slice.name: slice.get_dependencies() for slice in appctx.get_slices()}
-        names = list(edges.keys())
-        try:
-            order = stable_depth_first(names, edges)
-        except CycleException as e:
-            raise PluginLoadFailed("Dependency cycle between server slices " + ",".join(e.nodes)) from e
-
-        def resolve(name: str) -> Optional[ServerSlice]:
-            if name in slices:
-                return slices[name]
-            LOGGER.debug("Slice %s is depended on but does not exist", name)
-            return None
-
-        return [s for s in (resolve(name) for name in order) if s is not None]
-
     def load_slices(self) -> List[ServerSlice]:
         exts = self._load_extensions()
         ctx = self._collect_slices(exts)
-        return self._order_slices(ctx)
+        return ctx.get_slices()

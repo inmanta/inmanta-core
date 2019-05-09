@@ -43,7 +43,7 @@ from inmanta import data, config
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.reporter import InfluxReporter
-from inmanta.server import protocol, SLICE_SERVER
+from inmanta.server import protocol, SLICE_SERVER, SLICE_SESSION_MANAGER
 from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
@@ -120,6 +120,9 @@ class Server(protocol.ServerSlice):
         # lock to ensure only one inflight request
         self._increment_cache_locks: Dict[uuid.UUID, locks.Lock] = defaultdict(lambda: locks.Lock())
         self._influx_db_reporter: Optional[InfluxReporter] = None
+
+    def get_dependencies(self) -> List[str]:
+        return [SLICE_SESSION_MANAGER]
 
     async def prestart(self, server: protocol.Server) -> None:
         self._server_storage: Dict[str, str] = self.check_storage()
