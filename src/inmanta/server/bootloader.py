@@ -27,9 +27,7 @@ from inmanta.server.extensions import ApplicationContext, InvalidSliceNameExcept
 from inmanta.server.protocol import Server, ServerSlice
 from inmanta.server.agentmanager import AgentManager
 
-from typing import List, Callable, Dict, Generator, Optional
-
-from inmanta.util import stable_depth_first, CycleException
+from typing import List, Callable, Dict, Generator
 
 LOGGER = logging.getLogger(__name__)
 

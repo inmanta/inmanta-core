@@ -38,7 +38,7 @@ from inmanta.protocol import encode_token, methods
 from inmanta.resources import Id
 import asyncio
 
-from typing import Optional, Dict, List, Tuple, Set
+from typing import Optional, Dict, List, Tuple
 from uuid import UUID
 from inmanta.server.server import Server
 

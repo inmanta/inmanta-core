@@ -19,6 +19,7 @@ requires = [
     "pymongo",
 ]
 
+# Package a dummy extensions so that the namespace package for extensions is not empty
 namespace_packages = ["inmanta_ext.core"]
 
 setup(

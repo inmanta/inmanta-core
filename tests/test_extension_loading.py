@@ -2,9 +2,7 @@ import importlib
 import logging
 import os
 from contextlib import contextmanager
-from importlib._bootstrap_external import PathFinder
 
-import pkg_resources
 import pytest
 import sys
 
