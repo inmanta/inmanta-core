@@ -1,3 +1,6 @@
+.. _migrate-to-postgresql:
+
+
 Migrate from MongoDB to PostgreSQL
 **********************************
 
