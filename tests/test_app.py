@@ -29,7 +29,9 @@ import signal
 from subprocess import TimeoutExpired
 
 
-def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_file=None, timed=False):
+def get_command(
+    tmp_dir, stdout_log_level=None, log_file=None, log_level_log_file=None, timed=False, dbport=None, dbname="inmanta"
+):
     root_dir = tmp_dir.mkdir("root").strpath
     log_dir = os.path.join(root_dir, "log")
     state_dir = os.path.join(root_dir, "data")
@@ -37,7 +39,10 @@ def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_fil
         os.mkdir(directory)
     config_file = os.path.join(root_dir, "inmanta.cfg")
 
-    port = inmanta.util.get_free_tcp_port()
+    if dbport is not None:
+        port = dbport
+    else:
+        port = inmanta.util.get_free_tcp_port()
 
     with open(config_file, "w+") as f:
         f.write("[config]\n")
@@ -45,6 +50,7 @@ def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_fil
         f.write("state-dir=" + state_dir + "\n")
         f.write("[database]\n")
         f.write("port=" + str(port) + "\n")
+        f.write("name=" + dbname + "\n")
 
     args = [sys.executable, "-m", "inmanta.app"]
     if stdout_log_level:
@@ -93,7 +99,7 @@ def do_kill(process, killtime=3, termtime=2):
 
     stdout = convert_to_ascii(out)
     stderr = convert_to_ascii(err)
-    return (stdout, stderr)
+    return (stdout, stderr, process.returncode)
 
 
 def run_without_tty(args, env={}, killtime=3, termtime=2):
@@ -211,9 +217,9 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
 
     (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, timed=timed)
     if with_tty:
-        (stdout, _) = run_with_tty(args)
+        (stdout, _, _) = run_with_tty(args)
     else:
-        (stdout, _) = run_without_tty(args)
+        (stdout, _, _) = run_without_tty(args)
     log_file = "server.log"
     assert log_file not in os.listdir(log_dir)
     assert len(stdout) != 0
@@ -263,9 +269,9 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
     log_file = "server.log"
     (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, log_file=log_file, log_level_log_file=log_level)
     if with_tty:
-        (stdout, _) = run_with_tty(args)
+        (stdout, _, _) = run_with_tty(args)
     else:
-        (stdout, _) = run_without_tty(args)
+        (stdout, _, _) = run_without_tty(args)
     assert log_file in os.listdir(log_dir)
     log_file = os.path.join(log_dir, log_file)
     with open(log_file, "r") as f:
@@ -296,8 +302,9 @@ def test_check_shutdown():
     except TimeoutExpired:
         pass
     process.send_signal(signal.SIGUSR1)
-    out, err = do_kill(process, killtime=6, termtime=3)
+    out, err, code = do_kill(process, killtime=6, termtime=3)
     print(out, err)
+    assert code == 0
     assert "----- Thread Dump ----" in out
     assert "STOP" in out
     assert "SHUTDOWN COMPLETE" in out
@@ -306,11 +313,26 @@ def test_check_shutdown():
 def test_check_bad_shutdown():
     print([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"])
     process = do_run([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"])
-    out, err = do_kill(process, killtime=5, termtime=2)
+    out, err, code = do_kill(process, killtime=5, termtime=2)
     print(out, err)
+    assert code == 3
     assert "----- Thread Dump ----" in out
     assert "STOP" not in out
     assert "SHUTDOWN COMPLETE" not in out
+    assert not err
+
+
+def test_startup_failure(tmpdir, postgres_db, database_name):
+    (args, log_dir) = get_command(tmpdir, dbport=postgres_db.port, dbname=database_name)
+    pp = ":".join(sys.path)
+    # Add a bad module
+    extrapath = os.path.join(os.path.dirname(__file__), "data", "bad_module_path")
+    (stdout, stderr, code) = run_without_tty(args, env={"PYTHONPATH": pp + ":" + extrapath})
+    print(stdout, stderr)
+    assert "Server setup failed" in stdout
+    assert "Slice badplugin.badslice failed to start because: Too bad, this plugin is broken" in stdout
+    assert "Server Shutdown complete" in stdout
+    assert code == 4
 
 
 def test_compiler_exception_output(snippetcompiler):

@@ -97,9 +97,8 @@ class AgentManager(ServerSlice, SessionListener):
     This class contains all server functionality related to the management of agents
     """
 
-    def __init__(self, restserver: protocol.Server, closesessionsonstart: bool = True, fact_back_off: int = None) -> None:
+    def __init__(self, closesessionsonstart: bool = True, fact_back_off: int = None) -> None:
         super(AgentManager, self).__init__(SLICE_AGENT_MANAGER)
-        self.restserver = restserver
 
         if fact_back_off is None:
             fact_back_off = opt.server_fact_resource_block.get()
@@ -119,6 +118,9 @@ class AgentManager(ServerSlice, SessionListener):
         self.tid_endpoint_to_session: Dict[Tuple[UUID, str], protocol.Session] = {}
 
         self.closesessionsonstart: bool = closesessionsonstart
+
+    def get_dependencies(self) -> List[str]:
+        return [SLICE_SERVER]
 
     async def prestart(self, server: protocol.Server) -> None:
         await ServerSlice.prestart(self, server)

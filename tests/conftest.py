@@ -240,14 +240,7 @@ async def agent(server, environment):
 
 
 @pytest.fixture(scope="function")
-async def server(event_loop, inmanta_config, postgres_db, database_name, clean_reset):
-    """
-    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
-    May not be required
-    """
-    # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
-    # causes handler failure
-
+async def server_config(event_loop, inmanta_config, postgres_db, database_name, clean_reset):
     reset_metrics()
 
     state_dir = tempfile.mkdtemp()
@@ -267,6 +260,18 @@ async def server(event_loop, inmanta_config, postgres_db, database_name, clean_r
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("server", "auto-recompile-wait", "0")
     config.Config.set("agent", "agent-repair-interval", "0")
+    yield config
+    shutil.rmtree(state_dir)
+
+
+@pytest.fixture(scope="function")
+async def server(server_config):
+    """
+    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
+    May not be required
+    """
+    # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
+    # causes handler failure
 
     ibl = InmantaBootloader()
     await ibl.start()
@@ -279,7 +284,6 @@ async def server(event_loop, inmanta_config, postgres_db, database_name, clean_r
         logger.exception("Timeout during stop of the server in teardown")
 
     logger.info("Server clean up done")
-    shutil.rmtree(state_dir)
 
 
 @pytest.fixture(
