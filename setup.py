@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
 
 requires = [
     "asyncpg",
@@ -18,9 +18,6 @@ requires = [
     "pyformance",
     "pymongo",
 ]
-
-# Package a dummy extensions so that the namespace package for extensions is not empty
-namespace_packages = ["inmanta_ext.core"]
 
 setup(
     version="2019.3",
@@ -50,7 +47,7 @@ setup(
     },
     # Packaging
     package_dir={"": "src"},
-    packages=find_packages("src") + namespace_packages,
+    packages=find_namespace_packages(where="src"),
     package_data={"": ["misc/*", "docs/*"]},
     include_package_data=True,
     install_requires=requires,

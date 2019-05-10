@@ -114,7 +114,7 @@ class Server(endpoints.Endpoint):
     id = property(get_id)
 
     def _order_slices(self) -> List["ServerSlice"]:
-        edges: Dict[str, List[str]] = {slice.name: slice.get_dependencies() for slice in self.get_slices().values()}
+        edges: Dict[str, List[str]] = {myslice.name: myslice.get_dependencies() for myslice in self.get_slices().values()}
         names = list(edges.keys())
         try:
             order = stable_depth_first(names, edges)
@@ -150,18 +150,18 @@ class Server(endpoints.Endpoint):
 
         await self.connect_database()
 
-        for slice in self.get_slices().values():
+        for my_slice in self._get_slice_sequence():
             try:
-                await slice.prestart(self)
+                await my_slice.prestart(self)
             except Exception as e:
-                raise SliceStartupException(slice.name, e)
+                raise SliceStartupException(my_slice.name, e)
 
-        for slice in self.get_slices().values():
+        for my_slice in self._get_slice_sequence():
             try:
-                await slice.start()
-                self._handlers.extend(slice.get_handlers())
+                await my_slice.start()
+                self._handlers.extend(my_slice.get_handlers())
             except Exception as e:
-                raise SliceStartupException(slice.name, e)
+                raise SliceStartupException(my_slice.name, e)
 
         await self._transport.start(self.get_slices().values(), self._handlers)
 
@@ -180,7 +180,7 @@ class Server(endpoints.Endpoint):
         self.running = False
         LOGGER.debug("Stopping Server Rest Endpoint")
         await self._transport.stop()
-        for endpoint in reversed(list(self.get_slices().values())):
+        for endpoint in reversed(list(self._get_slice_sequence())):
             LOGGER.debug("Stopping %s", endpoint)
             await endpoint.stop()
 
