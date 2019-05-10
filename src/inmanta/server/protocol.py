@@ -184,7 +184,6 @@ class Server(endpoints.Endpoint):
 
         await super(Server, self).stop()
 
-
         LOGGER.debug("Stopping Server Rest Endpoint")
         await self._transport.stop()
 

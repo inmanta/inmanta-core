@@ -94,7 +94,7 @@ class ResourceActionLogLine(logging.LogRecord):
 
 class DatabaseSlice(protocol.ServerSlice):
     """Slice to initialize the database"""
-    
+
     def __init__(self):
         super(DatabaseSlice, self).__init__(SLICE_DATABASE)
 
@@ -119,7 +119,7 @@ class DatabaseSlice(protocol.ServerSlice):
         """ Disconnect the database
         """
         await data.disconnect()
-    
+
 
 class Server(protocol.ServerSlice):
     """
