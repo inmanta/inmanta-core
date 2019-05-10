@@ -112,6 +112,8 @@ install -p -m 644 misc/logrotation_config %{buildroot}/etc/logrotate.d/inmanta
 mkdir -p %{buildroot}%{_unitdir}
 install -p -m 644 misc/inmanta-agent.service $RPM_BUILD_ROOT%{_unitdir}/inmanta-agent.service
 install -p -m 644 misc/inmanta-server.service $RPM_BUILD_ROOT%{_unitdir}/inmanta-server.service
+touch %{buildroot}/etc/sysconfig/inmanta-server
+touch %{buildroot}/etc/sysconfig/inmanta-agent
 
 # Install the dashboard
 cp -a dist %{venv}/dashboard
@@ -135,6 +137,8 @@ rm -rf %{buildroot}
 %attr(-, inmanta, inmanta) /var/log/inmanta
 %config %attr(-, root, root)/etc/inmanta
 %config %attr(-, root, root)/etc/logrotate.d/inmanta
+%config(noreplace) %attr(-, root, root)/etc/sysconfig/inmanta-server
+%config(noreplace) %attr(-, root, root)/etc/sysconfig/inmanta-agent
 
 %files server
 /opt/inmanta/dashboard
