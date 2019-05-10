@@ -3,6 +3,7 @@ Changes in this release:
 - Various bugfixes (#1148)
 - Use native coroutines everywhere (async def)
 - Updated dockerfile and docker-compose to use postgres and centos
+- Added extensions mechanism (#565)
 
 v 2019.2 (2019-04-30)
 Changes in this release:
