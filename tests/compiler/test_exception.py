@@ -21,7 +21,7 @@ host = Host(name="x")
 Repo(host=host,name="epel")
 
 implement Host using std::none
-implement Repo using std::none when host.os.name=="os" 
+implement Repo using std::none when host.os.name=="os"
 """,
         """Reported 2 errors
 error 0:
