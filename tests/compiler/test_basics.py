@@ -236,3 +236,18 @@ Test(value="ab")
 caused by:
   Invalid value 'ab', constraint does not match (reported in __config__::abc ({dir}/main.cf:2:9))""",  # noqa: E501
     )
+
+
+def test_value_set_twice(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+test = "a"
+test = "b"
+""",
+        """value set twice:
+\told value: a
+\t\tset at {dir}/main.cf:2
+\tnew value: b
+\t\tset at {dir}/main.cf:3
+ (reported in test = 'b' ({dir}/main.cf:3))""",
+    )

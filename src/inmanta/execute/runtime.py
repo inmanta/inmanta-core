@@ -522,6 +522,7 @@ class ExecutionUnit(Waiter):
         result: ResultVariable,
         requires: Dict[object, ResultVariable],
         expression: "ExpressionStatement",
+        owner: "Optional[Statement]" = None,
     ):
         Waiter.__init__(self, queue_scheduler)
         self.result = result.get_promise(expression)
@@ -532,6 +533,10 @@ class ExecutionUnit(Waiter):
         for r in requires.values():
             self.waitfor(r)
         self.ready(self)
+        if owner is not None:
+            self.owner = owner
+        else:
+            self.owner = expression
 
     def _unsafe_execute(self) -> None:
         requires = {k: v.get_value() for (k, v) in self.requires.items()}
@@ -543,7 +548,7 @@ class ExecutionUnit(Waiter):
         try:
             self._unsafe_execute()
         except RuntimeException as e:
-            e.set_statement(self.expression)
+            e.set_statement(self.owner)
             raise e
 
     def __repr__(self) -> str:

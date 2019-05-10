@@ -190,10 +190,13 @@ class Assign(AssignStatement):
         target = resolver.lookup(self.name)
         assert isinstance(target, ResultVariable)
         reqs = self.value.requires_emit(resolver, queue)
-        ExecutionUnit(queue, resolver, target, reqs, self.value)
+        ExecutionUnit(queue, resolver, target, reqs, self.value, owner=self)
 
     def __repr__(self) -> str:
         return "Assign(%s, %s)" % (self.name, self.value)
+
+    def __str__(self) -> str:
+        return f"{self.name} = {self.value}"
 
 
 class MapLookup(ReferenceStatement):
