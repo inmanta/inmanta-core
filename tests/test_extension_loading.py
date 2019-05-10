@@ -87,6 +87,7 @@ def test_phase_3(caplog):
     server.add_slice(AgentManager())
 
     order = server._get_slice_sequence()
+    assert [s.name for s in order] == [SLICE_SESSION_MANAGER, SLICE_SERVER, SLICE_AGENT_MANAGER, "testplugin.testslice"]
     print([s.name for s in order])
     assert [s.name for s in order] == [
         SLICE_SESSION_MANAGER,

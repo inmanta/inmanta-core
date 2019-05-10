@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 User=inmanta
 Group=inmanta
+EnvironmentFile=/etc/sysconfig/inmanta-server
 ExecStart=/usr/bin/inmanta -c /etc/inmanta/server.cfg --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs server
 Restart=on-failure
 

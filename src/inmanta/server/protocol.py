@@ -154,20 +154,20 @@ class Server(endpoints.Endpoint):
         LOGGER.debug("Starting Server Rest Endpoint")
         self.running = True
 
-        for slice in self._get_slice_sequence():
+        for my_slice in self._get_slice_sequence():
             try:
-                LOGGER.debug("Pre Starting %s", slice.name)
-                await slice.prestart(self)
+                LOGGER.debug("Pre Starting %s", my_slice.name)
+                await my_slice.prestart(self)
             except Exception as e:
-                raise SliceStartupException(slice.name, e)
+                raise SliceStartupException(my_slice.name, e)
 
-        for slice in self._get_slice_sequence():
+        for my_slice in self._get_slice_sequence():
             try:
-                LOGGER.debug("Starting %s", slice.name)
-                await slice.start()
-                self._handlers.extend(slice.get_handlers())
+                LOGGER.debug("Starting %s", my_slice.name)
+                await my_slice.start()
+                self._handlers.extend(my_slice.get_handlers())
             except Exception as e:
-                raise SliceStartupException(slice.name, e)
+                raise SliceStartupException(my_slice.name, e)
 
     async def stop(self) -> None:
         """
@@ -276,6 +276,9 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
     # internal API towards extension framework
     name = property(lambda self: self._name)
+
+    def get_dependencies(self) -> List[str]:
+        return []
 
     def get_handlers(self) -> List[routing.Rule]:
         """Get the list of """
