@@ -29,6 +29,8 @@ from inmanta.server.agentmanager import AgentManager
 
 from typing import List, Callable, Dict, Generator
 
+from inmanta.server.server import DatabaseSlice
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -70,8 +72,11 @@ class InmantaBootloader(object):
     def get_agent_manager_slice(self) -> AgentManager:
         return AgentManager()
 
+    def get_database_slice(self) -> DatabaseSlice:
+        return DatabaseSlice()
+
     def get_bootstrap_slices(self) -> List[ServerSlice]:
-        return [self.get_server_slice(), self.get_agent_manager_slice()]
+        return [self.get_server_slice(), self.get_agent_manager_slice(), self.get_database_slice()]
 
     async def start(self) -> None:
         for mypart in self.load_slices():

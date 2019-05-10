@@ -36,8 +36,7 @@ import logging
 import asyncio
 import time
 import uuid
-import abc
-
+from collections import defaultdict
 
 LOGGER = logging.getLogger(__name__)
 
@@ -114,10 +113,16 @@ class Server(endpoints.Endpoint):
     id = property(get_id)
 
     def _order_slices(self) -> List["ServerSlice"]:
-        edges: Dict[str, List[str]] = {slice.name: slice.get_dependencies() for slice in self.get_slices().values()}
+        edges: Dict[str, Set[str]] = defaultdict(set)
+
+        for slice in self.get_slices().values():
+            edges[slice.name].update(slice.get_dependencies())
+            for depby in slice.get_dependened_by():
+                edges[depby].add(slice.name)
+
         names = list(edges.keys())
         try:
-            order = stable_depth_first(names, edges)
+            order = stable_depth_first(names, {k: list(v) for k, v in edges.items()})
         except CycleException as e:
             raise ServerStartFailure("Dependency cycle between server slices " + ",".join(e.nodes)) from e
 
@@ -148,16 +153,16 @@ class Server(endpoints.Endpoint):
         LOGGER.debug("Starting Server Rest Endpoint")
         self.running = True
 
-        await self.connect_database()
-
-        for slice in self.get_slices().values():
+        for slice in self._get_slice_sequence():
             try:
+                LOGGER.debug("Pre Starting %s", slice.name)
                 await slice.prestart(self)
             except Exception as e:
                 raise SliceStartupException(slice.name, e)
 
-        for slice in self.get_slices().values():
+        for slice in self._get_slice_sequence():
             try:
+                LOGGER.debug("Starting %s", slice.name)
                 await slice.start()
                 self._handlers.extend(slice.get_handlers())
             except Exception as e:
@@ -173,40 +178,46 @@ class Server(endpoints.Endpoint):
             This prevents database connection from being closed too early. This order in which the endpoint
             are started, is hardcoded in the get_server_slices() method in server/bootloader.py
         """
-        await super(Server, self).stop()
         if not self.running:
             return
-
         self.running = False
+
+        await super(Server, self).stop()
+
+
         LOGGER.debug("Stopping Server Rest Endpoint")
         await self._transport.stop()
-        for endpoint in reversed(list(self.get_slices().values())):
-            LOGGER.debug("Stopping %s", endpoint)
+
+        order = list(reversed(self._get_slice_sequence()))
+
+        for endpoint in order:
+            LOGGER.debug("Pre Stopping %s", endpoint.name)
+            await endpoint.prestop()
+
+        for endpoint in order:
+            LOGGER.debug("Stopping %s", endpoint.name)
             await endpoint.stop()
 
         await self._transport.join()
-        await self.disconnect_database()
-
-    async def connect_database(self) -> None:
-        """ Connect to the database
-        """
-        database_host = opt.db_host.get()
-        database_port = opt.db_port.get()
-
-        database_username = opt.db_username.get()
-        database_password = opt.db_password.get()
-        await data.connect(database_host, database_port, opt.db_name.get(), database_username, database_password)
-        LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
-
-    async def disconnect_database(self) -> None:
-        """ Disconnect the database
-        """
-        await data.disconnect()
 
 
 class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
     """
-        An API serving part of the server.
+        Base class for server extensions offering zero or more api endpoints
+
+        Extensions developers should override the lifecycle methods:
+
+        * :func:`ServerSlice.prestart`
+        * :func:`ServerSlice.start`
+        * :func:`ServerSlice.prestop`
+        * :func:`ServerSlice.stop`
+        * :func:`ServerSlice.get_dependencies`
+
+        To register endpoints that server static content, either use :func:'add_static_handler' or :func:'add_static_content'
+        To create endpoints, use the annotation based mechanism
+
+        To schedule recurring tasks, use self._sched
+        To schedule background tasks, use self.add_background_task
     """
 
     def __init__(self, name: str) -> None:
@@ -214,34 +225,70 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
         self._name: str = name
         self._handlers: List[routing.Rule] = []
-        self._sched = Scheduler("server slice")  # FIXME: why has each slice its own scheduler?
+        self._sched = Scheduler(f"server slice {name}")  # FIXME: why has each slice its own scheduler?
         self.running: bool = False  # for debugging
-        self._background_tasks: Set[Task] = set()
+        self.stopping: bool = False
 
-    @abc.abstractmethod
     async def prestart(self, server: Server) -> None:
-        """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
+        """
+        Called by the RestServer host prior to start, can be used to collect references to other server slices
+        Dependencies are not up yet.
+        """
+        pass
 
-    @abc.abstractmethod
     async def start(self) -> None:
         """
             Start the server slice.
+
+            This method `blocks` until the slice is ready to receive calls
+
+            Dependencies are up (if present) prior to invocation of this call
         """
         self.running = True
 
-    async def stop(self) -> None:
-        self.running = False
+    async def prestop(self) -> None:
+        """
+            Always called before stop
+
+            Stop producing new work:
+            - stop timers
+            - stop listeners
+            - notify shutdown to systems depending on us (like agents)
+
+            But remain functional
+
+            All dependencies are up (if present)
+        """
+        self.stopping = True
         self._sched.stop()
+
+    async def stop(self) -> None:
+        """
+            Go down
+
+            All dependencies are up (if present)
+
+            This method `blocks` until the slice is down
+        """
+        self.running = False
         await super(ServerSlice, self).stop()
 
-    name = property(lambda self: self._name)
-
     def get_dependencies(self) -> List[str]:
+        """List of names of slices that must be started before this one."""
         return []
 
+    def get_dependened_by(self) -> List[str]:
+        """List of names of slices that must be started after this one."""
+        return []
+
+    # internal API towards extension framework
+    name = property(lambda self: self._name)
+
     def get_handlers(self) -> List[routing.Rule]:
+        """Get the list of """
         return self._handlers
 
+    # utility methods for extensions developers
     def schedule(self, call: Callable, interval: int = 60) -> None:
         self._sched.add_action(call, interval)
 
@@ -439,20 +486,8 @@ class SessionManager(ServerSlice):
     def add_listener(self, listener: SessionListener) -> None:
         self.listeners.append(listener)
 
-    async def prestart(self, server: Server) -> None:
-        """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
-
-    async def start(self) -> None:
-        """
-            Start the server slice.
-        """
-        await super().start()
-
-    async def stop(self) -> None:
-        """
-            Stop the end-point and all of its transports
-        """
-        await super().stop()
+    async def prestop(self) -> None:
+        await super(SessionManager, self).prestop()
         # terminate all sessions cleanly
         for session in self._sessions.copy().values():
             session.expire(0)

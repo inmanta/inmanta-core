@@ -19,7 +19,7 @@ from tornado import web
 from typing import Optional, Dict, Any
 
 
-class BaseException(web.HTTPError):
+class BaseHttpException(web.HTTPError):
     """
         A base exception for errors in the server
     """
@@ -40,7 +40,7 @@ class BaseException(web.HTTPError):
         return self.status_code
 
 
-class AccessDeniedException(BaseException):
+class AccessDeniedException(BaseHttpException):
     """
         An exception raised when access is denied (403)
     """
@@ -53,7 +53,7 @@ class AccessDeniedException(BaseException):
         super().__init__(403, msg)
 
 
-class UnauthorizedException(BaseException):
+class UnauthorizedException(BaseHttpException):
     """
         An exception raised when access to this resource is unauthorized
     """
@@ -66,7 +66,7 @@ class UnauthorizedException(BaseException):
         super().__init__(401, msg)
 
 
-class BadRequest(BaseException):
+class BadRequest(BaseHttpException):
     """
         This exception is raised for a mailformed request
     """
@@ -79,7 +79,7 @@ class BadRequest(BaseException):
         super().__init__(400, msg)
 
 
-class NotFound(BaseException):
+class NotFound(BaseHttpException):
     """
         This exception is used to indicate that a request or reference resource was not found.
     """
@@ -92,7 +92,7 @@ class NotFound(BaseException):
         super().__init__(404, msg)
 
 
-class ServerError(BaseException):
+class ServerError(BaseHttpException):
     """
         An unexpected error occurred in the server
     """
@@ -103,3 +103,14 @@ class ServerError(BaseException):
             msg += ": " + message
 
         super().__init__(500, msg)
+
+
+class ShutdownInProgress(BaseHttpException):
+    """ This request can not be fulfilled because the server is going down """
+
+    def __init__(self, message: Optional[str] = None) -> None:
+        msg = "Can not complete this request as a shutdown is on progress"
+        if message is not None:
+            msg += ": " + message
+
+        super().__init__(503, msg)

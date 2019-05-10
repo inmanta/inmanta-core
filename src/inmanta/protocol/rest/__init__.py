@@ -345,7 +345,7 @@ class RESTBase(util.TaskHandler):
 
             return common.Response(headers=headers, status_code=code)
 
-        except exceptions.BaseException:
+        except exceptions.BaseHttpException:
             LOGGER.exception("")
             raise
 

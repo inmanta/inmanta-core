@@ -21,3 +21,4 @@
 SLICE_SERVER = "server"
 SLICE_AGENT_MANAGER = "agentmanager"
 SLICE_SESSION_MANAGER = "session"
+SLICE_DATABASE = "core.database"

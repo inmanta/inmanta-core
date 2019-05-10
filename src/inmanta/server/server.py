@@ -43,7 +43,7 @@ from inmanta import data, config
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.reporter import InfluxReporter
-from inmanta.server import protocol, SLICE_SERVER, SLICE_SESSION_MANAGER
+from inmanta.server import protocol, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_AGENT_MANAGER, SLICE_DATABASE
 from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
@@ -92,6 +92,35 @@ class ResourceActionLogLine(logging.LogRecord):
         self.relativeCreated = (self.created - logging._startTime) * 1000
 
 
+class DatabaseSlice(protocol.ServerSlice):
+    """Slice to initialize the database"""
+    
+    def __init__(self):
+        super(DatabaseSlice, self).__init__(SLICE_DATABASE)
+
+    async def start(self) -> None:
+        await self.connect_database()
+
+    async def stop(self) -> None:
+        await self.disconnect_database()
+
+    async def connect_database(self) -> None:
+        """ Connect to the database
+        """
+        database_host = opt.db_host.get()
+        database_port = opt.db_port.get()
+
+        database_username = opt.db_username.get()
+        database_password = opt.db_password.get()
+        await data.connect(database_host, database_port, opt.db_name.get(), database_username, database_password)
+        LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
+
+    async def disconnect_database(self) -> None:
+        """ Disconnect the database
+        """
+        await data.disconnect()
+    
+
 class Server(protocol.ServerSlice):
     """
         The central Inmanta server that communicates with clients and agents and persists configuration
@@ -122,11 +151,11 @@ class Server(protocol.ServerSlice):
         self._influx_db_reporter: Optional[InfluxReporter] = None
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_SESSION_MANAGER]
+        return [SLICE_SESSION_MANAGER, SLICE_DATABASE]
 
     async def prestart(self, server: protocol.Server) -> None:
         self._server_storage: Dict[str, str] = self.check_storage()
-        self.agentmanager: "AgentManager" = server.get_slice("agentmanager")
+        self.agentmanager: "AgentManager" = server.get_slice(SLICE_AGENT_MANAGER)
 
     async def start(self) -> None:
         self.schedule(self.renew_expired_facts, self._fact_renew)
@@ -348,7 +377,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                     param.resource_id,
                     param.environment,
                 )
-                await self.agentmanager._request_parameter(param.environment, param.resource_id)
+                await self.agentmanager.request_parameter(param.environment, param.resource_id)
 
         unknown_parameters = await data.UnknownParameter.get_list(resolved=False)
         for u in unknown_parameters:
@@ -359,7 +388,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 await u.delete()
             else:
                 LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.id)
-                await self.agentmanager._request_parameter(u.environment, u.resource_id)
+                await self.agentmanager.request_parameter(u.environment, u.resource_id)
 
         LOGGER.info("Done renewing expired parameters")
 
@@ -372,7 +401,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         if len(params) == 0:
             if resource_id is not None:
-                out = await self.agentmanager._request_parameter(env.id, resource_id)
+                out = await self.agentmanager.request_parameter(env.id, resource_id)
                 return out
             return 404
 
@@ -384,7 +413,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             return 200, {"parameter": params[0]}
 
         LOGGER.info("Parameter %s of resource %s expired.", param_id, resource_id)
-        out = await self.agentmanager._request_parameter(env.id, resource_id)
+        out = await self.agentmanager.request_parameter(env.id, resource_id)
         return out
 
     async def _update_param(
