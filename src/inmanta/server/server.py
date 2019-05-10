@@ -43,7 +43,7 @@ from inmanta import data, config
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.reporter import InfluxReporter
-from inmanta.server import protocol, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_AGENT_MANAGER, SLICE_DATABASE
+from inmanta.server import protocol, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
@@ -152,6 +152,9 @@ class Server(protocol.ServerSlice):
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_SESSION_MANAGER, SLICE_DATABASE]
+
+    def get_dependened_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
         self._server_storage: Dict[str, str] = self.check_storage()

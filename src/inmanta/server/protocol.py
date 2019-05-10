@@ -25,7 +25,7 @@ from inmanta.protocol import common, endpoints
 from inmanta.protocol.rest import server
 
 from inmanta import config as inmanta_config, data
-from inmanta.server import config as opt, SLICE_SESSION_MANAGER
+from inmanta.server import config as opt, SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 
 from tornado import gen, queues, web, routing
 from tornado.ioloop import IOLoop
@@ -89,6 +89,7 @@ class Server(endpoints.Endpoint):
         self.add_slice(self.sessions_handler)
 
         self._transport = server.RESTServer(self.sessions_handler, self.id)
+        self.add_slice(TransportSlice(self))
         self.running = False
 
     def add_slice(self, slice: "ServerSlice") -> None:
@@ -168,8 +169,6 @@ class Server(endpoints.Endpoint):
             except Exception as e:
                 raise SliceStartupException(slice.name, e)
 
-        await self._transport.start(self.get_slices().values(), self._handlers)
-
     async def stop(self) -> None:
         """
             Stop the transport.
@@ -184,9 +183,6 @@ class Server(endpoints.Endpoint):
 
         await super(Server, self).stop()
 
-        LOGGER.debug("Stopping Server Rest Endpoint")
-        await self._transport.stop()
-
         order = list(reversed(self._get_slice_sequence()))
 
         for endpoint in order:
@@ -196,8 +192,6 @@ class Server(endpoints.Endpoint):
         for endpoint in order:
             LOGGER.debug("Stopping %s", endpoint.name)
             await endpoint.stop()
-
-        await self._transport.join()
 
 
 class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
@@ -369,6 +363,8 @@ class Session(object):
     id = property(get_id)
 
     def expire(self, timeout: float) -> None:
+        if self.expired:
+            return
         self.expired = True
         if self._callhandle is not None:
             IOLoop.current().remove_timeout(self._callhandle)
@@ -456,6 +452,27 @@ class SessionListener(object):
 
 
 # Internals
+class TransportSlice(ServerSlice):
+    """Slice to manage the listening socket"""
+
+    def __init__(self, server: Server):
+        super(TransportSlice, self).__init__(SLICE_TRANSPORT)
+        self.server = server
+
+    async def start(self) -> None:
+        await super(TransportSlice, self).start()
+        await self.server._transport.start(self.server.get_slices().values(), self.server._handlers)
+
+    async def prestop(self) -> None:
+        await super(TransportSlice, self).prestop()
+        LOGGER.debug("Stopping Server Rest Endpoint")
+        await self.server._transport.stop()
+
+    async def stop(self) -> None:
+        await super(TransportSlice, self).stop()
+        await self.server._transport.join()
+
+
 class SessionManager(ServerSlice):
     """
         A service that receives method calls over one or more transports
@@ -492,6 +509,9 @@ class SessionManager(ServerSlice):
             session.expire(0)
             session.abort()
 
+    def get_dependened_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
+
     def validate_sid(self, sid: uuid.UUID) -> bool:
         if isinstance(sid, str):
             sid = uuid.UUID(sid)
@@ -520,9 +540,9 @@ class SessionManager(ServerSlice):
 
     def expire(self, session: Session, timeout: float) -> None:
         LOGGER.debug("Expired session with id %s, last seen %d seconds ago" % (session.get_id(), timeout))
+        del self._sessions[session.id]
         for listener in self.listeners:
             listener.expire(session, timeout)
-        del self._sessions[session.id]
 
     def seen(self, session: Session, endpoint_names: List[str]) -> None:
         LOGGER.debug("Seen session with id %s" % (session.get_id()))

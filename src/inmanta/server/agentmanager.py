@@ -22,7 +22,7 @@ from tornado import process
 from inmanta.config import Config
 from inmanta import data
 from inmanta.protocol.exceptions import ShutdownInProgress
-from inmanta.server import protocol, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_SERVER, SLICE_DATABASE
+from inmanta.server import protocol, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_SERVER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.util import retry_limited
 from . import config as server_config
 from inmanta.types import Apireturn
@@ -122,6 +122,9 @@ class AgentManager(ServerSlice, SessionListener):
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER, SLICE_DATABASE]
+
+    def get_dependened_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
         await ServerSlice.prestart(self, server)
