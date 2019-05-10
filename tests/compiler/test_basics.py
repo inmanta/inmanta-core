@@ -158,7 +158,7 @@ def test_bad_var(snippetcompiler):
         """
         a=b
 """,
-        "variable b not found (reported in Assign(a, b) ({dir}/main.cf:2))",
+        "variable b not found (reported in a = b ({dir}/main.cf:2))",
     )
 
 
