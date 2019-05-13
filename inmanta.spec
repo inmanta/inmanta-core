@@ -112,6 +112,7 @@ install -p -m 644 misc/logrotation_config %{buildroot}/etc/logrotate.d/inmanta
 mkdir -p %{buildroot}%{_unitdir}
 install -p -m 644 misc/inmanta-agent.service $RPM_BUILD_ROOT%{_unitdir}/inmanta-agent.service
 install -p -m 644 misc/inmanta-server.service $RPM_BUILD_ROOT%{_unitdir}/inmanta-server.service
+mkdir -p %{buildroot}/etc/sysconfig
 touch %{buildroot}/etc/sysconfig/inmanta-server
 touch %{buildroot}/etc/sysconfig/inmanta-agent
 
