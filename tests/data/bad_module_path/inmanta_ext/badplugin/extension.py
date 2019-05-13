@@ -7,9 +7,9 @@ from inmanta.server.extensions import ApplicationContext
 from inmanta.server.protocol import ServerSlice, Server
 
 
-class TestSlice(ServerSlice):
+class MyTestSlice(ServerSlice):
     def __init__(self):
-        super(TestSlice, self).__init__("badplugin.badslice")
+        super(MyTestSlice, self).__init__("badplugin.badslice")
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER, SLICE_AGENT_MANAGER]
@@ -19,4 +19,4 @@ class TestSlice(ServerSlice):
 
 
 def setup(application: ApplicationContext) -> None:
-    application.register_slice(TestSlice())
+    application.register_slice(MyTestSlice())

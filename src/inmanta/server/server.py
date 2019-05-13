@@ -104,6 +104,9 @@ class DatabaseSlice(protocol.ServerSlice):
     async def stop(self) -> None:
         await self.disconnect_database()
 
+    def get_dependencies(self) -> List[str]:
+        return []
+
     async def connect_database(self) -> None:
         """ Connect to the database
         """

@@ -456,7 +456,7 @@ class AgentManager(ServerSlice, SessionListener):
             :param agents: A list of agent names that possibly should be started in this environment.
             :param restart: Restart all agents even if the list of agents is up to date.
         """
-        if self.stopping:
+        if self._stopping:
             raise ShutdownInProgress()
 
         agent_map: Dict[str, str]

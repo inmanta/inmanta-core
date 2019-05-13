@@ -31,6 +31,14 @@ from asyncpg import PostgresSyntaxError
 
 
 @pytest.mark.asyncio
+async def test_connection_failuer(free_socket, database_name, clean_reset):
+    _addr, port = free_socket.getsockname()
+    free_socket.close()
+    with pytest.raises(OSError):
+        await data.connect("localhost", port, database_name, "testuser", None)
+
+
+@pytest.mark.asyncio
 async def test_postgres_client(postgresql_client):
     await postgresql_client.execute("CREATE TABLE test(id serial PRIMARY KEY, name VARCHAR (25) NOT NULL)")
     await postgresql_client.execute("INSERT INTO test VALUES(5, 'jef')")

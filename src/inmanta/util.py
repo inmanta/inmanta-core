@@ -246,6 +246,9 @@ class TaskHandler(object):
         self._await_tasks: Set[Task] = set()
         self._stopped = False
 
+    def is_stopped(self):
+        return self._stopped
+
     def add_background_task(self, future: Union[Future, Coroutine], cancel_on_stop=True) -> Task:
         """ Add a background task to the event loop. When stop is called, the task is cancelled.
 

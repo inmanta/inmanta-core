@@ -209,8 +209,8 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         To register endpoints that server static content, either use :func:'add_static_handler' or :func:'add_static_content'
         To create endpoints, use the annotation based mechanism
 
-        To schedule recurring tasks, use self._sched
-        To schedule background tasks, use self.add_background_task
+        To schedule recurring tasks, use :func:`schedule` or `self._sched`
+        To schedule background tasks, use :func:`add_background_task`
     """
 
     def __init__(self, name: str) -> None:
@@ -218,9 +218,13 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
         self._name: str = name
         self._handlers: List[routing.Rule] = []
-        self._sched = Scheduler(f"server slice {name}")  # FIXME: why has each slice its own scheduler?
-        self.running: bool = False  # for debugging
-        self.stopping: bool = False
+        self._sched = Scheduler(f"server slice {name}")
+        # is shutdown in progress?
+        self._stopping: bool = False
+
+    def is_stopping(self):
+        """True when prestop has been called."""
+        return self._stopping
 
     async def prestart(self, server: Server) -> None:
         """
@@ -237,7 +241,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
             Dependencies are up (if present) prior to invocation of this call
         """
-        self.running = True
+        pass
 
     async def prestop(self) -> None:
         """
@@ -248,11 +252,13 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
             - stop listeners
             - notify shutdown to systems depending on us (like agents)
 
+            sets is_stopping to true
+
             But remain functional
 
             All dependencies are up (if present)
         """
-        self.stopping = True
+        self._stopping = True
         self._sched.stop()
 
     async def stop(self) -> None:
@@ -263,7 +269,6 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
             This method `blocks` until the slice is down
         """
-        self.running = False
         await super(ServerSlice, self).stop()
 
     def get_dependencies(self) -> List[str]:
@@ -276,9 +281,6 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
     # internal API towards extension framework
     name = property(lambda self: self._name)
-
-    def get_dependencies(self) -> List[str]:
-        return []
 
     def get_handlers(self) -> List[routing.Rule]:
         """Get the list of """
@@ -461,6 +463,10 @@ class TransportSlice(ServerSlice):
     def __init__(self, server: Server):
         super(TransportSlice, self).__init__(SLICE_TRANSPORT)
         self.server = server
+
+    def get_dependencies(self) -> List[str]:
+        """All Slices with an http endpoint should depend on this one using :func:`get_dependened_by`"""
+        return []
 
     async def start(self) -> None:
         await super(TransportSlice, self).start()
