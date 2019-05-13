@@ -158,7 +158,7 @@ def test_bad_var(snippetcompiler):
         """
         a=b
 """,
-        "variable b not found (reported in Assign(a, b) ({dir}/main.cf:2))",
+        "variable b not found (reported in a = b ({dir}/main.cf:2))",
     )
 
 
@@ -235,4 +235,19 @@ Test(value="ab")
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:10)` (reported in Construct(Test) ({dir}/main.cf:10))
 caused by:
   Invalid value 'ab', constraint does not match (reported in __config__::abc ({dir}/main.cf:2:9))""",  # noqa: E501
+    )
+
+
+def test_value_set_twice(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+test = "a"
+test = "b"
+""",
+        """value set twice:
+\told value: a
+\t\tset at {dir}/main.cf:2
+\tnew value: b
+\t\tset at {dir}/main.cf:3
+ (reported in test = 'b' ({dir}/main.cf:3))""",
     )
