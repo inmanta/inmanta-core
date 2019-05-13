@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-from inmanta import compiler
 
 
 def test_typedef_in_non_constant(snippetcompiler):
