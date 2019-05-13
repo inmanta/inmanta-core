@@ -33,8 +33,15 @@ import yaml
 
 from inmanta import env, const
 from inmanta import plugins
-from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException, Location, LocatableString, Range, \
-    ExternalException
+from inmanta.ast import (
+    Namespace,
+    CompilerException,
+    ModuleNotFoundException,
+    Location,
+    LocatableString,
+    Range,
+    ExternalException,
+)
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DefinitionStatement, BiStatement, Statement, DynamicStatement
 from inmanta.ast.statements.define import DefineImport
@@ -69,7 +76,7 @@ class InvalidModuleException(CompilerException):
 
     def format_trace(self, indent: str = "", indent_level: int = 0) -> str:
         """Make a representation of this exception and its causes"""
-        #can have a cause of any type
+        # can have a cause of any type
         out = indent * indent_level + self.format()
 
         if self.__cause__ is not None:
