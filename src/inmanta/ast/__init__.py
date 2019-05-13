@@ -488,6 +488,15 @@ class CompilerException(Exception):
 
         return out
 
+    def importantance(self):
+        """
+        Importance used to order exceptions when reporting multiple, lower is more important
+
+        default is 100
+        below 50 is for pure compiler errors (type, syntax)
+        """
+        return 100
+
     def __str__(self) -> str:
         return self.format()
 
@@ -526,6 +535,9 @@ class TypeNotFoundException(RuntimeException):
         self.type = type
         self.ns = ns
 
+    def importantance(self):
+        return 20
+
 
 def stringify_exception(exn: Exception) -> str:
     if isinstance(exn, CompilerException):
@@ -558,6 +570,9 @@ class ExternalException(RuntimeException):
 
         return out
 
+    def importantance(self):
+        return 60
+
 
 class WrappingRuntimeException(RuntimeException):
     """ Baseclass for RuntimeExceptions wrapping other RuntimeException """
@@ -572,6 +587,10 @@ class WrappingRuntimeException(RuntimeException):
 
     def get_causes(self) -> List[CompilerException]:
         return [self.__cause__]
+
+    def importantance(self):
+        # less likely to be the cause then out child
+        return self.__cause__.importantance() + 1
 
 
 class AttributeException(WrappingRuntimeException):
@@ -595,21 +614,29 @@ class OptionalValueException(RuntimeException):
         self.instance = instance
         self.attribute = attribute
 
+    def importantance(self):
+        return 61
+
 
 class IndexException(RuntimeException):
     """Exception raised when an index definition is invalid"""
 
-    pass
+    def importantance(self):
+        return 10
 
 
 class TypingException(RuntimeException):
     """Base class for exceptions raised during the typing phase of compilation"""
 
-    pass
+    def importantance(self):
+        return 10
 
 
 class KeyException(RuntimeException):
     pass
+
+    def importantance(self):
+        return 70
 
 
 class CycleExcpetion(TypingException):
@@ -641,6 +668,9 @@ class ModuleNotFoundException(RuntimeException):
         RuntimeException.__init__(self, stmt, msg)
         self.name = name
 
+    def importantance(self):
+        return 5
+
 
 class NotFoundException(RuntimeException):
     def __init__(self, stmt: "Optional[Statement]", name: str, msg: "Optional[str]" = None) -> None:
@@ -648,6 +678,9 @@ class NotFoundException(RuntimeException):
             msg = "could not find value %s" % name
         RuntimeException.__init__(self, stmt, msg)
         self.name = name
+
+    def importantance(self):
+        return 20
 
 
 class DoubleSetException(RuntimeException):
@@ -665,6 +698,9 @@ class DoubleSetException(RuntimeException):
             self.newlocation,
         )
         RuntimeException.__init__(self, stmt, msg)
+
+    def importantance(self):
+        return 51
 
 
 class ModifiedAfterFreezeException(RuntimeException):
@@ -685,6 +721,9 @@ class ModifiedAfterFreezeException(RuntimeException):
         self.resultvariable = rv
         self.reverse = reverse
 
+    def importantance(self):
+        return 50
+
 
 class DuplicateException(TypingException):
     """ Exception raise when something is defined twice """
@@ -695,6 +734,9 @@ class DuplicateException(TypingException):
 
     def format(self) -> str:
         return "%s (original at (%s)) (duplicate at (%s))" % (self.get_message(), self.location, self.other.get_location())
+
+    def importantance(self):
+        return 40
 
 
 class CompilerError(Exception):
@@ -710,10 +752,32 @@ class MultiException(CompilerException):
         self.others = others
 
     def get_causes(self) -> List[CompilerException]:
-        return self.others
+        def sortkey(item: CompilerException):
+            location = item.get_location()
+            if not location:
+                file = ""
+                line = 0
+            else:
+                file = location.file
+                line = location.lnr
+
+            return (item.importantance(), file, line)
+
+        return sorted(self.others, key=sortkey)
 
     def format(self) -> str:
         return "Reported %d errors" % len(self.others)
 
     def __str__(self) -> str:
         return "Reported %d errors:\n\t" % len(self.others) + "\n\t".join([str(e) for e in self.others])
+
+    def format_trace(self, indent: str = "", indent_level: int = 0) -> str:
+        """Make a representation of this exception and its causes"""
+        out = indent * indent_level + self.format()
+
+        for i, cause in enumerate(self.get_causes()):
+            part = cause.format_trace(indent=indent, indent_level=indent_level + 1)
+            out += "\n" + indent * indent_level + f"error {i}:"
+            out += "\n" + part
+
+        return out
