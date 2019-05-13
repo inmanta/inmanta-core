@@ -33,7 +33,7 @@ import sys
 
 import dateutil
 
-from inmanta import protocol, data, config
+from inmanta import protocol, data, config, server
 from inmanta.protocol import methods, encode_token
 from inmanta.server import SLICE_DATABASE, SLICE_COMPILER, SLICE_TRANSPORT, SLICE_SERVER
 from inmanta.server.protocol import ServerSlice
@@ -47,7 +47,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class CompilerSerice(ServerSlice):
-    def __init__(self):
+    def __init__(self) -> None:
         super(CompilerSerice, self).__init__(SLICE_COMPILER)
         self._recompiles: Dict[uuid.UUID, Union[None, CompilerSerice, datetime.datetime]] = defaultdict(lambda: None)
 
@@ -57,7 +57,7 @@ class CompilerSerice(ServerSlice):
     def get_dependened_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
 
-    async def prestart(self, server: Server) -> None:
+    async def prestart(self, server: server.protocol.Server) -> None:
         await super(CompilerSerice, self).prestart(server)
         preserver = server.get_slice(SLICE_SERVER)
         assert isinstance(preserver, Server)
@@ -75,7 +75,7 @@ class CompilerSerice(ServerSlice):
         """
             Recompile an environment in a different thread and taking wait time into account.
         """
-        server_compile = await env.get(data.SERVER_COMPILE)
+        server_compile: bool = await env.get(data.SERVER_COMPILE)
         if not server_compile:
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
             return
@@ -87,9 +87,10 @@ class CompilerSerice(ServerSlice):
             return
 
         if last_recompile is None:
-            wait = 0
+            wait: float = 0
             LOGGER.info("First recompile")
         else:
+            assert isinstance(last_recompile, datetime.datetime)
             wait = max(0, wait_time - (datetime.datetime.now() - last_recompile).total_seconds())
             LOGGER.info("Last recompile longer than %s ago (last was at %s)", wait_time, last_recompile)
 
