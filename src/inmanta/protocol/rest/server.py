@@ -46,7 +46,7 @@ class RESTHandler(tornado.web.RequestHandler):
         if http_method.upper() not in self._config:
             allowed = ", ".join(self._config.keys())
             self.set_header("Allow", allowed)
-            raise exceptions.BaseException(
+            raise exceptions.BaseHttpException(
                 405, "%s is not supported for this url. Supported methods: %s" % (http_method, allowed)
             )
 
@@ -122,7 +122,7 @@ class RESTHandler(tornado.web.RequestHandler):
                 LOGGER.exception("An exception occured")
                 self.respond({"message": "Unable to decode request body"}, {}, 400)
 
-            except exceptions.BaseException as e:
+            except exceptions.BaseHttpException as e:
                 self.respond(e.to_body(), {}, e.to_status())
 
             except CancelledError:

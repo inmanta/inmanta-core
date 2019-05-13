@@ -21,7 +21,8 @@ from tornado import process
 
 from inmanta.config import Config
 from inmanta import data
-from inmanta.server import protocol, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_SERVER
+from inmanta.protocol.exceptions import ShutdownInProgress
+from inmanta.server import protocol, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_SERVER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.util import retry_limited
 from . import config as server_config
 from inmanta.types import Apireturn
@@ -120,7 +121,10 @@ class AgentManager(ServerSlice, SessionListener):
         self.closesessionsonstart: bool = closesessionsonstart
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_SERVER]
+        return [SLICE_SERVER, SLICE_DATABASE]
+
+    def get_dependened_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
         await ServerSlice.prestart(self, server)
@@ -135,10 +139,10 @@ class AgentManager(ServerSlice, SessionListener):
         presession.add_listener(self)
 
     def new_session(self, session: protocol.Session) -> None:
-        self.add_background_task(self.register_session(session, datetime.now()))
+        self.add_background_task(self._register_session(session, datetime.now()))
 
     def expire(self, session: protocol.Session, timeout: float) -> None:
-        self.add_future(self.expire_session(session, datetime.now()))
+        self.add_background_task(self._expire_session(session, datetime.now()))
 
     def seen(self, session: protocol.Session, endpoint_names: List[str]) -> None:
         if set(session.endpoint_names) != set(endpoint_names):
@@ -147,7 +151,7 @@ class AgentManager(ServerSlice, SessionListener):
                 % (set(session.endpoint_names), set(endpoint_names))
             )
         # start async, let it run free
-        self.add_background_task(self.flush_agent_presence(session, datetime.now()))
+        self.add_background_task(self._flush_agent_presence(session, datetime.now()))
 
     # From server
     def get_agent_client(self, tid: uuid.UUID, endpoint: str) -> Optional[ReturnClient]:
@@ -160,13 +164,16 @@ class AgentManager(ServerSlice, SessionListener):
 
     async def start(self) -> None:
         await super().start()
-        self.add_background_task(self.start_agents())
+        self.add_background_task(self._start_agents())
         if self.closesessionsonstart:
-            self.add_background_task(self.clean_db())
+            self.add_background_task(self._clean_db())
+
+    async def prestop(self) -> None:
+        await super().prestop()
+        await self._terminate_agents()
 
     async def stop(self) -> None:
         await super().stop()
-        await self.terminate_agents()
 
     # Agent Management
     async def ensure_agent_registered(self, env: data.Environment, nodename: str) -> data.Agent:
@@ -178,16 +185,16 @@ class AgentManager(ServerSlice, SessionListener):
             if agent is not None:
                 return agent
             else:
-                agent = await self.create_default_agent(env, nodename)
+                agent = await self._create_default_agent(env, nodename)
                 return agent
 
-    async def create_default_agent(self, env: data.Environment, nodename: str) -> data.Agent:
+    async def _create_default_agent(self, env: data.Environment, nodename: str) -> data.Agent:
         saved = data.Agent(environment=env.id, name=nodename, paused=False)
         await saved.insert()
-        await self.verify_reschedule(env, [nodename])
+        await self._verify_reschedule(env, [nodename])
         return saved
 
-    async def register_session(self, session: protocol.Session, now: float) -> data.Agent:
+    async def _register_session(self, session: protocol.Session, now: float) -> data.Agent:
         with (await self.session_lock.acquire()):
             tid = session.tid
             sid = session.get_id()
@@ -213,10 +220,10 @@ class AgentManager(ServerSlice, SessionListener):
                 # await session.get_client().set_state(agent=nodename, enabled=False)
 
             if env is not None:
-                await self.verify_reschedule(env, session.endpoint_names)
+                await self._verify_reschedule(env, session.endpoint_names)
 
-    async def expire_session(self, session: protocol.Session, now: float) -> None:
-        if not self.running:
+    async def _expire_session(self, session: protocol.Session, now: float) -> None:
+        if not self.is_running() or self.is_stopping():
             return
         with (await self.session_lock.acquire()):
             tid = session.tid
@@ -247,9 +254,9 @@ class AgentManager(ServerSlice, SessionListener):
                     ] == session:
                         del self.tid_endpoint_to_session[(tid, endpoint)]
 
-                await self.verify_reschedule(env, session.endpoint_names)
+                await self._verify_reschedule(env, session.endpoint_names)
 
-    async def get_environment_sessions(self, env_id: uuid.UUID) -> List[protocol.Session]:
+    async def _get_environment_sessions(self, env_id: uuid.UUID) -> List[protocol.Session]:
         """
             Get a list of all sessions for the given environment id
         """
@@ -262,7 +269,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         return session_list
 
-    async def flush_agent_presence(self, session: protocol.Session, now: float) -> None:
+    async def _flush_agent_presence(self, session: protocol.Session, now: float) -> None:
         tid = session.tid
         sid = session.get_id()
 
@@ -278,20 +285,20 @@ class AgentManager(ServerSlice, SessionListener):
 
         await aps.update_fields(last_seen=now)
 
-    async def verify_reschedule(self, env: data.Environment, enpoints: str) -> None:
+    async def _verify_reschedule(self, env: data.Environment, enpoints: str) -> None:
         """
              only call under session lock
         """
-        if not self.running:
+        if not self.is_running() or self.is_stopping():
             return
         tid = env.id
         no_primary = [endpoint for endpoint in enpoints if (tid, endpoint) not in self.tid_endpoint_to_session]
         agents = await asyncio.gather(*[data.Agent.get(env.id, endpoint) for endpoint in no_primary])
         needswork = [agent for agent in agents if agent is not None and not agent.paused]
         for agent in needswork:
-            await self.reschedule(env, agent)
+            await self._reschedule(env, agent)
 
-    async def reschedule(self, env: data.Environment, agent: data.Agent) -> None:
+    async def _reschedule(self, env: data.Environment, agent: data.Agent) -> None:
         """
              only call under session lock
         """
@@ -324,7 +331,7 @@ class AgentManager(ServerSlice, SessionListener):
             return False
         return prim.get_id() == sid
 
-    async def clean_db(self) -> None:
+    async def _clean_db(self) -> None:
         with (await self.session_lock.acquire()):
             LOGGER.debug("Cleaning server session DB")
 
@@ -449,6 +456,9 @@ class AgentManager(ServerSlice, SessionListener):
             :param agents: A list of agent names that possibly should be started in this environment.
             :param restart: Restart all agents even if the list of agents is up to date.
         """
+        if self._stopping:
+            raise ShutdownInProgress()
+
         agent_map: Dict[str, str]
         agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
         agents = [agent for agent in agents if agent in agent_map]
@@ -511,11 +521,6 @@ class AgentManager(ServerSlice, SessionListener):
 
         LOGGER.debug("Started new agent with PID %s", proc.proc.pid)
         return True
-
-    async def terminate_agents(self) -> None:
-        for proc in self._agent_procs.values():
-            proc.proc.terminate()
-        await wait_for_proc_bounded(self._agent_procs.values())
 
     async def _make_agent_config(self, env: data.Environment, agent_names: List[str], agent_map: Dict[str, str]) -> str:
         """
@@ -599,7 +604,7 @@ ssl=True
 
     # Parameters
 
-    async def _request_parameter(self, env_id: uuid.UUID, resource_id: str) -> Apireturn:
+    async def request_parameter(self, env_id: uuid.UUID, resource_id: str) -> Apireturn:
         """
             Request the value of a parameter from an agent
         """
@@ -642,7 +647,7 @@ ssl=True
         else:
             return 404, {"message": "resource_id parameter is required."}
 
-    async def start_agents(self) -> None:
+    async def _start_agents(self) -> None:
         """
             Ensure that autostarted agents of each environment are started when AUTOSTART_ON_START is true. This method
             is called on server start.
@@ -675,6 +680,18 @@ ssl=True
 
         LOGGER.debug("Expiring all sessions for %s", env.id)
         sessions: List[protocol.Session]
-        sessions = await self.get_environment_sessions(env.id)
+        sessions = await self._get_environment_sessions(env.id)
         for session in sessions:
             session.expire(0)
+            session.abort()
+
+    async def _terminate_agents(self) -> None:
+        LOGGER.debug("Stopping all autostarted agents")
+        for proc in self._agent_procs.values():
+            proc.proc.terminate()
+        await wait_for_proc_bounded(self._agent_procs.values())
+
+        LOGGER.debug("Expiring all sessions")
+        for session in self.sessions.values():
+            session.expire(0)
+            session.abort()

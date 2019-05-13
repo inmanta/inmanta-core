@@ -9,7 +9,7 @@ import sys
 from typing import Generator, Any
 
 import inmanta_ext
-from inmanta.server import SLICE_SERVER, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
+from inmanta.server import SLICE_SERVER, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
 
@@ -87,7 +87,14 @@ def test_phase_3(caplog):
     server.add_slice(AgentManager())
 
     order = server._get_slice_sequence()
-    assert [s.name for s in order] == [SLICE_SESSION_MANAGER, SLICE_SERVER, SLICE_AGENT_MANAGER, "testplugin.testslice"]
+    print([s.name for s in order])
+    assert [s.name for s in order] == [
+        SLICE_SESSION_MANAGER,
+        SLICE_SERVER,
+        SLICE_AGENT_MANAGER,
+        SLICE_TRANSPORT,
+        "testplugin.testslice",
+    ]
 
 
 def test_end_to_end(caplog):

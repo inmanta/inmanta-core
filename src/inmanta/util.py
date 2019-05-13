@@ -246,19 +246,11 @@ class TaskHandler(object):
         self._await_tasks: Set[Task] = set()
         self._stopped = False
 
-    def add_future(self, future: Union[Future, Coroutine]) -> Task:
-        """ Add a future to the event loop and report any exceptions if they occur
-        """
+    def is_stopped(self):
+        return self._stopped
 
-        def handle_result(f: Task) -> None:
-            try:
-                f.result()
-            except Exception as e:
-                LOGGER.exception("An exception occurred while handling a future: %s", str(e))
-
-        task = ensure_future(future)
-        task.add_done_callback(handle_result)
-        return task
+    def is_running(self):
+        return not self._stopped
 
     def add_background_task(self, future: Union[Future, Coroutine], cancel_on_stop=True) -> Task:
         """ Add a background task to the event loop. When stop is called, the task is cancelled.
