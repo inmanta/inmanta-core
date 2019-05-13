@@ -661,11 +661,11 @@ class CycleExcpetion(TypingException):
         return "Entity can not be its own parent %s" % (trace)
 
 
-class ModuleNotFoundException(RuntimeException):
-    def __init__(self, name: str, stmt: "Statement", msg: str = None) -> None:
+class ModuleNotFoundException(WrappingRuntimeException):
+    def __init__(self, name: str, stmt: "Statement", cause: RuntimeException, msg: str = None) -> None:
         if msg is None:
             msg = "could not find module %s" % name
-        RuntimeException.__init__(self, stmt, msg)
+        WrappingRuntimeException.__init__(self, stmt, msg, cause)
         self.name = name
 
     def importantance(self):
