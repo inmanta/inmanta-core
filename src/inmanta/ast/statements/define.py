@@ -383,6 +383,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self, namespace: Namespace, name: LocatableString, basetype: LocatableString, expression: ExpressionStatement
     ) -> None:
         TypeDefinitionStatement.__init__(self, namespace, str(name))
+        self.set_location(name.get_location())
         self.basetype = str(basetype)
         self.anchors.append(TypeReferenceAnchor(basetype.get_location(), namespace, str(basetype)))
         self.anchors.extend(expression.get_anchors())

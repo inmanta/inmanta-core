@@ -198,46 +198,6 @@ caused by:
     )
 
 
-def test_typedef_in_non_constant(snippetcompiler):
-    # noqa: E501
-    snippetcompiler.setup_for_error(
-        """
-a = "A"
-typedef abc as string matching self in [a,"b","c"]
-
-entity Test:
-    abc value
-end
-
-implement Test using std::none
-
-Test(value="a")
-""",
-        """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:11)` (reported in Construct(Test) ({dir}/main.cf:11))
-caused by:
-  Could not resolve the value a in this static context (reported in a ({dir}/main.cf:3:41))""",  # noqa: E501
-    )
-
-
-def test_typedef_in_violates(snippetcompiler):
-    snippetcompiler.setup_for_error(
-        """
-typedef abc as string matching self in ["a","b","c"]
-
-entity Test:
-    abc value
-end
-
-implement Test using std::none
-
-Test(value="ab")
-""",
-        """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:10)` (reported in Construct(Test) ({dir}/main.cf:10))
-caused by:
-  Invalid value 'ab', constraint does not match (reported in __config__::abc ({dir}/main.cf:2:9))""",  # noqa: E501
-    )
-
-
 def test_value_set_twice(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
