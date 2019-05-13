@@ -223,7 +223,7 @@ class AgentManager(ServerSlice, SessionListener):
                 await self._verify_reschedule(env, session.endpoint_names)
 
     async def _expire_session(self, session: protocol.Session, now: float) -> None:
-        if not self.running:
+        if not self.is_running() or self.is_stopping():
             return
         with (await self.session_lock.acquire()):
             tid = session.tid
@@ -289,7 +289,7 @@ class AgentManager(ServerSlice, SessionListener):
         """
              only call under session lock
         """
-        if not self.running:
+        if not self.is_running() or self.is_stopping():
             return
         tid = env.id
         no_primary = [endpoint for endpoint in enpoints if (tid, endpoint) not in self.tid_endpoint_to_session]
