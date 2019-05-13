@@ -15,8 +15,6 @@
 
     Contact: code@inmanta.com
 """
-from _asyncio import Task
-
 import inmanta.protocol.endpoints
 from inmanta.types import JsonType
 from inmanta.util import Scheduler, TaskHandler, stable_depth_first, CycleException
@@ -24,7 +22,7 @@ from inmanta.protocol import Client, handle, methods
 from inmanta.protocol import common, endpoints
 from inmanta.protocol.rest import server
 
-from inmanta import config as inmanta_config, data
+from inmanta import config as inmanta_config
 from inmanta.server import config as opt, SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 
 from tornado import gen, queues, web, routing
