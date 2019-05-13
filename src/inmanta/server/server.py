@@ -17,45 +17,47 @@
 """
 import asyncio
 import base64
-import subprocess
-from asyncio import CancelledError
-from collections import defaultdict
 import datetime
 import difflib
-import os
-import re
 import logging
-import sys
-import tempfile
-import time
-from uuid import UUID
-import uuid
+import os
 import shutil
-import json
+import time
+import uuid
+from collections import defaultdict
+from typing import Dict, Any, Optional, Set, List, TYPE_CHECKING
+from uuid import UUID
 
-import dateutil.parser
 import asyncpg
 from tornado import locks
-from typing import Dict, Any, Optional, Union, Set, List, TYPE_CHECKING
 
 from inmanta import const
-from inmanta import data, config
+from inmanta import data
+from inmanta.ast import type
+from inmanta.const import STATE_UPDATE, VALID_STATES_ON_STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES
+from inmanta.protocol import encode_token, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.reporter import InfluxReporter
-from inmanta.server import protocol, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_TRANSPORT
-from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
+from inmanta.server import (
+    protocol,
+    SLICE_SERVER,
+    SLICE_SESSION_MANAGER,
+    SLICE_AGENT_MANAGER,
+    SLICE_DATABASE,
+    SLICE_TRANSPORT,
+    SLICE_COMPILER,
+)
 from inmanta.types import Apireturn, JsonType
 from inmanta.util import hash_file
-from inmanta.const import STATE_UPDATE, VALID_STATES_ON_STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES
-from inmanta.protocol import encode_token, methods
 
 LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from inmanta.server.agentmanager import AgentManager
+    from inmanta.server.compilerservice import CompilerService
 
 DBLIMIT = 100000
 
@@ -138,8 +140,6 @@ class Server(protocol.ServerSlice):
 
         self._agent_no_log: bool = agent_no_log
 
-        self._recompiles: Dict[uuid.UUID, Union[None, Server, datetime.datetime]] = defaultdict(lambda: None)
-
         self.setup_dashboard()
         self.dryrun_lock = locks.Lock()
         self._fact_expire = opt.server_fact_expire.get()
@@ -162,6 +162,7 @@ class Server(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         self._server_storage: Dict[str, str] = self.check_storage()
         self.agentmanager: "AgentManager" = server.get_slice(SLICE_AGENT_MANAGER)
+        self.compiler: "CompilerService" = server.get_slice(SLICE_COMPILER)
 
     async def start(self) -> None:
         self.schedule(self.renew_expired_facts, self._fact_renew)
@@ -1950,13 +1951,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         except KeyError:
             return 404
 
-    @protocol.handle(methods.is_compiling, environment_id="id")
-    async def is_compiling(self, environment_id: uuid.UUID) -> Apireturn:
-        if self._recompiles[environment_id] is self:
-            return 200
-
-        return 204
-
     @protocol.handle(methods.notify_change_get, env="id")
     async def notify_change_get(self, env: data.Environment, update: bool) -> Apireturn:
         result = await self.notify_change(env, update, {})
@@ -1979,214 +1973,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         """
             Recompile an environment in a different thread and taking wait time into account.
         """
-        server_compile = await env.get(data.SERVER_COMPILE)
-        if not server_compile:
-            LOGGER.info("Skipping compile because server compile not enabled for this environment.")
-            return
-
-        last_recompile = self._recompiles[env.id]
-        wait_time = opt.server_autrecompile_wait.get()
-        if last_recompile is self:
-            LOGGER.info("Already recompiling")
-            return
-
-        if last_recompile is None:
-            wait = 0
-            LOGGER.info("First recompile")
-        else:
-            wait = max(0, wait_time - (datetime.datetime.now() - last_recompile).total_seconds())
-            LOGGER.info("Last recompile longer than %s ago (last was at %s)", wait_time, last_recompile)
-
-        self._recompiles[env.id] = self
-        self.add_background_task(self._recompile_environment(env.id, update_repo, wait, metadata))
-
-    async def _run_compile_stage(self, name: str, cmd: List[str], cwd: str, **kwargs: Any) -> data.Report:
-        start = datetime.datetime.now()
-
-        try:
-            out = tempfile.NamedTemporaryFile()
-            err = tempfile.NamedTemporaryFile()
-            sub_process = await asyncio.create_subprocess_exec(cmd[0], *cmd[1:], stdout=out, stderr=err, cwd=cwd, **kwargs)
-
-            returncode = await sub_process.wait()
-
-            out.seek(0)
-            err.seek(0)
-
-            stop = datetime.datetime.now()
-            return data.Report(
-                started=start,
-                completed=stop,
-                name=name,
-                command=" ".join(cmd),
-                errstream=err.read().decode(),
-                outstream=out.read().decode(),
-                returncode=returncode,
-            )
-
-        finally:
-            out.close()
-            err.close()
-
-    async def _recompile_environment(
-        self, environment_id: uuid.UUID, update_repo: bool = False, wait=0, metadata: JsonType = {}
-    ) -> None:
-        """
-            Recompile an environment
-        """
-        if wait > 0:
-            await asyncio.sleep(wait)
-
-        env = await data.Environment.get_by_id(environment_id)
-        if env is None:
-            LOGGER.error("Environment %s does not exist.", environment_id)
-            return
-
-        requested = datetime.datetime.now()
-        stages = []
-
-        try:
-            inmanta_path = [sys.executable, "-m", "inmanta.app"]
-            project_dir = os.path.join(self._server_storage["environments"], str(environment_id))
-
-            if not os.path.exists(project_dir):
-                LOGGER.info("Creating project directory for environment %s at %s", environment_id, project_dir)
-                os.mkdir(project_dir)
-
-            if not env.repo_url:
-                if not os.path.exists(os.path.join(project_dir, ".git")):
-                    LOGGER.warning("Project not found and repository not set %s", project_dir)
-            else:
-                # checkout repo
-                if not os.path.exists(os.path.join(project_dir, ".git")):
-                    LOGGER.info("Cloning repository into environment directory %s", project_dir)
-                    result = await self._run_compile_stage(
-                        "Cloning repository", ["git", "clone", env.repo_url, "."], project_dir
-                    )
-                    stages.append(result)
-                    if result.returncode > 0:
-                        return
-
-                elif update_repo:
-                    LOGGER.info("Fetching changes from repo %s", env.repo_url)
-                    result = await self._run_compile_stage("Fetching changes", ["git", "fetch", env.repo_url], project_dir)
-                    stages.append(result)
-                if env.repo_branch:
-                    # verify if branch is correct
-                    LOGGER.debug("Verifying correct branch")
-
-                    sub_process = await asyncio.create_subprocess_exec(
-                        "git", "branch", stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=project_dir
-                    )
-
-                    out, _, _ = await asyncio.gather(
-                        sub_process.stdout.read_until_close(),
-                        sub_process.stderr.read_until_close(),
-                        sub_process.wait_for_exit(raise_error=False),
-                    )
-
-                    o = re.search(r"\* ([^\s]+)$", out.decode(), re.MULTILINE)
-                    if o is not None and env.repo_branch != o.group(1):
-                        LOGGER.info("Repository is at %s branch, switching to %s", o.group(1), env.repo_branch)
-                        result = await self._run_compile_stage(
-                            "switching branch", ["git", "checkout", env.repo_branch], project_dir
-                        )
-                        stages.append(result)
-
-                if update_repo:
-                    result = await self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
-                    stages.append(result)
-                    LOGGER.info("Installing and updating modules")
-                    result = await self._run_compile_stage(
-                        "Installing modules", inmanta_path + ["modules", "install"], project_dir, env=os.environ.copy()
-                    )
-                    stages.append(result)
-                    result = await self._run_compile_stage(
-                        "Updating modules", inmanta_path + ["modules", "update"], project_dir, env=os.environ.copy()
-                    )
-                    stages.append(result)
-
-            LOGGER.info("Recompiling configuration model")
-            server_address = opt.server_address.get()
-            server_port = opt.transport_port.get()
-            cmd = inmanta_path + [
-                "-vvv",
-                "export",
-                "-e",
-                str(environment_id),
-                "--server_address",
-                server_address,
-                "--server_port",
-                str(server_port),
-                "--metadata",
-                json.dumps(metadata),
-            ]
-            if config.Config.get("server", "auth", False):
-                token = encode_token(["compiler", "api"], str(environment_id))
-                cmd.append("--token")
-                cmd.append(token)
-
-            if opt.server_ssl_cert.get() is not None:
-                cmd.append("--ssl")
-
-            if opt.server_ssl_ca_cert.get() is not None:
-                cmd.append("--ssl-ca-cert")
-                cmd.append(opt.server_ssl_ca_cert.get())
-
-            result = await self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=os.environ.copy())
-
-            stages.append(result)
-        except CancelledError:
-            # This compile was cancelled. Catch it here otherwise a warning will be printed in the logs because of an
-            # unhandled exception in a backgrounded coroutine.
-            pass
-
-        except Exception:
-            LOGGER.exception("An error occured while recompiling")
-
-        finally:
-            try:
-                end = datetime.datetime.now()
-                self._recompiles[environment_id] = end
-
-                comp = data.Compile(environment=environment_id, started=requested, completed=end)
-
-                for stage in stages:
-                    stage.compile = comp.id
-
-                await comp.insert()
-                await data.Report.insert_many(stages)
-            except Exception as exc:
-                LOGGER.warning("An exception occurred that should not happen.", exc_info=exc)
-
-    @protocol.handle(methods.get_reports, env="tid")
-    async def get_reports(
-        self, env: data.Environment, start: Optional[str] = None, end: Optional[str] = None, limit: Optional[int] = None
-    ) -> Apireturn:
-        argscount = len([x for x in [start, end, limit] if x is not None])
-        if argscount == 3:
-            return 500, {"message": "Limit, start and end can not be set together"}
-        if env is None:
-            return 404, {"message": "The given environment id does not exist!"}
-
-        start_time = None
-        end_time = None
-        if start is not None:
-            start_time = dateutil.parser.parse(start)
-        if end is not None:
-            end_time = dateutil.parser.parse(end)
-        models = await data.Compile.get_reports(env.id, limit, start_time, end_time)
-
-        return 200, {"reports": models}
-
-    @protocol.handle(methods.get_report, compile_id="id")
-    async def get_report(self, compile_id: uuid.UUID) -> Apireturn:
-        report = await data.Compile.get_report(compile_id)
-
-        if report is None:
-            return 404
-
-        return 200, {"report": report}
+        await self.compiler._async_recompile(env, update_repo, metadata)
 
     @protocol.handle(methods.decomission_environment, env="id")
     async def decomission_environment(self, env: data.Environment, metadata: JsonType) -> Apireturn:
