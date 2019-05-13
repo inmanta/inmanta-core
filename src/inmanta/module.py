@@ -33,15 +33,7 @@ import yaml
 
 from inmanta import env, const
 from inmanta import plugins
-from inmanta.ast import (
-    Namespace,
-    CompilerException,
-    ModuleNotFoundException,
-    Location,
-    LocatableString,
-    Range,
-    ExternalException,
-)
+from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException, Location, LocatableString, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DefinitionStatement, BiStatement, Statement, DynamicStatement
 from inmanta.ast.statements.define import DefineImport
@@ -1003,8 +995,8 @@ class Module(ModuleLike):
 
         try:
             return self._load_file(ns, file)
-        except FileNotFoundError:
-            raise InvalidModuleException("could not locate module with name: %s", name)
+        except FileNotFoundError as e:
+            raise InvalidModuleException("could not locate module with name: %s" % name) from e
 
     def get_freeze(self, submodule: str, recursive: bool = False, mode: str = ">=") -> Dict[str, str]:
         imports = [statement.name for statement in self.get_imports(submodule)]

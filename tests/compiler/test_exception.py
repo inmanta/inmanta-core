@@ -43,6 +43,6 @@ caused by:
   Could not load module badmodule
   caused by:
     inmanta.module.InvalidModuleException: Module %s is not a valid inmanta configuration module. Make sure that a model/_init.cf file exists and a module.yml definition file.
-"""
+"""  # noqa: E501
         % modpath,
-    )  # noqa: E501
+    )
