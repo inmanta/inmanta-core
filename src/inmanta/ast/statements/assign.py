@@ -89,6 +89,15 @@ class CreateDict(ReferenceStatement):
                 raise DuplicateException(v, seen[x], "duplicate key in dict %s" % x)
             seen[x] = v
 
+    def execute_direct(self, requires):
+        qlist = Dict()
+
+        for i in range(len(self.items)):
+            key, value = self.items[i]
+            qlist[key] = value.execute_direct(requires)
+
+        return qlist
+
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
             Create this list
