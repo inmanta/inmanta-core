@@ -18,6 +18,7 @@
 
 import glob
 import imp
+import traceback
 from io import BytesIO
 import logging
 import os
@@ -60,19 +61,32 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class InvalidModuleException(Exception):
+class InvalidModuleException(CompilerException):
     """
         This exception is raised if a module is invalid
     """
 
+    def format_trace(self, indent: str = "", indent_level: int = 0) -> str:
+        """Make a representation of this exception and its causes"""
+        # can have a cause of any type
+        out = indent * indent_level + self.format()
 
-class InvalidModuleFileException(Exception):
+        if self.__cause__ is not None:
+            part = traceback.format_exception_only(self.__cause__.__class__, self.__cause__)
+            out += "\n" + indent * indent_level + "caused by:\n"
+            for line in part:
+                out += indent * (indent_level + 1) + line
+
+        return out
+
+
+class InvalidModuleFileException(CompilerException):
     """
         This exception is raised if a module file is invalid
     """
 
 
-class ProjectNotFoundExcpetion(Exception):
+class ProjectNotFoundExcpetion(CompilerException):
     """
         This exception is raised when inmanta is unable to find a valid project
     """
@@ -536,8 +550,8 @@ class Project(ModuleLike):
 
                     # get imports and add to list
                     imports.extend(module.get_imports(subs))
-            except InvalidModuleException:
-                raise ModuleNotFoundException(ns, imp)
+            except InvalidModuleException as e:
+                raise ModuleNotFoundException(ns, imp, e)
 
         return out
 
@@ -556,8 +570,8 @@ class Project(ModuleLike):
                     )
             self.modules[module_name] = module
             return module
-        except Exception:
-            raise InvalidModuleException("Could not load module %s" % module_name)
+        except Exception as e:
+            raise InvalidModuleException("Could not load module %s" % module_name) from e
 
     def load_plugins(self) -> None:
         """
@@ -981,8 +995,8 @@ class Module(ModuleLike):
 
         try:
             return self._load_file(ns, file)
-        except FileNotFoundError:
-            raise InvalidModuleException("could not locate module with name: %s", name)
+        except FileNotFoundError as e:
+            raise InvalidModuleException("could not locate module with name: %s" % name) from e
 
     def get_freeze(self, submodule: str, recursive: bool = False, mode: str = ">=") -> Dict[str, str]:
         imports = [statement.name for statement in self.get_imports(submodule)]

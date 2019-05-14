@@ -689,3 +689,9 @@ class DefineImport(TypeDefinitionStatement, Import):
         """
             Evaluate this plugin
         """
+
+    def __str__(self) -> str:
+        if self.toname == self.name:
+            return f"import {self.name}"
+        else:
+            return f"import {self.name} as {self.toname}"
