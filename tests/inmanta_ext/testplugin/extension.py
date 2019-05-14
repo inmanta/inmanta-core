@@ -1,5 +1,3 @@
-from builtins import super
-
 from typing import List
 
 from inmanta.server import SLICE_SERVER, SLICE_AGENT_MANAGER
