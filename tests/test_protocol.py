@@ -278,7 +278,7 @@ async def test_method_properties():
         Test method properties decorator and helper functions
     """
 
-    @protocol.method(method_name="test", operation="PUT", client_types=["api"])
+    @protocol.method(method_name="test", operation="PUT", client_types=["api"], api_prefix="x", api_version=2)
     def test_method(name):
         """
             Create a new project
@@ -286,8 +286,8 @@ async def test_method_properties():
 
     props: protocol.common.MethodProperties = test_method.__method_properties__
     assert "Authorization" in props.get_call_headers()
-    assert props.get_listen_url() == "/api/v1/test"
-    assert props.get_call_url({}) == "/api/v1/test"
+    assert props.get_listen_url() == "/x/v2/test"
+    assert props.get_call_url({}) == "/x/v2/test"
 
 
 @pytest.mark.asyncio

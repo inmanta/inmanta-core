@@ -169,6 +169,7 @@ class MethodProperties(object):
         validate_sid: Optional[bool],
         client_types: List[str],
         api_version: int,
+        api_prefix: str,
     ) -> None:
         """
             Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -187,7 +188,7 @@ class MethodProperties(object):
             :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg
                                 to which the options apply.
             :param api_version: The version of the api this method belongs to
-
+            :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -208,6 +209,7 @@ class MethodProperties(object):
         self._validate_sid: bool = validate_sid
         self._client_types = client_types
         self._api_version = api_version
+        self._api_prefix = api_prefix
         self.function = function
 
         MethodProperties.methods[function.__name__] = self
@@ -267,7 +269,7 @@ class MethodProperties(object):
         """
             Create a listen url for this method
         """
-        url = "/api/v%d" % self._api_version
+        url = "/%s/v%d" % (self._api_prefix, self._api_version)
 
         if self._id:
             url += "/%s/(?P<id>[^/]+)" % self._method_name
@@ -282,7 +284,7 @@ class MethodProperties(object):
         """
              Create a calling url for the client
         """
-        url = "/api/v%d" % self._api_version
+        url = "/%s/v%d" % (self._api_prefix, self._api_version)
 
         if self._id:
             url += "/%s/%s" % (self._method_name, parse.quote(str(msg["id"]), safe=""))

@@ -56,6 +56,7 @@ def method(
     validate_sid: bool = None,
     client_types: List[str] = ["public"],
     api_version: int = 1,
+    api_prefix: str = "api",
 ) -> Callable[..., Callable]:
     """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -94,6 +95,7 @@ def method(
             validate_sid,
             client_types,
             api_version,
+            api_prefix,
         )
         return func
 

@@ -4,7 +4,7 @@ Changes in this release:
 - Abort server startup if the database can not be reached (#1153)
 - Use native coroutines everywhere (async def)
 - Updated dockerfile and docker-compose to use postgres and centos
-- Added extensions mechanism (#565)
+- Added extensions mechanism (#565, #1185)
 - Support to set environment variables on the Inmanta server and it's agents
 
 v 2019.2 (2019-04-30)
