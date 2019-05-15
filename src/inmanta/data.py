@@ -1130,17 +1130,17 @@ class Report(BaseDocument):
         :param outstream what was reported on system out
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    started = Field(field_type=datetime.datetime, required=True)
-    completed = Field(field_type=datetime.datetime)
-    command = Field(field_type=str, required=True)
-    name = Field(field_type=str, required=True)
-    errstream = Field(field_type=str, default="")
-    outstream = Field(field_type=str, default="")
-    returncode = Field(field_type=int)
-    compile = Field(field_type=uuid.UUID, required=True)
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    started: datetime.datetime = Field(field_type=datetime.datetime, required=True)
+    completed: datetime.datetime = Field(field_type=datetime.datetime)
+    command: str = Field(field_type=str, required=True)
+    name: str = Field(field_type=str, required=True)
+    errstream: str = Field(field_type=str, default="")
+    outstream: str = Field(field_type=str, default="")
+    returncode: int = Field(field_type=int)
+    compile: uuid.UUID = Field(field_type=uuid.UUID, required=True)
 
-    async def update_streams(self, out="", err=""):
+    async def update_streams(self, out="", err="") -> None:
         if not out and not err:
             return
         await self._execute_query(
@@ -1160,23 +1160,23 @@ class Compile(BaseDocument):
         :param completed Time to compile was completed
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    remote_id = Field(field_type=uuid.UUID)
-    environment = Field(field_type=uuid.UUID, required=True)
-    requested = Field(field_type=datetime.datetime)
-    started = Field(field_type=datetime.datetime)
-    completed = Field(field_type=datetime.datetime)
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    remote_id: uuid.UUID = Field(field_type=uuid.UUID)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+    requested: datetime.datetime = Field(field_type=datetime.datetime)
+    started: datetime.datetime = Field(field_type=datetime.datetime)
+    completed: datetime.datetime = Field(field_type=datetime.datetime)
 
-    do_export = Field(field_type=bool)
-    force_update = Field(field_type=bool)
-    metadata = Field(field_type=dict)
-    environment_variables = Field(field_type=dict)
+    do_export: bool = Field(field_type=bool)
+    force_update: bool = Field(field_type=bool)
+    metadata: dict = Field(field_type=dict, default={})
+    environment_variables: dict = Field(field_type=dict)
 
-    success = Field(field_type=bool)
-    version = Field(field_type=int)
+    success: bool = Field(field_type=bool)
+    version: int = Field(field_type=int)
 
     @classmethod
-    async def get_reports(cls, environment_id, limit=None, start=None, end=None):
+    async def get_reports(cls, environment_id, limit=None, start=None, end=None) -> List[JsonType]:
         query = "SELECT * FROM " + cls.table_name()
         conditions_in_where_clause = ["environment=$1"]
         values = [cls._get_value(environment_id)]
@@ -1241,16 +1241,17 @@ class Compile(BaseDocument):
         results = await cls.select_query(
             f"SELECT DISTINCT ON (environment) * FROM {cls.table_name()} WHERE completed IS NULL ORDER BY environment, "
             f"requested ASC",
-            []
+            [],
         )
         return results
 
     @classmethod
-    async def get_by_remote_id(cls, remote_id: uuid.UUID) -> "Compile":
-        results = await cls.select_query(f"SELECT * FROM {cls.table_name()} WHERE remote_id=$1", [cls._get_value(remote_id)])
+    async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "Compile":
+        results = await cls.select_query(
+            f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND remote_id=$2",
+            [cls._get_value(environment_id), cls._get_value(remote_id)],
+        )
         return results
-
-
 
 
 class Form(BaseDocument):

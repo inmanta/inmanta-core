@@ -67,7 +67,7 @@ server_ssl_cert = Option(
     "server", "ssl_cert_file", None, "SSL certificate file for the server key. Leave blank to disable SSL", is_str_opt
 )
 
-server_ssl_ca_cert = Option(
+server_ssl_ca_cert: Option[str] = Option(
     "server",
     "ssl_ca_cert_file",
     None,
@@ -139,7 +139,7 @@ server_version_to_keep = Option(
     is_int,
 )
 
-server_address = Option(
+server_address: Option[str] = Option(
     "server",
     "server_address",
     "localhost",

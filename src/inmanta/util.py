@@ -71,7 +71,7 @@ def groupby(mylist, f):
     return itertools.groupby(sorted(mylist, key=f), f)
 
 
-def ensure_directory_exist(directory, *subdirs):
+def ensure_directory_exist(directory: str, *subdirs: str) -> str:
     directory = os.path.join(directory, *subdirs)
     if not os.path.exists(directory):
         os.mkdir(directory)
