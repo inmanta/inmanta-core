@@ -15,20 +15,21 @@
 
     Contact: code@inmanta.com
 """
-import logging
+import enum
 import inspect
 import json
+import logging
 import uuid
 from datetime import datetime
-import enum
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, cast  # noqa: F401
 
+import pydantic
 from tornado import escape
-from inmanta import const, util
-from inmanta.types import JsonType
-from inmanta.protocol import common, exceptions
-from inmanta import config as inmanta_config
 
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, cast, Mapping  # noqa: F401
+from inmanta import config as inmanta_config
+from inmanta import const, util
+from inmanta.protocol import common, exceptions
+from inmanta.types import JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -154,6 +155,9 @@ class CallArguments(object):
             return value
 
         try:
+            if issubclass(arg_type, pydantic.main.BaseModel):
+                return arg_type(**value)
+
             if arg_type == datetime:
                 return datetime.strptime(value, const.TIME_ISOFMT)
 
@@ -166,13 +170,13 @@ class CallArguments(object):
             else:
                 return arg_type(value)
 
+        except pydantic.ValidationError as e:
+            error_msg = f"Failed to validate argument {arg} of expected type {arg_type}\n{str(e)}"
+            LOGGER.exception(error_msg)
+            raise exceptions.BadRequest()
+
         except (ValueError, TypeError):
-            error_msg = "Invalid type for argument %s. Expected %s but received %s, %s" % (
-                arg,
-                arg_type,
-                value.__class__,
-                value,
-            )
+            error_msg = f"Invalid type for argument {arg}. Expected {arg_type} but received {value.__class__}, {value}"
             LOGGER.exception(error_msg)
             raise exceptions.BadRequest(error_msg)
 

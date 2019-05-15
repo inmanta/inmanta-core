@@ -35,6 +35,7 @@ from pkg_resources import DistributionNotFound
 from tornado.ioloop import IOLoop
 from typing import Callable, Dict, Union, Tuple, List, Coroutine, Set
 from tornado import gen
+import pydantic
 
 from inmanta.types import JsonType
 
@@ -202,6 +203,9 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
     if isinstance(o, Exception):
         # Logs can push exceptions through RPC. Return a string representation.
         return str(o)
+
+    if isinstance(o, pydantic.BaseModel):
+        return o.dict()
 
     LOGGER.error("Unable to serialize %s", o)
     raise TypeError(repr(o) + " is not JSON serializable")

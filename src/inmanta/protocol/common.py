@@ -29,7 +29,8 @@ import jwt
 
 from tornado import web
 from urllib import parse
-from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, cast, Coroutine, TYPE_CHECKING  # noqa: F401
+from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, cast, Coroutine, TYPE_CHECKING, TypeVar, \
+    Generic  # noqa: F401
 
 from inmanta import execute, const, util
 from inmanta import config as inmanta_config
@@ -144,6 +145,17 @@ class Response(object):
     @property
     def status_code(self) -> int:
         return self._status_code
+
+
+T = TypeVar('T')
+
+
+class ReturnValue(Generic[T]):
+    """
+        An object that handlers can return to provide a response to a method call
+    """
+    def __init__(self, status_code: int, headers: Dict[str, str], body: Optional[T] = None) -> None:
+        pass
 
 
 class MethodProperties(object):

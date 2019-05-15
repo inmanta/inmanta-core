@@ -15,15 +15,20 @@
 
     Contact: code@inmanta.com
 """
+import json
 import random
 import base64
 import threading
 import os
 import time
+import uuid
+from enum import Enum
 
+import pydantic
 import pytest
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient
 from inmanta import config, protocol
+from inmanta.protocol import exceptions, json_encode
 from inmanta.protocol.rest import CallArguments
 from inmanta.util import hash_file
 from inmanta.server import config as opt
@@ -331,3 +336,68 @@ def test_create_client():
 
     with pytest.raises(AssertionError):
         protocol.Client("agent", "120")
+
+
+@pytest.mark.asyncio
+async def test_pydantic():
+    """
+        Test validating pydantic objects
+    """
+
+    class Project(pydantic.BaseModel):
+        id: uuid.UUID
+        name: str
+
+    @protocol.method(method_name="test", operation="PUT", client_types=["api"])
+    def test_method(project: Project):
+        """
+            Create a new project
+        """
+
+    id = uuid.uuid4()
+    call = CallArguments(
+        test_method.__method_properties__, {"project": {"name": "test", "id": str(id)}}, {}
+    )
+    await call.process()
+
+    project = call.call_args["project"]
+    assert project.name == "test"
+    assert project.id == id
+
+    with pytest.raises(exceptions.BadRequest):
+        call = CallArguments(
+            test_method.__method_properties__, {"project": {"name": "test", "id": "abcd"}}, {}
+        )
+        await call.process()
+
+
+def test_pydantic_json():
+    """
+        Test running pydanyic objects through the json encoder
+    """
+    class Options(str, Enum):
+        yes = "yes"
+        no = "no"
+
+    class Project(pydantic.BaseModel):
+        id: uuid.UUID
+        name: str
+        opts: Options
+
+
+    project = Project(id=uuid.uuid4(), name="test", opts="no")
+    assert project.opts == Options.no
+
+    json_string = json_encode(project)
+    data = json.loads(json_string)
+
+    assert "id" in data
+    assert "name" in data
+    assert data["id"] == str(project.id)
+    assert data["name"] == "test"
+
+    # Now create the project again
+    new = Project(**data)
+
+    assert project == new
+    assert project is not new
