@@ -1980,7 +1980,7 @@ async def test_compile_get_next(init_dataclasses_and_load_schema):
 
     # Compile 2 (later)
     requested = datetime.datetime(2019, 7, 15, 12, 30)
-    started =  datetime.datetime(2019, 7, 15, 15, 00)
+    started = datetime.datetime(2019, 7, 15, 15, 00)
     compile2 = data.Compile(environment=env.id, requested=requested, started=started)
     await compile2.insert()
 
@@ -2003,7 +2003,6 @@ async def test_compile_get_next(init_dataclasses_and_load_schema):
     env_to_run = {c.environment: c.id for c in allenvs}
     assert env_to_run[env.id] == compile2.id
     assert env_to_run[env2.id] == compile4.id
-
 
 
 @pytest.mark.asyncio
@@ -2143,9 +2142,8 @@ async def test_dbschema_get_dct_with_update_functions():
 
     # Test behavior of "versions_higher_than" parameter
     lowest_version = min(update_function_map.keys())
-    one_version_higher_than_lowest_version = lowest_version + 1
 
-    restricted_function_map = await db_schema._get_dct_with_update_functions(one_version_higher_than_lowest_version)
+    restricted_function_map = await db_schema._get_dct_with_update_functions(lowest_version)
     assert len(restricted_function_map) == len(update_function_map) - 1
     assert lowest_version not in restricted_function_map
 

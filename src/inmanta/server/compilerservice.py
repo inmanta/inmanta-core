@@ -21,21 +21,21 @@ import json
 import logging
 import os
 import subprocess
-import tempfile
 import traceback
 import uuid
 from tempfile import NamedTemporaryFile
-from typing import List, Dict, Union, Any, Optional, Coroutine
+from typing import List, Dict, Optional, cast
 import re
 from asyncio import CancelledError, Task
 
 import sys
 
 import dateutil
+import dateutil.parser
 
-from inmanta import protocol, data, config, server
+from inmanta import protocol, data, config, server, const
 from inmanta.protocol import methods, encode_token
-from inmanta.server import SLICE_DATABASE, SLICE_COMPILER, SLICE_TRANSPORT, SLICE_SERVER
+from inmanta.server import SLICE_DATABASE, SLICE_COMPILER, SLICE_TRANSPORT
 from inmanta.server.protocol import ServerSlice
 from inmanta.types import Apireturn, JsonType, Warnings
 
@@ -48,55 +48,79 @@ LOGGER = logging.getLogger(__name__)
 class CompileRun(object):
     def __init__(self, request: data.Compile, project_dir: str) -> None:
         self.request = request
-        self.stage: data.Report = None
+        self.stage: Optional[data.Report] = None
         self._project_dir = project_dir
+        # When set, used to collect tail of std out
+        self.tail_stdout: Optional[str] = None
+        self.version: Optional[int] = None
 
     async def _error(self, message: str) -> None:
+        assert self.stage is not None
         LOGGER.error(message)
         await self.stage.update_streams(err=message + "\n")
 
     async def _info(self, message: str) -> None:
+        assert self.stage is not None
         LOGGER.info(message)
         await self.stage.update_streams(out=message + "\n")
 
     async def _warning(self, message: str) -> None:
+        assert self.stage is not None
         LOGGER.warning(message)
         await self.stage.update_streams(out=message + "\n")
 
     async def _start_stage(self, name: str, command: str) -> None:
+        LOGGER.log(const.LOG_LEVEL_TRACE, "starting stage %s for %s in %s", name, self.request.id, self.request.environment)
         start = datetime.datetime.now()
         stage = data.Report(compile=self.request.id, started=start, name=name, command=command)
         await stage.insert()
         self.stage = stage
 
-    async def _end_stage(self, returncode: int) -> None:
+    async def _end_stage(self, returncode: int) -> data.Report:
+        assert self.stage is not None
+        LOGGER.log(
+            const.LOG_LEVEL_TRACE, "ending stage %s for %s in %s", self.stage.name, self.request.id, self.request.environment
+        )
         stage = self.stage
         end = datetime.datetime.now()
         await stage.update_fields(completed=end, returncode=returncode)
         self.stage = None
         return stage
 
-    async def drain_stream(self, name: str, stream: asyncio.StreamReader) -> None:
+    def _add_to_tail(self, part: str) -> None:
+        if self.tail_stdout is not None:
+            self.tail_stdout += part
+            self.tail_stdout = self.tail_stdout[-1024:]
+
+    async def drain_out(self, stream: asyncio.StreamReader) -> None:
+        assert self.stage is not None
         while not stream.at_eof():
             part = (await stream.read(1)).decode()
-            await self.stage.update_streams(**{name: part})
+            self._add_to_tail(part)
+            await self.stage.update_streams(out=part)
+
+    async def drain_err(self, stream: asyncio.StreamReader) -> None:
+        assert self.stage is not None
+        while not stream.at_eof():
+            part = (await stream.read(1)).decode()
+            await self.stage.update_streams(err=part)
 
     async def drain(self, sub_process: asyncio.subprocess.Process) -> int:
-        ret, _, _ = await asyncio.gather(
-            sub_process.wait(), self.drain_stream("out", sub_process.stdout), self.drain_stream("err", sub_process.stderr)
-        )
+        # pipe, so stream is actual, not optional
+        out = cast(asyncio.StreamReader, sub_process.stdout)
+        err = cast(asyncio.StreamReader, sub_process.stderr)
+        ret, _, _ = await asyncio.gather(sub_process.wait(), self.drain_out(out), self.drain_err(err))
         return ret
 
-    async def get_branch(self):
+    async def get_branch(self) -> Optional[str]:
         sub_process = await asyncio.create_subprocess_exec(
             "git", "branch", stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self._project_dir
         )
 
-        out, _, _ = await asyncio.gather(
-            sub_process.stdout.read_until_close(),
-            sub_process.stderr.read_until_close(),
-            sub_process.wait_for_exit(raise_error=False),
-        )
+        out, err = await sub_process.communicate()
+
+        if sub_process.returncode != 0:
+            return None
 
         o = re.search(r"\* ([^\s]+)$", out.decode(), re.MULTILINE)
         if o is not None:
@@ -105,12 +129,12 @@ class CompileRun(object):
             return None
 
     async def _run_compile_stage(self, name: str, cmd: List[str], cwd: str, env: Dict[str, str] = {}) -> data.Report:
-        start = datetime.datetime.now()
         await self._start_stage(name, " ".join(cmd))
 
         try:
             env_all = os.environ.copy()
-            env_all.update(env)
+            if env is not None:
+                env_all.update(env)
 
             sub_process = await asyncio.create_subprocess_exec(
                 cmd[0], *cmd[1:], stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env
@@ -119,7 +143,6 @@ class CompileRun(object):
             returncode = await self.drain(sub_process)
 
             return await self._end_stage(returncode)
-
         except Exception as e:
             await self._error("".join(traceback.format_exception(type(e), e, e.__traceback__)))
             return await self._end_stage(-1)
@@ -140,7 +163,7 @@ class CompileRun(object):
             if env is None:
                 await self._error("Environment %s does not exist." % environment_id)
                 await self._end_stage(-1)
-                return
+                return False
 
             inmanta_path = [sys.executable, "-m", "inmanta.app"]
 
@@ -148,29 +171,31 @@ class CompileRun(object):
                 await self._info("Creating project directory for environment %s at %s" % (environment_id, project_dir))
                 os.mkdir(project_dir)
 
-            if not env.repo_url:
+            repo_url: str = env.repo_url
+            repo_branch: str = env.repo_branch
+            if not repo_url:
                 if not os.path.exists(os.path.join(project_dir, ".git")):
                     await self._warning("Project not found and repository not set %s" % project_dir)
                 await self._end_stage(0)
             else:
                 await self._end_stage(0)
                 # checkout repo
+
                 if not os.path.exists(os.path.join(project_dir, ".git")):
-                    result = await self._run_compile_stage(
-                        "Cloning repository", ["git", "clone", env.repo_url, "."], project_dir
-                    )
+                    cmd = ["git", "clone", repo_url, "."]
+                    if repo_branch:
+                        cmd.extend(["-b", repo_branch])
+                    result = await self._run_compile_stage("Cloning repository", cmd, project_dir)
                     if result.returncode > 0:
-                        return
+                        return False
 
                 elif self.request.force_update:
-                    result = await self._run_compile_stage("Fetching changes", ["git", "fetch", env.repo_url], project_dir)
-                if env.repo_branch:
+                    result = await self._run_compile_stage("Fetching changes", ["git", "fetch", repo_url], project_dir)
+                if repo_branch:
                     branch = await self.get_branch()
-                    if branch is not None and env.repo_branch != branch:
+                    if branch is not None and repo_branch != branch:
                         result = await self._run_compile_stage(
-                            f"switching branch from {branch} to {env.repo_branch}",
-                            ["git", "checkout", env.repo_branch],
-                            project_dir,
+                            f"switching branch from {branch} to {repo_branch}", ["git", "checkout", repo_branch], project_dir
                         )
 
                 if self.request.force_update:
@@ -210,10 +235,17 @@ class CompileRun(object):
                 cmd.append("--ssl-ca-cert")
                 cmd.append(opt.server_ssl_ca_cert.get())
 
+            self.tail_stdout = ""
             result = await self._run_compile_stage(
                 "Recompiling configuration model", cmd, project_dir, env=self.request.environment_variables
             )
             success = result.returncode == 0
+            if not success:
+                LOGGER.debug("Compile %d failed", self.request.id)
+
+            match = re.search(r"Committed resources with version (\d+)", self.tail_stdout)
+            if match:
+                self.version = int(match.group(1))
         except CancelledError:
             # This compile was cancelled. Catch it here otherwise a warning will be printed in the logs because of an
             # unhandled exception in a backgrounded coroutine.
@@ -227,11 +259,13 @@ class CompileRun(object):
 
 
 class CompilerService(ServerSlice):
+
+    _env_folder: str
+
     def __init__(self) -> None:
         super(CompilerService, self).__init__(SLICE_COMPILER)
         self._recompiles: Dict[uuid.UUID, Task] = {}
         self._global_lock = asyncio.locks.Lock()
-        self._env_folder = None
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_DATABASE]
@@ -241,7 +275,7 @@ class CompilerService(ServerSlice):
 
     async def prestart(self, server: server.protocol.Server) -> None:
         await super(CompilerService, self).prestart(server)
-        state_dir = opt.state_dir.get()
+        state_dir: str = opt.state_dir.get()
         server_state_dir = ensure_directory_exist(state_dir, "server")
         self._env_folder = ensure_directory_exist(server_state_dir, "environments")
 
@@ -278,6 +312,7 @@ class CompilerService(ServerSlice):
         )
         await compile.insert()
         await self._queue(compile)
+        return None
 
     async def _queue(self, compile: data.Compile) -> None:
         async with self._global_lock:
@@ -292,7 +327,7 @@ class CompilerService(ServerSlice):
                 task = self.add_background_task(self._run(nextrun))
                 self._recompiles[environment] = task
 
-    async def _recover(self):
+    async def _recover(self) -> None:
         """Restart runs after server restart"""
         runs = await data.Compile.get_next_run_all()
         for run in runs:
@@ -311,7 +346,7 @@ class CompilerService(ServerSlice):
 
         lastrun = await data.Compile.get_last_run(compile.environment)
         if not lastrun:
-            wait = 0
+            wait: float = 0
         else:
             wait = max(0, wait_time - (now - lastrun.completed).total_seconds())
         if wait > 0:
@@ -320,14 +355,17 @@ class CompilerService(ServerSlice):
             )
         await asyncio.sleep(wait)
 
-        success = await self._get_compile_runner(compile, project_dir=os.path.join(self._env_folder, str(compile.id))).run()
+        runner = self._get_compile_runner(compile, project_dir=os.path.join(self._env_folder, str(compile.environment)))
+        success = await runner.run()
+
+        version = runner.version
 
         end = datetime.datetime.now()
-        await compile.update_fields(completed=end, success=success)
+        await compile.update_fields(completed=end, success=success, version=version)
 
         await self._dequeue(compile.environment)
 
-    def _get_compile_runner(self, compile: data.Compile, project_dir: str):
+    def _get_compile_runner(self, compile: data.Compile, project_dir: str) -> CompileRun:
         return CompileRun(compile, project_dir)
 
     @protocol.handle(methods.get_reports, env="tid")

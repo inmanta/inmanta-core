@@ -1,15 +1,23 @@
 import asyncio
 import logging
+import os
+import shutil
+import subprocess
 import uuid
 from asyncio import Semaphore
 
 import pytest
 from typing import List
 
-from inmanta import data
-from inmanta.server.compilerservice import CompilerService
+from inmanta import data, config
+from inmanta.server.compilerservice import CompilerService, CompileRun
 from inmanta.server.protocol import Server
-from utils import retry_limited, log_contains
+from inmanta.util import ensure_directory_exist
+from utils import retry_limited, log_contains, report_db_index_usage, wait_for_version
+from inmanta.server import config as server_config
+
+
+logger = logging.getLogger("inmanta.test.server.compilerservice")
 
 
 @pytest.fixture
@@ -26,11 +34,13 @@ async def compilerservice(server_config, init_dataclasses_and_load_schema):
 @pytest.mark.asyncio
 async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog):
     caplog.set_level(logging.WARNING)
+
     class HangRunner(object):
         def __init__(self):
             self.lock = Semaphore(0)
             self.started = False
             self.done = False
+            self.version = None
 
         async def run(self):
             self.started = True
@@ -63,7 +73,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     async def request_compile(env: data.Environment) -> uuid.UUID:
         u1 = uuid.uuid4()
         await cs.request_recompile(env, False, False, u1)
-        results = await data.Compile.get_by_remote_id(u1)
+        results = await data.Compile.get_by_remote_id(env.id, u1)
         assert len(results) == 1
         assert results[0].remote_id == u1
         print(u1, results[0].id)
@@ -135,6 +145,152 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
         print(i)
         await check_stage(env2, e2[2:], i)
 
+    await report_db_index_usage()
+
+
+@pytest.mark.asyncio
+async def test_compile_runner(server, tmpdir, client):
+    # create project, printing env
+    project_source_dir = os.path.join(tmpdir, "src")
+
+    project_template = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
+
+    shutil.copytree(project_template, project_source_dir)
+    subprocess.check_output(["git", "init"], cwd=project_source_dir)
+    subprocess.check_output(["git", "add", "*"], cwd=project_source_dir)
+    subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=project_source_dir)
+    subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=project_source_dir)
+    subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_source_dir)
+
+    testmarker_env = "TESTMARKER"
+    no_marker = "__no__marker__"
+    marker_print = "_INM_MM:"
+    marker_print2 = "_INM_MM2:"
+    marker_print3 = "_INM_MM3:"
+
+    def make_main(marker_print):
+        # add main.cf
+        with open(os.path.join(project_source_dir, "main.cf"), "w") as fd:
+            fd.write(
+                f"""
+    marker = std::get_env("{testmarker_env}","{no_marker}")
+    std::print("{marker_print} {{{{marker}}}}")
+
+    host = std::Host(name="test", os=std::linux)
+    std::ConfigFile(host=host, path="/etc/motd", content="1234")
+    """
+            )
+
+        subprocess.check_output(["git", "add", "main.cf"], cwd=project_source_dir)
+        subprocess.check_output(["git", "commit", "-m", "unit test 2"], cwd=project_source_dir)
+
+    make_main(marker_print)
+    subprocess.check_output("git checkout -b alt".split(), cwd=project_source_dir)
+    make_main(marker_print2)
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url=project_source_dir, repo_branch="master")
+    await env.insert()
+
+    env2 = data.Environment(name="devalt", project=project.id, repo_url=project_source_dir, repo_branch="alt")
+    await env2.insert()
+
+    async def compile_and_assert(env, export=True, meta={}, env_vars={}, update=False):
+        compile = data.Compile(
+            remote_id=uuid.uuid4(),
+            environment=env.id,
+            do_export=True,
+            metadata=meta,
+            environment_variables=env_vars,
+            force_update=update,
+        )
+        await compile.insert()
+
+        # compile with export
+        cr = CompileRun(compile, project_work_dir)
+        await cr.run()
+
+        # get and process reports
+        result = await client.get_report(compile.id)
+        assert result.code == 200
+        stages = result.result["report"]["reports"]
+        if export:
+            assert cr.version > 0
+            result = await client.get_version(env.id, cr.version)
+            assert result.code == 200
+            metadata = result.result["model"]["version_info"]["export_metadata"]
+            for k, v in meta.items():
+                assert k in metadata
+                assert v == metadata[k]
+
+        print(stages)
+
+        stage_by_name = {stage["name"]: stage for stage in stages}
+
+        return stage_by_name
+
+    # with export
+    stages = await compile_and_assert(env, True, meta={"type": "Test"})
+    assert stages["Init"]["returncode"] == 0
+    assert stages["Cloning repository"]["returncode"] == 0
+    assert stages["Recompiling configuration model"]["returncode"] == 0
+    out = stages["Recompiling configuration model"]["outstream"]
+    assert f"{marker_print} {no_marker}" in out
+    assert len(stages) == 3
+
+    # no export
+    stages = await compile_and_assert(env, False)
+    assert stages["Init"]["returncode"] == 0
+    assert stages["Recompiling configuration model"]["returncode"] == 0
+    out = stages["Recompiling configuration model"]["outstream"]
+    assert f"{marker_print} {no_marker}" in out
+    assert len(stages) == 2
+
+    # env vars
+    marker = str(uuid.uuid4())
+    stages = await compile_and_assert(env, False, env_vars={testmarker_env: marker})
+    assert stages["Init"]["returncode"] == 0
+    assert stages["Recompiling configuration model"]["returncode"] == 0
+    out = stages["Recompiling configuration model"]["outstream"]
+    assert f"{marker_print} {marker}" in out
+    assert len(stages) == 2
+
+    # switch branch
+    stages = await compile_and_assert(env2, False)
+    assert stages["Init"]["returncode"] == 0
+    assert stages["switching branch from master to alt"]["returncode"] == 0
+    assert stages["Recompiling configuration model"]["returncode"] == 0
+    out = stages["Recompiling configuration model"]["outstream"]
+    assert f"{marker_print2} {no_marker}" in out
+    assert len(stages) == 3
+
+    # update with no update
+    stages = await compile_and_assert(env2, False, update=True)
+    assert stages["Init"]["returncode"] == 0
+    assert stages["Fetching changes"]["returncode"] == 0
+    assert stages["Pulling updates"]["returncode"] == 0
+    assert stages["Updating modules"]["returncode"] == 0
+    assert stages["Recompiling configuration model"]["returncode"] == 0
+    out = stages["Recompiling configuration model"]["outstream"]
+    assert f"{marker_print2} {no_marker}" in out
+    assert len(stages) == 5
+
+    make_main(marker_print3)
+    stages = await compile_and_assert(env2, False, update=True)
+    assert stages["Init"]["returncode"] == 0
+    assert stages["Fetching changes"]["returncode"] == 0
+    assert stages["Pulling updates"]["returncode"] == 0
+    assert stages["Updating modules"]["returncode"] == 0
+    assert stages["Recompiling configuration model"]["returncode"] == 0
+    out = stages["Recompiling configuration model"]["outstream"]
+    assert f"{marker_print3} {no_marker}" in out
+    assert len(stages) == 5
+
 
 @pytest.mark.asyncio
 async def test_e2e_recompile_failure(compilerservice: CompilerService):
@@ -172,7 +328,7 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
         # stages
         init = reports["Init"]
         assert not init["errstream"]
-        assert "Creating project directory for environment" in init["outstream"]
+        assert "Project not found and repository not set" in init["outstream"]
 
         # compile
         comp = reports["Recompiling configuration model"]
@@ -187,3 +343,80 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
     assert r1 < s1 < f1
     assert r2 < s2 < f2
     assert f1 < s2
+
+
+@pytest.mark.asyncio(timeout=90)
+async def test_server_recompile(server_multi, client_multi, environment_multi):
+    """
+        Test a recompile on the server and verify recompile triggers
+    """
+    config.Config.set("server", "auto-recompile-wait", "0")
+    client = client_multi
+    server = server_multi
+    environment = environment_multi
+
+    project_dir = os.path.join(server.get_slice("server")._server_storage["environments"], str(environment))
+    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
+    print("Project at: ", project_dir)
+
+    shutil.copytree(project_source, project_dir)
+    subprocess.check_output(["git", "init"], cwd=project_dir)
+    subprocess.check_output(["git", "add", "*"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=project_dir)
+    subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_dir)
+
+    # add main.cf
+    with open(os.path.join(project_dir, "main.cf"), "w") as fd:
+        fd.write(
+            """
+        host = std::Host(name="test", os=std::linux)
+        std::ConfigFile(host=host, path="/etc/motd", content="1234")
+"""
+        )
+
+    logger.info("request a compile")
+    result = await client.notify_change(environment)
+    assert result.code == 200
+
+    logger.info("wait for 1")
+    versions = await wait_for_version(client, environment, 1)
+    assert versions["versions"][0]["total"] == 1
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
+
+    # get compile reports
+    reports = await client.get_reports(environment)
+    assert len(reports.result["reports"]) == 1
+
+    # set a parameter without requesting a recompile
+    await client.set_param(environment, id="param1", value="test", source="plugin")
+    versions = await wait_for_version(client, environment, 1)
+    assert versions["count"] == 1
+
+    logger.info("request second compile")
+    # set a new parameter and request a recompile
+    await client.set_param(environment, id="param2", value="test", source="plugin", recompile=True)
+    logger.info("wait for 2")
+    versions = await wait_for_version(client, environment, 2)
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
+    assert versions["count"] == 2
+
+    # update the parameter to the same value -> no compile
+    await client.set_param(environment, id="param2", value="test", source="plugin", recompile=True)
+    versions = await wait_for_version(client, environment, 2)
+    assert versions["count"] == 2
+
+    # update the parameter to a new value
+    await client.set_param(environment, id="param2", value="test2", source="plugin", recompile=True)
+    versions = await wait_for_version(client, environment, 3)
+    logger.info("wait for 3")
+    assert versions["count"] == 3
+
+    # clear the environment
+    state_dir = server_config.state_dir.get()
+    project_dir = os.path.join(state_dir, "server", "environments", environment)
+    assert os.path.exists(project_dir)
+
+    await client.clear_environment(environment)
+
+    assert not os.path.exists(project_dir)
