@@ -1882,7 +1882,7 @@ async def test_formrecord(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
-async def test_compile_get_reports(init_dataclasses_and_load_schema):
+async def test_reports_append(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -1900,32 +1900,110 @@ async def test_compile_get_reports(init_dataclasses_and_load_schema):
         await compile.insert()
         compiles.append(compile)
 
-    retrieved_compiles = await data.Compile.get_reports(env.id, None, None, None)
-    assert len(retrieved_compiles) == 3
-    assert retrieved_compiles[0]["id"] == compiles[1].id
-    assert retrieved_compiles[1]["id"] == compiles[0].id
-    assert retrieved_compiles[2]["id"] == compiles[2].id
 
-    limit = 1
-    retrieved_compiles = await data.Compile.get_reports(env.id, 1, None, None)
-    assert len(retrieved_compiles) == 1
-    assert retrieved_compiles[0]["id"] == compiles[1].id
+@pytest.mark.asyncio
+async def test_compile_get_reports(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
 
-    start_time = datetime.datetime(2018, 7, 13, 12, 30)
-    retrieved_compiles = await data.Compile.get_reports(env.id, None, start_time, None)
-    assert len(retrieved_compiles) == 2
-    assert retrieved_compiles[0]["id"] == compiles[1].id
-    assert retrieved_compiles[1]["id"] == compiles[0].id
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
 
-    end_time = datetime.datetime(2018, 7, 15, 12, 30)
-    retrieved_compiles = await data.Compile.get_reports(env.id, None, None, end_time)
-    assert len(retrieved_compiles) == 2
-    assert retrieved_compiles[0]["id"] == compiles[0].id
-    assert retrieved_compiles[1]["id"] == compiles[2].id
+    # Compile 1
+    started = datetime.datetime(2018, 7, 15, 12, 30)
+    completed = datetime.datetime(2018, 7, 15, 13, 00)
+    compile1 = data.Compile(environment=env.id, started=started, completed=completed)
+    await compile1.insert()
 
-    retrieved_compiles = await data.Compile.get_reports(env.id, limit, start_time, end_time)
-    assert len(retrieved_compiles) == 1
-    assert retrieved_compiles[0]["id"] == compiles[0].id
+    report1 = data.Report(started=datetime.datetime.now(), command="cmd", name="test", compile=compile1.id)
+    await report1.insert()
+
+    report2 = data.Report(started=datetime.datetime.now(), command="cmd", name="test", compile=compile1.id)
+    await report2.insert()
+
+    await report1.update_streams("aaaa")
+    await report1.update_streams("aaaa", "eeee")
+
+    report1 = await data.Report.get_by_id(report1.id)
+    assert report1.outstream == "aaaaaaaa"
+    assert report1.errstream == "eeee"
+
+
+@pytest.mark.asyncio
+async def test_compile_get_latest(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    env2 = data.Environment(name="devx", project=project.id, repo_url="", repo_branch="")
+    await env2.insert()
+
+    # Compile 1
+    started = datetime.datetime(2018, 7, 15, 12, 30)
+    completed = datetime.datetime(2018, 7, 15, 13, 00)
+    compile1 = data.Compile(environment=env.id, started=started, completed=completed)
+    await compile1.insert()
+
+    # Compile 2 (later)
+    started = datetime.datetime(2017, 7, 15, 12, 30)
+    completed = datetime.datetime(2019, 7, 15, 13, 00)
+    compile2 = data.Compile(environment=env.id, started=started, completed=completed)
+    await compile2.insert()
+
+    # Compile 3 (later and other env)
+    started = datetime.datetime(2022, 7, 15, 12, 30)
+    completed = datetime.datetime(2022, 7, 15, 13, 00)
+    compile3 = data.Compile(environment=env2.id, started=started, completed=completed)
+    await compile3.insert()
+
+    assert (await data.Compile.get_last_run(env.id)).id == compile2.id
+
+
+@pytest.mark.asyncio
+async def test_compile_get_next(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    env2 = data.Environment(name="dev2", project=project.id, repo_url="", repo_branch="")
+    await env2.insert()
+
+    # Compile 1
+    requested = datetime.datetime(2018, 7, 15, 12, 30)
+    completed = datetime.datetime(2018, 7, 15, 13, 00)
+    compile1 = data.Compile(environment=env.id, requested=requested, completed=completed)
+    await compile1.insert()
+
+    # Compile 2 (later)
+    requested = datetime.datetime(2019, 7, 15, 12, 30)
+    started =  datetime.datetime(2019, 7, 15, 15, 00)
+    compile2 = data.Compile(environment=env.id, requested=requested, started=started)
+    await compile2.insert()
+
+    # Compile 3 (later)
+    requested = datetime.datetime(2020, 7, 15, 12, 30)
+    started = datetime.datetime(2019, 7, 15, 13, 00)
+    compile3 = data.Compile(environment=env.id, requested=requested, started=started)
+    await compile3.insert()
+
+    # Compile 4 (other env)
+    compile4 = data.Compile(environment=env2.id, requested=requested, started=started)
+    await compile4.insert()
+
+    print(compile1.id, compile2.id, compile3.id)
+
+    assert (await data.Compile.get_next_run(env.id)).id == compile2.id
+
+    allenvs = await data.Compile.get_next_run_all()
+    assert len(allenvs) == 2
+    env_to_run = {c.environment: c.id for c in allenvs}
+    assert env_to_run[env.id] == compile2.id
+    assert env_to_run[env2.id] == compile4.id
+
 
 
 @pytest.mark.asyncio

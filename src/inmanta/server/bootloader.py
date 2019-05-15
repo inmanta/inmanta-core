@@ -23,7 +23,7 @@ from types import ModuleType
 
 from inmanta.const import EXTENSION_NAMESPACE, EXTENSION_MODULE
 from inmanta.server import server
-from inmanta.server.compilerservice import CompilerSerice
+from inmanta.server.compilerservice import CompilerService
 from inmanta.server.extensions import ApplicationContext, InvalidSliceNameException
 from inmanta.server.protocol import Server, ServerSlice
 from inmanta.server.agentmanager import AgentManager
@@ -71,7 +71,7 @@ class InmantaBootloader(object):
         return server.Server(agent_no_log=self.agent_no_log)
 
     def get_bootstrap_slices(self) -> List[ServerSlice]:
-        return [self.get_server_slice(), AgentManager(), DatabaseSlice(), CompilerSerice()]
+        return [self.get_server_slice(), AgentManager(), DatabaseSlice(), CompilerService()]
 
     async def start(self) -> None:
         for mypart in self.load_slices():

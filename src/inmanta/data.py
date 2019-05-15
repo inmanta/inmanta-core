@@ -38,10 +38,10 @@ import asyncpg
 from inmanta.types import JsonType
 from typing import Dict, List, Union, Set, Optional, Any, Tuple
 
-
 LOGGER = logging.getLogger(__name__)
 
 DBLIMIT = 100000
+
 
 # TODO: disconnect
 # TODO: difference between None and not set
@@ -1132,13 +1132,23 @@ class Report(BaseDocument):
 
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     started = Field(field_type=datetime.datetime, required=True)
-    completed = Field(field_type=datetime.datetime, required=True)
+    completed = Field(field_type=datetime.datetime)
     command = Field(field_type=str, required=True)
     name = Field(field_type=str, required=True)
     errstream = Field(field_type=str, default="")
     outstream = Field(field_type=str, default="")
     returncode = Field(field_type=int)
-    compile = Field(field_type=uuid.UUID)
+    compile = Field(field_type=uuid.UUID, required=True)
+
+    async def update_streams(self, out="", err=""):
+        if not out and not err:
+            return
+        await self._execute_query(
+            f"UPDATE {self.table_name()} SET outstream = outstream || $1, errstream = errstream || $2 WHERE id = $3",
+            self._get_value(out),
+            self._get_value(err),
+            self._get_value(self.id),
+        )
 
 
 class Compile(BaseDocument):
@@ -1148,13 +1158,22 @@ class Compile(BaseDocument):
         :param environment The environment this resource is defined in
         :param started Time the compile started
         :param completed Time to compile was completed
-        :param reports Per stage reports
     """
 
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    remote_id = Field(field_type=uuid.UUID)
     environment = Field(field_type=uuid.UUID, required=True)
+    requested = Field(field_type=datetime.datetime)
     started = Field(field_type=datetime.datetime)
     completed = Field(field_type=datetime.datetime)
+
+    do_export = Field(field_type=bool)
+    force_update = Field(field_type=bool)
+    metadata = Field(field_type=dict)
+    environment_variables = Field(field_type=dict)
+
+    success = Field(field_type=bool)
+    version = Field(field_type=int)
 
     @classmethod
     async def get_reports(cls, environment_id, limit=None, start=None, end=None):
@@ -1196,6 +1215,42 @@ class Compile(BaseDocument):
         dict_model["reports"] = [r.to_dict() for r in reports]
 
         return dict_model
+
+    @classmethod
+    async def get_last_run(cls, environment_id: uuid.UUID) -> "Compile":
+        results = await cls.select_query(
+            f"SELECT * FROM {cls.table_name()} where environment=$1 AND completed IS NOT NULL ORDER BY completed DESC LIMIT 1",
+            [cls._get_value(environment_id)],
+        )
+        if not results:
+            return None
+        return results[0]
+
+    @classmethod
+    async def get_next_run(cls, environment_id: uuid.UUID) -> "Compile":
+        results = await cls.select_query(
+            f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND completed IS NULL ORDER BY requested ASC LIMIT 1",
+            [cls._get_value(environment_id)],
+        )
+        if not results:
+            return None
+        return results[0]
+
+    @classmethod
+    async def get_next_run_all(cls) -> "List[Compile]":
+        results = await cls.select_query(
+            f"SELECT DISTINCT ON (environment) * FROM {cls.table_name()} WHERE completed IS NULL ORDER BY environment, "
+            f"requested ASC",
+            []
+        )
+        return results
+
+    @classmethod
+    async def get_by_remote_id(cls, remote_id: uuid.UUID) -> "Compile":
+        results = await cls.select_query(f"SELECT * FROM {cls.table_name()} WHERE remote_id=$1", [cls._get_value(remote_id)])
+        return results
+
+
 
 
 class Form(BaseDocument):
@@ -1264,7 +1319,6 @@ class LogLine(DataDocument):
 
 
 class ResourceVersionId(BaseDocument):
-
     environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     resource_version_id = Field(field_type=str, required=True, part_of_primary_key=True)
     action_id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -2412,7 +2466,6 @@ _classes = [
 
 
 class DBSchema(object):
-
     PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 
     async def ensure_db_schema(self, connection):

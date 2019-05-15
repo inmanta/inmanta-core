@@ -133,6 +133,7 @@ class Server(protocol.ServerSlice):
     """
 
     _server_storage: Dict[str, str]
+    compiler: "CompilerService"
 
     def __init__(self, agent_no_log: bool = False) -> None:
         super().__init__(name=SLICE_SERVER)
@@ -156,7 +157,7 @@ class Server(protocol.ServerSlice):
     def get_dependencies(self) -> List[str]:
         return [SLICE_SESSION_MANAGER, SLICE_DATABASE]
 
-    def get_dependened_by(self) -> List[str]:
+    def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -491,20 +492,21 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         recompile: bool,
     ) -> Apireturn:
         result = await self._update_param(env, param_id, value, source, resource_id, metadata, recompile)
+        warnings = None
         if result:
             compile_metadata = {
                 "message": "Recompile model because one or more parameters were updated",
                 "type": "param",
                 "params": [(param_id, resource_id)],
             }
-            await self._async_recompile(env, False, metadata=compile_metadata)
+            warnings = await self._async_recompile(env, False, metadata=compile_metadata)
 
         if resource_id is None:
             resource_id = ""
 
         params = await data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
 
-        return 200, {"parameter": params[0]}
+        return attach_warnings(200, {"parameter": params[0]}, warnings)
 
     @protocol.handle(methods.set_parameters, env="tid")
     async def set_parameters(self, env: data.Environment, parameters: JsonType) -> Apireturn:
@@ -526,10 +528,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 recompile = True
                 compile_metadata["params"].append((name, resource_id))
 
+        warnings = None
         if recompile:
-            await self._async_recompile(env, False, metadata=compile_metadata)
+            warnings = await self._async_recompile(env, False, metadata=compile_metadata)
 
-        return 200
+        return attach_warnings(200, None, warnings)
 
     @protocol.handle(methods.delete_param, env="tid", parameter_name="id")
     async def delete_param(self, env: data.Environment, parameter_name: str, resource_id: str) -> Apireturn:
@@ -548,9 +551,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             "type": "param",
             "params": [(param.name, param.resource_id)],
         }
-        await self._async_recompile(env, False, metadata=metadata)
+        warnings = await self._async_recompile(env, False, metadata=metadata)
 
-        return 200
+        return attach_warnings(200, None, warnings)
 
     @protocol.handle(methods.list_params, env="tid")
     async def list_param(self, env: data.Environment, query: Dict[str, str]) -> Apireturn:
@@ -660,8 +663,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             "form": form,
         }
 
-        await self._async_recompile(env, False, metadata=metadata)
-        return 200, {"record": record}
+        warnings = await self._async_recompile(env, False, metadata=metadata)
+        return attach_warnings(200, {"record": record}, warnings)
 
     @protocol.handle(methods.create_record, env="tid")
     async def create_record(self, env: data.Environment, form_type: str, form: JsonType) -> Apireturn:
@@ -690,9 +693,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             "records": [str(record.id)],
             "form": form,
         }
-        await self._async_recompile(env, False, metadata=metadata)
+        warnings = await self._async_recompile(env, False, metadata=metadata)
 
-        return 200, {"record": record}
+        return attach_warnings(200, {"record": record}, warnings)
 
     @protocol.handle(methods.delete_record, record_id="id", env="tid")
     async def delete_record(self, env: data.Environment, record_id: uuid.UUID) -> Apireturn:
@@ -707,9 +710,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             "records": [str(record.id)],
             "form": record.form,
         }
-        await self._async_recompile(env, False, metadata=metadata)
 
-        return 200
+        warnings = await self._async_recompile(env, False, metadata=metadata)
+
+        return attach_warnings(200, None, warnings)
 
     @protocol.handle(methods.upload_file, file_hash="id")
     async def upload_file(self, file_hash: str, content: str) -> Apireturn:
@@ -1912,23 +1916,27 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     async def list_settings(self, env: data.Environment) -> Apireturn:
         return 200, {"settings": env.settings, "metadata": data.Environment._settings}
 
-    async def _setting_change(self, env: data.Environment, key: str) -> None:
+    async def _setting_change(self, env: data.Environment, key: str) -> Warning:
         setting = env._settings[key]
+
+        warnings = None
         if setting.recompile:
             LOGGER.info("Environment setting %s changed. Recompiling with update = %s", key, setting.update)
             metadata = {"message": "Recompile for modified setting", "type": "setting", "setting": key}
-            await self._async_recompile(env, setting.update, metadata=metadata)
+            warnings = await self._async_recompile(env, setting.update, metadata=metadata)
 
         if setting.agent_restart:
             LOGGER.info("Environment setting %s changed. Restarting agents.", key)
             await self.agentmanager.restart_agents(env)
 
+        return warnings
+
     @protocol.handle(methods.set_setting, env="tid", key="id")
     async def set_setting(self, env: data.Environment, key: str, value: str) -> Apireturn:
         try:
             await env.set(key, value)
-            await self._setting_change(env, key)
-            return 200
+            warnings = await self._setting_change(env, key)
+            return attach_warnings(200, None, warnings)
         except KeyError:
             return 404
         except ValueError:
@@ -1946,8 +1954,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     async def delete_setting(self, env: data.Environment, key: str) -> Apireturn:
         try:
             await env.unset(key)
-            await self._setting_change(env, key)
-            return 200
+            warnings = await self._setting_change(env, key)
+            return attach_warnings(200, None, warnings)
         except KeyError:
             return 404
 
@@ -1965,15 +1973,17 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if "message" not in metadata:
             metadata["message"] = "Recompile trigger through API call"
 
-        await self._async_recompile(env, update, metadata=metadata)
+        warnings = await self._async_recompile(env, update, metadata=metadata)
 
-        return 200
+        return attach_warnings(200, None, warnings)
 
     async def _async_recompile(self, env: data.Environment, update_repo: bool, metadata: JsonType = {}) -> None:
         """
             Recompile an environment in a different thread and taking wait time into account.
         """
-        await self.compiler._async_recompile(env, update_repo, metadata)
+        await self.compiler.request_recompile(
+            env=env, force_update=update_repo, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
+        )
 
     @protocol.handle(methods.decomission_environment, env="id")
     async def decomission_environment(self, env: data.Environment, metadata: JsonType) -> Apireturn:

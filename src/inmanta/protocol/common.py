@@ -388,6 +388,8 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
 
 def attach_warnings(code: int, value: JsonType, warnings: Optional[List[str]]) -> Tuple[int, JsonType]:
     if warnings:
+        if value is None:
+            value = {}
         meta = value.setdefault("metadata", {})
         warns = meta.setdefault("warnings", [])
         warns.extend(warnings)
