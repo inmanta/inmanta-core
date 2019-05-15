@@ -24,7 +24,7 @@ sphinx-tabs==1.1.10
 sphinx==1.8.5
 texttable==1.6.1
 tornado==6.0.2
-tox==3.10.0
+tox==3.11.0
 tox-venv==0.4.0
 typing==3.6.6
 asyncpg==0.18.3
