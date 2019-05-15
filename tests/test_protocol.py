@@ -355,9 +355,7 @@ async def test_pydantic():
         """
 
     id = uuid.uuid4()
-    call = CallArguments(
-        test_method.__method_properties__, {"project": {"name": "test", "id": str(id)}}, {}
-    )
+    call = CallArguments(test_method.__method_properties__, {"project": {"name": "test", "id": str(id)}}, {})
     await call.process()
 
     project = call.call_args["project"]
@@ -365,9 +363,7 @@ async def test_pydantic():
     assert project.id == id
 
     with pytest.raises(exceptions.BadRequest):
-        call = CallArguments(
-            test_method.__method_properties__, {"project": {"name": "test", "id": "abcd"}}, {}
-        )
+        call = CallArguments(test_method.__method_properties__, {"project": {"name": "test", "id": "abcd"}}, {})
         await call.process()
 
 
@@ -375,6 +371,7 @@ def test_pydantic_json():
     """
         Test running pydanyic objects through the json encoder
     """
+
     class Options(str, Enum):
         yes = "yes"
         no = "no"
@@ -383,7 +380,6 @@ def test_pydantic_json():
         id: uuid.UUID
         name: str
         opts: Options
-
 
     project = Project(id=uuid.uuid4(), name="test", opts="no")
     assert project.opts == Options.no
