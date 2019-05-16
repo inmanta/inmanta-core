@@ -183,11 +183,13 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     for i in range(2):
         await check_compile_in_sequence(env2, e2, i)
 
+    assert not collector.seen
+    print(collector.preseen)
+    await retry_limited(lambda: len(collector.preseen) == 2, 1)
+
     # test server restart
     await cs.prestop()
     await cs.stop()
-    assert not collector.seen
-    assert len(collector.preseen) == 2
 
     # in the log, find cancel of compile(hangs) and handler(hangs)
     LogSequence(caplog, allow_errors=False).contains("inmanta.util", logging.WARNING, "was cancelled").contains(
