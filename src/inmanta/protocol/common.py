@@ -170,12 +170,11 @@ class ReturnValue(Generic[T]):
     """
 
     def __init__(
-        self, status_code: int = 200, headers: Dict[str, str] = {}, response: Optional[T] = None, data_wrap: bool = True
+        self, status_code: int = 200, headers: Dict[str, str] = {}, response: Optional[T] = None
     ) -> None:
         self.status_code = status_code
         self.headers = headers
         self._response = response
-        self._data_wrap = data_wrap
 
     @property
     def body(self) -> Optional[JsonType]:
@@ -185,9 +184,6 @@ class ReturnValue(Generic[T]):
             return None
 
         response = self._response.dict()
-
-        if self._data_wrap:
-            return {"data": response}
         return response
 
     def __repr__(self) -> str:

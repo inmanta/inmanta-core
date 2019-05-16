@@ -33,7 +33,7 @@ class handle(object):  # noqa: N801
         :param kwargs: Map arguments in the message from one name to an other
     """
 
-    def __init__(self, method: Callable[..., Any], **kwargs: str) -> None:
+    def __init__(self, method: Callable[..., Apireturn], **kwargs: str) -> None:
         self.method = method
         self.mapping: Dict[str, str] = kwargs
 

@@ -324,37 +324,7 @@ class RESTBase(util.TaskHandler):
             )
 
             result = await config.handler(**arguments.call_args)
-
-            if result is None:
-                raise exceptions.BadRequest(
-                    "Handlers for method calls should at least return a status code or ReturnValue instance. %s on %s"
-                    % (config.method_name, config.endpoint)
-                )
-
-            reply = None
-            if isinstance(result, ReturnValue):
-                code = result.status_code
-                reply = result.body
-
-            elif isinstance(result, tuple):
-                if len(result) == 2:
-                    code, reply = result
-                else:
-                    raise exceptions.BadRequest("Handlers for method call can only return a status code and a reply")
-
-            else:
-                code = result
-
-            if reply is not None:
-                if config.properties.reply:
-                    LOGGER.debug("%s returned %d: %s", config.method_name, code, common.shorten(str(reply), 70))
-                    return common.Response(body=reply, headers=headers, status_code=code)
-
-                else:
-                    LOGGER.warning("Method %s returned a result although it is has not reply!")
-
-            return common.Response(headers=headers, status_code=code)
-
+            return await self.process_return(config, arguments, headers, result)
         except exceptions.BaseHttpException:
             LOGGER.exception("")
             raise
@@ -362,3 +332,45 @@ class RESTBase(util.TaskHandler):
         except Exception as e:
             LOGGER.exception("An exception occured during the request.")
             raise exceptions.ServerError(str(e.args))
+
+    async def process_return(
+        self, config: common.UrlMethod, arguments: CallArguments, headers: Dict[str, str], result: JsonType
+    ) -> common.Response:
+        """ A handler can return ApiReturn, so lets handle all possible return types and convert it to a Response
+
+            Apireturn = Union[int, Tuple[int, Optional[JsonType]], "ReturnValue", "BaseModel"]
+        """
+        if result is None:
+            raise exceptions.BadRequest(
+                "Handlers for method calls should at least return a status code or ReturnValue instance. %s on %s"
+                % (config.method_name, config.endpoint)
+            )
+
+        elif isinstance(result, ReturnValue):
+            code = result.status_code
+            body = result.body
+            headers.update(result.headers)
+
+        elif isinstance(result, BaseModel):
+            code = 200
+            body = result.dict()
+
+        elif isinstance(result, tuple):
+            if len(result) == 2:
+                code, body = result
+            else:
+                raise exceptions.BadRequest("Handlers for method call can only return a status code and a reply")
+
+        elif isinstance(result, int):
+            code = result
+            body = None
+
+        if body is not None:
+            if config.properties.reply:
+                LOGGER.debug("%s returned %d: %s", config.method_name, code, common.shorten(str(body), 70))
+                return common.Response(body=body, headers=headers, status_code=code)
+
+            else:
+                LOGGER.warning("Method %s returned a result although it is has not reply!")
+
+        return common.Response(headers=headers, status_code=code)

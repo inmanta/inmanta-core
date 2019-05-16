@@ -455,10 +455,8 @@ async def test_return_value(unused_tcp_port, postgres_db, database_name):
     result = await client.test_method({"name": "test", "id": str(uuid.uuid4())})
     assert result.code == 200
 
-    assert "data" in result.result
-    data = result.result["data"]
-    assert "id" in data
-    assert "name" in data
+    assert "id" in result.result
+    assert "name" in result.result
 
     await server.stop()
     await rs.stop()
@@ -497,10 +495,8 @@ async def test_return_model(unused_tcp_port, postgres_db, database_name):
     result = await client.test_method({"name": "test", "id": str(uuid.uuid4())})
     assert result.code == 200
 
-    assert "data" in result.result
-    data = result.result["data"]
-    assert "id" in data
-    assert "name" in data
+    assert "id" in result.result
+    assert "name" in result.result
 
     await server.stop()
     await rs.stop()
