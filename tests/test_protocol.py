@@ -24,16 +24,20 @@ import time
 import uuid
 from enum import Enum
 
-import pydantic
 import pytest
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient
 from inmanta import config, protocol
+from inmanta.data.model import BaseModel
 from inmanta.protocol import exceptions, json_encode
+from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.rest import CallArguments
+from inmanta.server.protocol import ServerSlice, Server
 from inmanta.util import hash_file
 from inmanta.server import config as opt
 from tornado import gen, web
 import tornado
+
+from utils import configure
 
 
 def make_random_file(size=0):
@@ -344,7 +348,7 @@ async def test_pydantic():
         Test validating pydantic objects
     """
 
-    class Project(pydantic.BaseModel):
+    class Project(BaseModel):
         id: uuid.UUID
         name: str
 
@@ -376,7 +380,7 @@ def test_pydantic_json():
         yes = "yes"
         no = "no"
 
-    class Project(pydantic.BaseModel):
+    class Project(BaseModel):
         id: uuid.UUID
         name: str
         opts: Options
@@ -397,3 +401,64 @@ def test_pydantic_json():
 
     assert project == new
     assert project is not new
+
+
+@pytest.mark.asyncio
+async def test_invalid_handler():
+    """
+        Test the use and validation of methods that use common.ReturnValue
+    """
+    with pytest.raises(ValueError):
+
+        class ProjectServer(ServerSlice):
+            @protocol.method(method_name="test", operation="POST", client_types=["api"])
+            def test_method(self):
+                """
+                    Create a new project
+                """
+
+            @protocol.handle(test_method)
+            def test_method(self):
+                return
+
+
+@pytest.mark.asyncio
+async def test_return_value(unused_tcp_port, postgres_db, database_name):
+    """
+        Test the use and validation of methods that use common.ReturnValue
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        id: uuid.UUID
+        name: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.method(method_name="test", operation="POST", client_types=["api"])
+        def test_method(project: Project) -> ReturnValue[Project]:
+            """
+                Create a new project
+            """
+
+        @protocol.handle(test_method)
+        async def test_method(self, project: Project) -> ReturnValue[Project]:
+            new_project = project.copy()
+
+            return ReturnValue(response=new_project)
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+    result = await client.test_method({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 200
+
+    assert "data" in result.result
+    data = result.result["data"]
+    assert "id" in data
+    assert "name" in data
+
+    await server.stop()
+    await rs.stop()

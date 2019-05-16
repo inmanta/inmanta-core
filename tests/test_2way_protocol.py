@@ -24,7 +24,7 @@ from pytest import fixture
 from inmanta import data
 import pytest
 from tornado.gen import sleep
-from utils import retry_limited
+from utils import retry_limited, configure
 from inmanta.server.protocol import Server, SessionListener, ServerSlice
 from inmanta.server import SLICE_SESSION_MANAGER
 from inmanta.protocol.methods import ENV_OPTS
@@ -134,24 +134,6 @@ async def test_2way_protocol(unused_tcp_port, no_tid_check, postgres_db, databas
 
     await rs.stop()
     await agent.stop()
-
-
-def configure(unused_tcp_port, database_name, database_port):
-    from inmanta.config import Config
-
-    import inmanta.agent.config  # noqa: F401
-    import inmanta.server.config  # noqa: F401
-
-    free_port = str(unused_tcp_port)
-    Config.load_config()
-    Config.set("server_rest_transport", "port", free_port)
-    Config.set("agent_rest_transport", "port", free_port)
-    Config.set("compiler_rest_transport", "port", free_port)
-    Config.set("client_rest_transport", "port", free_port)
-    Config.set("cmdline_rest_transport", "port", free_port)
-    Config.set("database", "name", database_name)
-    Config.set("database", "host", "localhost")
-    Config.set("database", "port", str(database_port))
 
 
 async def check_sessions(sessions):

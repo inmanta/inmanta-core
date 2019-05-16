@@ -15,11 +15,25 @@
 
     Contact: code@inmanta.com
 """
-# This file defines named type definition for the Inmanta code base
-from typing import Any, Tuple, Dict, Union, Optional
+from enum import Enum
 
 from inmanta.data.model import BaseModel
-from inmanta.protocol.common import ReturnValue
 
-JsonType = Dict[str, Any]
-Apireturn = Union[int, Tuple[int, Optional[JsonType]], ReturnValue, BaseModel]
+
+def test_model_inheritance():
+    """ Test if config classes inheritance
+    """
+
+    class Choices(str, Enum):
+        yes = "yes"
+        no = "no"
+
+    class Project(BaseModel):
+        name: str
+        opts: Choices
+
+    project = Project(name="test", opts="no")
+    ser = project.dict()
+
+    assert ser["opts"] == "no"
+    assert not isinstance(ser["opts"], Enum)

@@ -15,11 +15,16 @@
 
     Contact: code@inmanta.com
 """
-# This file defines named type definition for the Inmanta code base
-from typing import Any, Tuple, Dict, Union, Optional
 
-from inmanta.data.model import BaseModel
-from inmanta.protocol.common import ReturnValue
+import pydantic
 
-JsonType = Dict[str, Any]
-Apireturn = Union[int, Tuple[int, Optional[JsonType]], ReturnValue, BaseModel]
+
+class BaseModel(pydantic.BaseModel):
+    """
+        Base class for all data objects in Inmanta
+    """
+
+    class Config:
+        # Populate models with the value property of enums, rather than the raw enum.
+        # This is useful to serialise model.dict() later
+        use_enum_values = True

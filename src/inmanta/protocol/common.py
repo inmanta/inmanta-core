@@ -29,12 +29,26 @@ import jwt
 
 from tornado import web
 from urllib import parse
-from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, cast, Coroutine, TYPE_CHECKING, TypeVar, \
-    Generic  # noqa: F401
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Union,
+    Tuple,
+    Set,
+    Callable,
+    cast,
+    Coroutine,
+    TYPE_CHECKING,
+    TypeVar,
+    Generic,
+)  # noqa: F401
 
 from inmanta import execute, const, util
 from inmanta import config as inmanta_config
-from inmanta.types import JsonType
+from inmanta.data.model import BaseModel
+from inmanta.types import JsonType, Apireturn
 from . import exceptions
 
 if TYPE_CHECKING:
@@ -71,7 +85,7 @@ class Request(object):
         A protocol request
     """
 
-    def __init__(self, url: str, method: str, headers: Dict[str, str], body: Dict[str, Any]) -> None:
+    def __init__(self, url: str, method: str, headers: Dict[str, str], body: Optional[JsonType]) -> None:
         self._url = url
         self._method = method
         self._headers = headers
@@ -79,7 +93,7 @@ class Request(object):
         self._reply_id: Optional[uuid.UUID] = None
 
     @property
-    def body(self) -> Dict[str, Any]:
+    def body(self) -> Optional[JsonType]:
         return self._body
 
     @property
@@ -102,15 +116,15 @@ class Request(object):
 
     reply_id = property(get_reply_id, set_reply_id)
 
-    def to_dict(self) -> Dict[str, Any]:
-        return_dict: Dict[str, Any] = {"url": self._url, "headers": self._headers, "body": self._body, "method": self._method}
+    def to_dict(self) -> JsonType:
+        return_dict: JsonType = {"url": self._url, "headers": self._headers, "body": self._body, "method": self._method}
         if self._reply_id is not None:
             return_dict["reply_id"] = self._reply_id
 
         return return_dict
 
     @classmethod
-    def from_dict(cls, value: Dict[str, Any]) -> "Request":
+    def from_dict(cls, value: JsonType) -> "Request":
         reply_id: Optional[str] = None
         if "reply_id" in value:
             reply_id = cast(str, value["reply_id"])
@@ -129,13 +143,13 @@ class Response(object):
         A response object of a call
     """
 
-    def __init__(self, status_code: int, headers: Dict[str, str], body: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, status_code: int, headers: Dict[str, str], body: Optional[JsonType] = None) -> None:
         self._status_code = status_code
         self._headers = headers
         self._body = body
 
     @property
-    def body(self) -> Optional[Dict[str, Any]]:
+    def body(self) -> Optional[JsonType]:
         return self._body
 
     @property
@@ -147,15 +161,40 @@ class Response(object):
         return self._status_code
 
 
-T = TypeVar('T')
+T = TypeVar("T", bound=BaseModel)
 
 
 class ReturnValue(Generic[T]):
     """
-        An object that handlers can return to provide a response to a method call
+        An object that handlers can return to provide a response to a method call.
     """
-    def __init__(self, status_code: int, headers: Dict[str, str], body: Optional[T] = None) -> None:
-        pass
+
+    def __init__(
+        self, status_code: int = 200, headers: Dict[str, str] = {}, response: Optional[T] = None, data_wrap: bool = True
+    ) -> None:
+        self.status_code = status_code
+        self.headers = headers
+        self._response = response
+        self._data_wrap = data_wrap
+
+    @property
+    def body(self) -> Optional[JsonType]:
+        """ Get the response body
+        """
+        if self._response is None:
+            return None
+
+        response = self._response.dict()
+
+        if self._data_wrap:
+            return {"data": response}
+        return response
+
+    def __repr__(self) -> str:
+        return f"ReturnValue<code={self.status_code} headers=<{self.headers}> response=<{self._response}>>"
+
+    def __str__(self) -> str:
+        return repr(self)
 
 
 class MethodProperties(object):
@@ -167,7 +206,7 @@ class MethodProperties(object):
 
     def __init__(
         self,
-        function: Callable[..., Dict[str, Any]],
+        function: Callable[..., JsonType],
         method_name: str,
         index: bool,
         id: bool,
@@ -359,13 +398,7 @@ class UrlMethod(object):
         :param method_name: The name of the method to call on the endpoint
     """
 
-    def __init__(
-        self,
-        properties: MethodProperties,
-        slice: "CallTarget",
-        handler: Callable[..., Dict[int, Dict[str, Any]]],
-        method_name: str,
-    ):
+    def __init__(self, properties: MethodProperties, slice: "CallTarget", handler: Callable[..., Apireturn], method_name: str):
         self._properties = properties
         self._handler = handler
         self._slice = slice
@@ -376,7 +409,7 @@ class UrlMethod(object):
         return self._properties
 
     @property
-    def handler(self) -> Callable[..., Dict[int, Dict[str, Any]]]:
+    def handler(self) -> Callable[..., Apireturn]:
         return self._handler
 
     @property
@@ -499,12 +532,12 @@ class Result(object):
         A result of a method call
     """
 
-    def __init__(self, code: int = 0, result: Dict[str, Any] = None):
+    def __init__(self, code: int = 0, result: Optional[JsonType] = None) -> None:
         self._result = result
         self.code = code
-        self._callback = None
+        self._callback: Optional[Callable[["Result"], None]] = None
 
-    def get_result(self) -> Dict[str, Any]:
+    def get_result(self) -> Optional[JsonType]:
         """
             Only when the result is marked as available the result can be returned
         """
@@ -512,7 +545,7 @@ class Result(object):
             return self._result
         raise Exception("The result is not yet available")
 
-    def set_result(self, value):
+    def set_result(self, value: Optional[JsonType]) -> None:
         if not self.available():
             self._result = value
             if self._callback:
@@ -532,7 +565,7 @@ class Result(object):
 
     result = property(get_result, set_result)
 
-    def callback(self, fnc):
+    def callback(self, fnc: Callable[["Result"], None]) -> None:
         """
             Set a callback function that is to be called when the result is ready.
         """

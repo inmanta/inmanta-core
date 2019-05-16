@@ -28,7 +28,9 @@ from tornado import escape
 
 from inmanta import config as inmanta_config
 from inmanta import const, util
+from inmanta.data.model import BaseModel
 from inmanta.protocol import common, exceptions
+from inmanta.protocol.common import ReturnValue
 from inmanta.types import JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -155,7 +157,7 @@ class CallArguments(object):
             return value
 
         try:
-            if issubclass(arg_type, pydantic.main.BaseModel):
+            if issubclass(arg_type, BaseModel):
                 return arg_type(**value)
 
             if arg_type == datetime:
@@ -325,12 +327,16 @@ class RESTBase(util.TaskHandler):
 
             if result is None:
                 raise exceptions.BadRequest(
-                    "Handlers for method calls should at least return a status code. %s on %s"
+                    "Handlers for method calls should at least return a status code or ReturnValue instance. %s on %s"
                     % (config.method_name, config.endpoint)
                 )
 
             reply = None
-            if isinstance(result, tuple):
+            if isinstance(result, ReturnValue):
+                code = result.status_code
+                reply = result.body
+
+            elif isinstance(result, tuple):
                 if len(result) == 2:
                     code, reply = result
                 else:
