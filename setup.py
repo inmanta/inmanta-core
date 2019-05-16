@@ -17,6 +17,7 @@ requires = [
     "jinja2",
     "pyformance",
     "pymongo",
+    "pydantic",
 ]
 
 # Package a dummy extensions so that the namespace package for extensions is not empty
