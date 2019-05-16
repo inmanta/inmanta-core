@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import abc
 import asyncio
 import datetime
 import json
@@ -43,6 +44,20 @@ from inmanta.server import config as opt
 from inmanta.util import ensure_directory_exist
 
 LOGGER = logging.getLogger(__name__)
+
+
+class CompileStateListener(object):
+    @abc.abstractmethod
+    async def compile_done(self, compile: data.Compile):
+        """Receive notification of all completed compiles
+
+        1- Notifications are delivered at least once (retry until all listeners have returned or raise an exception other
+        than CancelledError)
+        2- Notification are delivered out-of-band (i.e. the next compile can already start, multiple notifications can be in
+        flight at any given time, out-of-order delivery is possible but highly unlikely)
+        3- Notification are cancelled upon shutdown
+        """
+        pass
 
 
 class CompileRun(object):
@@ -266,6 +281,10 @@ class CompilerService(ServerSlice):
         super(CompilerService, self).__init__(SLICE_COMPILER)
         self._recompiles: Dict[uuid.UUID, Task] = {}
         self._global_lock = asyncio.locks.Lock()
+        self.listeners: List[CompileStateListener] = []
+
+    def add_listener(self, listener: CompileStateListener) -> None:
+        self.listeners.append(listener)
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_DATABASE]
@@ -327,11 +346,28 @@ class CompilerService(ServerSlice):
                 task = self.add_background_task(self._run(nextrun))
                 self._recompiles[environment] = task
 
+    async def _notify_listeners(self, compile: data.Compile) -> None:
+        async def notify(listener: CompileStateListener) -> None:
+            try:
+                await listener.compile_done(compile)
+            except CancelledError:
+                """ Propagate Cancel """
+                raise
+            except Exception:
+                logging.exception("CompileStateListener failed")
+
+        await asyncio.gather(*[notify(listener) for listener in self.listeners])
+        await compile.update_fields(handled=True)
+        LOGGER.log(const.LOG_LEVEL_TRACE, "listeners notified for %s", compile.id)
+
     async def _recover(self) -> None:
         """Restart runs after server restart"""
         runs = await data.Compile.get_next_run_all()
         for run in runs:
             await self._queue(run)
+        unhandled = await data.Compile.get_unhandled_compiles()
+        for u in unhandled:
+            self.add_background_task(self._notify_listeners(u))
 
     @protocol.handle(methods.is_compiling, environment_id="id")
     async def is_compiling(self, environment_id: uuid.UUID) -> Apireturn:
@@ -362,7 +398,7 @@ class CompilerService(ServerSlice):
 
         end = datetime.datetime.now()
         await compile.update_fields(completed=end, success=success, version=version)
-
+        self.add_background_task(self._notify_listeners(compile))
         await self._dequeue(compile.environment)
 
     def _get_compile_runner(self, compile: data.Compile, project_dir: str) -> CompileRun:

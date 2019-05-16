@@ -10,10 +10,10 @@ import pytest
 from typing import List
 
 from inmanta import data, config
-from inmanta.server.compilerservice import CompilerService, CompileRun
+from inmanta.server.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.server.protocol import Server
 from inmanta.util import ensure_directory_exist
-from utils import retry_limited, log_contains, report_db_index_usage, wait_for_version
+from utils import retry_limited, log_contains, report_db_index_usage, wait_for_version, LogSequence
 from inmanta.server import config as server_config
 
 
@@ -33,9 +33,43 @@ async def compilerservice(server_config, init_dataclasses_and_load_schema):
 
 @pytest.mark.asyncio
 async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog):
-    caplog.set_level(logging.WARNING)
+    """Test the scheduler part in isolation, mock out compile runner and listen to state updates"""
+
+    class Collector(CompileStateListener):
+        """
+            Collect all state updates, optionally hang the processing of listeners
+        """
+
+        def __init__(self):
+            self.seen = []
+            self.preseen = []
+            self.lock = Semaphore(1)
+
+        def reset(self):
+            self.seen = []
+            self.preseen = []
+
+        async def compile_done(self, compile: data.Compile):
+            self.preseen.append(compile)
+            print("Got compile done for ", compile.remote_id)
+            async with self.lock:
+                self.seen.append(compile)
+
+        async def hang(self):
+            await self.lock.acquire()
+
+        def release(self):
+            self.lock.release()
+
+        def verify(self, envs: uuid.UUID):
+            assert sorted([x.remote_id for x in self.seen]) == sorted(envs)
+            self.reset()
 
     class HangRunner(object):
+        """
+            compile runner mock, hang until released
+        """
+
         def __init__(self):
             self.lock = Semaphore(0)
             self.started = False
@@ -52,12 +86,16 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
             self.lock.release()
 
     class HookedCompilerService(CompilerService):
+        """
+            hook in the hangrunner
+        """
+
         def __init__(self):
             super(HookedCompilerService, self).__init__()
             self.locks = {}
 
         def _get_compile_runner(self, compile: data.Compile, project_dir: str):
-            print("X: ", compile.remote_id, compile.id)
+            print("Get Run: ", compile.remote_id, compile.id)
             runner = HangRunner()
             self.locks[compile.remote_id] = runner
             return runner
@@ -65,35 +103,43 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
         def get_runner(self, remote_id: uuid.UUID) -> HangRunner:
             return self.locks.get(remote_id)
 
+    # manual setup of server
     server = Server()
     cs = HookedCompilerService()
     await cs.prestart(server)
     await cs.start()
+    collector = Collector()
+    cs.add_listener(collector)
 
     async def request_compile(env: data.Environment) -> uuid.UUID:
+        """Request compile for given env, return remote_id"""
         u1 = uuid.uuid4()
         await cs.request_recompile(env, False, False, u1)
         results = await data.Compile.get_by_remote_id(env.id, u1)
         assert len(results) == 1
         assert results[0].remote_id == u1
-        print(u1, results[0].id)
+        print("request: ", u1, results[0].id)
         return u1
 
+    # setup projects in the database
     project = data.Project(name="test")
     await project.insert()
-
     env1 = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env1.insert()
-
     env2 = data.Environment(name="dev2", project=project.id, repo_url="", repo_branch="")
     await env2.insert()
 
-    print()
+    # setup series of compiles for two envs
+    # e1 is for a plain run
+    # e2 is for server restart
     e1 = [await request_compile(env1) for i in range(3)]
     e2 = [await request_compile(env2) for i in range(4)]
-    print(e1)
+    print("env 1:", e1)
 
-    async def check_stage(env: data.Environment, remote_ids: List[uuid.UUID], idx: int):
+    async def check_compile_in_sequence(env: data.Environment, remote_ids: List[uuid.UUID], idx: int):
+        """
+        Check integrity of a compile sequence and progress the hangrunner.
+        """
         before = remote_ids[:idx]
 
         for rid in before:
@@ -124,26 +170,46 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
             await retry_limited(isdone, 1)
 
+    # run through env1, entire sequence
     for i in range(4):
-        await check_stage(env1, e1, i)
+        await check_compile_in_sequence(env1, e1, i)
+    collector.verify(e1)
+    print("env1 done")
 
+    print("env2 ", e2)
+    # make event collector hang
+    await collector.hang()
+    # progress two steps into env2
     for i in range(2):
-        print(i)
-        await check_stage(env2, e2, i)
+        await check_compile_in_sequence(env2, e2, i)
 
     # test server restart
     await cs.prestop()
     await cs.stop()
+    assert not collector.seen
+    assert len(collector.preseen) == 2
 
-    log_contains(caplog, "inmanta.util", logging.WARNING, "was cancelled")
+    # in the log, find cancel of compile(hangs) and handler(hangs)
+    LogSequence(caplog, allow_errors=False).contains("inmanta.util", logging.WARNING, "was cancelled").contains(
+        "inmanta.util", logging.WARNING, "was cancelled"
+    ).no_more_errors()
 
+    print("restarting")
+
+    # restart new server
     cs = HookedCompilerService()
     await cs.prestart(server)
     await cs.start()
+    collector = Collector()
+    cs.add_listener(collector)
 
+    # complete the sequence, expect re-run of third compile
     for i in range(3):
         print(i)
-        await check_stage(env2, e2[2:], i)
+        await check_compile_in_sequence(env2, e2[2:], i)
+
+    # all are re-run, entire sequence present
+    collector.verify(e2)
 
     await report_db_index_usage()
 

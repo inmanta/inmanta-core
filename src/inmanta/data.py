@@ -36,7 +36,7 @@ from inmanta import const, util
 import asyncpg
 
 from inmanta.types import JsonType
-from typing import Dict, List, Union, Set, Optional, Any, Tuple
+from typing import Dict, List, Union, Set, Optional, Any, Tuple, no_type_check
 
 LOGGER = logging.getLogger(__name__)
 
@@ -304,7 +304,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         return (column_names, values)
 
-    async def insert(self, connection=None):
+    async def insert(self, connection=None) -> None:
         """
             Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
@@ -346,7 +346,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return await con.execute(query, *values)
 
     @classmethod
-    async def insert_many(cls, documents):
+    async def insert_many(cls, documents) -> None:
         """
             Insert multiple objects at once
         """
@@ -373,7 +373,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 result[name] = default_value
         return result
 
-    async def update(self, **kwargs):
+    async def update(self, **kwargs) -> None:
         """
             Update this document in the database. It will update the fields in this object and send a full update to mongodb.
             Use update_fields to only update specific fields.
@@ -400,7 +400,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         set_statement = ",".join(parts_of_set_statement)
         return (set_statement, values)
 
-    async def update_fields(self, **kwargs):
+    async def update_fields(self, **kwargs) -> None:
         """
             Update the given fields of this document in the database. It will update the fields in this object and do a specific
             $set in the mongodb on this document.
@@ -1155,9 +1155,17 @@ class Compile(BaseDocument):
     """
         A run of the compiler
 
-        :param environment The environment this resource is defined in
-        :param started Time the compile started
-        :param completed Time to compile was completed
+        :param environment: The environment this resource is defined in
+        :param requested: Time the compile was requested
+        :param started: Time the compile started
+        :param completed: Time to compile was completed
+        :param do_export: should this compiler perform an export
+        :param force_update: should this compile definitely update
+        :param metadata: exporter metadata to be passed to the compiler
+        :param environment_variable: environment variables to be passed to the compiler
+        :param succes: was the compile successful
+        :param handled: were all registered handlers executed?
+        :param version: version exported by this compile
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1173,6 +1181,7 @@ class Compile(BaseDocument):
     environment_variables: dict = Field(field_type=dict)
 
     success: bool = Field(field_type=bool)
+    handled: bool = Field(field_type=bool, default=False)
     version: int = Field(field_type=int)
 
     @classmethod
@@ -1242,6 +1251,13 @@ class Compile(BaseDocument):
             f"SELECT DISTINCT ON (environment) * FROM {cls.table_name()} WHERE completed IS NULL ORDER BY environment, "
             f"requested ASC",
             [],
+        )
+        return results
+
+    @classmethod
+    async def get_unhandled_compiles(cls) -> "List[Compile]":
+        results = await cls.select_query(
+            f"SELECT * FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL ORDER BY requested ASC", []
         )
         return results
 
@@ -1939,25 +1955,25 @@ class Resource(BaseDocument):
 
         return should_purge
 
-    async def insert(self, connection=None):
+    async def insert(self, connection=None) -> None:
         self.make_hash()
         await super(Resource, self).insert(connection=connection)
 
     @classmethod
-    async def insert_many(cls, documents):
+    async def insert_many(cls, documents) -> None:
         for doc in documents:
             doc.make_hash()
         await super(Resource, cls).insert_many(documents)
 
-    async def update(self, **kwargs):
+    async def update(self, **kwargs) -> None:
         self.make_hash()
         await super(Resource, self).update(**kwargs)
 
-    async def update_fields(self, **kwargs):
+    async def update_fields(self, **kwargs) -> None:
         self.make_hash()
         await super(Resource, self).update_fields(**kwargs)
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         self.make_hash()
         dct = super(Resource, self).to_dict()
         dct["id"] = dct["resource_version_id"]

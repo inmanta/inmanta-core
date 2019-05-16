@@ -1943,13 +1943,13 @@ async def test_compile_get_latest(init_dataclasses_and_load_schema):
     # Compile 1
     started = datetime.datetime(2018, 7, 15, 12, 30)
     completed = datetime.datetime(2018, 7, 15, 13, 00)
-    compile1 = data.Compile(environment=env.id, started=started, completed=completed)
+    compile1 = data.Compile(environment=env.id, started=started, completed=completed, handled=True)
     await compile1.insert()
 
     # Compile 2 (later)
     started = datetime.datetime(2017, 7, 15, 12, 30)
     completed = datetime.datetime(2019, 7, 15, 13, 00)
-    compile2 = data.Compile(environment=env.id, started=started, completed=completed)
+    compile2 = data.Compile(environment=env.id, started=started, completed=completed, handled=False)
     await compile2.insert()
 
     # Compile 3 (later and other env)
@@ -1958,7 +1958,14 @@ async def test_compile_get_latest(init_dataclasses_and_load_schema):
     compile3 = data.Compile(environment=env2.id, started=started, completed=completed)
     await compile3.insert()
 
+    # Compile 3 (later and not complete)
+    started = datetime.datetime(2024, 7, 15, 12, 30)
+    completed = datetime.datetime(2024, 7, 15, 13, 00)
+    compile4 = data.Compile(environment=env2.id, started=started)
+    await compile4.insert()
+
     assert (await data.Compile.get_last_run(env.id)).id == compile2.id
+    assert sorted([x.id for x in await data.Compile.get_unhandled_compiles()]) == sorted([compile2.id, compile3.id])
 
 
 @pytest.mark.asyncio

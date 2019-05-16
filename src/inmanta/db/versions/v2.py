@@ -8,7 +8,8 @@ ALTER TABLE public.compile
     ADD COLUMN force_update boolean,
     ADD COLUMN success boolean,
     ADD COLUMN version integer,
-    ADD COLUMN remote_id uuid;
+    ADD COLUMN remote_id uuid,
+    ADD COLUMN handled boolean;
 
 ALTER TABLE public.report ALTER COLUMN completed DROP NOT NULL;
 
