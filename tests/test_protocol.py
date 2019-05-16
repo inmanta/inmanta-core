@@ -462,3 +462,45 @@ async def test_return_value(unused_tcp_port, postgres_db, database_name):
 
     await server.stop()
     await rs.stop()
+
+
+@pytest.mark.asyncio
+async def test_return_model(unused_tcp_port, postgres_db, database_name):
+    """
+        Test the use and validation of methods that use common.ReturnValue
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        id: uuid.UUID
+        name: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.method(method_name="test", operation="POST", client_types=["api"])
+        def test_method(project: Project) -> Project:  # NOQA
+            """
+                Create a new project
+            """
+
+        @protocol.handle(test_method)
+        async def test_method(self, project: Project) -> Project:
+            new_project = project.copy()
+
+            return new_project
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+    result = await client.test_method({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 200
+
+    assert "data" in result.result
+    data = result.result["data"]
+    assert "id" in data
+    assert "name" in data
+
+    await server.stop()
+    await rs.stop()

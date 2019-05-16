@@ -20,8 +20,8 @@ from typing import Any, Tuple, Dict, Union, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     # Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
-    from inmanta.data.model import BaseModel
-    from inmanta.protocol.common import ReturnValue
+    from inmanta.data.model import BaseModel  # noqa: F401
+    from inmanta.protocol.common import ReturnValue  # noqa: F401
 
 JsonType = Dict[str, Any]
 Apireturn = Union[int, Tuple[int, Optional[JsonType]], "ReturnValue", "BaseModel"]
