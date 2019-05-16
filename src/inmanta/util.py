@@ -35,7 +35,6 @@ from pkg_resources import DistributionNotFound
 from tornado.ioloop import IOLoop
 from typing import Callable, Dict, Union, Tuple, List, Coroutine, Set, Optional
 from tornado import gen
-import pydantic
 
 from inmanta.data.model import BaseModel
 from inmanta.types import JsonType

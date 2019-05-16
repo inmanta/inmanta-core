@@ -435,7 +435,7 @@ async def test_return_value(unused_tcp_port, postgres_db, database_name):
 
     class ProjectServer(ServerSlice):
         @protocol.method(method_name="test", operation="POST", client_types=["api"])
-        def test_method(project: Project) -> ReturnValue[Project]:
+        def test_method(project: Project) -> ReturnValue[Project]:  # NOQA
             """
                 Create a new project
             """
