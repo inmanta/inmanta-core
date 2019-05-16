@@ -20,7 +20,7 @@ import ssl
 import uuid
 from asyncio import CancelledError
 
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, MutableMapping
 
 import tornado
 from pyformance import timer
@@ -52,7 +52,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
         return self._config[http_method]
 
-    def get_auth_token(self, headers: Dict[str, str]) -> Optional[Dict[str, str]]:
+    def get_auth_token(self, headers: MutableMapping[str, str]) -> Optional[MutableMapping[str, str]]:
         """
             Get the auth token provided by the caller. The token is provided as a bearer token.
         """

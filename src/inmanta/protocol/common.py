@@ -43,12 +43,13 @@ from typing import (
     TYPE_CHECKING,
     TypeVar,
     Generic,
-)  # noqa: F401
+    MutableMapping,
+)
 
 from inmanta import execute, const, util
 from inmanta import config as inmanta_config
 from inmanta.data.model import BaseModel
-from inmanta.types import JsonType, Apireturn
+from inmanta.types import JsonType, HandlerType
 from . import exceptions
 
 if TYPE_CHECKING:
@@ -65,9 +66,9 @@ class ArgOption(object):
 
     def __init__(
         self,
+        getter: Callable[[Any, Dict[str, str]], Coroutine[Any, Any, Any]],
         header: Optional[str] = None,
         reply_header: bool = True,
-        getter: Optional[Callable[[Any, Dict[str, str]], Coroutine[Any, Any, Any]]] = None,
     ) -> None:
         """
             :param header: Map this argument to a header with the following name.
@@ -169,12 +170,18 @@ class ReturnValue(Generic[T]):
         An object that handlers can return to provide a response to a method call.
     """
 
-    def __init__(
-        self, status_code: int = 200, headers: Dict[str, str] = {}, response: Optional[T] = None
-    ) -> None:
-        self.status_code = status_code
-        self.headers = headers
+    def __init__(self, status_code: int = 200, headers: MutableMapping[str, str] = {}, response: Optional[T] = None) -> None:
+        self._status_code = status_code
+        self._headers = headers
         self._response = response
+
+    @property
+    def status_code(self) -> int:
+        return self._status_code
+
+    @property
+    def headers(self) -> MutableMapping[str, str]:
+        return self._headers
 
     @property
     def body(self) -> Optional[JsonType]:
@@ -277,6 +284,7 @@ class MethodProperties(object):
 
     @property
     def timeout(self) -> Optional[int]:
+
         return self._timeout
 
     @property
@@ -394,7 +402,7 @@ class UrlMethod(object):
         :param method_name: The name of the method to call on the endpoint
     """
 
-    def __init__(self, properties: MethodProperties, slice: "CallTarget", handler: Callable[..., Apireturn], method_name: str):
+    def __init__(self, properties: MethodProperties, slice: "CallTarget", handler: HandlerType, method_name: str):
         self._properties = properties
         self._handler = handler
         self._slice = slice
@@ -405,7 +413,7 @@ class UrlMethod(object):
         return self._properties
 
     @property
-    def handler(self) -> Callable[..., Apireturn]:
+    def handler(self) -> HandlerType:
         return self._handler
 
     @property

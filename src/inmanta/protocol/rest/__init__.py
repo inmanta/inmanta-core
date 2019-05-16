@@ -21,7 +21,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, cast  # noqa: F401
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, cast, Type  # noqa: F401
 
 import pydantic
 from tornado import escape
@@ -31,7 +31,7 @@ from inmanta import const, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.common import ReturnValue
-from inmanta.types import JsonType
+from inmanta.types import JsonType, Apireturn
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -152,7 +152,7 @@ class CallArguments(object):
         if value is None:
             return value
 
-        arg_type = self._argspec.annotations[arg]
+        arg_type: Type = self._argspec.annotations[arg]
         if isinstance(value, arg_type):
             return value
 
@@ -249,6 +249,65 @@ class CallArguments(object):
 
         self._processed = True
 
+    async def process_return(self, config: common.UrlMethod, headers: Dict[str, str], result: Apireturn) -> common.Response:
+        """ A handler can return ApiReturn, so lets handle all possible return types and convert it to a Response
+
+            Apireturn = Union[int, Tuple[int, Optional[JsonType]], "ReturnValue", "BaseModel"]
+        """
+        if "return" in self._argspec.annotations:  # new style with return type
+            return_type = self._argspec.annotations["return"]
+
+            if return_type is None:
+                if result is not None:
+                    raise exceptions.ServerError(f"Method {config.method_name} returned a result but is defined as -> None")
+
+                return common.Response(headers=headers, status_code=200)
+
+            # There is no obvious method to check if the return_type is a specific version of the generic ReturnValue
+            # The way this is implemented in typing is different for python 3.6 and 3.7. In this code we "trust" that the
+            # signature of the handler and the method definition matches and the returned value matches this return value
+            # Both isubclass and isinstance fail on this type
+            if isinstance(result, ReturnValue):
+                code = result.status_code
+                body = result.body
+                headers.update(result.headers)
+
+            elif isinstance(result, BaseModel):
+                code = 200
+                body = result.dict()
+
+            else:
+                raise exceptions.ServerError(
+                    f"Method {config.method_name} returned an invalid result {result} instead of a BaseModel or ReturnValue"
+                )
+
+            return common.Response(body=body, headers=headers, status_code=code)
+
+        else:  # "old" style method definition
+            if isinstance(result, tuple):
+                if len(result) == 2:
+                    code, body = result
+                else:
+                    raise exceptions.ServerError("Handlers for method call can only return a status code and a reply")
+
+            elif isinstance(result, int):
+                code = result
+                body = None
+
+            else:
+                raise exceptions.ServerError(
+                    f"Method {config.method_name} returned an invalid result {result} instead of a status code or tupple"
+                )
+
+            if body is not None:
+                if config.properties.reply:
+                    return common.Response(body=body, headers=headers, status_code=code)
+
+                else:
+                    LOGGER.warning("Method %s returned a result although it is has not reply!")
+
+            return common.Response(headers=headers, status_code=code)
+
 
 # Shared
 class RESTBase(util.TaskHandler):
@@ -324,7 +383,7 @@ class RESTBase(util.TaskHandler):
             )
 
             result = await config.handler(**arguments.call_args)
-            return await self.process_return(config, arguments, headers, result)
+            return await arguments.process_return(config, headers, result)
         except exceptions.BaseHttpException:
             LOGGER.exception("")
             raise
@@ -332,45 +391,3 @@ class RESTBase(util.TaskHandler):
         except Exception as e:
             LOGGER.exception("An exception occured during the request.")
             raise exceptions.ServerError(str(e.args))
-
-    async def process_return(
-        self, config: common.UrlMethod, arguments: CallArguments, headers: Dict[str, str], result: JsonType
-    ) -> common.Response:
-        """ A handler can return ApiReturn, so lets handle all possible return types and convert it to a Response
-
-            Apireturn = Union[int, Tuple[int, Optional[JsonType]], "ReturnValue", "BaseModel"]
-        """
-        if result is None:
-            raise exceptions.BadRequest(
-                "Handlers for method calls should at least return a status code or ReturnValue instance. %s on %s"
-                % (config.method_name, config.endpoint)
-            )
-
-        elif isinstance(result, ReturnValue):
-            code = result.status_code
-            body = result.body
-            headers.update(result.headers)
-
-        elif isinstance(result, BaseModel):
-            code = 200
-            body = result.dict()
-
-        elif isinstance(result, tuple):
-            if len(result) == 2:
-                code, body = result
-            else:
-                raise exceptions.BadRequest("Handlers for method call can only return a status code and a reply")
-
-        elif isinstance(result, int):
-            code = result
-            body = None
-
-        if body is not None:
-            if config.properties.reply:
-                LOGGER.debug("%s returned %d: %s", config.method_name, code, common.shorten(str(body), 70))
-                return common.Response(body=body, headers=headers, status_code=code)
-
-            else:
-                LOGGER.warning("Method %s returned a result although it is has not reply!")
-
-        return common.Response(headers=headers, status_code=code)

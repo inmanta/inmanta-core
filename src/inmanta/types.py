@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 # This file defines named type definition for the Inmanta code base
-from typing import Any, Tuple, Dict, Union, Optional, TYPE_CHECKING
+from typing import Any, Tuple, Dict, Union, Optional, TYPE_CHECKING, Callable, Coroutine
 
 if TYPE_CHECKING:
     # Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
@@ -24,4 +24,7 @@ if TYPE_CHECKING:
     from inmanta.protocol.common import ReturnValue  # noqa: F401
 
 JsonType = Dict[str, Any]
-Apireturn = Union[int, Tuple[int, Optional[JsonType]], "ReturnValue", "BaseModel"]
+ReturnTupple = Tuple[int, Optional[JsonType]]
+Apireturn = Union[int, ReturnTupple, "ReturnValue", "BaseModel"]
+
+HandlerType = Callable[..., Coroutine[Any, Any, Apireturn]]

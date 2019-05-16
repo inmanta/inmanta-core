@@ -480,11 +480,27 @@ async def test_return_model(unused_tcp_port, postgres_db, database_name):
                 Create a new project
             """
 
+        @protocol.method(method_name="test2", operation="POST", client_types=["api"])
+        def test_method2(project: Project) -> None:  # NOQA
+            pass
+
+        @protocol.method(method_name="test3", operation="POST", client_types=["api"])
+        def test_method3(project: Project) -> None:  # NOQA
+            pass
+
         @protocol.handle(test_method)
         async def test_method(self, project: Project) -> Project:
             new_project = project.copy()
 
             return new_project
+
+        @protocol.handle(test_method2)
+        async def test_method2(self, project: Project) -> None:
+            pass
+
+        @protocol.handle(test_method3)
+        async def test_method3(self, project: Project) -> None:
+            return 1
 
     rs = Server()
     server = ProjectServer(name="projectserver")
@@ -497,6 +513,12 @@ async def test_return_model(unused_tcp_port, postgres_db, database_name):
 
     assert "id" in result.result
     assert "name" in result.result
+
+    result = await client.test_method2({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 200
+
+    result = await client.test_method3({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 500
 
     await server.stop()
     await rs.stop()

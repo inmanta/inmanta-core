@@ -17,12 +17,12 @@
 """
 import inspect
 
-from inmanta.types import Apireturn
+from inmanta.types import Apireturn, HandlerType
 from . import common
 
-from typing import Any, Dict, List, Optional, Tuple, Set, Callable, Generator, Coroutine, TypeVar  # noqa: F401
+from typing import Any, Dict, List, Optional, Callable, TypeVar
 
-FuncT = TypeVar("FuncT", bound=Callable[..., Coroutine[Any, Any, Apireturn]])
+FuncT = TypeVar("FuncT", bound=HandlerType)
 
 
 class handle(object):  # noqa: N801
