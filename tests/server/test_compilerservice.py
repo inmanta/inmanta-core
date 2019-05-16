@@ -13,7 +13,7 @@ from inmanta import data, config
 from inmanta.server.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.server.protocol import Server
 from inmanta.util import ensure_directory_exist
-from utils import retry_limited, log_contains, report_db_index_usage, wait_for_version, LogSequence
+from utils import retry_limited, report_db_index_usage, wait_for_version, LogSequence
 from inmanta.server import config as server_config
 
 

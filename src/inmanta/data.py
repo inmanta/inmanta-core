@@ -36,7 +36,7 @@ from inmanta import const, util
 import asyncpg
 
 from inmanta.types import JsonType
-from typing import Dict, List, Union, Set, Optional, Any, Tuple, no_type_check
+from typing import Dict, List, Union, Set, Optional, Any, Tuple
 
 LOGGER = logging.getLogger(__name__)
 
