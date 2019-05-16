@@ -280,7 +280,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         raise AttributeError(name)
 
     @classmethod
-    def _convert_field_names_to_db_column_names(cls, field_dict: Dict[str, str]) -> Dict[str, str]:
+    def _convert_field_names_to_db_column_names(cls, field_dict: Dict[str, Any]) -> Dict[str, Any]:
         return field_dict
 
     def _get_column_names_and_values(self) -> Tuple[List[str], List[str]]:
@@ -304,7 +304,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         return (column_names, values)
 
-    async def insert(self, connection=None) -> None:
+    async def insert(self, connection: asyncpg.Connection = None) -> None:
         """
             Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
@@ -346,7 +346,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return await con.execute(query, *values)
 
     @classmethod
-    async def insert_many(cls, documents) -> None:
+    async def insert_many(cls, documents: List["BaseDocument"]) -> None:
         """
             Insert multiple objects at once
         """
@@ -373,7 +373,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 result[name] = default_value
         return result
 
-    async def update(self, **kwargs) -> None:
+    async def update(self, **kwargs: Any) -> None:
         """
             Update this document in the database. It will update the fields in this object and send a full update to mongodb.
             Use update_fields to only update specific fields.
@@ -400,7 +400,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         set_statement = ",".join(parts_of_set_statement)
         return (set_statement, values)
 
-    async def update_fields(self, **kwargs) -> None:
+    async def update_fields(self, **kwargs: Any) -> None:
         """
             Update the given fields of this document in the database. It will update the fields in this object and do a specific
             $set in the mongodb on this document.
@@ -689,12 +689,12 @@ class Environment(BaseDocument):
         :param settings Key/value settings for this environment
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name = Field(field_type=str, required=True)
-    project = Field(field_type=uuid.UUID, required=True)
-    repo_url = Field(field_type=str, default="")
-    repo_branch = Field(field_type=str, default="")
-    settings = Field(field_type=dict, default={})
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    name: str = Field(field_type=str, required=True)
+    project: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+    repo_url: str = Field(field_type=str, default="")
+    repo_branch: str = Field(field_type=str, default="")
+    settings: Dict[str, Any] = Field(field_type=dict, default={})
 
     _settings = {
         AUTO_DEPLOY: Setting(
@@ -803,7 +803,7 @@ class Environment(BaseDocument):
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
     }  # name new_option -> name deprecated_option
 
-    async def get(self, key):
+    async def get(self, key: str):
         """
             Get a setting in this environment.
 
@@ -1132,12 +1132,12 @@ class Report(BaseDocument):
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     started: datetime.datetime = Field(field_type=datetime.datetime, required=True)
-    completed: datetime.datetime = Field(field_type=datetime.datetime)
+    completed: Optional[datetime.datetime] = Field(field_type=datetime.datetime)
     command: str = Field(field_type=str, required=True)
     name: str = Field(field_type=str, required=True)
     errstream: str = Field(field_type=str, default="")
     outstream: str = Field(field_type=str, default="")
-    returncode: int = Field(field_type=int)
+    returncode: Optional[int] = Field(field_type=int)
     compile: uuid.UUID = Field(field_type=uuid.UUID, required=True)
 
     async def update_streams(self, out="", err="") -> None:
@@ -1169,23 +1169,25 @@ class Compile(BaseDocument):
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    remote_id: uuid.UUID = Field(field_type=uuid.UUID)
+    remote_id: Optional[uuid.UUID] = Field(field_type=uuid.UUID)
     environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
-    requested: datetime.datetime = Field(field_type=datetime.datetime)
-    started: datetime.datetime = Field(field_type=datetime.datetime)
-    completed: datetime.datetime = Field(field_type=datetime.datetime)
+    requested: Optional[datetime.datetime] = Field(field_type=datetime.datetime)
+    started: Optional[datetime.datetime] = Field(field_type=datetime.datetime)
+    completed: Optional[datetime.datetime] = Field(field_type=datetime.datetime)
 
-    do_export: bool = Field(field_type=bool)
-    force_update: bool = Field(field_type=bool)
+    do_export: bool = Field(field_type=bool, default=False)
+    force_update: bool = Field(field_type=bool, default=False)
     metadata: dict = Field(field_type=dict, default={})
     environment_variables: dict = Field(field_type=dict)
 
-    success: bool = Field(field_type=bool)
+    success: Optional[bool] = Field(field_type=bool)
     handled: bool = Field(field_type=bool, default=False)
-    version: int = Field(field_type=int)
+    version: Optional[int] = Field(field_type=int)
 
     @classmethod
-    async def get_reports(cls, environment_id, limit=None, start=None, end=None) -> List[JsonType]:
+    async def get_reports(
+        cls, environment_id: uuid.UUID, limit: int = None, start: datetime.datetime = None, end: datetime.datetime = None
+    ) -> List[JsonType]:
         query = "SELECT * FROM " + cls.table_name()
         conditions_in_where_clause = ["environment=$1"]
         values = [cls._get_value(environment_id)]

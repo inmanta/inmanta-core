@@ -67,11 +67,8 @@ class InmantaBootloader(object):
         self.agent_no_log = agent_no_log
         self.started = False
 
-    def get_server_slice(self) -> server.Server:
-        return server.Server(agent_no_log=self.agent_no_log)
-
     def get_bootstrap_slices(self) -> List[ServerSlice]:
-        return [self.get_server_slice(), AgentManager(), DatabaseSlice(), CompilerService()]
+        return [server.Server(agent_no_log=self.agent_no_log), AgentManager(), DatabaseSlice(), CompilerService()]
 
     async def start(self) -> None:
         for mypart in self.load_slices():

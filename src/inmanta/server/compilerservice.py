@@ -43,12 +43,14 @@ from inmanta.types import Apireturn, JsonType, Warnings
 from inmanta.server import config as opt
 from inmanta.util import ensure_directory_exist
 
+RETURNCODE_INTERNAL_ERROR = -1
+
 LOGGER = logging.getLogger(__name__)
 
 
 class CompileStateListener(object):
     @abc.abstractmethod
-    async def compile_done(self, compile: data.Compile):
+    async def compile_done(self, compile: data.Compile) -> None:
         """Receive notification of all completed compiles
 
         1- Notifications are delivered at least once (retry until all listeners have returned or raise an exception other
@@ -61,6 +63,8 @@ class CompileStateListener(object):
 
 
 class CompileRun(object):
+    """Class encapsulating running the compiler."""
+
     def __init__(self, request: data.Compile, project_dir: str) -> None:
         self.request = request
         self.stage: Optional[data.Report] = None
@@ -160,7 +164,7 @@ class CompileRun(object):
             return await self._end_stage(returncode)
         except Exception as e:
             await self._error("".join(traceback.format_exception(type(e), e, e.__traceback__)))
-            return await self._end_stage(-1)
+            return await self._end_stage(RETURNCODE_INTERNAL_ERROR)
 
     async def run(self) -> bool:
         success = False
@@ -201,7 +205,7 @@ class CompileRun(object):
                     if repo_branch:
                         cmd.extend(["-b", repo_branch])
                     result = await self._run_compile_stage("Cloning repository", cmd, project_dir)
-                    if result.returncode > 0:
+                    if result.returncode is None or result.returncode > 0:
                         return False
 
                 elif self.request.force_update:
@@ -274,6 +278,29 @@ class CompileRun(object):
 
 
 class CompilerService(ServerSlice):
+    """
+    Compiler services offers:
+
+    1. service slice API for lifecyclemanagement
+    2. internal api for requesting compiles: :meth:`~CompilerService.request_recompile`
+    3. internal api for watching complete compiles: :meth:`~CompilerService.add_listener`
+    4. api endpoints: is_compiling, get_report, get_reports
+    """
+
+    """
+    General design of compile scheduling:
+
+    1. all compile request are stored in the database.
+    2. when a task starts, _queue is called, if no job is executing for that environment, it is started
+    3. when a task ends, it is marked as completed in the database and _dequeue is called and _notify_listeners is scheduled
+    as a background task
+    4. _dequeue checks the database for a runnable job and starts it (if present)
+    5. _notify_listeners runs all listeners in parallel, afterwards the task is marked as handled
+
+    Upon restart
+    1. find a runnable(incomplete) job for every environment (if any) and call _queue on it
+    2. find all unhandled but complete jobs and run _notify_listeners on them
+    """
 
     _env_folder: str
 
@@ -384,6 +411,7 @@ class CompilerService(ServerSlice):
         if not lastrun:
             wait: float = 0
         else:
+            assert lastrun.completed is not None
             wait = max(0, wait_time - (now - lastrun.completed).total_seconds())
         if wait > 0:
             LOGGER.info(
