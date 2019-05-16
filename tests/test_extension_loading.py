@@ -16,7 +16,7 @@ from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
 from inmanta.server.extensions import InvalidSliceNameException
 from inmanta.server.protocol import Server
 import inmanta.server
-from inmanta_ext.testplugin.extension import TestSlice
+from inmanta_ext.testplugin.extension import TesterSlice
 
 from utils import log_contains
 
@@ -82,7 +82,7 @@ def test_phase_2(caplog):
 
 def test_phase_3(caplog):
     server = Server()
-    server.add_slice(TestSlice())
+    server.add_slice(TesterSlice())
     server.add_slice(inmanta.server.server.Server())
     server.add_slice(AgentManager())
 
