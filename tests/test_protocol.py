@@ -15,28 +15,28 @@
 
     Contact: code@inmanta.com
 """
-import json
-import random
 import base64
-import threading
+import json
 import os
+import random
+import threading
 import time
 import uuid
 from enum import Enum
 
 import pytest
-from tornado.httpclient import HTTPRequest, AsyncHTTPClient
+import tornado
+from tornado import gen, web
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+
 from inmanta import config, protocol
 from inmanta.data.model import BaseModel
 from inmanta.protocol import exceptions, json_encode
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.rest import CallArguments
-from inmanta.server.protocol import ServerSlice, Server
-from inmanta.util import hash_file
 from inmanta.server import config as opt
-from tornado import gen, web
-import tornado
-
+from inmanta.server.protocol import Server, ServerSlice
+from inmanta.util import hash_file
 from utils import configure
 
 

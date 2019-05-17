@@ -16,10 +16,11 @@
     Contact: code@inmanta.com
 """
 import ply.lex as lex
-from inmanta.parser import ParserException
-from inmanta.ast.variables import Reference
-from inmanta.ast.constraint.expression import Regex
+
 from inmanta.ast import LocatableString, Range
+from inmanta.ast.constraint.expression import Regex
+from inmanta.ast.variables import Reference
+from inmanta.parser import ParserException
 
 states = (("mls", "exclusive"),)
 

@@ -15,26 +15,26 @@
 
     Contact: code@inmanta.com
 """
-from inmanta.module import INSTALL_MASTER, Project, Module, INSTALL_RELEASES, gitprovider
 import inspect
 import logging
 import os
-import sys
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
-
 from argparse import ArgumentParser
-from pkg_resources import parse_version
+from collections import OrderedDict
+
 import texttable
+import yaml
+from pkg_resources import parse_version
 
 import inmanta
 from inmanta.ast import Namespace
-from inmanta.parser.plyInmantaParser import parse
 from inmanta.command import CLIException
-import yaml
-from collections import OrderedDict
+from inmanta.module import INSTALL_MASTER, INSTALL_RELEASES, Module, Project, gitprovider
+from inmanta.parser.plyInmantaParser import parse
 
 LOGGER = logging.getLogger(__name__)
 

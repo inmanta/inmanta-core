@@ -15,8 +15,9 @@
 
     Contact: code@inmanta.com
 """
+from typing import Any, Dict, Optional
+
 from tornado import web
-from typing import Optional, Dict, Any
 
 
 class BaseHttpException(web.HTTPError):

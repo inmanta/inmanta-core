@@ -25,32 +25,31 @@ import shutil
 import time
 import uuid
 from collections import defaultdict
-from typing import Dict, Any, Optional, Set, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 from uuid import UUID
 
 import asyncpg
 from tornado import locks
 
-from inmanta import const
-from inmanta import data
+from inmanta import const, data
 from inmanta.ast import type
-from inmanta.const import STATE_UPDATE, VALID_STATES_ON_STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES
+from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
 from inmanta.protocol import encode_token, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.reporter import InfluxReporter
 from inmanta.resources import Id
-from inmanta.server import config as opt
 from inmanta.server import (
-    protocol,
+    SLICE_AGENT_MANAGER,
+    SLICE_COMPILER,
+    SLICE_DATABASE,
     SLICE_SERVER,
     SLICE_SESSION_MANAGER,
-    SLICE_AGENT_MANAGER,
-    SLICE_DATABASE,
     SLICE_TRANSPORT,
-    SLICE_COMPILER,
 )
-from inmanta.types import Apireturn, JsonType, Warnings, ReturnTupple
+from inmanta.server import config as opt
+from inmanta.server import protocol
+from inmanta.types import Apireturn, JsonType, ReturnTupple, Warnings
 from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)

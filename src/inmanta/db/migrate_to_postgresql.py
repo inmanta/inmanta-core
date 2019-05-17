@@ -15,13 +15,14 @@
 
     Contact: code@inmanta.com
 """
-import sys
 import asyncio
-import click
 import logging
-from pymongo import MongoClient
-from inmanta import data
+import sys
 
+import click
+from pymongo import MongoClient
+
+from inmanta import data
 
 LOGGER = logging.getLogger()
 

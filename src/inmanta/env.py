@@ -16,19 +16,18 @@
     Contact: code@inmanta.com
 """
 
-import sys
-import os
-import site
-import subprocess
-import tempfile
 import hashlib
 import logging
+import os
 import re
+import site
+import subprocess
+import sys
+import tempfile
+import venv
+from subprocess import CalledProcessError
 
 import pkg_resources
-from subprocess import CalledProcessError
-import venv
-
 
 LOGGER = logging.getLogger(__name__)
 

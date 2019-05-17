@@ -18,37 +18,38 @@
 
 # Yacc example
 
+import logging
+import re
+from typing import List, Optional
+
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
 
-# Get the token map from the lexer. This is required.
-from inmanta.parser.plyInmantaLex import tokens, reserved
+from inmanta.ast import LocatableString, Location, Namespace, Range
+from inmanta.ast.blocks import BasicBlock
+from inmanta.ast.constraint.expression import IsDefined, Not, Operator
 from inmanta.ast.statements import Literal, Statement
-from inmanta.ast import Location, LocatableString, Range, Namespace
-from inmanta.ast.statements.generator import For, Constructor
+from inmanta.ast.statements.assign import CreateDict, CreateList, IndexLookup, MapLookup, ShortIndexLookup, StringFormat
+from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.define import (
-    DefineEntity,
     DefineAttribute,
+    DefineEntity,
     DefineImplement,
     DefineImplementation,
+    DefineImplementInherits,
+    DefineImport,
+    DefineIndex,
     DefineRelation,
     DefineTypeConstraint,
     DefineTypeDefault,
-    DefineIndex,
-    DefineImport,
-    DefineImplementInherits,
 )
-from inmanta.ast.constraint.expression import Operator, Not, IsDefined
-from inmanta.ast.statements.call import FunctionCall
-from inmanta.ast.statements.assign import CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup, MapLookup
-from inmanta.ast.variables import Reference, AttributeReference
-from inmanta.parser import plyInmantaLex, ParserException
-from inmanta.ast.blocks import BasicBlock
-import re
-import logging
+from inmanta.ast.statements.generator import Constructor, For
+from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from typing import List, Optional
+from inmanta.parser import ParserException, plyInmantaLex
 
+# Get the token map from the lexer. This is required.
+from inmanta.parser.plyInmantaLex import reserved, tokens
 
 LOGGER = logging.getLogger()
 

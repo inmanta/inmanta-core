@@ -16,8 +16,8 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.ast import ModuleNotFoundException
 import inmanta.compiler as compiler
+from inmanta.ast import ModuleNotFoundException
 
 
 def test_issue_120_bad_import(snippetcompiler):

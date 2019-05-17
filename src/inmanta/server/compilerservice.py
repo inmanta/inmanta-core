@@ -21,26 +21,24 @@ import datetime
 import json
 import logging
 import os
+import re
 import subprocess
+import sys
 import traceback
 import uuid
-from tempfile import NamedTemporaryFile
-from typing import List, Dict, Optional, cast, Tuple
-import re
 from asyncio import CancelledError, Task
-
-import sys
+from tempfile import NamedTemporaryFile
+from typing import Dict, List, Optional, Tuple, cast
 
 import dateutil
 import dateutil.parser
 
-from inmanta import protocol, data, config, server, const
-from inmanta.protocol import methods, encode_token
-from inmanta.server import SLICE_DATABASE, SLICE_COMPILER, SLICE_TRANSPORT
+from inmanta import config, const, data, protocol, server
+from inmanta.protocol import encode_token, methods
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
+from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
 from inmanta.types import Apireturn, JsonType, Warnings
-
-from inmanta.server import config as opt
 from inmanta.util import ensure_directory_exist
 
 RETURNCODE_INTERNAL_ERROR = -1

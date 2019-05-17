@@ -18,10 +18,8 @@
 
 import pytest
 
-from inmanta.ast import AttributeException
-from inmanta.ast import MultiException
-
 import inmanta.compiler as compiler
+from inmanta.ast import AttributeException, MultiException
 
 
 def test_issue_139_scheduler(snippetcompiler):

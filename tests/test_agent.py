@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import pytest
+
 from inmanta.agent import reporting
 from inmanta.server import SLICE_SESSION_MANAGER
 

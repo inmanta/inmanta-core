@@ -1,5 +1,5 @@
-from inmanta.config import Config
 import inmanta.agent.config as cfg
+from inmanta.config import Config
 
 
 def test_environment_deprecated_options(caplog):

@@ -18,13 +18,11 @@
 
 import logging
 import re
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Type
 
-from inmanta.execute import util, runtime
-from inmanta.execute.proxy import DynamicProxy, UnknownException, UnsetException, DictProxy, SequenceProxy
+from inmanta.execute import runtime, util
+from inmanta.execute.proxy import DictProxy, DynamicProxy, SequenceProxy, UnknownException, UnsetException
 from inmanta.types import JsonType
-
-from typing import Dict, Tuple, Type, Iterator, Optional, List, Set, Any, TYPE_CHECKING, Callable
-
 
 if TYPE_CHECKING:
     from inmanta import export

@@ -16,15 +16,15 @@
     Contact: code@inmanta.com
 """
 
-import uuid
 import datetime
+import uuid
+from typing import Any
 
-from inmanta import data, const
+from inmanta import const, data
+
+from . import exceptions
 from .common import ArgOption
 from .decorators import method
-from . import exceptions
-
-from typing import Any
 
 
 async def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environment:

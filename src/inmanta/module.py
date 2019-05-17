@@ -18,33 +18,29 @@
 
 import glob
 import imp
-import traceback
-from io import BytesIO
 import logging
 import os
-import sys
 import re
-from subprocess import CalledProcessError
 import subprocess
+import sys
+import traceback
+from functools import lru_cache
+from io import BytesIO
+from subprocess import CalledProcessError
 from tarfile import TarFile
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from pkg_resources import parse_version, parse_requirements
 import yaml
+from pkg_resources import parse_requirements, parse_version
 
-from inmanta import env, const
-from inmanta import plugins
-from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException, Location, LocatableString, Range
+from inmanta import const, env, plugins
+from inmanta.ast import CompilerException, LocatableString, Location, ModuleNotFoundException, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import DefinitionStatement, BiStatement, Statement, DynamicStatement
+from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
 from inmanta.parser import plyInmantaParser
 from inmanta.types import JsonType
 from inmanta.util import get_compiler_version
-from typing import Tuple, List, Dict
-from typing import Optional
-from typing import Union
-from typing import Any
-from functools import lru_cache
 
 try:
     from typing import TYPE_CHECKING

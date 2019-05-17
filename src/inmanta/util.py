@@ -16,6 +16,8 @@
     Contact: code@inmanta.com
 """
 
+import datetime
+import enum
 import functools
 import hashlib
 import inspect
@@ -24,18 +26,16 @@ import logging
 import os
 import socket
 import time
-import warnings
 import uuid
-import datetime
-import enum
-from asyncio import ensure_future, CancelledError, Future, sleep, Task, gather
+import warnings
+from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
 from logging import Logger
+from typing import Callable, Coroutine, Dict, List, Optional, Set, Tuple, Union
 
 import pkg_resources
 from pkg_resources import DistributionNotFound
-from tornado.ioloop import IOLoop
-from typing import Callable, Dict, Union, Tuple, List, Coroutine, Set, Optional
 from tornado import gen
+from tornado.ioloop import IOLoop
 
 from inmanta.data.model import BaseModel
 from inmanta.types import JsonType

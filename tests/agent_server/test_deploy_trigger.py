@@ -19,8 +19,8 @@ import logging
 
 import pytest
 
-from agent_server.conftest import get_resource, _deploy_resources, get_agent
-from utils import retry_limited, AsyncClosing, log_contains, log_doesnt_contain
+from agent_server.conftest import _deploy_resources, get_agent, get_resource
+from utils import AsyncClosing, log_contains, log_doesnt_contain, retry_limited
 
 
 @pytest.mark.asyncio(timeout=150)

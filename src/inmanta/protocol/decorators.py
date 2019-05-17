@@ -16,11 +16,11 @@
     Contact: code@inmanta.com
 """
 import inspect
+from typing import Callable, Dict, List, Optional, TypeVar
 
 from inmanta.types import Apireturn, HandlerType, MethodType
-from . import common
 
-from typing import Dict, List, Optional, Callable, TypeVar
+from . import common
 
 FuncT = TypeVar("FuncT", bound=HandlerType)
 

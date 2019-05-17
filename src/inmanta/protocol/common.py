@@ -16,40 +16,40 @@
     Contact: code@inmanta.com
 """
 
-import inspect
 import enum
-import uuid
-import logging
-import json
 import gzip
+import inspect
 import io
+import json
+import logging
 import time
+import uuid
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Coroutine,
+    Dict,
+    Generic,
+    List,
+    MutableMapping,
+    Optional,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
+from urllib import parse
 
 import jwt
-
 from tornado import web
-from urllib import parse
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-    Union,
-    Tuple,
-    Set,
-    Callable,
-    cast,
-    Coroutine,
-    TYPE_CHECKING,
-    TypeVar,
-    Generic,
-    MutableMapping,
-)
 
-from inmanta import execute, const, util
 from inmanta import config as inmanta_config
+from inmanta import const, execute, util
 from inmanta.data.model import BaseModel
-from inmanta.types import JsonType, HandlerType, MethodType
+from inmanta.types import HandlerType, JsonType, MethodType
+
 from . import exceptions
 
 if TYPE_CHECKING:
