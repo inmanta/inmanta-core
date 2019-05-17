@@ -47,9 +47,9 @@ from inmanta.ast.statements.generator import Constructor, For
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException, plyInmantaLex
-
-# Get the token map from the lexer. This is required.
 from inmanta.parser.plyInmantaLex import reserved, tokens
+
+# the token map is imported from the lexer. This is required.
 
 LOGGER = logging.getLogger()
 
