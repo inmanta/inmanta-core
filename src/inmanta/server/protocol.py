@@ -116,7 +116,7 @@ class Server(endpoints.Endpoint):
 
         for slice in self.get_slices().values():
             edges[slice.name].update(slice.get_dependencies())
-            for depby in slice.get_dependened_by():
+            for depby in slice.get_depended_by():
                 edges[depby].add(slice.name)
 
         names = list(edges.keys())
@@ -273,7 +273,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         """List of names of slices that must be started before this one."""
         return []
 
-    def get_dependened_by(self) -> List[str]:
+    def get_depended_by(self) -> List[str]:
         """List of names of slices that must be started after this one."""
         return []
 
@@ -516,7 +516,7 @@ class SessionManager(ServerSlice):
             session.expire(0)
             session.abort()
 
-    def get_dependened_by(self) -> List[str]:
+    def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
 
     def validate_sid(self, sid: uuid.UUID) -> bool:

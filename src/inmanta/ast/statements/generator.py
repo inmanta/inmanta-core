@@ -285,7 +285,7 @@ class Constructor(GeneratorStatement):
 
             if obj is not None:
                 if obj.get_type().get_entity() != type_class:
-                    raise DuplicateException(self, object, "Type found in index is not an exact match")
+                    raise DuplicateException(self, obj, "Type found in index is not an exact match")
                 instances.append(obj)
 
         if len(instances) > 0:

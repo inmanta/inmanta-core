@@ -123,7 +123,7 @@ class AgentManager(ServerSlice, SessionListener):
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER, SLICE_DATABASE]
 
-    def get_dependened_by(self) -> List[str]:
+    def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:

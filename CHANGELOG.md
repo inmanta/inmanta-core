@@ -1,11 +1,12 @@
 v 2019.3 (2019-06-30)
 Changes in this release:
-- Various bugfixes (#1148, #1157, #1163, #1167)
+- Various bugfixes (#1148, #1157, #1163, #1167, #1188)
 - Abort server startup if the database can not be reached (#1153)
 - Use native coroutines everywhere (async def)
 - Updated dockerfile and docker-compose to use postgres and centos
 - Added extensions mechanism (#565, #1185)
 - Support to set environment variables on the Inmanta server and it's agents
+- Split of server recompile into separate extension (#1183)
 
 v 2019.2 (2019-04-30)
 Changes in this release:

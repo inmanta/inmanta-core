@@ -16,11 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
-import json
 import logging
-import os
-import shutil
-import subprocess
 import time
 import uuid
 from itertools import groupby
@@ -36,38 +32,11 @@ from inmanta import agent, const, execute, config, data
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.server import SLICE_AGENT_MANAGER, config as server_config
+from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from utils import retry_limited, assert_equal_ish, UNKWN, log_contains, log_index
 
 logger = logging.getLogger("inmanta.test.server_agent")
-
-
-async def wait_for_version(client, environment, cnt):
-    # Wait until the server is no longer compiling
-    # wait for it to finish
-    await asyncio.sleep(0.1)
-    code = 200
-    while code == 200:
-        compiling = await client.is_compiling(environment)
-        code = compiling.code
-        await asyncio.sleep(0.1)
-    # wait for it to appear
-    versions = await client.list_versions(environment)
-
-    while versions.result["count"] < cnt:
-        logger.info(versions.result)
-        versions = await client.list_versions(environment)
-        await asyncio.sleep(0.1)
-
-    reports = await client.get_reports(environment)
-    for report in reports.result["reports"]:
-        data = await client.get_report(report["id"])
-        print(json.dumps(data.result, indent=4))
-
-    # Added until #1011 is implemented
-    await asyncio.sleep(1)
-    return versions.result
 
 
 @pytest.mark.asyncio(timeout=150)
@@ -1768,81 +1737,6 @@ async def test_export_duplicate(resource_container, snippetcompiler):
         snippetcompiler.do_export()
 
     assert "exists more than once in the configuration model" in str(exc.value)
-
-
-@pytest.mark.asyncio(timeout=90)
-async def test_server_recompile(server_multi, client_multi, environment_multi):
-    """
-        Test a recompile on the server and verify recompile triggers
-    """
-    config.Config.set("server", "auto-recompile-wait", "0")
-    client = client_multi
-    server = server_multi
-    environment = environment_multi
-
-    project_dir = os.path.join(server.get_slice("server")._server_storage["environments"], str(environment))
-    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
-
-    shutil.copytree(project_source, project_dir)
-    subprocess.check_output(["git", "init"], cwd=project_dir)
-    subprocess.check_output(["git", "add", "*"], cwd=project_dir)
-    subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=project_dir)
-    subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=project_dir)
-    subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_dir)
-
-    # add main.cf
-    with open(os.path.join(project_dir, "main.cf"), "w") as fd:
-        fd.write(
-            """
-        host = std::Host(name="test", os=std::linux)
-        std::ConfigFile(host=host, path="/etc/motd", content="1234")
-"""
-        )
-
-    logger.info("request a compile")
-    await client.notify_change(environment)
-
-    logger.info("wait for 1")
-    versions = await wait_for_version(client, environment, 1)
-    assert versions["versions"][0]["total"] == 1
-    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
-
-    # get compile reports
-    reports = await client.get_reports(environment)
-    assert len(reports.result["reports"]) == 1
-
-    # set a parameter without requesting a recompile
-    await client.set_param(environment, id="param1", value="test", source="plugin")
-    versions = await wait_for_version(client, environment, 1)
-    assert versions["count"] == 1
-
-    logger.info("request second compile")
-    # set a new parameter and request a recompile
-    await client.set_param(environment, id="param2", value="test", source="plugin", recompile=True)
-    logger.info("wait for 2")
-    versions = await wait_for_version(client, environment, 2)
-    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
-    assert versions["count"] == 2
-
-    # update the parameter to the same value -> no compile
-    await client.set_param(environment, id="param2", value="test", source="plugin", recompile=True)
-    versions = await wait_for_version(client, environment, 2)
-    assert versions["count"] == 2
-
-    # update the parameter to a new value
-    await client.set_param(environment, id="param2", value="test2", source="plugin", recompile=True)
-    versions = await wait_for_version(client, environment, 3)
-    logger.info("wait for 3")
-    assert versions["count"] == 3
-
-    # clear the environment
-    state_dir = server_config.state_dir.get()
-    project_dir = os.path.join(state_dir, "server", "environments", environment)
-    assert os.path.exists(project_dir)
-
-    await client.clear_environment(environment)
-
-    assert not os.path.exists(project_dir)
 
 
 class ResourceProvider(object):

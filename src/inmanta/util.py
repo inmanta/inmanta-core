@@ -21,6 +21,7 @@ import hashlib
 import inspect
 import itertools
 import logging
+import os
 import socket
 import time
 import warnings
@@ -69,6 +70,13 @@ def get_compiler_version() -> Optional[str]:
 
 def groupby(mylist, f):
     return itertools.groupby(sorted(mylist, key=f), f)
+
+
+def ensure_directory_exist(directory: str, *subdirs: str) -> str:
+    directory = os.path.join(directory, *subdirs)
+    if not os.path.exists(directory):
+        os.mkdir(directory)
+    return directory
 
 
 def hash_file(content: str) -> str:

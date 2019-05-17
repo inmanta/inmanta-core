@@ -19,6 +19,7 @@ import asyncio
 import ssl
 import uuid
 from asyncio import CancelledError
+from collections import defaultdict
 
 from typing import Optional, Dict, List, MutableMapping
 
@@ -29,6 +30,7 @@ from tornado import httpserver, web, routing, iostream
 import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config, const
 from inmanta.protocol import exceptions, common
+from inmanta.protocol.common import UrlMethod
 from inmanta.protocol.rest import LOGGER, CONTENT_TYPE, JSON_CONTENT, RESTBase
 from inmanta.types import JsonType
 
@@ -246,19 +248,20 @@ class RESTServer(RESTBase):
         """
             Start the server on the current ioloop
         """
-        rules: List[routing.Rule] = []
-        rules.extend(additional_rules)
-
+        global_url_map: Dict[str, Dict[str, UrlMethod]] = defaultdict(dict)
         for slice in targets:
             url_map = slice.get_op_mapping()
-
             for url, configs in url_map.items():
-                handler_config = {}
+                handler_config = global_url_map[url]
                 for op, cfg in configs.items():
                     handler_config[op] = cfg
 
-                rules.append(routing.Rule(routing.PathMatches(url), RESTHandler, {"transport": self, "config": handler_config}))
-                LOGGER.debug("Registering handler(s) for url %s and methods %s" % (url, ", ".join(handler_config.keys())))
+        rules: List[routing.Rule] = []
+        rules.extend(additional_rules)
+
+        for url, handler_config in global_url_map.items():
+            rules.append(routing.Rule(routing.PathMatches(url), RESTHandler, {"transport": self, "config": handler_config}))
+            LOGGER.debug("Registering handler(s) for url %s and methods %s", url, ", ".join(handler_config.keys()))
 
         port = 8888
         if self.id in inmanta_config.Config.get() and "port" in inmanta_config.Config.get()[self.id]:

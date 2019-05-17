@@ -15,10 +15,13 @@
 
     Contact: code@inmanta.com
 """
+import json
 import logging
 import time
 import asyncio
 import inspect
+
+from inmanta import data
 
 
 async def retry_limited(fun, timeout):
@@ -190,3 +193,48 @@ def configure(unused_tcp_port, database_name, database_port):
     Config.set("database", "name", database_name)
     Config.set("database", "host", "localhost")
     Config.set("database", "port", str(database_port))
+
+
+async def report_db_index_usage(min_precent=100):
+    q = (
+        "select relname ,idx_scan ,seq_scan , 100*idx_scan / (seq_scan + idx_scan) percent_of_times_index_used,"
+        " n_live_tup rows_in_table, seq_scan * n_live_tup badness  FROM pg_stat_user_tables "
+        "WHERE seq_scan + idx_scan > 0 order by badness desc"
+    )
+    async with data.Compile._connection_pool.acquire() as con:
+        result = await con.fetch(q)
+
+    for row in result:
+        print(row)
+
+
+async def wait_for_version(client, environment, cnt):
+    start = time.time()
+
+    # Wait until the server is no longer compiling
+    # wait for it to finish
+    async def compile_done():
+        compiling = await client.is_compiling(environment)
+        code = compiling.code
+        return code == 204
+
+    await retry_limited(compile_done, 10)
+
+    reports = await client.get_reports(environment)
+    for report in reports.result["reports"]:
+        data = await client.get_report(report["id"])
+        print(json.dumps(data.result, indent=4))
+        assert report["success"]
+
+    # wait for it to appear
+    async def sufficient_versions():
+        versions = await client.list_versions(environment)
+        return versions.result["count"] >= cnt
+
+    await retry_limited(sufficient_versions, 10)
+
+    # Added until #1011 is implemented
+    nextsecond = int(start) + 1
+    await asyncio.sleep(nextsecond - time.time())
+    versions = await client.list_versions(environment)
+    return versions.result
