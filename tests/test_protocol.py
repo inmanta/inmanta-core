@@ -15,20 +15,29 @@
 
     Contact: code@inmanta.com
 """
+import json
 import random
 import base64
 import threading
 import os
 import time
+import uuid
+from enum import Enum
 
 import pytest
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient
 from inmanta import config, protocol
+from inmanta.data.model import BaseModel
+from inmanta.protocol import exceptions, json_encode
+from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.rest import CallArguments
+from inmanta.server.protocol import ServerSlice, Server
 from inmanta.util import hash_file
 from inmanta.server import config as opt
 from tornado import gen, web
 import tornado
+
+from utils import configure
 
 
 def make_random_file(size=0):
@@ -331,3 +340,226 @@ def test_create_client():
 
     with pytest.raises(AssertionError):
         protocol.Client("agent", "120")
+
+
+@pytest.mark.asyncio
+async def test_pydantic():
+    """
+        Test validating pydantic objects
+    """
+
+    class Project(BaseModel):
+        id: uuid.UUID
+        name: str
+
+    @protocol.method(method_name="test", operation="PUT", client_types=["api"])
+    def test_method(project: Project):
+        """
+            Create a new project
+        """
+
+    id = uuid.uuid4()
+    call = CallArguments(test_method.__method_properties__, {"project": {"name": "test", "id": str(id)}}, {})
+    await call.process()
+
+    project = call.call_args["project"]
+    assert project.name == "test"
+    assert project.id == id
+
+    with pytest.raises(exceptions.BadRequest):
+        call = CallArguments(test_method.__method_properties__, {"project": {"name": "test", "id": "abcd"}}, {})
+        await call.process()
+
+
+def test_pydantic_json():
+    """
+        Test running pydanyic objects through the json encoder
+    """
+
+    class Options(str, Enum):
+        yes = "yes"
+        no = "no"
+
+    class Project(BaseModel):
+        id: uuid.UUID
+        name: str
+        opts: Options
+
+    project = Project(id=uuid.uuid4(), name="test", opts="no")
+    assert project.opts == Options.no
+
+    json_string = json_encode(project)
+    data = json.loads(json_string)
+
+    assert "id" in data
+    assert "name" in data
+    assert data["id"] == str(project.id)
+    assert data["name"] == "test"
+
+    # Now create the project again
+    new = Project(**data)
+
+    assert project == new
+    assert project is not new
+
+
+@pytest.mark.asyncio
+async def test_invalid_handler():
+    """
+        Handlers should be async
+    """
+    with pytest.raises(ValueError):
+
+        class ProjectServer(ServerSlice):
+            @protocol.method(method_name="test", operation="POST", client_types=["api"])
+            def test_method(self):
+                """
+                    Create a new project
+                """
+
+            @protocol.handle(test_method)
+            def test_method(self):
+                return
+
+
+@pytest.mark.asyncio
+async def test_return_value(unused_tcp_port, postgres_db, database_name):
+    """
+        Test the use and validation of methods that use common.ReturnValue
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        id: uuid.UUID
+        name: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.method(method_name="test", operation="POST", client_types=["api"])
+        def test_method(project: Project) -> ReturnValue[Project]:  # NOQA
+            """
+                Create a new project
+            """
+
+        @protocol.handle(test_method)
+        async def test_method(self, project: Project) -> ReturnValue[Project]:
+            new_project = project.copy()
+
+            return ReturnValue(response=new_project)
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+    result = await client.test_method({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 200
+
+    assert "id" in result.result
+    assert "name" in result.result
+
+    await server.stop()
+    await rs.stop()
+
+
+@pytest.mark.asyncio
+async def test_return_model(unused_tcp_port, postgres_db, database_name):
+    """
+        Test the use and validation of methods that use common.ReturnValue
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        id: uuid.UUID
+        name: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.method(method_name="test", operation="POST", client_types=["api"])
+        def test_method(project: Project) -> Project:  # NOQA
+            """
+                Create a new project
+            """
+
+        @protocol.method(method_name="test2", operation="POST", client_types=["api"])
+        def test_method2(project: Project) -> None:  # NOQA
+            pass
+
+        @protocol.method(method_name="test3", operation="POST", client_types=["api"])
+        def test_method3(project: Project) -> None:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, project: Project) -> Project:
+            new_project = project.copy()
+
+            return new_project
+
+        @protocol.handle(test_method2)
+        async def test_method2(self, project: Project) -> None:
+            pass
+
+        @protocol.handle(test_method3)
+        async def test_method3(self, project: Project) -> None:
+            return 1
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+    result = await client.test_method({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 200
+
+    assert "id" in result.result
+    assert "name" in result.result
+
+    result = await client.test_method2({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 200
+
+    result = await client.test_method3({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 500
+
+    await server.stop()
+    await rs.stop()
+
+
+@pytest.mark.asyncio
+async def test_data_wrap(unused_tcp_port, postgres_db, database_name):
+    """
+        Test the use and validation of methods that use common.ReturnValue
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        id: uuid.UUID
+        name: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(method_name="test", operation="POST", client_types=["api"])
+        def test_method(project: Project) -> ReturnValue[Project]:  # NOQA
+            """
+                Create a new project
+            """
+
+        @protocol.handle(test_method)
+        async def test_method(self, project: Project) -> ReturnValue[Project]:
+            new_project = project.copy()
+
+            return ReturnValue(response=new_project)
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+    result = await client.test_method({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 200
+
+    assert "data" in result.result
+    assert "id" in result.result["data"]
+    assert "name" in result.result["data"]
+
+    await server.stop()
+    await rs.stop()

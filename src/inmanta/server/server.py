@@ -50,7 +50,7 @@ from inmanta.server import (
     SLICE_TRANSPORT,
     SLICE_COMPILER,
 )
-from inmanta.types import Apireturn, JsonType, Warnings
+from inmanta.types import Apireturn, JsonType, Warnings, ReturnTupple
 from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
@@ -744,14 +744,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             return 404
 
     @protocol.handle(methods.get_file, file_hash="id")
-    async def get_file(self, file_hash: str) -> Apireturn:
+    async def get_file(self, file_hash: str) -> ReturnTupple:
         ret, content = self.get_file_internal(file_hash)
         if ret == 200:
             return 200, {"content": base64.b64encode(content).decode("ascii")}
         else:
             return ret, content
 
-    def get_file_internal(self, file_hash: str) -> Apireturn:
+    def get_file_internal(self, file_hash: str) -> ReturnTupple:
         """get_file, but on return code 200, content is not encoded """
 
         file_name = os.path.join(self._server_storage["files"], file_hash)
@@ -807,7 +807,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 return 200, content
 
     @protocol.handle(methods.stat_files)
-    async def stat_files(self, files: List[str]) -> Apireturn:
+    async def stat_files(self, files: List[str]) -> ReturnTupple:
         """
             Return which files in the list exist on the server
         """

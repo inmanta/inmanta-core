@@ -34,9 +34,10 @@ from logging import Logger
 import pkg_resources
 from pkg_resources import DistributionNotFound
 from tornado.ioloop import IOLoop
-from typing import Callable, Dict, Union, Tuple, List, Coroutine, Set
+from typing import Callable, Dict, Union, Tuple, List, Coroutine, Set, Optional
 from tornado import gen
 
+from inmanta.data.model import BaseModel
 from inmanta.types import JsonType
 
 LOGGER = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ def memoize(obj):
     return memoizer
 
 
-def get_compiler_version() -> str:
+def get_compiler_version() -> Optional[str]:
     try:
         return pkg_resources.get_distribution("inmanta").version
     except DistributionNotFound:
@@ -210,6 +211,9 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
     if isinstance(o, Exception):
         # Logs can push exceptions through RPC. Return a string representation.
         return str(o)
+
+    if isinstance(o, BaseModel):
+        return o.dict()
 
     LOGGER.error("Unable to serialize %s", o)
     raise TypeError(repr(o) + " is not JSON serializable")
