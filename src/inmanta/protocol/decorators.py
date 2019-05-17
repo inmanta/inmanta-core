@@ -20,7 +20,7 @@ import inspect
 from inmanta.types import Apireturn, HandlerType, MethodType
 from . import common
 
-from typing import Any, Dict, List, Optional, Callable, TypeVar
+from typing import Dict, List, Optional, Callable, TypeVar
 
 FuncT = TypeVar("FuncT", bound=HandlerType)
 
@@ -50,6 +50,7 @@ class handle(object):  # noqa: N801
 
 
 MethodT = TypeVar("MethodT", bound=MethodType)
+
 
 def method(
     method_name: str,
