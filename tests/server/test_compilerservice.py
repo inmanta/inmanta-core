@@ -272,7 +272,7 @@ async def test_compile_runner(server, tmpdir, client):
         compile = data.Compile(
             remote_id=uuid.uuid4(),
             environment=env.id,
-            do_export=True,
+            do_export=export,
             metadata=meta,
             environment_variables=env_vars,
             force_update=update,
@@ -300,45 +300,49 @@ async def test_compile_runner(server, tmpdir, client):
 
         stage_by_name = {stage["name"]: stage for stage in stages}
 
-        return stage_by_name
+        return cr, stage_by_name
 
     # with export
-    stages = await compile_and_assert(env, True, meta={"type": "Test"})
+    compile, stages = await compile_and_assert(env, True, meta={"type": "Test"})
     assert stages["Init"]["returncode"] == 0
     assert stages["Cloning repository"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print} {no_marker}" in out
     assert len(stages) == 3
+    assert compile.version is not None
 
     # no export
-    stages = await compile_and_assert(env, False)
+    compile, stages = await compile_and_assert(env, False)
     assert stages["Init"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print} {no_marker}" in out
     assert len(stages) == 2
+    assert compile.version is None
 
     # env vars
     marker = str(uuid.uuid4())
-    stages = await compile_and_assert(env, False, env_vars={testmarker_env: marker})
+    compile, stages = await compile_and_assert(env, False, env_vars={testmarker_env: marker})
     assert stages["Init"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print} {marker}" in out
     assert len(stages) == 2
+    assert compile.version is None
 
     # switch branch
-    stages = await compile_and_assert(env2, False)
+    compile, stages = await compile_and_assert(env2, False)
     assert stages["Init"]["returncode"] == 0
     assert stages["switching branch from master to alt"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print2} {no_marker}" in out
     assert len(stages) == 3
+    assert compile.version is None
 
     # update with no update
-    stages = await compile_and_assert(env2, False, update=True)
+    compile, stages = await compile_and_assert(env2, False, update=True)
     assert stages["Init"]["returncode"] == 0
     assert stages["Fetching changes"]["returncode"] == 0
     assert stages["Pulling updates"]["returncode"] == 0
@@ -347,9 +351,10 @@ async def test_compile_runner(server, tmpdir, client):
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print2} {no_marker}" in out
     assert len(stages) == 5
+    assert compile.version is None
 
     make_main(marker_print3)
-    stages = await compile_and_assert(env2, False, update=True)
+    compile, stages = await compile_and_assert(env2, False, update=True)
     assert stages["Init"]["returncode"] == 0
     assert stages["Fetching changes"]["returncode"] == 0
     assert stages["Pulling updates"]["returncode"] == 0
@@ -358,6 +363,7 @@ async def test_compile_runner(server, tmpdir, client):
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print3} {no_marker}" in out
     assert len(stages) == 5
+    assert compile.version is None
 
 
 @pytest.mark.asyncio

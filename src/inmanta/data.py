@@ -1187,7 +1187,7 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_reports(
-        cls, environment_id: uuid.UUID, limit: int = None, start: datetime.datetime = None, end: datetime.datetime = None
+        cls, environment_id: uuid.UUID, limit: Optional[int] = None, start: Optional[datetime.datetime] = None, end: Optional[datetime.datetime] = None
     ) -> List[JsonType]:
         query = "SELECT * FROM " + cls.table_name()
         conditions_in_where_clause = ["environment=$1"]
