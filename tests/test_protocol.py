@@ -406,7 +406,7 @@ def test_pydantic_json():
 @pytest.mark.asyncio
 async def test_invalid_handler():
     """
-        Test the use and validation of methods that use common.ReturnValue
+        Handlers should be async
     """
     with pytest.raises(ValueError):
 
