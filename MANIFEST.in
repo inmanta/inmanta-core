@@ -2,6 +2,7 @@ include LICENSE
 graft docs
 include tox.ini
 include setup.py
+include setup.cfg
 
 recursive-include src *.j2
 recursive-include docs *
