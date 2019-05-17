@@ -268,20 +268,15 @@ class CallArguments(object):
             # signature of the handler and the method definition matches and the returned value matches this return value
             # Both isubclass and isinstance fail on this type
             if isinstance(result, ReturnValue):
-                code = result.status_code
-                body = result.body
-                headers.update(result.headers)
+                return common.Response.create(result, headers, config.properties.wrap_data)
 
             elif isinstance(result, BaseModel):
-                code = 200
-                body = result.dict()
+                return common.Response.create(ReturnValue(response=result), headers, config.properties.wrap_data)
 
             else:
                 raise exceptions.ServerError(
                     f"Method {config.method_name} returned an invalid result {result} instead of a BaseModel or ReturnValue"
                 )
-
-            return common.Response(body=body, headers=headers, status_code=code)
 
         else:  # "old" style method definition
             if isinstance(result, tuple):

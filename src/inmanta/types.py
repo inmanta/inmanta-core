@@ -28,3 +28,6 @@ ReturnTupple = Tuple[int, Optional[JsonType]]
 Apireturn = Union[int, ReturnTupple, "ReturnValue", "BaseModel"]
 
 HandlerType = Callable[..., Coroutine[Any, Any, Apireturn]]
+
+MethodReturn = Union[None, "ReturnValue", "BaseModel"]
+MethodType = Callable[..., MethodReturn]

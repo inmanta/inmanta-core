@@ -49,7 +49,7 @@ from typing import (
 from inmanta import execute, const, util
 from inmanta import config as inmanta_config
 from inmanta.data.model import BaseModel
-from inmanta.types import JsonType, HandlerType
+from inmanta.types import JsonType, HandlerType, MethodType
 from . import exceptions
 
 if TYPE_CHECKING:
@@ -139,29 +139,6 @@ class Request(object):
         return req
 
 
-class Response(object):
-    """
-        A response object of a call
-    """
-
-    def __init__(self, status_code: int, headers: Dict[str, str], body: Optional[JsonType] = None) -> None:
-        self._status_code = status_code
-        self._headers = headers
-        self._body = body
-
-    @property
-    def body(self) -> Optional[JsonType]:
-        return self._body
-
-    @property
-    def headers(self) -> Dict[str, str]:
-        return self._headers
-
-    @property
-    def status_code(self) -> int:
-        return self._status_code
-
-
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -183,14 +160,19 @@ class ReturnValue(Generic[T]):
     def headers(self) -> MutableMapping[str, str]:
         return self._headers
 
-    @property
-    def body(self) -> Optional[JsonType]:
+    def get_body(self, wrap_data: bool = False) -> Optional[JsonType]:
         """ Get the response body
+
+            :param wrap_data: Should the response be mapped into a data key
         """
         if self._response is None:
             return None
 
         response = self._response.dict()
+
+        if wrap_data:
+            return {"data": response}
+
         return response
 
     def __repr__(self) -> str:
@@ -198,6 +180,38 @@ class ReturnValue(Generic[T]):
 
     def __str__(self) -> str:
         return repr(self)
+
+
+class Response(object):
+    """
+        A response object of a call
+    """
+
+    @classmethod
+    def create(
+        cls, result: ReturnValue, additional_headers: MutableMapping[str, str] = {}, wrap_data: bool = False
+    ) -> "Response":
+        """
+            Create a response from a return value
+        """
+        return cls(status_code=result.status_code, headers=additional_headers, body=result.get_body(wrap_data))
+
+    def __init__(self, status_code: int, headers: Dict[str, str], body: Optional[JsonType] = None) -> None:
+        self._status_code = status_code
+        self._headers = headers
+        self._body = body
+
+    @property
+    def body(self) -> Optional[JsonType]:
+        return self._body
+
+    @property
+    def headers(self) -> Dict[str, str]:
+        return self._headers
+
+    @property
+    def status_code(self) -> int:
+        return self._status_code
 
 
 class MethodProperties(object):
@@ -209,7 +223,7 @@ class MethodProperties(object):
 
     def __init__(
         self,
-        function: Callable[..., JsonType],
+        function: MethodType,
         method_name: str,
         index: bool,
         id: bool,
@@ -224,6 +238,7 @@ class MethodProperties(object):
         client_types: List[str],
         api_version: int,
         api_prefix: str,
+        wrap_data: bool,
     ) -> None:
         """
             Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -243,6 +258,7 @@ class MethodProperties(object):
                                 to which the options apply.
             :param api_version: The version of the api this method belongs to
             :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
+            :param wrap_data: Put the response of the call under a "data" key.
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -264,6 +280,7 @@ class MethodProperties(object):
         self._client_types = client_types
         self._api_version = api_version
         self._api_prefix = api_prefix
+        self._wrap_data = wrap_data
         self.function = function
 
         MethodProperties.methods[function.__name__] = self
@@ -273,6 +290,10 @@ class MethodProperties(object):
         for ct in self._client_types:
             if ct not in const.VALID_CLIENT_TYPES:
                 raise Exception("Invalid client type %s specified for function %s" % (ct, function))
+
+        full_spec = inspect.getfullargspec(self.function)
+        if "return" not in full_spec.annotations and wrap_data:
+            raise Exception(f"Wrap data is only supported on methods that define a return type ({function}")
 
     @property
     def operation(self) -> str:
@@ -306,6 +327,10 @@ class MethodProperties(object):
     @property
     def client_types(self) -> List[str]:
         return self._client_types
+
+    @property
+    def wrap_data(self) -> bool:
+        return self._wrap_data
 
     def get_call_headers(self) -> Set[str]:
         """
