@@ -620,7 +620,7 @@ def convert_agent_trigger_method(value):
     return value
 
 
-TYPE_MAP = {"int": "integer", "bool": "boolean", "dict": "jsonb", "str": "varchar"}
+TYPE_MAP = {"int": "integer", "bool": "boolean", "dict": "jsonb", "str": "varchar", "enum": "varchar"}
 
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
@@ -644,7 +644,16 @@ class Setting(object):
     """
 
     def __init__(
-        self, name, typ, default=None, doc=None, validator=None, recompile=False, update_model=False, agent_restart=False
+        self,
+        name,
+        typ,
+        default=None,
+        doc=None,
+        validator=None,
+        recompile=False,
+        update_model=False,
+        agent_restart=False,
+        allowed_values=None,
     ):
         """
             :param name: The name of the setting.
@@ -657,6 +666,7 @@ class Setting(object):
             :param recompile: Trigger a recompile of the model when a setting is updated?
             :param update_model: Update the configuration model (git pull on project and repos)
             :param agent_restart: Restart autostarted agents when this settings is updated.
+            :param values: list of possible values (if type is enum)
         """
         self.typ = typ
         self.default = default
@@ -665,6 +675,7 @@ class Setting(object):
         self.recompile = recompile
         self.update = update_model
         self.agent_restart = agent_restart
+        self.allowed_values = allowed_values
 
     def to_dict(self):
         return {
@@ -674,6 +685,7 @@ class Setting(object):
             "recompile": self.recompile,
             "update": self.update,
             "agent_restart": self.agent_restart,
+            "allowed_values": self.allowed_values
         }
 
 
@@ -714,10 +726,11 @@ class Environment(BaseDocument):
         ),
         AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY: Setting(
             name=AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY,
-            typ="str",
+            typ="enum",
             default=const.AgentTriggerMethod.push_full_deploy.name,
             validator=convert_agent_trigger_method,
             doc="The agent trigger method to use when " + PUSH_ON_AUTO_DEPLOY + " is enabled",
+            allowed_values=[opt.name for opt in const.AgentTriggerMethod]
         ),
         AUTOSTART_SPLAY: Setting(
             name=AUTOSTART_SPLAY,
