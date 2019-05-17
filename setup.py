@@ -1,4 +1,5 @@
 from setuptools import setup, find_packages
+from os import path
 
 requires = [
     "asyncpg",
@@ -22,12 +23,19 @@ requires = [
 # Package a dummy extensions so that the namespace package for extensions is not empty
 namespace_packages = ["inmanta_ext.core"]
 
+# read the contents of your README file
+this_directory = path.abspath(path.dirname(__file__))
+with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
+    long_description = f.read()
+
 setup(
     version="2019.3",
     python_requires=">=3.6",  # also update classifiers
     # Meta data
     name="inmanta",
     description="Inmanta deployment tool",
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     author="Inmanta",
     author_email="code@inmanta.com",
     url="https://github.com/inmanta/inmanta",
