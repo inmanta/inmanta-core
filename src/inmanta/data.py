@@ -36,12 +36,12 @@ from inmanta import const, util
 import asyncpg
 
 from inmanta.types import JsonType
-from typing import Dict, List, Union, Set, Optional, Any, Tuple
-
+from typing import Dict, List, Union, Set, Optional, Any, Tuple, Iterable
 
 LOGGER = logging.getLogger(__name__)
 
 DBLIMIT = 100000
+
 
 # TODO: disconnect
 # TODO: difference between None and not set
@@ -280,7 +280,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         raise AttributeError(name)
 
     @classmethod
-    def _convert_field_names_to_db_column_names(cls, field_dict: Dict[str, str]) -> Dict[str, str]:
+    def _convert_field_names_to_db_column_names(cls, field_dict: Dict[str, Any]) -> Dict[str, Any]:
         return field_dict
 
     def _get_column_names_and_values(self) -> Tuple[List[str], List[str]]:
@@ -304,7 +304,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         return (column_names, values)
 
-    async def insert(self, connection=None):
+    async def insert(self, connection: asyncpg.Connection = None) -> None:
         """
             Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
@@ -346,7 +346,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return await con.execute(query, *values)
 
     @classmethod
-    async def insert_many(cls, documents):
+    async def insert_many(cls, documents: List["BaseDocument"]) -> None:
         """
             Insert multiple objects at once
         """
@@ -373,7 +373,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 result[name] = default_value
         return result
 
-    async def update(self, **kwargs):
+    async def update(self, **kwargs: Any) -> None:
         """
             Update this document in the database. It will update the fields in this object and send a full update to mongodb.
             Use update_fields to only update specific fields.
@@ -400,7 +400,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         set_statement = ",".join(parts_of_set_statement)
         return (set_statement, values)
 
-    async def update_fields(self, **kwargs):
+    async def update_fields(self, **kwargs: Any) -> None:
         """
             Update the given fields of this document in the database. It will update the fields in this object and do a specific
             $set in the mongodb on this document.
@@ -689,12 +689,12 @@ class Environment(BaseDocument):
         :param settings Key/value settings for this environment
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name = Field(field_type=str, required=True)
-    project = Field(field_type=uuid.UUID, required=True)
-    repo_url = Field(field_type=str, default="")
-    repo_branch = Field(field_type=str, default="")
-    settings = Field(field_type=dict, default={})
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    name: str = Field(field_type=str, required=True)
+    project: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+    repo_url: str = Field(field_type=str, default="")
+    repo_branch: str = Field(field_type=str, default="")
+    settings: Dict[str, Any] = Field(field_type=dict, default={})
 
     _settings = {
         AUTO_DEPLOY: Setting(
@@ -803,7 +803,7 @@ class Environment(BaseDocument):
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
     }  # name new_option -> name deprecated_option
 
-    async def get(self, key):
+    async def get(self, key: str) -> Union[str, int, bool, dict]:
         """
             Get a setting in this environment.
 
@@ -1130,34 +1130,69 @@ class Report(BaseDocument):
         :param outstream what was reported on system out
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    started = Field(field_type=datetime.datetime, required=True)
-    completed = Field(field_type=datetime.datetime, required=True)
-    command = Field(field_type=str, required=True)
-    name = Field(field_type=str, required=True)
-    errstream = Field(field_type=str, default="")
-    outstream = Field(field_type=str, default="")
-    returncode = Field(field_type=int)
-    compile = Field(field_type=uuid.UUID)
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    started: datetime.datetime = Field(field_type=datetime.datetime, required=True)
+    completed: Optional[datetime.datetime] = Field(field_type=datetime.datetime)
+    command: str = Field(field_type=str, required=True)
+    name: str = Field(field_type=str, required=True)
+    errstream: str = Field(field_type=str, default="")
+    outstream: str = Field(field_type=str, default="")
+    returncode: Optional[int] = Field(field_type=int)
+    compile: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+
+    async def update_streams(self, out: str = "", err: str = "") -> None:
+        if not out and not err:
+            return
+        await self._execute_query(
+            f"UPDATE {self.table_name()} SET outstream = outstream || $1, errstream = errstream || $2 WHERE id = $3",
+            self._get_value(out),
+            self._get_value(err),
+            self._get_value(self.id),
+        )
 
 
 class Compile(BaseDocument):
     """
         A run of the compiler
 
-        :param environment The environment this resource is defined in
-        :param started Time the compile started
-        :param completed Time to compile was completed
-        :param reports Per stage reports
+        :param environment: The environment this resource is defined in
+        :param requested: Time the compile was requested
+        :param started: Time the compile started
+        :param completed: Time to compile was completed
+        :param do_export: should this compiler perform an export
+        :param force_update: should this compile definitely update
+        :param metadata: exporter metadata to be passed to the compiler
+        :param environment_variable: environment variables to be passed to the compiler
+        :param succes: was the compile successful
+        :param handled: were all registered handlers executed?
+        :param version: version exported by this compile
+        :param remote_id: id as given by the requestor, used by the requestor to distinguish between different requests
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    environment = Field(field_type=uuid.UUID, required=True)
-    started = Field(field_type=datetime.datetime)
-    completed = Field(field_type=datetime.datetime)
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    remote_id: Optional[uuid.UUID] = Field(field_type=uuid.UUID)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+    requested: Optional[datetime.datetime] = Field(field_type=datetime.datetime)
+    started: Optional[datetime.datetime] = Field(field_type=datetime.datetime)
+    completed: Optional[datetime.datetime] = Field(field_type=datetime.datetime)
+
+    do_export: bool = Field(field_type=bool, default=False)
+    force_update: bool = Field(field_type=bool, default=False)
+    metadata: dict = Field(field_type=dict, default={})
+    environment_variables: dict = Field(field_type=dict)
+
+    success: Optional[bool] = Field(field_type=bool)
+    handled: bool = Field(field_type=bool, default=False)
+    version: Optional[int] = Field(field_type=int)
 
     @classmethod
-    async def get_reports(cls, environment_id, limit=None, start=None, end=None):
+    async def get_reports(
+        cls,
+        environment_id: uuid.UUID,
+        limit: Optional[int] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+    ) -> List[JsonType]:
         query = "SELECT * FROM " + cls.table_name()
         conditions_in_where_clause = ["environment=$1"]
         values = [cls._get_value(environment_id)]
@@ -1196,6 +1231,50 @@ class Compile(BaseDocument):
         dict_model["reports"] = [r.to_dict() for r in reports]
 
         return dict_model
+
+    @classmethod
+    async def get_last_run(cls, environment_id: uuid.UUID) -> "Compile":
+        results = await cls.select_query(
+            f"SELECT * FROM {cls.table_name()} where environment=$1 AND completed IS NOT NULL ORDER BY completed DESC LIMIT 1",
+            [cls._get_value(environment_id)],
+        )
+        if not results:
+            return None
+        return results[0]
+
+    @classmethod
+    async def get_next_run(cls, environment_id: uuid.UUID) -> "Compile":
+        results = await cls.select_query(
+            f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND completed IS NULL ORDER BY requested ASC LIMIT 1",
+            [cls._get_value(environment_id)],
+        )
+        if not results:
+            return None
+        return results[0]
+
+    @classmethod
+    async def get_next_run_all(cls) -> "List[Compile]":
+        results = await cls.select_query(
+            f"SELECT DISTINCT ON (environment) * FROM {cls.table_name()} WHERE completed IS NULL ORDER BY environment, "
+            f"requested ASC",
+            [],
+        )
+        return results
+
+    @classmethod
+    async def get_unhandled_compiles(cls) -> "List[Compile]":
+        results = await cls.select_query(
+            f"SELECT * FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL ORDER BY requested ASC", []
+        )
+        return results
+
+    @classmethod
+    async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "List[Compile]":
+        results = await cls.select_query(
+            f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND remote_id=$2",
+            [cls._get_value(environment_id), cls._get_value(remote_id)],
+        )
+        return results
 
 
 class Form(BaseDocument):
@@ -1264,7 +1343,6 @@ class LogLine(DataDocument):
 
 
 class ResourceVersionId(BaseDocument):
-
     environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     resource_version_id = Field(field_type=str, required=True, part_of_primary_key=True)
     action_id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1884,25 +1962,25 @@ class Resource(BaseDocument):
 
         return should_purge
 
-    async def insert(self, connection=None):
+    async def insert(self, connection: Optional[asyncpg.Connection] = None) -> None:
         self.make_hash()
         await super(Resource, self).insert(connection=connection)
 
     @classmethod
-    async def insert_many(cls, documents):
+    async def insert_many(cls, documents: Iterable["Resource"]) -> None:
         for doc in documents:
             doc.make_hash()
         await super(Resource, cls).insert_many(documents)
 
-    async def update(self, **kwargs):
+    async def update(self, **kwargs: Any) -> None:
         self.make_hash()
         await super(Resource, self).update(**kwargs)
 
-    async def update_fields(self, **kwargs):
+    async def update_fields(self, **kwargs: Any) -> None:
         self.make_hash()
         await super(Resource, self).update_fields(**kwargs)
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         self.make_hash()
         dct = super(Resource, self).to_dict()
         dct["id"] = dct["resource_version_id"]
@@ -2412,7 +2490,6 @@ _classes = [
 
 
 class DBSchema(object):
-
     PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 
     async def ensure_db_schema(self, connection):

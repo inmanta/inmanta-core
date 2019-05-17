@@ -289,7 +289,7 @@ class Option(Generic[T]):
 # Global config options are defined here
 #############################
 # flake8: noqa: H904
-state_dir = Option("config", "state_dir", "/var/lib/inmanta", "The directory where the server stores its state")
+state_dir: Option[str] = Option("config", "state_dir", "/var/lib/inmanta", "The directory where the server stores its state")
 
 log_dir = Option(
     "config",

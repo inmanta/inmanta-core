@@ -6,6 +6,7 @@ Changes in this release:
 - Updated dockerfile and docker-compose to use postgres and centos
 - Added extensions mechanism (#565, #1185)
 - Support to set environment variables on the Inmanta server and it's agents
+- Split of server recompile into separate extension (#1183)
 
 v 2019.2 (2019-04-30)
 Changes in this release:
