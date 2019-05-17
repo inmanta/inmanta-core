@@ -114,14 +114,14 @@ class CompileRun(object):
     async def drain_out(self, stream: asyncio.StreamReader) -> None:
         assert self.stage is not None
         while not stream.at_eof():
-            part = (await stream.read(1)).decode()
+            part = (await stream.read(8192)).decode()
             self._add_to_tail(part)
             await self.stage.update_streams(out=part)
 
     async def drain_err(self, stream: asyncio.StreamReader) -> None:
         assert self.stage is not None
         while not stream.at_eof():
-            part = (await stream.read(1)).decode()
+            part = (await stream.read(8192)).decode()
             await self.stage.update_streams(err=part)
 
     async def drain(self, sub_process: asyncio.subprocess.Process) -> int:
