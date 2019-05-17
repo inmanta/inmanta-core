@@ -41,7 +41,6 @@ from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.reporter import InfluxReporter
 from inmanta.resources import Id
 from inmanta.server import config as opt
-from inmanta.types import Apireturn, JsonType, ReturnTupple
 from inmanta.server import (
     protocol,
     SLICE_SERVER,
@@ -51,7 +50,7 @@ from inmanta.server import (
     SLICE_TRANSPORT,
     SLICE_COMPILER,
 )
-from inmanta.types import Apireturn, JsonType, Warnings
+from inmanta.types import Apireturn, JsonType, Warnings, ReturnTupple
 from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
