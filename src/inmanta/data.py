@@ -36,7 +36,7 @@ from inmanta import const, util
 import asyncpg
 
 from inmanta.types import JsonType
-from typing import Dict, List, Union, Set, Optional, Any, Tuple
+from typing import Dict, List, Union, Set, Optional, Any, Tuple, Iterable
 
 LOGGER = logging.getLogger(__name__)
 
@@ -803,7 +803,7 @@ class Environment(BaseDocument):
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
     }  # name new_option -> name deprecated_option
 
-    async def get(self, key: str):
+    async def get(self, key: str) -> Union[str, int, bool, dict]:
         """
             Get a setting in this environment.
 
@@ -1140,7 +1140,7 @@ class Report(BaseDocument):
     returncode: Optional[int] = Field(field_type=int)
     compile: uuid.UUID = Field(field_type=uuid.UUID, required=True)
 
-    async def update_streams(self, out="", err="") -> None:
+    async def update_streams(self, out: str = "", err: str = "") -> None:
         if not out and not err:
             return
         await self._execute_query(
@@ -1166,6 +1166,7 @@ class Compile(BaseDocument):
         :param succes: was the compile successful
         :param handled: were all registered handlers executed?
         :param version: version exported by this compile
+        :param remote_id: id as given by the requestor, used by the requestor to distinguish between different requests
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1264,7 +1265,7 @@ class Compile(BaseDocument):
         return results
 
     @classmethod
-    async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "Compile":
+    async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "List[Compile]":
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND remote_id=$2",
             [cls._get_value(environment_id), cls._get_value(remote_id)],
@@ -1957,21 +1958,21 @@ class Resource(BaseDocument):
 
         return should_purge
 
-    async def insert(self, connection=None) -> None:
+    async def insert(self, connection: Optional[asyncpg.Connection] = None) -> None:
         self.make_hash()
         await super(Resource, self).insert(connection=connection)
 
     @classmethod
-    async def insert_many(cls, documents) -> None:
+    async def insert_many(cls, documents: Iterable["Resource"]) -> None:
         for doc in documents:
             doc.make_hash()
         await super(Resource, cls).insert_many(documents)
 
-    async def update(self, **kwargs) -> None:
+    async def update(self, **kwargs: Any) -> None:
         self.make_hash()
         await super(Resource, self).update(**kwargs)
 
-    async def update_fields(self, **kwargs) -> None:
+    async def update_fields(self, **kwargs: Any) -> None:
         self.make_hash()
         await super(Resource, self).update_fields(**kwargs)
 

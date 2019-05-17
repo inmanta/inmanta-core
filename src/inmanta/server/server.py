@@ -50,7 +50,7 @@ from inmanta.server import (
     SLICE_TRANSPORT,
     SLICE_COMPILER,
 )
-from inmanta.types import Apireturn, JsonType
+from inmanta.types import Apireturn, JsonType, Warnings
 from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
@@ -1977,13 +1977,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return attach_warnings(200, None, warnings)
 
-    async def _async_recompile(self, env: data.Environment, update_repo: bool, metadata: JsonType = {}) -> None:
+    async def _async_recompile(self, env: data.Environment, update_repo: bool, metadata: JsonType = {}) -> Warnings:
         """
             Recompile an environment in a different thread and taking wait time into account.
         """
-        await self.compiler.request_recompile(
+        _, warnings = await self.compiler.request_recompile(
             env=env, force_update=update_repo, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
         )
+        return warnings
 
     @protocol.handle(methods.decomission_environment, env="id")
     async def decomission_environment(self, env: data.Environment, metadata: JsonType) -> Apireturn:

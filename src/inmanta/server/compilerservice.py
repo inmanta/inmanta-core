@@ -25,7 +25,7 @@ import subprocess
 import traceback
 import uuid
 from tempfile import NamedTemporaryFile
-from typing import List, Dict, Optional, cast
+from typing import List, Dict, Optional, cast, Tuple
 import re
 from asyncio import CancelledError, Task
 
@@ -337,14 +337,16 @@ class CompilerService(ServerSlice):
         remote_id: uuid.UUID,
         metadata: JsonType = {},
         env_vars: Dict[str, str] = {},
-    ) -> Warnings:
+    ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
             Recompile an environment in a different thread and taking wait time into account.
+
+            :return: the compile id of the requested compile and any warnings produced during the request
         """
         server_compile: bool = await env.get(data.SERVER_COMPILE)
         if not server_compile:
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
-            return ["Skipping compile because server compile not enabled for this environment."]
+            return None, ["Skipping compile because server compile not enabled for this environment."]
 
         requested = datetime.datetime.now()
         compile = data.Compile(
@@ -358,7 +360,7 @@ class CompilerService(ServerSlice):
         )
         await compile.insert()
         await self._queue(compile)
-        return None
+        return compile.id, None
 
     async def _queue(self, compile: data.Compile) -> None:
         async with self._global_lock:
@@ -402,7 +404,7 @@ class CompilerService(ServerSlice):
             return 200
         return 204
 
-    async def _run(self, compile: data.Compile):
+    async def _run(self, compile: data.Compile) -> None:
         now = datetime.datetime.now()
 
         wait_time = opt.server_autrecompile_wait.get()

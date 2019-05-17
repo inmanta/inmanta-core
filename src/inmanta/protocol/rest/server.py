@@ -261,7 +261,7 @@ class RESTServer(RESTBase):
 
         for url, handler_config in global_url_map.items():
             rules.append(routing.Rule(routing.PathMatches(url), RESTHandler, {"transport": self, "config": handler_config}))
-            LOGGER.debug("Registering handler(s) for url %s and methods %s" % (url, ", ".join(handler_config.keys())))
+            LOGGER.debug("Registering handler(s) for url %s and methods %s", url, ", ".join(handler_config.keys()))
 
         port = 8888
         if self.id in inmanta_config.Config.get() and "port" in inmanta_config.Config.get()[self.id]:
