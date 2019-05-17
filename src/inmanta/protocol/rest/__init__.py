@@ -299,7 +299,7 @@ class CallArguments(object):
                     return common.Response(body=body, headers=headers, status_code=code)
 
                 else:
-                    LOGGER.warning("Method %s returned a result although it is has no reply!")
+                    LOGGER.warning("Method %s returned a result although it has no reply!")
 
             return common.Response(headers=headers, status_code=code)
 
