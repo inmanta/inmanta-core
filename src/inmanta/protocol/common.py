@@ -67,6 +67,7 @@ class ArgOption(object):
     def __init__(
         self,
         getter: Callable[[Any, Dict[str, str]], Coroutine[Any, Any, Any]],
+        # Type is Any to Any because it transforms from method to handler but in the current typing there is no link
         header: Optional[str] = None,
         reply_header: bool = True,
     ) -> None:
