@@ -469,5 +469,5 @@ Site()
     """,
         """Could not set attribute `tier` on instance `__config__::Site (instantiated at {dir}/main.cf:28)` (reported in self.tier = Construct(Tier) ({dir}/main.cf:20))
 caused by:
-  Type found in index is not an exact match (original at ({dir}/main.cf:20)) (duplicate at ({dir}/main.cf:21))""", # noqa: E501
+  Type found in index is not an exact match (original at ({dir}/main.cf:20)) (duplicate at ({dir}/main.cf:21))""",  # noqa: E501
     )
