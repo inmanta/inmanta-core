@@ -434,3 +434,40 @@ caused by:
 \t\tset at {dir}/main.cf:15:34
  (reported in Construct(Test) ({dir}/main.cf:15))""",  # noqa: E501
     )
+
+
+def test_index_collission_error_reporting(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Site:
+end
+
+entity Tier:
+    string type
+end
+
+entity SubTier extends Tier:
+
+end
+
+index Tier(type)
+
+Site.tier [1] -- Tier
+
+implementation tiers for Site:
+    # Only fails when assignment is inside the implementation
+    # Does not fail when in ctor or s = Site(); s.tier = ...
+    self.tier = Tier(type="api")
+    self.tier = SubTier(type="api")
+end
+
+implement Site using tiers
+implement Tier using std::none
+implement SubTier using std::none
+
+Site()
+    """,
+        """Could not set attribute `tier` on instance `__config__::Site (instantiated at {dir}/main.cf:28)` (reported in self.tier = Construct(Tier) ({dir}/main.cf:20))
+caused by:
+  Type found in index is not an exact match (original at ({dir}/main.cf:20)) (duplicate at ({dir}/main.cf:21))""",
+    )  # noqa: E501
