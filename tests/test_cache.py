@@ -20,7 +20,7 @@ from threading import Lock, Thread
 from time import sleep
 
 import pytest
-from _pytest.fixtures import fixture
+from pytest import fixture
 
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import cache
