@@ -18,8 +18,8 @@
 
 import pytest
 
-from inmanta.ast import OptionalValueException
 import inmanta.compiler as compiler
+from inmanta.ast import OptionalValueException
 from inmanta.execute.util import NoneValue
 
 

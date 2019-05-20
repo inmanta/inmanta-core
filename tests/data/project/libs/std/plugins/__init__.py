@@ -17,33 +17,29 @@
 """
 
 import hashlib
+import logging
 import os
 import random
 import re
 import time
-import logging
-from operator import attrgetter
-from itertools import chain
 from collections import defaultdict
-
-
-from inmanta.ast import OptionalValueException, RuntimeException
-from inmanta.execute.proxy import DynamicProxy, UnknownException
-from inmanta.execute.util import Unknown, NoneValue
-from inmanta.export import dependency_manager
-from inmanta.plugins import plugin, Context
-from inmanta.export import unknown_parameters
-from inmanta import resources
-from inmanta.module import Project
-from inmanta.config import Config
-
-
 from copy import copy
-from inmanta.ast import NotFoundException
+from itertools import chain
+from operator import attrgetter
+
+import jinja2
 from jinja2 import Environment, FileSystemLoader, PrefixLoader
 from jinja2.exceptions import UndefinedError
 from jinja2.runtime import Undefined
-import jinja2
+
+from inmanta import resources
+from inmanta.ast import NotFoundException, OptionalValueException, RuntimeException
+from inmanta.config import Config
+from inmanta.execute.proxy import DynamicProxy, UnknownException
+from inmanta.execute.util import NoneValue, Unknown
+from inmanta.export import dependency_manager, unknown_parameters
+from inmanta.module import Project
+from inmanta.plugins import Context, plugin
 
 
 @plugin

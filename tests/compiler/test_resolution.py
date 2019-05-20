@@ -18,9 +18,8 @@
 
 import pytest
 
-from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import DuplicateException, TypeNotFoundException
 import inmanta.compiler as compiler
+from inmanta.ast import DuplicateException, NotFoundException, TypeNotFoundException, TypingException
 
 
 def test_issue_92(snippetcompiler):

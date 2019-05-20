@@ -15,48 +15,44 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import concurrent
-import os
-import tempfile
-import random
-import string
-import shutil
-from tempfile import mktemp
-import socket
 import logging
+import os
+import random
+import re
+import shutil
+import socket
+import string
+import sys
+import tempfile
+import traceback
+from tempfile import mktemp
+from typing import Dict, Optional
 
-
+import asyncpg
+import pkg_resources
+import pyformance
 import pytest
+from asyncpg.exceptions import DuplicateDatabaseError
+from click import testing
+from pyformance.registry import MetricsRegistry
+from tornado import netutil, process
+from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
-import utils
-from inmanta import data, config
-import inmanta.compiler as compiler
-from inmanta.module import Project
-from inmanta import resources
 import inmanta.agent
+import inmanta.compiler as compiler
+import inmanta.main
+import utils
+from inmanta import config, data, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
-from click import testing
-import inmanta.main
-import re
-from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.export import cfg_env, unknown_parameters
-import traceback
-from tornado import process, netutil
-import asyncio
-from tornado.platform.asyncio import AnyThreadEventLoopPolicy
-import asyncpg
-from asyncpg.exceptions import DuplicateDatabaseError
+from inmanta.module import Project
 from inmanta.postgresproc import PostgresProc
-import sys
-import pkg_resources
-from typing import Optional, Dict
-from inmanta import protocol
-import pyformance
-from pyformance.registry import MetricsRegistry
-
+from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_free_tcp_port
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())

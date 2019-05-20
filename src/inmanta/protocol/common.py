@@ -16,24 +16,40 @@
     Contact: code@inmanta.com
 """
 
-import inspect
 import enum
-import uuid
-import logging
-import json
 import gzip
+import inspect
 import io
+import json
+import logging
 import time
+import uuid
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Coroutine,
+    Dict,
+    Generic,
+    List,
+    MutableMapping,
+    Optional,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
+from urllib import parse
 
 import jwt
-
 from tornado import web
-from urllib import parse
-from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, cast, Coroutine, TYPE_CHECKING  # noqa: F401
 
-from inmanta import execute, const, util
 from inmanta import config as inmanta_config
-from inmanta.types import JsonType
+from inmanta import const, execute, util
+from inmanta.data.model import BaseModel
+from inmanta.types import HandlerType, JsonType, MethodType
+
 from . import exceptions
 
 if TYPE_CHECKING:
@@ -50,9 +66,10 @@ class ArgOption(object):
 
     def __init__(
         self,
+        getter: Callable[[Any, Dict[str, str]], Coroutine[Any, Any, Any]],
+        # Type is Any to Any because it transforms from method to handler but in the current typing there is no link
         header: Optional[str] = None,
         reply_header: bool = True,
-        getter: Optional[Callable[[Any, Dict[str, str]], Coroutine[Any, Any, Any]]] = None,
     ) -> None:
         """
             :param header: Map this argument to a header with the following name.
@@ -70,7 +87,7 @@ class Request(object):
         A protocol request
     """
 
-    def __init__(self, url: str, method: str, headers: Dict[str, str], body: Dict[str, Any]) -> None:
+    def __init__(self, url: str, method: str, headers: Dict[str, str], body: Optional[JsonType]) -> None:
         self._url = url
         self._method = method
         self._headers = headers
@@ -78,7 +95,7 @@ class Request(object):
         self._reply_id: Optional[uuid.UUID] = None
 
     @property
-    def body(self) -> Dict[str, Any]:
+    def body(self) -> Optional[JsonType]:
         return self._body
 
     @property
@@ -101,15 +118,15 @@ class Request(object):
 
     reply_id = property(get_reply_id, set_reply_id)
 
-    def to_dict(self) -> Dict[str, Any]:
-        return_dict: Dict[str, Any] = {"url": self._url, "headers": self._headers, "body": self._body, "method": self._method}
+    def to_dict(self) -> JsonType:
+        return_dict: JsonType = {"url": self._url, "headers": self._headers, "body": self._body, "method": self._method}
         if self._reply_id is not None:
             return_dict["reply_id"] = self._reply_id
 
         return return_dict
 
     @classmethod
-    def from_dict(cls, value: Dict[str, Any]) -> "Request":
+    def from_dict(cls, value: JsonType) -> "Request":
         reply_id: Optional[str] = None
         if "reply_id" in value:
             reply_id = cast(str, value["reply_id"])
@@ -123,18 +140,70 @@ class Request(object):
         return req
 
 
+T = TypeVar("T", bound=BaseModel)
+
+
+class ReturnValue(Generic[T]):
+    """
+        An object that handlers can return to provide a response to a method call.
+    """
+
+    def __init__(self, status_code: int = 200, headers: MutableMapping[str, str] = {}, response: Optional[T] = None) -> None:
+        self._status_code = status_code
+        self._headers = headers
+        self._response = response
+
+    @property
+    def status_code(self) -> int:
+        return self._status_code
+
+    @property
+    def headers(self) -> MutableMapping[str, str]:
+        return self._headers
+
+    def get_body(self, wrap_data: bool = False) -> Optional[JsonType]:
+        """ Get the response body
+
+            :param wrap_data: Should the response be mapped into a data key
+        """
+        if self._response is None:
+            return None
+
+        response = self._response.dict()
+
+        if wrap_data:
+            return {"data": response}
+
+        return response
+
+    def __repr__(self) -> str:
+        return f"ReturnValue<code={self.status_code} headers=<{self.headers}> response=<{self._response}>>"
+
+    def __str__(self) -> str:
+        return repr(self)
+
+
 class Response(object):
     """
         A response object of a call
     """
 
-    def __init__(self, status_code: int, headers: Dict[str, str], body: Optional[Dict[str, Any]] = None) -> None:
+    @classmethod
+    def create(
+        cls, result: ReturnValue, additional_headers: MutableMapping[str, str] = {}, wrap_data: bool = False
+    ) -> "Response":
+        """
+            Create a response from a return value
+        """
+        return cls(status_code=result.status_code, headers=additional_headers, body=result.get_body(wrap_data))
+
+    def __init__(self, status_code: int, headers: Dict[str, str], body: Optional[JsonType] = None) -> None:
         self._status_code = status_code
         self._headers = headers
         self._body = body
 
     @property
-    def body(self) -> Optional[Dict[str, Any]]:
+    def body(self) -> Optional[JsonType]:
         return self._body
 
     @property
@@ -155,7 +224,7 @@ class MethodProperties(object):
 
     def __init__(
         self,
-        function: Callable[..., Dict[str, Any]],
+        function: MethodType,
         method_name: str,
         index: bool,
         id: bool,
@@ -170,6 +239,7 @@ class MethodProperties(object):
         client_types: List[str],
         api_version: int,
         api_prefix: str,
+        wrap_data: bool,
     ) -> None:
         """
             Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -189,6 +259,7 @@ class MethodProperties(object):
                                 to which the options apply.
             :param api_version: The version of the api this method belongs to
             :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
+            :param wrap_data: Put the response of the call under a "data" key.
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -210,6 +281,7 @@ class MethodProperties(object):
         self._client_types = client_types
         self._api_version = api_version
         self._api_prefix = api_prefix
+        self._wrap_data = wrap_data
         self.function = function
 
         MethodProperties.methods[function.__name__] = self
@@ -219,6 +291,10 @@ class MethodProperties(object):
         for ct in self._client_types:
             if ct not in const.VALID_CLIENT_TYPES:
                 raise Exception("Invalid client type %s specified for function %s" % (ct, function))
+
+        full_spec = inspect.getfullargspec(self.function)
+        if "return" not in full_spec.annotations and wrap_data:
+            raise Exception(f"Wrap data is only supported on methods that define a return type ({function}")
 
     @property
     def operation(self) -> str:
@@ -230,6 +306,7 @@ class MethodProperties(object):
 
     @property
     def timeout(self) -> Optional[int]:
+
         return self._timeout
 
     @property
@@ -251,6 +328,10 @@ class MethodProperties(object):
     @property
     def client_types(self) -> List[str]:
         return self._client_types
+
+    @property
+    def wrap_data(self) -> bool:
+        return self._wrap_data
 
     def get_call_headers(self) -> Set[str]:
         """
@@ -347,13 +428,7 @@ class UrlMethod(object):
         :param method_name: The name of the method to call on the endpoint
     """
 
-    def __init__(
-        self,
-        properties: MethodProperties,
-        slice: "CallTarget",
-        handler: Callable[..., Dict[int, Dict[str, Any]]],
-        method_name: str,
-    ):
+    def __init__(self, properties: MethodProperties, slice: "CallTarget", handler: HandlerType, method_name: str):
         self._properties = properties
         self._handler = handler
         self._slice = slice
@@ -364,7 +439,7 @@ class UrlMethod(object):
         return self._properties
 
     @property
-    def handler(self) -> Callable[..., Dict[int, Dict[str, Any]]]:
+    def handler(self) -> HandlerType:
         return self._handler
 
     @property
@@ -489,12 +564,12 @@ class Result(object):
         A result of a method call
     """
 
-    def __init__(self, code: int = 0, result: Dict[str, Any] = None):
+    def __init__(self, code: int = 0, result: Optional[JsonType] = None) -> None:
         self._result = result
         self.code = code
-        self._callback = None
+        self._callback: Optional[Callable[["Result"], None]] = None
 
-    def get_result(self) -> Dict[str, Any]:
+    def get_result(self) -> Optional[JsonType]:
         """
             Only when the result is marked as available the result can be returned
         """
@@ -502,7 +577,7 @@ class Result(object):
             return self._result
         raise Exception("The result is not yet available")
 
-    def set_result(self, value):
+    def set_result(self, value: Optional[JsonType]) -> None:
         if not self.available():
             self._result = value
             if self._callback:
@@ -522,7 +597,7 @@ class Result(object):
 
     result = property(get_result, set_result)
 
-    def callback(self, fnc):
+    def callback(self, fnc: Callable[["Result"], None]) -> None:
         """
             Set a callback function that is to be called when the result is ready.
         """

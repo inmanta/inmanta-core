@@ -16,10 +16,11 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException, Locatable, Named, DuplicateException, Location
-from inmanta.execute.util import AnyType, NoneValue
 import numbers
 from typing import Optional
+
+from inmanta.ast import DuplicateException, Locatable, Location, Named, Namespace, RuntimeException, TypeNotFoundException
+from inmanta.execute.util import AnyType, NoneValue
 
 
 class BasicResolver(object):

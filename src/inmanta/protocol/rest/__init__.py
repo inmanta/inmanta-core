@@ -15,20 +15,23 @@
 
     Contact: code@inmanta.com
 """
-import logging
+import enum
 import inspect
 import json
+import logging
 import uuid
 from datetime import datetime
-import enum
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Type, cast  # noqa: F401
 
+import pydantic
 from tornado import escape
-from inmanta import const, util
-from inmanta.types import JsonType
-from inmanta.protocol import common, exceptions
-from inmanta import config as inmanta_config
 
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, cast, Mapping  # noqa: F401
+from inmanta import config as inmanta_config
+from inmanta import const, util
+from inmanta.data.model import BaseModel
+from inmanta.protocol import common, exceptions
+from inmanta.protocol.common import ReturnValue
+from inmanta.types import Apireturn, JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -149,11 +152,14 @@ class CallArguments(object):
         if value is None:
             return value
 
-        arg_type = self._argspec.annotations[arg]
+        arg_type: Type = self._argspec.annotations[arg]
         if isinstance(value, arg_type):
             return value
 
         try:
+            if issubclass(arg_type, BaseModel):
+                return arg_type(**value)
+
             if arg_type == datetime:
                 return datetime.strptime(value, const.TIME_ISOFMT)
 
@@ -166,13 +172,13 @@ class CallArguments(object):
             else:
                 return arg_type(value)
 
+        except pydantic.ValidationError as e:
+            error_msg = f"Failed to validate argument {arg} of expected type {arg_type}\n{str(e)}"
+            LOGGER.exception(error_msg)
+            raise exceptions.BadRequest()
+
         except (ValueError, TypeError):
-            error_msg = "Invalid type for argument %s. Expected %s but received %s, %s" % (
-                arg,
-                arg_type,
-                value.__class__,
-                value,
-            )
+            error_msg = f"Invalid type for argument {arg}. Expected {arg_type} but received {value.__class__}, {value}"
             LOGGER.exception(error_msg)
             raise exceptions.BadRequest(error_msg)
 
@@ -242,6 +248,60 @@ class CallArguments(object):
             )
 
         self._processed = True
+
+    async def process_return(self, config: common.UrlMethod, headers: Dict[str, str], result: Apireturn) -> common.Response:
+        """ A handler can return ApiReturn, so lets handle all possible return types and convert it to a Response
+
+            Apireturn = Union[int, Tuple[int, Optional[JsonType]], "ReturnValue", "BaseModel"]
+        """
+        if "return" in self._argspec.annotations:  # new style with return type
+            return_type = self._argspec.annotations["return"]
+
+            if return_type is None:
+                if result is not None:
+                    raise exceptions.ServerError(f"Method {config.method_name} returned a result but is defined as -> None")
+
+                return common.Response(headers=headers, status_code=200)
+
+            # There is no obvious method to check if the return_type is a specific version of the generic ReturnValue
+            # The way this is implemented in typing is different for python 3.6 and 3.7. In this code we "trust" that the
+            # signature of the handler and the method definition matches and the returned value matches this return value
+            # Both isubclass and isinstance fail on this type
+            if isinstance(result, ReturnValue):
+                return common.Response.create(result, headers, config.properties.wrap_data)
+
+            elif isinstance(result, BaseModel):
+                return common.Response.create(ReturnValue(response=result), headers, config.properties.wrap_data)
+
+            else:
+                raise exceptions.ServerError(
+                    f"Method {config.method_name} returned an invalid result {result} instead of a BaseModel or ReturnValue"
+                )
+
+        else:  # "old" style method definition
+            if isinstance(result, tuple):
+                if len(result) == 2:
+                    code, body = result
+                else:
+                    raise exceptions.ServerError("Handlers for method call can only return a status code and a reply")
+
+            elif isinstance(result, int):
+                code = result
+                body = None
+
+            else:
+                raise exceptions.ServerError(
+                    f"Method {config.method_name} returned an invalid result {result} instead of a status code or tupple"
+                )
+
+            if body is not None:
+                if config.properties.reply:
+                    return common.Response(body=body, headers=headers, status_code=code)
+
+                else:
+                    LOGGER.warning("Method %s returned a result although it has no reply!")
+
+            return common.Response(headers=headers, status_code=code)
 
 
 # Shared
@@ -318,33 +378,7 @@ class RESTBase(util.TaskHandler):
             )
 
             result = await config.handler(**arguments.call_args)
-
-            if result is None:
-                raise exceptions.BadRequest(
-                    "Handlers for method calls should at least return a status code. %s on %s"
-                    % (config.method_name, config.endpoint)
-                )
-
-            reply = None
-            if isinstance(result, tuple):
-                if len(result) == 2:
-                    code, reply = result
-                else:
-                    raise exceptions.BadRequest("Handlers for method call can only return a status code and a reply")
-
-            else:
-                code = result
-
-            if reply is not None:
-                if config.properties.reply:
-                    LOGGER.debug("%s returned %d: %s", config.method_name, code, common.shorten(str(reply), 70))
-                    return common.Response(body=reply, headers=headers, status_code=code)
-
-                else:
-                    LOGGER.warning("Method %s returned a result although it is has not reply!")
-
-            return common.Response(headers=headers, status_code=code)
-
+            return await arguments.process_return(config, headers, result)
         except exceptions.BaseHttpException:
             LOGGER.exception("")
             raise

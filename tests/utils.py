@@ -15,11 +15,11 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
+import inspect
 import json
 import logging
 import time
-import asyncio
-import inspect
 
 from inmanta import data
 
@@ -175,6 +175,24 @@ class LogSequence(object):
 
     def no_more_errors(self):
         self.assert_not("", logging.ERROR, "")
+
+
+def configure(unused_tcp_port, database_name, database_port):
+    from inmanta.config import Config
+
+    import inmanta.agent.config  # noqa: F401
+    import inmanta.server.config  # noqa: F401
+
+    free_port = str(unused_tcp_port)
+    Config.load_config()
+    Config.set("server_rest_transport", "port", free_port)
+    Config.set("agent_rest_transport", "port", free_port)
+    Config.set("compiler_rest_transport", "port", free_port)
+    Config.set("client_rest_transport", "port", free_port)
+    Config.set("cmdline_rest_transport", "port", free_port)
+    Config.set("database", "name", database_name)
+    Config.set("database", "host", "localhost")
+    Config.set("database", "port", str(database_port))
 
 
 async def report_db_index_usage(min_precent=100):

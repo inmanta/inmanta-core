@@ -20,18 +20,18 @@ import ssl
 import uuid
 from asyncio import CancelledError
 from collections import defaultdict
-
-from typing import Optional, Dict, List
+from typing import Dict, List, MutableMapping, Optional
 
 import tornado
 from pyformance import timer
-from tornado import httpserver, web, routing, iostream
+from tornado import httpserver, iostream, routing, web
 
 import inmanta.protocol.endpoints
-from inmanta import config as inmanta_config, const
-from inmanta.protocol import exceptions, common
+from inmanta import config as inmanta_config
+from inmanta import const
+from inmanta.protocol import common, exceptions
 from inmanta.protocol.common import UrlMethod
-from inmanta.protocol.rest import LOGGER, CONTENT_TYPE, JSON_CONTENT, RESTBase
+from inmanta.protocol.rest import CONTENT_TYPE, JSON_CONTENT, LOGGER, RESTBase
 from inmanta.types import JsonType
 
 
@@ -54,7 +54,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
         return self._config[http_method]
 
-    def get_auth_token(self, headers: Dict[str, str]) -> Optional[Dict[str, str]]:
+    def get_auth_token(self, headers: MutableMapping[str, str]) -> Optional[MutableMapping[str, str]]:
         """
             Get the auth token provided by the caller. The token is provided as a bearer token.
         """

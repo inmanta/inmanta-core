@@ -16,8 +16,9 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.config import *
 import logging
+
+from inmanta.config import *
 
 LOGGER = logging.getLogger(__name__)
 

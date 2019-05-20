@@ -17,11 +17,11 @@
 """
 import asyncio
 import json
-import time
 import os
+import time
+
 import pytest
 import tornado
-
 from tornado import web
 
 from inmanta import protocol

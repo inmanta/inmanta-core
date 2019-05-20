@@ -17,6 +17,7 @@
 """
 
 import pytest
+
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import DynamicProxy
 

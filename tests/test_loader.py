@@ -15,9 +15,10 @@
 
     Contact: code@inmanta.com
 """
-import pytest
-import inspect
 import hashlib
+import inspect
+
+import pytest
 
 from inmanta import loader
 

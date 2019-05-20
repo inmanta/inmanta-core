@@ -18,30 +18,30 @@
 # pylint: disable-msg=R0923,W0613
 
 import logging
+from typing import Dict, List, Optional, Tuple
+
+from inmanta.ast import (
+    AttributeReferenceAnchor,
+    DuplicateException,
+    Import,
+    IndexException,
+    LocatableString,
+    Namespace,
+    NotFoundException,
+    TypeNotFoundException,
+    TypeReferenceAnchor,
+    TypingException,
+)
+from inmanta.ast.attribute import Attribute, RelationAttribute
+from inmanta.ast.blocks import BasicBlock
+from inmanta.ast.constraint.expression import Equals
+from inmanta.ast.entity import Default, Entity, EntityLike, Implement, Implementation
+from inmanta.ast.statements import BiStatement, ExpressionStatement, Literal, Statement, TypeDefinitionStatement
+from inmanta.ast.statements.generator import Constructor
+from inmanta.ast.type import ConstraintType, Type
+from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 
 from . import DefinitionStatement
-from inmanta.ast.type import ConstraintType, Type
-from inmanta.ast.attribute import Attribute, RelationAttribute
-from inmanta.ast.entity import Implementation, Entity, Default, Implement, EntityLike
-from inmanta.ast.constraint.expression import Equals
-from inmanta.ast.statements import TypeDefinitionStatement, Statement, ExpressionStatement, Literal, BiStatement
-from inmanta.ast import (
-    Namespace,
-    TypingException,
-    DuplicateException,
-    TypeNotFoundException,
-    NotFoundException,
-    LocatableString,
-    TypeReferenceAnchor,
-    AttributeReferenceAnchor,
-    IndexException,
-    Import,
-)
-from typing import List, Optional, Dict, Tuple
-from inmanta.execute.runtime import ResultVariable, ExecutionUnit, Resolver, QueueScheduler
-from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements.generator import Constructor
-
 
 LOGGER = logging.getLogger(__name__)
 

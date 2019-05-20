@@ -15,17 +15,16 @@
 
     Contact: code@inmanta.com
 """
-import os
 import glob
-import imp
 import hashlib
-import logging
+import imp
 import inspect
+import logging
+import os
 import types
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import pkg_resources
-
-from typing import Dict, Set, Iterable, List, Tuple, Optional
 
 from inmanta import const
 from inmanta.module import Project

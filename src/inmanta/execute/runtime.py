@@ -16,23 +16,24 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.execute.util import Unknown
-from inmanta.execute.proxy import UnsetException
+from abc import abstractmethod
+from typing import Dict, Generic, List, Optional, Set, TypeVar, Union
+
 from inmanta.ast import (
-    RuntimeException,
-    NotFoundException,
-    DoubleSetException,
-    OptionalValueException,
     AttributeException,
+    DoubleSetException,
     Locatable,
     Location,
     ModifiedAfterFreezeException,
     Namespace,
+    NotFoundException,
+    OptionalValueException,
+    RuntimeException,
 )
 from inmanta.ast.type import Type
-from typing import List, Dict, Optional, TypeVar, Generic, Union, Set
-from abc import abstractmethod
+from inmanta.execute.proxy import UnsetException
 from inmanta.execute.tracking import Tracker
+from inmanta.execute.util import Unknown
 
 try:
     from typing import TYPE_CHECKING

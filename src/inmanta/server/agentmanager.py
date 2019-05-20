@@ -15,34 +15,32 @@
 
     Contact: code@inmanta.com
 """
-from tornado import locks
-from tornado import process
-
-
-from inmanta.config import Config
-from inmanta import data
-from inmanta.protocol.exceptions import ShutdownInProgress
-from inmanta.server import protocol, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_SERVER, SLICE_DATABASE, SLICE_TRANSPORT
-from inmanta.util import retry_limited
-from . import config as server_config
-from inmanta.types import Apireturn
-
+import asyncio
 import logging
 import os
-from datetime import datetime
-import time
 import sys
+import time
 import uuid
-from inmanta.server.protocol import ServerSlice, SessionListener, SessionManager, ReturnClient
-from inmanta.server import config as opt
-from inmanta.protocol import encode_token, methods
-from inmanta.resources import Id
-import asyncio
-
-from typing import Optional, Dict, List, Tuple
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
 from uuid import UUID
-from inmanta.server.server import Server
 
+from tornado import locks, process
+
+from inmanta import data
+from inmanta.config import Config
+from inmanta.protocol import encode_token, methods
+from inmanta.protocol.exceptions import ShutdownInProgress
+from inmanta.resources import Id
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT
+from inmanta.server import config as opt
+from inmanta.server import protocol
+from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, SessionManager
+from inmanta.server.server import Server
+from inmanta.types import Apireturn
+from inmanta.util import retry_limited
+
+from . import config as server_config
 
 LOGGER = logging.getLogger(__name__)
 

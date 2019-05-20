@@ -15,19 +15,20 @@
 
     Contact: code@inmanta.com
 """
-import pytest
-import asyncpg
 import datetime
-import uuid
-import time
-import logging
 import inspect
-import types
+import logging
 import pkgutil
+import time
+import types
+import uuid
 
-from inmanta import data, const
-from inmanta.const import LogLevel
+import asyncpg
+import pytest
 from asyncpg import PostgresSyntaxError
+
+from inmanta import const, data
+from inmanta.const import LogLevel
 
 
 @pytest.mark.asyncio

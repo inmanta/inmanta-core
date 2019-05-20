@@ -16,11 +16,12 @@
     Contact: code@inmanta.com
 """
 
+from typing import List, Optional, Tuple
+
 from inmanta.ast import Locatable, RuntimeException, TypingException
-from inmanta.ast.type import TypedList, NullableType
-from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable, QueueScheduler
+from inmanta.ast.type import NullableType, TypedList
+from inmanta.execute.runtime import AttributeVariable, ListVariable, OptionVariable, QueueScheduler, ResultVariable
 from inmanta.execute.util import Unknown
-from typing import List, Tuple, Optional
 
 try:
     from typing import TYPE_CHECKING

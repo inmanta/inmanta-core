@@ -15,28 +15,27 @@
 
     Contact: code@inmanta.com
 """
-from configparser import RawConfigParser
-
-from inmanta.const import ResourceState, DONE_STATES
-from collections import defaultdict
-from asyncpg import UndefinedTableError
 import copy
 import datetime
 import enum
-import uuid
+import hashlib
 import json
 import logging
-import warnings
-import hashlib
 import pkgutil
-import inmanta.db.versions
+import uuid
+import warnings
+from collections import defaultdict
+from configparser import RawConfigParser
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
-from inmanta.resources import Id
-from inmanta import const, util
 import asyncpg
+from asyncpg import UndefinedTableError
 
+import inmanta.db.versions
+from inmanta import const, util
+from inmanta.const import DONE_STATES, ResourceState
+from inmanta.resources import Id
 from inmanta.types import JsonType
-from typing import Dict, List, Union, Set, Optional, Any, Tuple, Iterable
 
 LOGGER = logging.getLogger(__name__)
 

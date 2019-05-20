@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,20 +15,25 @@
 
     Contact: code@inmanta.com
 """
-import pytest
+from enum import Enum
 
-from inmanta.agent import reporting
-from inmanta.server import SLICE_SESSION_MANAGER
+from inmanta.data.model import BaseModel
 
 
-@pytest.mark.slowtest
-@pytest.mark.asyncio
-async def test_agent_get_status(server, environment, agent):
-    clients = server.get_slice(SLICE_SESSION_MANAGER)._sessions.values()
-    assert len(clients) == 1
-    clients = [x for x in clients]
-    client = clients[0].get_client()
-    status = await client.get_status()
-    status = status.get_result()
-    for name in reporting.reports.keys():
-        assert name in status and status[name] != "ERROR"
+def test_model_inheritance():
+    """ Test if config classes inheritance
+    """
+
+    class Choices(str, Enum):
+        yes = "yes"
+        no = "no"
+
+    class Project(BaseModel):
+        name: str
+        opts: Choices
+
+    project = Project(name="test", opts="no")
+    ser = project.dict()
+
+    assert ser["opts"] == "no"
+    assert not isinstance(ser["opts"], Enum)

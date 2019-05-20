@@ -1,23 +1,20 @@
 import importlib
 import logging
 import os
+import sys
 from contextlib import contextmanager
+from typing import Any, Generator
 
 import pytest
-import sys
 
-from typing import Generator, Any
-
+import inmanta.server
 import inmanta_ext
-from inmanta.server import SLICE_SERVER, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
-
 from inmanta.server.extensions import InvalidSliceNameException
 from inmanta.server.protocol import Server
-import inmanta.server
-from inmanta_ext.testplugin.extension import TestSlice
-
+from inmanta_ext.testplugin.extension import XTestSlice
 from utils import log_contains
 
 
@@ -82,7 +79,7 @@ def test_phase_2(caplog):
 
 def test_phase_3(caplog):
     server = Server()
-    server.add_slice(TestSlice())
+    server.add_slice(XTestSlice())
     server.add_slice(inmanta.server.server.Server())
     server.add_slice(AgentManager())
 

@@ -17,24 +17,24 @@
 """
 
 import base64
-from urllib import request, error
-from collections import defaultdict
-from configparser import ConfigParser, Interpolation
 import json
 import logging
 import os
 import re
+import ssl
 import sys
 import uuid
 import warnings
-import ssl
+from collections import defaultdict
+from configparser import ConfigParser, Interpolation
+from typing import Callable, Dict, Generic, List, Optional, TypeVar, Union, cast
+from urllib import error, request
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
-from inmanta import const
 
-from typing import Optional, Callable, TypeVar, Generic, Dict, List, cast, Union
+from inmanta import const
 
 LOGGER = logging.getLogger(__name__)
 
