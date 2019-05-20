@@ -666,7 +666,7 @@ class Setting(object):
             :param recompile: Trigger a recompile of the model when a setting is updated?
             :param update_model: Update the configuration model (git pull on project and repos)
             :param agent_restart: Restart autostarted agents when this settings is updated.
-            :param values: list of possible values (if type is enum)
+            :param allowed_values: list of possible values (if type is enum)
         """
         self.typ = typ
         self.default = default
