@@ -196,14 +196,6 @@ def compiler_config(parser):
         Configure the compiler of the export function
     """
     parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
-    parser.add_argument(
-        "-X",
-        "--extended-errors",
-        dest="errors",
-        help="Show stack traces for compile errors",
-        action="store_true",
-        default=False,
-    )
     parser.add_argument("--server_address", dest="server", help="The address of the server hosting the environment")
     parser.add_argument("--server_port", dest="port", help="The port of the server hosting the environment")
     parser.add_argument("--username", dest="user", help="The username of the server")
@@ -345,14 +337,6 @@ def export_parser_config(parser):
     parser.add_argument("--token", dest="token", help="The token to auth to the server")
     parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
-    parser.add_argument(
-        "-X",
-        "--extended-errors",
-        dest="errors",
-        help="Show stack traces for compile errors",
-        action="store_true",
-        default=False,
-    )
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
     parser.add_argument(
         "--metadata",
