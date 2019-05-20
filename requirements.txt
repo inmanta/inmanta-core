@@ -40,4 +40,4 @@ pymongo==3.8.0
 pydantic==0.25
 flake8-isort
 isort
-black
+black==19.3b0
