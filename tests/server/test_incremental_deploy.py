@@ -310,6 +310,12 @@ async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
         setup.add_resource("R13", "A1 A1 A1 A1 A1", True)
         setup.add_resource("R14", "A1 A1 d1 D1", True)
         setup.add_resource("R15", "A1 A1 p1 D1", True)
+        setup.add_resource("R16", "S1 A1", False)
+        setup.add_resource("R17", "A1 S1 A1", True)
+        setup.add_resource("R18", "D1 S1 A1", False)
+        setup.add_resource("R19", "U1 A1", False)
+        setup.add_resource("R20", "U1 D1", False)
+        setup.add_resource("R21", "A1 U1", True)
 
         await setup.setup(serverdirect, env, sid)
 

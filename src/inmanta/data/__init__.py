@@ -33,7 +33,7 @@ from asyncpg import UndefinedTableError
 
 import inmanta.db.versions
 from inmanta import const, util
-from inmanta.const import DONE_STATES, ResourceState
+from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
 from inmanta.resources import Id
 from inmanta.types import JsonType
 
@@ -2246,7 +2246,7 @@ class ConfigurationModel(BaseDocument):
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
-        :param negative: find resources not in the increment
+        :param negative: find deployable resources not in the increment
 
         available/skipped/unavailable -> next version
         not present -> increment
@@ -2264,7 +2264,7 @@ class ConfigurationModel(BaseDocument):
         increment = []
         not_incrememt = []
         # todo in this verions
-        work = list(r for r in resources)
+        work = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
 
         # get versions
         query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
@@ -2293,14 +2293,17 @@ class ConfigurationModel(BaseDocument):
                 if status in [ResourceState.available.name, ResourceState.skipped.name, ResourceState.unavailable.name]:
                     next.append(res)
 
-                # error -> increment
+                # error/undeployable -> increment
                 elif status in [
                     ResourceState.failed.name,
                     ResourceState.cancelled.name,
                     ResourceState.deploying.name,
                     ResourceState.processing_events.name,
+                    ResourceState.skipped_for_undefined.name,
+                    ResourceState.undefined.name,
                 ]:
                     increment.append(res)
+                # undefined -> not in increment
 
                 elif status == ResourceState.deployed.name:
                     if res["attribute_hash"] == ores["attribute_hash"]:
