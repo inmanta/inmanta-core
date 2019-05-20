@@ -35,6 +35,7 @@ class ResourceState(Enum):
 
 # undeployable
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
+UNDEPLOYABLE_NAMES = [s.name for s in UNDEPLOYABLE_STATES]
 # this resource action is not complete, resource is in transient state
 TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying, ResourceState.processing_events]
 # not counting as done
