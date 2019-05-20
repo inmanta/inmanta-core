@@ -2251,7 +2251,7 @@ class ConfigurationModel(BaseDocument):
         increment = []
         not_incrememt = []
         # todo in this verions
-        work = list(r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES)
+        work = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
 
         # get versions
         query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
