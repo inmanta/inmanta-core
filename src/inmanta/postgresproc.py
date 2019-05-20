@@ -15,14 +15,12 @@
 
     Contact: code@inmanta.com
 """
-import os
-import tempfile
-import subprocess
-import shutil
 import logging
-
+import os
+import shutil
+import subprocess
+import tempfile
 from typing import Optional
-
 
 PG_CTL_BIN = "pg_ctl"
 INITDB_BIN = "initdb"

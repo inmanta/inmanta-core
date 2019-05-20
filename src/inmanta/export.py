@@ -16,29 +16,27 @@
     Contact: code@inmanta.com
 """
 
+import argparse
+import base64
+import itertools
 import logging
 import os
 import time
-import base64
 import uuid
-import argparse
-from typing import Dict, List, Callable, Any, Union, Optional, Tuple, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
-from inmanta import protocol, const, loader
-from inmanta.agent.handler import Commander
-from inmanta.execute.util import Unknown, NoneValue
-from inmanta.resources import resource, Resource, to_id, IgnoreResourceException
-from inmanta.config import Option, is_uuid_opt, is_list, is_str
-from inmanta.execute.proxy import DynamicProxy, UnknownException
-from inmanta.ast import CompilerException, Locatable, OptionalValueException, type, Namespace
-from inmanta.execute.runtime import Instance, ResultVariable
-from inmanta.util import hash_file
-import itertools
-from inmanta.ast.entity import Entity
-from inmanta.util import groupby
-from inmanta.ast.attribute import RelationAttribute
 import inmanta.model as model
-
+from inmanta import const, loader, protocol
+from inmanta.agent.handler import Commander
+from inmanta.ast import CompilerException, Locatable, Namespace, OptionalValueException, type
+from inmanta.ast.attribute import RelationAttribute
+from inmanta.ast.entity import Entity
+from inmanta.config import Option, is_list, is_str, is_uuid_opt
+from inmanta.execute.proxy import DynamicProxy, UnknownException
+from inmanta.execute.runtime import Instance, ResultVariable
+from inmanta.execute.util import NoneValue, Unknown
+from inmanta.resources import IgnoreResourceException, Resource, resource, to_id
+from inmanta.util import groupby, hash_file
 
 LOGGER = logging.getLogger(__name__)
 

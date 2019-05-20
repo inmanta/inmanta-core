@@ -16,10 +16,9 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.config import Option, is_int, is_bool, is_time, is_str_opt, is_map
-from inmanta.config import state_dir, log_dir
 import logging
 
+from inmanta.config import Option, is_bool, is_int, is_map, is_str_opt, is_time, log_dir, state_dir
 
 LOGGER = logging.getLogger(__name__)
 

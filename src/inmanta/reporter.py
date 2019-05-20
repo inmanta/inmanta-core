@@ -1,16 +1,15 @@
 # Adapted from pyformance
 
 import asyncio
-import time
 import base64
 import logging
+import time
 from asyncio import Task
-
-from pyformance import global_registry, MetricsRegistry
-from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPError
+from typing import Dict, Optional
 from urllib.parse import quote
 
-from typing import Optional, Dict
+from pyformance import MetricsRegistry, global_registry
+from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest
 
 LOGGER = logging.getLogger(__name__)
 

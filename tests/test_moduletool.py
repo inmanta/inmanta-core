@@ -17,22 +17,23 @@
 """
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 from subprocess import CalledProcessError
-import re
 
-from inmanta import module
-from inmanta.config import Config
-from inmanta.module import LocalFileRepo, RemoteRepo, gitprovider, INSTALL_MASTER, INSTALL_PRERELEASES
-from inmanta.ast import CompilerException, ModuleNotFoundException
 import pytest
 import yaml
 from pkg_resources import parse_version
+
+from inmanta import module
+from inmanta.ast import CompilerException, ModuleNotFoundException
+from inmanta.command import CLIException
+from inmanta.config import Config
+from inmanta.module import INSTALL_MASTER, INSTALL_PRERELEASES, LocalFileRepo, RemoteRepo, gitprovider
 from inmanta.moduletool import ModuleTool
 from test_app_cli import app
-from inmanta.command import CLIException
 
 
 def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode=None, options=""):

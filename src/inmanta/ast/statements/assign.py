@@ -18,22 +18,24 @@
 
 # pylint: disable-msg=W0613
 
-from . import ReferenceStatement
-from inmanta.ast.type import List, Dict
-from inmanta.ast.statements import AssignStatement, ExpressionStatement, Statement, Resumer
-from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance, Resolver, QueueScheduler
-from inmanta.execute.util import Unknown
+import typing
+
 from inmanta.ast import (
-    RuntimeException,
     AttributeException,
     DuplicateException,
-    TypingException,
-    LocatableString,
-    TypeReferenceAnchor,
     KeyException,
+    LocatableString,
+    RuntimeException,
+    TypeReferenceAnchor,
+    TypingException,
 )
 from inmanta.ast.attribute import RelationAttribute
-import typing
+from inmanta.ast.statements import AssignStatement, ExpressionStatement, Resumer, Statement
+from inmanta.ast.type import Dict, List
+from inmanta.execute.runtime import ExecutionUnit, HangUnit, Instance, QueueScheduler, Resolver, ResultVariable
+from inmanta.execute.util import Unknown
+
+from . import ReferenceStatement
 
 try:
     from typing import TYPE_CHECKING

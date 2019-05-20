@@ -17,17 +17,16 @@
 """
 
 import inspect
-import subprocess
 import os
+import subprocess
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Type, TypeVar
 
-from inmanta.execute.proxy import DynamicProxy
-from inmanta.execute.util import Unknown
-from inmanta.ast import Namespace, CompilerException, TypeNotFoundException, RuntimeException
-from inmanta.execute.runtime import ExecutionUnit, Resolver, QueueScheduler, ResultVariable
+from inmanta import const, protocol
+from inmanta.ast import CompilerException, Namespace, RuntimeException, TypeNotFoundException
 from inmanta.ast.type import TypedList
-from inmanta import protocol, const
-
-from typing import Optional, Callable, List, TYPE_CHECKING, TypeVar, Any, Type
+from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
+from inmanta.execute.util import Unknown
 
 T = TypeVar("T")
 

@@ -16,16 +16,17 @@
     Contact: code@inmanta.com
 """
 
-import pytest
+import asyncio
 import os
-import sys
 import shutil
+import sys
+from asyncio import subprocess
+
+import pytest
 
 from inmanta.app import cmd_parser
 from inmanta.config import Config
 from inmanta.const import VersionState
-from asyncio import subprocess
-import asyncio
 
 
 def app(args):

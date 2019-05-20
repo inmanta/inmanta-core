@@ -15,26 +15,24 @@
 
     Contact: code@inmanta.com
 """
-import inmanta.protocol.endpoints
-from inmanta.types import JsonType
-from inmanta.util import Scheduler, TaskHandler, stable_depth_first, CycleException
-from inmanta.protocol import Client, handle, methods
-from inmanta.protocol import common, endpoints
-from inmanta.protocol.rest import server
-
-from inmanta import config as inmanta_config
-from inmanta.server import config as opt, SLICE_SESSION_MANAGER, SLICE_TRANSPORT
-
-from tornado import gen, queues, web, routing
-from tornado.ioloop import IOLoop
-
-from typing import Dict, Tuple, Callable, Optional, List, Union, Set
-
-import logging
 import asyncio
+import logging
 import time
 import uuid
 from collections import defaultdict
+from typing import Callable, Dict, List, Optional, Set, Tuple, Union
+
+from tornado import gen, queues, routing, web
+from tornado.ioloop import IOLoop
+
+import inmanta.protocol.endpoints
+from inmanta import config as inmanta_config
+from inmanta.protocol import Client, common, endpoints, handle, methods
+from inmanta.protocol.rest import server
+from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
+from inmanta.server import config as opt
+from inmanta.types import JsonType
+from inmanta.util import CycleException, Scheduler, TaskHandler, stable_depth_first
 
 LOGGER = logging.getLogger(__name__)
 

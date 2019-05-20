@@ -16,16 +16,16 @@
     Contact: code@inmanta.com
 """
 
-import os
-import sys
-import logging
 import glob
 import imp
+import logging
+import os
+import sys
 
 from inmanta import const
-from inmanta.execute import scheduler
-from inmanta.ast import Namespace, LocatableString, Range
+from inmanta.ast import LocatableString, Namespace, Range
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
+from inmanta.execute import scheduler
 from inmanta.module import Project
 from inmanta.plugins import PluginMeta
 

@@ -16,22 +16,21 @@
     Contact: code@inmanta.com
 """
 
+import itertools
 import logging
 import time
+from typing import Dict, List, Set, Tuple
 
+from inmanta import plugins
+from inmanta.ast import CycleExcpetion, Location, MultiException, RuntimeException
+from inmanta.ast.entity import Entity
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
+from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineRelation, DefineTypeDefault
+from inmanta.ast.type import TYPES, Type
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.proxy import UnsetException
-from inmanta import plugins
-from inmanta.ast.type import TYPES, Type
-
-from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineTypeDefault, DefineIndex, DefineRelation
-from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler, ExecutionUnit
-from inmanta.ast.entity import Entity
-from inmanta.ast import RuntimeException, MultiException, CycleExcpetion, Location
+from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver
 from inmanta.execute.tracking import ModuleTracker
-import itertools
-from typing import Dict, List, Set, Tuple
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)

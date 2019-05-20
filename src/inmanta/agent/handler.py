@@ -16,23 +16,21 @@
     Contact: code@inmanta.com
 """
 
+import base64
 import inspect
 import logging
-import base64
 import traceback
-from concurrent.futures import Future
-from collections import defaultdict
 import typing
-
+import uuid
+from collections import defaultdict
+from concurrent.futures import Future
+from typing import Dict, Tuple
 
 from tornado import concurrent
-from typing import Tuple
 
-from inmanta.agent.io import get_io
-from inmanta import protocol, resources, const, data
+from inmanta import const, data, protocol, resources
 from inmanta.agent.cache import AgentCache
-import uuid
-from typing import Dict
+from inmanta.agent.io import get_io
 
 LOGGER = logging.getLogger(__name__)
 

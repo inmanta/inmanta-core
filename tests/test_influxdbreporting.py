@@ -1,12 +1,13 @@
-import pytest
-import tornado
-from tornado.web import url
-
-from tornado.httpserver import HTTPServer
-from inmanta.reporter import InfluxReporter, AsyncReporter
-from pyformance import timer
 import asyncio
 import re
+
+import pytest
+import tornado
+from pyformance import timer
+from tornado.httpserver import HTTPServer
+from tornado.web import url
+
+from inmanta.reporter import AsyncReporter, InfluxReporter
 
 
 class QueryMockHandler(tornado.web.RequestHandler):

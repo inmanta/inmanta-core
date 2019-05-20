@@ -16,12 +16,11 @@
     Contact: code@inmanta.com
 """
 
-import time
-import sys
 import bisect
 import logging
+import sys
+import time
 from threading import Lock
-
 
 LOGGER = logging.getLogger()
 

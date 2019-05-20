@@ -18,26 +18,25 @@
 
 # pylint: disable-msg=R0902,R0904
 
-from inmanta.ast.type import Type, NamedType
-from inmanta.ast.blocks import BasicBlock
-from inmanta.execute.runtime import Resolver, QueueScheduler
-from inmanta.ast.statements.generator import SubConstructor
+from abc import abstractmethod
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union  # noqa: F401
+
 from inmanta.ast import (
-    RuntimeException,
+    CompilerException,
     DuplicateException,
-    NotFoundException,
-    Namespace,
+    Locatable,
     Location,
     Named,
-    Locatable,
-    CompilerException,
+    Namespace,
+    NotFoundException,
+    RuntimeException,
 )
-from inmanta.util import memoize
-from inmanta.execute.runtime import Instance
+from inmanta.ast.blocks import BasicBlock
+from inmanta.ast.statements.generator import SubConstructor
+from inmanta.ast.type import NamedType, Type
+from inmanta.execute.runtime import Instance, QueueScheduler, Resolver
 from inmanta.execute.util import AnyType
-
-from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set  # noqa: F401
-from abc import abstractmethod
+from inmanta.util import memoize
 
 try:
     from typing import TYPE_CHECKING

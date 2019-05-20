@@ -15,19 +15,17 @@
 
     Contact: code@inmanta.com
 """
+import argparse
 import logging
 import os
+import socket
 import subprocess
 import sys
 import time
-import socket
-import argparse
+from typing import Dict, List, Optional, Set, Tuple
 
-from inmanta import module, config, protocol, const, postgresproc
+from inmanta import config, const, module, postgresproc, protocol
 from inmanta.server import config as server_opts
-
-from typing import Optional, Tuple, List, Dict, Set
-
 from inmanta.types import JsonType
 from inmanta.util import get_free_tcp_port
 

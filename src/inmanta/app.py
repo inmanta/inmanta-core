@@ -30,35 +30,34 @@
     @command annotation to register new command
 """
 
-from argparse import ArgumentParser
-import logging
-import sys
-import time
+import asyncio
 import json
+import logging
 import os
-import socket
 import signal
+import socket
+import sys
+import threading
+import time
+import traceback
+from argparse import ArgumentParser
 from asyncio import ensure_future
+from threading import Timer
 
 import colorlog
-
-from inmanta.command import command, Commander, CLIException
-from inmanta.compiler import do_compile
-from inmanta.config import Config
+import yaml
+from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
-from tornado import gen
-from inmanta import protocol, module, moduletool, const
-from inmanta.const import EXIT_START_FAILED
-from inmanta.export import cfg_env, ModelExporter
-import yaml
 
-from inmanta.server.bootloader import InmantaBootloader
+from inmanta import const, module, moduletool, protocol
 from inmanta.ast import CompilerException
-import asyncio
-import traceback
-import threading
-from threading import Timer
+from inmanta.command import CLIException, Commander, command
+from inmanta.compiler import do_compile
+from inmanta.config import Config
+from inmanta.const import EXIT_START_FAILED
+from inmanta.export import ModelExporter, cfg_env
+from inmanta.server.bootloader import InmantaBootloader
 
 LOGGER = logging.getLogger()
 

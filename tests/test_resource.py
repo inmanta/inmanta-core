@@ -16,9 +16,10 @@
     Contact: code@inmanta.com
 """
 
-from inmanta import resources
 import pytest
-from inmanta.resources import resource, ResourceException
+
+from inmanta import resources
+from inmanta.resources import ResourceException, resource
 
 
 class Base(resources.Resource):

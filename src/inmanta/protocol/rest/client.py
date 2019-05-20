@@ -18,13 +18,13 @@
 
 import re
 from asyncio import CancelledError
-from typing import Set, Dict, Tuple, Optional, List, Any, TYPE_CHECKING, AnyStr
+from typing import TYPE_CHECKING, Any, AnyStr, Dict, List, Optional, Set, Tuple
 
-from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
+from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest
 
 from inmanta import config as inmanta_config
 from inmanta.protocol import common
-from inmanta.protocol.rest import RESTBase, LOGGER
+from inmanta.protocol.rest import LOGGER, RESTBase
 
 if TYPE_CHECKING:
     from inmanta.protocol.endpoints import Endpoint

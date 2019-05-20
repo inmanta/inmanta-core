@@ -16,14 +16,14 @@
     Contact: code@inmanta.com
 """
 import glob
-import tempfile
 import os
-import uuid
 import sys
+import tempfile
+import uuid
 
-from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta.config import Config
+from inmanta.module import Project
 
 
 class CompilerFixture(object):

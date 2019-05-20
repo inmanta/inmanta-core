@@ -17,21 +17,21 @@
 """
 
 import logging
+from typing import Dict, List
 
+from inmanta.ast import Locatable, LocatableString, Location, RuntimeException
+from inmanta.ast.statements import AssignStatement, ExpressionStatement
+from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.runtime import (
-    ResultVariable,
     ExecutionUnit,
-    RawUnit,
     HangUnit,
     Instance,
-    Resolver,
     QueueScheduler,
+    RawUnit,
+    Resolver,
     ResultCollector,
+    ResultVariable,
 )
-from inmanta.ast.statements.assign import Assign, SetAttribute
-from inmanta.ast.statements import ExpressionStatement, AssignStatement
-from inmanta.ast import RuntimeException, Locatable, Location, LocatableString
-from typing import List, Dict
 from inmanta.parser import ParserException
 
 LOGGER = logging.getLogger(__name__)

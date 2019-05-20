@@ -20,16 +20,14 @@ import logging
 import pkgutil
 from pkgutil import ModuleInfo
 from types import ModuleType
+from typing import Callable, Dict, Generator, List
 
-from inmanta.const import EXTENSION_NAMESPACE, EXTENSION_MODULE
+from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.server import server
+from inmanta.server.agentmanager import AgentManager
 from inmanta.server.compilerservice import CompilerService
 from inmanta.server.extensions import ApplicationContext, InvalidSliceNameException
 from inmanta.server.protocol import Server, ServerSlice
-from inmanta.server.agentmanager import AgentManager
-
-from typing import List, Callable, Dict, Generator
-
 from inmanta.server.server import DatabaseSlice
 
 LOGGER = logging.getLogger(__name__)
