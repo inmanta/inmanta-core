@@ -684,7 +684,7 @@ class Setting(object):
             "recompile": self.recompile,
             "update": self.update,
             "agent_restart": self.agent_restart,
-            "allowed_values": self.allowed_values
+            "allowed_values": self.allowed_values,
         }
 
 
@@ -729,7 +729,7 @@ class Environment(BaseDocument):
             default=const.AgentTriggerMethod.push_full_deploy.name,
             validator=convert_agent_trigger_method,
             doc="The agent trigger method to use when " + PUSH_ON_AUTO_DEPLOY + " is enabled",
-            allowed_values=[opt.name for opt in const.AgentTriggerMethod]
+            allowed_values=[opt.name for opt in const.AgentTriggerMethod],
         ),
         AUTOSTART_SPLAY: Setting(
             name=AUTOSTART_SPLAY,
