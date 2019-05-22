@@ -344,13 +344,8 @@ class RESTBase(util.TaskHandler):
             if kwargs is None or config is None:
                 raise Exception("This method is unknown! This should not occur!")
 
-            # create message that contains all arguments (id, query args and body)
-            if "id" in kwargs and (message is None or "id" not in message):
-                message["id"] = kwargs["id"]
-
-            # validate message against config
-            if config.properties.id and "id" not in message:
-                raise exceptions.BadRequest("the request should contain an id in the url.")
+            # # create message that contains all arguments
+            message.update(kwargs)
 
             if config.properties.validate_sid:
                 if "sid" not in message:

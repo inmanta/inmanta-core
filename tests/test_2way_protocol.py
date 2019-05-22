@@ -35,13 +35,13 @@ from utils import configure, retry_limited
 LOGGER = logging.getLogger(__name__)
 
 
-@method(method_name="status", operation="GET", index=True)
+@method(path="/status", operation="GET")
 def get_status_x(tid: uuid.UUID):
     pass
 
 
-@method(method_name="status", operation="GET", id=True, server_agent=True, timeout=10)
-def get_agent_status_x(id):
+@method(path="/status/<id>", operation="GET", server_agent=True, timeout=10)
+def get_agent_status_x(id: str):
     pass
 
 

@@ -22,6 +22,7 @@ import inspect
 import io
 import json
 import logging
+import re
 import time
 import uuid
 from typing import (
@@ -31,6 +32,7 @@ from typing import (
     Coroutine,
     Dict,
     Generic,
+    Iterable,
     List,
     MutableMapping,
     Optional,
@@ -215,6 +217,57 @@ class Response(object):
         return self._status_code
 
 
+class InvalidPathException(Exception):
+    """ This exception is raised when a path definition is invalid.
+    """
+
+
+class UrlPath(object):
+    """ Class to handle manipulation of method paths
+    """
+
+    def __init__(self, path: str) -> None:
+        self._path = path
+        self._vars = self._parse_path()
+
+    def _parse_path(self) -> List[str]:
+        if self._path[0] != "/":
+            raise InvalidPathException(f"{self._path} should start with a /")
+
+        return re.findall("<([^<>]+)>", self._path)
+
+    def validate_vars(self, method_vars: Iterable[str], function_name: str) -> None:
+        """ Are all variable defined in the method
+        """
+        for var in self._vars:
+            if var not in method_vars:
+                raise InvalidPathException(f"Variable {var} in path {self._path} is not defined in function {function_name}.")
+
+    @property
+    def path(self) -> str:
+        return self._path
+
+    def generate_path(self, variables: Dict[str, str]) -> str:
+        """ Create a path with all variables substituted
+        """
+        path = self._path
+        for var in self._vars:
+            if var not in variables:
+                raise KeyError(f"No value provided for variable {var}")
+            path = path.replace(f"<{var}>", variables[var])
+
+        return path
+
+    def generate_regex_path(self) -> str:
+        """ Generate a path that uses regex named groups for tornado
+        """
+        path = self._path
+        for var in self._vars:
+            path = path.replace(f"<{var}>", f"(?P<{var}>[^/]+)")
+
+        return path
+
+
 class MethodProperties(object):
     """
         This class stores the information from a method definition
@@ -225,9 +278,7 @@ class MethodProperties(object):
     def __init__(
         self,
         function: MethodType,
-        method_name: str,
-        index: bool,
-        id: bool,
+        path: str,
         operation: str,
         reply: bool,
         arg_options: Dict[str, ArgOption],
@@ -245,9 +296,7 @@ class MethodProperties(object):
             Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
             and model the protocol.
 
-            :param method_name: The method name in the url
-            :param index: A method that returns a list of resources. The url of this method is only the method/resource name.
-            :param id: This method requires an id of a resource. The python function should have an id parameter.
+            :param path: The path in the url
             :param operation: The type of HTTP operation (verb)
             :param timeout: nr of seconds before request it terminated
             :param api This is a call from the client to the Server (True if not server_agent and not agent_server)
@@ -267,9 +316,7 @@ class MethodProperties(object):
         if validate_sid is None:
             validate_sid = agent_server and not api
 
-        self._method_name = method_name
-        self._index = index
-        self._id = id
+        self._path = UrlPath(path)
         self._operation = operation
         self._reply = reply
         self._arg_options = arg_options
@@ -296,6 +343,8 @@ class MethodProperties(object):
         if "return" not in full_spec.annotations and wrap_data:
             raise Exception(f"Wrap data is only supported on methods that define a return type ({function}")
 
+        self._path.validate_vars(full_spec.annotations.keys(), str(self.function))
+
     @property
     def operation(self) -> str:
         return self._operation
@@ -308,10 +357,6 @@ class MethodProperties(object):
     def timeout(self) -> Optional[int]:
 
         return self._timeout
-
-    @property
-    def id(self) -> bool:
-        return self._id
 
     @property
     def validate_sid(self) -> bool:
@@ -351,30 +396,14 @@ class MethodProperties(object):
             Create a listen url for this method
         """
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
-
-        if self._id:
-            url += "/%s/(?P<id>[^/]+)" % self._method_name
-        elif self._index:
-            url += "/%s" % self._method_name
-        else:
-            url += "/%s" % self._method_name
-
-        return url
+        return url + self._path.generate_regex_path()
 
     def get_call_url(self, msg: Dict[str, str]) -> str:
         """
              Create a calling url for the client
         """
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
-
-        if self._id:
-            url += "/%s/%s" % (self._method_name, parse.quote(str(msg["id"]), safe=""))
-        elif self._index:
-            url += "/%s" % self._method_name
-        else:
-            url += "/%s" % self._method_name
-
-        return url
+        return url + self._path.generate_path({k: parse.quote(str(v), safe="") for k, v in msg.items()})
 
     def build_call(self, args: List, kwargs: Dict[str, Any] = {}) -> Request:
         """

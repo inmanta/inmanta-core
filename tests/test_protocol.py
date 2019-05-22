@@ -32,7 +32,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from inmanta import config, protocol
 from inmanta.data.model import BaseModel
 from inmanta.protocol import exceptions, json_encode
-from inmanta.protocol.common import ReturnValue
+from inmanta.protocol.common import InvalidPathException, ReturnValue
 from inmanta.protocol.rest import CallArguments
 from inmanta.server import config as opt
 from inmanta.server.protocol import Server, ServerSlice
@@ -287,7 +287,7 @@ async def test_method_properties():
         Test method properties decorator and helper functions
     """
 
-    @protocol.method(method_name="test", operation="PUT", client_types=["api"], api_prefix="x", api_version=2)
+    @protocol.method(path="/test", operation="PUT", client_types=["api"], api_prefix="x", api_version=2)
     def test_method(name):
         """
             Create a new project
@@ -306,7 +306,7 @@ async def test_invalid_client_type():
     """
     with pytest.raises(Exception) as e:
 
-        @protocol.method(method_name="test", operation="PUT", client_types=["invalid"])
+        @protocol.method(path="/test", operation="PUT", client_types=["invalid"])
         def test_method(name):
             """
                 Create a new project
@@ -321,7 +321,7 @@ async def test_call_arguments_defaults():
         Test processing RPC messages
     """
 
-    @protocol.method(method_name="test", operation="PUT", client_types=["api"])
+    @protocol.method(path="/test", operation="PUT", client_types=["api"])
     def test_method(name: str, value: int = 10):
         """
             Create a new project
@@ -352,7 +352,7 @@ async def test_pydantic():
         id: uuid.UUID
         name: str
 
-    @protocol.method(method_name="test", operation="PUT", client_types=["api"])
+    @protocol.method(path="/test", operation="PUT", client_types=["api"])
     def test_method(project: Project):
         """
             Create a new project
@@ -411,7 +411,7 @@ async def test_invalid_handler():
     with pytest.raises(ValueError):
 
         class ProjectServer(ServerSlice):
-            @protocol.method(method_name="test", operation="POST", client_types=["api"])
+            @protocol.method(path="/test", operation="POST", client_types=["api"])
             def test_method(self):
                 """
                     Create a new project
@@ -434,7 +434,7 @@ async def test_return_value(unused_tcp_port, postgres_db, database_name):
         name: str
 
     class ProjectServer(ServerSlice):
-        @protocol.method(method_name="test", operation="POST", client_types=["api"])
+        @protocol.method(path="/test", operation="POST", client_types=["api"])
         def test_method(project: Project) -> ReturnValue[Project]:  # NOQA
             """
                 Create a new project
@@ -474,17 +474,17 @@ async def test_return_model(unused_tcp_port, postgres_db, database_name):
         name: str
 
     class ProjectServer(ServerSlice):
-        @protocol.method(method_name="test", operation="POST", client_types=["api"])
+        @protocol.method(path="/test", operation="POST", client_types=["api"])
         def test_method(project: Project) -> Project:  # NOQA
             """
                 Create a new project
             """
 
-        @protocol.method(method_name="test2", operation="POST", client_types=["api"])
+        @protocol.method(path="/test2", operation="POST", client_types=["api"])
         def test_method2(project: Project) -> None:  # NOQA
             pass
 
-        @protocol.method(method_name="test3", operation="POST", client_types=["api"])
+        @protocol.method(path="/test3", operation="POST", client_types=["api"])
         def test_method3(project: Project) -> None:  # NOQA
             pass
 
@@ -536,7 +536,7 @@ async def test_data_wrap(unused_tcp_port, postgres_db, database_name):
         name: str
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(method_name="test", operation="POST", client_types=["api"])
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
         def test_method(project: Project) -> ReturnValue[Project]:  # NOQA
             """
                 Create a new project
@@ -560,6 +560,74 @@ async def test_data_wrap(unused_tcp_port, postgres_db, database_name):
     assert "data" in result.result
     assert "id" in result.result["data"]
     assert "name" in result.result["data"]
+
+    await server.stop()
+    await rs.stop()
+
+
+@pytest.mark.asyncio
+async def test_invalid_paths():
+    """
+        Test path validation
+    """
+    with pytest.raises(InvalidPathException) as e:
+
+        @protocol.method(path="test", operation="PUT", client_types=["api"], api_prefix="x", api_version=2)
+        def test_method(name):
+            pass
+
+    assert "test should start with a /" == str(e.value)
+
+    with pytest.raises(InvalidPathException) as e:
+
+        @protocol.method(path="/test/<othername>", operation="PUT", client_types=["api"], api_prefix="x", api_version=2)
+        def test_method2(name):
+            pass
+
+    assert str(e.value).startswith("Variable othername in path /test/<othername> is not defined in function")
+
+
+@pytest.mark.asyncio
+async def test_nested_paths(unused_tcp_port, postgres_db, database_name):
+    """
+        Test the use and validation of methods that use common.ReturnValue
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        name: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test/<data>", operation="GET", client_types=["api"])
+        def test_method(data: str) -> Project:  # NOQA
+            pass
+
+        @protocol.typedmethod(path="/test/<data>/config", operation="GET", client_types=["api"])
+        def test_method2(data: str) -> Project:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, data: str) -> Project:
+            return Project(name="test_method")
+
+        @protocol.handle(test_method2)
+        async def test_method2(self, data: str) -> Project:
+            return Project(name="test_method2")
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+    result = await client.test_method({"data": "test"})
+    assert result.code == 200
+    assert "test_method" == result.result["data"]["name"]
+
+    client = protocol.Client("client")
+    result = await client.test_method2({"data": "test"})
+    assert result.code == 200
+    assert "test_method2" == result.result["data"]["name"]
 
     await server.stop()
     await rs.stop()
