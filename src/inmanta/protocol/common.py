@@ -253,7 +253,7 @@ class UrlPath(object):
         path = self._path
         for var in self._vars:
             if var not in variables:
-                raise ValueError(f"No value provided for variable {var}")
+                raise KeyError(f"No value provided for variable {var}")
             path = path.replace(f"<{var}>", variables[var])
 
         return path
