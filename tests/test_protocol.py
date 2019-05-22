@@ -585,3 +585,49 @@ async def test_invalid_paths():
             pass
 
     assert str(e.value).startswith("Variable othername in path /test/<othername> is not defined in function")
+
+
+@pytest.mark.asyncio
+async def test_nested_paths(unused_tcp_port, postgres_db, database_name):
+    """
+        Test the use and validation of methods that use common.ReturnValue
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        name: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test/<data>", operation="GET", client_types=["api"])
+        def test_method(data: str) -> Project:  # NOQA
+            pass
+
+        @protocol.typedmethod(path="/test/<data>/config", operation="GET", client_types=["api"])
+        def test_method2(data: str) -> Project:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, data: str) -> Project:
+            return Project(name="test_method")
+
+        @protocol.handle(test_method2)
+        async def test_method2(self, data: str) -> Project:
+            return Project(name="test_method2")
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+    result = await client.test_method({"data": "test"})
+    assert result.code == 200
+    assert "test_method" == result.result["data"]["name"]
+
+    client = protocol.Client("client")
+    result = await client.test_method2({"data": "test"})
+    assert result.code == 200
+    assert "test_method2" == result.result["data"]["name"]
+
+    await server.stop()
+    await rs.stop()
