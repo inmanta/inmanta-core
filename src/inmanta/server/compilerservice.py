@@ -426,6 +426,8 @@ class CompilerService(ServerSlice):
 
         end = datetime.datetime.now()
         await compile.update_fields(completed=end, success=success, version=version)
+        if self.is_stopping():
+            return
         self.add_background_task(self._notify_listeners(compile))
         await self._dequeue(compile.environment)
 
