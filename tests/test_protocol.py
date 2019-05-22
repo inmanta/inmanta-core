@@ -581,7 +581,7 @@ async def test_invalid_paths():
     with pytest.raises(InvalidPathException) as e:
 
         @protocol.method(path="/test/<othername>", operation="PUT", client_types=["api"], api_prefix="x", api_version=2)
-        def test_method(name):
+        def test_method2(name):
             pass
 
     assert str(e.value).startswith("Variable othername in path /test/<othername> is not defined in function")
