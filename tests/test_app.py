@@ -368,15 +368,7 @@ caused by:
 
 
 @pytest.mark.parametrize(
-    "cmd",
-    [
-      (["-X", "compile"]),
-      (["compile", "-X"]),
-      (["compile"]),
-      (["export", "-X"]),
-      (["-X", "export"]),
-      (["export"]),
-    ],
+    "cmd", [(["-X", "compile"]), (["compile", "-X"]), (["compile"]), (["export", "-X"]), (["-X", "export"]), (["export"])]
 )
 def test_minus_x_option(snippetcompiler, cmd):
     snippetcompiler.setup_for_snippet_external(

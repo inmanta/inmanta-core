@@ -23,9 +23,9 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Type, cast  # noqa: F401
 
-import pydantic
 from tornado import escape
 
+import pydantic
 from inmanta import config as inmanta_config
 from inmanta import const, util
 from inmanta.data.model import BaseModel
