@@ -21,7 +21,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, cast, Type  # noqa: F401
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Type, cast  # noqa: F401
 
 import pydantic
 from tornado import escape
@@ -31,7 +31,7 @@ from inmanta import const, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.common import ReturnValue
-from inmanta.types import JsonType, Apireturn
+from inmanta.types import Apireturn, JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -344,13 +344,8 @@ class RESTBase(util.TaskHandler):
             if kwargs is None or config is None:
                 raise Exception("This method is unknown! This should not occur!")
 
-            # create message that contains all arguments (id, query args and body)
-            if "id" in kwargs and (message is None or "id" not in message):
-                message["id"] = kwargs["id"]
-
-            # validate message against config
-            if config.properties.id and "id" not in message:
-                raise exceptions.BadRequest("the request should contain an id in the url.")
+            # # create message that contains all arguments
+            message.update(kwargs)
 
             if config.properties.validate_sid:
                 if "sid" not in message:

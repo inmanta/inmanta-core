@@ -18,9 +18,8 @@
 
 import pytest
 
-from inmanta.ast import TypingException
-from inmanta.ast import DuplicateException
 import inmanta.compiler as compiler
+from inmanta.ast import DuplicateException, TypingException
 from inmanta.execute.proxy import UnsetException
 
 

@@ -18,20 +18,20 @@
 import logging
 import socket
 import uuid
+from asyncio import CancelledError, sleep
 from collections import defaultdict
-
+from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Set, Tuple, Union  # noqa: F401
 from urllib import parse
-from asyncio import sleep, CancelledError
-from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator, Coroutine  # noqa: F401
+
+from tornado import ioloop
 
 from inmanta import config as inmanta_config
 from inmanta import util
 from inmanta.protocol.common import UrlMethod
 from inmanta.util import TaskHandler
+
 from . import common
 from .rest import client
-
-from tornado import ioloop
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 

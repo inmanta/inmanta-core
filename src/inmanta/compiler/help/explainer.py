@@ -15,17 +15,17 @@
 
     Contact: code@inmanta.com
 """
-from inmanta.ast import CompilerException, ModifiedAfterFreezeException
-from inmanta.execute.runtime import OptionVariable
-from inmanta.ast.statements import AssignStatement
-from inmanta.ast.statements.generator import Constructor
-
-
-from abc import abstractmethod
-from typing import Optional, Dict, List, Any
-from jinja2 import PackageLoader, Environment
 import os
 import re
+from abc import abstractmethod
+from typing import Any, Dict, List, Optional
+
+from jinja2 import Environment, PackageLoader
+
+from inmanta.ast import CompilerException, ModifiedAfterFreezeException
+from inmanta.ast.statements import AssignStatement
+from inmanta.ast.statements.generator import Constructor
+from inmanta.execute.runtime import OptionVariable
 
 
 def bold(content: str = None) -> str:

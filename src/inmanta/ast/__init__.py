@@ -16,11 +16,10 @@
     Contact: code@inmanta.com
 """
 
-from typing import Dict, Sequence, List, Optional, Union  # noqa: F401
-from abc import abstractmethod
 import traceback
+from abc import abstractmethod
 from functools import lru_cache
-
+from typing import Dict, List, Optional, Sequence, Union  # noqa: F401
 
 try:
     from typing import TYPE_CHECKING

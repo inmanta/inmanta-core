@@ -1,10 +1,9 @@
 from builtins import super
-
 from typing import List
 
-from inmanta.server import SLICE_SERVER, SLICE_AGENT_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER
 from inmanta.server.extensions import ApplicationContext
-from inmanta.server.protocol import ServerSlice, Server
+from inmanta.server.protocol import Server, ServerSlice
 
 
 class MyTestSlice(ServerSlice):

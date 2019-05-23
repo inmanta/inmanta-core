@@ -16,19 +16,18 @@
     Contact: code@inmanta.com
 """
 
-from itertools import groupby
 import os
 import re
 import shutil
 import tempfile
 import unittest
+from itertools import groupby
 
 import pytest
 
-from inmanta import config
-from inmanta.ast import AttributeException
-from inmanta.ast import RuntimeException
 import inmanta.compiler as compiler
+from inmanta import config
+from inmanta.ast import AttributeException, RuntimeException
 from inmanta.module import Project
 
 

@@ -15,10 +15,11 @@
 
     Contact: code@inmanta.com
 """
-import inmanta.compiler as compiler
-from inmanta.export import ModelExporter
 import logging
+
+import inmanta.compiler as compiler
 import inmanta.model
+from inmanta.export import ModelExporter
 
 
 class EntityBuilder(object):

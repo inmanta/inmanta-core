@@ -22,10 +22,9 @@ import re
 import urllib
 
 from inmanta import data
-from inmanta.agent.handler import provider, ResourceHandler, HandlerContext, CRUDHandler, ResourcePurged
+from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, provider
 from inmanta.execute.util import Unknown
-from inmanta.resources import Resource, PurgeableResource, resource, ResourceNotFoundExcpetion, IgnoreResourceException
-
+from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, ResourceNotFoundExcpetion, resource
 
 LOGGER = logging.getLogger(__name__)
 FILE_SOURCE = "imp-module-source:"

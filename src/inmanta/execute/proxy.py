@@ -16,12 +16,12 @@
     Contact: code@inmanta.com
 """
 
-from copy import copy
 from collections import Mapping
-from typing import Union, Any
+from copy import copy
+from typing import Any, Union
 
-from inmanta.execute.util import Unknown, NoneValue
 from inmanta.ast import RuntimeException
+from inmanta.execute.util import NoneValue, Unknown
 
 
 class UnsetException(RuntimeException):

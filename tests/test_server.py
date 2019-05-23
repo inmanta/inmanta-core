@@ -16,23 +16,24 @@
     Contact: code@inmanta.com
 """
 
-import time
-import logging
-import uuid
-import os
-
-from utils import retry_limited
-import pytest
-from inmanta.agent.agent import Agent
-from inmanta.agent import handler
-from inmanta import data, config, const, loader, resources
-from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, server
-
-from datetime import datetime
-from inmanta.util import hash_file
-from inmanta.export import upload_code, unknown_parameters
 import asyncio
+import logging
+import os
+import time
+import uuid
+from datetime import datetime
 
+import pytest
+
+from inmanta import config, const, data, loader, resources
+from inmanta.agent import handler
+from inmanta.agent.agent import Agent
+from inmanta.export import unknown_parameters, upload_code
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
+from inmanta.server import config as opt
+from inmanta.server import server
+from inmanta.util import hash_file
+from utils import retry_limited
 
 LOGGER = logging.getLogger(__name__)
 

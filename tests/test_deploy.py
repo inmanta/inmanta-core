@@ -15,12 +15,13 @@
 
     Contact: code@inmanta.com
 """
-import os
 import collections
+import os
+
+import pytest
+from tornado import process
 
 from inmanta import deploy
-from tornado import process
-import pytest
 
 
 def test_deploy(snippetcompiler, tmpdir, postgres_db):

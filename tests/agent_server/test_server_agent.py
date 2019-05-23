@@ -20,21 +20,21 @@ import logging
 import time
 import uuid
 from itertools import groupby
-from typing import List, Tuple, Optional, Dict
+from typing import Dict, List, Optional, Tuple
 
 import psutil
 import pytest
-from psutil import Process, NoSuchProcess
+from psutil import NoSuchProcess, Process
 
 import inmanta.agent.agent
-from agent_server.conftest import ResourceContainer, _wait_until_deployment_finishes, _deploy_resources, get_agent
-from inmanta import agent, const, execute, config, data
+from agent_server.conftest import ResourceContainer, _deploy_resources, _wait_until_deployment_finishes, get_agent
+from inmanta import agent, config, const, data, execute
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
-from utils import retry_limited, assert_equal_ish, UNKWN, log_contains, log_index
+from utils import UNKWN, assert_equal_ish, log_contains, log_index, retry_limited
 
 logger = logging.getLogger("inmanta.test.server_agent")
 

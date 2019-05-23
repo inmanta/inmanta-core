@@ -19,32 +19,30 @@
 import logging
 import uuid
 
-from pytest import fixture
-
-from inmanta import data
 import pytest
+from pytest import fixture
 from tornado.gen import sleep
-from utils import retry_limited, configure
-from inmanta.server.protocol import Server, SessionListener, ServerSlice
-from inmanta.server import SLICE_SESSION_MANAGER
-from inmanta.protocol.methods import ENV_OPTS
+
+# Methods need to be defined before the Client class is loaded by Python
+from inmanta import protocol  # NOQA
+from inmanta import data
 from inmanta.protocol import method
+from inmanta.protocol.methods import ENV_OPTS
+from inmanta.server import SLICE_SESSION_MANAGER
+from inmanta.server.protocol import Server, ServerSlice, SessionListener
+from utils import configure, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
 
-@method(method_name="status", operation="GET", index=True)
+@method(path="/status", operation="GET")
 def get_status_x(tid: uuid.UUID):
     pass
 
 
-@method(method_name="status", operation="GET", id=True, server_agent=True, timeout=10)
-def get_agent_status_x(id):
+@method(path="/status/<id>", operation="GET", server_agent=True, timeout=10)
+def get_agent_status_x(id: str):
     pass
-
-
-# Methods need to be defined before the Client class is loaded by Python
-from inmanta import protocol  # NOQA
 
 
 class SessionSpy(SessionListener, ServerSlice):

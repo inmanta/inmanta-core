@@ -19,27 +19,26 @@
 # pylint: disable-msg=W0613,R0201
 
 import logging
+from typing import Dict, List, Set, Tuple  # noqa: F401
 
-from inmanta.ast.statements import GeneratorStatement
-from inmanta.const import LOG_LEVEL_TRACE
-from inmanta.execute.util import Unknown
-from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable, ResultCollector
 from inmanta.ast import (
-    RuntimeException,
-    TypingException,
-    NotFoundException,
-    Location,
-    Namespace,
+    AttributeReferenceAnchor,
     DuplicateException,
     LocatableString,
+    Location,
+    Namespace,
+    NotFoundException,
+    RuntimeException,
     TypeReferenceAnchor,
-    AttributeReferenceAnchor,
+    TypingException,
 )
-from inmanta.execute.tracking import ImplementsTracker
-from typing import List, Dict, Tuple, Set  # noqa: F401
-from inmanta.ast.statements import ExpressionStatement
 from inmanta.ast.blocks import BasicBlock
+from inmanta.ast.statements import ExpressionStatement, GeneratorStatement
 from inmanta.ast.statements.assign import SetAttributeHelper
+from inmanta.const import LOG_LEVEL_TRACE
+from inmanta.execute.runtime import ExecutionContext, QueueScheduler, Resolver, ResultCollector, ResultVariable
+from inmanta.execute.tracking import ImplementsTracker
+from inmanta.execute.util import Unknown
 
 try:
     from typing import TYPE_CHECKING

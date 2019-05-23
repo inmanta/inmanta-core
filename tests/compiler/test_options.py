@@ -18,8 +18,8 @@
 
 import pytest
 
-from inmanta.ast import RuntimeException
 import inmanta.compiler as compiler
+from inmanta.ast import RuntimeException
 
 
 def test_option_values(snippetcompiler):

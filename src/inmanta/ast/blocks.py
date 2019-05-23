@@ -16,11 +16,12 @@
     Contact: code@inmanta.com
 """
 
+from typing import List
+
+from inmanta.ast import Anchor, Namespace, RuntimeException, TypeNotFoundException
 from inmanta.ast.statements import DynamicStatement
 from inmanta.ast.statements.assign import Assign
-from inmanta.ast import TypeNotFoundException, RuntimeException, Namespace, Anchor
-from typing import List
-from inmanta.execute.runtime import Resolver, QueueScheduler
+from inmanta.execute.runtime import QueueScheduler, Resolver
 
 
 class BasicBlock(object):

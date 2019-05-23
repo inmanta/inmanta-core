@@ -15,10 +15,10 @@
 
     Contact: code@inmanta.com
 """
-from inmanta.execute.runtime import ResultVariable, ExecutionUnit, Resolver, QueueScheduler
-from inmanta.ast import Locatable, Location, Namespaced, Namespace, Named, Anchor
-from typing import Any, Dict, List, Tuple  # noqa: F401
-from typing import Optional
+from typing import Any, Dict, List, Optional, Tuple  # noqa: F401
+
+from inmanta.ast import Anchor, Locatable, Location, Named, Namespace, Namespaced
+from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 
 try:
     from typing import TYPE_CHECKING

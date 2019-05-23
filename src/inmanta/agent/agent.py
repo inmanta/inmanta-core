@@ -16,29 +16,29 @@
     Contact: code@inmanta.com
 """
 
-from concurrent.futures.thread import ThreadPoolExecutor
+import asyncio
 import datetime
 import logging
 import os
 import random
-import uuid
 import time
-import asyncio
+import uuid
+from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
-from tornado import locks, ioloop
-from inmanta import env, const
-from inmanta import protocol
+from tornado import ioloop, locks
+from tornado.concurrent import Future
+
+from inmanta import const, env, protocol
+from inmanta.agent import config as cfg
 from inmanta.agent import handler
+from inmanta.agent.cache import AgentCache
+from inmanta.agent.handler import ResourceHandler
+from inmanta.agent.reporting import collect_report
 from inmanta.loader import CodeLoader
 from inmanta.protocol import SessionEndpoint, methods
-from inmanta.resources import Resource, Id
-from tornado.concurrent import Future
-from inmanta.agent.cache import AgentCache
-from inmanta.agent import config as cfg
-from inmanta.agent.reporting import collect_report
-from typing import Tuple, Optional, Dict, List, TYPE_CHECKING
-from inmanta.agent.handler import ResourceHandler
+from inmanta.resources import Id, Resource
 from inmanta.util import add_future
 
 LOGGER = logging.getLogger(__name__)

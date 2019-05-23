@@ -16,14 +16,15 @@
     Contact: code@inmanta.com
 """
 
-from _io import StringIO
-import os
 import logging
+import os
 import unittest
 from unittest import mock
 
-from inmanta import module
 import pytest
+
+from _io import StringIO
+from inmanta import module
 
 
 def test_module():

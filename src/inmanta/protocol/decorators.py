@@ -16,11 +16,11 @@
     Contact: code@inmanta.com
 """
 import inspect
+from typing import Callable, Dict, List, Optional, TypeVar
 
 from inmanta.types import Apireturn, HandlerType, MethodType
-from . import common
 
-from typing import Dict, List, Optional, Callable, TypeVar
+from . import common
 
 FuncT = TypeVar("FuncT", bound=HandlerType)
 
@@ -53,9 +53,7 @@ MethodT = TypeVar("MethodT", bound=MethodType)
 
 
 def method(
-    method_name: str,
-    index: bool = False,
-    id: bool = False,
+    path: str,
     operation: str = "POST",
     reply: bool = True,
     arg_options: Dict[str, common.ArgOption] = {},
@@ -73,8 +71,8 @@ def method(
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
         and model the protocol.
 
-        :param index: A method that returns a list of resources. The url of this method is only the method/resource name.
-        :param id: This method requires an id of a resource. The python function should have an id parameter.
+        :param path: The url path to use for this call. This path can contain parameter names of the function. These names
+                     should be enclosed in < > brackets.
         :param operation: The type of HTTP operation (verb)
         :param timeout: nr of seconds before request it terminated
         :param api This is a call from the client to the Server (True if not server_agent and not agent_server)
@@ -96,9 +94,7 @@ def method(
     def wrapper(func: MethodT) -> MethodT:
         common.MethodProperties(
             func,
-            method_name,
-            index,
-            id,
+            path,
             operation,
             reply,
             arg_options,
@@ -118,9 +114,7 @@ def method(
 
 
 def typedmethod(
-    method_name: str,
-    index: bool = False,
-    id: bool = False,
+    path: str,
     operation: str = "POST",
     reply: bool = True,
     arg_options: Dict[str, common.ArgOption] = {},
@@ -137,8 +131,8 @@ def typedmethod(
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
         and model the protocol.
 
-        :param index: A method that returns a list of resources. The url of this method is only the method/resource name.
-        :param id: This method requires an id of a resource. The python function should have an id parameter.
+        :param path: The url path to use for this call. This path can contain parameter names of the function. These names
+                     should be enclosed in < > brackets.
         :param operation: The type of HTTP operation (verb)
         :param timeout: nr of seconds before request it terminated
         :param api This is a call from the client to the Server (True if not server_agent and not agent_server)
@@ -160,9 +154,7 @@ def typedmethod(
     def wrapper(func: MethodT) -> MethodT:
         common.MethodProperties(
             func,
-            method_name,
-            index,
-            id,
+            path,
             operation,
             reply,
             arg_options,

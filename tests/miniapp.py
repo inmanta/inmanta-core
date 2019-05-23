@@ -15,14 +15,15 @@
 
     Contact: code@inmanta.com
 """
-from tornado import gen
-from inmanta.app import setup_signal_handlers
-from tornado.ioloop import IOLoop
 import asyncio
-import threading
 import sys
+import threading
+
+from tornado import gen
+from tornado.ioloop import IOLoop
 
 import inmanta.const
+from inmanta.app import setup_signal_handlers
 
 inmanta.const.SHUTDOWN_GRACE_IOLOOP = 1
 inmanta.const.SHUTDOWN_GRACE_HARD = 2

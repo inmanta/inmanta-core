@@ -18,13 +18,12 @@
 
 import logging
 
-from inmanta.ast.statements import ReferenceStatement
-from inmanta.execute.runtime import ResultVariable, Waiter
-from inmanta.execute.proxy import UnsetException, UnknownException
-from inmanta.execute.util import Unknown
-from inmanta.ast import RuntimeException, WrappingRuntimeException, ExternalException
 from inmanta import plugins
-
+from inmanta.ast import ExternalException, RuntimeException, WrappingRuntimeException
+from inmanta.ast.statements import ReferenceStatement
+from inmanta.execute.proxy import UnknownException, UnsetException
+from inmanta.execute.runtime import ResultVariable, Waiter
+from inmanta.execute.util import Unknown
 
 LOGGER = logging.getLogger(__name__)
 

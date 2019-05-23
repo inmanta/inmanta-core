@@ -18,34 +18,35 @@
 
 import re
 
-from inmanta.ast import Namespace, LocatableString
-from inmanta.ast.statements import define, Literal
-from inmanta.parser.plyInmantaParser import parse
-from inmanta.parser import ParserException
-from inmanta.ast.statements.define import (
-    DefineImplement,
-    DefineTypeConstraint,
-    DefineTypeDefault,
-    DefineIndex,
-    DefineEntity,
-    DefineImplementInherits,
-)
-from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined, In
-from inmanta.ast.statements.generator import Constructor
-from inmanta.ast.statements.call import FunctionCall
+import pytest
+
+from inmanta.ast import LocatableString, Namespace
+from inmanta.ast.constraint.expression import And, GreaterThan, In, IsDefined, Not, Regex
+from inmanta.ast.statements import Literal, define
 from inmanta.ast.statements.assign import (
     Assign,
+    CreateDict,
     CreateList,
     IndexLookup,
-    StringFormat,
-    CreateDict,
-    ShortIndexLookup,
-    SetAttribute,
     MapLookup,
+    SetAttribute,
+    ShortIndexLookup,
+    StringFormat,
 )
-from inmanta.ast.variables import Reference, AttributeReference
-import pytest
+from inmanta.ast.statements.call import FunctionCall
+from inmanta.ast.statements.define import (
+    DefineEntity,
+    DefineImplement,
+    DefineImplementInherits,
+    DefineIndex,
+    DefineTypeConstraint,
+    DefineTypeDefault,
+)
+from inmanta.ast.statements.generator import Constructor
+from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
+from inmanta.parser import ParserException
+from inmanta.parser.plyInmantaParser import parse
 
 
 def parse_code(model_code: str):

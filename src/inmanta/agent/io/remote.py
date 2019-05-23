@@ -16,14 +16,15 @@
     Contact: code@inmanta.com
 """
 
-import threading
 import logging
+import threading
 import time
 
-from execnet import multi, gateway_bootstrap
-from . import local
+from execnet import gateway_bootstrap, multi
+
 from inmanta import resources
 
+from . import local
 
 LOGGER = logging.getLogger()
 

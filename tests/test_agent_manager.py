@@ -15,15 +15,16 @@
 
     Contact: code@inmanta.com
 """
-from unittest.mock import Mock
-from uuid import uuid4, UUID
 import asyncio
+from unittest.mock import Mock
+from uuid import UUID, uuid4
 
 import pytest
-from inmanta.server.agentmanager import AgentManager
+
 from inmanta import data
 from inmanta.protocol import Result
-from utils import assert_equal_ish, UNKWN
+from inmanta.server.agentmanager import AgentManager
+from utils import UNKWN, assert_equal_ish
 
 
 class Collector(object):

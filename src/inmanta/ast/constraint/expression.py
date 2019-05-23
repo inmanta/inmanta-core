@@ -16,15 +16,15 @@
     Contact: code@inmanta.com
 """
 
-from abc import ABCMeta, abstractmethod
 import re
+from abc import ABCMeta, abstractmethod
+from typing import Dict
 
-from inmanta.ast.statements import ReferenceStatement, Literal
-from inmanta.execute.runtime import ResultVariable, HangUnit, ExecutionUnit, RawUnit, Resolver, QueueScheduler
+from inmanta.ast import LocatableString
+from inmanta.ast.statements import Literal, ReferenceStatement
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedReferenceHelper, Reference
-from typing import Dict
-from inmanta.ast import LocatableString
+from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, RawUnit, Resolver, ResultVariable
 
 
 class InvalidNumberOfArgumentsException(Exception):

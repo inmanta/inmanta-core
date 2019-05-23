@@ -15,14 +15,19 @@
 
     Contact: code@inmanta.com
 """
-import pytest
-
 import re
 
-from inmanta.ast import IndexException
-from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException
+import pytest
+
 import inmanta.compiler as compiler
+from inmanta.ast import (
+    DuplicateException,
+    IndexException,
+    NotFoundException,
+    RuntimeException,
+    TypeNotFoundException,
+    TypingException,
+)
 
 
 def test_issue_121_non_matching_index(snippetcompiler):

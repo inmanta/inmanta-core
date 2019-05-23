@@ -16,25 +16,22 @@
     Contact: code@inmanta.com
 """
 
-import os
-import logging
-import uuid
 import datetime
 import json
+import logging
+import os
+import uuid
 from collections import defaultdict
+from time import sleep
+from typing import Callable, Dict, List, Optional, cast
 
+import click
+import texttable
 
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
-from inmanta.const import AgentTriggerMethod, TIME_ISOFMT
+from inmanta.const import TIME_ISOFMT, AgentTriggerMethod
 from inmanta.resources import Id
-import click
-import texttable
-from time import sleep
-
-
-from typing import Optional, cast, Dict, List, Callable
-
 from inmanta.types import JsonType
 
 

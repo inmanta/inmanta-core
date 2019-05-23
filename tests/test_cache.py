@@ -16,14 +16,15 @@
     Contact: code@inmanta.com
 """
 import unittest
+from threading import Lock, Thread
 from time import sleep
 
-from inmanta.agent.handler import cache
-from inmanta.agent.cache import AgentCache
-from inmanta.resources import resource, Resource, Id
 import pytest
-from _pytest.fixtures import fixture
-from threading import Lock, Thread
+from pytest import fixture
+
+from inmanta.agent.cache import AgentCache
+from inmanta.agent.handler import cache
+from inmanta.resources import Id, Resource, resource
 
 
 @fixture(autouse=True)

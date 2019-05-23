@@ -16,17 +16,18 @@
     Contact: code@inmanta.com
 """
 
-import sys
 import os
-import subprocess
-import pytest
 import re
+import signal
+import subprocess
+import sys
+from subprocess import TimeoutExpired
 from threading import Timer
+
+import pytest
 
 import inmanta.util
 from inmanta import const
-import signal
-from subprocess import TimeoutExpired
 
 
 def get_command(

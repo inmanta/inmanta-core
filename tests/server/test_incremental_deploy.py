@@ -15,24 +15,22 @@
 
     Contact: code@inmanta.com
 """
+import logging
+import time
+import uuid
 from collections import defaultdict
+from datetime import datetime
 from re import sub
+from typing import Any, Dict, List
 from uuid import UUID, uuid4
 
 import pytest
-import time
 
 import utils
+from inmanta import config, const, data
 from inmanta.agent.agent import Agent
-
-from inmanta.server import SLICE_SERVER, SLICE_AGENT_MANAGER
-import uuid
-from datetime import datetime
-from inmanta import data, const, config
-from inmanta.const import ResourceState, ResourceAction
-import logging
-from typing import List, Dict, Any
-
+from inmanta.const import ResourceAction, ResourceState
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER
 from inmanta.server.server import Server
 
 
@@ -312,6 +310,12 @@ async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
         setup.add_resource("R13", "A1 A1 A1 A1 A1", True)
         setup.add_resource("R14", "A1 A1 d1 D1", True)
         setup.add_resource("R15", "A1 A1 p1 D1", True)
+        setup.add_resource("R16", "S1 A1", False)
+        setup.add_resource("R17", "A1 S1 A1", True)
+        setup.add_resource("R18", "D1 S1 A1", False)
+        setup.add_resource("R19", "U1 A1", False)
+        setup.add_resource("R20", "U1 D1", False)
+        setup.add_resource("R21", "A1 U1", True)
 
         await setup.setup(serverdirect, env, sid)
 

@@ -18,9 +18,9 @@
 
 from subprocess import CalledProcessError
 
+import pytest
 
 from inmanta import env
-import pytest
 
 
 def test_basic_install(tmpdir):

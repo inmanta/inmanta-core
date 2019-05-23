@@ -15,28 +15,27 @@
 
     Contact: code@inmanta.com
 """
-from configparser import RawConfigParser
-
-from inmanta.const import ResourceState, DONE_STATES
-from collections import defaultdict
-from asyncpg import UndefinedTableError
 import copy
 import datetime
 import enum
-import uuid
+import hashlib
 import json
 import logging
-import warnings
-import hashlib
 import pkgutil
-import inmanta.db.versions
+import uuid
+import warnings
+from collections import defaultdict
+from configparser import RawConfigParser
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
-from inmanta.resources import Id
-from inmanta import const, util
 import asyncpg
+from asyncpg import UndefinedTableError
 
+import inmanta.db.versions
+from inmanta import const, util
+from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
+from inmanta.resources import Id
 from inmanta.types import JsonType
-from typing import Dict, List, Union, Set, Optional, Any, Tuple, Iterable
 
 LOGGER = logging.getLogger(__name__)
 
@@ -620,7 +619,7 @@ def convert_agent_trigger_method(value):
     return value
 
 
-TYPE_MAP = {"int": "integer", "bool": "boolean", "dict": "jsonb", "str": "varchar"}
+TYPE_MAP = {"int": "integer", "bool": "boolean", "dict": "jsonb", "str": "varchar", "enum": "varchar"}
 
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
@@ -644,7 +643,16 @@ class Setting(object):
     """
 
     def __init__(
-        self, name, typ, default=None, doc=None, validator=None, recompile=False, update_model=False, agent_restart=False
+        self,
+        name,
+        typ,
+        default=None,
+        doc=None,
+        validator=None,
+        recompile=False,
+        update_model=False,
+        agent_restart=False,
+        allowed_values=None,
     ):
         """
             :param name: The name of the setting.
@@ -657,6 +665,7 @@ class Setting(object):
             :param recompile: Trigger a recompile of the model when a setting is updated?
             :param update_model: Update the configuration model (git pull on project and repos)
             :param agent_restart: Restart autostarted agents when this settings is updated.
+            :param allowed_values: list of possible values (if type is enum)
         """
         self.typ = typ
         self.default = default
@@ -665,6 +674,7 @@ class Setting(object):
         self.recompile = recompile
         self.update = update_model
         self.agent_restart = agent_restart
+        self.allowed_values = allowed_values
 
     def to_dict(self):
         return {
@@ -674,6 +684,7 @@ class Setting(object):
             "recompile": self.recompile,
             "update": self.update,
             "agent_restart": self.agent_restart,
+            "allowed_values": self.allowed_values,
         }
 
 
@@ -714,10 +725,11 @@ class Environment(BaseDocument):
         ),
         AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY: Setting(
             name=AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY,
-            typ="str",
+            typ="enum",
             default=const.AgentTriggerMethod.push_full_deploy.name,
             validator=convert_agent_trigger_method,
             doc="The agent trigger method to use when " + PUSH_ON_AUTO_DEPLOY + " is enabled",
+            allowed_values=[opt.name for opt in const.AgentTriggerMethod],
         ),
         AUTOSTART_SPLAY: Setting(
             name=AUTOSTART_SPLAY,
@@ -2234,7 +2246,7 @@ class ConfigurationModel(BaseDocument):
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
-        :param negative: find resources not in the increment
+        :param negative: find deployable resources not in the increment
 
         available/skipped/unavailable -> next version
         not present -> increment
@@ -2252,7 +2264,7 @@ class ConfigurationModel(BaseDocument):
         increment = []
         not_incrememt = []
         # todo in this verions
-        work = list(r for r in resources)
+        work = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
 
         # get versions
         query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
@@ -2281,14 +2293,17 @@ class ConfigurationModel(BaseDocument):
                 if status in [ResourceState.available.name, ResourceState.skipped.name, ResourceState.unavailable.name]:
                     next.append(res)
 
-                # error -> increment
+                # error/undeployable -> increment
                 elif status in [
                     ResourceState.failed.name,
                     ResourceState.cancelled.name,
                     ResourceState.deploying.name,
                     ResourceState.processing_events.name,
+                    ResourceState.skipped_for_undefined.name,
+                    ResourceState.undefined.name,
                 ]:
                     increment.append(res)
+                # undefined -> not in increment
 
                 elif status == ResourceState.deployed.name:
                     if res["attribute_hash"] == ores["attribute_hash"]:

@@ -16,6 +16,7 @@
     Contact: bart@inmanta.com
 """
 
+import grp
 import os
 import pwd
 import shutil
@@ -24,11 +25,8 @@ import tempfile
 
 import pytest
 
-import grp
 from inmanta.agent.io import parse_agent_uri
-from inmanta.agent.io.local import BashIO
-from inmanta.agent.io.local import LocalIO
-
+from inmanta.agent.io.local import BashIO, LocalIO
 
 io_list = [LocalIO("local:", {}), BashIO("local:", {}), BashIO("local:", {}, run_as="root")]
 io_names = ["local", "bash", "bash_root"]
