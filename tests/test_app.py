@@ -391,6 +391,6 @@ end
     out, err = process.communicate(timeout=5)
     assert out.decode() == ""
     if "-X" in cmd:
-        assert "Traceback" in str(err)
+        assert "inmanta.ast.TypeNotFoundException: could not find type nuber in namespace" in str(err)
     else:
-        assert "Traceback" not in str(err)
+        assert "inmanta.ast.TypeNotFoundException: could not find type nuber in namespace" not in str(err)
