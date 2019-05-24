@@ -313,12 +313,6 @@ CREATE TABLE IF NOT EXISTS public.dryrun(
 --      * server.dryrun_list()
 -- => Prevent sequential scan through all dryruns
 CREATE INDEX dryrun_env_model_index ON dryrun (environment, model);
-
--- Table: public.schemaversion
-CREATE TABLE IF NOT EXISTS public.schemaversion(
-    id uuid PRIMARY KEY,
-    current_version integer NOT NULL UNIQUE
-);
 """
     async with connection.transaction():
         await connection.execute(schema)

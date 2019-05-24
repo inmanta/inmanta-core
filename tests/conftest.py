@@ -48,6 +48,7 @@ from inmanta import config, data, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
+from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import Project
 from inmanta.postgresproc import PostgresProc
@@ -67,6 +68,17 @@ def postgres_db(postgresql_proc):
 @pytest.fixture(scope="function")
 async def postgresql_client(postgres_db, database_name):
     client = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name)
+    try:
+        yield client
+    finally:
+        await client.close()
+
+
+@pytest.fixture(scope="function")
+async def postgresql_pool(postgres_db, database_name):
+    client = await asyncpg.create_pool(
+        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name
+    )
     try:
         yield client
     finally:
@@ -131,6 +143,14 @@ async def create_db(postgres_db, database_name):
 
 
 @pytest.fixture(scope="function")
+async def hard_clean_db(postgresql_client, create_db):
+    tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+    drop_query = "DROP TABLE %s CASCADE" % ", ".join([x["table_name"] for x in tables_in_db])
+    await postgresql_client.execute(drop_query)
+    yield
+
+
+@pytest.fixture(scope="function")
 async def clean_db(postgresql_client, create_db):
     """
         1) Truncated tables: All tables which are part of the inmanta schema, except for the schemaversion table. The version
@@ -142,7 +162,8 @@ async def clean_db(postgresql_client, create_db):
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     tables_in_db = [x["table_name"] for x in tables_in_db]
     tables_to_preserve = [x.table_name() for x in data._classes]
-    tables_to_truncate = [x for x in tables_in_db if x != data.SchemaVersion.table_name() and x in tables_to_preserve]
+    tables_to_preserve.append(SCHEMA_VERSION_TABLE)
+    tables_to_truncate = [x for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE]
     tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
     if tables_to_drop:
         drop_query = "DROP TABLE %s CASCADE" % ", ".join(tables_to_drop)

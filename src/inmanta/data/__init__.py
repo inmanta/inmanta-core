@@ -21,7 +21,6 @@ import enum
 import hashlib
 import json
 import logging
-import pkgutil
 import uuid
 import warnings
 from collections import defaultdict
@@ -29,11 +28,11 @@ from configparser import RawConfigParser
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import asyncpg
-from asyncpg import UndefinedTableError
 
 import inmanta.db.versions
 from inmanta import const, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
+from inmanta.data.schema import CORE_NAME, DBSchema
 from inmanta.resources import Id
 from inmanta.types import JsonType
 
@@ -2447,41 +2446,6 @@ class DryRun(BaseDocument):
         return dict_result
 
 
-class SchemaVersion(BaseDocument):
-    """
-       This table contains the current version of the database schema.
-
-       :param current_version The current version of the database schema.
-    """
-
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    current_version = Field(field_type=int, required=True, unique=True)
-
-    @classmethod
-    async def get_current_version(cls):
-        try:
-            result = await cls.get_list()
-        except UndefinedTableError:
-            return None
-        if len(result) > 1:
-            raise Exception("More than one current version was found.")
-        if not result:
-            return None
-        return result[0].current_version
-
-    @classmethod
-    async def set_current_version(cls, version_number, connection):
-        """
-            Set the current version of the database schema to version_number
-
-            :param version_number: The new version number of the db schema
-            :param connection: The new version is set in the same transaction as the one of this connection.
-        """
-        new_version = cls(current_version=version_number)
-        await SchemaVersion.delete_all(connection=connection)
-        await new_version.insert(connection=connection)
-
-
 _classes = [
     Project,
     Environment,
@@ -2500,47 +2464,7 @@ _classes = [
     FormRecord,
     Compile,
     Report,
-    SchemaVersion,
 ]
-
-
-class DBSchema(object):
-    PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
-
-    async def ensure_db_schema(self, connection):
-        current_version_db_schema = await self._get_current_version_db_schema()
-        update_functions_map = await self._get_dct_with_update_functions(current_version_db_schema)
-        await self._update_db_schema(update_functions_map, connection)
-
-    async def _update_db_schema(self, update_function_map, connection):
-        for version in sorted(update_function_map.keys()):
-            LOGGER.info("Updating database schema to version {:d}".format(version))
-            update_function = update_function_map[version]
-            async with connection.transaction():
-                await update_function(connection)
-                await SchemaVersion.set_current_version(version, connection)
-
-    async def _get_current_version_db_schema(self):
-        current_version_db_schema = await SchemaVersion.get_current_version()
-        if not current_version_db_schema:
-            return -1
-        return current_version_db_schema
-
-    @classmethod
-    async def _get_dct_with_update_functions(cls, versions_higher_than=None):
-        module_names = [
-            modname for _, modname, ispkg in pkgutil.iter_modules(DBSchema.PACKAGE_WITH_UPDATE_FILES.__path__) if not ispkg
-        ]
-        version_to_update_function = {}
-        for mod_name in module_names:
-            schema_version = int(mod_name[1:])
-            if versions_higher_than and schema_version <= versions_higher_than:
-                continue
-            fq_module_name = DBSchema.PACKAGE_WITH_UPDATE_FILES.__name__ + "." + mod_name
-            module = __import__(fq_module_name, fromlist=("update"))
-            update_function = module.update
-            version_to_update_function[schema_version] = update_function
-        return version_to_update_function
 
 
 def set_connection_pool(pool):
@@ -2554,13 +2478,17 @@ async def disconnect():
         await cls.close_connection_pool()
 
 
+PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
+CORE_DATABASE_NAME = CORE_NAME
+
+
 async def connect(host, port, database, username, password, create_db_schema=True):
     pool = await asyncpg.create_pool(host=host, port=port, database=database, user=username, password=password)
     set_connection_pool(pool)
     if create_db_schema:
         try:
             async with pool.acquire() as con:
-                await DBSchema().ensure_db_schema(con)
+                await DBSchema(CORE_DATABASE_NAME, PACKAGE_WITH_UPDATE_FILES, con).ensure_db_schema()
         except Exception as e:
             await disconnect()
             await pool.close()

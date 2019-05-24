@@ -8,6 +8,7 @@ Changes in this release:
 - Support to set environment variables on the Inmanta server and its agents
 - Split of server recompile into separate extension (#1183)
 - Define explicit path in protocol methods
+- Added support for schema management for multiple slices in the same database
 
 v 2019.2 (2019-04-30)
 Changes in this release:
