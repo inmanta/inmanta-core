@@ -96,7 +96,9 @@ CREATE TABLE IF NOT EXISTS public.schemaversion(
 
 
 @pytest.mark.asyncio
-async def test_dbschema_update_legacy_2(postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db):
+async def test_dbschema_update_legacy_2(
+    postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db, hard_clean_db_post
+):
     await postgresql_client.execute(
         """
 -- Table: public.schemaversion
@@ -116,19 +118,22 @@ CREATE TABLE IF NOT EXISTS public.schemaversion(
 
 
 @pytest.mark.asyncio
-async def test_dbschema_update_db_schema(postgresql_client, init_dataclasses_and_load_schema, get_columns_in_db_table):
-    db_schema = schema.DBSchema("tes1t", inmanta.db.versions, postgresql_client)
+async def test_dbschema_update_db_schema(postgresql_client, get_columns_in_db_table, hard_clean_db_post):
 
-    await run_updates_and_verify(get_columns_in_db_table, db_schema, 0)
+    db_schema = schema.DBSchema("test1", inmanta.db.versions, postgresql_client)
+    await db_schema.ensure_self_update()
 
-    db_schema = schema.DBSchema(CORE_NAME, inmanta.db.versions, postgresql_client)
+    await run_updates_and_verify(get_columns_in_db_table, db_schema, None)
 
-    await run_updates_and_verify(get_columns_in_db_table, db_schema, prefix="C")
+    db_schema = schema.DBSchema("test11", inmanta.db.versions, postgresql_client)
+
+    await run_updates_and_verify(get_columns_in_db_table, db_schema, None, prefix="C")
 
 
 @pytest.mark.asyncio
-async def test_dbschema_update_db_schema_failure(postgresql_client, init_dataclasses_and_load_schema, get_columns_in_db_table):
+async def test_dbschema_update_db_schema_failure(postgresql_client, get_columns_in_db_table):
     db_schema = schema.DBSchema("test2", inmanta.db.versions, postgresql_client)
+    await db_schema.ensure_self_update()
 
     async def update_function(connection):
         # Syntax error should trigger database rollback
@@ -170,10 +175,9 @@ def make_versions(idx, *fcts):
 
 
 @pytest.mark.asyncio
-async def test_dbschema_partial_update_db_schema_failure(
-    postgresql_client, init_dataclasses_and_load_schema, get_columns_in_db_table
-):
+async def test_dbschema_partial_update_db_schema_failure(postgresql_client, get_columns_in_db_table):
     db_schema = schema.DBSchema("test3", inmanta.db.versions, postgresql_client)
+    await db_schema.ensure_self_update()
 
     async def update_function_good(connection):
         # Fix syntax issue
@@ -189,6 +193,8 @@ async def test_dbschema_partial_update_db_schema_failure(
         await connection.execute("CREATE TABLE public.tabc(id integer primary key, val varchar NOT NULL);")
 
     current_db_version = await db_schema.get_current_version()
+    if current_db_version is None:
+        current_db_version = 0
 
     update_function_map = make_versions(
         current_db_version + 1, update_function_good, update_function_bad, update_function_good2

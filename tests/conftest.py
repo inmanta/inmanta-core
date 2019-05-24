@@ -145,9 +145,21 @@ async def create_db(postgres_db, database_name):
 @pytest.fixture(scope="function")
 async def hard_clean_db(postgresql_client, create_db):
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-    drop_query = "DROP TABLE %s CASCADE" % ", ".join([x["table_name"] for x in tables_in_db])
-    await postgresql_client.execute(drop_query)
+    table_names = [x["table_name"] for x in tables_in_db]
+    if table_names:
+        drop_query = "DROP TABLE %s CASCADE" % ", ".join(table_names)
+        await postgresql_client.execute(drop_query)
     yield
+
+
+@pytest.fixture(scope="function")
+async def hard_clean_db_post(postgresql_client, create_db):
+    yield
+    tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+    table_names = [x["table_name"] for x in tables_in_db]
+    if table_names:
+        drop_query = "DROP TABLE %s CASCADE" % ", ".join(table_names)
+        await postgresql_client.execute(drop_query)
 
 
 @pytest.fixture(scope="function")

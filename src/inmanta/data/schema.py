@@ -42,7 +42,7 @@ class Version(object):
 
 class DBSchema(object):
     """
-    Schema Manager, ensures the schema is up to date
+    Schema Manager, ensures the schema is up to date,
     """
 
     def __init__(self, name: str, package: ModuleType, connection: asyncpg.Connection) -> None:
