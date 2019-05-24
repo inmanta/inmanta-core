@@ -1,4 +1,7 @@
-async def update(connection):
+import asyncpg
+
+
+async def update(connection: asyncpg.connection) -> None:
     schema = """
 CREATE TYPE versionstate AS ENUM('success', 'failed', 'deploying', 'pending');
 CREATE TYPE resourcestate AS ENUM('unavailable', 'skipped', 'dry', 'deployed', 'failed', 'deploying', 'available',

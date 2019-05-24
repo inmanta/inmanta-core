@@ -42,15 +42,36 @@ class Version(object):
 
 class DBSchema(object):
     """
-    Schema Manager, ensures the schema is up to date,
+    Schema Manager, ensures the schema is up to date.
+
     """
 
     def __init__(self, name: str, package: ModuleType, connection: asyncpg.Connection) -> None:
+        """
+
+        :param name: unique name for this schema, best equal to extension name and used as prefix for all table names
+        :param package: a python package, containing modules with name v%(version)s.py.
+            Each module contains a method `async def update(connection: asyncpg.connection) -> None:`
+        :param connection: asyncpg connection
+        """
         self.name = name
         self.package = package
         self.connection = connection
 
-    async def legacy_migration(self):
+    async def ensure_db_schema(self) -> None:
+        current_version_db_schema = await self.ensure_self_update()
+        update_functions = await self._get_update_functions()
+        if update_functions[-1].version > current_version_db_schema:
+            await self._update_db_schema(update_functions)
+
+    async def _legacy_migration(self) -> None:
+        """
+        Migration to new schema management:
+        1- as long as the legacy schemaversion table exists, no other operation is allowed by DBSchema
+        2- takes a lock on the legacy schemaversion table to ensure exclusivity
+        3- migrates the existing version to the new table, for the core slice
+        4- drops legacy table
+        """
         LOGGER.info("Migrating from old schema management to new schema management")
         # tx begin
         async with self.connection.transaction():
@@ -82,9 +103,9 @@ class DBSchema(object):
     async def ensure_self_update(self) -> int:
         legacy_version_db_schema = await self.get_legacy_version()
         if legacy_version_db_schema is not None:
-            await self.legacy_migration()
-        current_version_db_schema = await self.get_current_version()
+            await self._legacy_migration()
 
+        current_version_db_schema = await self.get_current_version()
         if current_version_db_schema is None:
             LOGGER.info("Creating schema version table")
             # create table
@@ -92,39 +113,59 @@ class DBSchema(object):
             return 0
         return current_version_db_schema
 
-    async def ensure_db_schema(self) -> None:
-        current_version_db_schema = await self.ensure_self_update()
-        update_functions = await self._get_update_functions()
-        if update_functions[-1].version > current_version_db_schema:
-            await self._update_db_schema(update_functions)
-
     async def _update_db_schema(self, update_functions: List[Version]) -> None:
+        """
+        Main update function
+
+        Wrapped in outer transaction, that holds a lock on the schemamanager table.
+        Each version update is wrapped in a subtransaction.
+
+        When a subtransaction fails, it is rolled back.
+        The outer transaction is committed at that point.
+
+        This logic requires manual transaction management,
+        as the exception is propagated over the transaction boundary without causing rollback.
+        """
+        # outer transaction
         outer = self.connection.transaction()
         try:
             await outer.start()
+            # get lock
             await self.connection.execute(f"LOCK TABLE {SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
+            # get current version again, in transaction this time
             sure_db_schema = await self.get_current_version()
             if sure_db_schema is None:
                 sure_db_schema = 0
+            # get relevant updates
             updates = [v for v in update_functions if v.version > sure_db_schema]
             for version in updates:
                 try:
+                    # wrap in subtransaction
                     async with self.connection.transaction():
+                        # actual update sequence
                         LOGGER.info("Updating database schema to version %d", version.version)
                         update_function = version.function
                         await update_function(self.connection)
+                        # also set version, outer tx will always contain consistent version
                         await self.set_current_version(version.version)
                 except Exception:
+                    # update failed, subtransaction already rolled back
                     LOGGER.exception("Database schema update to version %d failed", version.version)
+                    # commit outer
                     await outer.commit()
+                    # unset it, to prevent double commit
                     outer = None
+                    # propagate excn
                     raise
         except Exception:
+            # an exception, from either outer transaction (before subtransaction) or subtransaction
             if outer is not None:
+                # subtransaction did not set None, so abort
                 await outer.rollback()
                 outer = None
             raise
         finally:
+            # if the tx is still there, all is good
             if outer is not None:
                 await outer.commit()
 
