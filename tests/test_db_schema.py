@@ -78,7 +78,9 @@ async def test_dbschema_unclean(postgresql_client: asyncpg.Connection, get_colum
 
 
 @pytest.mark.asyncio
-async def test_dbschema_update_legacy_1(postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db):
+async def test_dbschema_update_legacy_1(
+    postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db, hard_clean_db_post
+):
     await postgresql_client.execute(
         """
 -- Table: public.schemaversion

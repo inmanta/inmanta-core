@@ -16,16 +16,12 @@
     Contact: code@inmanta.com
 """
 import datetime
-import inspect
 import logging
-import pkgutil
 import time
-import types
 import uuid
 
 import asyncpg
 import pytest
-from asyncpg import PostgresSyntaxError
 
 from inmanta import const, data
 from inmanta.const import LogLevel
