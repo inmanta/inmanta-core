@@ -25,6 +25,7 @@ import logging
 import re
 import time
 import uuid
+from collections import defaultdict
 from enum import Enum
 from typing import (
     TYPE_CHECKING,
@@ -385,25 +386,27 @@ class MethodProperties(object):
 
         elif typing_inspect.is_union_type(arg_type):
             # Make sure there is only one list and one dict in the union, otherwise we cannot process the arguments
-            cnt = {dict: 0, list: 0}
-            for sub_arg in typing_inspect.get_args(arg_type):
+            cnt = defaultdict(lambda: 0)
+            for sub_arg in typing_inspect.get_args(arg_type, evaluate=True):
                 self._validate_type_arg(arg, sub_arg)
 
                 if typing_inspect.is_generic_type(sub_arg):
-                    cnt[typing_inspect.get_origin(sub_arg)] += 1
+                    # there is a difference between python 3.6 and >=3.7
+                    if hasattr(sub_arg, "__name__"):
+                        cnt[sub_arg.__name__] += 1
+                    else:
+                        cnt[sub_arg._name] += 1
 
-            if cnt[list] > 1:
-                raise InvalidMethodDefinition(f"Union of argument {arg} can contain only one generic List")
-
-            if cnt[dict] > 1:
-                raise InvalidMethodDefinition(f"Union of argument {arg} can contain only one generic List")
+            for name, n in cnt.items():
+                if n > 1:
+                    raise InvalidMethodDefinition(f"Union of argument {arg} can contain only one generic {name}")
 
         elif typing_inspect.is_generic_type(arg_type):
             orig = typing_inspect.get_origin(arg_type)
             if not issubclass(orig, (list, dict)):
                 raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} can only be generic List or Dict")
 
-            args = typing_inspect.get_args(arg_type)
+            args = typing_inspect.get_args(arg_type, evaluate=True)
             if len(args) == 0:
                 raise InvalidMethodDefinition(
                     f"Type {arg_type} of argument {arg} must be have a subtype plain List or Dict is not allowed."

@@ -144,7 +144,7 @@ class CallArguments(object):
         """ Process a union type
         """
         matching_type = None
-        for t in typing_inspect.get_args(arg_type):
+        for t in typing_inspect.get_args(arg_type, evaluate=True):
             instanceof_type = t
             if typing_inspect.is_generic_type(t):
                 instanceof_type = typing_inspect.get_origin(t)
@@ -178,7 +178,7 @@ class CallArguments(object):
                     f"Invalid argument {arg_name}, type needs to be a list. Argument type should be {arg_type}"
                 )
 
-            el_type = typing_inspect.get_args(arg_type)[0]
+            el_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
             if typing_inspect.is_union_type(el_type):
                 return [self._process_union(el_type, arg_name, el) for el in value]
 
@@ -193,7 +193,7 @@ class CallArguments(object):
                     f"Invalid argument {arg_name}, type needs to be a dict. Argument type should be {arg_type}"
                 )
 
-            el_type = typing_inspect.get_args(arg_type)[1]
+            el_type = typing_inspect.get_args(arg_type, evaluate=True)[1]
             result = {}
             for k, v in value.items():
                 if not isinstance(k, str):
@@ -218,7 +218,7 @@ class CallArguments(object):
         """ Validate a return with a union type
         """
         matching_type = None
-        for t in typing_inspect.get_args(arg_type):
+        for t in typing_inspect.get_args(arg_type, evaluate=True):
             instanceof_type = t
             if typing_inspect.is_generic_type(t):
                 instanceof_type = typing_inspect.get_origin(t)
@@ -250,7 +250,7 @@ class CallArguments(object):
                     f"Invalid return value, type needs to be a list. Argument type should be {arg_type}"
                 )
 
-            el_type = typing_inspect.get_args(arg_type)[0]
+            el_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
             for el in value:
                 if typing_inspect.is_union_type(el_type):
                     self._validate_union_return(el_type, el)
@@ -263,7 +263,7 @@ class CallArguments(object):
                     f"Invalid return value, type needs to be a dict. Argument type should be {arg_type}"
                 )
 
-            el_type = typing_inspect.get_args(arg_type)[1]
+            el_type = typing_inspect.get_args(arg_type, evaluate=True)[1]
             for k, v in value.items():
                 if not isinstance(k, str):
                     raise exceptions.ServerError(f"Keys of return dict need to be strings.")
