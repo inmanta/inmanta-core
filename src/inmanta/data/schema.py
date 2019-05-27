@@ -6,7 +6,8 @@ from typing import List, Optional
 import asyncpg
 from asyncpg import UndefinedTableError
 
-from inmanta.data import CORE_SCHEMA_NAME
+# Name of core schema in the DB schema verions
+CORE_SCHEMA_NAME = "core"
 
 LOGGER = logging.getLogger(__name__)
 
