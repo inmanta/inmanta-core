@@ -275,7 +275,7 @@ class InvalidMethodDefinition(Exception):
     """
 
 
-VALID_PRIMITIVE_ARG_TYPES = (BaseModel, Enum, str, float, int, bool)
+VALID_PRIMITIVE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool)
 
 
 class MethodProperties(object):
