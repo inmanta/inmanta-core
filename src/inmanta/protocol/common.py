@@ -370,17 +370,35 @@ class MethodProperties(object):
             if arg not in type_hints:
                 raise InvalidMethodDefinition(f"{arg} in function {self.function} has no type annotation.")
 
-            arg_type = type_hints[arg]
-            self._validate_type_arg(arg, arg_type)
+            self._validate_type_arg(arg, type_hints[arg])
 
-        return_type = type_hints["return"]
-        if typing_inspect.is_generic_type(return_type) and issubclass(typing_inspect.get_origin(return_type), ReturnValue):
-            self._validate_type_arg("return type", typing_inspect.get_args(return_type)[0])
-        else:
-            self._validate_type_arg("return type", return_type)
+        self._validate_type_arg("return type", type_hints["return"])
 
     def _validate_type_arg(self, arg: Any, arg_type: Type) -> None:
-        if typing_inspect.is_generic_type(arg_type):
+        """ Validate the given type arg recursively
+        """
+        if isinstance(arg_type, type(None)):
+            return
+
+        if typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
+            self._validate_type_arg(arg, typing_inspect.get_args(arg_type)[0])
+
+        elif typing_inspect.is_union_type(arg_type):
+            # Make sure there is only one list and one dict in the union, otherwise we cannot process the arguments
+            cnt = {dict: 0, list: 0}
+            for sub_arg in typing_inspect.get_args(arg_type):
+                self._validate_type_arg(arg, sub_arg)
+
+                if typing_inspect.is_generic_type(sub_arg):
+                    cnt[typing_inspect.get_origin(sub_arg)] += 1
+
+            if cnt[list] > 1:
+                raise InvalidMethodDefinition(f"Union of argument {arg} can contain only one generic List")
+
+            if cnt[dict] > 1:
+                raise InvalidMethodDefinition(f"Union of argument {arg} can contain only one generic List")
+
+        elif typing_inspect.is_generic_type(arg_type):
             orig = typing_inspect.get_origin(arg_type)
             if not issubclass(orig, (list, dict)):
                 raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} can only be generic List or Dict")
@@ -391,23 +409,16 @@ class MethodProperties(object):
                     f"Type {arg_type} of argument {arg} must be have a subtype plain List or Dict is not allowed."
                 )
 
-            elif len(args) == 1 and not issubclass(args[0], VALID_PRIMITIVE_ARG_TYPES):  # A generic list
-                raise InvalidMethodDefinition(
-                    f"Type {arg_type} of argument {arg} must be a "
-                    f"List of {', '.join([x.__name__ for x in VALID_PRIMITIVE_ARG_TYPES])}"
-                )
+            elif len(args) == 1:  # A generic list
+                self._validate_type_arg(arg, args[0])
 
-            elif len(args) == 2:
+            elif len(args) == 2:  # Generic Dict
                 if not issubclass(args[0], str):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} must be a Dict with str keys and not {args[0].__name__}"
                     )
 
-                if not issubclass(args[1], VALID_PRIMITIVE_ARG_TYPES):
-                    raise InvalidMethodDefinition(
-                        f"Type {arg_type} of argument {arg} must be a "
-                        f"Dict with value type one of {', '.join([x.__name__ for x in VALID_PRIMITIVE_ARG_TYPES])}"
-                    )
+                self._validate_type_arg(arg, args[1])
 
             elif len(args) > 2:
                 raise InvalidMethodDefinition(f"Failed to validate type {arg_type} of argument {arg}.")
@@ -418,7 +429,7 @@ class MethodProperties(object):
         else:
             valid_types = ", ".join([x.__name__ for x in VALID_PRIMITIVE_ARG_TYPES])
             raise InvalidMethodDefinition(
-                f"Type {arg_type} of argument {arg} must be a either {valid_types} or a List of these types or a "
+                f"Type {arg_type.__name__} of argument {arg} must be a either {valid_types} or a List of these types or a "
                 "Dict with str keys and values of these types."
             )
 

@@ -140,6 +140,33 @@ class CallArguments(object):
 
         return value
 
+    def _process_union(self, arg_type: Type, arg_name: str, value: Any) -> Any:
+        """ Process a union type
+        """
+        matching_type = None
+        for t in typing_inspect.get_args(arg_type):
+            instanceof_type = t
+            if typing_inspect.is_generic_type(t):
+                instanceof_type = typing_inspect.get_origin(t)
+
+            if isinstance(value, instanceof_type):
+                if matching_type is not None:
+                    raise exceptions.ServerError(
+                        f"Argument {arg_name} is defined as a union {arg_type} for which multiple "
+                        f"types match the provided value {value}"
+                    )
+                matching_type = t
+
+        if matching_type is None:
+            raise exceptions.BadRequest(
+                f"Invalid argument {arg_name}, no matching type found in union {arg_type} for value type {type(value)}"
+            )
+
+        if typing_inspect.is_generic_type(matching_type):
+            return self._process_generic(matching_type, arg_name, value)
+
+        return matching_type(value)
+
     def _process_generic(self, arg_type: Type, arg_name: str, value: Any) -> Any:
         """ Process List or Dict types.
 
@@ -152,7 +179,10 @@ class CallArguments(object):
                 )
 
             el_type = typing_inspect.get_args(arg_type)[0]
-            if issubclass(el_type, BaseModel):
+            if typing_inspect.is_union_type(el_type):
+                return [self._process_union(el_type, arg_name, el) for el in value]
+
+            elif issubclass(el_type, BaseModel):
                 return [el_type(**el) for el in value]
 
             return [el_type(el) for el in value]
@@ -169,7 +199,9 @@ class CallArguments(object):
                 if not isinstance(k, str):
                     raise exceptions.BadRequest(f"Keys of dict argument {arg_name} need to be strings.")
 
-                if issubclass(el_type, BaseModel):
+                if typing_inspect.is_union_type(el_type):
+                    result[k] = self._process_union(el_type, arg_name, v)
+                elif issubclass(el_type, BaseModel):
                     result[k] = el_type(**v)
                 else:
                     result[k] = el_type(v)
@@ -181,6 +213,31 @@ class CallArguments(object):
             raise exceptions.BadRequest(
                 f"Failed to validate generic type {arg_type} of {arg_name}, only List and Dict are supported"
             )
+
+    def _validate_union_return(self, arg_type: Type, value: Any) -> Any:
+        """ Validate a return with a union type
+        """
+        matching_type = None
+        for t in typing_inspect.get_args(arg_type):
+            instanceof_type = t
+            if typing_inspect.is_generic_type(t):
+                instanceof_type = typing_inspect.get_origin(t)
+
+            if isinstance(value, instanceof_type):
+                if matching_type is not None:
+                    raise exceptions.ServerError(
+                        f"Return type is defined as a union {arg_type} for which multiple "
+                        f"types match the provided value {value}"
+                    )
+                matching_type = t
+
+        if matching_type is None:
+            raise exceptions.BadRequest(
+                f"Invalid return value, no matching type found in union {arg_type} for value type {type(value)}"
+            )
+
+        if typing_inspect.is_generic_type(matching_type):
+            self._validate_generic_return(arg_type, matching_type)
 
     def _validate_generic_return(self, arg_type: Type, value: Any) -> Any:
         """ Validate List or Dict types.
@@ -195,7 +252,9 @@ class CallArguments(object):
 
             el_type = typing_inspect.get_args(arg_type)[0]
             for el in value:
-                if not isinstance(el, el_type):
+                if typing_inspect.is_union_type(el_type):
+                    self._validate_union_return(el_type, el)
+                elif not isinstance(el, el_type):
                     raise exceptions.ServerError(f"Element {el} of returned list is not of type {el_type}.")
 
         elif issubclass(typing_inspect.get_origin(arg_type), dict):
@@ -209,7 +268,9 @@ class CallArguments(object):
                 if not isinstance(k, str):
                     raise exceptions.ServerError(f"Keys of return dict need to be strings.")
 
-                if not isinstance(v, el_type):
+                if typing_inspect.is_union_type(el_type):
+                    self._validate_union_return(el_type, v)
+                elif not isinstance(v, el_type):
                     raise exceptions.ServerError(f"Element {v } of returned list is not of type {el_type}.")
 
         else:
@@ -234,6 +295,9 @@ class CallArguments(object):
         arg_type: Type = self._argspec.annotations[arg]
 
         try:
+            if typing_inspect.is_union_type(arg_type):
+                return self._process_union(arg_type, arg, value)
+
             # This check needs to be first because isinstance fails on generic types.
             if typing_inspect.is_generic_type(arg_type):
                 return self._process_generic(arg_type, arg, value)
@@ -352,6 +416,11 @@ class CallArguments(object):
             # signature of the handler and the method definition matches and the returned value matches this return value
             # Both isubclass and isinstance fail on this type
             # This check needs to be first because isinstance fails on generic types.
+            # TODO: also validate the value inside a ReturnValue
+            if typing_inspect.is_union_type(return_type):
+                self._validate_union_return(return_type, result)
+                return common.Response.create(ReturnValue(response=result), headers, config.properties.wrap_data)
+
             if typing_inspect.is_generic_type(return_type):
                 if isinstance(result, ReturnValue):
                     return common.Response.create(result, headers, config.properties.wrap_data)

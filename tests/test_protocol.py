@@ -23,7 +23,7 @@ import threading
 import time
 import uuid
 from enum import Enum
-from typing import Dict, Iterator, List
+from typing import Dict, Iterator, List, Union
 
 import pytest
 import tornado
@@ -784,7 +784,10 @@ async def test_method_definition():
                 Create a new project
             """
 
-    assert "Type typing.List[object] of argument name must be a List of BaseModel, Enum, str, float, int, bool" in str(e)
+    assert (
+        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, bool or a "
+        "List of these types or a Dict with str keys and values of these types."
+    ) in str(e)
 
     with pytest.raises(InvalidMethodDefinition) as e:
 
@@ -805,6 +808,46 @@ async def test_method_definition():
             """
 
     assert (
-        "Type typing.Dict[str, object] of argument name must be a "
-        "Dict with value type one of BaseModel, Enum, str, float, int, bool"
+        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, bool or a List of these types "
+        "or a Dict with str keys and values of these types."
     ) in str(e)
+
+
+@pytest.mark.asyncio
+async def test_union_types(unused_tcp_port, postgres_db, database_name):
+    """ Test use of union types
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    SimpleTypes = Union[float, int, str, bool]  # NOQA
+    AttributeTypes = Union[SimpleTypes, List[SimpleTypes], Dict[str, SimpleTypes]]  # NOQA
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(data: AttributeTypes) -> List[SimpleTypes]:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, data: AttributeTypes) -> List[SimpleTypes]:  # NOQA
+            if isinstance(data, list):
+                return data
+            return [data]
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+    result = await client.test_method(data=5)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert 5 == result.result["data"][0]
+
+    result = await client.test_method(data=[5])
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert 5 == result.result["data"][0]
+
+    await server.stop()
+    await rs.stop()
