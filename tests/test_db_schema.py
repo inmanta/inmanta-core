@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import inspect
 import pkgutil
 import types
@@ -23,7 +24,8 @@ from typing import Optional
 
 import asyncpg
 import pytest
-from asyncpg import PostgresSyntaxError
+from asyncio import Semaphore
+from asyncpg import PostgresSyntaxError, InterfaceError
 
 import inmanta.db.versions
 from inmanta import data
@@ -261,3 +263,81 @@ async def test_dbschema_get_dct_with_update_functions():
         assert isinstance(version.function, types.FunctionType)
         assert version.function.__name__ == "update"
         assert inspect.getfullargspec(version.function)[0] == ["connection"]
+
+
+
+@pytest.mark.asyncio
+async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, hard_clean_db):
+    async with postgresql_pool.acquire() as postgresql_client:
+        async with postgresql_pool.acquire() as postgresql_client2:
+
+            # schedule 3 updates, hang on second, unblock one, verify, unblock other, verify
+            corev = await get_core_version(postgresql_client)
+
+            db_schema = schema.DBSchema("test_multi_upgrade_lockout", inmanta.db.versions,
+                                        postgresql_client)
+            db_schema2 = schema.DBSchema("test_multi_upgrade_lockout", inmanta.db.versions,
+                                        postgresql_client2)
+            await db_schema.ensure_self_update()
+
+
+            lock = Semaphore(0)
+
+            async def update_function_a(connection):
+                # Fix syntax issue
+                await connection.execute("CREATE TABLE public.taba(id integer primary key, val varchar NOT NULL);")
+
+            async def update_function_b(connection):
+                # Syntax error should trigger database rollback
+                await lock.acquire()
+                await connection.execute("CREATE TABLE public.tabb(id integer primary key, val varchar NOT NULL);")
+
+            async def update_function_c(connection):
+                # Fix syntax issue
+                await connection.execute("CREATE TABLE public.tabc(id integer primary key, val varchar NOT NULL);")
+
+            current_db_version = await db_schema.get_current_version()
+            if current_db_version is None:
+                current_db_version = 0
+
+            update_function_map = make_versions(
+                current_db_version + 1, update_function_a, update_function_b, update_function_c
+            )
+
+            r1 = asyncio.create_task(db_schema._update_db_schema(update_function_map))
+            r2 = asyncio.create_task(db_schema2._update_db_schema(update_function_map))
+
+            both = asyncio.as_completed([r1, r2]).__iter__()
+
+            await asyncio.sleep(0.1)
+            first = next(both)
+            lock.release()
+            await first
+
+            # second one doesn't even hit the lock, as it never sees schema version 0
+            # lock.release()
+            second = next(both)
+            await second
+
+
+            # Assert done
+            assert (await db_schema.get_current_version()) == current_db_version + 3
+            assert (
+                       await postgresql_client.fetchval(
+                           "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='taba'"
+                       )
+                   ) is not None
+
+            assert (
+                       await postgresql_client.fetchval(
+                           "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='tabb'"
+                       )
+                   ) is not None
+
+            assert (
+                       await postgresql_client.fetchval(
+                           "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='tabc'"
+                       )
+                   ) is not None
+
+            await assert_core_untouched(postgresql_client, corev)

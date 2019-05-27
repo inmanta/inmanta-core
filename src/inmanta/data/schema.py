@@ -44,6 +44,7 @@ class DBSchema(object):
     """
     Schema Manager, ensures the schema is up to date.
 
+    Concurrent updates are safe
     """
 
     def __init__(self, name: str, package: ModuleType, connection: asyncpg.Connection) -> None:
