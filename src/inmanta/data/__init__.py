@@ -2479,7 +2479,7 @@ async def disconnect():
 
 
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
-CORE_DATABASE_NAME = CORE_NAME
+CORE_SCHEMA_NAME = "core"
 
 
 async def connect(host, port, database, username, password, create_db_schema=True):
@@ -2488,7 +2488,7 @@ async def connect(host, port, database, username, password, create_db_schema=Tru
     if create_db_schema:
         try:
             async with pool.acquire() as con:
-                await DBSchema(CORE_DATABASE_NAME, PACKAGE_WITH_UPDATE_FILES, con).ensure_db_schema()
+                await DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, con).ensure_db_schema()
         except Exception as e:
             await disconnect()
             await pool.close()

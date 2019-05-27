@@ -28,7 +28,7 @@ from asyncpg import PostgresSyntaxError
 import inmanta.db.versions
 from inmanta import data
 from inmanta.data import schema
-from inmanta.data.schema import CORE_NAME, Version
+from inmanta.data.schema import CORE_NAME, Version, TableNotFound
 
 
 async def run_updates_and_verify(
@@ -57,8 +57,8 @@ async def run_updates_and_verify(
 @pytest.mark.asyncio
 async def test_dbschema_clean(postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db):
     dbm = schema.DBSchema("test", inmanta.db.versions, postgresql_client)
-    current_db_version = await dbm.get_current_version()
-    assert current_db_version == schema.VERSION_NONE
+    with pytest.raises(TableNotFound):
+        await dbm.get_current_version()
     await dbm.ensure_self_update()
     await run_updates_and_verify(get_columns_in_db_table, dbm, 0)
 
@@ -73,8 +73,7 @@ async def test_dbschema_unclean(postgresql_client: asyncpg.Connection, get_colum
     current_db_version = await dbm.get_current_version()
     assert current_db_version == 5
 
-    assert current_db_version == 5
-    await run_updates_and_verify(get_columns_in_db_table, dbm, 5)
+    await run_updates_and_verify(get_columns_in_db_table, dbm, current_db_version)
 
 
 @pytest.mark.asyncio
@@ -92,9 +91,9 @@ CREATE TABLE IF NOT EXISTS public.schemaversion(
     )
     dbm = schema.DBSchema("test", inmanta.db.versions, postgresql_client)
     current_db_version = await dbm.get_legacy_version()
-    assert current_db_version == schema.VERSION_LEGACY
+    assert current_db_version == 0
     await dbm.ensure_self_update()
-    await run_updates_and_verify(get_columns_in_db_table, dbm, 0)
+    await run_updates_and_verify(get_columns_in_db_table, dbm, current_db_version)
 
 
 @pytest.mark.asyncio
@@ -116,7 +115,7 @@ CREATE TABLE IF NOT EXISTS public.schemaversion(
     current_db_version = await dbm.get_legacy_version()
     assert current_db_version == 1
     await dbm.ensure_self_update()
-    await run_updates_and_verify(get_columns_in_db_table, dbm, 1)
+    await run_updates_and_verify(get_columns_in_db_table, dbm, current_db_version)
 
 
 @pytest.mark.asyncio
