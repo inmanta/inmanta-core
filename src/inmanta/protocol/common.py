@@ -25,6 +25,7 @@ import logging
 import re
 import time
 import uuid
+from enum import Enum
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -38,13 +39,16 @@ from typing import (
     Optional,
     Set,
     Tuple,
+    Type,
     TypeVar,
     Union,
     cast,
+    get_type_hints,
 )
 from urllib import parse
 
 import jwt
+import typing_inspect
 from tornado import web
 
 from inmanta import config as inmanta_config
@@ -171,12 +175,10 @@ class ReturnValue(Generic[T]):
         if self._response is None:
             return None
 
-        response = self._response.dict()
-
         if wrap_data:
-            return {"data": response}
+            return {"data": self._response}
 
-        return response
+        return self._response
 
     def __repr__(self) -> str:
         return f"ReturnValue<code={self.status_code} headers=<{self.headers}> response=<{self._response}>>"
@@ -268,6 +270,14 @@ class UrlPath(object):
         return path
 
 
+class InvalidMethodDefinition(Exception):
+    """ This exception is raised when the definition of a method is invalid.
+    """
+
+
+VALID_PRIMITIVE_ARG_TYPES = (BaseModel, Enum, str, float, int, bool)
+
+
 class MethodProperties(object):
     """
         This class stores the information from a method definition
@@ -291,6 +301,7 @@ class MethodProperties(object):
         api_version: int,
         api_prefix: str,
         wrap_data: bool,
+        typed: bool = False,
     ) -> None:
         """
             Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -309,6 +320,7 @@ class MethodProperties(object):
             :param api_version: The version of the api this method belongs to
             :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
             :param wrap_data: Put the response of the call under a "data" key.
+            :param typed: Is the method definition typed or not
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -331,19 +343,84 @@ class MethodProperties(object):
         self._wrap_data = wrap_data
         self.function = function
 
-        MethodProperties.methods[function.__name__] = self
-        function.__method_properties__ = self
-
         # validate client types
         for ct in self._client_types:
             if ct not in const.VALID_CLIENT_TYPES:
-                raise Exception("Invalid client type %s specified for function %s" % (ct, function))
+                raise InvalidMethodDefinition("Invalid client type %s specified for function %s" % (ct, function))
 
+        self._validate_function_types(typed)
+
+    def _validate_function_types(self, typed) -> None:
+        """ Validate the type hints used in the method definition
+        """
+        type_hints = get_type_hints(self.function)
+        if "return" not in type_hints and self._wrap_data:
+            raise InvalidMethodDefinition(f"Wrap data is only supported on methods that define a return type ({self.function}")
+
+        # TODO: only primitive types are allowed in the path
+        # TODO: body and get does not work
+        self._path.validate_vars(type_hints.keys(), str(self.function))
+
+        if not typed:
+            return
+
+        # now validate the arguments and return type
         full_spec = inspect.getfullargspec(self.function)
-        if "return" not in full_spec.annotations and wrap_data:
-            raise Exception(f"Wrap data is only supported on methods that define a return type ({function}")
+        for arg in full_spec.args:
+            if arg not in type_hints:
+                raise InvalidMethodDefinition(f"{arg} in function {self.function} has no type annotation.")
 
-        self._path.validate_vars(full_spec.annotations.keys(), str(self.function))
+            arg_type = type_hints[arg]
+            self._validate_type_arg(arg, arg_type)
+
+        return_type = type_hints["return"]
+        if typing_inspect.is_generic_type(return_type) and issubclass(typing_inspect.get_origin(return_type), ReturnValue):
+            self._validate_type_arg("return type", typing_inspect.get_args(return_type)[0])
+        else:
+            self._validate_type_arg("return type", return_type)
+
+    def _validate_type_arg(self, arg: Any, arg_type: Type) -> None:
+        if typing_inspect.is_generic_type(arg_type):
+            orig = typing_inspect.get_origin(arg_type)
+            if not issubclass(orig, (list, dict)):
+                raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} can only be generic List or Dict")
+
+            args = typing_inspect.get_args(arg_type)
+            if len(args) == 0:
+                raise InvalidMethodDefinition(
+                    f"Type {arg_type} of argument {arg} must be have a subtype plain List or Dict is not allowed."
+                )
+
+            elif len(args) == 1 and not issubclass(args[0], VALID_PRIMITIVE_ARG_TYPES):  # A generic list
+                raise InvalidMethodDefinition(
+                    f"Type {arg_type} of argument {arg} must be a "
+                    f"List of {', '.join([x.__name__ for x in VALID_PRIMITIVE_ARG_TYPES])}"
+                )
+
+            elif len(args) == 2:
+                if not issubclass(args[0], str):
+                    raise InvalidMethodDefinition(
+                        f"Type {arg_type} of argument {arg} must be a Dict with str keys and not {args[0].__name__}"
+                    )
+
+                if not issubclass(args[1], VALID_PRIMITIVE_ARG_TYPES):
+                    raise InvalidMethodDefinition(
+                        f"Type {arg_type} of argument {arg} must be a "
+                        f"Dict with value type one of {', '.join([x.__name__ for x in VALID_PRIMITIVE_ARG_TYPES])}"
+                    )
+
+            elif len(args) > 2:
+                raise InvalidMethodDefinition(f"Failed to validate type {arg_type} of argument {arg}.")
+
+        elif issubclass(arg_type, VALID_PRIMITIVE_ARG_TYPES):
+            pass
+
+        else:
+            valid_types = ", ".join([x.__name__ for x in VALID_PRIMITIVE_ARG_TYPES])
+            raise InvalidMethodDefinition(
+                f"Type {arg_type} of argument {arg} must be a either {valid_types} or a List of these types or a "
+                "Dict with str keys and values of these types."
+            )
 
     @property
     def operation(self) -> str:

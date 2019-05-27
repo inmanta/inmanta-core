@@ -92,7 +92,7 @@ def method(
     """
 
     def wrapper(func: MethodT) -> MethodT:
-        common.MethodProperties(
+        properties = common.MethodProperties(
             func,
             path,
             operation,
@@ -108,6 +108,8 @@ def method(
             api_prefix,
             wrap_data,
         )
+        common.MethodProperties.methods[func.__name__] = properties
+        func.__method_properties__ = properties
         return func
 
     return wrapper
@@ -148,11 +150,10 @@ def typedmethod(
                         type of the argument. This method can raise an HTTPException to return a 404 for example.
         :param api_version: The version of the api this method belongs to
         :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
-        :param wrap_data: Put the response of the call under a "data" key.
     """
 
     def wrapper(func: MethodT) -> MethodT:
-        common.MethodProperties(
+        properties = common.MethodProperties(
             func,
             path,
             operation,
@@ -167,7 +168,10 @@ def typedmethod(
             api_version,
             api_prefix,
             True,
+            True,
         )
+        common.MethodProperties.methods[func.__name__] = properties
+        func.__method_properties__ = properties
         return func
 
     return wrapper

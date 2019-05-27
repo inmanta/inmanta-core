@@ -23,6 +23,7 @@ import threading
 import time
 import uuid
 from enum import Enum
+from typing import Dict, Iterator, List
 
 import pytest
 import tornado
@@ -32,7 +33,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from inmanta import config, protocol
 from inmanta.data.model import BaseModel
 from inmanta.protocol import exceptions, json_encode
-from inmanta.protocol.common import InvalidPathException, ReturnValue
+from inmanta.protocol.common import InvalidMethodDefinition, InvalidPathException, ReturnValue
 from inmanta.protocol.rest import CallArguments
 from inmanta.server import config as opt
 from inmanta.server.protocol import Server, ServerSlice
@@ -304,7 +305,7 @@ async def test_invalid_client_type():
     """
         Test invalid client ype
     """
-    with pytest.raises(Exception) as e:
+    with pytest.raises(InvalidMethodDefinition) as e:
 
         @protocol.method(path="/test", operation="PUT", client_types=["invalid"])
         def test_method(name):
@@ -589,8 +590,7 @@ async def test_invalid_paths():
 
 @pytest.mark.asyncio
 async def test_nested_paths(unused_tcp_port, postgres_db, database_name):
-    """
-        Test the use and validation of methods that use common.ReturnValue
+    """ Test overlapping path definition
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
 
@@ -631,3 +631,180 @@ async def test_nested_paths(unused_tcp_port, postgres_db, database_name):
 
     await server.stop()
     await rs.stop()
+
+
+@pytest.mark.asyncio
+async def test_list_basemodel_argument(unused_tcp_port, postgres_db, database_name):
+    """ Test list of basemodel arguments and primitive types
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        name: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(data: List[Project], data2: List[int]) -> Project:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, data: List[Project], data2: List[int]) -> Project:
+            assert len(data) == 1
+            assert data[0].name == "test"
+            assert len(data2) == 3
+
+            return Project(name="test_method")
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+    result = await client.test_method(data=[{"name": "test"}], data2=[1, 2, 3])
+    assert result.code == 200
+    assert "test_method" == result.result["data"]["name"]
+
+    await server.stop()
+    await rs.stop()
+
+
+@pytest.mark.asyncio
+async def test_dict_basemodel_argument(unused_tcp_port, postgres_db, database_name):
+    """ Test dict of basemodel arguments and primitive types
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        name: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(data: Dict[str, Project], data2: Dict[str, int]) -> Project:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, data: Dict[str, Project], data2: Dict[str, int]) -> Project:
+            assert len(data) == 1
+            assert data["projectA"].name == "test"
+            assert len(data2) == 3
+
+            return Project(name="test_method")
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+    result = await client.test_method(data={"projectA": {"name": "test"}}, data2={"1": 1, "2": 2, "3": 3})
+    assert result.code == 200
+    assert "test_method" == result.result["data"]["name"]
+
+    await server.stop()
+    await rs.stop()
+
+
+@pytest.mark.asyncio
+async def test_dict_and_list_return(unused_tcp_port, postgres_db, database_name):
+    """ Test list of basemodel arguments
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        name: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(data: Project) -> List[Project]:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, data: Project) -> List[Project]:  # NOQA
+            return [Project(name="test_method")]
+
+        @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"])
+        def test_method2(data: Project) -> List[str]:  # NOQA
+            pass
+
+        @protocol.handle(test_method2)
+        async def test_method2(self, data: Project) -> List[str]:  # NOQA
+            return ["test_method"]
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+    result = await client.test_method(data={"name": "test"})
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert "test_method" == result.result["data"][0]["name"]
+
+    result = await client.test_method2(data={"name": "test"})
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert "test_method" == result.result["data"][0]
+
+    await server.stop()
+    await rs.stop()
+
+
+@pytest.mark.asyncio
+async def test_method_definition():
+    """
+        Test typed methods with wrong annotations
+    """
+    with pytest.raises(InvalidMethodDefinition) as e:
+
+        @protocol.typedmethod(path="/test", operation="PUT", client_types=["api"])
+        def test_method1(name) -> None:
+            """
+                Create a new project
+            """
+
+    assert "has no type annotation." in str(e)
+
+    with pytest.raises(InvalidMethodDefinition) as e:
+
+        @protocol.typedmethod(path="/test", operation="PUT", client_types=["api"])
+        def test_method2(name: Iterator[str]) -> None:
+            """
+                Create a new project
+            """
+
+    assert "Type typing.Iterator[str] of argument name can only be generic List or Dict" in str(e)
+
+    with pytest.raises(InvalidMethodDefinition) as e:
+
+        @protocol.typedmethod(path="/test", operation="PUT", client_types=["api"])
+        def test_method3(name: List[object]) -> None:
+            """
+                Create a new project
+            """
+
+    assert "Type typing.List[object] of argument name must be a List of BaseModel, Enum, str, float, int, bool" in str(e)
+
+    with pytest.raises(InvalidMethodDefinition) as e:
+
+        @protocol.typedmethod(path="/test", operation="PUT", client_types=["api"])
+        def test_method4(name: Dict[int, str]) -> None:
+            """
+                Create a new project
+            """
+
+    assert "Type typing.Dict[int, str] of argument name must be a Dict with str keys and not int" in str(e)
+
+    with pytest.raises(InvalidMethodDefinition) as e:
+
+        @protocol.typedmethod(path="/test", operation="PUT", client_types=["api"])
+        def test_method5(name: Dict[str, object]) -> None:
+            """
+                Create a new project
+            """
+
+    assert (
+        "Type typing.Dict[str, object] of argument name must be a "
+        "Dict with value type one of BaseModel, Enum, str, float, int, bool"
+    ) in str(e)

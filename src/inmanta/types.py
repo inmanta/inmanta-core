@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from inmanta.protocol.common import ReturnValue  # noqa: F401
 
 
+PrimitiveTypes = Union[float, int, str, bool]
 JsonType = Dict[str, Any]
 ReturnTupple = Tuple[int, Optional[JsonType]]
 Apireturn = Union[int, ReturnTupple, "ReturnValue", "BaseModel"]

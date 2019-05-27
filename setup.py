@@ -19,6 +19,7 @@ requires = [
     "pyformance",
     "pymongo",
     "pydantic",
+    "typing_inspect",
 ]
 
 # Package a dummy extensions so that the namespace package for extensions is not empty
