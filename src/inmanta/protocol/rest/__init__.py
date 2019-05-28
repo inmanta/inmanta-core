@@ -214,7 +214,7 @@ class CallArguments(object):
                 f"Failed to validate generic type {arg_type} of {arg_name}, only List and Dict are supported"
             )
 
-    def _validate_union_return(self, arg_type: Type, value: Any) -> Any:
+    def _validate_union_return(self, arg_type: Type, value: Any) -> None:
         """ Validate a return with a union type
         """
         matching_type = None
@@ -239,7 +239,7 @@ class CallArguments(object):
         if typing_inspect.is_generic_type(matching_type):
             self._validate_generic_return(arg_type, matching_type)
 
-    def _validate_generic_return(self, arg_type: Type, value: Any) -> Any:
+    def _validate_generic_return(self, arg_type: Type, value: Any) -> None:
         """ Validate List or Dict types.
 
             :note: we return any here because the calling function also returns any.
@@ -271,7 +271,7 @@ class CallArguments(object):
                 if typing_inspect.is_union_type(el_type):
                     self._validate_union_return(el_type, v)
                 elif not isinstance(v, el_type):
-                    raise exceptions.ServerError(f"Element {v } of returned list is not of type {el_type}.")
+                    raise exceptions.ServerError(f"Element {v} of returned list is not of type {el_type}.")
 
         else:
             # This should not happen because of MethodProperties validation
