@@ -785,7 +785,7 @@ async def test_method_definition():
             """
 
     assert (
-        "Type object of argument name must be a either BaseModel, datetime, Enum, UUID, str, float, int, bool, datetime or a "
+        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, bool, datetime or a "
         "List of these types or a Dict with str keys and values of these types."
     ) in str(e)
 
@@ -808,7 +808,7 @@ async def test_method_definition():
             """
 
     assert (
-        "Type object of argument name must be a either BaseModel, datetime, Enum, UUID, str, float, int, bool, datetime or a "
+        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, bool, datetime or a "
         "List of these types or a Dict with str keys and values of these types."
     ) in str(e)
 

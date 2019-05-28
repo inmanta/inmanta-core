@@ -168,7 +168,7 @@ class ReturnValue(Generic[T]):
     def headers(self) -> MutableMapping[str, str]:
         return self._headers
 
-    def get_body(self, wrap_data: bool = False) -> Optional[JsonType]:
+    def get_body(self, wrap_data: bool = False) -> Optional[BaseModel]:
         """ Get the response body
 
             :param wrap_data: Should the response be mapped into a data key
@@ -276,7 +276,7 @@ class InvalidMethodDefinition(Exception):
     """
 
 
-VALID_SIMPLE_ARG_TYPES = (BaseModel, datetime, Enum, uuid.UUID, str, float, int, bool, datetime)
+VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime)
 
 
 class MethodProperties(object):
@@ -351,7 +351,7 @@ class MethodProperties(object):
 
         self._validate_function_types(typed)
 
-    def _validate_function_types(self, typed) -> None:
+    def _validate_function_types(self, typed: bool) -> None:
         """ Validate the type hints used in the method definition.
 
             For arguments the following types are supported:
@@ -385,7 +385,7 @@ class MethodProperties(object):
 
         self._validate_return_type(type_hints["return"])
 
-    def _validate_return_type(self, arg_type):
+    def _validate_return_type(self, arg_type: Type) -> None:
         """ Validate the return type
         """
         # Note: we cannot call issubclass on a generic type!

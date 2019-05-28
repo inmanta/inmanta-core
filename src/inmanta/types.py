@@ -16,6 +16,9 @@
     Contact: code@inmanta.com
 """
 # This file defines named type definition for the Inmanta code base
+from datetime import datetime
+import uuid
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Optional, Tuple, Union
 
 if TYPE_CHECKING:
@@ -23,13 +26,17 @@ if TYPE_CHECKING:
     from inmanta.data.model import BaseModel  # noqa: F401
     from inmanta.protocol.common import ReturnValue  # noqa: F401
 
+SimpleTypes = Union["BaseModel", Enum, uuid.UUID, str, float, int, bool, datetime]
 
-PrimitiveTypes = Union[float, int, str, bool]
 JsonType = Dict[str, Any]
 ReturnTupple = Tuple[int, Optional[JsonType]]
-Apireturn = Union[int, ReturnTupple, "ReturnValue", "BaseModel"]
+
+ArgumentTypes = Union[SimpleTypes, List[SimpleTypes], Dict[str, SimpleTypes]]
+
+ReturnTypes = Union[None, ArgumentTypes]
+MethodReturn = Union[ReturnTypes, "ReturnValue[ReturnTypes]"]
+MethodType = Callable[..., MethodReturn]
+
+Apireturn = Union[int, ReturnTupple, "ReturnValue[ReturnTypes]", ReturnTypes]
 Warnings = Optional[List[str]]
 HandlerType = Callable[..., Coroutine[Any, Any, Apireturn]]
-
-MethodReturn = Union[None, "ReturnValue", "BaseModel"]
-MethodType = Callable[..., MethodReturn]
