@@ -22,10 +22,9 @@ from types import ModuleType
 from typing import Any, Callable, Coroutine, List, Optional
 
 from asyncpg import Connection, UndefinedTableError
-
-# Name of core schema in the DB schema verions
 from asyncpg.transaction import Transaction
 
+# Name of core schema in the DB schema verions
 CORE_SCHEMA_NAME = "core"
 
 LOGGER = logging.getLogger(__name__)
