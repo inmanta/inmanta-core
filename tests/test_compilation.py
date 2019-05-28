@@ -26,6 +26,7 @@ from itertools import groupby
 import pytest
 
 import inmanta.compiler as compiler
+import inmanta_tests
 from inmanta import config
 from inmanta.ast import AttributeException, RuntimeException
 from inmanta.module import Project
@@ -34,7 +35,7 @@ from inmanta.module import Project
 class CompilerBaseTest(object):
     def __init__(self, name, mainfile=None):
         config.Config.load_config()
-        self.project_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", name)
+        self.project_dir = os.path.join(os.path.dirname(os.path.abspath(inmanta_tests.__file__)), "data", name)
         if not os.path.isdir(self.project_dir):
             raise Exception("A compile test should set a valid project directory: %s does not exist" % self.project_dir)
         self.mainfile = mainfile

@@ -26,7 +26,7 @@ from agent_server.conftest import _wait_until_deployment_finishes
 from inmanta import const, data, execute
 from inmanta.agent.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER
-from utils import retry_limited
+from inmanta_tests.utils import retry_limited
 
 logger = logging.getLogger("inmanta.test.dryrun")
 

@@ -22,7 +22,7 @@ import pytest
 
 from inmanta import util
 from inmanta.util import CycleException, ensure_future_and_handle_exception, stable_depth_first
-from utils import LogSequence, log_contains, no_error_in_logs
+from inmanta_tests.utils import LogSequence, log_contains, no_error_in_logs
 
 LOGGER = logging.getLogger(__name__)
 

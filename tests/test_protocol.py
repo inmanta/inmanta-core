@@ -37,7 +37,7 @@ from inmanta.protocol.rest import CallArguments
 from inmanta.server import config as opt
 from inmanta.server.protocol import Server, ServerSlice
 from inmanta.util import hash_file
-from utils import configure
+from inmanta_tests.utils import configure
 
 
 def make_random_file(size=0):

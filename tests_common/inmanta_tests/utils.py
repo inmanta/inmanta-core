@@ -23,7 +23,6 @@ import time
 
 from inmanta import data
 
-
 async def retry_limited(fun, timeout):
     async def fun_wrapper():
         if inspect.iscoroutinefunction(fun):

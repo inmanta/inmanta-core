@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
 import logging
 import uuid
 
@@ -30,7 +29,7 @@ from inmanta.protocol import method
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.server import SLICE_SESSION_MANAGER
 from inmanta.server.protocol import Server, ServerSlice, SessionListener
-from utils import configure, retry_limited
+from inmanta_tests.utils import configure, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 

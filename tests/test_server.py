@@ -33,7 +33,7 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from inmanta.server import config as opt
 from inmanta.server import server
 from inmanta.util import hash_file
-from utils import retry_limited
+from inmanta_tests.utils import retry_limited
 
 LOGGER = logging.getLogger(__name__)
 

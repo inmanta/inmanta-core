@@ -23,17 +23,18 @@ from unittest import mock
 
 import pytest
 
+import inmanta_tests
 from _io import StringIO
 from inmanta import module
 
 
 def test_module():
-    good_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "mod1")
+    good_mod_dir = os.path.join(os.path.dirname(os.path.abspath(inmanta_tests.__file__)), "data", "modules", "mod1")
     module.Module(project=mock.Mock(), path=good_mod_dir)
 
 
 def test_bad_module():
-    bad_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "mod2")
+    bad_mod_dir = os.path.join(os.path.dirname(os.path.abspath(inmanta_tests.__file__)), "data", "modules", "mod2")
     with pytest.raises(module.InvalidModuleException):
         module.Module(project=mock.Mock(), path=bad_mod_dir)
 
@@ -57,7 +58,7 @@ class TestModuleName(unittest.TestCase):
         self.log.addHandler(self.handler)
 
     def test_wrong_name(self):
-        mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "mod3")
+        mod_dir = os.path.join(os.path.dirname(os.path.abspath(inmanta_tests.__file__)), "data", "modules", "mod3")
         module.Module(project=mock.Mock(), path=mod_dir)
 
         self.handler.flush()

@@ -1,5 +1,7 @@
 import os
 
+import inmanta_tests
+
 
 def test_multi_excn(snippetcompiler):
     snippetcompiler.setup_for_error(
@@ -35,7 +37,7 @@ error 1:
 
 
 def test_module_error(snippetcompiler):
-    modpath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "modules", "badmodule")
+    modpath = os.path.join(os.path.dirname(os.path.abspath(inmanta_tests.__file__)), "data", "modules", "badmodule")
     snippetcompiler.setup_for_error(
         "import badmodule",
         """could not find module badmodule (reported in import badmodule ({dir}/main.cf:1))

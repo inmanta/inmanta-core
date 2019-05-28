@@ -19,7 +19,7 @@
 import pytest
 
 from inmanta.export import DependencyCycleException
-from utils import assert_graph
+from inmanta_tests.utils import assert_graph
 
 
 def test_abstract_requires(snippetcompiler):

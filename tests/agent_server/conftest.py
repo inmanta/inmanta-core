@@ -29,7 +29,7 @@ from inmanta.agent.agent import Agent
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
 from inmanta.server import SLICE_AGENT_MANAGER
-from utils import retry_limited
+from inmanta_tests.utils import retry_limited
 
 logger = logging.getLogger("inmanta.test.server_agent")
 

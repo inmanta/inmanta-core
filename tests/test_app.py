@@ -27,6 +27,7 @@ from threading import Timer
 import pytest
 
 import inmanta.util
+import inmanta_tests
 from inmanta import const
 
 
@@ -316,6 +317,14 @@ def test_check_bad_shutdown():
     process = do_run([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"])
     out, err, code = do_kill(process, killtime=5, termtime=2)
     print(out, err)
+
+    print("OUTPUT: ")
+    for l in out:
+        print(l)
+    print("ERROR: ")
+    for l in err:
+        print(l)
+
     assert code == 3
     assert "----- Thread Dump ----" in out
     assert "STOP" not in out
@@ -327,7 +336,7 @@ def test_startup_failure(tmpdir, postgres_db, database_name):
     (args, log_dir) = get_command(tmpdir, dbport=postgres_db.port, dbname=database_name)
     pp = ":".join(sys.path)
     # Add a bad module
-    extrapath = os.path.join(os.path.dirname(__file__), "data", "bad_module_path")
+    extrapath = os.path.join(os.path.dirname(inmanta_tests.__file__), "data", "bad_module_path")
     (stdout, stderr, code) = run_without_tty(args, env={"PYTHONPATH": pp + ":" + extrapath})
     print(stdout, stderr)
     assert "Server setup failed" in stdout

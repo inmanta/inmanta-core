@@ -26,12 +26,12 @@ from uuid import UUID, uuid4
 
 import pytest
 
-import utils
 from inmanta import config, const, data
 from inmanta.agent.agent import Agent
 from inmanta.const import ResourceAction, ResourceState
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER
 from inmanta.server.server import Server
+from inmanta_tests.utils import retry_limited
 
 
 class MultiVersionSetup(object):
@@ -131,7 +131,7 @@ class MultiVersionSetup(object):
         for e in endpoints:
             a.add_end_point_name(e)
         await a.start()
-        await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+        await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
         return a
 

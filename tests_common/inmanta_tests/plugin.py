@@ -43,7 +43,7 @@ from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 import inmanta.agent
 import inmanta.compiler as compiler
 import inmanta.main
-import utils
+import inmanta.app
 from inmanta import config, data, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
@@ -54,6 +54,7 @@ from inmanta.postgresproc import PostgresProc
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_free_tcp_port
+from inmanta_tests.utils import retry_limited
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 logger = logging.getLogger(__name__)
@@ -212,7 +213,7 @@ async def agent_multi(server_multi, environment_multi):
     a = Agent(hostname="node1", environment=environment_multi, agent_map={"agent1": "localhost"}, code_loader=False)
     a.add_end_point_name("agent1")
     await a.start()
-    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     yield a
 
@@ -228,7 +229,7 @@ async def agent(server, environment):
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     a.add_end_point_name("agent1")
     await a.start()
-    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     yield a
 
@@ -252,7 +253,7 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     config.Config.set("compiler_rest_transport", "port", port)
     config.Config.set("client_rest_transport", "port", port)
     config.Config.set("cmdline_rest_transport", "port", port)
-    config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
+    config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("server", "auto-recompile-wait", "0")
     config.Config.set("agent", "agent-repair-interval", "0")
@@ -336,7 +337,7 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
     config.Config.set("compiler_rest_transport", "port", port)
     config.Config.set("client_rest_transport", "port", port)
     config.Config.set("cmdline_rest_transport", "port", port)
-    config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
+    config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("agent", "agent-repair-interval", "0")
     config.Config.set("server", "auto-recompile-wait", "0")

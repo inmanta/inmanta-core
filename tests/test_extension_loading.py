@@ -9,13 +9,14 @@ import pytest
 
 import inmanta.server
 import inmanta_ext
+import inmanta_tests
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
 from inmanta.server.extensions import InvalidSliceNameException
 from inmanta.server.protocol import Server
 from inmanta_ext.testplugin.extension import XTestSlice
-from utils import log_contains
+from inmanta_tests.utils import log_contains
 
 
 @contextmanager
@@ -23,7 +24,7 @@ def splice_extension_in(name: str) -> Generator[Any, Any, None]:
     """Context manager to all extensions in tests/data/{name}/inmanta_ext/ to the interpreter and unload them again"""
     oldpath = sys.path
     try:
-        sys.path = sys.path + [os.path.join(os.path.dirname(__file__), "data", name)]
+        sys.path = sys.path + [os.path.join(os.path.dirname(inmanta_tests.__file__), "data", name)]
         importlib.reload(inmanta_ext)
         yield
     finally:
@@ -57,6 +58,8 @@ def test_phase_1(caplog):
 
         assert "testplugin" in all
         assert all["testplugin"] == inmanta_ext.testplugin.extension.setup
+
+        print("ALL: " + str(all))
 
         log_contains(caplog, "inmanta.server.bootloader", logging.WARNING, "Could not load extension inmanta_ext.noext")
 

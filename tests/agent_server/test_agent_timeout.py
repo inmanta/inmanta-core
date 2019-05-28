@@ -22,7 +22,7 @@ import pytest
 
 from agent_server.conftest import get_agent, get_resource
 from inmanta import config
-from utils import log_index, retry_limited
+from inmanta_tests.utils import log_index, retry_limited
 
 
 @pytest.mark.asyncio

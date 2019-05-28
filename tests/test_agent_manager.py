@@ -24,7 +24,7 @@ import pytest
 from inmanta import data
 from inmanta.protocol import Result
 from inmanta.server.agentmanager import AgentManager
-from utils import UNKWN, assert_equal_ish
+from inmanta_tests.utils import UNKWN, assert_equal_ish
 
 
 class Collector(object):
