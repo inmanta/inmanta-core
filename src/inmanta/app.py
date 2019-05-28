@@ -106,11 +106,6 @@ def dump_threads():
     print("----- Thread Dump ----")
     for th in threading.enumerate():
         print("---", th)
-
-        print("BLUB: ")
-        for i in traceback.StackSummary.from_list(traceback.extract_stack(sys._current_frames()[th.ident])):
-            print("I: " + str(i))
-
         traceback.print_stack(sys._current_frames()[th.ident])
         print()
     sys.stdout.flush()
