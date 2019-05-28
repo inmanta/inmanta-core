@@ -812,6 +812,13 @@ async def test_method_definition():
         "or a Dict with str keys and values of these types."
     ) in str(e)
 
+    @protocol.typedmethod(
+        path="/service_types/<service_type>", operation="DELETE", client_types=["api"]
+    )
+    def lcm_service_type_delete(tid: uuid.UUID, service_type: str) -> None:
+        """ Delete an existing service type.
+        """
+
 
 @pytest.mark.asyncio
 async def test_union_types(unused_tcp_port, postgres_db, database_name):

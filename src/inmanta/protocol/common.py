@@ -378,9 +378,6 @@ class MethodProperties(object):
     def _validate_type_arg(self, arg: Any, arg_type: Type) -> None:
         """ Validate the given type arg recursively
         """
-        if isinstance(arg_type, type(None)):
-            return
-
         if typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
             self._validate_type_arg(arg, typing_inspect.get_args(arg_type)[0])
 
@@ -425,6 +422,9 @@ class MethodProperties(object):
 
             elif len(args) > 2:
                 raise InvalidMethodDefinition(f"Failed to validate type {arg_type} of argument {arg}.")
+
+        elif issubclass(arg_type, type(None)):
+            pass
 
         elif issubclass(arg_type, VALID_PRIMITIVE_ARG_TYPES):
             pass
