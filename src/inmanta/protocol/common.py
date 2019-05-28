@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
 import enum
 import gzip
 import inspect
@@ -26,6 +25,7 @@ import re
 import time
 import uuid
 from collections import defaultdict
+from datetime import datetime
 from enum import Enum
 from typing import (
     TYPE_CHECKING,
@@ -276,7 +276,7 @@ class InvalidMethodDefinition(Exception):
     """
 
 
-VALID_PRIMITIVE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool)
+VALID_SIMPLE_ARG_TYPES = (BaseModel, datetime, Enum, uuid.UUID, str, float, int, bool, datetime)
 
 
 class MethodProperties(object):
@@ -352,7 +352,17 @@ class MethodProperties(object):
         self._validate_function_types(typed)
 
     def _validate_function_types(self, typed) -> None:
-        """ Validate the type hints used in the method definition
+        """ Validate the type hints used in the method definition.
+
+            For arguments the following types are supported:
+            - Simpletypes: BaseModel, datetime, Enum, uuid.UUID, str, float, int, bool
+            - List[Simpletypes]: A list of simple types
+            - Dict[str, Simpletypes]: A dict with string keys and simple types
+
+            For return types:
+            - Everything for arguments
+            - None is allowed
+            - ReturnValue with a type parameter. The type must be the allowed types for arguments or none
         """
         type_hints = get_type_hints(self.function)
         if "return" not in type_hints and self._wrap_data:
@@ -373,15 +383,32 @@ class MethodProperties(object):
 
             self._validate_type_arg(arg, type_hints[arg])
 
-        self._validate_type_arg("return type", type_hints["return"])
+        self._validate_return_type(type_hints["return"])
 
-    def _validate_type_arg(self, arg: Any, arg_type: Type) -> None:
-        """ Validate the given type arg recursively
+    def _validate_return_type(self, arg_type):
+        """ Validate the return type
         """
+        # Note: we cannot call issubclass on a generic type!
+        arg = "return type"
         if typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
             self._validate_type_arg(arg, typing_inspect.get_args(arg_type)[0])
 
-        elif typing_inspect.is_union_type(arg_type):
+        elif not typing_inspect.is_generic_type(arg_type) and issubclass(arg_type, ReturnValue):
+            raise InvalidMethodDefinition("ReturnValue should have a type specified.")
+
+        elif not typing_inspect.is_generic_type(arg_type) and issubclass(arg_type, type(None)):
+            pass
+
+        else:
+            self._validate_type_arg(arg, arg_type)
+
+    def _validate_type_arg(self, arg: str, arg_type: Type) -> None:
+        """ Validate the given type arg recursively
+
+            :param arg: The name of the argument
+            :param arg_type: The annotated type fo the argument
+        """
+        if typing_inspect.is_union_type(arg_type):
             # Make sure there is only one list and one dict in the union, otherwise we cannot process the arguments
             cnt = defaultdict(lambda: 0)
             for sub_arg in typing_inspect.get_args(arg_type, evaluate=True):
@@ -423,14 +450,11 @@ class MethodProperties(object):
             elif len(args) > 2:
                 raise InvalidMethodDefinition(f"Failed to validate type {arg_type} of argument {arg}.")
 
-        elif issubclass(arg_type, type(None)):
-            pass
-
-        elif issubclass(arg_type, VALID_PRIMITIVE_ARG_TYPES):
+        elif issubclass(arg_type, VALID_SIMPLE_ARG_TYPES):
             pass
 
         else:
-            valid_types = ", ".join([x.__name__ for x in VALID_PRIMITIVE_ARG_TYPES])
+            valid_types = ", ".join([x.__name__ for x in VALID_SIMPLE_ARG_TYPES])
             raise InvalidMethodDefinition(
                 f"Type {arg_type.__name__} of argument {arg} must be a either {valid_types} or a List of these types or a "
                 "Dict with str keys and values of these types."

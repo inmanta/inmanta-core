@@ -140,8 +140,10 @@ class CallArguments(object):
 
         return value
 
-    def _process_union(self, arg_type: Type, arg_name: str, value: Any) -> Any:
+    def _process_union_for_arguments(self, arg_type: Type, arg_name: str, value: Any) -> Any:
         """ Process a union type
+
+            :see: protocol.common.MethodProperties._validate_function_types
         """
         matching_type = None
         for t in typing_inspect.get_args(arg_type, evaluate=True):
@@ -163,14 +165,15 @@ class CallArguments(object):
             )
 
         if typing_inspect.is_generic_type(matching_type):
-            return self._process_generic(matching_type, arg_name, value)
+            return self._process_generic_for_arguments(matching_type, arg_name, value)
 
         return matching_type(value)
 
-    def _process_generic(self, arg_type: Type, arg_name: str, value: Any) -> Any:
+    def _process_generic_for_arguments(self, arg_type: Type, arg_name: str, value: Any) -> Any:
         """ Process List or Dict types.
 
             :note: we return any here because the calling function also returns any.
+            :see: protocol.common.MethodProperties._validate_function_types
         """
         if issubclass(typing_inspect.get_origin(arg_type), list):
             if not isinstance(value, list):
@@ -180,7 +183,7 @@ class CallArguments(object):
 
             el_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
             if typing_inspect.is_union_type(el_type):
-                return [self._process_union(el_type, arg_name, el) for el in value]
+                return [self._process_union_for_arguments(el_type, arg_name, el) for el in value]
 
             elif issubclass(el_type, BaseModel):
                 return [el_type(**el) for el in value]
@@ -200,7 +203,7 @@ class CallArguments(object):
                     raise exceptions.BadRequest(f"Keys of dict argument {arg_name} need to be strings.")
 
                 if typing_inspect.is_union_type(el_type):
-                    result[k] = self._process_union(el_type, arg_name, v)
+                    result[k] = self._process_union_for_arguments(el_type, arg_name, v)
                 elif issubclass(el_type, BaseModel):
                     result[k] = el_type(**v)
                 else:
@@ -216,6 +219,7 @@ class CallArguments(object):
 
     def _validate_union_return(self, arg_type: Type, value: Any) -> None:
         """ Validate a return with a union type
+            :see: protocol.common.MethodProperties._validate_function_types
         """
         matching_type = None
         for t in typing_inspect.get_args(arg_type, evaluate=True):
@@ -296,11 +300,11 @@ class CallArguments(object):
 
         try:
             if typing_inspect.is_union_type(arg_type):
-                return self._process_union(arg_type, arg, value)
+                return self._process_union_for_arguments(arg_type, arg, value)
 
             # This check needs to be first because isinstance fails on generic types.
             if typing_inspect.is_generic_type(arg_type):
-                return self._process_generic(arg_type, arg, value)
+                return self._process_generic_for_arguments(arg_type, arg, value)
 
             if isinstance(value, arg_type):
                 return value
