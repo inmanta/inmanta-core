@@ -20,17 +20,17 @@ import inspect
 import pkgutil
 import types
 import uuid
+from asyncio import Semaphore
 from typing import Optional
 
 import asyncpg
 import pytest
-from asyncio import Semaphore
-from asyncpg import PostgresSyntaxError, InterfaceError
+from asyncpg import PostgresSyntaxError
 
 import inmanta.db.versions
 from inmanta import data
-from inmanta.data import schema, CORE_SCHEMA_NAME
-from inmanta.data.schema import Version, TableNotFound
+from inmanta.data import CORE_SCHEMA_NAME, schema
+from inmanta.data.schema import TableNotFound, Version
 
 
 async def run_updates_and_verify(
@@ -59,10 +59,9 @@ async def run_updates_and_verify(
 async def get_core_version(postgresql_client):
     dbm = schema.DBSchema(CORE_SCHEMA_NAME, inmanta.db.versions, postgresql_client)
     try:
-        current_db_version = await dbm.get_current_version()
+        return await dbm.get_current_version()
     except TableNotFound:
         return 0
-    return await dbm.get_current_version()
 
 
 async def assert_core_untouched(postgresql_client, corev=0):
@@ -72,6 +71,7 @@ async def assert_core_untouched(postgresql_client, corev=0):
     dbm = schema.DBSchema(CORE_SCHEMA_NAME, inmanta.db.versions, postgresql_client)
     current_db_version = await dbm.get_current_version()
     assert current_db_version == corev
+
 
 @pytest.mark.asyncio
 async def test_dbschema_clean(postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db):
@@ -95,6 +95,7 @@ async def test_dbschema_unclean(postgresql_client: asyncpg.Connection, get_colum
 
     await run_updates_and_verify(get_columns_in_db_table, dbm, current_db_version)
     await assert_core_untouched(postgresql_client)
+
 
 @pytest.mark.asyncio
 async def test_dbschema_update_legacy_1(
@@ -265,7 +266,6 @@ async def test_dbschema_get_dct_with_update_functions():
         assert inspect.getfullargspec(version.function)[0] == ["connection"]
 
 
-
 @pytest.mark.asyncio
 async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, hard_clean_db):
     async with postgresql_pool.acquire() as postgresql_client:
@@ -274,12 +274,9 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
             # schedule 3 updates, hang on second, unblock one, verify, unblock other, verify
             corev = await get_core_version(postgresql_client)
 
-            db_schema = schema.DBSchema("test_multi_upgrade_lockout", inmanta.db.versions,
-                                        postgresql_client)
-            db_schema2 = schema.DBSchema("test_multi_upgrade_lockout", inmanta.db.versions,
-                                        postgresql_client2)
+            db_schema = schema.DBSchema("test_multi_upgrade_lockout", inmanta.db.versions, postgresql_client)
+            db_schema2 = schema.DBSchema("test_multi_upgrade_lockout", inmanta.db.versions, postgresql_client2)
             await db_schema.ensure_self_update()
-
 
             lock = Semaphore(0)
 
@@ -300,9 +297,7 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
             if current_db_version is None:
                 current_db_version = 0
 
-            update_function_map = make_versions(
-                current_db_version + 1, update_function_a, update_function_b, update_function_c
-            )
+            update_function_map = make_versions(current_db_version + 1, update_function_a, update_function_b, update_function_c)
 
             r1 = asyncio.create_task(db_schema._update_db_schema(update_function_map))
             r2 = asyncio.create_task(db_schema2._update_db_schema(update_function_map))
@@ -319,25 +314,24 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
             second = next(both)
             await second
 
-
             # Assert done
             assert (await db_schema.get_current_version()) == current_db_version + 3
             assert (
-                       await postgresql_client.fetchval(
-                           "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='taba'"
-                       )
-                   ) is not None
+                await postgresql_client.fetchval(
+                    "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='taba'"
+                )
+            ) is not None
 
             assert (
-                       await postgresql_client.fetchval(
-                           "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='tabb'"
-                       )
-                   ) is not None
+                await postgresql_client.fetchval(
+                    "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='tabb'"
+                )
+            ) is not None
 
             assert (
-                       await postgresql_client.fetchval(
-                           "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='tabc'"
-                       )
-                   ) is not None
+                await postgresql_client.fetchval(
+                    "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='tabc'"
+                )
+            ) is not None
 
             await assert_core_untouched(postgresql_client, corev)
