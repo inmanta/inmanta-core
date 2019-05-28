@@ -1,12 +1,13 @@
 import logging
 import pkgutil
 from types import ModuleType
-from typing import List, Optional
+from typing import List, Callable, Coroutine, Any, Optional, cast
 
-import asyncpg
-from asyncpg import UndefinedTableError
+from asyncpg import UndefinedTableError, Connection
 
 # Name of core schema in the DB schema verions
+from asyncpg.transaction import Transaction
+
 CORE_SCHEMA_NAME = "core"
 
 LOGGER = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ class TableNotFound(Exception):
 class Version(object):
     """ Internal representation of a version """
 
-    def __init__(self, name, function):
+    def __init__(self, name: str, function: Callable[[Connection], Coroutine[Any, Any, None]]):
         self.name = name
         self.function = function
         self.version = self.parse(name)
@@ -47,7 +48,7 @@ class DBSchema(object):
     Concurrent updates are safe
     """
 
-    def __init__(self, name: str, package: ModuleType, connection: asyncpg.Connection) -> None:
+    def __init__(self, name: str, package: ModuleType, connection: Connection) -> None:
         """
 
         :param name: unique name for this schema, best equal to extension name and used as prefix for all table names
@@ -131,6 +132,7 @@ class DBSchema(object):
         as the exception is propagated over the transaction boundary without causing rollback.
         """
         # outer transaction
+        outer: Optional[Transaction]
         outer = self.connection.transaction()
         try:
             # enter transaction
@@ -186,7 +188,7 @@ class DBSchema(object):
             return 0
         return version["current_version"]
 
-    async def get_current_version(self) -> Optional[int]:
+    async def get_current_version(self) -> int:
         try:
             version = await self.connection.fetchrow(
                 f"select current_version from {SCHEMA_VERSION_TABLE} where name=$1", self.name
@@ -208,9 +210,9 @@ class DBSchema(object):
     async def _get_update_functions(self) -> List[Version]:
         module_names = [modname for _, modname, ispkg in pkgutil.iter_modules(self.package.__path__) if not ispkg]
 
-        def make_version(mod_name):
+        def make_version(mod_name: str) -> Version:
             fq_module_name = self.package.__name__ + "." + mod_name
-            module = __import__(fq_module_name, fromlist=("update"))
+            module = __import__(fq_module_name, fromlist=["update"])
             update_function = module.update
             return Version(mod_name, update_function)
 
