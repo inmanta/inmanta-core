@@ -15,9 +15,9 @@
 
     Contact: code@inmanta.com
 """
-import uuid
-
 # This file defines named type definition for the Inmanta code base
+
+import uuid
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Optional, Tuple, Union
