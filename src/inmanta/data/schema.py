@@ -19,9 +19,9 @@
 import logging
 import pkgutil
 from types import ModuleType
-from typing import List, Callable, Coroutine, Any, Optional, cast
+from typing import Any, Callable, Coroutine, List, Optional
 
-from asyncpg import UndefinedTableError, Connection
+from asyncpg import Connection, UndefinedTableError
 
 # Name of core schema in the DB schema verions
 from asyncpg.transaction import Transaction
