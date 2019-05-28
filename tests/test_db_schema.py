@@ -299,8 +299,8 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
 
             update_function_map = make_versions(current_db_version + 1, update_function_a, update_function_b, update_function_c)
 
-            r1 = asyncio.create_task(db_schema._update_db_schema(update_function_map))
-            r2 = asyncio.create_task(db_schema2._update_db_schema(update_function_map))
+            r1 = asyncio.ensure_future(db_schema._update_db_schema(update_function_map))
+            r2 = asyncio.ensure_future(db_schema2._update_db_schema(update_function_map))
 
             both = asyncio.as_completed([r1, r2]).__iter__()
 
