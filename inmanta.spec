@@ -152,13 +152,13 @@ rm -rf %{buildroot}
 %systemd_post inmanta-agent.service
 
 %preun agent
-%systemd_preun inmanta-server.service
+%systemd_preun inmanta-agent.service
 
 %postun agent
-%systemd_postun_with_restart inmanta-server.service
+%systemd_postun_with_restart inmanta-agent.service
 
 %post server
-%systemd_post inmanta-agent.service
+%systemd_post inmanta-server.service
 
 %preun server
 %systemd_preun inmanta-server.service
