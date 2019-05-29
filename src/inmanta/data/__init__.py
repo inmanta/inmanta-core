@@ -2468,6 +2468,7 @@ _classes = [
 
 
 def set_connection_pool(pool):
+    LOGGER.debug("Connecting data classes")
     for cls in _classes:
         cls.set_connection_pool(pool)
 
