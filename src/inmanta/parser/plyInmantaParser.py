@@ -47,7 +47,7 @@ from inmanta.ast.statements.generator import Constructor, For
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException, plyInmantaLex
-from inmanta.parser.plyInmantaLex import reserved, tokens
+from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 
 # the token map is imported from the lexer. This is required.
 
@@ -728,8 +728,8 @@ def p_constant_f(p: YaccProduction) -> None:
     attach_lnr(p)
 
 
-formatRegex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
-format_regex_compiled = re.compile(formatRegex, re.MULTILINE | re.DOTALL)
+format_regex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
+format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
 def p_string(p: YaccProduction) -> None:
