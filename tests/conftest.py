@@ -48,6 +48,7 @@ from inmanta import config, data, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
+from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import Project
 from inmanta.postgresproc import PostgresProc
@@ -67,6 +68,17 @@ def postgres_db(postgresql_proc):
 @pytest.fixture(scope="function")
 async def postgresql_client(postgres_db, database_name):
     client = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name)
+    try:
+        yield client
+    finally:
+        await client.close()
+
+
+@pytest.fixture(scope="function")
+async def postgresql_pool(postgres_db, database_name):
+    client = await asyncpg.create_pool(
+        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name
+    )
     try:
         yield client
     finally:
@@ -130,6 +142,50 @@ async def create_db(postgres_db, database_name):
         await connection.close()
 
 
+async def do_clean_hard(postgresql_client):
+    tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+    table_names = [x["table_name"] for x in tables_in_db]
+    if table_names:
+        drop_query = "DROP TABLE %s CASCADE" % ", ".join(table_names)
+        await postgresql_client.execute(drop_query)
+
+    # Query extracted from CLI
+    # psql -E
+    # \dT
+
+    get_custom_types = """
+    SELECT n.nspname as "Schema",
+      pg_catalog.format_type(t.oid, NULL) AS "Name",
+      pg_catalog.obj_description(t.oid, 'pg_type') as "Description"
+    FROM pg_catalog.pg_type t
+         LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+    WHERE (t.typrelid = 0 OR (SELECT c.relkind = 'c' FROM pg_catalog.pg_class c WHERE c.oid = t.typrelid))
+      AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_type el WHERE el.oid = t.typelem AND el.typarray = t.oid)
+          AND n.nspname <> 'pg_catalog'
+          AND n.nspname <> 'information_schema'
+      AND pg_catalog.pg_type_is_visible(t.oid)
+    ORDER BY 1, 2;
+    """
+
+    types_in_db = await postgresql_client.fetch(get_custom_types)
+    type_names = [x["Name"] for x in types_in_db]
+    if type_names:
+        drop_query = "DROP TYPE %s" % ", ".join(type_names)
+        await postgresql_client.execute(drop_query)
+
+
+@pytest.fixture(scope="function")
+async def hard_clean_db(postgresql_client):
+    await do_clean_hard(postgresql_client)
+    yield
+
+
+@pytest.fixture(scope="function")
+async def hard_clean_db_post(postgresql_client):
+    yield
+    await do_clean_hard(postgresql_client)
+
+
 @pytest.fixture(scope="function")
 async def clean_db(postgresql_client, create_db):
     """
@@ -142,7 +198,8 @@ async def clean_db(postgresql_client, create_db):
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     tables_in_db = [x["table_name"] for x in tables_in_db]
     tables_to_preserve = [x.table_name() for x in data._classes]
-    tables_to_truncate = [x for x in tables_in_db if x != data.SchemaVersion.table_name() and x in tables_to_preserve]
+    tables_to_preserve.append(SCHEMA_VERSION_TABLE)
+    tables_to_truncate = [x for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE]
     tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
     if tables_to_drop:
         drop_query = "DROP TABLE %s CASCADE" % ", ".join(tables_to_drop)

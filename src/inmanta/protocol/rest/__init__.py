@@ -24,6 +24,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Type, cast  # noqa: F401
 
 import pydantic
+import typing_inspect
 from tornado import escape
 
 from inmanta import config as inmanta_config
@@ -139,10 +140,153 @@ class CallArguments(object):
 
         return value
 
+    def _process_union_for_arguments(self, arg_type: Type, arg_name: str, value: Any) -> Any:
+        """ Process a union type
+
+            :see: protocol.common.MethodProperties._validate_function_types
+        """
+        matching_type = None
+        for t in typing_inspect.get_args(arg_type, evaluate=True):
+            instanceof_type = t
+            if typing_inspect.is_generic_type(t):
+                instanceof_type = typing_inspect.get_origin(t)
+
+            if isinstance(value, instanceof_type):
+                if matching_type is not None:
+                    raise exceptions.ServerError(
+                        f"Argument {arg_name} is defined as a union {arg_type} for which multiple "
+                        f"types match the provided value {value}"
+                    )
+                matching_type = t
+
+        if matching_type is None:
+            raise exceptions.BadRequest(
+                f"Invalid argument {arg_name}, no matching type found in union {arg_type} for value type {type(value)}"
+            )
+
+        if typing_inspect.is_generic_type(matching_type):
+            return self._process_generic_for_arguments(matching_type, arg_name, value)
+
+        return matching_type(value)
+
+    def _process_generic_for_arguments(self, arg_type: Type, arg_name: str, value: Any) -> Any:
+        """ Process List or Dict types.
+
+            :note: we return any here because the calling function also returns any.
+            :see: protocol.common.MethodProperties._validate_function_types
+        """
+        if issubclass(typing_inspect.get_origin(arg_type), list):
+            if not isinstance(value, list):
+                raise exceptions.BadRequest(
+                    f"Invalid argument {arg_name}, type needs to be a list. Argument type should be {arg_type}"
+                )
+
+            el_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+            if typing_inspect.is_union_type(el_type):
+                return [self._process_union_for_arguments(el_type, arg_name, el) for el in value]
+
+            elif issubclass(el_type, BaseModel):
+                return [el_type(**el) for el in value]
+
+            return [el_type(el) for el in value]
+
+        elif issubclass(typing_inspect.get_origin(arg_type), dict):
+            if not isinstance(value, dict):
+                raise exceptions.BadRequest(
+                    f"Invalid argument {arg_name}, type needs to be a dict. Argument type should be {arg_type}"
+                )
+
+            el_type = typing_inspect.get_args(arg_type, evaluate=True)[1]
+            result = {}
+            for k, v in value.items():
+                if not isinstance(k, str):
+                    raise exceptions.BadRequest(f"Keys of dict argument {arg_name} need to be strings.")
+
+                if typing_inspect.is_union_type(el_type):
+                    result[k] = self._process_union_for_arguments(el_type, arg_name, v)
+                elif issubclass(el_type, BaseModel):
+                    result[k] = el_type(**v)
+                else:
+                    result[k] = el_type(v)
+
+            return result
+
+        else:
+            # This should not happen because of MethodProperties validation
+            raise exceptions.BadRequest(
+                f"Failed to validate generic type {arg_type} of {arg_name}, only List and Dict are supported"
+            )
+
+    def _validate_union_return(self, arg_type: Type, value: Any) -> None:
+        """ Validate a return with a union type
+            :see: protocol.common.MethodProperties._validate_function_types
+        """
+        matching_type = None
+        for t in typing_inspect.get_args(arg_type, evaluate=True):
+            instanceof_type = t
+            if typing_inspect.is_generic_type(t):
+                instanceof_type = typing_inspect.get_origin(t)
+
+            if isinstance(value, instanceof_type):
+                if matching_type is not None:
+                    raise exceptions.ServerError(
+                        f"Return type is defined as a union {arg_type} for which multiple "
+                        f"types match the provided value {value}"
+                    )
+                matching_type = t
+
+        if matching_type is None:
+            raise exceptions.BadRequest(
+                f"Invalid return value, no matching type found in union {arg_type} for value type {type(value)}"
+            )
+
+        if typing_inspect.is_generic_type(matching_type):
+            self._validate_generic_return(arg_type, matching_type)
+
+    def _validate_generic_return(self, arg_type: Type, value: Any) -> None:
+        """ Validate List or Dict types.
+
+            :note: we return any here because the calling function also returns any.
+        """
+        if issubclass(typing_inspect.get_origin(arg_type), list):
+            if not isinstance(value, list):
+                raise exceptions.ServerError(
+                    f"Invalid return value, type needs to be a list. Argument type should be {arg_type}"
+                )
+
+            el_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+            for el in value:
+                if typing_inspect.is_union_type(el_type):
+                    self._validate_union_return(el_type, el)
+                elif not isinstance(el, el_type):
+                    raise exceptions.ServerError(f"Element {el} of returned list is not of type {el_type}.")
+
+        elif issubclass(typing_inspect.get_origin(arg_type), dict):
+            if not isinstance(value, dict):
+                raise exceptions.ServerError(
+                    f"Invalid return value, type needs to be a dict. Argument type should be {arg_type}"
+                )
+
+            el_type = typing_inspect.get_args(arg_type, evaluate=True)[1]
+            for k, v in value.items():
+                if not isinstance(k, str):
+                    raise exceptions.ServerError(f"Keys of return dict need to be strings.")
+
+                if typing_inspect.is_union_type(el_type):
+                    self._validate_union_return(el_type, v)
+                elif not isinstance(v, el_type):
+                    raise exceptions.ServerError(f"Element {v} of returned list is not of type {el_type}.")
+
+        else:
+            # This should not happen because of MethodProperties validation
+            raise exceptions.BadRequest(
+                f"Failed to validate generic type {arg_type} of return value, only List and Dict are supported"
+            )
+
     def _process_typing(self, arg: str, value: Optional[Any]) -> Optional[Any]:
         """
             Validate and coerce if required
-            :param arg: The name of the arugment
+            :param arg: The name of the argument
             :param value: The current value of the argument
             :return: The processed value of the argument
         """
@@ -153,10 +297,18 @@ class CallArguments(object):
             return value
 
         arg_type: Type = self._argspec.annotations[arg]
-        if isinstance(value, arg_type):
-            return value
 
         try:
+            if typing_inspect.is_union_type(arg_type):
+                return self._process_union_for_arguments(arg_type, arg, value)
+
+            # This check needs to be first because isinstance fails on generic types.
+            if typing_inspect.is_generic_type(arg_type):
+                return self._process_generic_for_arguments(arg_type, arg, value)
+
+            if isinstance(value, arg_type):
+                return value
+
             if issubclass(arg_type, BaseModel):
                 return arg_type(**value)
 
@@ -175,10 +327,10 @@ class CallArguments(object):
         except pydantic.ValidationError as e:
             error_msg = f"Failed to validate argument {arg} of expected type {arg_type}\n{str(e)}"
             LOGGER.exception(error_msg)
-            raise exceptions.BadRequest()
+            raise exceptions.BadRequest(error_msg)
 
         except (ValueError, TypeError):
-            error_msg = f"Invalid type for argument {arg}. Expected {arg_type} but received {value.__class__}, {value}"
+            error_msg = f"Invalid type for argument {arg}. Expected {arg_type} but received {value.__class__.__name__}, {value}"
             LOGGER.exception(error_msg)
             raise exceptions.BadRequest(error_msg)
 
@@ -267,8 +419,18 @@ class CallArguments(object):
             # The way this is implemented in typing is different for python 3.6 and 3.7. In this code we "trust" that the
             # signature of the handler and the method definition matches and the returned value matches this return value
             # Both isubclass and isinstance fail on this type
-            if isinstance(result, ReturnValue):
-                return common.Response.create(result, headers, config.properties.wrap_data)
+            # This check needs to be first because isinstance fails on generic types.
+            # TODO: also validate the value inside a ReturnValue
+            if typing_inspect.is_union_type(return_type):
+                self._validate_union_return(return_type, result)
+                return common.Response.create(ReturnValue(response=result), headers, config.properties.wrap_data)
+
+            if typing_inspect.is_generic_type(return_type):
+                if isinstance(result, ReturnValue):
+                    return common.Response.create(result, headers, config.properties.wrap_data)
+                else:
+                    self._validate_generic_return(return_type, result)
+                    return common.Response.create(ReturnValue(response=result), headers, config.properties.wrap_data)
 
             elif isinstance(result, BaseModel):
                 return common.Response.create(ReturnValue(response=result), headers, config.properties.wrap_data)

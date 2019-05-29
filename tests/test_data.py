@@ -16,16 +16,12 @@
     Contact: code@inmanta.com
 """
 import datetime
-import inspect
 import logging
-import pkgutil
 import time
-import types
 import uuid
 
 import asyncpg
 import pytest
-from asyncpg import PostgresSyntaxError
 
 from inmanta import const, data
 from inmanta.const import LogLevel
@@ -2071,89 +2067,10 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
     )
     table_names_in_database = [x["table_name"] for x in table_names]
     table_names_in_classes_list = [x.__name__.lower() for x in data._classes]
-    assert len(table_names_in_classes_list) == len(table_names_in_database)
+    # Schema management table is not in classes list
+    assert len(table_names_in_classes_list) + 1 == len(table_names_in_database)
     for item in table_names_in_classes_list:
         assert item in table_names_in_database
-
-
-@pytest.mark.asyncio
-async def test_dbschema_update_db_schema(postgresql_client, init_dataclasses_and_load_schema, get_columns_in_db_table):
-    async def update_function1(connection):
-        await connection.execute("CREATE TABLE public.tab(id integer primary key, val varchar NOT NULL);")
-
-    async def update_function2(connection):
-        await connection.execute("ALTER TABLE public.tab DROP COLUMN val;")
-
-    current_db_version = await data.SchemaVersion.get_current_version()
-    version_update1 = current_db_version + 1
-    version_update2 = current_db_version + 2
-    update_function_map = {version_update1: update_function1, version_update2: update_function2}
-
-    db_schema = data.DBSchema()
-    await db_schema._update_db_schema(update_function_map, postgresql_client)
-
-    assert (await data.SchemaVersion.get_current_version()) == version_update2
-    assert sorted(["id"]) == sorted(await get_columns_in_db_table("tab"))
-
-
-@pytest.mark.asyncio
-async def test_dbschema_update_db_schema_failure(postgresql_client, init_dataclasses_and_load_schema, get_columns_in_db_table):
-    async def update_function(connection):
-        # Syntax error should trigger database rollback
-        await connection.execute("CREATE TABE public.tab(id integer primary key, val varchar NOT NULL);")
-
-    current_db_version = await data.SchemaVersion.get_current_version()
-    new_db_version = current_db_version + 1
-    update_function_map = {new_db_version: update_function}
-
-    db_schema = data.DBSchema()
-    try:
-        await db_schema._update_db_schema(update_function_map, postgresql_client)
-    except PostgresSyntaxError:
-        pass
-
-    # Assert rollback
-    assert (await data.SchemaVersion.get_current_version()) == current_db_version
-    assert (
-        await postgresql_client.fetchval(
-            "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='tab'"
-        )
-    ) is None
-
-    async def update_function(connection):
-        # Fix syntax issue
-        await connection.execute("CREATE TABLE public.tab(id integer primary key, val varchar NOT NULL);")
-
-    update_function_map[new_db_version] = update_function
-    await db_schema._update_db_schema(update_function_map, postgresql_client)
-
-    # Assert update
-    assert (await data.SchemaVersion.get_current_version()) == new_db_version
-    assert sorted(["id", "val"]) == sorted(await get_columns_in_db_table("tab"))
-
-
-@pytest.mark.asyncio
-async def test_dbschema_get_dct_with_update_functions():
-    module_names = [
-        modname for _, modname, ispkg in pkgutil.iter_modules(data.DBSchema.PACKAGE_WITH_UPDATE_FILES.__path__) if not ispkg
-    ]
-    all_versions = [int(mod_name[1:]) for mod_name in module_names]
-
-    db_schema = data.DBSchema()
-    update_function_map = await db_schema._get_dct_with_update_functions()
-    assert sorted(all_versions) == sorted(update_function_map.keys())
-    for version, update_function in update_function_map.items():
-        assert version >= 0
-        assert isinstance(update_function, types.FunctionType)
-        assert update_function.__name__ == "update"
-        assert inspect.getfullargspec(update_function)[0] == ["connection"]
-
-    # Test behavior of "versions_higher_than" parameter
-    lowest_version = min(update_function_map.keys())
-
-    restricted_function_map = await db_schema._get_dct_with_update_functions(lowest_version)
-    assert len(restricted_function_map) == len(update_function_map) - 1
-    assert lowest_version not in restricted_function_map
 
 
 @pytest.mark.asyncio

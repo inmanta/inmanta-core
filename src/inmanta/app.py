@@ -198,7 +198,7 @@ def compiler_config(parser):
     parser.add_argument(
         "-X",
         "--extended-errors",
-        dest="errors",
+        dest="errors_subcommand",
         help="Show stack traces for compile errors",
         action="store_true",
         default=False,
@@ -347,7 +347,7 @@ def export_parser_config(parser):
     parser.add_argument(
         "-X",
         "--extended-errors",
-        dest="errors",
+        dest="errors_subcommand",
         help="Show stack traces for compile errors",
         action="store_true",
         default=False,
@@ -568,7 +568,9 @@ def app():
         return
 
     def report(e):
-        if not options.errors:
+        minus_x_set_top_level_command = options.errors
+        minus_x_set_subcommand = hasattr(options, "errors_subcommand") and options.errors_subcommand
+        if not minus_x_set_top_level_command and not minus_x_set_subcommand:
             if isinstance(e, CompilerException):
                 print(e.format_trace(indent="  "), file=sys.stderr)
             else:

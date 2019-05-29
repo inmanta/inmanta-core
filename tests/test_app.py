@@ -365,3 +365,24 @@ caused by:
 
     exec("compile")
     exec("export", "-J", "out.json")
+
+
+@pytest.mark.parametrize(
+    "cmd", [(["-X", "compile"]), (["compile", "-X"]), (["compile"]), (["export", "-X"]), (["-X", "export"]), (["export"])]
+)
+def test_minus_x_option(snippetcompiler, cmd):
+    snippetcompiler.setup_for_snippet_external(
+        """
+entity Test:
+    nuber attr
+end
+"""
+    )
+
+    process = do_run([sys.executable, "-m", "inmanta.app"] + cmd, cwd=snippetcompiler.project_dir)
+    out, err = process.communicate(timeout=5)
+    assert out.decode() == ""
+    if "-X" in cmd:
+        assert "inmanta.ast.TypeNotFoundException: could not find type nuber in namespace" in str(err)
+    else:
+        assert "inmanta.ast.TypeNotFoundException: could not find type nuber in namespace" not in str(err)
