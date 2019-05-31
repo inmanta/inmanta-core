@@ -1,5 +1,5 @@
 """
-    Copyright 2018 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -16,16 +16,4 @@
     Contact: code@inmanta.com
 """
 
-
-def test_plugin_excn(snippetcompiler, modules_dir):
-    snippetcompiler.setup_for_error(
-        """
-        import std
-        std::template("/tet.tmpl")
-""",
-        """Exception in plugin std::template (reported in std::template('/tet.tmpl') ({dir}/main.cf:3))
-caused by:
-  jinja2.exceptions.TemplateNotFound: /tet.tmpl
-""",
-        libs_dir=modules_dir,
-    )
+from inmanta_tests.conftest import *

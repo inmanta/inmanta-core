@@ -19,7 +19,7 @@
 import inmanta.compiler as compiler
 
 
-def test_issue_261_tracing(snippetcompiler):
+def test_issue_261_tracing(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -43,7 +43,8 @@ end
 implement Test2 using std::none
 
 Test1()
-        """
+        """,
+        libs_dir=modules_dir,
     )
     (types, _) = compiler.do_compile()
 
@@ -72,7 +73,7 @@ Test1()
         assert l1[0].get_next()[0].namespace.name == "__config__"
 
 
-def test_trackingbug(snippetcompiler):
+def test_trackingbug(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity A:
@@ -123,14 +124,15 @@ end
 implement D using d
 
 D()
-"""
+""",
+        libs_dir=modules_dir,
     )
     (types, _) = compiler.do_compile()
     files = types["__config__::C"].get_all_instances()
     assert len(files) == 1
 
 
-def test_747_entity_multi_location(snippetcompiler):
+def test_747_entity_multi_location(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Alpha:
@@ -148,6 +150,7 @@ b= Alpha(name="A")
 c= Alpha(name="A")
 """,
         autostd=False,
+        libs_dir=modules_dir,
     )
     (_, scopes) = compiler.do_compile()
 

@@ -23,18 +23,19 @@ from inmanta.ast import DuplicateException, TypingException
 from inmanta.execute.proxy import UnsetException
 
 
-def test_issue_127_default_overrides(snippetcompiler):
+def test_issue_127_default_overrides(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 f1=std::ConfigFile(host=std::Host(name="jos",os=std::linux), path="/tmp/test", owner="wouter", content="blabla")
-        """
+        """,
+        libs_dir=modules_dir,
     )
     (types, _) = compiler.do_compile()
     instances = types["std::File"].get_all_instances()
     assert instances[0].get_attribute("owner").get_value() == "wouter"
 
 
-def test_issue_135_duplo_relations(snippetcompiler):
+def test_issue_135_duplo_relations(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -48,13 +49,14 @@ implement Test2 using std::none
 
 Test1 test1 [1] -- [0:] Test2 test2
 Test1 test1 [0:1] -- [0:] Test2 test2
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
-def test_issue_224_default_over_inheritance(snippetcompiler):
+def test_issue_224_default_over_inheritance(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -67,7 +69,8 @@ end
 implement Test3 using std::none
 
 Test3()
-"""
+""",
+        libs_dir=modules_dir,
     )
     (types, _) = compiler.do_compile()
     instances = types["__config__::Test3"].get_all_instances()
@@ -76,7 +79,7 @@ Test3()
     assert i.get_attribute("a").get_value() == "a"
 
 
-def test_275_default_override(snippetcompiler):
+def test_275_default_override(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
     entity A:
@@ -92,7 +95,8 @@ def test_275_default_override(snippetcompiler):
     a = A()
     b = B()
 
-    """
+    """,
+        libs_dir=modules_dir,
     )
 
     (_, scopes) = compiler.do_compile()
@@ -104,7 +108,7 @@ def test_275_default_override(snippetcompiler):
     assert b.get_value().get_attribute("at").get_value() is False
 
 
-def test_275_default_diamond(snippetcompiler):
+def test_275_default_diamond(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
     entity A:
@@ -129,7 +133,8 @@ def test_275_default_diamond(snippetcompiler):
     b = B()
     c = C()
     d = D()
-    """
+    """,
+        libs_dir=modules_dir,
     )
 
     (_, scopes) = compiler.do_compile()
@@ -145,7 +150,7 @@ def test_275_default_diamond(snippetcompiler):
     assert d.get_value().get_attribute("at").get_value() is False
 
 
-def test_275_duplicate_parent(snippetcompiler):
+def test_275_duplicate_parent(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
     entity A:
@@ -157,13 +162,14 @@ def test_275_duplicate_parent(snippetcompiler):
         bool at = false
     end
     implement B using std::none
-    """
+    """,
+        libs_dir=modules_dir,
     )
     with pytest.raises(TypingException):
         compiler.do_compile()
 
 
-def test_default_remove(snippetcompiler):
+def test_default_remove(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
     entity A:
@@ -178,13 +184,14 @@ def test_default_remove(snippetcompiler):
 
     a = A()
     b = B()
-    """
+    """,
+        libs_dir=modules_dir,
     )
     with pytest.raises(UnsetException):
         compiler.do_compile()
 
 
-def test_gradual_default(snippetcompiler):
+def test_gradual_default(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Server:
@@ -197,12 +204,13 @@ typedef Server2 as Server(b="b")
 Server2()
 
 implement Server using std::none
-"""
+""",
+        libs_dir=modules_dir,
     )
     compiler.do_compile()
 
 
-def test_default_on_relation(snippetcompiler):
+def test_default_on_relation(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Server:
@@ -223,6 +231,7 @@ Server2()
 
 implement Server using std::none
 implement Option using std::none
-"""
+""",
+        libs_dir=modules_dir,
     )
     compiler.do_compile()

@@ -20,8 +20,8 @@ import inmanta.compiler as compiler
 from inmanta.ast import ModuleNotFoundException
 
 
-def test_issue_120_bad_import(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""import ip::ip""")
+def test_issue_120_bad_import(snippetcompiler, modules_dir):
+    snippetcompiler.setup_for_snippet("""import ip::ip""", libs_dir=modules_dir)
     try:
         compiler.do_compile()
         raise AssertionError("Should get exception")
@@ -29,8 +29,8 @@ def test_issue_120_bad_import(snippetcompiler):
         assert e.location.lnr == 1
 
 
-def test_issue_120_bad_import_extra(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""import slorpf""")
+def test_issue_120_bad_import_extra(snippetcompiler, modules_dir):
+    snippetcompiler.setup_for_snippet("""import slorpf""", libs_dir=modules_dir)
     try:
         compiler.do_compile()
         raise AssertionError("Should get exception")

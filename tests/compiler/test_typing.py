@@ -22,7 +22,7 @@ import inmanta.compiler as compiler
 from inmanta.ast import AttributeException, TypingException
 
 
-def test_lnr_on_double_is_defined(snippetcompiler):
+def test_lnr_on_double_is_defined(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
@@ -35,12 +35,13 @@ implement Test using std::none when self.one.two is defined
 
 a = Test(two="b")
 a.one = a
-"""
+""",
+        libs_dir=modules_dir,
     )
     compiler.do_compile()
 
 
-def test_double_define(snippetcompiler):
+def test_double_define(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
@@ -48,13 +49,14 @@ entity Test:
     string? test
     bool test
 end
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(TypingException):
         compiler.do_compile()
 
 
-def test_536_number_cast(snippetcompiler):
+def test_536_number_cast(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Network:
@@ -62,7 +64,8 @@ entity Network:
 end
 implement Network using std::none
 net1 = Network(segmentation_id="10")
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(AttributeException):
         compiler.do_compile()

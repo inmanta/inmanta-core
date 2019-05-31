@@ -30,11 +30,12 @@ from inmanta.ast import (
 )
 
 
-def test_issue_121_non_matching_index(snippetcompiler):
+def test_issue_121_non_matching_index(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
         a=std::Host[name="test"]
-        """
+        """,
+        libs_dir=modules_dir,
     )
 
     try:
@@ -44,7 +45,7 @@ def test_issue_121_non_matching_index(snippetcompiler):
         assert e.location.lnr == 2
 
 
-def test_issue_122_index_inheritance(snippetcompiler):
+def test_issue_122_index_inheritance(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Repository extends std::File:
@@ -75,7 +76,8 @@ Repository(host=h1, name="flens-demo",
 
 Repository(host=h1, name="flens-demo",
                            baseurl="http://people.cs.kuleuven.be/~wouter.deborger/repo/")
-        """
+        """,
+        libs_dir=modules_dir,
     )
 
     try:
@@ -85,12 +87,13 @@ Repository(host=h1, name="flens-demo",
         assert e.location.lnr == 25
 
 
-def test_issue_140_index_error(snippetcompiler):
+def test_issue_140_index_error(snippetcompiler, modules_dir):
     try:
         snippetcompiler.setup_for_snippet(
             """
         h = std::Host(name="test", os=std::linux)
-        test = std::Service[host=h, path="test"]"""
+        test = std::Service[host=h, path="test"]""",
+            libs_dir=modules_dir,
         )
         compiler.do_compile()
         raise AssertionError("Should get exception")
@@ -98,7 +101,7 @@ def test_issue_140_index_error(snippetcompiler):
         assert re.match(".*No index defined on std::Service for this lookup:.*", str(e))
 
 
-def test_issue_745_index_on_nullable(snippetcompiler):
+def test_issue_745_index_on_nullable(snippetcompiler, modules_dir):
     with pytest.raises(IndexException):
         snippetcompiler.setup_for_snippet(
             """
@@ -108,12 +111,13 @@ entity A:
 end
 
 index A(name,opt)
-"""
+""",
+            libs_dir=modules_dir,
         )
         compiler.do_compile()
 
 
-def test_issue_745_index_on_optional(snippetcompiler):
+def test_issue_745_index_on_optional(snippetcompiler, modules_dir):
     with pytest.raises(IndexException):
         snippetcompiler.setup_for_snippet(
             """
@@ -124,12 +128,13 @@ end
 A.opt [0:1] -- A
 
 index A(name,opt)
-"""
+""",
+            libs_dir=modules_dir,
         )
         compiler.do_compile()
 
 
-def test_issue_745_index_on_multi(snippetcompiler):
+def test_issue_745_index_on_multi(snippetcompiler, modules_dir):
     with pytest.raises(IndexException):
         snippetcompiler.setup_for_snippet(
             """
@@ -140,41 +145,45 @@ end
 A.opt [1:] -- A
 
 index A(name,opt)
-"""
+""",
+            libs_dir=modules_dir,
         )
         compiler.do_compile()
 
 
-def test_issue_index_on_not_existing(snippetcompiler):
+def test_issue_index_on_not_existing(snippetcompiler, modules_dir):
     with pytest.raises(TypeNotFoundException):
         snippetcompiler.setup_for_snippet(
             """
 index A(name)
-"""
+""",
+            libs_dir=modules_dir,
         )
         compiler.do_compile()
 
 
-def test_issue_212_bad_index_defintion(snippetcompiler):
+def test_issue_212_bad_index_defintion(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
     string x
 end
 index Test1(x,y)
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(RuntimeException):
         compiler.do_compile()
 
 
-def test_index_on_subtype(snippetcompiler):
+def test_index_on_subtype(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
         host = std::Host(name="a",os=std::linux)
         a=std::DefaultDirectory(host=host,path="/etc")
         b=std::DefaultDirectory(host=host,path="/etc")
-    """
+    """,
+        libs_dir=modules_dir,
     )
 
     (_, scopes) = compiler.do_compile()
@@ -186,13 +195,14 @@ def test_index_on_subtype(snippetcompiler):
     assert a.get_value() == b.get_value()
 
 
-def test_index_on_subtype2(snippetcompiler):
+def test_index_on_subtype2(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
         host = std::Host(name="a",os=std::linux)
         a=std::DefaultDirectory(host=host,path="/etc")
         b=std::Directory(host=host,path="/etc",mode=755 ,group="root",owner="root" )
-    """
+    """,
+        libs_dir=modules_dir,
     )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
@@ -216,7 +226,7 @@ implement C using std::none
 """
 
 
-def test_index_on_subtype_diamond(snippetcompiler):
+def test_index_on_subtype_diamond(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         diamond
         + """
@@ -225,14 +235,15 @@ def test_index_on_subtype_diamond(snippetcompiler):
 
     a = A(at="a")
     b = C(at="a")
-    """
+    """,
+        libs_dir=modules_dir,
     )
 
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
-def test_index_on_subtype_diamond_2(snippetcompiler):
+def test_index_on_subtype_diamond_2(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         diamond
         + """
@@ -241,12 +252,13 @@ def test_index_on_subtype_diamond_2(snippetcompiler):
 
     a = A(at="a")
     b = B(at="a")
-    """
+    """,
+        libs_dir=modules_dir,
     )
     compiler.do_compile()
 
 
-def test_index_on_subtype_diamond_3(snippetcompiler):
+def test_index_on_subtype_diamond_3(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         diamond
         + """
@@ -255,12 +267,13 @@ def test_index_on_subtype_diamond_3(snippetcompiler):
 
     a = A(at="a")
     b = B(at="ab")
-    """
+    """,
+        libs_dir=modules_dir,
     )
     compiler.do_compile()
 
 
-def test_index_on_subtype_diamond_4(snippetcompiler):
+def test_index_on_subtype_diamond_4(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         diamond
         + """
@@ -270,14 +283,15 @@ def test_index_on_subtype_diamond_4(snippetcompiler):
     a = C(at="a")
     b = C(at="a")
     a=b
-    """
+    """,
+        libs_dir=modules_dir,
     )
     (types, _) = compiler.do_compile()
     c = types["__config__::C"]
     assert len(c.get_indices()) == 1
 
 
-def test_394_short_index(snippetcompiler):
+def test_394_short_index(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """implementation none for std::Entity:
 
@@ -305,7 +319,8 @@ f1h1=File(host=h1,name="f1")
 f2h1=File(host=h1,name="f2")
 
 z = h1.files[name="f1"]
-"""
+""",
+        libs_dir=modules_dir,
     )
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
@@ -314,7 +329,7 @@ z = h1.files[name="f1"]
     assert z is f1h1
 
 
-def test_394_short_index_bad(snippetcompiler):
+def test_394_short_index_bad(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_error(
         """implementation none for std::Entity:
 
@@ -350,10 +365,11 @@ z = h1.files[name="f1"]
 """,
         "short index lookup is only possible on bi-drectional relations, __config__::Host.files is unidirectional"
         " (reported in h1.files[[('name', 'f1')]] ({dir}/main.cf:31))",
+        libs_dir=modules_dir,
     )
 
 
-def test_511_index_on_default(snippetcompiler):
+def test_511_index_on_default(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
@@ -366,22 +382,24 @@ index Test(a, b)
 implement Test using std::none
 
 Test(b="b")
-"""
+""",
+        libs_dir=modules_dir,
     )
     compiler.do_compile()
 
 
-def test_index_undefined_attribute(snippetcompiler):
+def test_index_undefined_attribute(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_error(
         """
         index std::Entity(foo, bar)
     """,
         "Attribute 'foo' referenced in index is not defined in entity std::Entity (reported in index "
         "std::Entity(foo, bar) ({dir}/main.cf:2))",
+        libs_dir=modules_dir,
     )
 
 
-def test_747_index_collisions(snippetcompiler):
+def test_747_index_collisions(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_error(
         """
         entity Test:
@@ -407,10 +425,11 @@ caused by:
 \tnew value: b
 \t\tset at {dir}/main.cf:14
  (reported in Construct(Test) ({dir}/main.cf:14))""",  # noqa: E501
+        libs_dir=modules_dir,
     )
 
 
-def test_747_index_collisions_invisible(snippetcompiler):
+def test_747_index_collisions_invisible(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_error(
         """
         entity Test:
@@ -438,10 +457,11 @@ caused by:
 \tnew value: b
 \t\tset at {dir}/main.cf:15:34
  (reported in Construct(Test) ({dir}/main.cf:15))""",  # noqa: E501
+        libs_dir=modules_dir,
     )
 
 
-def test_index_collission_error_reporting(snippetcompiler):
+def test_index_collission_error_reporting(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_error(
         """
 entity Site:
@@ -475,4 +495,5 @@ Site()
         """Could not set attribute `tier` on instance `__config__::Site (instantiated at {dir}/main.cf:28)` (reported in self.tier = Construct(Tier) ({dir}/main.cf:20))
 caused by:
   Type found in index is not an exact match (original at ({dir}/main.cf:20)) (duplicate at ({dir}/main.cf:21))""",  # noqa: E501
+        libs_dir=modules_dir,
     )

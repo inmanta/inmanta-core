@@ -625,14 +625,17 @@ async def test_purge_on_delete_requires(client, server, environment):
 
 
 @pytest.mark.asyncio(timeout=20)
-async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, server, environment, snippetcompiler):
+async def test_purge_on_delete_compile_failed_with_compile(
+    event_loop, client, server, environment, snippetcompiler, modules_dir
+):
     config.Config.set("compiler_rest_transport", "request_timeout", "1")
 
     snippetcompiler.setup_for_snippet(
         """
     h = std::Host(name="test", os=std::linux)
     f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
-    """
+    """,
+        libs_dir=modules_dir,
     )
     version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
 
@@ -643,7 +646,8 @@ async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, s
     snippetcompiler.setup_for_snippet(
         """
     h = std::Host(name="test")
-    """
+    """,
+        libs_dir=modules_dir,
     )
 
     # force deploy by having unknown
@@ -1050,7 +1054,7 @@ async def test_code_upload(server_multi, client_multi, agent_multi, environment_
 
 @pytest.mark.asyncio(timeout=30)
 async def test_batched_code_upload(
-    server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
+    server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler, modules_dir
 ):
     """ Test uploading all code definitions at once
     """
@@ -1060,7 +1064,8 @@ async def test_batched_code_upload(
         """
     h = std::Host(name="test", os=std::linux)
     f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
-    """
+    """,
+        libs_dir=modules_dir,
     )
     version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
 

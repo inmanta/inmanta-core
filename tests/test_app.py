@@ -336,7 +336,7 @@ def test_startup_failure(tmpdir, postgres_db, database_name):
     assert code == 4
 
 
-def test_compiler_exception_output(snippetcompiler):
+def test_compiler_exception_output(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet_external(
         """
 entity Test:
@@ -346,7 +346,8 @@ end
 implement Test using std::none
 
 o = Test(attr="1234")
-"""
+""",
+        libs_dir=modules_dir,
     )
 
     output = (
@@ -370,13 +371,14 @@ caused by:
 @pytest.mark.parametrize(
     "cmd", [(["-X", "compile"]), (["compile", "-X"]), (["compile"]), (["export", "-X"]), (["-X", "export"]), (["export"])]
 )
-def test_minus_x_option(snippetcompiler, cmd):
+def test_minus_x_option(snippetcompiler, modules_dir, cmd):
     snippetcompiler.setup_for_snippet_external(
         """
 entity Test:
     nuber attr
 end
-"""
+""",
+        libs_dir=modules_dir,
     )
 
     process = do_run([sys.executable, "-m", "inmanta.app"] + cmd, cwd=snippetcompiler.project_dir)

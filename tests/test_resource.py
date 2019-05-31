@@ -57,7 +57,7 @@ def test_fields_parent_type():
             fields = ("z",)
 
 
-def test_resource_base(snippetcompiler):
+def test_resource_base(snippetcompiler, modules_dir):
 
     import inmanta.resources
 
@@ -85,6 +85,7 @@ def test_resource_base(snippetcompiler):
         XResource(key="key", agent="agent", value="value")
         """,
         autostd=False,
+        libs_dir=modules_dir,
     )
     _version, json_value = snippetcompiler.do_export()
 
@@ -96,7 +97,7 @@ def test_resource_base(snippetcompiler):
     assert myresource.value == "value"
 
 
-def test_resource_base_with_method_key(snippetcompiler):
+def test_resource_base_with_method_key(snippetcompiler, modules_dir):
 
     import inmanta.resources
 
@@ -128,12 +129,13 @@ def test_resource_base_with_method_key(snippetcompiler):
         XResource(key="key", agent="agent", value="value")
         """,
         autostd=False,
+        libs_dir=modules_dir,
     )
     with pytest.raises(ResourceException):
         snippetcompiler.do_export()
 
 
-def test_resource_with_keyword(snippetcompiler):
+def test_resource_with_keyword(snippetcompiler, modules_dir):
 
     import inmanta.resources
 
@@ -165,13 +167,14 @@ def test_resource_with_keyword(snippetcompiler):
          YResource(key="key", agent="agent", value="value")
          """,
         autostd=False,
+        libs_dir=modules_dir,
     )
 
     with pytest.raises(ResourceException):
         snippetcompiler.do_export()
 
 
-def test_resource_with_private_method(snippetcompiler):
+def test_resource_with_private_method(snippetcompiler, modules_dir):
 
     import inmanta.resources
 
@@ -199,6 +202,7 @@ def test_resource_with_private_method(snippetcompiler):
         YResource(key="key", agent="agent", value="value")
         """,
         autostd=False,
+        libs_dir=modules_dir,
     )
 
     with pytest.raises(ResourceException):

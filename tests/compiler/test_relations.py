@@ -21,7 +21,7 @@ import inmanta.compiler as compiler
 from inmanta.ast import DuplicateException, NotFoundException, RuntimeException, TypingException
 
 
-def test_issue_93(snippetcompiler):
+def test_issue_93(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -41,7 +41,8 @@ t2a = Test2(test1=t)
 t2b = Test2(test1=t)
 
 std::print(t.test2.attribute)
-        """
+        """,
+        libs_dir=modules_dir,
     )
 
     try:
@@ -51,7 +52,7 @@ std::print(t.test2.attribute)
         assert e.location.lnr == 18
 
 
-def test_issue_135_duplo_relations_2(snippetcompiler):
+def test_issue_135_duplo_relations_2(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -65,13 +66,14 @@ implement Test2 using std::none
 
 Test1 test1 [1] -- [0:] Test2 test2
 Test1 test1 [1] -- [0:] Test2 floem
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
-def test_issue_135_duplo_relations_3(snippetcompiler):
+def test_issue_135_duplo_relations_3(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -85,13 +87,14 @@ implement Test2 using std::none
 
 Test1 test1 [1] -- [0:] Test2 test2
 Test1 test1 [1] -- [0:] Test1 test2
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
-def test_issue_135_duplo_relations_4(snippetcompiler):
+def test_issue_135_duplo_relations_4(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Stdhost:
@@ -110,13 +113,14 @@ end
 
 Agent inmanta_agent   [1] -- [1] Oshost os_host
 Stdhost deploy_host [1] -- [0:1] Agent inmanta_agent
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
-def test_issue_135_duplo_relations_5(snippetcompiler):
+def test_issue_135_duplo_relations_5(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Stdhost:
@@ -136,24 +140,26 @@ end
 Oshost os_host [1] -- [1] Agent inmanta_agent
 
 Stdhost deploy_host [1] -- [0:1] Agent inmanta_agent
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
-def test_issue_132_relation_on_default(snippetcompiler):
+def test_issue_132_relation_on_default(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 typedef CFG as std::File(mode=755)
 CFG cfg [1] -- [1] std::File stuff
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(TypingException):
         compiler.do_compile()
 
 
-def test_issue_141(snippetcompiler):
+def test_issue_141(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 h = std::Host(name="test", os=std::linux)
@@ -162,13 +168,14 @@ entity SpecialService extends std::Service:
 
 end
 
-std::Host host [1] -- [0:] SpecialService services_list"""
+std::Host host [1] -- [0:] SpecialService services_list""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
-def test_m_to_n(snippetcompiler):
+def test_m_to_n(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity LogFile:
@@ -202,7 +209,8 @@ c2 = LogCollector(name="c2", logfiles=[lf4, lf7])
 c3 = LogCollector(name="c3", logfiles=[lf4, lf7, lf1])
 
 std::print([c1,c2,lf1,lf2,lf3,lf4,lf5,lf6,lf7,lf8])
-        """
+        """,
+        libs_dir=modules_dir,
     )
 
     (types, _) = compiler.do_compile()
@@ -210,7 +218,7 @@ std::print([c1,c2,lf1,lf2,lf3,lf4,lf5,lf6,lf7,lf8])
         assert lf.get_attribute("members").get_value() == len(lf.get_attribute("collectors").get_value())
 
 
-def test_new_relation_syntax(snippetcompiler):
+def test_new_relation_syntax(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -227,7 +235,8 @@ Test1.tests [0:] -- Test2.test1 [1]
 a = Test1(tests=[Test2(),Test2()])
 b = Test1()
 Test2(test1 = b)
-"""
+""",
+        libs_dir=modules_dir,
     )
     types, root = compiler.do_compile()
 
@@ -237,7 +246,7 @@ Test2(test1 = b)
     assert len(scope.lookup("b").get_value().get_attribute("tests").get_value()) == 1
 
 
-def test_new_relation_with_annotation_syntax(snippetcompiler):
+def test_new_relation_with_annotation_syntax(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -256,7 +265,8 @@ Test1.tests [0:] annotation Test2.test1 [1]
 a = Test1(tests=[Test2(),Test2()])
 b = Test1()
 Test2(test1 = b)
-"""
+""",
+        libs_dir=modules_dir,
     )
     types, root = compiler.do_compile()
 
@@ -266,7 +276,7 @@ Test2(test1 = b)
     assert len(scope.lookup("b").get_value().get_attribute("tests").get_value()) == 1
 
 
-def test_new_relation_uni_dir(snippetcompiler):
+def test_new_relation_uni_dir(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -282,7 +292,8 @@ Test1.tests [0:] -- Test2
 
 a = Test1(tests=[Test2(),Test2()])
 
-"""
+""",
+        libs_dir=modules_dir,
     )
     types, root = compiler.do_compile()
 
@@ -291,7 +302,7 @@ a = Test1(tests=[Test2(),Test2()])
     assert len(scope.lookup("a").get_value().get_attribute("tests").get_value()) == 2
 
 
-def test_new_relation_uni_dir_double_define(snippetcompiler):
+def test_new_relation_uni_dir_double_define(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -306,13 +317,14 @@ implement Test2 using std::none
 Test1.tests [0:] -- Test2
 
 Test2.xx [1] -- Test1.tests [0:]
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
-def test_relation_attributes(snippetcompiler):
+def test_relation_attributes(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
@@ -330,7 +342,8 @@ implement Foo using std::none
 
 
 Test.bar [1] foo,bar Foo
-"""
+""",
+        libs_dir=modules_dir,
     )
     (_, scopes) = compiler.do_compile()
 
@@ -342,7 +355,7 @@ Test.bar [1] foo,bar Foo
     assert annotations[1].get_value() == bar.value
 
 
-def test_relation_attributes_unresolved(snippetcompiler):
+def test_relation_attributes_unresolved(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
@@ -358,13 +371,14 @@ implement Foo using std::none
 
 
 Test.bar [1] foo,bar Foo
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(NotFoundException):
         compiler.do_compile()
 
 
-def test_relation_attributes_unknown(snippetcompiler):
+def test_relation_attributes_unknown(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
@@ -383,13 +397,14 @@ implement Foo using std::none
 
 
 Test.bar [1] foo,bar Foo
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(TypingException):
         compiler.do_compile()
 
 
-def test_671_bounds_check(snippetcompiler):
+def test_671_bounds_check(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """ entity Test:
 
@@ -414,11 +429,12 @@ implement Test using none
 implement Foo using none
 """,
         autostd=False,
+        libs_dir=modules_dir,
     )
     compiler.do_compile()
 
 
-def test_587_assign_extend_correct(snippetcompiler):
+def test_587_assign_extend_correct(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
     entity A:
@@ -436,7 +452,8 @@ def test_587_assign_extend_correct(snippetcompiler):
     a.b += B(name = "a")
     a.b += B(name = "b")
 
-    """
+    """,
+        libs_dir=modules_dir,
     )
 
     (_, scopes) = compiler.do_compile()
@@ -447,7 +464,7 @@ def test_587_assign_extend_correct(snippetcompiler):
     assert ["a", "b"] == [v.get_attribute("name").get_value() for v in ab]
 
 
-def test_587_assign_extend_incorrect(snippetcompiler):
+def test_587_assign_extend_incorrect(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
     entity A:
@@ -464,14 +481,15 @@ def test_587_assign_extend_incorrect(snippetcompiler):
     a = A()
     a.b += B(name = "a")
 
-    """
+    """,
+        libs_dir=modules_dir,
     )
 
     with pytest.raises(TypingException):
         (_, scopes) = compiler.do_compile()
 
 
-def test_set_wrong_relation_type(snippetcompiler):
+def test_set_wrong_relation_type(snippetcompiler, modules_dir):
     """
         Test the error message when setting the wrong type on a relation in the two cases:
         1) on an instance
@@ -494,6 +512,7 @@ def test_set_wrong_relation_type(snippetcompiler):
 caused by:
   Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File """
         """(reported in Construct(Credentials) ({dir}/main.cf:9))""",
+        libs_dir=modules_dir,
     )
 
     snippetcompiler.setup_for_error(
@@ -511,10 +530,11 @@ caused by:
         r"""Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` (reported in creds.file = creds ({dir}/main.cf:10))
 caused by:
   Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File (reported in creds.file = creds ({dir}/main.cf:10))""",  # noqa: E501
+        libs_dir=modules_dir,
     )
 
 
-def test_610_multi_add(snippetcompiler):
+def test_610_multi_add(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_error(
         """
         entity A:
@@ -534,10 +554,11 @@ def test_610_multi_add(snippetcompiler):
         """,
         "The object __config__::A (instantiated at {dir}/main.cf:13) is not complete:"
         " attribute b ({dir}/main.cf:11:11) requires 2 values but only 1 are set",
+        libs_dir=modules_dir,
     )
 
 
-def test_670_assign_on_relation(snippetcompiler):
+def test_670_assign_on_relation(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_error_re(
         """
         h = std::Host(name="test", os=std::linux)
@@ -548,4 +569,5 @@ def test_670_assign_on_relation(snippetcompiler):
         """,
         r"The object at h.files is not an Entity but a <class 'list'> with value \[std::ConfigFile [0-9a-fA-F]+\]"
         r" \(reported in h.files.path = '1' \({dir}/main.cf:5\)\)",
+        libs_dir=modules_dir,
     )

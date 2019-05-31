@@ -22,7 +22,7 @@ import inmanta.compiler as compiler
 from inmanta.ast import AttributeException, MultiException
 
 
-def test_issue_139_scheduler(snippetcompiler):
+def test_issue_139_scheduler(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """import std
 
@@ -37,13 +37,14 @@ f = std::ConfigFile(host=host, path="", content="{{ host.attr }}")
 std::Service(host=host, name="svc", state="running", onboot=true, requires=[f])
 ref = std::Service[host=host, name="svc"]
 
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(MultiException):
         compiler.do_compile()
 
 
-def test_issue_201_double_set(snippetcompiler):
+def test_issue_201_double_set(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -64,7 +65,8 @@ b.test1 = a
 b.test1 = a
 
 std::print(b.test1)
-"""
+""",
+        libs_dir=modules_dir,
     )
 
     (types, _) = compiler.do_compile()
@@ -72,7 +74,7 @@ std::print(b.test1)
     assert len(a.get_attribute("test2").value)
 
 
-def test_issue_170_attribute_exception(snippetcompiler):
+def test_issue_170_attribute_exception(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -80,18 +82,20 @@ entity Test1:
 end
 
 Test1(a=3)
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(AttributeException):
         compiler.do_compile()
 
 
-def test_execute_twice(snippetcompiler):
+def test_execute_twice(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 import mod4::other
 import mod4
-    """
+    """,
+        libs_dir=modules_dir,
     )
 
     (_, scopes) = compiler.do_compile()
@@ -99,7 +103,7 @@ import mod4
     assert scopes.get_child("mod4").get_child("other").lookup("other").get_value() == 0
 
 
-def test_643_cycle_empty(snippetcompiler):
+def test_643_cycle_empty(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Alpha:
@@ -113,7 +117,8 @@ implement Alpha using none
 a = Alpha()
 
 a.requires = a.provides
-"""
+""",
+        libs_dir=modules_dir,
     )
     (_, scopes) = compiler.do_compile()
 
@@ -124,7 +129,7 @@ a.requires = a.provides
     assert ab == []
 
 
-def test_643_cycle(snippetcompiler):
+def test_643_cycle(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Alpha:
@@ -141,7 +146,8 @@ b = Alpha(name="b")
 
 a.requires = b
 a.requires = b.provides
-"""
+""",
+        libs_dir=modules_dir,
     )
     (_, scopes) = compiler.do_compile()
 
@@ -162,7 +168,7 @@ a.requires = b.provides
     assert sorted(ab) == ["a"]
 
 
-def test_643_forcycle_complex(snippetcompiler):
+def test_643_forcycle_complex(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Alpha:
@@ -194,6 +200,7 @@ b.alink = a
 
 """,
         autostd=False,
+        libs_dir=modules_dir,
     )
     (_, scopes) = compiler.do_compile()
 
@@ -212,7 +219,7 @@ b.alink = a
     assert get_names(d) == ["a", "b", "c", "d"]
 
 
-def test_643_forcycle_complex_reverse(snippetcompiler):
+def test_643_forcycle_complex_reverse(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Alpha:
@@ -244,6 +251,7 @@ b.alink = a
 
 """,
         autostd=False,
+        libs_dir=modules_dir,
     )
     (_, scopes) = compiler.do_compile()
 
@@ -267,7 +275,7 @@ b.alink = a
     assert get_names(d, "blink") == ["a", "b", "c", "d"]
 
 
-def test_lazy_attibutes(snippetcompiler):
+def test_lazy_attibutes(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity  Thing:
@@ -281,7 +289,8 @@ index Thing(id)
 
 a = Thing(id=5, value="{{a.id}}")
 
-"""
+""",
+        libs_dir=modules_dir,
     )
 
     (_, scopes) = compiler.do_compile()
@@ -290,7 +299,7 @@ a = Thing(id=5, value="{{a.id}}")
     assert "5" == root.lookup("a").get_value().lookup("value").get_value()
 
 
-def test_lazy_attibutes2(snippetcompiler):
+def test_lazy_attibutes2(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity  Thing:
@@ -305,7 +314,8 @@ index Thing(id)
 a = Thing(id=5)
 a.value="{{a.id}}"
 
-"""
+""",
+        libs_dir=modules_dir,
     )
 
     (_, scopes) = compiler.do_compile()
@@ -314,7 +324,7 @@ a.value="{{a.id}}"
     assert "5" == root.lookup("a").get_value().lookup("value").get_value()
 
 
-def test_lazy_attibutes3(snippetcompiler):
+def test_lazy_attibutes3(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity  Thing:
@@ -335,7 +345,8 @@ index Thing(id)
 
 a = Thing(id=5, value=StringWrapper(value="{{a.id}}"))
 
-"""
+""",
+        libs_dir=modules_dir,
     )
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
@@ -343,7 +354,7 @@ a = Thing(id=5, value=StringWrapper(value="{{a.id}}"))
     assert "5" == root.lookup("a").get_value().lookup("value").get_value().lookup("value").get_value()
 
 
-def test_veryhardsequencing(snippetcompiler):
+def test_veryhardsequencing(snippetcompiler, modules_dir):
 
     snippetcompiler.setup_for_snippet(
         """
@@ -383,12 +394,13 @@ kafka-volume = Volume(requires=kafka-user)
 KafkaNode(requires=kafka-volume)
 """,
         autostd=False,
+        libs_dir=modules_dir,
     )
 
     compiler.do_compile()
 
 
-def test_lazy_constructor(snippetcompiler):
+def test_lazy_constructor(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity One:
@@ -410,12 +422,13 @@ implement One using none
 implement Two using none
 """,
         autostd=False,
+        libs_dir=modules_dir,
     )
 
     compiler.do_compile()
 
 
-def test_incomplete(snippetcompiler):
+def test_incomplete(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_error(
         """
 import std
@@ -430,4 +443,5 @@ t1 = Test1()
 """,
         "The object __config__::Test1 (instantiated at {dir}/main.cf:10) is not complete: "
         "attribute a ({dir}/main.cf:5) is not set",
+        libs_dir=modules_dir,
     )

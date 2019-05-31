@@ -41,9 +41,9 @@ from tornado import netutil, process
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 import inmanta.agent
+import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.main
-import utils
 from inmanta import config, data, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
@@ -55,6 +55,11 @@ from inmanta.postgresproc import PostgresProc
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_free_tcp_port
+
+if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
+    import inmanta_tests.utils  # noqa: F401
+else:
+    import utils  # noqa: F401
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 logger = logging.getLogger(__name__)
@@ -161,7 +166,7 @@ async def do_clean_hard(postgresql_client):
          LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
     WHERE (t.typrelid = 0 OR (SELECT c.relkind = 'c' FROM pg_catalog.pg_class c WHERE c.oid = t.typrelid))
       AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_type el WHERE el.oid = t.typelem AND el.typarray = t.oid)
-          AND n.nspname <> 'pg_catalog'
+           AND n.nspname <> 'pg_catalog'
           AND n.nspname <> 'information_schema'
       AND pg_catalog.pg_type_is_visible(t.oid)
     ORDER BY 1, 2;
@@ -309,7 +314,7 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     config.Config.set("compiler_rest_transport", "port", port)
     config.Config.set("client_rest_transport", "port", port)
     config.Config.set("cmdline_rest_transport", "port", port)
-    config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
+    config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("server", "auto-recompile-wait", "0")
     config.Config.set("agent", "agent-repair-interval", "0")
@@ -393,7 +398,7 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
     config.Config.set("compiler_rest_transport", "port", port)
     config.Config.set("client_rest_transport", "port", port)
     config.Config.set("cmdline_rest_transport", "port", port)
-    config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
+    config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("agent", "agent-repair-interval", "0")
     config.Config.set("server", "auto-recompile-wait", "0")
@@ -557,21 +562,24 @@ class SnippetCompilationTest(KeepOnFail):
         self.keep_shared = True
         return {"env": self.env, "libs": self.libs, "project": self.project_dir}
 
-    def setup_for_snippet(self, snippet, autostd=True):
-        self.setup_for_snippet_external(snippet)
-
+    def setup_for_snippet(self, snippet, autostd=True, libs_dir=None):
+        self.setup_for_snippet_external(snippet, libs_dir=libs_dir)
         Project.set(Project(self.project_dir, autostd=autostd))
 
-    def setup_for_snippet_external(self, snippet):
+    def setup_for_snippet_external(self, snippet, libs_dir=None):
+        if libs_dir:
+            module_path = f"[{self.libs}, {libs_dir}]"
+        else:
+            module_path = f"{self.libs}"
         with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
             cfg.write(
                 """
             name: snippet test
-            modulepath: [%s, %s]
+            modulepath: %s
             downloadpath: %s
             version: 1.0
             repo: ['https://github.com/inmanta/']"""
-                % (self.libs, os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"), self.libs)
+                % (module_path, self.libs)
             )
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w") as x:
@@ -616,8 +624,8 @@ class SnippetCompilationTest(KeepOnFail):
     async def do_export_and_deploy(self, include_status=False, do_raise=True):
         return await off_main_thread(lambda: self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
 
-    def setup_for_error(self, snippet, shouldbe):
-        self.setup_for_snippet(snippet)
+    def setup_for_error(self, snippet, shouldbe, libs_dir=None):
+        self.setup_for_snippet(snippet, libs_dir=libs_dir)
         try:
             compiler.do_compile()
             assert False, "Should get exception"
@@ -627,8 +635,8 @@ class SnippetCompilationTest(KeepOnFail):
             shouldbe = shouldbe.format(dir=self.project_dir)
             assert shouldbe == text
 
-    def setup_for_error_re(self, snippet, shouldbe):
-        self.setup_for_snippet(snippet)
+    def setup_for_error_re(self, snippet, shouldbe, libs_dir=None):
+        self.setup_for_snippet(snippet, libs_dir=libs_dir)
         try:
             compiler.do_compile()
             assert False, "Should get exception"
@@ -652,6 +660,11 @@ def snippetcompiler(snippetcompiler_global):
     snippetcompiler_global.setup_func()
     yield snippetcompiler_global
     snippetcompiler_global.tear_down_func()
+
+
+@pytest.fixture(scope="session")
+def modules_dir():
+    yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules")
 
 
 class CLI(object):

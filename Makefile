@@ -9,6 +9,11 @@ install:
 	pip install -U -r requirements.txt
 	pip install -e .
 
+.PHONY: install-inmanta-tests
+install-inmanta-tests:
+	pip install -U setuptools pip
+	pip install -e ./tests_common
+
 .PHONY: format
 format:
 	$(isort)

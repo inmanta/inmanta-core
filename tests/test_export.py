@@ -20,12 +20,13 @@ import pytest
 from inmanta import config, const
 
 
-def test_id_mapping_export(snippetcompiler):
+def test_id_mapping_export(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """import exp
 
         exp::Test(name="a", agent="b")
-        """
+        """,
+        libs_dir=modules_dir,
     )
 
     _version, json_value = snippetcompiler.do_export()
@@ -35,46 +36,49 @@ def test_id_mapping_export(snippetcompiler):
     assert resource.id.attribute_value == "test_value_a"
 
 
-def test_unknown_agent(snippetcompiler):
+def test_unknown_agent(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """import exp
         import tests
 
         exp::Test(name="a", agent=tests::unknown())
-        """
+        """,
+        libs_dir=modules_dir,
     )
     _version, json_value = snippetcompiler.do_export()
 
     assert len(json_value) == 0
 
 
-def test_unknown_attribute_value(snippetcompiler):
+def test_unknown_attribute_value(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """import exp
         import tests
 
         exp::Test(name=tests::unknown(), agent="b")
-        """
+        """,
+        libs_dir=modules_dir,
     )
     _version, json_value = snippetcompiler.do_export()
 
     assert len(json_value) == 0
 
 
-def test_ignore_resource(snippetcompiler):
+def test_ignore_resource(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """import exp
         import tests
 
         exp::Test(name="a", agent="b", managed=false)
-        """
+        """,
+        libs_dir=modules_dir,
     )
     _version, json_value = snippetcompiler.do_export()
 
     assert len(json_value) == 0
 
 
-def test_ignore_resource_requires(snippetcompiler, caplog):
+def test_ignore_resource_requires(snippetcompiler, caplog, modules_dir):
     snippetcompiler.setup_for_snippet(
         """import exp
         import tests
@@ -82,7 +86,8 @@ def test_ignore_resource_requires(snippetcompiler, caplog):
         a = exp::Test(name="a", agent="aa", managed=false)
         b = exp::Test(name="b", agent="aa", requires=a)
         c = exp::Test(name="c", agent="aa", requires=b)
-        """
+        """,
+        libs_dir=modules_dir,
     )
     _version, json_value = snippetcompiler.do_export()
     assert len(json_value) == 2
@@ -106,7 +111,7 @@ def test_ignore_resource_requires(snippetcompiler, caplog):
     assert assert_count == 2
 
 
-def test_unknown_in_id_requires(snippetcompiler, caplog):
+def test_unknown_in_id_requires(snippetcompiler, caplog, modules_dir):
     """
         Test to validate that resources that have an unknown in their ID attributes, are removed from requires
     """
@@ -117,7 +122,8 @@ def test_unknown_in_id_requires(snippetcompiler, caplog):
         a = exp::Test(name=tests::unknown(), agent="aa")
         b = exp::Test(name="b", agent="aa", requires=a)
         c = exp::Test(name="c", agent="aa", requires=b)
-        """
+        """,
+        libs_dir=modules_dir,
     )
     config.Config.set("unknown_handler", "default", "prune-resource")
     _version, json_value = snippetcompiler.do_export()
@@ -143,7 +149,7 @@ def test_unknown_in_id_requires(snippetcompiler, caplog):
     assert assert_count == 2
 
 
-def test_unknown_in_attribute_requires(snippetcompiler, caplog):
+def test_unknown_in_attribute_requires(snippetcompiler, caplog, modules_dir):
     """
         Test to validate that resources that have an unknown in their ID attributes, are removed from requires
     """
@@ -154,7 +160,8 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
         a = exp::Test(name="a", agent="aa", field1=tests::unknown())
         b = exp::Test(name="b", agent="aa", requires=a)
         c = exp::Test(name="c", agent="aa", requires=b)
-        """
+        """,
+        libs_dir=modules_dir,
     )
     config.Config.set("unknown_handler", "default", "prune-resource")
     _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
@@ -173,22 +180,24 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
 
 
 @pytest.mark.asyncio
-async def test_empty_server_export(snippetcompiler, server, client):
+async def test_empty_server_export(snippetcompiler, server, client, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
             h = std::Host(name="test", os=std::linux)
-        """
+        """,
+        libs_dir=modules_dir,
     )
     await snippetcompiler.do_export_and_deploy()
 
 
 @pytest.mark.asyncio
-async def test_server_export(snippetcompiler, server, client, environment):
+async def test_server_export(snippetcompiler, server, client, environment, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
             h = std::Host(name="test", os=std::linux)
             f = std::ConfigFile(host=h, path="/etc/motd", content="test")
-        """
+        """,
+        libs_dir=modules_dir,
     )
     await snippetcompiler.do_export_and_deploy()
 
@@ -199,14 +208,15 @@ async def test_server_export(snippetcompiler, server, client, environment):
 
 
 @pytest.mark.asyncio
-async def test_dict_export_server(snippetcompiler, server, client, environment):
+async def test_dict_export_server(snippetcompiler, server, client, environment, modules_dir):
     config.Config.set("config", "environment", environment)
     snippetcompiler.setup_for_snippet(
         """
 import exp
 
 a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
-"""
+""",
+        libs_dir=modules_dir,
     )
 
     await snippetcompiler.do_export_and_deploy()
@@ -217,13 +227,14 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
     assert result.result["versions"][0]["total"] == 1
 
 
-def test_dict_export(snippetcompiler):
+def test_dict_export(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 import exp
 
 a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
-"""
+""",
+        libs_dir=modules_dir,
     )
     _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
 

@@ -22,12 +22,13 @@ import inmanta.compiler as compiler
 from inmanta.ast import DuplicateException, NotFoundException, TypeNotFoundException, TypingException
 
 
-def test_issue_92(snippetcompiler):
+def test_issue_92(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
     entity Host extends std::NotThere:
     end
-"""
+""",
+        libs_dir=modules_dir,
     )
     try:
         compiler.do_compile()
@@ -36,17 +37,18 @@ def test_issue_92(snippetcompiler):
         assert e.location.lnr == 2
 
 
-def test_issue_73(snippetcompiler):
+def test_issue_73(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 vm1 = std::floob()
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(TypeNotFoundException):
         compiler.do_compile()
 
 
-def test_issue_110_resolution(snippetcompiler):
+def test_issue_110_resolution(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -60,26 +62,28 @@ implementation test1i for Test1:
 end
 
 t = Test1()
-"""
+""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(NotFoundException):
         compiler.do_compile()
 
 
-def test_issue_134_colliding_umplementations(snippetcompiler):
+def test_issue_134_colliding_umplementations(snippetcompiler, modules_dir):
 
     snippetcompiler.setup_for_snippet(
         """
 implementation test for std::Entity:
 end
 implementation test for std::Entity:
-end"""
+end""",
+        libs_dir=modules_dir,
     )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
-def test_issue_164_fqn_in_when(snippetcompiler):
+def test_issue_164_fqn_in_when(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 implementation linux for std::HostConfig:
@@ -88,24 +92,26 @@ end
 implement std::HostConfig using linux when host.os == std::linux
 
 std::Host(name="vm1", os=std::linux)
-"""
+""",
+        libs_dir=modules_dir,
     )
     compiler.do_compile()
 
 
-def test_400_typeloops(snippetcompiler):
+def test_400_typeloops(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
     entity Test extends Test:
 
     end
-    """
+    """,
+        libs_dir=modules_dir,
     )
     with pytest.raises(TypingException):
         compiler.do_compile()
 
 
-def test_400_typeloops_2(snippetcompiler):
+def test_400_typeloops_2(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
     entity Test extends Test2:
@@ -115,13 +121,14 @@ def test_400_typeloops_2(snippetcompiler):
     entity Test2 extends Test:
 
     end
-    """
+    """,
+        libs_dir=modules_dir,
     )
     with pytest.raises(TypingException):
         compiler.do_compile()
 
 
-def test_438_parent_scopes_accessible(snippetcompiler):
+def test_438_parent_scopes_accessible(snippetcompiler, modules_dir):
 
     snippetcompiler.setup_for_snippet(
         """
@@ -154,12 +161,13 @@ implement HostConfig using test
 Host(name="bar")
 """,
         autostd=False,
+        libs_dir=modules_dir,
     )
     with pytest.raises(NotFoundException):
         compiler.do_compile()
 
 
-def test_438_parent_scopes_accessible_2(snippetcompiler):
+def test_438_parent_scopes_accessible_2(snippetcompiler, modules_dir):
 
     snippetcompiler.setup_for_snippet(
         """
@@ -189,12 +197,13 @@ implement HostConfig using test
 Host(name="bar")
 """,
         autostd=False,
+        libs_dir=modules_dir,
     )
     with pytest.raises(NotFoundException):
         compiler.do_compile()
 
 
-def test_484_attr_redef(snippetcompiler):
+def test_484_attr_redef(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_snippet(
         """
 typedef type as string matching self == "component" or self == "package" or self == "frame"
@@ -211,22 +220,24 @@ entity Service extends Group:
 end
 """,
         autostd=False,
+        libs_dir=modules_dir,
     )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
-def test_bad_deref(snippetcompiler):
+def test_bad_deref(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_error(
         """
 h = std::Host(name="test", os=std::linux)
 std::print(h.name.test)
 """,
         "can not get a attribute test, test not an entity (reported in h.name.test ({dir}/main.cf:3))",
+        libs_dir=modules_dir,
     )
 
 
-def test_672_missing_type(snippetcompiler):
+def test_672_missing_type(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_error(
         """
         entity Test:
@@ -237,4 +248,5 @@ def test_672_missing_type(snippetcompiler):
 
         """,
         "could not find type Testt in namespace __config__" " (reported in Implementation(test) ({dir}/main.cf:5))",
+        libs_dir=modules_dir,
     )

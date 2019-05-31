@@ -24,7 +24,7 @@ from tornado import process
 from inmanta import deploy
 
 
-def test_deploy(snippetcompiler, tmpdir, postgres_db):
+def test_deploy(snippetcompiler, tmpdir, postgres_db, modules_dir):
     file_name = tmpdir.join("test_file")
     # TODO: when agentconfig deploys no longer require an agent restart, define a new agent. Currently this makes the
     # test to slow.
@@ -33,7 +33,8 @@ def test_deploy(snippetcompiler, tmpdir, postgres_db):
     host = std::Host(name="internal", os=std::linux)
     file = std::Symlink(host=host, source="/dev/null", target="%s")
     """
-        % file_name
+        % file_name,
+        libs_dir=modules_dir,
     )
 
     os.chdir(snippetcompiler.project_dir)

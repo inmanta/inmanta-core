@@ -17,7 +17,7 @@
 """
 
 
-def test_typedef_in_non_constant(snippetcompiler):
+def test_typedef_in_non_constant(snippetcompiler, modules_dir):
     # noqa: E501
     snippetcompiler.setup_for_error(
         """
@@ -35,10 +35,11 @@ Test(value="a")
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:11)` (reported in Construct(Test) ({dir}/main.cf:11))
 caused by:
   Could not resolve the value a in this static context (reported in a ({dir}/main.cf:3:41))""",  # noqa: E501
+        libs_dir=modules_dir,
     )
 
 
-def test_typedef_in_violates(snippetcompiler):
+def test_typedef_in_violates(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_error(
         """
 typedef abc as string matching self in ["a","b","c"]
@@ -54,11 +55,13 @@ Test(value="ab")
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:10)` (reported in Construct(Test) ({dir}/main.cf:10))
 caused by:
   Invalid value 'ab', constraint does not match (reported in __config__::abc ({dir}/main.cf:2:9))""",  # noqa: E501
+        libs_dir=modules_dir,
     )
 
 
-def test_typedef_exception(snippetcompiler):
+def test_typedef_exception(snippetcompiler, modules_dir):
     snippetcompiler.setup_for_error(
         "typedef test as string matching std::to_number({}) > 0",
         """typedef expressions should reference the self variable (reported in Type(test) ({dir}/main.cf:1:9))""",
+        libs_dir=modules_dir,
     )
