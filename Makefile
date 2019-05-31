@@ -9,9 +9,10 @@ install:
 	pip install -U -r requirements.txt
 	pip install -e .
 
-.PHONY: install-inmanta-tests
-install-inmanta-tests:
+.PHONY: install-tests
+install-tests:
 	pip install -U setuptools pip
+	python3 tests_common/copy_files_from_core.py
 	pip install -e ./tests_common
 
 .PHONY: format
