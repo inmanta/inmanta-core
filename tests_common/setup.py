@@ -1,6 +1,12 @@
+from os import path
+
 from setuptools import find_packages, setup
 
 requires = ["asyncpg", "pyformance", "tornado", "click", "typing", "pytest-postgresql", "pytest-asyncio", "pytest-env"]
+
+this_directory = path.abspath(path.dirname(__file__))
+with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
+    long_description = f.read()
 
 setup(
     version="2019.3",
@@ -8,7 +14,7 @@ setup(
     # Meta data
     name="pytest-inmanta-tests",
     description="Inmanta tests package",
-    long_description="This package contains test code which is used by the Inmanta core and its extensions",
+    long_description=long_description,
     long_description_content_type="text/markdown",
     author="Inmanta",
     author_email="code@inmanta.com",
