@@ -56,6 +56,7 @@ from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_free_tcp_port
 
+# Import the utils module differently when conftest is put into the inmanta_tests package
 if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
     import inmanta_tests.utils  # noqa: F401
 else:
