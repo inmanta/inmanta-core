@@ -1,15 +1,6 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
-requires = [
-    "asyncpg",
-    "pyformance",
-    "tornado",
-    "click",
-    "typing",
-    "pytest-postgresql",
-    "pytest-asyncio",
-    "pytest-env",
-]
+requires = ["asyncpg", "pyformance", "tornado", "click", "typing", "pytest-postgresql", "pytest-asyncio", "pytest-env"]
 
 setup(
     version="2019.3",
@@ -18,7 +9,7 @@ setup(
     name="pytest-inmanta-tests",
     description="Inmanta tests package",
     long_description="This package contains test code which is used by the Inmanta core and its extensions",
-    long_description_content_type='text/markdown',
+    long_description_content_type="text/markdown",
     author="Inmanta",
     author_email="code@inmanta.com",
     url="https://github.com/inmanta/inmanta",
@@ -35,9 +26,7 @@ setup(
         "Framework :: Pytest",
     ],
     keywords="pytest inmanta tests",
-    project_urls={
-        "Bug Tracker": "https://github.com/inmanta/inmanta/issues"
-    },
+    project_urls={"Bug Tracker": "https://github.com/inmanta/inmanta/issues"},
     # Packaging
     package_dir={"": "src"},
     packages=find_packages("src"),

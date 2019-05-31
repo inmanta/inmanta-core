@@ -16,4 +16,4 @@
     Contact: code@inmanta.com
 """
 
-from inmanta_tests.conftest import *
+from inmanta_tests.conftest import *  # noqa: F401, F403

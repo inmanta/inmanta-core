@@ -1,7 +1,7 @@
 # Shortcuts for various dev tasks. Based on makefile from pydantic
 .DEFAULT_GOAL := all
-isort = isort -rc src tests
-black = black src tests
+isort = isort -rc src tests tests_common
+black = black src tests tests_common
 
 .PHONY: install
 install:
@@ -22,7 +22,7 @@ format:
 .PHONY: pep8
 pep8:
 	pip install -c requirements.txt pep8-naming flake8-black flake8-isort
-	flake8 src tests
+	flake8 src tests tests_common
 
 .PHONY: mypy
 mypy:

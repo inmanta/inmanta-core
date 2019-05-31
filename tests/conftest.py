@@ -59,7 +59,7 @@ from inmanta.util import get_free_tcp_port
 if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
     import inmanta_tests.utils  # noqa: F401
 else:
-    import utils  # noqa: F401
+    import utils
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 logger = logging.getLogger(__name__)
