@@ -21,7 +21,7 @@ sphinx-argparse==0.2.5
 sphinx-autodoc-annotation==1.0-1
 sphinx-rtd-theme==0.4.3
 sphinx-tabs==1.1.10
-sphinx==1.8.5
+sphinx==2.1.0
 texttable==1.6.1
 tornado==6.0.2
 tox==3.12.1
