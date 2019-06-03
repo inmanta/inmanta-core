@@ -27,14 +27,27 @@ data_dir = os.path.join(tests_dir, "data")
 # Destination dirs
 dest_dir = os.path.join(script_dir, "src", "inmanta_tests")
 dest_data_dir = os.path.join(dest_dir, "data")
+
+
+# cleanup
+if os.path.exists(dest_data_dir):
+    shutil.rmtree(dest_data_dir)
 os.makedirs(dest_data_dir, exist_ok=True)
 
 # Files/Directories to copy
 conftest_py = os.path.join(tests_dir, "conftest.py")
+dest_conftest_py = os.path.join(dest_dir, "conftest.py")
 utils_py = os.path.join(tests_dir, "utils.py")
+dest_utils_py = os.path.join(dest_dir, "utils.py")
 server_crt_file = os.path.join(data_dir, "server.crt")
 server_open_key_file = os.path.join(data_dir, "server.open.key")
 enduser_certs_dir = os.path.join(data_dir, "ca", "enduser-certs")
+
+if os.path.exists(dest_conftest_py):
+    os.remove(dest_conftest_py)
+
+if os.path.exists(dest_utils_py):
+    os.remove(dest_utils_py)
 
 # Copy files
 shutil.copy(conftest_py, dest_dir)
