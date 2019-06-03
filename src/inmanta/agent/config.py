@@ -32,6 +32,7 @@ agent_map = Option(
 agent map it can be mapped to other hosts. This value consists of a list of key/value pairs. The key is the name of the
 agent and the format of the value is described in :inmanta:entity:`std::AgentConfig`
 
+
 example: iaas_openstack=localhost,vm1=192.16.13.2""",
     is_map,
 )
