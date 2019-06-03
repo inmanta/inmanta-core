@@ -246,3 +246,6 @@ texinfo_documents = [
 
 linkcheck_ignore = [r'http(s)?://localhost:\d+/', r'http://127.0.0.1:\d+']
 
+# Do not print the warning that tabs only work in html
+# https://github.com/djungelorm/sphinx-tabs/issues/39
+sphinx_tabs_nowarn = True
