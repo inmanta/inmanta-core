@@ -22,14 +22,13 @@ from io import StringIO
 import inmanta.compiler as compiler
 
 
-def test_order_of_execution(snippetcompiler, modules_dir):
+def test_order_of_execution(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 for i in std::sequence(10):
     std::print(i)
 end
-        """,
-        libs_dir=modules_dir,
+        """
     )
 
     saved_stdout = sys.stdout
@@ -43,7 +42,7 @@ end
         sys.stdout = saved_stdout
 
 
-def test_for_error(snippetcompiler, modules_dir):
+def test_for_error(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
         entity A:
@@ -55,16 +54,14 @@ def test_for_error(snippetcompiler, modules_dir):
         end
     """,
         "A for loop can only be applied to lists and relations (reported in For(i) ({dir}/main.cf:7))",
-        libs_dir=modules_dir,
     )
 
 
-def test_for_error_2(snippetcompiler, modules_dir):
+def test_for_error_2(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
         for i in "foo":
         end
     """,
         "A for loop can only be applied to lists and relations (reported in For(i) ({dir}/main.cf:2))",
-        libs_dir=modules_dir,
     )

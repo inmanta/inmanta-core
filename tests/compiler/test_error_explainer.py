@@ -22,7 +22,7 @@ from inmanta.ast import AttributeException
 from inmanta.compiler.help.explainer import ExplainerFactory
 
 
-def test_optional_loop_forward(snippetcompiler, modules_dir):
+def test_optional_loop_forward(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Thing:
@@ -40,8 +40,7 @@ end
 implement Thing using setother when not (other is defined)
 
 Thing(name="a")
-""",
-        libs_dir=modules_dir,
+"""
     )
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()
@@ -80,7 +79,7 @@ The procedure to solve this is the following:
     )
 
 
-def test_optional_loop_forward_tty(snippetcompiler, modules_dir):
+def test_optional_loop_forward_tty(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Thing:
@@ -98,8 +97,7 @@ end
 implement Thing using setother when not (other is defined)
 
 Thing(name="a")
-""",
-        libs_dir=modules_dir,
+"""
     )
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()
@@ -140,7 +138,7 @@ The procedure to solve this is the following:
     )
 
 
-def test_optional_loop_reverse(snippetcompiler, modules_dir):
+def test_optional_loop_reverse(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Thing:
@@ -159,8 +157,7 @@ end
 implement Thing using setother when not (other is defined)
 
 Thing(name="a")
-""",
-        libs_dir=modules_dir,
+"""
     )
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()
@@ -199,7 +196,7 @@ The procedure to solve this is the following:
     )
 
 
-def test_optional_loop_list(snippetcompiler, modules_dir):
+def test_optional_loop_list(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Thing:
@@ -219,8 +216,7 @@ implement Thing using setother when std::count(other) == 1
 
 t = Thing(name="a")
 t.other = Thing(name="b")
-""",
-        libs_dir=modules_dir,
+"""
     )
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()

@@ -18,7 +18,7 @@
 import inmanta.compiler as compiler
 
 
-def test_str_on_instance_pos(snippetcompiler, modules_dir):
+def test_str_on_instance_pos(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 import std
@@ -40,15 +40,14 @@ end
 for i in hg.hosts:
     std::ConfigFile(host=i, path="/fx", content="")
 end
-""",
-        libs_dir=modules_dir,
+"""
     )
     (types, _) = compiler.do_compile()
     files = types["std::File"].get_all_instances()
     assert len(files) == 3
 
 
-def test_str_on_instance_neg(snippetcompiler, modules_dir):
+def test_str_on_instance_neg(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 import std
@@ -70,15 +69,14 @@ end
 for i in hg.hosts:
     std::ConfigFile(host=i, path="/fx", content="")
 end
-""",
-        libs_dir=modules_dir,
+"""
     )
     (types, _) = compiler.do_compile()
     files = types["std::File"].get_all_instances()
     assert len(files) == 1
 
 
-def test_implements_inheritance(snippetcompiler, modules_dir):
+def test_implements_inheritance(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
@@ -98,8 +96,7 @@ implement Test using test
 implement TestC using parents
 
 a = TestC()
-""",
-        libs_dir=modules_dir,
+"""
     )
     (_, scopes) = compiler.do_compile()
 
@@ -107,71 +104,65 @@ a = TestC()
     assert "xx" == root.lookup("a").get_value().lookup("a").get_value()
 
 
-def test_keyword_excn(snippetcompiler, modules_dir):
+def test_keyword_excn(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
        index = ""
 """,
         "Syntax error invalid identifier, index is a reserved keyword ({dir}/main.cf:2:8)",
-        libs_dir=modules_dir,
     )
 
 
-def test_keyword_excn2(snippetcompiler, modules_dir):
+def test_keyword_excn2(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
        implementation index for std::Entity:
        end
 """,
         "Syntax error invalid identifier, index is a reserved keyword ({dir}/main.cf:2:23)",
-        libs_dir=modules_dir,
     )
 
 
-def test_keyword_excn3(snippetcompiler, modules_dir):
+def test_keyword_excn3(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
        implementation aaa for index::Entity:
        end
 """,
         "Syntax error invalid identifier, index is a reserved keyword ({dir}/main.cf:2:31)",
-        libs_dir=modules_dir,
     )
 
 
-def test_cid_excn(snippetcompiler, modules_dir):
+def test_cid_excn(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
        entity test:
        end
 """,
         "Syntax error Invalid identifier: Entity names must start with a capital ({dir}/main.cf:2:15)",
-        libs_dir=modules_dir,
     )
 
 
-def test_cid_excn2(snippetcompiler, modules_dir):
+def test_cid_excn2(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
        entity Test extends test:
        end
 """,
         "Syntax error Invalid identifier: Entity names must start with a capital ({dir}/main.cf:2:28)",
-        libs_dir=modules_dir,
     )
 
 
-def test_bad_var(snippetcompiler, modules_dir):
+def test_bad_var(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
         a=b
 """,
         "variable b not found (reported in a = b ({dir}/main.cf:2))",
-        libs_dir=modules_dir,
     )
 
 
-def test_bad_type(snippetcompiler, modules_dir):
+def test_bad_type(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
 entity Test1:
@@ -184,11 +175,10 @@ Test1(a=3)
         """(reported in Construct(Test1) ({dir}/main.cf:6))
 caused by:
   Invalid value '3', expected String (reported in Construct(Test1) ({dir}/main.cf:6))""",
-        libs_dir=modules_dir,
     )
 
 
-def test_bad_type_2(snippetcompiler, modules_dir):
+def test_bad_type_2(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
 import std
@@ -205,11 +195,10 @@ t1.a=3
         """Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:10)` (reported in t1.a = 3 ({dir}/main.cf:11))
 caused by:
   Invalid value '3', expected String (reported in t1.a = 3 ({dir}/main.cf:11))""",  # noqa: E501
-        libs_dir=modules_dir,
     )
 
 
-def test_value_set_twice(snippetcompiler, modules_dir):
+def test_value_set_twice(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
 test = "a"
@@ -221,5 +210,4 @@ test = "b"
 \tnew value: b
 \t\tset at {dir}/main.cf:3
  (reported in test = 'b' ({dir}/main.cf:3))""",
-        libs_dir=modules_dir,
     )

@@ -18,7 +18,7 @@
 import inmanta.compiler as compiler
 
 
-def test_doc_string_on_new_relation(snippetcompiler, modules_dir):
+def test_doc_string_on_new_relation(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity File:
@@ -31,14 +31,13 @@ File.host [1] -- Host
 \"""
 Each file needs to be associated with a host
 \"""
-""",
-        libs_dir=modules_dir,
+"""
     )
     (types, _) = compiler.do_compile()
     assert types["__config__::File"].get_attribute("host").comment.strip() == "Each file needs to be associated with a host"
 
 
-def test_doc_string_on_relation(snippetcompiler, modules_dir):
+def test_doc_string_on_relation(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity File:
@@ -51,15 +50,14 @@ File file [1] -- [0:] Host host
 \"""
 Each file needs to be associated with a host
 \"""
-""",
-        libs_dir=modules_dir,
+"""
     )
     (types, _) = compiler.do_compile()
     assert types["__config__::File"].get_attribute("host").comment.strip() == "Each file needs to be associated with a host"
     assert types["__config__::Host"].get_attribute("file").comment.strip() == "Each file needs to be associated with a host"
 
 
-def test_function_in_typedef(snippetcompiler, modules_dir):
+def test_function_in_typedef(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 import tests
@@ -74,27 +72,25 @@ end
 A(ne="aa", uc="")
 
 implement A using std::none
-""",
-        libs_dir=modules_dir,
+"""
     )
     (types, _) = compiler.do_compile()
 
 
-def test_doc_string_on_typedef(snippetcompiler, modules_dir):
+def test_doc_string_on_typedef(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 typedef foo as string matching /^a+$/
 \"""
     Foo is a stringtype that only allows "a"
 \"""
-""",
-        libs_dir=modules_dir,
+"""
     )
     (types, _) = compiler.do_compile()
     assert types["__config__::foo"].comment.strip() == 'Foo is a stringtype that only allows "a"'
 
 
-def test_doc_string_on_typedefault(snippetcompiler, modules_dir):
+def test_doc_string_on_typedefault(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity File:
@@ -105,14 +101,13 @@ typedef Foo as File(x=5)
 \"""
     Foo is a stringtype that only allows "a"
 \"""
-""",
-        libs_dir=modules_dir,
+"""
     )
     (types, _) = compiler.do_compile()
     assert types["__config__::Foo"].comment.strip() == 'Foo is a stringtype that only allows "a"'
 
 
-def test_doc_string_on_impl(snippetcompiler, modules_dir):
+def test_doc_string_on_impl(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Host:
@@ -123,15 +118,14 @@ implementation test for Host:
         Bla bla
     \"""
 end
-""",
-        libs_dir=modules_dir,
+"""
     )
 
     (types, _) = compiler.do_compile()
     assert types["__config__::Host"].implementations[0].comment.strip() == "Bla bla"
 
 
-def test_doc_string_on_implements(snippetcompiler, modules_dir):
+def test_doc_string_on_implements(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Host:
@@ -144,8 +138,7 @@ implement Host using test
 \"""
     Always use test!
 \"""
-""",
-        libs_dir=modules_dir,
+"""
     )
     (types, _) = compiler.do_compile()
 

@@ -22,7 +22,7 @@ from inmanta.export import DependencyCycleException
 from utils import assert_graph
 
 
-def test_abstract_requires(snippetcompiler, modules_dir):
+def test_abstract_requires(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 host = std::Host(name="host", os=std::unix)
@@ -43,15 +43,14 @@ pre = std::ConfigFile(path="host0", host=host, content="")
 post = std::ConfigFile(path="hosts4", host=host, content="")
 
 inter = A(name = "inter")
-""",
-        libs_dir=modules_dir,
+"""
     )
 
     v, resources = snippetcompiler.do_export()
     assert_graph(resources, """inter2: inter1""")
 
 
-def test_abstract_requires_3(snippetcompiler, modules_dir):
+def test_abstract_requires_3(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 host = std::Host(name="host", os=std::unix)
@@ -76,8 +75,7 @@ post = std::ConfigFile(path="post", host=host, content="")
 inter = A(name = "inter")
 inter.requires = pre
 post.requires = inter
-""",
-        libs_dir=modules_dir,
+"""
     )
 
     v, resources = snippetcompiler.do_export()
@@ -89,7 +87,7 @@ post.requires = inter
     )
 
 
-def test_abstract_requires_2(snippetcompiler, caplog, modules_dir):
+def test_abstract_requires_2(snippetcompiler, caplog):
     snippetcompiler.setup_for_snippet(
         """
 host = std::Host(name="host", os=std::unix)
@@ -112,8 +110,7 @@ post = std::ConfigFile(path="hosts4", host=host, content="")
 inter = A(name = "inter")
 inter.requires = pre
 post.requires = inter
-""",
-        libs_dir=modules_dir,
+"""
     )
 
     snippetcompiler.do_export()
@@ -126,7 +123,7 @@ post.requires = inter
     assert len(warning) == 1
 
 
-def test_issue_220_dep_loops(snippetcompiler, modules_dir):
+def test_issue_220_dep_loops(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 import std
@@ -140,8 +137,7 @@ f1.requires = f2
 f2.requires = f3
 f3.requires = f1
 f4.requires = f1
-""",
-        libs_dir=modules_dir,
+"""
     )
     with pytest.raises(DependencyCycleException) as e:
         snippetcompiler.do_export()

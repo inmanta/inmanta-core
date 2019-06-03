@@ -17,7 +17,7 @@
 """
 
 
-def test_plugin_excn(snippetcompiler, modules_dir):
+def test_plugin_excn(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
         import std
@@ -27,5 +27,4 @@ def test_plugin_excn(snippetcompiler, modules_dir):
 caused by:
   jinja2.exceptions.TemplateNotFound: /tet.tmpl
 """,
-        libs_dir=modules_dir,
     )

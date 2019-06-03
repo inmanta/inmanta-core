@@ -22,7 +22,7 @@ from inmanta.ast import AttributeException, OptionalValueException, RuntimeExcep
 from inmanta.parser import ParserException
 
 
-def test_list_atributes(snippetcompiler, modules_dir):
+def test_list_atributes(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Jos:
@@ -40,8 +40,7 @@ b = Jos(bar = [true, false])
 c = Jos(bar = [])
 d = Jos(bar = [], floom=["test","test2"])
 
-""",
-        libs_dir=modules_dir,
+"""
     )
     (_, root) = compiler.do_compile()
 
@@ -61,7 +60,7 @@ d = Jos(bar = [], floom=["test","test2"])
     check_jos(scope.lookup("d"), [], floom=["test", "test2"])
 
 
-def test_list_atribute_type_violation_1(snippetcompiler, modules_dir):
+def test_list_atribute_type_violation_1(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Jos:
@@ -69,14 +68,13 @@ entity Jos:
 end
 implement Jos using std::none
 c = Jos()
-""",
-        libs_dir=modules_dir,
+"""
     )
     with pytest.raises(ParserException):
         compiler.do_compile()
 
 
-def test_list_atribute_type_violation_2(snippetcompiler, modules_dir):
+def test_list_atribute_type_violation_2(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Jos:
@@ -84,14 +82,13 @@ entity Jos:
 end
 implement Jos using std::none
 c = Jos()
-""",
-        libs_dir=modules_dir,
+"""
     )
     with pytest.raises(RuntimeException):
         compiler.do_compile()
 
 
-def test_list_atribute_type_violation_3(snippetcompiler, modules_dir):
+def test_list_atribute_type_violation_3(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Jos:
@@ -99,14 +96,13 @@ entity Jos:
 end
 implement Jos using std::none
 c = Jos(bar = ["X"])
-""",
-        libs_dir=modules_dir,
+"""
     )
     with pytest.raises(RuntimeException):
         compiler.do_compile()
 
 
-def test_issue_235_empty_lists(snippetcompiler, modules_dir):
+def test_issue_235_empty_lists(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -122,8 +118,7 @@ Test1 tests [0:] -- [0:] Test2 tests
 
 t1 = Test1(tests=[])
 std::print(t1.tests)
-""",
-        libs_dir=modules_dir,
+"""
     )
     (_, root) = compiler.do_compile()
     scope = root.get_child("__config__").scope
@@ -131,7 +126,7 @@ std::print(t1.tests)
     assert scope.lookup("t1").get_value().get_attribute("tests").get_value() == []
 
 
-def test_608_list_to_list(snippetcompiler, modules_dir):
+def test_608_list_to_list(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 implementation none for std::Entity:
@@ -166,13 +161,12 @@ c1 = C(name="c1")
 
 b1.a = a1
 b1.a = c1.a
-""",
-        libs_dir=modules_dir,
+"""
     )
     (_, scopes) = compiler.do_compile()
 
 
-def test_608_list_to_single(snippetcompiler, modules_dir):
+def test_608_list_to_single(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 implementation none for std::Entity:
@@ -206,14 +200,13 @@ b1 = B(name="b1")
 c1 = C(name="c1")
 
 b1.a = c1.a
-""",
-        libs_dir=modules_dir,
+"""
     )
     with pytest.raises(AttributeException):
         (_, scopes) = compiler.do_compile()
 
 
-def test_608_opt_to_list(snippetcompiler, modules_dir):
+def test_608_opt_to_list(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 implementation none for std::Entity:
@@ -248,14 +241,13 @@ c1 = C(name="c1")
 
 b1.a = a1
 b1.a = c1.a
-""",
-        libs_dir=modules_dir,
+"""
     )
     with pytest.raises(OptionalValueException):
         (_, scopes) = compiler.do_compile()
 
 
-def test_608_opt_to_single(snippetcompiler, modules_dir):
+def test_608_opt_to_single(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 implementation none for std::Entity:
@@ -289,14 +281,13 @@ c1 = C(name="c1")
 
 b1.a = a1
 b1.a = c1.a
-""",
-        libs_dir=modules_dir,
+"""
     )
     with pytest.raises(OptionalValueException):
         (_, scopes) = compiler.do_compile()
 
 
-def test_608_opt_to_single_2(snippetcompiler, modules_dir):
+def test_608_opt_to_single_2(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 implementation none for std::Entity:
@@ -332,13 +323,12 @@ b1.a = a1
 b1.a = c1.a
 
 c1.a = a1
-""",
-        libs_dir=modules_dir,
+"""
     )
     (_, scopes) = compiler.do_compile()
 
 
-def test_633_default_on_list(snippetcompiler, modules_dir):
+def test_633_default_on_list(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Foo:
@@ -353,8 +343,7 @@ end
 implement Foo using none
 
 foo = Foo()
-""",
-        libs_dir=modules_dir,
+"""
     )
     (_, scopes) = compiler.do_compile()
 
@@ -371,7 +360,7 @@ foo = Foo()
     assert third == ["a", "b"]
 
 
-def test_673_in_list(snippetcompiler, modules_dir):
+def test_673_in_list(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
@@ -385,13 +374,12 @@ end
 implement Test using test when "foo" in self.attributes
 
 Test(attributes=["blah", "foo"])
-""",
-        libs_dir=modules_dir,
+"""
     )
     compiler.do_compile()
 
 
-def test_552_string_rendering_for_lists(snippetcompiler, modules_dir):
+def test_552_string_rendering_for_lists(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Network:
@@ -402,8 +390,7 @@ implement Network using std::none
 
 net1 = Network(tags=["vlan"])
 a="Net has tags {{ net1.tags }}"
-""",
-        libs_dir=modules_dir,
+"""
     )
 
     (_, scopes) = compiler.do_compile()
@@ -414,7 +401,7 @@ a="Net has tags {{ net1.tags }}"
     assert a == """Net has tags ['vlan']"""
 
 
-def test_emptylists(snippetcompiler, modules_dir):
+def test_emptylists(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
     implement std::Entity using std::none
@@ -425,13 +412,12 @@ def test_emptylists(snippetcompiler, modules_dir):
 
     a.provides = b.provides
     b.provides = c.provides
-    """,
-        libs_dir=modules_dir,
+    """
     )
     compiler.do_compile()
 
 
-def test_653_list_attribute_unset(snippetcompiler, modules_dir):
+def test_653_list_attribute_unset(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
         entity Test:
@@ -444,5 +430,4 @@ def test_653_list_attribute_unset(snippetcompiler, modules_dir):
         """,
         "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete:"
         " attribute bla ({dir}/main.cf:3) requires 1 values but only 0 are set",
-        libs_dir=modules_dir,
     )

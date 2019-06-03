@@ -23,7 +23,7 @@ from inmanta.ast import OptionalValueException
 from inmanta.execute.util import NoneValue
 
 
-def test_null(snippetcompiler, modules_dir):
+def test_null(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
         entity A:
@@ -32,8 +32,7 @@ def test_null(snippetcompiler, modules_dir):
         implement A using std::none
         a = A()
 
-    """,
-        libs_dir=modules_dir,
+    """
     )
 
     (_, scopes) = compiler.do_compile()
@@ -42,7 +41,7 @@ def test_null(snippetcompiler, modules_dir):
     assert isinstance(a, NoneValue)
 
 
-def test_null_unset(snippetcompiler, modules_dir):
+def test_null_unset(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
         entity A:
@@ -51,8 +50,7 @@ def test_null_unset(snippetcompiler, modules_dir):
         implement A using std::none
         a = A()
 
-    """,
-        libs_dir=modules_dir,
+    """
     )
 
     (_, scopes) = compiler.do_compile()
@@ -61,7 +59,7 @@ def test_null_unset(snippetcompiler, modules_dir):
         root.lookup("a").get_value().get_attribute("a").get_value()
 
 
-def test_null_unset_hang(snippetcompiler, modules_dir):
+def test_null_unset_hang(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
             entity A:
@@ -70,14 +68,13 @@ def test_null_unset_hang(snippetcompiler, modules_dir):
             implement A using std::none
             a = A()
             b = a.a
-        """,
-        libs_dir=modules_dir,
+        """
     )
     with pytest.raises(OptionalValueException):
         (_, scopes) = compiler.do_compile()
 
 
-def test_null_on_list(snippetcompiler, modules_dir):
+def test_null_on_list(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
         entity A:
@@ -85,8 +82,7 @@ def test_null_on_list(snippetcompiler, modules_dir):
         end
         implement A using std::none
         a = A()
-    """,
-        libs_dir=modules_dir,
+    """
     )
 
     (_, scopes) = compiler.do_compile()
@@ -95,7 +91,7 @@ def test_null_on_list(snippetcompiler, modules_dir):
     assert isinstance(a, NoneValue)
 
 
-def test_null_on_dict(snippetcompiler, modules_dir):
+def test_null_on_dict(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
         entity A:
@@ -103,8 +99,7 @@ def test_null_on_dict(snippetcompiler, modules_dir):
         end
         implement A using std::none
         a = A()
-    """,
-        libs_dir=modules_dir,
+    """
     )
 
     (_, scopes) = compiler.do_compile()
@@ -113,7 +108,7 @@ def test_null_on_dict(snippetcompiler, modules_dir):
     assert isinstance(a, NoneValue)
 
 
-def test_null_on_dict_err(snippetcompiler, modules_dir):
+def test_null_on_dict_err(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
         entity A:
@@ -123,11 +118,10 @@ def test_null_on_dict_err(snippetcompiler, modules_dir):
         a = A()
     """,
         'Syntax error null can not be assigned to dict, did you mean "dict? a = null" ({dir}/main.cf:3:18)',
-        libs_dir=modules_dir,
     )
 
 
-def test_null_err(snippetcompiler, modules_dir):
+def test_null_err(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
         entity A:
@@ -140,11 +134,10 @@ def test_null_err(snippetcompiler, modules_dir):
         """Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)` (reported in Construct(A) ({dir}/main.cf:6))
 caused by:
   Invalid value 'null', expected String (reported in Construct(A) ({dir}/main.cf:6))""",  # noqa: E501
-        libs_dir=modules_dir,
     )
 
 
-def test_null_on_list_err(snippetcompiler, modules_dir):
+def test_null_on_list_err(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
         entity A:
@@ -156,5 +149,4 @@ def test_null_on_list_err(snippetcompiler, modules_dir):
         """Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)` (reported in Construct(A) ({dir}/main.cf:6))
 caused by:
   Invalid value 'null', expected list (reported in Construct(A) ({dir}/main.cf:6))""",  # noqa: E501
-        libs_dir=modules_dir,
     )

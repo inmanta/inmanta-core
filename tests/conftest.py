@@ -548,10 +548,11 @@ class SnippetCompilationTest(KeepOnFail):
         # reset cwd
         os.chdir(self.cwd)
 
-    def setup_func(self):
+    def setup_func(self, module_dir):
         # init project
         self._keep = False
         self.project_dir = tempfile.mkdtemp()
+        self.modules_dir = module_dir
         os.symlink(self.env, os.path.join(self.project_dir, ".env"))
 
     def tear_down_func(self):
@@ -563,13 +564,13 @@ class SnippetCompilationTest(KeepOnFail):
         self.keep_shared = True
         return {"env": self.env, "libs": self.libs, "project": self.project_dir}
 
-    def setup_for_snippet(self, snippet, autostd=True, libs_dir=None):
-        self.setup_for_snippet_external(snippet, libs_dir=libs_dir)
+    def setup_for_snippet(self, snippet, autostd=True):
+        self.setup_for_snippet_external(snippet)
         Project.set(Project(self.project_dir, autostd=autostd))
 
-    def setup_for_snippet_external(self, snippet, libs_dir=None):
-        if libs_dir:
-            module_path = f"[{self.libs}, {libs_dir}]"
+    def setup_for_snippet_external(self, snippet):
+        if self.modules_dir:
+            module_path = f"[{self.libs}, {self.modules_dir}]"
         else:
             module_path = f"{self.libs}"
         with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
@@ -625,8 +626,8 @@ class SnippetCompilationTest(KeepOnFail):
     async def do_export_and_deploy(self, include_status=False, do_raise=True):
         return await off_main_thread(lambda: self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
 
-    def setup_for_error(self, snippet, shouldbe, libs_dir=None):
-        self.setup_for_snippet(snippet, libs_dir=libs_dir)
+    def setup_for_error(self, snippet, shouldbe):
+        self.setup_for_snippet(snippet)
         try:
             compiler.do_compile()
             assert False, "Should get exception"
@@ -636,8 +637,8 @@ class SnippetCompilationTest(KeepOnFail):
             shouldbe = shouldbe.format(dir=self.project_dir)
             assert shouldbe == text
 
-    def setup_for_error_re(self, snippet, shouldbe, libs_dir=None):
-        self.setup_for_snippet(snippet, libs_dir=libs_dir)
+    def setup_for_error_re(self, snippet, shouldbe):
+        self.setup_for_snippet(snippet)
         try:
             compiler.do_compile()
             assert False, "Should get exception"
@@ -657,8 +658,8 @@ def snippetcompiler_global():
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler(snippetcompiler_global):
-    snippetcompiler_global.setup_func()
+def snippetcompiler(snippetcompiler_global, modules_dir):
+    snippetcompiler_global.setup_func(modules_dir)
     yield snippetcompiler_global
     snippetcompiler_global.tear_down_func()
 

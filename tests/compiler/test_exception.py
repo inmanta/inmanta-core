@@ -1,7 +1,7 @@
 import os
 
 
-def test_multi_excn(snippetcompiler, modules_dir):
+def test_multi_excn(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
 entity Repo:
@@ -31,11 +31,10 @@ error 0:
   The object __config__::Host (instantiated at {dir}/main.cf:17) is not complete: attribute os ({dir}/main.cf:15:6) is not set
 error 1:
   Unable to select implementation for entity Repo (reported in __config__::Repo (instantiated at {dir}/main.cf:19) ({dir}/main.cf:19))""",  # noqa: E501
-        libs_dir=modules_dir,
     )
 
 
-def test_module_error(snippetcompiler, modules_dir):
+def test_module_error(snippetcompiler):
     modpath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "modules", "badmodule")
     snippetcompiler.setup_for_error(
         "import badmodule",
@@ -46,5 +45,4 @@ caused by:
     inmanta.module.InvalidModuleException: Module %s is not a valid inmanta configuration module. Make sure that a model/_init.cf file exists and a module.yml definition file.
 """  # noqa: E501
         % modpath,
-        libs_dir=modules_dir,
     )

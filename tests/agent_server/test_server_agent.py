@@ -1720,7 +1720,7 @@ async def test_stop_autostarted_agents_on_project_removal(server, client, resour
 
 
 @pytest.mark.asyncio
-async def test_export_duplicate(resource_container, snippetcompiler, modules_dir):
+async def test_export_duplicate(resource_container, snippetcompiler):
     """
         The exported should provide a compilation error when a resource is defined twice in a model
     """
@@ -1730,8 +1730,7 @@ async def test_export_duplicate(resource_container, snippetcompiler, modules_dir
 
         test::Resource(key="test", value="foo")
         test::Resource(key="test", value="bar")
-    """,
-        libs_dir=modules_dir,
+    """
     )
 
     with pytest.raises(CompilerException) as exc:

@@ -18,7 +18,7 @@
 from inmanta import compiler
 
 
-def test_anchors_basic(snippetcompiler, modules_dir):
+def test_anchors_basic(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
@@ -49,7 +49,6 @@ typedef Test3 as Test(b="a")
 y = Test3(a="xx")
 """,
         autostd=False,
-        libs_dir=modules_dir,
     )
     anchormap = compiler.anchormap()
 
@@ -77,7 +76,7 @@ y = Test3(a="xx")
     verify_anchor(27, 11, 12, 3)
 
 
-def test_anchors_two(snippetcompiler, modules_dir):
+def test_anchors_two(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
@@ -96,7 +95,6 @@ end
 implement Test using a
 """,
         autostd=False,
-        libs_dir=modules_dir,
     )
     anchormap = compiler.anchormap()
 

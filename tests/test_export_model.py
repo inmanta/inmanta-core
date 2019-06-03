@@ -104,7 +104,7 @@ class TypeBuilder(object):
 LOGGER = logging.getLogger(__name__)
 
 
-def test_basic_model_export(snippetcompiler, modules_dir):
+def test_basic_model_export(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         r"""
 typedef hoststring as string matching /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$/
@@ -132,7 +132,6 @@ implement One using none
 implement Two using none
     """,
         autostd=False,
-        libs_dir=modules_dir,
     )
 
     (types, scopes) = compiler.do_compile()
@@ -196,7 +195,7 @@ implement Two using none
         assert round == mytype
 
 
-def test_null_relation_model_export(snippetcompiler, modules_dir):
+def test_null_relation_model_export(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity One:
@@ -211,7 +210,6 @@ end
 implement One using none
 """,
         autostd=False,
-        libs_dir=modules_dir,
     )
     (types, scopes) = compiler.do_compile()
     exporter = ModelExporter(types)
@@ -224,7 +222,7 @@ implement One using none
     assert model == result
 
 
-def test_unknown_relation_model_export(snippetcompiler, modules_dir):
+def test_unknown_relation_model_export(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 import tests
@@ -240,7 +238,6 @@ end
 implement One using none
 """,
         autostd=False,
-        libs_dir=modules_dir,
     )
     (types, scopes) = compiler.do_compile()
     exporter = ModelExporter(types)
@@ -261,7 +258,7 @@ implement One using none
     assert model == result
 
 
-def test_complex_attributes_model_export(snippetcompiler, modules_dir):
+def test_complex_attributes_model_export(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 import tests
@@ -281,7 +278,6 @@ implement Two using none
 
 """,
         autostd=False,
-        libs_dir=modules_dir,
     )
     (types, scopes) = compiler.do_compile()
     exporter = ModelExporter(types)
