@@ -12,7 +12,7 @@ setup(
     version="2019.3",
     python_requires=">=3.6",  # also update classifiers
     # Meta data
-    name="pytest-inmanta-tests",
+    name="pytest-inmanta-extensions",
     description="Inmanta tests package",
     long_description=long_description,
     long_description_content_type="text/markdown",
