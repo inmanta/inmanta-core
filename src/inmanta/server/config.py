@@ -82,12 +82,12 @@ server_fact_expire = Option(
 
 
 def default_fact_renew():
-    """ server.fact-expire/3 """
+    """:inmanta.config:option:`server.fact-expire` /3 """
     return int(server_fact_expire.get() / 3)
 
 
 def validate_fact_renew(value):
-    """ time; < server.fact-expire """
+    """ time; < :inmanta.config:option:`server.fact-expire` """
     out = int(value)
     if not out < server_fact_expire.get():
         LOGGER.warn(
@@ -193,7 +193,7 @@ dash_lcm_enable = Option("dashboard", "lcm", False, "Enable lifecycle manager in
 
 
 def default_hangtime():
-    """ server.agent-timeout*3/4 """
+    """:inmanta.config:option:`server.agent-timeout` *3/4"""
     return str(int(agent_timeout.get() * 3 / 4))
 
 

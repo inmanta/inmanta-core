@@ -263,9 +263,9 @@ class Option(Generic[T]):
     def get_default_desc(self) -> str:
         defa = self.default
         if callable(defa):
-            return "$%s" % defa.__doc__
+            return "%s" % defa.__doc__
         else:
-            return defa
+            return f"``{defa}``"
 
     def validate(self, value: str) -> T:
         return self.validator(value)
@@ -279,8 +279,17 @@ class Option(Generic[T]):
 
     def set(self, value: str) -> None:
         """ Only for tests"""
-        cfg = Config._get_instance()
-        cfg.set(self.section, self.name, value)
+        Config.set(self.section, self.name, value)
+
+
+def option_as_default(opt: Option[T]) -> Callable[[], T]:
+    """
+    Wrap an option to be used as default value
+    """
+    def default_func():
+        return opt.get()
+    default_func.__doc__ = f""":inmanta.config:option:`{opt.section}.{opt.name}`"""
+    return default_func
 
 
 #############################
@@ -300,7 +309,7 @@ log_dir = Option(
 
 
 def get_executable():
-    """os.path.abspath(sys.argv[0]) """
+    """``os.path.abspath(sys.argv[0])``"""
     try:
         return os.path.abspath(sys.argv[0])
     except:
@@ -308,7 +317,7 @@ def get_executable():
 
 
 def get_default_nodename():
-    """ socket.gethostname() """
+    """``socket.gethostname()``"""
     import socket
 
     return socket.gethostname()

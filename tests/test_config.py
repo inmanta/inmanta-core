@@ -1,5 +1,5 @@
 import inmanta.agent.config as cfg
-from inmanta.config import Config
+from inmanta.config import Config, Option, option_as_default
 
 
 def test_environment_deprecated_options(caplog):
@@ -25,3 +25,18 @@ def test_environment_deprecated_options(caplog):
         caplog.clear()
         assert new_option.get() == 24
         assert "Config option %s is deprecated. Use %s instead." % (deprecated_option.name, new_option.name) not in caplog.text
+
+
+def test_options():
+    configa = Option("test", "a", "markerA", "test a docs")
+    configb = Option("test", "B", option_as_default(configa), "test b docs")
+
+    assert "test.a" in configb.get_default_desc()
+
+    Config.load_config()
+
+    assert configb.get() == "markerA"
+    configa.set("MA2")
+    assert configb.get() == "MA2"
+    configb.set("MB2")
+    assert configb.get() == "MB2"
