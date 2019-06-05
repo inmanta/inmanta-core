@@ -54,7 +54,7 @@ class Config(object):
     __config_definition: Dict[str, Dict[str, "Option"]] = defaultdict(lambda: {})
 
     _main_cfg_file: str = "/etc/inmanta.cfg"
-    _inmanta_d_dir: str = "/etc/inmanta.d"
+    _inmanta_d_dir: str = "/etc/inmanta/inmanta.d"
     _local_dot_inmanta_cfg_files: List[str] = [os.path.expanduser("~/.inmanta.cfg"), ".inmanta", ".inmanta.cfg"]
 
     @classmethod
@@ -95,7 +95,7 @@ class Config(object):
     def _reset(cls) -> None:
         cls.__instance = None
         cls._main_cfg_file = "/etc/inmanta.cfg"
-        cls._inmanta_d_dir = "/etc/inmanta.d"
+        cls._inmanta_d_dir = "/etc/inmanta/inmanta.d"
         cls._local_dot_inmanta_cfg_files = [os.path.expanduser("~/.inmanta.cfg"), ".inmanta", ".inmanta.cfg"]
 
     # noinspection PyNoneFunctionAssignment

@@ -45,12 +45,12 @@ def test_options():
 
 
 def test_configfile_hierarchy(tmpdir):
-    etc_dir = os.path.join(tmpdir, "etc")
-    os.mkdir(etc_dir)
+    etc_inmanta_dir = os.path.join(tmpdir, "etc", "inmanta")
+    os.makedirs(etc_inmanta_dir, exist_ok=False)
 
-    main_inmanta_cfg_file = os.path.join(etc_dir, "inmanta.cfg")
+    main_inmanta_cfg_file = os.path.join(etc_inmanta_dir, "inmanta.cfg")
 
-    inmanta_d_dir = os.path.join(etc_dir, "inmanta.d")
+    inmanta_d_dir = os.path.join(etc_inmanta_dir, "inmanta.d")
     os.mkdir(inmanta_d_dir)
 
     inmanta_d_cfg_file01 = os.path.join(inmanta_d_dir, "01-dbconfig.cfg")
