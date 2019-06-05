@@ -9,6 +9,7 @@ Changes in this release:
 - Split of server recompile into separate extension (#1183)
 - Define explicit path in protocol methods
 - Added support for schema management for multiple slices in the same database (#1207)
+- Added support for /etc/inmanta.d style configuration files (#183)
 
 v 2019.2 (2019-04-30)
 Changes in this release:

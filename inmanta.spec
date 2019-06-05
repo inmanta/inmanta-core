@@ -103,6 +103,7 @@ ln -s /opt/inmanta/bin/inmanta-cli %{buildroot}%{_bindir}/inmanta-cli
 chmod -x LICENSE
 mkdir -p %{buildroot}%{_localstatedir}/lib/inmanta
 mkdir -p %{buildroot}/etc/inmanta
+mkdir -p %{buildroot}/etc/inmanta.d
 mkdir -p %{buildroot}/var/log/inmanta
 mkdir -p %{buildroot}/etc/logrotate.d
 install -p -m 644 misc/inmanta.cfg %{buildroot}/etc/inmanta.cfg
@@ -137,7 +138,8 @@ rm -rf %{buildroot}
 %config %attr(-, root, root) /etc/inmanta.cfg
 %attr(-, inmanta, inmanta) /var/log/inmanta
 %config %attr(-, root, root)/etc/inmanta
-%config %attr(-, root, root)/etc/logrotate.d/inmanta
+%config %attr(-, root, root)/etc/inmanta.d
+%config(noreplace) %attr(-, root, root)/etc/logrotate.d/inmanta
 %config(noreplace) %attr(-, root, root)/etc/sysconfig/inmanta-server
 %config(noreplace) %attr(-, root, root)/etc/sysconfig/inmanta-agent
 

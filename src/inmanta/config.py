@@ -53,6 +53,10 @@ class Config(object):
     __instance: Optional["Config"] = None
     __config_definition: Dict[str, Dict[str, "Option"]] = defaultdict(lambda: {})
 
+    _main_cfg_file: str = "/etc/inmanta.cfg"
+    _inmanta_d_dir: str = "/etc/inmanta.d"
+    _local_dot_inmanta_cfg_files: List[str] = [os.path.expanduser("~/.inmanta.cfg"), ".inmanta", ".inmanta.cfg"]
+
     @classmethod
     def get_config_options(cls) -> Dict[str, Dict[str, str]]:
         return cls.__config_definition
@@ -64,7 +68,16 @@ class Config(object):
         """
         config = LenientConfigParser(interpolation=Interpolation())
 
-        files = ["/etc/inmanta.cfg", os.path.expanduser("~/.inmanta.cfg"), ".inmanta", ".inmanta.cfg"]
+        if os.path.isdir(cls._inmanta_d_dir):
+            inmanta_d_cfg_files = [
+                os.path.join(cls._inmanta_d_dir, f) for f in os.listdir(cls._inmanta_d_dir) if f.endswith(".cfg")
+            ]
+        else:
+            inmanta_d_cfg_files = []
+        inmanta_d_cfg_files = sorted(inmanta_d_cfg_files)
+
+        # Files with a higher index in the list, override config options defined by files with a lower index
+        files = [cls._main_cfg_file] + inmanta_d_cfg_files + list(cls._local_dot_inmanta_cfg_files)
         if config_file is not None:
             files.append(config_file)
 
@@ -81,6 +94,9 @@ class Config(object):
     @classmethod
     def _reset(cls) -> None:
         cls.__instance = None
+        cls._main_cfg_file = "/etc/inmanta.cfg"
+        cls._inmanta_d_dir = "/etc/inmanta.d"
+        cls._local_dot_inmanta_cfg_files = [os.path.expanduser("~/.inmanta.cfg"), ".inmanta", ".inmanta.cfg"]
 
     # noinspection PyNoneFunctionAssignment
     @classmethod
