@@ -119,7 +119,6 @@ touch %{buildroot}/etc/sysconfig/inmanta-agent
 
 # Install the dashboard
 cp -a dist %{venv}/dashboard
-install -p -m 644 misc/server.cfg %{buildroot}/etc/inmanta/server.cfg
 
 %clean
 rm -rf %{buildroot}
@@ -135,9 +134,9 @@ rm -rf %{buildroot}
 %{_bindir}/inmanta
 %{_bindir}/inmanta-cli
 %attr(-, inmanta, inmanta) %{_localstatedir}/lib/inmanta
-%config %attr(-, root, root) /etc/inmanta.cfg
 %attr(-, inmanta, inmanta) /var/log/inmanta
 %config %attr(-, root, root)/etc/inmanta
+%config %attr(-, root, root)/etc/inmanta/inmanta.cfg
 %config %attr(-, root, root)/etc/inmanta/inmanta.d
 %config(noreplace) %attr(-, root, root)/etc/logrotate.d/inmanta
 %config(noreplace) %attr(-, root, root)/etc/sysconfig/inmanta-server

@@ -12,6 +12,10 @@ Changes in this release:
 - Marked pypi package as typed
 - Added support for /etc/inmanta.d style configuration files (#183)
 
+DEPRECATIONS:
+* The files /etc/inmanta/agent.cfg and /etc/inmanta/server.cfg are not used anymore. More information about the available 
+configuration files can be found in the documentation pages under `Administrator Documentation -> Configuration files`.  
+
 v 2019.2 (2019-04-30)
 Changes in this release:
 - Various bugfixes (#1046, #968, #1045)
