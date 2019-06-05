@@ -197,6 +197,7 @@ async def hard_clean_db_post(postgresql_client):
     yield
     await do_clean_hard(postgresql_client)
 
+TABLES_TO_KEEP = [x.table_name() for x in data._classes]
 
 @pytest.fixture(scope="function")
 async def clean_db(postgresql_client, create_db):
@@ -209,7 +210,7 @@ async def clean_db(postgresql_client, create_db):
     yield
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     tables_in_db = [x["table_name"] for x in tables_in_db]
-    tables_to_preserve = [x.table_name() for x in data._classes]
+    tables_to_preserve = TABLES_TO_KEEP
     tables_to_preserve.append(SCHEMA_VERSION_TABLE)
     tables_to_truncate = [x for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE]
     tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]

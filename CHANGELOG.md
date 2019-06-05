@@ -10,6 +10,7 @@ Changes in this release:
 - Define explicit path in protocol methods
 - Added support for schema management for multiple slices in the same database (#1207)
 - Marked pypi package as typed
+- Create pytest-inmanta-extensions package for extensions testing
 
 v 2019.2 (2019-04-30)
 Changes in this release:
