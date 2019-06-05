@@ -61,7 +61,9 @@ setup(
     # Packaging
     package_dir={"": "src"},
     packages=find_packages("src") + namespace_packages,
-    package_data={"": ["misc/*", "docs/*"]},
+    # https://www.python.org/dev/peps/pep-0561/#packaging-type-information
+    package_data={"": ["misc/*", "docs/*"], "inmanta": "py.typed"},
+    zip_safe=False,
     include_package_data=True,
     install_requires=requires,
     entry_points={
