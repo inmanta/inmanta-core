@@ -60,8 +60,6 @@ def test_configfile_hierarchy(tmpdir):
     dot_inmanta_file = os.path.join(tmpdir, ".inmanta")
     dot_inmanta_cfg_file = os.path.join(tmpdir, ".inmanta.cfg")
 
-    min_c_cfg_file = os.path.join(tmpdir, "file")
-
     with open(main_inmanta_cfg_file, "w+") as f:
         f.write(
             """
@@ -130,18 +128,10 @@ path=/directory
         """
         )
 
-    with open(min_c_cfg_file, "w+") as f:
-        f.write(
-            """
-[config]
-log-dir=/log2
-        """
-        )
-
     os.chdir(tmpdir)
-    Config.load_config(config_file=min_c_cfg_file, config_dir=etc_inmanta_dir)
+    Config.load_config(config_file=main_inmanta_cfg_file, config_dir=inmanta_d_dir)
 
-    assert Config.get("config", "log-dir") == "/log2"
+    assert Config.get("config", "log-dir") == "/log"
     assert Config.get("database", "host") == "host3"
     assert Config.get("database", "name") == "db2"
     assert Config.get("database", "port") == 5678

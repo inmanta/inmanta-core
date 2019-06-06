@@ -106,7 +106,7 @@ mkdir -p %{buildroot}/etc/inmanta
 mkdir -p %{buildroot}/etc/inmanta/inmanta.d
 mkdir -p %{buildroot}/var/log/inmanta
 mkdir -p %{buildroot}/etc/logrotate.d
-install -p -m 644 misc/inmanta.cfg %{buildroot}/etc/inmanta.cfg
+install -p -m 644 misc/inmanta.cfg %{buildroot}/etc/inmanta/inmanta.cfg
 install -p -m 644 misc/logrotation_config %{buildroot}/etc/logrotate.d/inmanta
 
 # Setup systemd
@@ -160,6 +160,11 @@ rm -rf %{buildroot}
 
 %post server
 %systemd_post inmanta-server.service
+
+# Move server.cfg file for backward compatibility
+if [ -e "/etc/inmanta/server.cfg" ]; then
+  mv /etc/inmanta/server.cfg /etc/inmanta/inmanta.d/
+fi
 
 %preun server
 %systemd_preun inmanta-server.service

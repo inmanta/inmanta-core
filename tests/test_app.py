@@ -399,7 +399,7 @@ end
 
 @pytest.mark.timeout(20)
 def test_config_dir_option(tmpdir):
-    non_existing_dir = os.path.join(tmpdir, "not_existing_dir")
+    non_existing_dir = os.path.join(tmpdir, "non_existing_dir")
     assert not os.path.isdir(non_existing_dir)
     (args, _) = get_command(tmpdir, stdout_log_level=3, config_dir=non_existing_dir)
     (stdout, _, _) = run_without_tty(args)
