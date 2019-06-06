@@ -197,7 +197,9 @@ async def hard_clean_db_post(postgresql_client):
     yield
     await do_clean_hard(postgresql_client)
 
+
 TABLES_TO_KEEP = [x.table_name() for x in data._classes]
+
 
 @pytest.fixture(scope="function")
 async def clean_db(postgresql_client, create_db):
