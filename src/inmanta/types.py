@@ -20,7 +20,7 @@
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 if TYPE_CHECKING:
     # Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
@@ -32,7 +32,7 @@ SimpleTypes = Union["BaseModel", Enum, uuid.UUID, str, float, int, bool, datetim
 JsonType = Dict[str, Any]
 ReturnTupple = Tuple[int, Optional[JsonType]]
 
-ArgumentTypes = Union[SimpleTypes, List[SimpleTypes], Dict[str, SimpleTypes]]
+ArgumentTypes = Union[SimpleTypes, Sequence[SimpleTypes], Mapping[str, SimpleTypes]]
 
 ReturnTypes = Union[None, ArgumentTypes]
 MethodReturn = Union[ReturnTypes, "ReturnValue[ReturnTypes]"]
