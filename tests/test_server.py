@@ -66,6 +66,8 @@ async def test_autostart(server, client, environment):
     agentmanager._agent_procs[env.id].proc.terminate()
     await agentmanager._agent_procs[env.id].wait_for_exit(raise_error=False)
     await retry_limited(lambda: len(sessionendpoint._sessions) == 0, 20)
+    # Prevent race condition
+    await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 20)
     res = await agentmanager._ensure_agents(env, ["iaas_agent"])
     assert res
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 3)
@@ -153,6 +155,8 @@ async def test_autostart_batched(client, server, environment):
     agentmanager._agent_procs[env.id].proc.terminate()
     await agentmanager._agent_procs[env.id].wait_for_exit(raise_error=False)
     await retry_limited(lambda: len(sessionendpoint._sessions) == 0, 20)
+    # Prevent race condition
+    await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 20)
     res = await agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
     assert res
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 3)

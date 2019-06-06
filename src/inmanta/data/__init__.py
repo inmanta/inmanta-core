@@ -45,13 +45,13 @@ DBLIMIT = 100000
 # TODO: difference between None and not set
 
 
-def json_encode(value: JsonType) -> str:
+def json_encode(value: Any) -> str:
     # see json_encode in tornado.escape
     return json.dumps(value, default=util.custom_json_encoder)
 
 
 class Field(object):
-    def __init__(self, field_type, required=False, unique=False, reference=False, part_of_primary_key=False, **kwargs):
+    def __init__(self, field_type, required=False, unique=False, reference=False, part_of_primary_key=False, **kwargs) -> None:
 
         self._field_type = field_type
         self._required = required
