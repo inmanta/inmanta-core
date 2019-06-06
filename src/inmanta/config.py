@@ -286,8 +286,10 @@ def option_as_default(opt: Option[T]) -> Callable[[], T]:
     """
     Wrap an option to be used as default value
     """
+
     def default_func():
         return opt.get()
+
     default_func.__doc__ = f""":inmanta.config:option:`{opt.section}.{opt.name}`"""
     return default_func
 
