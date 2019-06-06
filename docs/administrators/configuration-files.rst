@@ -4,8 +4,6 @@ Configuration files
 Inmanta server and Inmanta agent
 --------------------------------
 
-.. _configuration_files_server_and_agent:
-
 The Inmanta server and the Inmanta agent read configuration files from the following two locations:
 
 1. ``/etc/inmanta/inmanta.cfg``

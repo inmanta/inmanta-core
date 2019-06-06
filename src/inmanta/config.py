@@ -95,9 +95,6 @@ class Config(object):
     @classmethod
     def _reset(cls) -> None:
         cls.__instance = None
-        cls._main_cfg_file = "/etc/inmanta/inmanta.cfg"
-        cls._inmanta_d_dir = "/etc/inmanta/inmanta.d"
-        cls._local_dot_inmanta_cfg_files = [os.path.expanduser("~/.inmanta.cfg"), ".inmanta", ".inmanta.cfg"]
 
     # noinspection PyNoneFunctionAssignment
     @classmethod

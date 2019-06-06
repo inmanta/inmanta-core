@@ -449,7 +449,7 @@ def cmd_parser():
     parser = ArgumentParser()
     parser.add_argument("-p", action="store_true", dest="profile", help="Profile this run of the program")
     parser.add_argument("-c", "--config", dest="config_file", help="Use this config file")
-    parser.add_argument("--config-dir", dest="config_dir", help="The directory using the Inmanta configuration files")
+    parser.add_argument("--config-dir", dest="config_dir", help="The directory containing the Inmanta configuration files")
     parser.add_argument("--log-file", dest="log_file", help="Path to the logfile")
     parser.add_argument(
         "--log-file-level",
