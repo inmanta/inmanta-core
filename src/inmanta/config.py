@@ -58,16 +58,26 @@ class Config(object):
         return cls.__config_definition
 
     @classmethod
-    def load_config(cls, config_file: str = None) -> None:
+    def load_config(cls, config_file: str = None, config_dir: str = None) -> None:
         """
         Load the configuration file
         """
-        config = LenientConfigParser(interpolation=Interpolation())
+        if config_dir and os.path.isdir(config_dir):
+            cfg_files_in_config_dir = sorted(
+                [os.path.join(config_dir, f) for f in os.listdir(config_dir) if f.endswith(".cfg")]
+            )
+        else:
+            cfg_files_in_config_dir = []
 
-        files = ["/etc/inmanta.cfg", os.path.expanduser("~/.inmanta.cfg"), ".inmanta", ".inmanta.cfg"]
+        local_dot_inmanta_cfg_files: List[str] = [os.path.expanduser("~/.inmanta.cfg"), ".inmanta", ".inmanta.cfg"]
+
+        # Files with a higher index in the list, override config options defined by files with a lower index
         if config_file is not None:
-            files.append(config_file)
+            files = [config_file] + cfg_files_in_config_dir + local_dot_inmanta_cfg_files
+        else:
+            files = cfg_files_in_config_dir + local_dot_inmanta_cfg_files
 
+        config = LenientConfigParser(interpolation=Interpolation())
         config.read(files)
         cls.__instance = config
 

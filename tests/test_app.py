@@ -31,7 +31,14 @@ from inmanta import const
 
 
 def get_command(
-    tmp_dir, stdout_log_level=None, log_file=None, log_level_log_file=None, timed=False, dbport=None, dbname="inmanta"
+    tmp_dir,
+    stdout_log_level=None,
+    log_file=None,
+    log_level_log_file=None,
+    timed=False,
+    dbport=None,
+    dbname="inmanta",
+    config_dir=None,
 ):
     root_dir = tmp_dir.mkdir("root").strpath
     log_dir = os.path.join(root_dir, "log")
@@ -63,6 +70,8 @@ def get_command(
         args += ["--log-file-level", str(log_level_log_file)]
     if timed:
         args += ["--timed-logs"]
+    if config_dir:
+        args += ["--config-dir", config_dir]
     args += ["-c", config_file, "server"]
     return (args, log_dir)
 
@@ -386,3 +395,14 @@ end
         assert "inmanta.ast.TypeNotFoundException: could not find type nuber in namespace" in str(err)
     else:
         assert "inmanta.ast.TypeNotFoundException: could not find type nuber in namespace" not in str(err)
+
+
+@pytest.mark.timeout(20)
+def test_config_dir_option(tmpdir):
+    non_existing_dir = os.path.join(tmpdir, "non_existing_dir")
+    assert not os.path.isdir(non_existing_dir)
+    (args, _) = get_command(tmpdir, stdout_log_level=3, config_dir=non_existing_dir)
+    (stdout, _, _) = run_without_tty(args)
+    stdout = "".join(stdout)
+    assert "Starting server endpoint" in stdout
+    assert f"Config directory {non_existing_dir} doesn't exist" in stdout

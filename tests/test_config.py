@@ -1,3 +1,5 @@
+import os
+
 import inmanta.agent.config as cfg
 from inmanta.config import Config, Option, option_as_default
 
@@ -40,3 +42,100 @@ def test_options():
     assert configb.get() == "MA2"
     configb.set("MB2")
     assert configb.get() == "MB2"
+
+
+def test_configfile_hierarchy(tmpdir):
+    etc_inmanta_dir = os.path.join(tmpdir, "etc", "inmanta")
+    os.makedirs(etc_inmanta_dir, exist_ok=False)
+
+    main_inmanta_cfg_file = os.path.join(etc_inmanta_dir, "inmanta.cfg")
+
+    inmanta_d_dir = os.path.join(etc_inmanta_dir, "inmanta.d")
+    os.mkdir(inmanta_d_dir)
+
+    inmanta_d_cfg_file01 = os.path.join(inmanta_d_dir, "01-dbconfig.cfg")
+    inmanta_d_cfg_file02 = os.path.join(inmanta_d_dir, "02-dbconfig.cfg")
+    inmanta_d_cfg_file_no_cfg_extension = os.path.join(inmanta_d_dir, "03-config")
+
+    dot_inmanta_file = os.path.join(tmpdir, ".inmanta")
+    dot_inmanta_cfg_file = os.path.join(tmpdir, ".inmanta.cfg")
+
+    with open(main_inmanta_cfg_file, "w+") as f:
+        f.write(
+            """
+[config]
+log-dir=/log
+[database]
+host=host1
+name=db1
+port=1234
+[influxdb]
+host=host1
+interval=10
+tags=tag1=value1
+[dashboard]
+path=/some/directory
+        """
+        )
+
+    with open(inmanta_d_cfg_file01, "w+") as f:
+        f.write(
+            """
+[database]
+host=host2
+name=db2
+[influxdb]
+host=host2
+        """
+        )
+
+    with open(inmanta_d_cfg_file02, "w+") as f:
+        f.write(
+            """
+[database]
+port=5678
+[influxdb]
+host=host3
+interval=20
+        """
+        )
+
+    with open(inmanta_d_cfg_file_no_cfg_extension, "w+") as f:
+        f.write(
+            """
+[database]
+port=9999
+        """
+        )
+
+    with open(dot_inmanta_file, "w+") as f:
+        f.write(
+            """
+[database]
+host=host3
+[influxdb]
+tags=tag2=value2
+[dashboard]
+path=/some/other/directory
+        """
+        )
+
+    with open(dot_inmanta_cfg_file, "w+") as f:
+        f.write(
+            """
+[dashboard]
+path=/directory
+        """
+        )
+
+    os.chdir(tmpdir)
+    Config.load_config(config_file=main_inmanta_cfg_file, config_dir=inmanta_d_dir)
+
+    assert Config.get("config", "log-dir") == "/log"
+    assert Config.get("database", "host") == "host3"
+    assert Config.get("database", "name") == "db2"
+    assert Config.get("database", "port") == 5678
+    assert Config.get("influxdb", "host") == "host3"
+    assert Config.get("influxdb", "interval") == 20
+    assert Config.get("influxdb", "tags")["tag2"] == "value2"
+    assert Config.get("dashboard", "path") == "/directory"
