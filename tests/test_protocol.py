@@ -457,11 +457,10 @@ async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name):
 
     async def roundtrip(obj: Project) -> None:
         data = await client.test_method(obj)
-        assert obj.validate_ == data.result["data"]["validate"];
-        print(obj.validate_ , data.result["data"]["validate"])
+        assert obj.validate_ == data.result["data"]["validate"]
 
         data = await client.test_method2([obj])
-        assert obj.validate_ == data.result["data"][0]["validate"];
+        assert obj.validate_ == data.result["data"][0]["validate"]
 
     await roundtrip(projectf)
     await roundtrip(projectt)
