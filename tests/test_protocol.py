@@ -28,6 +28,7 @@ from typing import Dict, Iterator, List, Union
 import pytest
 import tornado
 from tornado import gen, web
+from tornado.escape import json_decode
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import config, protocol
@@ -402,6 +403,70 @@ def test_pydantic_json():
 
     assert project == new
     assert project is not new
+
+
+@pytest.mark.asyncio
+async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name):
+    """
+         Round trip test on aliased object
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        source: str
+        validate_: bool
+
+        class Config:
+            fields = {"validate_": {"alias": "validate"}}
+
+    class ProjectServer(ServerSlice):
+
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(project: Project) -> ReturnValue[Project]:  # NOQA
+            """
+                Create a new project
+            """
+
+        @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"])
+        def test_method2(project: List[Project]) -> ReturnValue[List[Project]]:  # NOQA
+            """
+                Create a new project
+            """
+
+        @protocol.handle(test_method)
+        async def test_methodi(self, project: Project) -> ReturnValue[Project]:
+            new_project = project.copy()
+
+            return ReturnValue(response=new_project)
+
+        @protocol.handle(test_method2)
+        async def test_method2i(self, project: List[Project]) -> ReturnValue[List[Project]]:
+
+            return ReturnValue(response=project)
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+
+    projectt = Project(id=uuid.uuid4(), source="test", validate=True)
+    assert projectt.validate_ is True
+    projectf = Project(id=uuid.uuid4(), source="test", validate=False)
+    assert projectf.validate_ is False
+
+    async def roundtrip(obj: Project) -> None:
+        data = await client.test_method(obj)
+        assert obj.validate_ == data.result["data"]["validate"];
+        print(obj.validate_ , data.result["data"]["validate"])
+
+        data = await client.test_method2([obj])
+        assert obj.validate_ == data.result["data"][0]["validate"];
+
+    await roundtrip(projectf)
+    await roundtrip(projectt)
+
 
 
 @pytest.mark.asyncio
