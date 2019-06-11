@@ -310,7 +310,7 @@ class CallArguments(object):
                 return value
 
             if issubclass(arg_type, BaseModel):
-                return arg_type(**value)
+                return arg_type(**value, by_alias=True)
 
             if arg_type == datetime:
                 return datetime.strptime(value, const.TIME_ISOFMT)

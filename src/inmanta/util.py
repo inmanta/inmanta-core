@@ -213,7 +213,7 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
         return str(o)
 
     if isinstance(o, BaseModel):
-        return o.dict()
+        return o.dict(by_alias=True)
 
     LOGGER.error("Unable to serialize %s", o)
     raise TypeError(repr(o) + " is not JSON serializable")
