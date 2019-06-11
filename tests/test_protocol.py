@@ -28,7 +28,6 @@ from typing import Dict, Iterator, List, Union
 import pytest
 import tornado
 from tornado import gen, web
-from tornado.escape import json_decode
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import config, protocol
