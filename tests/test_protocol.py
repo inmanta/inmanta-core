@@ -419,7 +419,6 @@ async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name):
             fields = {"validate_": {"alias": "validate"}}
 
     class ProjectServer(ServerSlice):
-
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
         def test_method(project: Project) -> ReturnValue[Project]:  # NOQA
             """
@@ -464,7 +463,6 @@ async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name):
 
     await roundtrip(projectf)
     await roundtrip(projectt)
-
 
 
 @pytest.mark.asyncio
