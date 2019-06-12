@@ -84,7 +84,7 @@ The main.cf below calls the print plugin from the std module.
 .. note::
     The std module is the only module that does not have to be imported explicitly.
 
-.. code-block:: none
+.. code-block:: inmanta
     :linenos:
 
     std::print("hello world")
@@ -102,9 +102,10 @@ Deploy a file
 
 The main.cf below is a small project that creates a file on a machine:
 
-.. code-block:: none
+.. code-block:: inmanta
     :linenos:
 
+    std::AgentConfig(agentname=host.name, autostart=true)
     host = std::Host(name="localhost", os=std::linux)
     std::File(host=host, path="/tmp/test", owner="user", group="group", mode=600, content="abcde")
 
