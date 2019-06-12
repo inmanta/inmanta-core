@@ -391,7 +391,7 @@ class MethodProperties(object):
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
         if typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
-            self._validate_type_arg(arg, typing_inspect.get_args(arg_type)[0])
+            self._validate_type_arg(arg, typing_inspect.get_args(arg_type, evaluate=True)[0])
 
         elif not typing_inspect.is_generic_type(arg_type) and issubclass(arg_type, ReturnValue):
             raise InvalidMethodDefinition("ReturnValue should have a type specified.")
