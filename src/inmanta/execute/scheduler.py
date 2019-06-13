@@ -19,6 +19,7 @@
 import itertools
 import logging
 import time
+from collections import deque
 from typing import Dict, List, Set, Tuple
 
 from inmanta import plugins
@@ -35,7 +36,7 @@ from inmanta.execute.tracking import ModuleTracker
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
 
-MAX_ITERATIONS = 2000
+MAX_ITERATIONS = 100000
 
 
 class Scheduler(object):
@@ -216,11 +217,11 @@ class Scheduler(object):
 
         # setup queues
         # queue for runnable items
-        basequeue = []
+        basequeue = deque()
         # queue for RV's that are delayed
-        waitqueue = []
+        waitqueue = deque()
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
-        zerowaiters = []
+        zerowaiters = deque()
         # queue containing everything, to find hanging statements
         all_statements = []
 
@@ -256,7 +257,7 @@ class Scheduler(object):
 
             # evaluate all that is ready
             while len(basequeue) > 0:
-                next = basequeue.pop(0)
+                next = basequeue.popleft()
                 try:
                     next.execute()
                     count = count + 1
@@ -269,7 +270,7 @@ class Scheduler(object):
 
             # find a RV that has waiters, so freezing creates progress
             while len(waitqueue) > 0 and not progress:
-                next = waitqueue.pop(0)
+                next = waitqueue.popleft()
                 if next.get_progress_potential() == 0:
                     zerowaiters.append(next)
                 elif next.get_waiting_providers() > 0:
@@ -286,12 +287,12 @@ class Scheduler(object):
             # no waiters in waitqueue,...
             # see if any zerowaiters have become gotten waiters
             if not progress:
-                waitqueue = [w for w in zerowaiters if w.get_progress_potential() != 0]
+                waitqueue = deque(w for w in zerowaiters if w.get_progress_potential() != 0)
                 queue.waitqueue = waitqueue
-                zerowaiters = [w for w in zerowaiters if w.get_progress_potential() == 0]
+                zerowaiters = deque(w for w in zerowaiters if w.get_progress_potential() == 0)
                 while len(waitqueue) > 0 and not progress:
                     LOGGER.debug("Moved zerowaiters to waiters")
-                    next = waitqueue.pop(0)
+                    next = waitqueue.popleft()
                     if next.get_waiting_providers() > 0:
                         next.unqueue()
                     else:
