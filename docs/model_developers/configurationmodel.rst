@@ -29,7 +29,7 @@ deployed.
     cd hello-world
     git init
 
-Inside the project the compiler expects a project.yml file that defines metadata about the project,
+Inside the project the compiler expects a ``project.yml`` file that defines metadata about the project,
 the location to store modules, repositories where to find modules and possibly specific versions of
 modules. project.yml defines the following settings:
 
@@ -60,7 +60,7 @@ modules. project.yml defines the following settings:
 
 For more information see 'Compiler Configuration Reference'_.
 
-An example project.yml could be:
+An example ``project.yml`` could be:
 
 .. code-block:: yaml
     :linenos:
@@ -78,17 +78,15 @@ Initial model
 Most infrastructure code is contained in modules, but the compiler needs an *entrypoint*. This
 entrypoint is the main.cf file in the toplevel directory of the project.
 
-The main.cf below calls the print plugin from the std module.
-
-
-.. note::
-    The std module is the only module that does not have to be imported explicitly.
+The ``main.cf`` below calls the print plugin from the std module.
 
 .. code-block:: inmanta
     :linenos:
 
     std::print("hello world")
 
+.. note::
+    The std module is the only module that does not have to be imported explicitly.
 
 This example can be executed with ``inmanta compile``
 
@@ -100,7 +98,7 @@ to the libs directory.
 Deploy a file
 -------------
 
-The main.cf below is a small project that creates a file on a machine:
+The ``main.cf`` below is a small project that creates a file on a machine:
 
 .. code-block:: inmanta
     :linenos:
@@ -111,7 +109,7 @@ The main.cf below is a small project that creates a file on a machine:
 
 .. note::
 
-    Replace *user* and *group* in the main.cf above. The user and group should exist. If this
+    Replace *user* and *group* in the ``main.cf`` above. The user and group should exist. If this
     command is not executed as root, make sure that user and group have the value of the current
     user.
 
