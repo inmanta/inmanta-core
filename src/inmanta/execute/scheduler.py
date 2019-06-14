@@ -18,6 +18,7 @@
 
 import itertools
 import logging
+import os
 import time
 from typing import Dict, List, Set, Tuple
 
@@ -35,7 +36,7 @@ from inmanta.execute.tracking import ModuleTracker
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
 
-MAX_ITERATIONS = 2000
+MAX_ITERATIONS = 10000
 
 
 class Scheduler(object):
@@ -234,7 +235,8 @@ class Scheduler(object):
         # start an evaluation loop
         i = 0
         count = 0
-        while i < MAX_ITERATIONS:
+        max_iterations = os.getenv("INMANTA_MAX_ITERATIONS", MAX_ITERATIONS)
+        while i < max_iterations:
             now = time.time()
 
             # check if we can stop the execution
@@ -317,7 +319,7 @@ class Scheduler(object):
             now - prev,
         )
 
-        if i == MAX_ITERATIONS:
+        if i == max_iterations:
             print("could not complete model")
             return False
         # now = time.time()
