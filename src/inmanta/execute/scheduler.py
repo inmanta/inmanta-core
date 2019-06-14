@@ -235,7 +235,7 @@ class Scheduler(object):
         # start an evaluation loop
         i = 0
         count = 0
-        max_iterations = os.getenv("INMANTA_MAX_ITERATIONS", MAX_ITERATIONS)
+        max_iterations = int(os.getenv("INMANTA_MAX_ITERATIONS", MAX_ITERATIONS))
         while i < max_iterations:
             now = time.time()
 
