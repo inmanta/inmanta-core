@@ -23,7 +23,7 @@ import time
 from typing import Dict, List, Set, Tuple
 
 from inmanta import plugins
-from inmanta.ast import CycleExcpetion, Location, MultiException, RuntimeException
+from inmanta.ast import CompilerException, CycleExcpetion, Location, MultiException, RuntimeException
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineRelation, DefineTypeDefault
@@ -320,8 +320,8 @@ class Scheduler(object):
         )
 
         if i == max_iterations:
-            print("could not complete model")
-            return False
+            raise CompilerException(f"Could not complete model, max_iterations {max_iterations} reached.")
+
         # now = time.time()
         # print(now - prev)
         # end evaluation loop
