@@ -167,6 +167,9 @@ class CallArguments(object):
         if typing_inspect.is_generic_type(matching_type):
             return self._process_generic_for_arguments(matching_type, arg_name, value)
 
+        if issubclass(matching_type, type(None)):
+            return None
+
         return matching_type(value)
 
     def _process_generic_for_arguments(self, arg_type: Type, arg_name: str, value: Any) -> Any:
@@ -506,7 +509,7 @@ class RESTBase(util.TaskHandler):
             if kwargs is None or config is None:
                 raise Exception("This method is unknown! This should not occur!")
 
-            # # create message that contains all arguments
+            # create message that contains all arguments
             message.update(kwargs)
 
             if config.properties.validate_sid:

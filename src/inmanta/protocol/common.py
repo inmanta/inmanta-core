@@ -402,7 +402,7 @@ class MethodProperties(object):
         else:
             self._validate_type_arg(arg, arg_type)
 
-    def _validate_type_arg(self, arg: str, arg_type: Type) -> None:
+    def _validate_type_arg(self, arg: str, arg_type: Type, allow_none_type: bool = False) -> None:
         """ Validate the given type arg recursively
 
             :param arg: The name of the argument
@@ -412,7 +412,7 @@ class MethodProperties(object):
             # Make sure there is only one list and one dict in the union, otherwise we cannot process the arguments
             cnt = defaultdict(lambda: 0)
             for sub_arg in typing_inspect.get_args(arg_type, evaluate=True):
-                self._validate_type_arg(arg, sub_arg)
+                self._validate_type_arg(arg, sub_arg, allow_none_type)
 
                 if typing_inspect.is_generic_type(sub_arg):
                     # there is a difference between python 3.6 and >=3.7
@@ -437,7 +437,7 @@ class MethodProperties(object):
                 )
 
             elif len(args) == 1:  # A generic list
-                self._validate_type_arg(arg, args[0])
+                self._validate_type_arg(arg, args[0], allow_none_type)
 
             elif len(args) == 2:  # Generic Dict
                 if not issubclass(args[0], str):
@@ -445,7 +445,7 @@ class MethodProperties(object):
                         f"Type {arg_type} of argument {arg} must be a Dict with str keys and not {args[0].__name__}"
                     )
 
-                self._validate_type_arg(arg, args[1])
+                self._validate_type_arg(arg, args[1], allow_none_type=True)
 
             elif len(args) > 2:
                 raise InvalidMethodDefinition(f"Failed to validate type {arg_type} of argument {arg}.")
@@ -453,6 +453,8 @@ class MethodProperties(object):
         elif issubclass(arg_type, VALID_SIMPLE_ARG_TYPES):
             pass
 
+        elif allow_none_type and issubclass(arg_type, type(None)):
+            pass
         else:
             valid_types = ", ".join([x.__name__ for x in VALID_SIMPLE_ARG_TYPES])
             raise InvalidMethodDefinition(
