@@ -29,21 +29,21 @@ def test_max_iterations(snippetcompiler, monkeypatch):
         snippetcompiler.setup_for_snippet(
             """
     import std
-    
+
     entity Hg:
     end
-    
+
     Hg.hosts [0:] -- std::Host
-    
+
     implement Hg using std::none
-    
+
     hg = Hg()
-    
+
     for i in [1,2,3]:
      hg.hosts = std::Host(name="Test{{i}}", os=std::unix)
     end
-    
-    
+
+
     for i in hg.hosts:
         std::ConfigFile(host=i, path="/fx", content="")
     end
