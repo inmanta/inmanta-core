@@ -45,6 +45,8 @@ from asyncio import ensure_future
 from threading import Timer
 
 import colorlog
+import gc
+import objgraph
 import yaml
 from tornado import gen
 from tornado.ioloop import IOLoop
@@ -249,7 +251,16 @@ def compile_project(options):
     else:
         t1 = time.time()
         result = do_compile()
-        LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
+        # gc.collect()
+        # print(objgraph.most_common_types(limit=50))
+        # LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
+        # import code
+        # code.interact(local=dict(globals(), **locals()))
+        import resource
+
+        ru = resource.getrusage(resource.RUSAGE_SELF)
+        print(ru.ru_maxrss)
+        print(gc.garbage)
     return result
 
 

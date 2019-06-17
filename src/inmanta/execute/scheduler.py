@@ -21,6 +21,9 @@ import logging
 import time
 from typing import Dict, List, Set, Tuple
 
+import gc
+import resource
+
 from inmanta import plugins
 from inmanta.ast import CycleExcpetion, Location, MultiException, RuntimeException
 from inmanta.ast.entity import Entity
@@ -32,6 +35,8 @@ from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver
 from inmanta.execute.tracking import ModuleTracker
 from collections import deque
+
+from inmanta.profile_mem import total_size
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
@@ -237,6 +242,11 @@ class Scheduler(object):
         count = 0
         while i < MAX_ITERATIONS:
             all_statements.clear()
+            if i%100 == 0:
+                ru = resource.getrusage(resource.RUSAGE_SELF)
+                counted = total_size()/1e6
+                allocated = ru.ru_maxrss/1000
+                print(f"{i} counted:{counted:.0f} allocated:{allocated:.0f} d:{allocated-counted:.0f}")
             now = time.time()
 
             # check if we can stop the execution
@@ -312,7 +322,7 @@ class Scheduler(object):
                     next.freeze()
 
         now = time.time()
-        LOGGER.debug(
+        LOGGER.info(
             "Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)",
             i,
             len(basequeue),
