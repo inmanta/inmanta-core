@@ -454,6 +454,7 @@ class MethodProperties(object):
             pass
 
         elif allow_none_type and issubclass(arg_type, type(None)):
+            # A check for optional arguments
             pass
         else:
             valid_types = ", ".join([x.__name__ for x in VALID_SIMPLE_ARG_TYPES])

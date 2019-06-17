@@ -168,6 +168,7 @@ class CallArguments(object):
             return self._process_generic_for_arguments(matching_type, arg_name, value)
 
         if issubclass(matching_type, type(None)):
+            # A check for optional arguments
             return None
 
         return matching_type(value)
