@@ -23,7 +23,7 @@ import threading
 import time
 import uuid
 from enum import Enum
-from typing import Dict, Iterator, List, Union
+from typing import Dict, Iterator, List, Optional, Union
 
 import pytest
 import tornado
@@ -761,6 +761,52 @@ async def test_dict_basemodel_argument(unused_tcp_port, postgres_db, database_na
     result = await client.test_method(data={"projectA": {"name": "test"}}, data2={"1": 1, "2": 2, "3": 3})
     assert result.code == 200
     assert "test_method" == result.result["data"]["name"]
+
+    await server.stop()
+    await rs.stop()
+
+
+@pytest.mark.asyncio
+async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_name):
+    """ Test dict which may have None as a value
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    types = Union[int, str]
+
+    class Result(BaseModel):
+        val: Optional[types]
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(data: Dict[str, Optional[types]]) -> Result:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, data: Dict[str, Optional[types]]) -> Result:
+            assert len(data) == 1
+            assert "test" in data
+            return Result(val=data["test"])
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+    result = await client.test_method(data={"test": None})
+    assert result.code == 200
+    assert result.result["data"]["val"] is None
+
+    client = protocol.Client("client")
+    result = await client.test_method(data={"test": 5})
+    assert result.code == 200
+    assert result.result["data"]["val"] == 5
+
+    client = protocol.Client("client")
+    result = await client.test_method(data={"test": "test123"})
+    assert result.code == 200
+    assert result.result["data"]["val"] == "test123"
 
     await server.stop()
     await rs.stop()
