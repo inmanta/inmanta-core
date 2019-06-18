@@ -18,11 +18,12 @@
 
 import itertools
 import logging
+import os
 import time
 from typing import Dict, List, Set, Tuple
 
 from inmanta import plugins
-from inmanta.ast import CycleExcpetion, Location, MultiException, RuntimeException
+from inmanta.ast import CompilerException, CycleExcpetion, Location, MultiException, RuntimeException
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineRelation, DefineTypeDefault
@@ -35,7 +36,7 @@ from inmanta.execute.tracking import ModuleTracker
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
 
-MAX_ITERATIONS = 2000
+MAX_ITERATIONS = 10000
 
 
 class Scheduler(object):
@@ -234,7 +235,8 @@ class Scheduler(object):
         # start an evaluation loop
         i = 0
         count = 0
-        while i < MAX_ITERATIONS:
+        max_iterations = int(os.getenv("INMANTA_MAX_ITERATIONS", MAX_ITERATIONS))
+        while i < max_iterations:
             now = time.time()
 
             # check if we can stop the execution
@@ -317,9 +319,9 @@ class Scheduler(object):
             now - prev,
         )
 
-        if i == MAX_ITERATIONS:
-            print("could not complete model")
-            return False
+        if i == max_iterations:
+            raise CompilerException(f"Could not complete model, max_iterations {max_iterations} reached.")
+
         # now = time.time()
         # print(now - prev)
         # end evaluation loop
