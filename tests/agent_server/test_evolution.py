@@ -1,0 +1,211 @@
+"""
+    Copyright 2019 Inmanta
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
+import asyncio
+import logging
+from collections import defaultdict
+
+import pytest
+
+from agent_server.conftest import _deploy_resources, _wait_until_deployment_finishes, get_agent, get_resource, \
+    stop_agent
+from inmanta import const, data
+from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
+from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
+
+
+from inmanta import resources
+from inmanta.agent import handler
+from inmanta.export import unknown_parameters
+
+from inmanta.loader import SourceInfo
+
+
+def reset_all_objects():
+    resources.resource.reset()
+    handler.Commander.reset()
+    unknown_parameters.clear()
+
+
+class Provider(CRUDHandler):
+    def check_resource(self, ctx, resource):
+        self.read(resource.id.get_agent_name(), resource.key)
+        assert resource.value != const.UNKNOWN_STRING
+        current = resource.clone()
+        current.purged = not self.isset(resource.id.get_agent_name(), resource.key)
+
+        if not current.purged:
+            current.value = self.get(resource.id.get_agent_name(), resource.key)
+        else:
+            current.value = None
+
+        return current
+
+    def create_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+        self.touch(resource.id.get_agent_name(), resource.key)
+        self.set(resource.id.get_agent_name(), resource.key, resource.value)
+        ctx.set_created()
+
+    def delete_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+        self.delete(resource.id.get_agent_name(), resource.key)
+        ctx.set_purged()
+
+    def update_resource(self, ctx: HandlerContext, changes: dict, resource: PurgeableResource) -> None:
+        self.touch(resource.id.get_agent_name(), resource.key)
+        self.set(resource.id.get_agent_name(), resource.key, resource.value)
+        ctx.set_updated()
+
+    _STATE = defaultdict(dict)
+    _WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
+    _RELOAD_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
+    _READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
+
+    @classmethod
+    def touch(cls, agent, key):
+        cls._WRITE_COUNT[agent][key] += 1
+
+    @classmethod
+    def read(cls, agent, key):
+        cls._READ_COUNT[agent][key] += 1
+
+    @classmethod
+    def set(cls, agent, key, value):
+        cls._STATE[agent][key] = value
+
+    @classmethod
+    def get(cls, agent, key):
+        if key in cls._STATE[agent]:
+            return cls._STATE[agent][key]
+        return None
+
+    @classmethod
+    def isset(cls, agent, key):
+        return key in cls._STATE[agent]
+
+    @classmethod
+    def delete(cls, agent, key):
+        if cls.isset(agent, key):
+            del cls._STATE[agent][key]
+
+    @classmethod
+    def changecount(cls, agent, key):
+        return cls._WRITE_COUNT[agent][key]
+
+    @classmethod
+    def readcount(cls, agent, key):
+        return cls._READ_COUNT[agent][key]
+
+
+def resource_containerA():
+    reset_all_objects()
+
+    @resource("__config__::Resource", agent="agent", id_attribute="key")
+    class MyResource(PurgeableResource):
+        """
+            A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged", "purge_on_delete")
+
+    @provider("__config__::Resource", name="test_resource")
+    class AProvider(Provider):
+        pass
+
+    return AProvider
+
+
+def resource_containerB():
+    reset_all_objects()
+
+    @resource("__config__::Resource", agent="agent", id_attribute="uid")
+    class MyResource(PurgeableResource):
+        """
+            A file on a filesystem
+        """
+
+        fields = ("uid", "key", "value", "purged", "purge_on_delete")
+
+    @provider("__config__::Resource", name="test_resource")
+    class BProvider(Provider):
+        pass
+
+    return BProvider
+
+
+@pytest.mark.asyncio(timeout=150)
+async def test_resource_evolution(server, client, environment, no_agent_backoff, snippetcompiler, monkeypatch, async_finalizer):
+
+    resource_containerA()
+
+    agent = await get_agent(server, environment, "agent1")
+    async_finalizer(agent.stop)
+
+    # override origin check
+    monkeypatch.setattr(SourceInfo, "_get_module_name", lambda s: s.module_name)
+    monkeypatch.setattr(SourceInfo, "requires", [])
+
+    snippetcompiler.setup_for_snippet(
+        """
+    entity Resource extends std::PurgeableResource:
+        string key
+        string value
+        string agent
+    end
+    
+    implement Resource using std::none
+    
+    Resource(key="a", value="b", agent="agent1")
+    """
+    )
+
+    version, _ = await snippetcompiler.do_export_and_deploy()
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    await stop_agent(server, agent)
+
+    # get different version from export, wait until next second
+    await asyncio.sleep(1)
+
+    resource_containerB()
+
+    agent = await get_agent(server, environment, "agent1")
+    async_finalizer(agent.stop)
+
+    snippetcompiler.setup_for_snippet(
+        """
+    entity Resource extends std::PurgeableResource:
+        string key
+        string value
+        string agent
+        string uid
+    end
+
+    implement Resource using std::none
+
+    Resource(key="a", value="b", agent="agent1", uid="alpha")
+    """
+    )
+
+    version, _ = await snippetcompiler.do_export_and_deploy()
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+    print(result.result)
+
+    await _wait_until_deployment_finishes(client, environment, version)

@@ -46,6 +46,14 @@ async def get_agent(server, environment, *endpoints, hostname="nodes1"):
     return agent
 
 
+async def stop_agent(server, agent):
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    endpoints = list(agent._instances.keys())
+    await agent.stop()
+
+    await retry_limited(lambda: len(agentmanager.sessions) == 0, 10)
+
+
 def get_resource(version, key="key1", agent="agent1", value="value1"):
     return {
         "key": key,
