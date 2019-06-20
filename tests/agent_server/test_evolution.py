@@ -21,18 +21,14 @@ from collections import defaultdict
 
 import pytest
 
-from agent_server.conftest import _deploy_resources, _wait_until_deployment_finishes, get_agent, get_resource, \
-    stop_agent
-from inmanta import const, data
-from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
-from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
-
-
-from inmanta import resources
+from agent_server.conftest import _deploy_resources, _wait_until_deployment_finishes, get_agent, get_resource, stop_agent
+from inmanta import const, data, resources
 from inmanta.agent import handler
+from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
 from inmanta.export import unknown_parameters
-
 from inmanta.loader import SourceInfo
+from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
+from inmanta.types import JsonType
 
 
 def reset_all_objects():
@@ -42,18 +38,15 @@ def reset_all_objects():
 
 
 class Provider(CRUDHandler):
-    def check_resource(self, ctx, resource):
-        self.read(resource.id.get_agent_name(), resource.key)
-        assert resource.value != const.UNKNOWN_STRING
-        current = resource.clone()
-        current.purged = not self.isset(resource.id.get_agent_name(), resource.key)
+    def read_resource(self, ctx, current):
+        self.read(current.id.get_agent_name(), current.key)
+        assert current.value != const.UNKNOWN_STRING
+        current.purged = not self.isset(current.id.get_agent_name(), current.key)
 
         if not current.purged:
-            current.value = self.get(resource.id.get_agent_name(), resource.key)
+            current.value = self.get(current.id.get_agent_name(), current.key)
         else:
             current.value = None
-
-        return current
 
     def create_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
         self.touch(resource.id.get_agent_name(), resource.key)
@@ -133,15 +126,37 @@ def resource_containerB():
 
     @resource("__config__::Resource", agent="agent", id_attribute="uid")
     class MyResource(PurgeableResource):
-        """
-            A file on a filesystem
-        """
-
         fields = ("uid", "key", "value", "purged", "purge_on_delete")
+
+        def __init__(self, _id: "Id", fields: JsonType = None) -> None:
+            if fields is not None:
+                if "uid" not in fields:
+                    # capture old format, cause by purge on delete
+                    fields["uid"] = None
+            super().__init__(_id, fields)
 
     @provider("__config__::Resource", name="test_resource")
     class BProvider(Provider):
-        pass
+        def read_resource(self, ctx, resource):
+            if resource.uid is None:
+                resource.purged = True
+                return
+            super().read_resource(ctx, resource)
+
+        def create_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+            if resource.uid is None:
+                return
+            super().create_resource(ctx, resource)
+
+        def delete_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+            if resource.uid is None:
+                return
+            super().delete_resource(ctx, resource)
+
+        def update_resource(self, ctx: HandlerContext, changes: dict, resource: PurgeableResource) -> None:
+            if resource.uid is None:
+                return
+            super().update_resource(ctx, resource)
 
     return BProvider
 
@@ -149,7 +164,7 @@ def resource_containerB():
 @pytest.mark.asyncio(timeout=150)
 async def test_resource_evolution(server, client, environment, no_agent_backoff, snippetcompiler, monkeypatch, async_finalizer):
 
-    resource_containerA()
+    provider = resource_containerA()
 
     agent = await get_agent(server, environment, "agent1")
     async_finalizer(agent.stop)
@@ -180,10 +195,13 @@ async def test_resource_evolution(server, client, environment, no_agent_backoff,
 
     await stop_agent(server, agent)
 
+    assert provider.isset("agent1", "a")
+    assert provider.changecount("agent1", "a") == 1
+
     # get different version from export, wait until next second
     await asyncio.sleep(1)
 
-    resource_containerB()
+    provider = resource_containerB()
 
     agent = await get_agent(server, environment, "agent1")
     async_finalizer(agent.stop)
@@ -206,6 +224,20 @@ async def test_resource_evolution(server, client, environment, no_agent_backoff,
     version, _ = await snippetcompiler.do_export_and_deploy()
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-    print(result.result)
+    assert result.result["model"]["total"] == 2
 
     await _wait_until_deployment_finishes(client, environment, version)
+    assert provider.isset("agent1", "a")
+    assert provider.changecount("agent1", "a") == 1
+
+    # get different version from export, wait until next second
+    await asyncio.sleep(1)
+    snippetcompiler.reset()
+    version, _ = await snippetcompiler.do_export_and_deploy()
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+    assert result.result["model"]["total"] == 1
+
+    await _wait_until_deployment_finishes(client, environment, version)
+    assert provider.isset("agent1", "a")
+    assert provider.changecount("agent1", "a") == 1

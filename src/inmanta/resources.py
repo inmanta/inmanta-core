@@ -299,11 +299,9 @@ class Resource(metaclass=ResourceMeta):
         # build the id of the object
         obj_id = cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
 
-        obj = cls(obj_id)
+        fields = {field: cls.map_field(exporter, entity_name, field, model_object) for field in cls.fields}
 
-        for field in cls.fields:
-            value = cls.map_field(exporter, entity_name, field, model_object)
-            setattr(obj, field, value)
+        obj = cls(obj_id, fields)
 
         obj.requires = getattr(model_object, "requires")
         obj.model = model_object
@@ -321,16 +319,7 @@ class Resource(metaclass=ResourceMeta):
         if cls is None:
             raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
 
-        obj = cls(obj_id)
-
-        for field in cls.fields:
-            if field in obj_map:
-                setattr(obj, field, obj_map[field])
-            else:
-                raise Exception("Resource with id %s does not have field %s" % (obj_map["id"], field))
-
-        for require in obj_map["requires"]:
-            obj.requires.add(Id.parse_id(require))
+        obj = cls(obj_id, obj_map)
 
         return obj
 
@@ -344,7 +333,7 @@ class Resource(metaclass=ResourceMeta):
                     "Resource %s is a reserved keyword and not a valid field name, reported in %s" % (field, cls.__name__)
                 )
 
-    def __init__(self, _id: "Id") -> None:
+    def __init__(self, _id: "Id", fields: JsonType = None) -> None:
         self.id = _id
         self.version = 0
         self.requires: Set[Resource] = set()
@@ -352,10 +341,18 @@ class Resource(metaclass=ResourceMeta):
 
         if not hasattr(self.__class__, "fields"):
             raise Exception("A resource should have a list of fields")
-
-        else:
+        elif fields is None:
             for field in self.__class__.fields:
                 setattr(self, field, None)
+        else:
+            for field in self.__class__.fields:
+                if field in fields:
+                    setattr(self, field, fields[field])
+                else:
+                    raise Exception("Resource with id %s does not have field %s" % (fields["id"], field))
+            if "requires" in fields:
+                for require in fields["requires"]:
+                    self.requires.add(Id.parse_id(require))
 
     def set_version(self, version: int) -> None:
         """
