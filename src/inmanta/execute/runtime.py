@@ -654,7 +654,7 @@ class RawUnit(Waiter):
 
     def execute(self) -> None:
         try:
-            self.resumer.resume(self.requires, self.resolver, self.queue_scheduler)
+            self.resumer.resume(self.requires, self.resolver, self.queue)
         except RuntimeException as e:
             e.set_statement(self.resumer)
             raise e
