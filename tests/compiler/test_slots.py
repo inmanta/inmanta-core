@@ -44,3 +44,5 @@ def test_slots():
     assert_slotted(ExecutionUnit(qs, r, ResultVariable(), {}, Literal(""), None))
     assert_slotted(HangUnit(qs, r, {}, None, Resumer()))
     assert_slotted(RawUnit(qs, r, {}, Resumer()))
+
+    assert_slotted(i)
