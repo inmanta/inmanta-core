@@ -49,6 +49,7 @@ Currently, the Inmanta project is mainly developed and maintained by `Inmanta nv
     faq
     glossary
     reference/index
+    lsm/index
 
 Additional resources
 --------------------

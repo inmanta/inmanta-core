@@ -23,7 +23,7 @@ import threading
 import time
 import uuid
 from enum import Enum
-from typing import Dict, Iterator, List, Union
+from typing import Dict, Iterator, List, Optional, Union
 
 import pytest
 import tornado
@@ -405,6 +405,67 @@ def test_pydantic_json():
 
 
 @pytest.mark.asyncio
+async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name):
+    """
+         Round trip test on aliased object
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        source: str
+        validate_: bool
+
+        class Config:
+            fields = {"validate_": {"alias": "validate"}}
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(project: Project) -> ReturnValue[Project]:  # NOQA
+            """
+                Create a new project
+            """
+
+        @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"])
+        def test_method2(project: List[Project]) -> ReturnValue[List[Project]]:  # NOQA
+            """
+                Create a new project
+            """
+
+        @protocol.handle(test_method)
+        async def test_methodi(self, project: Project) -> ReturnValue[Project]:
+            new_project = project.copy()
+
+            return ReturnValue(response=new_project)
+
+        @protocol.handle(test_method2)
+        async def test_method2i(self, project: List[Project]) -> ReturnValue[List[Project]]:
+
+            return ReturnValue(response=project)
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+
+    projectt = Project(id=uuid.uuid4(), source="test", validate=True)
+    assert projectt.validate_ is True
+    projectf = Project(id=uuid.uuid4(), source="test", validate=False)
+    assert projectf.validate_ is False
+
+    async def roundtrip(obj: Project) -> None:
+        data = await client.test_method(obj)
+        assert obj.validate_ == data.result["data"]["validate"]
+
+        data = await client.test_method2([obj])
+        assert obj.validate_ == data.result["data"][0]["validate"]
+
+    await roundtrip(projectf)
+    await roundtrip(projectt)
+
+
+@pytest.mark.asyncio
 async def test_invalid_handler():
     """
         Handlers should be async
@@ -700,6 +761,52 @@ async def test_dict_basemodel_argument(unused_tcp_port, postgres_db, database_na
     result = await client.test_method(data={"projectA": {"name": "test"}}, data2={"1": 1, "2": 2, "3": 3})
     assert result.code == 200
     assert "test_method" == result.result["data"]["name"]
+
+    await server.stop()
+    await rs.stop()
+
+
+@pytest.mark.asyncio
+async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_name):
+    """ Test dict which may have None as a value
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    types = Union[int, str]
+
+    class Result(BaseModel):
+        val: Optional[types]
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(data: Dict[str, Optional[types]]) -> Result:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, data: Dict[str, Optional[types]]) -> Result:
+            assert len(data) == 1
+            assert "test" in data
+            return Result(val=data["test"])
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+    result = await client.test_method(data={"test": None})
+    assert result.code == 200
+    assert result.result["data"]["val"] is None
+
+    client = protocol.Client("client")
+    result = await client.test_method(data={"test": 5})
+    assert result.code == 200
+    assert result.result["data"]["val"] == 5
+
+    client = protocol.Client("client")
+    result = await client.test_method(data={"test": "test123"})
+    assert result.code == 200
+    assert result.result["data"]["val"] == "test123"
 
     await server.stop()
     await rs.stop()

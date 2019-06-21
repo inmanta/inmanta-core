@@ -96,7 +96,7 @@ class ResourceActionLogLine(logging.LogRecord):
 class DatabaseSlice(protocol.ServerSlice):
     """Slice to initialize the database"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(DatabaseSlice, self).__init__(SLICE_DATABASE)
 
     async def start(self) -> None:
