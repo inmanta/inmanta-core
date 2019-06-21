@@ -451,7 +451,10 @@ class QueueScheduler(object):
         return self.types
 
     def add_to_all(self, item: "Waiter") -> None:
-        self.allwaiters.append(item)
+        self.allwaiters.add(item)
+
+    def remove_from_all(self, item: "Waiter") -> None:
+        self.allwaiters.remove(item)
 
     def get_tracker(self) -> Optional[Tracker]:
         return None
@@ -479,6 +482,9 @@ class DelegateQueueScheduler(QueueScheduler):
 
     def add_to_all(self, item: "Waiter") -> None:
         self.__delegate.add_to_all(item)
+
+    def remove_from_all(self, item: "Waiter") -> None:
+        self.__delegate.remove_from_all(item)
 
     def get_tracker(self) -> Tracker:
         return self.__tracker

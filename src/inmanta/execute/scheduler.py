@@ -21,9 +21,6 @@ import logging
 import time
 from typing import Dict, List, Set, Tuple
 
-import gc
-import resource
-
 from inmanta import plugins
 from inmanta.ast import CycleExcpetion, Location, MultiException, RuntimeException
 from inmanta.ast.entity import Entity
@@ -228,7 +225,7 @@ class Scheduler(object):
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
         zerowaiters = []
         # queue containing everything, to find hanging statements
-        all_statements = []
+        all_statements = set()
 
         # Wrap in object to pass around
         queue = QueueScheduler(compiler, basequeue, waitqueue, self.types, all_statements)
@@ -241,12 +238,6 @@ class Scheduler(object):
         i = 0
         count = 0
         while i < MAX_ITERATIONS:
-            all_statements.clear()
-            if i%100 == 0:
-                ru = resource.getrusage(resource.RUSAGE_SELF)
-                counted = total_size()/1e6
-                allocated = ru.ru_maxrss/1000
-                print(f"{i} counted:{counted:.0f} allocated:{allocated:.0f} d:{allocated-counted:.0f}")
             now = time.time()
 
             # check if we can stop the execution
@@ -271,6 +262,7 @@ class Scheduler(object):
                 next = basequeue.popleft()
                 try:
                     next.execute()
+                    all_statements.remove(next)
                     count = count + 1
                 except UnsetException as e:
                     # some statements don't know all their dependencies up front,...
@@ -353,8 +345,6 @@ class Scheduler(object):
             raise excns[0]
         else:
             raise MultiException(excns)
-
-        all_statements = [x for x in all_statements if not x.done]
 
         if all_statements:
             stmt = None
