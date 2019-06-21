@@ -29,7 +29,8 @@ from inmanta.ast import (
     NotFoundException,
     OptionalValueException,
     RuntimeException,
-    SLocatable)
+    SLocatable,
+)
 from inmanta.ast.type import Type
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.tracking import Tracker
@@ -57,6 +58,8 @@ class ResultCollector(Generic[T]):
         Helper interface for gradual execution
     """
 
+    __slots__ = ()
+
     def receive_result(self, value: T, location: Location) -> None:
         """
             receive a possibly partial result
@@ -65,6 +68,8 @@ class ResultCollector(Generic[T]):
 
 
 class IPromise(Generic[T]):
+    __slots__ = ()
+
     @abstractmethod
     def set_value(self, value: T, location: Location, recur: bool = True) -> None:
         pass
@@ -85,7 +90,7 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
 
     location: Location
 
-    __slots__ = ("location", "provider", "waiter", "value", "hasValue", "type")
+    __slots__ = ("location", "provider", "waiters", "value", "hasValue", "type")
 
     def __init__(self, value: Optional[T] = None) -> None:
         self.provider: "Optional[Statement]" = None
@@ -208,7 +213,7 @@ class DelayedResultVariable(ResultVariable[T]):
             (a queue variable can be dequeued by the scheduler when a provider is added)
     """
 
-    __slots__ = ("queued", "queues")
+    __slots__ = ("queued", "queues", "listeners")
 
     def __init__(self, queue: "QueueScheduler", value: T = None) -> None:
         ResultVariable.__init__(self, value)
@@ -266,7 +271,7 @@ class ListVariable(DelayedResultVariable[ListValue]):
 
     value: "List[Instance]"
 
-    __slots__ = ("attribute", "myself", "promisses", "done_promisses", "listeners")
+    __slots__ = ("attribute", "myself", "promisses", "done_promisses")
 
     def __init__(self, attribute: "RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
         self.attribute = attribute
@@ -380,7 +385,7 @@ class ListVariable(DelayedResultVariable[ListValue]):
 
 class OptionVariable(DelayedResultVariable["Instance"]):
 
-    __slots__ = ("value", "attribute", "myself", "location")
+    __slots__ = ("attribute", "myself", "location")
 
     def __init__(self, attribute: "Attribute", instance: "Instance", queue: "QueueScheduler") -> None:
         DelayedResultVariable.__init__(self, queue)
@@ -438,13 +443,15 @@ class QueueScheduler(object):
         MUTABLE!
     """
 
+    __slots__ = ("compiler", "runqueue", "waitqueue", "types", "allwaiters")
+
     def __init__(
         self,
         compiler: "Compiler",
         runqueue: "List[Waiter]",
         waitqueue: List[ResultVariable],
         types: Dict[str, Type],
-        allwaiters: "List[Waiter]",
+        allwaiters: "Set[Waiter]",
     ) -> None:
         self.compiler = compiler
         self.runqueue = runqueue
@@ -478,6 +485,8 @@ class QueueScheduler(object):
 
 
 class DelegateQueueScheduler(QueueScheduler):
+    __slots__ = ("__delegate", "__tracker")
+
     def __init__(self, delegate: QueueScheduler, tracker: Tracker):
         self.__delegate = delegate
         self.__tracker = tracker
@@ -545,6 +554,8 @@ class ExecutionUnit(Waiter):
         @param provides: Whether to register this XU as provider to the result variable
     """
 
+    __slots__ = ("result", "requires", "expression", "resolver", "queue_scheduler", "owner")
+
     def __init__(
         self,
         queue_scheduler: QueueScheduler,
@@ -590,6 +601,8 @@ class HangUnit(Waiter):
         Wait for a dict of requirements, call the resume method on the resumer, with a map of the resulting values
     """
 
+    __slots__ = ("resolver", "requires", "resumer", "target")
+
     def __init__(
         self,
         queue_scheduler: QueueScheduler,
@@ -599,7 +612,6 @@ class HangUnit(Waiter):
         resumer: "Resumer",
     ) -> None:
         Waiter.__init__(self, queue_scheduler)
-        self.queue_scheduler = queue_scheduler
         self.resolver = resolver
         self.requires = requires
         self.resumer = resumer
@@ -610,9 +622,7 @@ class HangUnit(Waiter):
 
     def execute(self) -> None:
         try:
-            self.resumer.resume(
-                {k: v.get_value() for (k, v) in self.requires.items()}, self.resolver, self.queue_scheduler, self.target
-            )
+            self.resumer.resume({k: v.get_value() for (k, v) in self.requires.items()}, self.resolver, self.queue, self.target)
         except RuntimeException as e:
             e.set_statement(self.resumer)
             raise e
@@ -625,6 +635,8 @@ class RawUnit(Waiter):
         but with a map of ResultVariables instead of their values
     """
 
+    __slots__ = ("resolver", "requires", "resumer")
+
     def __init__(
         self,
         queue_scheduler: QueueScheduler,
@@ -633,7 +645,6 @@ class RawUnit(Waiter):
         resumer: "RawResumer",
     ) -> None:
         Waiter.__init__(self, queue_scheduler)
-        self.queue_scheduler = queue_scheduler
         self.resolver = resolver
         self.requires = requires
         self.resumer = resumer
@@ -670,7 +681,7 @@ Typeorvalue = Union[Type, ResultVariable]
 
 class Resolver(object):
 
-    __slots__ = ("namespace")
+    __slots__ = "namespace"
 
     def __init__(self, namespace: Namespace) -> None:
         self.namespace = namespace
@@ -743,9 +754,9 @@ class ExecutionContext(Resolver):
     def for_namespace(self, namespace: Namespace) -> Resolver:
         return NamespaceResolver(self, namespace)
 
+
 # also extends locatable
 class Instance(ExecutionContext):
-
     def set_location(self, location: Location) -> None:
         assert location is not None and location.lnr > 0
         self._location = location

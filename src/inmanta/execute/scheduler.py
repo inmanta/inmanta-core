@@ -19,6 +19,7 @@
 import itertools
 import logging
 import time
+from collections import deque
 from typing import Dict, List, Set, Tuple
 
 from inmanta import plugins
@@ -31,8 +32,6 @@ from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver
 from inmanta.execute.tracking import ModuleTracker
-from collections import deque
-
 from inmanta.profile_mem import total_size
 
 DEBUG = True

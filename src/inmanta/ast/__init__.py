@@ -122,7 +122,7 @@ class Locatable(object):
 
 class SLocatable(Locatable):
 
-    __slots__ = ("_location")
+    __slots__ = "_location"
 
 
 class LocatableString(object):
