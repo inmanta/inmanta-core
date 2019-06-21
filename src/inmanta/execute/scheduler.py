@@ -262,7 +262,7 @@ class Scheduler(object):
                 next = basequeue.popleft()
                 try:
                     next.execute()
-                    all_statements.remove(next)
+                    all_statements.discard(next)
                     count = count + 1
                 except UnsetException as e:
                     # some statements don't know all their dependencies up front,...
