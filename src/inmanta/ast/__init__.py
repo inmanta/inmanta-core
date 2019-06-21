@@ -120,6 +120,11 @@ class Locatable(object):
     location = property(get_location, set_location)
 
 
+class SLocatable(Locatable):
+
+    __slots__ = ("_location")
+
+
 class LocatableString(object):
     """
         A string with an attached source location.
@@ -196,7 +201,7 @@ class AttributeReferenceAnchor(Anchor):
         return instancetype.get_entity().get_attribute(self.attribute).get_location()
 
 
-class Namespaced(Locatable):
+class Namespaced(SLocatable):
     @abstractmethod
     def get_namespace(self) -> "Namespace":
         raise NotImplementedError()
@@ -224,6 +229,8 @@ class Namespace(Namespaced):
     """
         This class models a namespace that contains defined types, modules, ...
     """
+
+    __slots__ = ("__name", "__parent", "__children", "defines_types", "visible_namespaces", "primitives", "scope")
 
     def __init__(self, name: str, parent: "Optional[Namespace]" = None) -> None:
         Namespaced.__init__(self)

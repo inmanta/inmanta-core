@@ -29,7 +29,7 @@ from inmanta.ast import (
     NotFoundException,
     OptionalValueException,
     RuntimeException,
-)
+    SLocatable)
 from inmanta.ast.type import Type
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.tracking import Tracker
@@ -84,6 +84,8 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
     """
 
     location: Location
+
+    __slots__ = ("location", "provider", "waiter", "value", "hasValue", "type")
 
     def __init__(self, value: Optional[T] = None) -> None:
         self.provider: "Optional[Statement]" = None
@@ -161,6 +163,8 @@ class AttributeVariable(ResultVariable["Instance"]):
         when assigned a value, it will also assign a value to its inverse relation
     """
 
+    __slots__ = ("attribute", "myself")
+
     def __init__(self, attribute: "RelationAttribute", instance: "Instance"):
         self.attribute: "RelationAttribute" = attribute
         self.myself: "Instance" = instance
@@ -204,6 +208,8 @@ class DelayedResultVariable(ResultVariable[T]):
             (a queue variable can be dequeued by the scheduler when a provider is added)
     """
 
+    __slots__ = ("queued", "queues")
+
     def __init__(self, queue: "QueueScheduler", value: T = None) -> None:
         ResultVariable.__init__(self, value)
         self.queued = False
@@ -245,6 +251,9 @@ ListValue = Union["Instance", List["Instance"]]
 
 
 class Promise(IPromise[ListValue]):
+
+    __slots__ = ("provider", "owner")
+
     def __init__(self, owner: "ListVariable", provider: "Statement"):
         self.provider: "Optional[Statement]" = provider
         self.owner: "ListVariable" = owner
@@ -256,6 +265,8 @@ class Promise(IPromise[ListValue]):
 class ListVariable(DelayedResultVariable[ListValue]):
 
     value: "List[Instance]"
+
+    __slots__ = ("attribute", "myself", "promisses", "done_promisses", "listeners")
 
     def __init__(self, attribute: "RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
         self.attribute = attribute
@@ -368,6 +379,9 @@ class ListVariable(DelayedResultVariable[ListValue]):
 
 
 class OptionVariable(DelayedResultVariable["Instance"]):
+
+    __slots__ = ("value", "attribute", "myself", "location")
+
     def __init__(self, attribute: "Attribute", instance: "Instance", queue: "QueueScheduler") -> None:
         DelayedResultVariable.__init__(self, queue)
         self.value = None
@@ -497,6 +511,8 @@ class Waiter(object):
     """
         Waiters represent an executable unit, that can be executed the result variables they depend on have their values.
     """
+
+    __slots__ = ("waitcount", "queue", "done")
 
     def __init__(self, queue: QueueScheduler):
         self.waitcount = 1
@@ -653,6 +669,9 @@ Typeorvalue = Union[Type, ResultVariable]
 
 
 class Resolver(object):
+
+    __slots__ = ("namespace")
+
     def __init__(self, namespace: Namespace) -> None:
         self.namespace = namespace
 
@@ -674,6 +693,9 @@ class Resolver(object):
 
 
 class NamespaceResolver(Resolver):
+
+    __slots__ = ("parent", "root")
+
     def __init__(self, parent: Resolver, lecial_root: Namespace) -> None:
         self.parent = parent
         self.root = lecial_root
@@ -691,6 +713,9 @@ class NamespaceResolver(Resolver):
 
 
 class ExecutionContext(Resolver):
+
+    __slots__ = ("block", "slots", "resolver")
+
     def __init__(self, block: "BasicBlock", resolver: Resolver):
         self.block = block
         self.slots: Dict[str, ResultVariable] = {n: ResultVariable() for n in block.get_variables()}
@@ -718,8 +743,21 @@ class ExecutionContext(Resolver):
     def for_namespace(self, namespace: Namespace) -> Resolver:
         return NamespaceResolver(self, namespace)
 
+# also extends locatable
+class Instance(ExecutionContext):
 
-class Instance(ExecutionContext, Locatable, Resolver):
+    def set_location(self, location: Location) -> None:
+        assert location is not None and location.lnr > 0
+        self._location = location
+
+    def get_location(self) -> Location:
+        assert self._location is not None
+        return self._location
+
+    location = property(get_location, set_location)
+
+    __slots__ = ("_location", "resolver", "type", "slots", "sid", "implemenations", "trackers", "locations")
+
     def __init__(self, mytype: "Entity", resolver: Resolver, queue: QueueScheduler) -> None:
         Locatable.__init__(self)
         # ExecutionContext, Resolver -> this class only uses it as an "interface", so no constructor call!
