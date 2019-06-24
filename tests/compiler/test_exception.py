@@ -46,3 +46,24 @@ caused by:
 """  # noqa: E501
         % modpath,
     )
+
+
+def test_direct_execute_error(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        a = "A"
+
+        typedef zz as string matching self == "{{a}}"
+
+        entity A:
+            zz aa = "A"
+        end
+
+        implement A using std::none
+
+        A()
+        """,
+        """Could not set attribute `aa` on instance `__config__::A (instantiated at {dir}/main.cf:12)` (reported in Construct(A) ({dir}/main.cf:12))
+caused by:
+  The statement Format({{{{a}}}}) can not be executed in this context (reported in Format({{{{a}}}}) ({dir}/main.cf:4))""",  # noqa: E501
+    )

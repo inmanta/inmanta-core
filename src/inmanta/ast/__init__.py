@@ -631,6 +631,13 @@ class TypingException(RuntimeException):
         return 10
 
 
+class DirectExecuteException(TypingException):
+    """Exception raised when direct execute is called on a wrong object"""
+
+    def importantance(self):
+        return 11
+
+
 class KeyException(RuntimeException):
     pass
 
