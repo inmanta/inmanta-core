@@ -34,3 +34,9 @@ I get a click related error/exception when I run inmanta-cli.
 
         export LC_ALL=en_US.utf8
         export LANG=en_US.utf8
+
+
+The model does not compile and exits with "could not complete model".
+    There is an upperbound on the number of iterations used in the model transformation algorithm. For large models this might
+    not be enough. This limit is controlled with the environment variable INMANTA_MAX_ITERATIONS The default value is set to
+    10000 iterations.
