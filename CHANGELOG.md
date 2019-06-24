@@ -15,6 +15,7 @@ Changes in this release:
 - Increased the iteration limit to 10000. This value is controlled with INMANTA_MAX_ITERATIONS
   environment variable.
 - Added support for custom resource deserialization by adding the 'populate' method 
+- Improve compiler scaling by using more efficient data structures
 
 DEPRECATIONS:
 * The files /etc/inmanta/agent.cfg and /etc/inmanta/server.cfg are not used anymore. More information about the available

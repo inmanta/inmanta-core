@@ -126,6 +126,8 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
         self.hasValue = True
         for waiter in self.waiters:
             waiter.ready(self)
+        # prevent memory leaks
+        self.waiters = None
 
     def get_value(self) -> T:
         if not self.hasValue:
@@ -181,6 +183,7 @@ class AttributeVariable(ResultVariable["Instance"]):
             value.set_attribute(self.attribute.end.name, self.myself, location, False)
         for waiter in self.waiters:
             waiter.ready(self)
+        self.waiters = None
 
 
 class DelayedResultVariable(ResultVariable[T]):
@@ -215,6 +218,10 @@ class DelayedResultVariable(ResultVariable[T]):
         self.hasValue = True
         for waiter in self.waiters:
             waiter.ready(self)
+        # prevent memory leaks
+        self.waiters = None
+        self.listeners = None
+        self.queues = None
 
     def queue(self) -> None:
         if self.queued:
@@ -444,7 +451,7 @@ class QueueScheduler(object):
         return self.types
 
     def add_to_all(self, item: "Waiter") -> None:
-        self.allwaiters.append(item)
+        self.allwaiters.add(item)
 
     def get_tracker(self) -> Optional[Tracker]:
         return None

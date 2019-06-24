@@ -26,7 +26,6 @@ import psutil
 import pytest
 from psutil import NoSuchProcess, Process
 
-import inmanta.agent.agent
 from agent_server.conftest import ResourceContainer, _deploy_resources, _wait_until_deployment_finishes, get_agent
 from inmanta import agent, config, const, data, execute
 from inmanta.agent.agent import Agent
@@ -40,7 +39,7 @@ logger = logging.getLogger("inmanta.test.server_agent")
 
 
 @pytest.mark.asyncio(timeout=150)
-async def test_deploy_empty(server, client, resource_container, environment):
+async def test_deploy_empty(server, client, resource_container, environment, no_agent_backoff):
     """
        Test deployment of empty model
     """
@@ -67,15 +66,10 @@ async def test_deploy_empty(server, client, resource_container, environment):
 
 
 @pytest.mark.asyncio(timeout=100)
-async def test_deploy_with_undefined(server_multi, client_multi, resource_container, async_finalizer):
+async def test_deploy_with_undefined(server_multi, client_multi, resource_container, async_finalizer, no_agent_backoff):
     """
          Test deploy of resource with undefined
     """
-
-    # agent backoff makes this test unreliable or slow, so we turn it off
-    backoff = inmanta.agent.agent.GET_RESOURCE_BACKOFF
-    inmanta.agent.agent.GET_RESOURCE_BACKOFF = 0
-
     agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
 
     Config.set("config", "agent-deploy-interval", "100")
@@ -192,11 +186,10 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
         )
 
     await retry_limited(done, 100)
-    inmanta.agent.agent.GET_RESOURCE_BACKOFF = backoff
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_server_restart(resource_container, server, postgres_db, client):
+async def test_server_restart(resource_container, server, postgres_db, client, no_agent_backoff):
     """
         dryrun and deploy a configuration model
     """
@@ -315,7 +308,7 @@ async def test_server_restart(resource_container, server, postgres_db, client):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_spontaneous_deploy(resource_container, server, client):
+async def test_spontaneous_deploy(resource_container, server, client, no_agent_backoff):
     """
         dryrun and deploy a configuration model
     """
@@ -397,7 +390,7 @@ async def test_spontaneous_deploy(resource_container, server, client):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_spontaneous_repair(resource_container, server, client):
+async def test_spontaneous_repair(resource_container, server, client, no_agent_backoff):
     """
         dryrun and deploy a configuration model
     """
@@ -494,7 +487,7 @@ async def test_spontaneous_repair(resource_container, server, client):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_failing_deploy_no_handler(resource_container, server, client, async_finalizer):
+async def test_failing_deploy_no_handler(resource_container, server, client, async_finalizer, no_agent_backoff):
     """
         dryrun and deploy a configuration model
     """
@@ -627,7 +620,7 @@ async def test_dual_agent(resource_container, server, client, environment, no_ag
 
 
 @pytest.mark.asyncio
-async def test_server_agent_api(resource_container, client, server):
+async def test_server_agent_api(resource_container, client, server, no_agent_backoff):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     result = await client.create_project("env-test")
@@ -764,7 +757,7 @@ async def test_get_set_param(resource_container, environment, client, server):
 
 
 @pytest.mark.asyncio
-async def test_unkown_parameters(resource_container, environment, client, server, agent):
+async def test_unkown_parameters(resource_container, environment, client, server, agent, no_agent_backoff):
     """
         Test retrieving facts from the agent
     """
@@ -800,7 +793,7 @@ async def test_unkown_parameters(resource_container, environment, client, server
 
 
 @pytest.mark.asyncio()
-async def test_fail(resource_container, client, server, async_finalizer):
+async def test_fail(resource_container, client, server, async_finalizer, no_agent_backoff):
     """
         Test results when a step fails
     """
@@ -1033,7 +1026,7 @@ async def test_wait(resource_container, client, server, no_agent_backoff):
 
 
 @pytest.mark.asyncio(timeout=15)
-async def test_multi_instance(resource_container, client, server):
+async def test_multi_instance(resource_container, client, server, no_agent_backoff):
     """
        Test for multi threaded deploy
     """
@@ -1165,7 +1158,7 @@ async def test_multi_instance(resource_container, client, server):
 
 
 @pytest.mark.asyncio
-async def test_cross_agent_deps(resource_container, server, client):
+async def test_cross_agent_deps(resource_container, server, client, no_agent_backoff):
     """
         deploy a configuration model with cross host dependency
     """
@@ -1362,7 +1355,7 @@ async def test_auto_deploy(
 
 
 @pytest.mark.asyncio(timeout=15)
-async def test_auto_deploy_no_splay(server, client, resource_container, environment):
+async def test_auto_deploy_no_splay(server, client, resource_container, environment, no_agent_backoff):
     """
         dryrun and deploy a configuration model automatically with agent autostart
     """
@@ -1443,7 +1436,7 @@ def ps_diff(original, current_process, diff=0):
 
 
 @pytest.mark.asyncio(timeout=15)
-async def test_autostart_mapping(server, client, resource_container, environment):
+async def test_autostart_mapping(server, client, resource_container, environment, no_agent_backoff):
     """
         Test autostart mapping and restart agents when the map is modified
     """
@@ -1518,7 +1511,7 @@ async def test_autostart_mapping(server, client, resource_container, environment
 
 
 @pytest.mark.asyncio(timeout=15)
-async def test_autostart_clear_environment(server_multi, client_multi, resource_container, environment_multi):
+async def test_autostart_clear_environment(server_multi, client_multi, resource_container, environment_multi, no_agent_backoff):
     """
         Test clearing an environment with autostarted agents. After clearing, autostart should still work
     """
@@ -1684,7 +1677,7 @@ async def setup_environment_with_agent(client, project_name):
 
 
 @pytest.mark.asyncio(timeout=15)
-async def test_stop_autostarted_agents_on_environment_removal(server, client, resource_container):
+async def test_stop_autostarted_agents_on_environment_removal(server, client, resource_container, no_agent_backoff):
     current_process = psutil.Process()
     children = current_process.children(recursive=True)
     resource_container.Provider.reset()
@@ -1701,7 +1694,7 @@ async def test_stop_autostarted_agents_on_environment_removal(server, client, re
 
 
 @pytest.mark.asyncio(timeout=15)
-async def test_stop_autostarted_agents_on_project_removal(server, client, resource_container):
+async def test_stop_autostarted_agents_on_project_removal(server, client, resource_container, no_agent_backoff):
     current_process = psutil.Process()
     children = current_process.children(recursive=True)
     resource_container.Provider.reset()
@@ -1837,7 +1830,9 @@ succ    2    2    2    0
 @pytest.mark.parametrize("self_state", self_states, ids=lambda x: x.name)
 @pytest.mark.parametrize("dep_state", dep_states, ids=lambda x: x.name)
 @pytest.mark.asyncio
-async def test_deploy_and_events(client, server, environment, resource_container, self_state, dep_state, async_finalizer):
+async def test_deploy_and_events(
+    client, server, environment, resource_container, self_state, dep_state, async_finalizer, no_agent_backoff
+):
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
@@ -1908,7 +1903,7 @@ async def test_deploy_and_events(client, server, environment, resource_container
 
 
 @pytest.mark.asyncio
-async def test_deploy_and_events_failed(client, server, environment, resource_container):
+async def test_deploy_and_events_failed(client, server, environment, resource_container, no_agent_backoff):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
@@ -1971,7 +1966,7 @@ dep_states_reload = [
 
 @pytest.mark.parametrize("dep_state", dep_states_reload, ids=lambda x: x.name)
 @pytest.mark.asyncio(timeout=5000)
-async def test_reload(client, server, environment, resource_container, dep_state):
+async def test_reload(client, server, environment, resource_container, dep_state, no_agent_backoff):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
@@ -2577,7 +2572,7 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
 
 
 @pytest.mark.asyncio
-async def test_bad_post_get_facts(resource_container, client, server, environment, caplog):
+async def test_bad_post_get_facts(resource_container, client, server, environment, caplog, no_agent_backoff):
     """
         Test retrieving facts from the agent
     """
@@ -2628,7 +2623,7 @@ async def test_bad_post_get_facts(resource_container, client, server, environmen
 
 
 @pytest.mark.asyncio
-async def test_bad_post_events(resource_container, environment, server, agent, client, caplog):
+async def test_bad_post_events(resource_container, environment, server, agent, client, caplog, no_agent_backoff):
     """
         Send and receive events within one agent
     """
@@ -2681,7 +2676,7 @@ async def test_bad_post_events(resource_container, environment, server, agent, c
 
 
 @pytest.mark.asyncio
-async def test_inprogress(resource_container, client, server, environment):
+async def test_inprogress(resource_container, client, server, environment, no_agent_backoff):
     """
         Test retrieving facts from the agent
     """
@@ -2720,7 +2715,7 @@ async def test_inprogress(resource_container, client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_eventprocessing(resource_container, client, server, environment, agent):
+async def test_eventprocessing(resource_container, client, server, environment, agent, no_agent_backoff):
     """
         Test retrieving facts from the agent
     """
@@ -2916,7 +2911,7 @@ async def test_push_full_deploy(resource_container, environment, server, client,
 
 
 @pytest.mark.asyncio
-async def test_agent_run_sync(resource_container, environment, server, client):
+async def test_agent_run_sync(resource_container, environment, server, client, no_agent_backoff):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     config.Config.set("config", "agent-deploy-interval", "0")
@@ -2957,7 +2952,9 @@ async def test_agent_run_sync(resource_container, environment, server, client):
 
 
 @pytest.mark.asyncio
-async def test_format_token_in_logline(server_multi, agent_multi, client_multi, environment_multi, resource_container, caplog):
+async def test_format_token_in_logline(
+    server_multi, agent_multi, client_multi, environment_multi, resource_container, caplog, no_agent_backoff
+):
     """Deploy a resource that logs a line that after formatting on the agent contains an invalid formatting character.
     """
     version = 1
@@ -3061,7 +3058,7 @@ async def test_1016_cache_invalidation(server, agent, client, environment, resou
 
 
 @pytest.mark.asyncio
-async def test_agent_lockout(resource_container, environment, server, client, async_finalizer):
+async def test_agent_lockout(resource_container, environment, server, client, async_finalizer, no_agent_backoff):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     version = int(time.time())
