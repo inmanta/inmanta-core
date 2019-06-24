@@ -299,11 +299,13 @@ class Resource(metaclass=ResourceMeta):
         # build the id of the object
         obj_id = cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
 
+        # map all fields
         fields = {field: cls.map_field(exporter, entity_name, field, model_object) for field in cls.fields}
 
-        obj = cls(obj_id, fields)
-
+        obj = cls(obj_id)
+        obj.populate(fields)
         obj.requires = getattr(model_object, "requires")
+
         obj.model = model_object
 
         return obj
@@ -319,7 +321,8 @@ class Resource(metaclass=ResourceMeta):
         if cls is None:
             raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
 
-        obj = cls(obj_id, obj_map)
+        obj = cls(obj_id)
+        obj.populate(obj_map)
 
         return obj
 
@@ -333,7 +336,7 @@ class Resource(metaclass=ResourceMeta):
                     "Resource %s is a reserved keyword and not a valid field name, reported in %s" % (field, cls.__name__)
                 )
 
-    def __init__(self, _id: "Id", fields: JsonType = None) -> None:
+    def __init__(self, _id: "Id") -> None:
         self.id = _id
         self.version = 0
         self.requires: Set[Resource] = set()
@@ -341,18 +344,20 @@ class Resource(metaclass=ResourceMeta):
 
         if not hasattr(self.__class__, "fields"):
             raise Exception("A resource should have a list of fields")
-        elif fields is None:
-            for field in self.__class__.fields:
-                setattr(self, field, None)
-        else:
-            for field in self.__class__.fields:
-                if field in fields:
-                    setattr(self, field, fields[field])
-                else:
-                    raise Exception("Resource with id %s does not have field %s" % (fields["id"], field))
-            if "requires" in fields:
-                for require in fields["requires"]:
-                    self.requires.add(Id.parse_id(require))
+
+        for field in self.__class__.fields:
+            setattr(self, field, None)
+
+    def populate(self, fields: JsonType = None):
+        for field in self.__class__.fields:
+            if field in fields:
+                setattr(self, field, fields[field])
+            else:
+                raise Exception("Resource with id %s does not have field %s" % (fields["id"], field))
+        if "requires" in fields:
+            # parse requires into ID's
+            for require in fields["requires"]:
+                self.requires.add(Id.parse_id(require))
 
     def set_version(self, version: int) -> None:
         """
@@ -424,6 +429,12 @@ class ManagedResource(Resource):
         if not obj.managed:
             raise IgnoreResourceException()
         return obj.managed
+
+
+PARSE_ID_REGEX = re.compile(
+    r"^(?P<id>(?P<type>(?P<ns>[\w-]+::)+(?P<class>[\w-]+))\[(?P<hostname>[^,]+),"
+    r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\])(,v=(?P<version>[0-9]+))?$"
+)
 
 
 class Id(object):
@@ -517,11 +528,7 @@ class Id(object):
             Parse the resource id and return the type, the hostname and the
             resource identifier.
         """
-        result = re.search(
-            r"^(?P<id>(?P<type>(?P<ns>[\w-]+::)+(?P<class>[\w-]+))\[(?P<hostname>[^,]+),"
-            r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\])(,v=(?P<version>[0-9]+))?$",
-            resource_id,
-        )
+        result = PARSE_ID_REGEX.search(resource_id)
 
         if result is None:
             raise Exception("Invalid id for resource %s" % resource_id)

@@ -16,18 +16,17 @@
     Contact: code@inmanta.com
 """
 import asyncio
-import logging
 from collections import defaultdict
 
 import pytest
 
-from agent_server.conftest import _deploy_resources, _wait_until_deployment_finishes, get_agent, get_resource, stop_agent
-from inmanta import const, data, resources
+from agent_server.conftest import _wait_until_deployment_finishes, get_agent, stop_agent
+from inmanta import const, resources
 from inmanta.agent import handler
-from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
+from inmanta.agent.handler import CRUDHandler, HandlerContext, provider
 from inmanta.export import unknown_parameters
 from inmanta.loader import SourceInfo
-from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
+from inmanta.resources import PurgeableResource, resource
 from inmanta.types import JsonType
 
 
@@ -103,7 +102,7 @@ class Provider(CRUDHandler):
         return cls._READ_COUNT[agent][key]
 
 
-def resource_containerA():
+def resource_container_a():
     reset_all_objects()
 
     @resource("__config__::Resource", agent="agent", id_attribute="key")
@@ -121,19 +120,18 @@ def resource_containerA():
     return AProvider
 
 
-def resource_containerB():
+def resource_container_b():
     reset_all_objects()
 
     @resource("__config__::Resource", agent="agent", id_attribute="uid")
     class MyResource(PurgeableResource):
         fields = ("uid", "key", "value", "purged", "purge_on_delete")
 
-        def __init__(self, _id: "Id", fields: JsonType = None) -> None:
-            if fields is not None:
-                if "uid" not in fields:
-                    # capture old format, cause by purge on delete
-                    fields["uid"] = None
-            super().__init__(_id, fields)
+        def populate(self, fields: JsonType = None):
+            if "uid" not in fields:
+                # capture old format, cause by purge on delete
+                fields["uid"] = None
+            super().populate(fields)
 
     @provider("__config__::Resource", name="test_resource")
     class BProvider(Provider):
@@ -164,7 +162,7 @@ def resource_containerB():
 @pytest.mark.asyncio(timeout=150)
 async def test_resource_evolution(server, client, environment, no_agent_backoff, snippetcompiler, monkeypatch, async_finalizer):
 
-    provider = resource_containerA()
+    provider = resource_container_a()
 
     agent = await get_agent(server, environment, "agent1")
     async_finalizer(agent.stop)
@@ -180,9 +178,9 @@ async def test_resource_evolution(server, client, environment, no_agent_backoff,
         string value
         string agent
     end
-    
+
     implement Resource using std::none
-    
+
     Resource(key="a", value="b", agent="agent1")
     """
     )
@@ -201,7 +199,7 @@ async def test_resource_evolution(server, client, environment, no_agent_backoff,
     # get different version from export, wait until next second
     await asyncio.sleep(1)
 
-    provider = resource_containerB()
+    provider = resource_container_b()
 
     agent = await get_agent(server, environment, "agent1")
     async_finalizer(agent.stop)

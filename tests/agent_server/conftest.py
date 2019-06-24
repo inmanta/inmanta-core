@@ -36,22 +36,22 @@ logger = logging.getLogger("inmanta.test.server_agent")
 
 async def get_agent(server, environment, *endpoints, hostname="nodes1"):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    prelen = len(agentmanager.sessions)
     agent = Agent(
         hostname=hostname, environment=environment, agent_map={agent: "localhost" for agent in endpoints}, code_loader=False
     )
     for agentname in endpoints:
         agent.add_end_point_name(agentname)
     await agent.start()
-    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == prelen + 1, 10)
     return agent
 
 
 async def stop_agent(server, agent):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-    endpoints = list(agent._instances.keys())
+    prelen = len(agentmanager.sessions)
     await agent.stop()
-
-    await retry_limited(lambda: len(agentmanager.sessions) == 0, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == prelen - 1, 10)
 
 
 def get_resource(version, key="key1", agent="agent1", value="value1"):
