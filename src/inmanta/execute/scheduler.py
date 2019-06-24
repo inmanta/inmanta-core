@@ -225,7 +225,7 @@ class Scheduler(object):
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
         zerowaiters = deque()
         # queue containing everything, to find hanging statements
-        all_statements = []
+        all_statements = set()
 
         # Wrap in object to pass around
         queue = QueueScheduler(compiler, basequeue, waitqueue, self.types, all_statements)
@@ -263,6 +263,7 @@ class Scheduler(object):
                 next = basequeue.popleft()
                 try:
                     next.execute()
+                    all_statements.discard(next)
                     count = count + 1
                 except UnsetException as e:
                     # some statements don't know all their dependencies up front,...
@@ -274,6 +275,9 @@ class Scheduler(object):
             # find a RV that has waiters, so freezing creates progress
             while len(waitqueue) > 0 and not progress:
                 next = waitqueue.popleft()
+                if next.hasValue:
+                    # already froze itself
+                    continue
                 if next.get_progress_potential() == 0:
                     zerowaiters.append(next)
                 elif next.get_waiting_providers() > 0:
@@ -311,7 +315,7 @@ class Scheduler(object):
                     next.freeze()
 
         now = time.time()
-        LOGGER.debug(
+        LOGGER.info(
             "Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)",
             i,
             len(basequeue),
@@ -342,8 +346,6 @@ class Scheduler(object):
             raise excns[0]
         else:
             raise MultiException(excns)
-
-        all_statements = [x for x in all_statements if not x.done]
 
         if all_statements:
             stmt = None
