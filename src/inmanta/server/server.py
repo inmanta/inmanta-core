@@ -1164,7 +1164,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 LOGGER.warning("Purging %s, purged resource based on %s" % (res.resource_id, res.resource_version_id))
 
                 attributes = res.attributes.copy()
-                attributes["purged"] = "true"
+                attributes["purged"] = True
                 attributes["requires"] = []
                 res_obj = data.Resource.new(
                     env.id, resource_version_id="%s,v=%s" % (res.resource_id, version), attributes=attributes

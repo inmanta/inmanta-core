@@ -14,6 +14,7 @@ Changes in this release:
 - Added support for /etc/inmanta.d style configuration files (#183)
 - Increased the iteration limit to 10000. This value is controlled with INMANTA_MAX_ITERATIONS
   environment variable.
+- Added support for custom resource deserialization by adding the 'populate' method 
 - Improve compiler scaling by using more efficient data structures
 
 DEPRECATIONS:
