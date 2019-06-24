@@ -218,7 +218,7 @@ class DelayedResultVariable(ResultVariable[T]):
         self.hasValue = True
         for waiter in self.waiters:
             waiter.ready(self)
-        # prevent memmory leaks
+        # prevent memory leaks
         self.waiters = None
         self.listeners = None
         self.queues = None
@@ -453,9 +453,6 @@ class QueueScheduler(object):
     def add_to_all(self, item: "Waiter") -> None:
         self.allwaiters.add(item)
 
-    def remove_from_all(self, item: "Waiter") -> None:
-        self.allwaiters.remove(item)
-
     def get_tracker(self) -> Optional[Tracker]:
         return None
 
@@ -482,9 +479,6 @@ class DelegateQueueScheduler(QueueScheduler):
 
     def add_to_all(self, item: "Waiter") -> None:
         self.__delegate.add_to_all(item)
-
-    def remove_from_all(self, item: "Waiter") -> None:
-        self.__delegate.remove_from_all(item)
 
     def get_tracker(self) -> Tracker:
         return self.__tracker
