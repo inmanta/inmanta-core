@@ -1,7 +1,5 @@
 import os
 
-from inmanta import compiler
-
 
 def test_multi_excn(snippetcompiler):
     snippetcompiler.setup_for_error(
@@ -54,17 +52,18 @@ def test_direct_execute_error(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
         a = "A"
-        
+
         typedef zz as string matching self == "{{a}}"
-        
+
         entity A:
             zz aa = "A"
         end
-     
+
         implement A using std::none
-           
+
         A()
-        """, """Could not set attribute `aa` on instance `__config__::A (instantiated at {dir}/main.cf:12)` (reported in Construct(A) ({dir}/main.cf:12))
+        """,
+        """Could not set attribute `aa` on instance `__config__::A (instantiated at {dir}/main.cf:12)` (reported in Construct(A) ({dir}/main.cf:12))
 caused by:
-  The statement Format({{{{a}}}}) can not be executed in this context (reported in Format({{{{a}}}}) ({dir}/main.cf:4))"""
+  The statement Format({{{{a}}}}) can not be executed in this context (reported in Format({{{{a}}}}) ({dir}/main.cf:4))""",  # noqa: E501
     )

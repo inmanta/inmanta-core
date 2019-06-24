@@ -17,8 +17,7 @@
 """
 from typing import Any, Dict, List, Optional, Tuple  # noqa: F401
 
-from inmanta.ast import Anchor, Locatable, Location, Named, Namespace, Namespaced, TypingException, \
-    DirectExecuteException
+from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 
 try:
