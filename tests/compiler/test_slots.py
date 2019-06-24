@@ -1,3 +1,4 @@
+from inmanta.ast import Location, Range, Locatable
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity, Namespace
 from inmanta.ast.statements import Literal, Resumer
@@ -22,7 +23,7 @@ def assert_slotted(obj):
     assert not hasattr(obj, "__dict__")
 
 
-def test_slots():
+def test_slots_rt():
     ns = Namespace("root", None)
     rs = Resolver(ns)
     e = Entity("xx", ns)
@@ -46,3 +47,9 @@ def test_slots():
     assert_slotted(RawUnit(qs, r, {}, Resumer()))
 
     assert_slotted(i)
+
+
+def test_slots_ast():
+    assert_slotted(Location("",0))
+    assert_slotted(Range("",0,0,0,0))
+    assert_slotted(Locatable())

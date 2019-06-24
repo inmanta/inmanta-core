@@ -38,6 +38,9 @@ if TYPE_CHECKING:
 
 
 class Location(object):
+
+    __slots__ = ("file", "lnr")
+
     def __init__(self, file: str, lnr: int) -> None:
         self.file = file
         self.lnr = lnr
@@ -61,6 +64,9 @@ class Location(object):
 
 
 class Range(Location):
+
+    __slots__ = ("start_char", "end_lnr", "end_char")
+
     def __init__(self, file: str, start_lnr: int, start_char: int, end_lnr: int, end_char: int) -> None:
         Location.__init__(self, file, start_lnr)
         self.start_char = start_char
