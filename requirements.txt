@@ -27,7 +27,7 @@ texttable==1.6.1
 tornado==6.0.3
 tox==3.12.1
 tox-venv==0.4.0
-typing==3.6.6
+typing==3.7.4
 asyncpg==0.18.3
 pytest-postgresql==1.4.1
 pytest-env==0.6.2
