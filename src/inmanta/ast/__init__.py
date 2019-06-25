@@ -126,11 +126,6 @@ class Locatable(object):
     location = property(get_location, set_location)
 
 
-class SLocatable(Locatable):
-
-    __slots__ = "_location"
-
-
 class LocatableString(object):
     """
         A string with an attached source location.
@@ -207,7 +202,7 @@ class AttributeReferenceAnchor(Anchor):
         return instancetype.get_entity().get_attribute(self.attribute).get_location()
 
 
-class Namespaced(SLocatable):
+class Namespaced(Locatable):
     @abstractmethod
     def get_namespace(self) -> "Namespace":
         raise NotImplementedError()
