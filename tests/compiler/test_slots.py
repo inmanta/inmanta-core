@@ -1,4 +1,4 @@
-from inmanta.ast import Locatable, Location, Range
+from inmanta.ast import Location, Range
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity, Namespace
 from inmanta.ast.statements import Literal, Resumer
