@@ -398,7 +398,7 @@ end
 
 
 @pytest.mark.timeout(20)
-def test_config_dir_option(tmpdir):
+def test_warning_config_dir_option_on_server_command(tmpdir):
     non_existing_dir = os.path.join(tmpdir, "non_existing_dir")
     assert not os.path.isdir(non_existing_dir)
     (args, _) = get_command(tmpdir, stdout_log_level=3, config_dir=non_existing_dir)
@@ -406,3 +406,30 @@ def test_config_dir_option(tmpdir):
     stdout = "".join(stdout)
     assert "Starting server endpoint" in stdout
     assert f"Config directory {non_existing_dir} doesn't exist" in stdout
+
+
+@pytest.mark.timeout(20)
+def test_warning_config_options_on_compile_command(snippetcompiler, tmpdir):
+    non_existing_config_dir = os.path.join(tmpdir, "non_existing_config_dir")
+    non_existing_config_file = os.path.join(tmpdir, "non_existing_config_file")
+    snippetcompiler.setup_for_snippet_external(
+        """
+entity Test:
+    number attr
+end
+"""
+    )
+    config_options = ["--config-dir", non_existing_config_dir, "-c", non_existing_config_file, "-vvv"]
+    args = [sys.executable, "-m", "inmanta.app"] + config_options + ["compile"]
+    process = do_run(args, cwd=snippetcompiler.project_dir)
+    out, err = process.communicate(timeout=5)
+    assert process.returncode == 0
+
+    out = out.decode()
+    err = err.decode()
+    all_output = out + err
+
+    assert "Starting compile" in all_output
+    assert "Compile done" in all_output
+    assert f"Config directory {non_existing_config_dir} doesn't exist" not in all_output
+    assert f"Config file {non_existing_config_file} doesn't exist" not in all_output

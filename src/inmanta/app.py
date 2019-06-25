@@ -64,6 +64,12 @@ LOGGER = logging.getLogger()
 
 @command("server", help_msg="Start the inmanta server")
 def start_server(options):
+    if options.config_file and not os.path.exists(options.config_file):
+        LOGGER.warning("Config file %s doesn't exist", options.config_file)
+
+    if options.config_dir and not os.path.isdir(options.config_dir):
+        LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
+
     ibl = InmantaBootloader()
     setup_signal_handlers(ibl.stop)
 
@@ -563,12 +569,6 @@ def app():
         stream_handler.setLevel(log_level)
 
     logging.captureWarnings(True)
-
-    if options.config_file and not os.path.exists(options.config_file):
-        LOGGER.warning("Config file %s doesn't exist", options.config_file)
-
-    if options.config_dir and not os.path.isdir(options.config_dir):
-        LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
 
     # Load the configuration
     Config.load_config(options.config_file, options.config_dir)
