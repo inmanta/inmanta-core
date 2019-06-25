@@ -1,4 +1,4 @@
-from inmanta.ast import Location, Range, Locatable
+from inmanta.ast import Locatable, Location, Range
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity, Namespace
 from inmanta.ast.statements import Literal, Resumer
@@ -50,6 +50,6 @@ def test_slots_rt():
 
 
 def test_slots_ast():
-    assert_slotted(Location("",0))
-    assert_slotted(Range("",0,0,0,0))
+    assert_slotted(Location("", 0))
+    assert_slotted(Range("", 0, 0, 0, 0))
     assert_slotted(Locatable())

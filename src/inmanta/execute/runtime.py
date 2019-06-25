@@ -756,7 +756,6 @@ class ExecutionContext(Resolver):
 
 # also extends locatable
 class Instance(ExecutionContext):
-
     def set_location(self, location: Location) -> None:
         assert location is not None and location.lnr > 0
         self._location = location

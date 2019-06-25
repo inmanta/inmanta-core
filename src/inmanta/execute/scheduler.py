@@ -32,7 +32,6 @@ from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver
 from inmanta.execute.tracking import ModuleTracker
-from inmanta.profile_mem import total_size
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
