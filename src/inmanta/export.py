@@ -197,7 +197,7 @@ class Exporter(object):
 
             self.run_export_plugin(name)
 
-    def run_export_plugin(self, name):
+    def run_export_plugin(self, name: str) -> None:
         types, function = Exporter.__export_functions[name]
         if len(types) > 0:
             function(self, types=self._get_instance_proxies_of_types(types))
