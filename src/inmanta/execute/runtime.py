@@ -228,7 +228,7 @@ class DelayedResultVariable(ResultVariable[T]):
         self.hasValue = True
         for waiter in self.waiters:
             waiter.ready(self)
-        # prevent memmory leaks
+        # prevent memory leaks
         self.waiters = None
         self.listeners = None
         self.queues = None

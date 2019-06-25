@@ -17,7 +17,7 @@
 """
 from typing import Any, Dict, List, Optional, Tuple  # noqa: F401
 
-from inmanta.ast import Anchor, Locatable, Location, Named, Namespace, Namespaced
+from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 
 try:
@@ -79,6 +79,9 @@ class DynamicStatement(Statement):
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """Emit new instructions to the queue, executing this instruction in the context of the resolver"""
         raise Exception("Not Implemented" + str(type(self)))
+
+    def execute_direct(self, requires):
+        raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
 
 
 class ExpressionStatement(DynamicStatement):

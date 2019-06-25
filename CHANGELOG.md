@@ -12,10 +12,14 @@ Changes in this release:
 - Marked pypi package as typed
 - Create pytest-inmanta-extensions package for extensions testing
 - Added support for /etc/inmanta.d style configuration files (#183)
+- Increased the iteration limit to 10000. This value is controlled with INMANTA_MAX_ITERATIONS
+  environment variable.
+- Added support for custom resource deserialization by adding the 'populate' method 
+- Improve compiler scaling by using more efficient data structures
 
 DEPRECATIONS:
-* The files /etc/inmanta/agent.cfg and /etc/inmanta/server.cfg are not used anymore. More information about the available 
-configuration files can be found in the documentation pages under `Administrator Documentation -> Configuration files`.  
+* The files /etc/inmanta/agent.cfg and /etc/inmanta/server.cfg are not used anymore. More information about the available
+configuration files can be found in the documentation pages under `Administrator Documentation -> Configuration files`.
 
 v 2019.2 (2019-04-30)
 Changes in this release:

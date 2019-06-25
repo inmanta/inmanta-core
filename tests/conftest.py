@@ -577,6 +577,9 @@ class SnippetCompilationTest(KeepOnFail):
         self.setup_for_snippet_external(snippet)
         Project.set(Project(self.project_dir, autostd=autostd))
 
+    def reset(self):
+        Project.set(Project(self.project_dir, autostd=Project.get().autostd))
+
     def setup_for_snippet_external(self, snippet):
         if self.modules_dir:
             module_path = f"[{self.libs}, {self.modules_dir}]"

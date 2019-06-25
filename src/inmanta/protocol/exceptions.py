@@ -93,6 +93,19 @@ class NotFound(BaseHttpException):
         super().__init__(404, msg)
 
 
+class Conflict(BaseHttpException):
+    """
+        This exception is used to indicate that a request conflicts with the current state of the resource.
+    """
+
+    def __init__(self, message: Optional[str] = None) -> None:
+        msg = "Request conflicts with the current state of the resource"
+        if message is not None:
+            msg += ": " + message
+
+        super().__init__(409, msg)
+
+
 class ServerError(BaseHttpException):
     """
         An unexpected error occurred in the server
