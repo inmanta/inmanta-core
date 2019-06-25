@@ -195,12 +195,14 @@ class Exporter(object):
             if name not in self.__class__.__export_functions:
                 raise Exception("Export function %s does not exist." % name)
 
-            types, function = Exporter.__export_functions[name]
+            self.run_export_plugin(name)
 
-            if len(types) > 0:
-                function(self, types=self._get_instance_proxies_of_types(types))
-            else:
-                function(self)
+    def run_export_plugin(self, name: str) -> None:
+        types, function = Exporter.__export_functions[name]
+        if len(types) > 0:
+            function(self, types=self._get_instance_proxies_of_types(types))
+        else:
+            function(self)
 
     def _call_dep_manager(self, types: ModelDict) -> None:
         """
