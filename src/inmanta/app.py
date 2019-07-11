@@ -373,6 +373,7 @@ def export_parser_config(parser):
         action="store_true",
         default=False,
     )
+    parser.add_argument("--export-plugin", dest="export_plugin", help="Use this export plugin.", default=None)
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
@@ -428,7 +429,9 @@ def export(options):
     # continue the export
 
     export = Exporter(options)
-    version, _ = export.run(types, scopes, metadata=metadata, model_export=options.model_export)
+    version, _ = export.run(
+        types, scopes, metadata=metadata, model_export=options.model_export, export_plugin=options.export_plugin
+    )
 
     if exp is not None:
         raise exp

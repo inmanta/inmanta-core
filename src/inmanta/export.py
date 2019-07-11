@@ -180,7 +180,7 @@ class Exporter(object):
 
         Resource.convert_requires(resource_mapping, ignored_set)
 
-    def _run_export_plugins(self) -> None:
+    def _run_export_plugins_specified_in_config_file(self) -> None:
         """
             Run any additional export plug-ins
         """
@@ -191,13 +191,12 @@ class Exporter(object):
         for name in export:
             if name.strip() == "":
                 continue
-
-            if name not in self.__class__.__export_functions:
-                raise Exception("Export function %s does not exist." % name)
-
             self.run_export_plugin(name)
 
     def run_export_plugin(self, name: str) -> None:
+        if name not in Exporter.__export_functions:
+            raise Exception("Export function %s does not exist." % name)
+
         types, function = Exporter.__export_functions[name]
         if len(types) > 0:
             function(self, types=self._get_instance_proxies_of_types(types))
@@ -263,6 +262,7 @@ class Exporter(object):
         no_commit: bool = False,
         include_status: bool = False,
         model_export: bool = False,
+        export_plugin: Optional[str] = None,
     ) -> None:
         """
         Run the export functions
@@ -271,8 +271,11 @@ class Exporter(object):
         self.scopes = scopes
         self._version = int(time.time())
 
-        # first run other export plugins
-        self._run_export_plugins()
+        if export_plugin is not None:
+            # Run export plugin specified on CLI
+            self.run_export_plugin(export_plugin)
+        else:
+            self._run_export_plugins_specified_in_config_file()
 
         if types is not None:
             # then process the configuration model to submit it to the mgmt server
