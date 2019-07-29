@@ -43,7 +43,13 @@ LOGGER = logging.getLogger(__name__)
 unknown_parameters = []
 
 cfg_env = Option("config", "environment", None, "The environment this model is associated with", is_uuid_opt)
-cfg_export = Option("config", "export", "", "The list of exporters to use", is_list)
+cfg_export = Option(
+    "config",
+    "export",
+    "",
+    "The list of exporters to use. This option is ignored when the --export-plugin option is used.",
+    is_list,
+)
 cfg_unknown_handler = Option("unknown_handler", "default", "prune-agent", "default method to handle unknown values ", is_str)
 
 
