@@ -52,4 +52,4 @@ def test_max_iterations(snippetcompiler, monkeypatch):
 
         (types, _) = compiler.do_compile()
 
-    assert "Could not complete model, max_iterations 1 reached." in str(e)
+    assert "Could not complete model, max_iterations 1 reached." in str(e.value)

@@ -871,7 +871,7 @@ async def test_method_definition():
                 Create a new project
             """
 
-    assert "has no type annotation." in str(e)
+    assert "has no type annotation." in str(e.value)
 
     with pytest.raises(InvalidMethodDefinition) as e:
 
@@ -881,7 +881,7 @@ async def test_method_definition():
                 Create a new project
             """
 
-    assert "Type typing.Iterator[str] of argument name can only be generic List or Dict" in str(e)
+    assert "Type typing.Iterator[str] of argument name can only be generic List or Dict" in str(e.value)
 
     with pytest.raises(InvalidMethodDefinition) as e:
 
@@ -894,7 +894,7 @@ async def test_method_definition():
     assert (
         "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, bool, datetime or a "
         "List of these types or a Dict with str keys and values of these types."
-    ) in str(e)
+    ) in str(e.value)
 
     with pytest.raises(InvalidMethodDefinition) as e:
 
@@ -904,7 +904,7 @@ async def test_method_definition():
                 Create a new project
             """
 
-    assert "Type typing.Dict[int, str] of argument name must be a Dict with str keys and not int" in str(e)
+    assert "Type typing.Dict[int, str] of argument name must be a Dict with str keys and not int" in str(e.value)
 
     with pytest.raises(InvalidMethodDefinition) as e:
 
@@ -917,7 +917,7 @@ async def test_method_definition():
     assert (
         "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, bool, datetime or a "
         "List of these types or a Dict with str keys and values of these types."
-    ) in str(e)
+    ) in str(e.value)
 
     @protocol.typedmethod(path="/service_types/<service_type>", operation="DELETE", client_types=["api"])
     def lcm_service_type_delete(tid: uuid.UUID, service_type: str) -> None:
