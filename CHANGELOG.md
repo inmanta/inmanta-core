@@ -16,6 +16,7 @@ Changes in this release:
   environment variable.
 - Added support for custom resource deserialization by adding the 'populate' method 
 - Improve compiler scaling by using more efficient data structures
+- Added the --export-plugin option to the export command (#1277)
 
 DEPRECATIONS:
 * The files /etc/inmanta/agent.cfg and /etc/inmanta/server.cfg are not used anymore. More information about the available
