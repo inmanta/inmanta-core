@@ -381,7 +381,7 @@ class MethodProperties(object):
             if arg not in type_hints:
                 raise InvalidMethodDefinition(f"{arg} in function {self.function} has no type annotation.")
 
-            self._validate_type_arg(arg, type_hints[arg])
+            self._validate_type_arg(arg, type_hints[arg], allow_none_type=True)
 
         self._validate_return_type(type_hints["return"])
 
