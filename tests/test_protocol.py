@@ -938,16 +938,26 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name):
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
 
-    SimpleTypes = Union[float, int, str, bool]  # NOQA
+    SimpleTypes = Union[float, int, bool, str]  # NOQA
     AttributeTypes = Union[SimpleTypes, List[SimpleTypes], Dict[str, SimpleTypes]]  # NOQA
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
-        def test_method(data: AttributeTypes) -> List[SimpleTypes]:  # NOQA
+        @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
+        def test_method(data: SimpleTypes, version: Optional[int] = None) -> List[SimpleTypes]:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, data: AttributeTypes) -> List[SimpleTypes]:  # NOQA
+        async def test_method(self, data: SimpleTypes, version: Optional[int] = None) -> List[SimpleTypes]:  # NOQA
+            if isinstance(data, list):
+                return data
+            return [data]
+
+        @protocol.typedmethod(path="/testp", operation="POST", client_types=["api"])
+        def test_methodp(data: AttributeTypes, version: Optional[int] = None) -> List[SimpleTypes]:  # NOQA
+            pass
+
+        @protocol.handle(test_methodp)
+        async def test_methodp(self, data: AttributeTypes, version: Optional[int] = None) -> List[SimpleTypes]:  # NOQA
             if isinstance(data, list):
                 return data
             return [data]
@@ -958,12 +968,23 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name):
     await rs.start()
 
     client = protocol.Client("client")
+
+    result = await client.test_methodp(data=[5], version=7)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert 5 == result.result["data"][0]
+
+    result = await client.test_method(data=5, version=3)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert 5 == result.result["data"][0]
+
     result = await client.test_method(data=5)
     assert result.code == 200
     assert len(result.result["data"]) == 1
     assert 5 == result.result["data"][0]
 
-    result = await client.test_method(data=[5])
+    result = await client.test_method(data=5, version=7)
     assert result.code == 200
     assert len(result.result["data"]) == 1
     assert 5 == result.result["data"][0]

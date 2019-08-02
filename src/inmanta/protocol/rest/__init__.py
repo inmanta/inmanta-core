@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Typ
 
 import pydantic
 import typing_inspect
+from pydantic.validators import str_validator, int_validator, float_validator
 from tornado import escape
 
 from inmanta import config as inmanta_config
@@ -145,33 +146,15 @@ class CallArguments(object):
 
             :see: protocol.common.MethodProperties._validate_function_types
         """
-        matching_type = None
         for t in typing_inspect.get_args(arg_type, evaluate=True):
-            instanceof_type = t
-            if typing_inspect.is_generic_type(t):
-                instanceof_type = typing_inspect.get_origin(t)
+            try:
+                return self._convert_type(arg_name, t, value)
+            except Exception as e:
+                pass
 
-            if isinstance(value, instanceof_type):
-                if matching_type is not None:
-                    raise exceptions.ServerError(
-                        f"Argument {arg_name} is defined as a union {arg_type} for which multiple "
-                        f"types match the provided value {value}"
-                    )
-                matching_type = t
-
-        if matching_type is None:
-            raise exceptions.BadRequest(
-                f"Invalid argument {arg_name}, no matching type found in union {arg_type} for value type {type(value)}"
-            )
-
-        if typing_inspect.is_generic_type(matching_type):
-            return self._process_generic_for_arguments(matching_type, arg_name, value)
-
-        if issubclass(matching_type, type(None)):
-            # A check for optional arguments
-            return None
-
-        return matching_type(value)
+        raise exceptions.BadRequest(
+            f"Invalid argument {arg_name}, no matching type found in union {arg_type} for value type {type(value)}"
+        )
 
     def _process_generic_for_arguments(self, arg_type: Type, arg_name: str, value: Any) -> Any:
         """ Process List or Dict types.
@@ -303,30 +286,7 @@ class CallArguments(object):
         arg_type: Type = self._argspec.annotations[arg]
 
         try:
-            if typing_inspect.is_union_type(arg_type):
-                return self._process_union_for_arguments(arg_type, arg, value)
-
-            # This check needs to be first because isinstance fails on generic types.
-            if typing_inspect.is_generic_type(arg_type):
-                return self._process_generic_for_arguments(arg_type, arg, value)
-
-            if isinstance(value, arg_type):
-                return value
-
-            if issubclass(arg_type, BaseModel):
-                return arg_type(**value)
-
-            if arg_type == datetime:
-                return datetime.strptime(value, const.TIME_ISOFMT)
-
-            elif issubclass(arg_type, enum.Enum):
-                return arg_type[value]
-
-            elif arg_type == bool:
-                return inmanta_config.is_bool(value)
-
-            else:
-                return arg_type(value)
+            return self._convert_type(arg, arg_type, value)
 
         except pydantic.ValidationError as e:
             error_msg = f"Failed to validate argument {arg} of expected type {arg_type}\n{str(e)}"
@@ -337,6 +297,36 @@ class CallArguments(object):
             error_msg = f"Invalid type for argument {arg}. Expected {arg_type} but received {value.__class__.__name__}, {value}"
             LOGGER.exception(error_msg)
             raise exceptions.BadRequest(error_msg)
+
+    def _convert_type(self, arg_name, arg_type, value):
+        if typing_inspect.is_union_type(arg_type):
+            return self._process_union_for_arguments(arg_type, arg_name, value)
+        # This check needs to be first because isinstance fails on generic types.
+        if typing_inspect.is_generic_type(arg_type):
+            return self._process_generic_for_arguments(arg_type, arg_name, value)
+        if isinstance(value, arg_type):
+            return value
+
+        if arg_type == str:
+            return str_validator(value)
+        if arg_type == int:
+            return int_validator(value)
+        if arg_type == float:
+            return float_validator(value)
+
+        if issubclass(arg_type, BaseModel):
+            return arg_type(**value)
+        if arg_type == datetime:
+            return datetime.strptime(value, const.TIME_ISOFMT)
+
+        elif issubclass(arg_type, enum.Enum):
+            return arg_type[value]
+
+        elif arg_type == bool:
+            return inmanta_config.is_bool(value)
+
+        else:
+            return arg_type(value)
 
     def get_default_value(self, arg_name: str, arg_position: int, default_start: int) -> Optional[Any]:
         """

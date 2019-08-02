@@ -27,6 +27,7 @@ import uuid
 from collections import defaultdict
 from datetime import datetime
 from enum import Enum
+from inspect import Parameter
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -50,6 +51,7 @@ from urllib import parse
 
 import jwt
 import typing_inspect
+from pydantic.main import create_model
 from tornado import web
 
 from inmanta import config as inmanta_config
@@ -276,6 +278,7 @@ class InvalidMethodDefinition(Exception):
     """
 
 
+VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
 VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime)
 
 
@@ -350,6 +353,21 @@ class MethodProperties(object):
                 raise InvalidMethodDefinition("Invalid client type %s specified for function %s" % (ct, function))
 
         self._validate_function_types(typed)
+        self.validator = self.to_pydantic()
+
+    def to_pydantic(self):
+        sig = inspect.signature(self.function)
+        def to_tuple(param: Parameter):
+            if param.annotation == Parameter.empty:
+                return param.default
+            if param.default != Parameter.empty:
+                return (param.annotation, param.default)
+            else:
+                return (param.annotation, None)
+        return create_model(self.function.__name__, **{param.name: to_tuple(param) for param in sig.parameters.values()})
+
+    def arguments_in_URL(self):
+        return self.operation == "GET"
 
     def _validate_function_types(self, typed: bool) -> None:
         """ Validate the type hints used in the method definition.
@@ -381,7 +399,7 @@ class MethodProperties(object):
             if arg not in type_hints:
                 raise InvalidMethodDefinition(f"{arg} in function {self.function} has no type annotation.")
 
-            self._validate_type_arg(arg, type_hints[arg], allow_none_type=True)
+            self._validate_type_arg(arg, type_hints[arg], allow_none_type=True, in_url=self.arguments_in_URL())
 
         self._validate_return_type(type_hints["return"])
 
@@ -402,17 +420,19 @@ class MethodProperties(object):
         else:
             self._validate_type_arg(arg, arg_type)
 
-    def _validate_type_arg(self, arg: str, arg_type: Type, allow_none_type: bool = False) -> None:
+    def _validate_type_arg(self, arg: str, arg_type: Type, allow_none_type: bool = False, in_url: bool = False) -> None:
         """ Validate the given type arg recursively
 
             :param arg: The name of the argument
             :param arg_type: The annotated type fo the argument
+            :param in_url: This argument is passed in the URL
         """
+
         if typing_inspect.is_union_type(arg_type):
             # Make sure there is only one list and one dict in the union, otherwise we cannot process the arguments
             cnt = defaultdict(lambda: 0)
             for sub_arg in typing_inspect.get_args(arg_type, evaluate=True):
-                self._validate_type_arg(arg, sub_arg, allow_none_type)
+                self._validate_type_arg(arg, sub_arg, allow_none_type, in_url)
 
                 if typing_inspect.is_generic_type(sub_arg):
                     # there is a difference between python 3.6 and >=3.7
@@ -426,6 +446,9 @@ class MethodProperties(object):
                     raise InvalidMethodDefinition(f"Union of argument {arg} can contain only one generic {name}")
 
         elif typing_inspect.is_generic_type(arg_type):
+            if in_url:
+                raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, as it can not be part of the URL")
+
             orig = typing_inspect.get_origin(arg_type)
             if not issubclass(orig, (list, dict)):
                 raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} can only be generic List or Dict")
@@ -437,7 +460,7 @@ class MethodProperties(object):
                 )
 
             elif len(args) == 1:  # A generic list
-                self._validate_type_arg(arg, args[0], allow_none_type)
+                self._validate_type_arg(arg, args[0], allow_none_type, in_url)
 
             elif len(args) == 2:  # Generic Dict
                 if not issubclass(args[0], str):
@@ -445,14 +468,15 @@ class MethodProperties(object):
                         f"Type {arg_type} of argument {arg} must be a Dict with str keys and not {args[0].__name__}"
                     )
 
-                self._validate_type_arg(arg, args[1], allow_none_type=True)
+                self._validate_type_arg(arg, args[1], allow_none_type=True, in_url=in_url)
 
             elif len(args) > 2:
                 raise InvalidMethodDefinition(f"Failed to validate type {arg_type} of argument {arg}.")
 
-        elif issubclass(arg_type, VALID_SIMPLE_ARG_TYPES):
+        elif not in_url and issubclass(arg_type, VALID_SIMPLE_ARG_TYPES):
             pass
-
+        elif in_url and issubclass(arg_type, VALID_URL_ARG_TYPES):
+            pass
         elif allow_none_type and issubclass(arg_type, type(None)):
             # A check for optional arguments
             pass

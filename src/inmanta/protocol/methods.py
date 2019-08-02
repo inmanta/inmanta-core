@@ -172,7 +172,7 @@ def list_settings(tid: uuid.UUID):
     agent_server=True,
     client_types=["api", "agent", "compiler"],
 )
-def set_setting(tid: uuid.UUID, id: str, value: object):
+def set_setting(tid: uuid.UUID, id: str, value: str):
     """
         Set a value
     """
