@@ -22,12 +22,15 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
+from pydantic import StrictBool
+
 if TYPE_CHECKING:
     # Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
     from inmanta.data.model import BaseModel  # noqa: F401
     from inmanta.protocol.common import ReturnValue  # noqa: F401
 
-SimpleTypes = Union["BaseModel", Enum, uuid.UUID, str, float, int, bool, datetime]
+PrimitiveTypes = Union[uuid.UUID, str, float, int, StrictBool, datetime]
+SimpleTypes = Union["BaseModel", Enum, uuid.UUID, str, float, int, StrictBool, datetime]
 
 JsonType = Dict[str, Any]
 ReturnTupple = Tuple[int, Optional[JsonType]]

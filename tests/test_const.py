@@ -5,6 +5,7 @@ from inmanta.const import (
     TRANSIENT_STATES,
     UNDEPLOYABLE_STATES,
     VALID_STATES_ON_STATE_UPDATE,
+    Change
 )
 
 
@@ -25,3 +26,12 @@ def test_action_set_consistency():
 
     # done + not_done == all == initial states + states one can transition to
     assert done | not_done == on_deploy | initial
+
+
+def test_ordinal_compare():
+    assert Change.updated.ordinal() == 3
+
+    assert Change.nochange < Change.created
+    assert Change.created < Change.purged
+    assert Change.purged < Change.updated
+

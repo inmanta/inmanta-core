@@ -51,12 +51,14 @@ from urllib import parse
 
 import jwt
 import typing_inspect
+from pydantic.error_wrappers import ValidationError
 from pydantic.main import create_model
 from tornado import web
 
 from inmanta import config as inmanta_config
 from inmanta import const, execute, util
 from inmanta.data.model import BaseModel
+from inmanta.protocol.exceptions import BadRequest
 from inmanta.types import HandlerType, JsonType, MethodType
 
 from . import exceptions
@@ -354,6 +356,16 @@ class MethodProperties(object):
 
         self._validate_function_types(typed)
         self.validator = self.to_pydantic()
+
+
+    def validate_dict(self, values:Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            out = self.validator(**values)
+            return {f: getattr(out, f) for f in out.fields.keys()}
+        except ValidationError as e:
+            error_msg = f"Failed to validate argument\n{str(e)}"
+            LOGGER.exception(error_msg)
+            raise BadRequest(error_msg)
 
     def to_pydantic(self):
         sig = inspect.signature(self.function)

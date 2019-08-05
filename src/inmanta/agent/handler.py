@@ -183,17 +183,17 @@ class HandlerContext(object):
 
     def set_created(self):
         self._created = True
-        if self._change is None or self._change.value < const.Change.created.value:
+        if self._change is None or self._change < const.Change.created:
             self._change = const.Change.created
 
     def set_purged(self):
         self._purged = True
-        if self._change is None or self._change.value < const.Change.purged.value:
+        if self._change is None or self._change < const.Change.purged:
             self._change = const.Change.purged
 
     def set_updated(self):
         self._updated = True
-        if self._change is None or self._change.value < const.Change.updated.value:
+        if self._change is None or self._change < const.Change.updated:
             self._change = const.Change.updated
 
     @property

@@ -27,6 +27,7 @@ from typing import Dict, Iterator, List, Optional, Union
 
 import pytest
 import tornado
+from pydantic.types import StrictBool
 from tornado import gen, web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
@@ -938,7 +939,7 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name):
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
 
-    SimpleTypes = Union[float, int, bool, str]  # NOQA
+    SimpleTypes = Union[float, int, StrictBool, str]  # NOQA
     AttributeTypes = Union[SimpleTypes, List[SimpleTypes], Dict[str, SimpleTypes]]  # NOQA
 
     class ProjectServer(ServerSlice):

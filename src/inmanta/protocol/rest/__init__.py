@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Typ
 
 import pydantic
 import typing_inspect
+from pydantic.types import StrictBool
 from pydantic.validators import str_validator, int_validator, float_validator
 from tornado import escape
 
@@ -322,7 +323,7 @@ class CallArguments(object):
         elif issubclass(arg_type, enum.Enum):
             return arg_type[value]
 
-        elif arg_type == bool:
+        elif arg_type == bool or arg_type == StrictBool:
             return inmanta_config.is_bool(value)
 
         else:
@@ -365,6 +366,9 @@ class CallArguments(object):
         if self._argspec.defaults is not None:
             defaults_start = len(args) - len(self._argspec.defaults)
 
+
+        call_args = {}
+
         for i, arg in enumerate(args):
             # get value from headers, defaults or message
             value = self._map_headers(arg)
@@ -376,9 +380,12 @@ class CallArguments(object):
                 else:  # get default value
                     value = self.get_default_value(arg, i, defaults_start)
 
-            # validate type
-            value = self._process_typing(arg, value)
+            call_args[arg] = value
 
+        # validate types
+        call_args = self._properties.validate_dict(call_args)
+
+        for arg, value in call_args.items():
             # run getters
             value = await self._run_getters(arg, value)
 

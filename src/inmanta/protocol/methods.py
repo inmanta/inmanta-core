@@ -18,9 +18,10 @@
 
 import datetime
 import uuid
-from typing import Any
+from typing import Any, Union
 
 from inmanta import const, data
+from inmanta.types import PrimitiveTypes, JsonType
 
 from . import exceptions
 from .common import ArgOption
@@ -172,7 +173,7 @@ def list_settings(tid: uuid.UUID):
     agent_server=True,
     client_types=["api", "agent", "compiler"],
 )
-def set_setting(tid: uuid.UUID, id: str, value: str):
+def set_setting(tid: uuid.UUID, id: str, value: Union[PrimitiveTypes, JsonType]):
     """
         Set a value
     """

@@ -25,7 +25,7 @@ import shutil
 import time
 import uuid
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
 from uuid import UUID
 
 import asyncpg
@@ -49,7 +49,7 @@ from inmanta.server import (
 )
 from inmanta.server import config as opt
 from inmanta.server import protocol
-from inmanta.types import Apireturn, JsonType, ReturnTupple, Warnings
+from inmanta.types import Apireturn, JsonType, ReturnTupple, Warnings, PrimitiveTypes
 from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
@@ -1931,7 +1931,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return warnings
 
     @protocol.handle(methods.set_setting, env="tid", key="id")
-    async def set_setting(self, env: data.Environment, key: str, value: str) -> Apireturn:
+    async def set_setting(self, env: data.Environment, key: str, value: Union[PrimitiveTypes, JsonType]) -> Apireturn:
         try:
             await env.set(key, value)
             warnings = await self._setting_change(env, key)

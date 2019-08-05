@@ -30,7 +30,7 @@ import uuid
 import warnings
 from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
 from logging import Logger
-from typing import Callable, Coroutine, Dict, List, Optional, Set, Tuple, Union
+from typing import Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
 
 import pkg_resources
 from pkg_resources import DistributionNotFound
@@ -43,6 +43,9 @@ from inmanta.types import JsonType
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
 HASH_ROUNDS = 100000
+
+T = TypeVar("T")
+S = TypeVar("S")
 
 
 def memoize(obj):
@@ -68,7 +71,7 @@ def get_compiler_version() -> Optional[str]:
         return None
 
 
-def groupby(mylist, f):
+def groupby(mylist: List[T], f: Callable[[T], S]) -> Iterator[Tuple[S, Iterator[T]]]:
     return itertools.groupby(sorted(mylist, key=f), f)
 
 
