@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from enum import Enum, IntEnum
+from enum import Enum
 
 
 class ResourceState(str, Enum):
@@ -114,7 +114,6 @@ States that are in the action log, but not actual states
 
 
 class Change(Enum):
-
     def __init__(self, value):
         self.__ordinal = None
 

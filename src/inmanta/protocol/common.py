@@ -357,8 +357,7 @@ class MethodProperties(object):
         self._validate_function_types(typed)
         self.validator = self.to_pydantic()
 
-
-    def validate_dict(self, values:Dict[str, Any]) -> Dict[str, Any]:
+    def validate_dict(self, values: Dict[str, Any]) -> Dict[str, Any]:
         try:
             out = self.validator(**values)
             return {f: getattr(out, f) for f in out.fields.keys()}
@@ -369,6 +368,7 @@ class MethodProperties(object):
 
     def to_pydantic(self):
         sig = inspect.signature(self.function)
+
         def to_tuple(param: Parameter):
             if param.annotation == Parameter.empty:
                 return param.default
@@ -376,9 +376,10 @@ class MethodProperties(object):
                 return (param.annotation, param.default)
             else:
                 return (param.annotation, None)
+
         return create_model(self.function.__name__, **{param.name: to_tuple(param) for param in sig.parameters.values()})
 
-    def arguments_in_URL(self):
+    def arguments_in_url(self):
         return self.operation == "GET"
 
     def _validate_function_types(self, typed: bool) -> None:
@@ -411,7 +412,7 @@ class MethodProperties(object):
             if arg not in type_hints:
                 raise InvalidMethodDefinition(f"{arg} in function {self.function} has no type annotation.")
 
-            self._validate_type_arg(arg, type_hints[arg], allow_none_type=True, in_url=self.arguments_in_URL())
+            self._validate_type_arg(arg, type_hints[arg], allow_none_type=True, in_url=self.arguments_in_url())
 
         self._validate_return_type(type_hints["return"])
 
@@ -459,7 +460,9 @@ class MethodProperties(object):
 
         elif typing_inspect.is_generic_type(arg_type):
             if in_url:
-                raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, as it can not be part of the URL")
+                raise InvalidMethodDefinition(
+                    f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, as it can not be part of the URL"
+                )
 
             orig = typing_inspect.get_origin(arg_type)
             if not issubclass(orig, (list, dict)):

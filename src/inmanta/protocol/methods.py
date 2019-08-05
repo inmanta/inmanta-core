@@ -21,7 +21,7 @@ import uuid
 from typing import Any, Union
 
 from inmanta import const, data
-from inmanta.types import PrimitiveTypes, JsonType
+from inmanta.types import JsonType, PrimitiveTypes
 
 from . import exceptions
 from .common import ArgOption

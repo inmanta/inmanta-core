@@ -5,7 +5,7 @@ from inmanta.const import (
     TRANSIENT_STATES,
     UNDEPLOYABLE_STATES,
     VALID_STATES_ON_STATE_UPDATE,
-    Change
+    Change,
 )
 
 
@@ -34,4 +34,3 @@ def test_ordinal_compare():
     assert Change.nochange < Change.created
     assert Change.created < Change.purged
     assert Change.purged < Change.updated
-

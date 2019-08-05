@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Typ
 import pydantic
 import typing_inspect
 from pydantic.types import StrictBool
-from pydantic.validators import str_validator, int_validator, float_validator
+from pydantic.validators import float_validator, int_validator, str_validator
 from tornado import escape
 
 from inmanta import config as inmanta_config
@@ -150,7 +150,7 @@ class CallArguments(object):
         for t in typing_inspect.get_args(arg_type, evaluate=True):
             try:
                 return self._convert_type(arg_name, t, value)
-            except Exception as e:
+            except Exception:
                 pass
 
         raise exceptions.BadRequest(
@@ -365,7 +365,6 @@ class CallArguments(object):
         defaults_start: int = -1
         if self._argspec.defaults is not None:
             defaults_start = len(args) - len(self._argspec.defaults)
-
 
         call_args = {}
 
