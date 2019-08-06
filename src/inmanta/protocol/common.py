@@ -370,9 +370,9 @@ class MethodProperties(object):
         sig = inspect.signature(self.function)
 
         def to_tuple(param: Parameter):
-            if param.annotation == Parameter.empty:
-                return param.default
-            if param.default != Parameter.empty:
+            if param.annotation is Parameter.empty:
+                return param.default if param.default is not Parameter.empty else None
+            if param.default is not Parameter.empty:
                 return (param.annotation, param.default)
             else:
                 return (param.annotation, None)
