@@ -359,6 +359,11 @@ class MethodProperties(object):
         self.validator = self.to_pydantic()
 
     def validate_dict(self, values: Dict[str, Any]) -> Dict[str, Any]:
+        """
+            Validate methods arguments. Values is a dict with key/value pairs for the arguments (similar to kwargs). This method
+            validates and converts types if required (e.g. str to int). The returns value has the correct typing to dispatch
+            to method handlers.
+        """
         try:
             out = self.validator(**values)
             return {f: getattr(out, f) for f in out.fields.keys()}
