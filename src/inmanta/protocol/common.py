@@ -50,6 +50,7 @@ from typing import (
 from urllib import parse
 
 import jwt
+import pydantic
 import typing_inspect
 from pydantic.error_wrappers import ValidationError
 from pydantic.main import create_model
@@ -366,7 +367,10 @@ class MethodProperties(object):
             LOGGER.exception(error_msg)
             raise BadRequest(error_msg)
 
-    def to_pydantic(self):
+    def to_pydantic(self) -> Type[pydantic.BaseModel]:
+        """
+            Convert the method arguments to a pydantic model that allows to validate a message body with pydantic
+        """
         sig = inspect.signature(self.function)
 
         def to_tuple(param: Parameter):
@@ -379,7 +383,7 @@ class MethodProperties(object):
 
         return create_model(self.function.__name__, **{param.name: to_tuple(param) for param in sig.parameters.values()})
 
-    def arguments_in_url(self):
+    def arguments_in_url(self) -> bool:
         return self.operation == "GET"
 
     def _validate_function_types(self, typed: bool) -> None:
