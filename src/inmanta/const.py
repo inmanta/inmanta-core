@@ -113,21 +113,7 @@ States that are in the action log, but not actual states
 """
 
 
-class Change(Enum):
-    def __init__(self, value):
-        self.__ordinal = None
-
-    def ordinal(self):
-        if self.__ordinal is None:
-            self.__ordinal = list(self.__class__.__members__.values()).index(self)
-        return self.__ordinal
-
-    def __gt__(self, other):
-        return self.ordinal() > other.ordinal()
-
-    def __lt__(self, other):
-        return self.ordinal() < other.ordinal()
-
+class Change(str, Enum):
     nochange = "nochange"
     created = "created"
     purged = "purged"
