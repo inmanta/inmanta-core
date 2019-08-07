@@ -142,68 +142,77 @@ class CallArguments(object):
 
         return value
 
-    def _process_union_for_arguments(self, arg_type: Type, arg_name: str, value: Any) -> Any:
-        """ Process a union type
-
-            :see: protocol.common.MethodProperties._validate_function_types
+    def get_default_value(self, arg_name: str, arg_position: int, default_start: int) -> Optional[Any]:
         """
-        for t in typing_inspect.get_args(arg_type, evaluate=True):
-            try:
-                return self._convert_type(arg_name, t, value)
-            except Exception:
-                pass
-
-        raise exceptions.BadRequest(
-            f"Invalid argument {arg_name}, no matching type found in union {arg_type} for value type {type(value)}"
-        )
-
-    def _process_generic_for_arguments(self, arg_type: Type, arg_name: str, value: Any) -> Any:
-        """ Process List or Dict types.
-
-            :note: we return any here because the calling function also returns any.
-            :see: protocol.common.MethodProperties._validate_function_types
+            Get a default value for an argument
         """
-        if issubclass(typing_inspect.get_origin(arg_type), list):
-            if not isinstance(value, list):
-                raise exceptions.BadRequest(
-                    f"Invalid argument {arg_name}, type needs to be a list. Argument type should be {arg_type}"
-                )
-
-            el_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
-            if typing_inspect.is_union_type(el_type):
-                return [self._process_union_for_arguments(el_type, arg_name, el) for el in value]
-
-            elif issubclass(el_type, BaseModel):
-                return [el_type(**el) for el in value]
-
-            return [el_type(el) for el in value]
-
-        elif issubclass(typing_inspect.get_origin(arg_type), dict):
-            if not isinstance(value, dict):
-                raise exceptions.BadRequest(
-                    f"Invalid argument {arg_name}, type needs to be a dict. Argument type should be {arg_type}"
-                )
-
-            el_type = typing_inspect.get_args(arg_type, evaluate=True)[1]
-            result = {}
-            for k, v in value.items():
-                if not isinstance(k, str):
-                    raise exceptions.BadRequest(f"Keys of dict argument {arg_name} need to be strings.")
-
-                if typing_inspect.is_union_type(el_type):
-                    result[k] = self._process_union_for_arguments(el_type, arg_name, v)
-                elif issubclass(el_type, BaseModel):
-                    result[k] = el_type(**v)
-                else:
-                    result[k] = el_type(v)
-
-            return result
-
+        if default_start >= 0 and (arg_position - default_start) < len(self._argspec.defaults):
+            return self._argspec.defaults[arg_position - default_start]
         else:
-            # This should not happen because of MethodProperties validation
+            raise exceptions.BadRequest("Invalid request. Field '%s' is required." % arg_name)
+
+    async def _run_getters(self, arg: str, value: Optional[Any]) -> Optional[Any]:
+        """
+            Run ant available getters on value
+        """
+        if arg not in self._properties.arg_options or self._properties.arg_options[arg].getter is None:
+            return value
+
+        try:
+            value = await self._properties.arg_options[arg].getter(value, self._metadata)
+            return value
+        except Exception as e:
+            LOGGER.exception("Failed to use getter for arg %s", arg)
+            raise e
+
+    async def process(self) -> None:
+        """
+            Process the message
+        """
+        args: List[str] = list(self._argspec.args)
+
+        if "self" in args:
+            args.remove("self")
+
+        all_fields = set(self._message.keys())  # Track all processed fields to warn user
+        defaults_start: int = -1
+        if self._argspec.defaults is not None:
+            defaults_start = len(args) - len(self._argspec.defaults)
+
+        call_args = {}
+
+        for i, arg in enumerate(args):
+            # get value from headers, defaults or message
+            value = self._map_headers(arg)
+            if value is None:
+                if arg in self._message:
+                    value = self._message[arg]
+                    all_fields.remove(arg)
+
+                else:  # get default value
+                    value = self.get_default_value(arg, i, defaults_start)
+
+            call_args[arg] = value
+
+        # validate types
+        call_args = self._properties.validate_arguments(call_args)
+
+        for arg, value in call_args.items():
+            # run getters
+            value = await self._run_getters(arg, value)
+
+            self._call_args[arg] = value
+
+        # discard session handling data
+        if self._properties.agent_server and "sid" in all_fields:
+            all_fields.remove("sid")
+
+        if len(all_fields) > 0 and self._argspec.varkw is None:
             raise exceptions.BadRequest(
-                f"Failed to validate generic type {arg_type} of {arg_name}, only List and Dict are supported"
+                "request contains fields %s that are not declared in method and no kwargs argument is provided." % all_fields
             )
+
+        self._processed = True
 
     def _validate_union_return(self, arg_type: Type, value: Any) -> None:
         """ Validate a return with a union type
@@ -270,136 +279,6 @@ class CallArguments(object):
             raise exceptions.BadRequest(
                 f"Failed to validate generic type {arg_type} of return value, only List and Dict are supported"
             )
-
-    def _process_typing(self, arg: str, value: Optional[Any]) -> Optional[Any]:
-        """
-            Validate and coerce if required
-            :param arg: The name of the argument
-            :param value: The current value of the argument
-            :return: The processed value of the argument
-        """
-        if arg not in self._argspec.annotations:
-            return value
-
-        if value is None:
-            return value
-
-        arg_type: Type = self._argspec.annotations[arg]
-
-        try:
-            return self._convert_type(arg, arg_type, value)
-
-        except pydantic.ValidationError as e:
-            error_msg = f"Failed to validate argument {arg} of expected type {arg_type}\n{str(e)}"
-            LOGGER.exception(error_msg)
-            raise exceptions.BadRequest(error_msg)
-
-        except (ValueError, TypeError):
-            error_msg = f"Invalid type for argument {arg}. Expected {arg_type} but received {value.__class__.__name__}, {value}"
-            LOGGER.exception(error_msg)
-            raise exceptions.BadRequest(error_msg)
-
-    def _convert_type(self, arg_name, arg_type, value):
-        if typing_inspect.is_union_type(arg_type):
-            return self._process_union_for_arguments(arg_type, arg_name, value)
-        # This check needs to be first because isinstance fails on generic types.
-        if typing_inspect.is_generic_type(arg_type):
-            return self._process_generic_for_arguments(arg_type, arg_name, value)
-        if isinstance(value, arg_type):
-            return value
-
-        if arg_type == str:
-            return str_validator(value)
-        if arg_type == int:
-            return int_validator(value)
-        if arg_type == float:
-            return float_validator(value)
-
-        if issubclass(arg_type, BaseModel):
-            return arg_type(**value)
-        if arg_type == datetime:
-            return datetime.strptime(value, const.TIME_ISOFMT)
-
-        elif issubclass(arg_type, enum.Enum):
-            return arg_type[value]
-
-        elif arg_type == bool or arg_type == StrictBool:
-            return inmanta_config.is_bool(value)
-
-        else:
-            return arg_type(value)
-
-    def get_default_value(self, arg_name: str, arg_position: int, default_start: int) -> Optional[Any]:
-        """
-            Get a default value for an argument
-        """
-        if default_start >= 0 and (arg_position - default_start) < len(self._argspec.defaults):
-            return self._argspec.defaults[arg_position - default_start]
-        else:
-            raise exceptions.BadRequest("Invalid request. Field '%s' is required." % arg_name)
-
-    async def _run_getters(self, arg: str, value: Optional[Any]) -> Optional[Any]:
-        """
-            Run ant available getters on value
-        """
-        if arg not in self._properties.arg_options or self._properties.arg_options[arg].getter is None:
-            return value
-
-        try:
-            value = await self._properties.arg_options[arg].getter(value, self._metadata)
-            return value
-        except Exception as e:
-            LOGGER.exception("Failed to use getter for arg %s", arg)
-            raise e
-
-    async def process(self) -> None:
-        """
-            Process the message
-        """
-        args: List[str] = list(self._argspec.args)
-
-        if "self" in args:
-            args.remove("self")
-
-        all_fields = set(self._message.keys())  # Track all processed fields to warn user
-        defaults_start: int = -1
-        if self._argspec.defaults is not None:
-            defaults_start = len(args) - len(self._argspec.defaults)
-
-        call_args = {}
-
-        for i, arg in enumerate(args):
-            # get value from headers, defaults or message
-            value = self._map_headers(arg)
-            if value is None:
-                if arg in self._message:
-                    value = self._message[arg]
-                    all_fields.remove(arg)
-
-                else:  # get default value
-                    value = self.get_default_value(arg, i, defaults_start)
-
-            call_args[arg] = value
-
-        # validate types
-        call_args = self._properties.validate_dict(call_args)
-
-        for arg, value in call_args.items():
-            # run getters
-            value = await self._run_getters(arg, value)
-
-            self._call_args[arg] = value
-
-        # discard session handling data
-        if self._properties.agent_server and "sid" in all_fields:
-            all_fields.remove("sid")
-
-        if len(all_fields) > 0 and self._argspec.varkw is None:
-            raise exceptions.BadRequest(
-                "request contains fields %s that are not declared in method and no kwargs argument is provided." % all_fields
-            )
-
-        self._processed = True
 
     async def process_return(self, config: common.UrlMethod, headers: Dict[str, str], result: Apireturn) -> common.Response:
         """ A handler can return ApiReturn, so lets handle all possible return types and convert it to a Response

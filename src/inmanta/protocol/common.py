@@ -356,23 +356,23 @@ class MethodProperties(object):
                 raise InvalidMethodDefinition("Invalid client type %s specified for function %s" % (ct, function))
 
         self._validate_function_types(typed)
-        self.validator = self.to_pydantic()
+        self.argument_validator = self.arguments_to_pydantic()
 
-    def validate_dict(self, values: Dict[str, Any]) -> Dict[str, Any]:
+    def validate_arguments(self, values: Dict[str, Any]) -> Dict[str, Any]:
         """
             Validate methods arguments. Values is a dict with key/value pairs for the arguments (similar to kwargs). This method
             validates and converts types if required (e.g. str to int). The returns value has the correct typing to dispatch
             to method handlers.
         """
         try:
-            out = self.validator(**values)
+            out = self.argument_validator(**values)
             return {f: getattr(out, f) for f in out.fields.keys()}
         except ValidationError as e:
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
             raise BadRequest(error_msg)
 
-    def to_pydantic(self) -> Type[pydantic.BaseModel]:
+    def arguments_to_pydantic(self) -> Type[pydantic.BaseModel]:
         """
             Convert the method arguments to a pydantic model that allows to validate a message body with pydantic
         """
@@ -380,13 +380,15 @@ class MethodProperties(object):
 
         def to_tuple(param: Parameter):
             if param.annotation is Parameter.empty:
-                return param.default if param.default is not Parameter.empty else None
+                return (Any, param.default if param.default is not Parameter.empty else None)
             if param.default is not Parameter.empty:
                 return (param.annotation, param.default)
             else:
                 return (param.annotation, None)
 
-        return create_model(self.function.__name__, **{param.name: to_tuple(param) for param in sig.parameters.values()})
+        return create_model(
+            f"{self.function.__name__}_arguments", **{param.name: to_tuple(param) for param in sig.parameters.values()}
+        )
 
     def arguments_in_url(self) -> bool:
         return self.operation == "GET"
