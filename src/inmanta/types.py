@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from inmanta.protocol.common import ReturnValue  # noqa: F401
 
 PrimitiveTypes = Union[uuid.UUID, str, float, int, StrictBool, datetime]
-SimpleTypes = Union["BaseModel", Enum, uuid.UUID, str, float, int, StrictBool, datetime]
+SimpleTypes = Union["BaseModel", Enum, PrimitiveTypes]
 
 JsonType = Dict[str, Any]
 ReturnTupple = Tuple[int, Optional[JsonType]]
