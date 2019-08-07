@@ -15,21 +15,15 @@
 
     Contact: code@inmanta.com
 """
-import enum
 import inspect
 import json
 import logging
 import uuid
-from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Type, cast  # noqa: F401
 
-import pydantic
 import typing_inspect
-from pydantic.types import StrictBool
-from pydantic.validators import float_validator, int_validator, str_validator
 from tornado import escape
 
-from inmanta import config as inmanta_config
 from inmanta import const, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol import common, exceptions
