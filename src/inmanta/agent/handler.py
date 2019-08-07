@@ -70,6 +70,12 @@ class ResourcePurged(Exception):
     """
 
 
+class InvalidOperation(Exception):
+    """
+        This exception is raised by the context or handler methods when an invalid operation is performed.
+    """
+
+
 def cache(
     f=None,
     ignore: typing.List[str] = [],
@@ -183,18 +189,26 @@ class HandlerContext(object):
 
     def set_created(self):
         self._created = True
-        if self._change is None or self._change.value < const.Change.created.value:
-            self._change = const.Change.created
+        if self._change is not const.Change.nochange:
+            raise InvalidOperation(f"Unable to set {const.Change.created} operation, {self._change} already set.")
+
+        self._change = const.Change.created
 
     def set_purged(self):
         self._purged = True
-        if self._change is None or self._change.value < const.Change.purged.value:
-            self._change = const.Change.purged
+
+        if self._change is not const.Change.nochange:
+            raise InvalidOperation(f"Unable to set {const.Change.created} operation, {self._change} already set.")
+
+        self._change = const.Change.purged
 
     def set_updated(self):
         self._updated = True
-        if self._change is None or self._change.value < const.Change.updated.value:
-            self._change = const.Change.updated
+
+        if self._change is not const.Change.nochange:
+            raise InvalidOperation(f"Unable to set {const.Change.created} operation, {self._change} already set.")
+
+        self._change = const.Change.updated
 
     @property
     def changed(self):

@@ -19,18 +19,18 @@
 from enum import Enum
 
 
-class ResourceState(Enum):
-    unavailable = 1  # This state is set by the agent when no handler is available for the resource
-    skipped = 2  #
-    dry = 3
-    deployed = 4
-    failed = 5
-    deploying = 6
-    available = 7
-    cancelled = 8  # When a new version is pushed, in progress deploys are cancelled
-    undefined = 9  # The state of this resource is unknown at this moment in the orchestration process
-    skipped_for_undefined = 10  # This resource depends on an undefined resource
-    processing_events = 11
+class ResourceState(str, Enum):
+    unavailable = "unavailable"  # This state is set by the agent when no handler is available for the resource
+    skipped = "skipped"  #
+    dry = "dry"
+    deployed = "deployed"
+    failed = "failed"
+    deploying = "deploying"
+    available = "available"
+    cancelled = "cancelled"  # When a new version is pushed, in progress deploys are cancelled
+    undefined = "undefined"  # The state of this resource is unknown at this moment in the orchestration process
+    skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
+    processing_events = "processing_events"
 
 
 # undeployable
@@ -113,36 +113,36 @@ States that are in the action log, but not actual states
 """
 
 
-class Change(Enum):
-    nochange = 0
-    created = 1
-    purged = 2
-    updated = 3
+class Change(str, Enum):
+    nochange = "nochange"
+    created = "created"
+    purged = "purged"
+    updated = "updated"
 
 
-class VersionState(Enum):
-    success = 1
-    failed = 2
-    deploying = 3
-    pending = 4
+class VersionState(str, Enum):
+    success = "success"
+    failed = "failed"
+    deploying = "deploying"
+    pending = "pending"
 
 
-class ResourceAction(Enum):
-    store = 1
-    push = 2
-    pull = 3
-    deploy = 4
-    dryrun = 5
-    getfact = 6
-    other = 8
+class ResourceAction(str, Enum):
+    store = "store"
+    push = "push"
+    pull = "pull"
+    deploy = "deploy"
+    dryrun = "dryrun"
+    getfact = "getfact"
+    other = "other"
 
 
 STATE_UPDATE = [ResourceAction.deploy]
 
 
-class AgentTriggerMethod(Enum):
-    push_incremental_deploy = 1
-    push_full_deploy = 2
+class AgentTriggerMethod(str, Enum):
+    push_incremental_deploy = "push_incremental_deploy"
+    push_full_deploy = "push_full_deploy"
 
     @classmethod
     def get_agent_trigger_method(cls, is_full_deploy):
