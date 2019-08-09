@@ -21,6 +21,7 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Type, cast  # noqa: F401
 
+import pydantic
 import typing_inspect
 from tornado import escape
 
@@ -409,6 +410,10 @@ class RESTBase(util.TaskHandler):
 
             result = await config.handler(**arguments.call_args)
             return await arguments.process_return(config, headers, result)
+        except pydantic.ValidationError as e:
+            LOGGER.exception(f"The handler {config.handler} caused a validation error in a data model (pydantic).")
+            raise exceptions.ServerError("data validation error.")
+
         except exceptions.BaseHttpException:
             LOGGER.exception("")
             raise

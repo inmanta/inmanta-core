@@ -370,7 +370,7 @@ class MethodProperties(object):
         except ValidationError as e:
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
-            raise BadRequest(error_msg)
+            raise BadRequest(error_msg, e.errors())
 
     def arguments_to_pydantic(self) -> Type[pydantic.BaseModel]:
         """
