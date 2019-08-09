@@ -410,7 +410,7 @@ class RESTBase(util.TaskHandler):
 
             result = await config.handler(**arguments.call_args)
             return await arguments.process_return(config, headers, result)
-        except pydantic.ValidationError as e:
+        except pydantic.ValidationError:
             LOGGER.exception(f"The handler {config.handler} caused a validation error in a data model (pydantic).")
             raise exceptions.ServerError("data validation error.")
 

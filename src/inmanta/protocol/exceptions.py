@@ -17,7 +17,6 @@
 """
 from typing import Any, Dict, Optional
 
-import pydantic
 from tornado import web
 
 from inmanta.types import JsonType
