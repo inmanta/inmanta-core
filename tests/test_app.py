@@ -376,6 +376,7 @@ caused by:
     exec("export", "-J", "out.json")
 
 
+@pytest.mark.timeout(10)
 @pytest.mark.parametrize(
     "cmd", [(["-X", "compile"]), (["compile", "-X"]), (["compile"]), (["export", "-X"]), (["-X", "export"]), (["export"])]
 )
