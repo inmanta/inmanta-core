@@ -992,3 +992,54 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name):
 
     await server.stop()
     await rs.stop()
+
+
+@pytest.mark.asyncio
+async def test_basemodel_return_validation_fail(unused_tcp_port, postgres_db, database_name):
+    """ Test the handling of basemodel returns values that are invalid.
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        name: str
+        value: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test/<data>", operation="GET", client_types=["api"])
+        def test_method(data: str) -> Project:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, data: str) -> Project:
+            return Project(name="test_method")
+
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+
+    result = await client.test_method(data=5)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert 5 == result.result["data"][0]
+
+    result = await client.test_method(data=5, version=3)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert 5 == result.result["data"][0]
+
+    result = await client.test_method(data=5)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert 5 == result.result["data"][0]
+
+    result = await client.test_method(data=5, version=7)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert 5 == result.result["data"][0]
+
+    await server.stop()
+    await rs.stop()

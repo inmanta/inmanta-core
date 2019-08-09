@@ -31,7 +31,7 @@ from inmanta.protocol import Client, common, endpoints, handle, methods
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
-from inmanta.types import JsonType
+from inmanta.types import ArgumentTypes, JsonType
 from inmanta.util import CycleException, Scheduler, TaskHandler, stable_depth_first
 
 LOGGER = logging.getLogger(__name__)
@@ -314,6 +314,12 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
                 {"transport": self, "content": content, "content_type": content_type},
             )
         )
+
+    async def get_status(self) -> Dict[str, ArgumentTypes]:
+        """
+            Get the status of this slice.
+        """
+        return {}
 
 
 class Session(object):

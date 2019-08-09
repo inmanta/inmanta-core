@@ -1150,3 +1150,5 @@ async def test_get_param(server, client, environment):
     assert res.code == 200
     parameters = res.result["parameters"]
     assert len(parameters) == 2
+
+

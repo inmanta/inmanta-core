@@ -24,17 +24,20 @@ import os
 import shutil
 import time
 import uuid
+import re
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
 from uuid import UUID
 
 import asyncpg
+import pkg_resources
 from tornado import locks
 
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.ast import type
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
-from inmanta.protocol import encode_token, methods
+from inmanta.data.model import StatusResponse
+from inmanta.protocol import encode_token, exceptions, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.reporter import InfluxReporter
@@ -2013,3 +2016,23 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             Create a new auth token for this environment
         """
         return 200, {"token": encode_token(client_types, str(env.id), idempotent)}
+
+    @protocol.handle(methods.get_server_status)
+    async def get_server_status(self) -> StatusResponse:
+        try:
+            distr = pkg_resources.get_distribution("inmanta")
+        except pkg_resources.DistributionNotFound:
+            raise exceptions.ServerError(
+                "Could not find version number for the inmanta compiler."
+                "Is inmanta installed? Use stuptools install or setuptools dev to install."
+            )
+
+        metadata = {}
+        for line in distr.get_metadata_lines(distr.PKG_INFO):
+            match = re.search("^(?P<key>[A-Z][^:]+):(?P<value>.*)$", line)
+            if match:
+                metadata[match.group(0)] = match.group(1)
+
+        response = StatusResponse(edition="community", version=util.get_compiler_version())
+
+        return response
