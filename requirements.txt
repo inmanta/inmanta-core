@@ -2,7 +2,7 @@ PyJWT==1.7.1
 click==7.0
 colorlog==4.0.2
 cryptography==2.7
-execnet==1.6.1
+execnet==1.7.0
 inmanta-sphinx>=1.0.0.dev0
 netifaces==0.10.9
 ply==3.11
