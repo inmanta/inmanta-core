@@ -23,7 +23,7 @@ from types import ModuleType
 from typing import Callable, Dict, Generator, List
 
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
-from inmanta.server import server
+from inmanta.server import server, config
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.compilerservice import CompilerService
 from inmanta.server.extensions import ApplicationContext, InvalidSliceNameException
@@ -94,6 +94,15 @@ class InmantaBootloader(object):
         except Exception as e:
             raise PluginLoadFailed(f"Could not load module {name}.{EXTENSION_MODULE}") from e
 
+    def _filter_extensions(self, extensions:  Dict[str, Callable[[ApplicationContext], None]]) ->  Dict[str, Callable[[ApplicationContext], None]]:
+        """ Filter a dict of extensions and their entrypoint based on the enabled_extensions and disabled_extensions setting
+            in the server configuration.
+        """
+        enabled = config.server_enabled_extensions.get()
+        disabled = config.server_disabled_extensions.get()
+
+        return extensions
+
     def _load_extensions(self) -> Dict[str, Callable[[ApplicationContext], None]]:
         plugins: Dict[str, Callable[[ApplicationContext], None]] = {}
         for name in self._discover_plugin_packages():
@@ -117,6 +126,6 @@ class InmantaBootloader(object):
         return ctx
 
     def load_slices(self) -> List[ServerSlice]:
-        exts = self._load_extensions()
+        exts = self._filter_extensions(self._load_extensions())
         ctx = self._collect_slices(exts)
         return ctx.get_slices()

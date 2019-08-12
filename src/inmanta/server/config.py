@@ -177,8 +177,8 @@ server_resource_action_log_prefix = Option(
 server_enabled_extensions = Option(
     "server",
     "enabled_extensions",
-    None,
-    "A list of extensions the server must load. If this option is empty, the server will load all extensions available. "
+    "",
+    "A list of extensions the server must load. If the list is empty, the server will load all extensions available. "
     "If an extension listed in this list is not available, the server will refuse to start.",
     is_list,
 )
@@ -186,8 +186,8 @@ server_enabled_extensions = Option(
 server_disabled_extensions = Option(
     "server",
     "disabled_extensions",
-    None,
-    "A list of extensions the server must not load. If this option is empty, the server will load all extensions available. "
+    "",
+    "A list of extensions the server must not load. "
     "The server will not start any extensions in this list. Extensions in this list take precedence of extension in the "
     "enabled list. core is not allowed in the list of disabled extensions.",
     is_list,
