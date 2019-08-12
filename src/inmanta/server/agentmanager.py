@@ -37,7 +37,7 @@ from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, SessionManager
 from inmanta.server.server import Server
-from inmanta.types import Apireturn
+from inmanta.types import Apireturn, ArgumentTypes
 from inmanta.util import retry_limited
 
 from . import config as server_config
@@ -117,6 +117,13 @@ class AgentManager(ServerSlice, SessionListener):
         self.tid_endpoint_to_session: Dict[Tuple[UUID, str], protocol.Session] = {}
 
         self.closesessionsonstart: bool = closesessionsonstart
+
+    async def get_status(self) -> Dict[str, ArgumentTypes]:
+        return {
+            "sessions": len(self.sessions),
+            "processes": len(self._agent_procs),
+            "resource_facts": len(self._fact_resource_block_set),
+        }
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER, SLICE_DATABASE]

@@ -1,3 +1,20 @@
+"""
+    Copyright 2019 Inmanta
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
 import asyncio
 import logging
 import time
@@ -8,7 +25,7 @@ import pytest
 from agent_server.conftest import _wait_until_deployment_finishes
 from inmanta import const, data
 from inmanta.agent import Agent
-from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from utils import LogSequence, no_error_in_logs, retry_limited
 
 
@@ -27,7 +44,7 @@ async def test_get_facts(resource_container, client, server, caplog):
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     await agent.start()
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -67,7 +84,7 @@ async def test_purged_facts(resource_container, client, server, environment, no_
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     await agent.start()
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 

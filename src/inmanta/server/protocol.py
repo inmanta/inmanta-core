@@ -17,6 +17,7 @@
 """
 import asyncio
 import logging
+import socket
 import time
 import uuid
 from collections import defaultdict
@@ -31,7 +32,7 @@ from inmanta.protocol import Client, common, endpoints, handle, methods
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
-from inmanta.types import JsonType
+from inmanta.types import ArgumentTypes, JsonType
 from inmanta.util import CycleException, Scheduler, TaskHandler, stable_depth_first
 
 LOGGER = logging.getLogger(__name__)
@@ -315,6 +316,12 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
             )
         )
 
+    async def get_status(self) -> Dict[str, ArgumentTypes]:
+        """
+            Get the status of this slice.
+        """
+        return {}
+
 
 class Session(object):
     """
@@ -477,6 +484,21 @@ class TransportSlice(ServerSlice):
         await super(TransportSlice, self).stop()
         await self.server._transport.join()
 
+    async def get_status(self) -> Dict[str, ArgumentTypes]:
+        def format_socket(sock: socket.socket) -> str:
+            sname = sock.getsockname()
+            return f"{sname[0]}:{sname[1]}"
+
+        return {
+            "inflight": self.server._transport.inflight_counter,
+            "running": self.server._transport.running,
+            "sockets": [
+                format_socket(s)
+                for s in self.server._transport._http_server._sockets.values()
+                if s.family in [socket.AF_INET, socket.AF_INET6]
+            ],
+        }
+
 
 class SessionManager(ServerSlice):
     """
@@ -503,6 +525,9 @@ class SessionManager(ServerSlice):
 
         # Listeners
         self.listeners: List[SessionListener] = []
+
+    async def get_status(self) -> Dict[str, ArgumentTypes]:
+        return {"hangtime": self.hangtime, "interval": self.interval, "sessions": len(self._sessions)}
 
     def add_listener(self, listener: SessionListener) -> None:
         self.listeners.append(listener)
