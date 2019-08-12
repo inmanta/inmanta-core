@@ -2030,7 +2030,7 @@ async def test_s_repair_postponed_due_to_running_deploy(
     myagent.add_end_point_name("agent1")
     await myagent.start()
     myagent_instance = myagent._instances[agent_name]
-    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGE)._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "value1")
 

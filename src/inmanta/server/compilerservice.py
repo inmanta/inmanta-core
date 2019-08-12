@@ -38,7 +38,7 @@ from inmanta.protocol import encode_token, methods
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
-from inmanta.types import Apireturn, JsonType, Warnings, ArgumentTypes
+from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
 from inmanta.util import ensure_directory_exist
 
 RETURNCODE_INTERNAL_ERROR = -1
@@ -309,10 +309,7 @@ class CompilerService(ServerSlice):
         self.listeners: List[CompileStateListener] = []
 
     async def get_status(self) -> Dict[str, ArgumentTypes]:
-        return {
-            "task_queue": len(self._recompiles),
-            "listeners": len(self.listeners),
-        }
+        return {"task_queue": len(self._recompiles), "listeners": len(self.listeners)}
 
     def add_listener(self, listener: CompileStateListener) -> None:
         self.listeners.append(listener)

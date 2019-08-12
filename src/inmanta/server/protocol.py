@@ -32,7 +32,6 @@ from inmanta.protocol import Client, common, endpoints, handle, methods
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
-from inmanta.server.extensions import ApplicationContext
 from inmanta.types import ArgumentTypes, JsonType
 from inmanta.util import CycleException, Scheduler, TaskHandler, stable_depth_first
 

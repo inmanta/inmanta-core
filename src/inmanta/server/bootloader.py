@@ -84,7 +84,7 @@ class InmantaBootloader(object):
 
     def _load_extension(self, name: str) -> Callable[[ApplicationContext], None]:
         try:
-            top_module = importlib.import_module(name)
+            importlib.import_module(name)
         except Exception as e:
             raise PluginLoadFailed(f"Could not load module {name}") from e
 
