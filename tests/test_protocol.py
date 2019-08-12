@@ -992,3 +992,52 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name):
 
     await server.stop()
     await rs.stop()
+
+
+@pytest.mark.asyncio
+async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name):
+    """ Test validation of basemodel arguments and return, and how they are reported
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        name: str
+        value: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(data: Project) -> Project:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, data: Project) -> Project:  # NOQA
+            return Project()
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+
+    # Check validation of arguments
+    result = await client.test_method(data={})
+    assert result.code == 400
+    assert "error_details" in result.result
+
+    details = result.result["error_details"]
+    assert len(details) == 2
+
+    name = [d for d in details if d["loc"] == ["data", "name"]][0]
+    value = [d for d in details if d["loc"] == ["data", "value"]][0]
+
+    assert name["msg"] == "field required"
+    assert value["msg"] == "field required"
+
+    # Check the validation of the return value
+    result = await client.test_method(data={"name": "X", "value": "Y"})
+    assert result.code == 500
+    assert "data validation error" in result.result["message"]
+
+    await server.stop()
+    await rs.stop()
