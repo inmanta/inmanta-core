@@ -31,6 +31,7 @@ from inmanta.protocol import Client, common, endpoints, handle, methods
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
+from inmanta.server.extensions import ApplicationContext
 from inmanta.types import ArgumentTypes, JsonType
 from inmanta.util import CycleException, Scheduler, TaskHandler, stable_depth_first
 
@@ -208,7 +209,6 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         To schedule recurring tasks, use :func:`schedule` or `self._sched`
         To schedule background tasks, use :func:`add_background_task`
     """
-
     def __init__(self, name: str) -> None:
         super().__init__()
 

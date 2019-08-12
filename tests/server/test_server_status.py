@@ -22,4 +22,9 @@ import pytest
 async def test_server_status(server, client):
     result = await client.get_server_status()
 
-    print(result.result)
+    assert result.code == 200
+    status = result.result
+    assert "version" in status
+
+    assert len([x for x in status["slices"] if x["name"] == "core.server"]) == 1
+    assert len([x for x in status["slices"] if x["name"] == "core.database"]) == 1

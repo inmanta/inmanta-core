@@ -10,7 +10,7 @@ from typing import List
 import pytest
 
 from inmanta import config, data
-from inmanta.server import config as server_config
+from inmanta.server import config as server_config, SLICE_SERVER
 from inmanta.server.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.server.protocol import Server
 from inmanta.util import ensure_directory_exist
@@ -428,7 +428,7 @@ async def test_server_recompile(server_multi, client_multi, environment_multi):
     server = server_multi
     environment = environment_multi
 
-    project_dir = os.path.join(server.get_slice("server")._server_storage["environments"], str(environment))
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
     print("Project at: ", project_dir)
 

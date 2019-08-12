@@ -24,19 +24,18 @@ import os
 import shutil
 import time
 import uuid
-import re
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
 from uuid import UUID
 
 import asyncpg
-import pkg_resources
+import importlib_metadata
 from tornado import locks
 
-from inmanta import const, data, util
+from inmanta import const, data
 from inmanta.ast import type
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
-from inmanta.data.model import StatusResponse
+from inmanta.data.model import StatusResponse, SliceStatus, ExtensionStatus
 from inmanta.protocol import encode_token, exceptions, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -136,6 +135,7 @@ class Server(protocol.ServerSlice):
 
     _server_storage: Dict[str, str]
     compiler: "CompilerService"
+    _server: protocol.Server
 
     def __init__(self, agent_no_log: bool = False) -> None:
         super().__init__(name=SLICE_SERVER)
@@ -163,6 +163,7 @@ class Server(protocol.ServerSlice):
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
+        self._server = server
         self._server_storage: Dict[str, str] = self.check_storage()
         self.agentmanager: "AgentManager" = server.get_slice(SLICE_AGENT_MANAGER)
         self.compiler: "CompilerService" = server.get_slice(SLICE_COMPILER)
@@ -2020,19 +2021,35 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @protocol.handle(methods.get_server_status)
     async def get_server_status(self) -> StatusResponse:
         try:
-            distr = pkg_resources.get_distribution("inmanta")
-        except pkg_resources.DistributionNotFound:
+            distr = importlib_metadata.distribution("inmanta")
+        except importlib_metadata.PackageNotFoundError:
             raise exceptions.ServerError(
                 "Could not find version number for the inmanta compiler."
                 "Is inmanta installed? Use stuptools install or setuptools dev to install."
             )
+        slices = []
+        extension_names = set()
+        for slice_name, slice in self._server.get_slices().items():
+            slices.append(SliceStatus(
+                name=slice_name,
+                status=await slice.get_status(),
+            ))
 
-        metadata = {}
-        for line in distr.get_metadata_lines(distr.PKG_INFO):
-            match = re.search("^(?P<key>[A-Z][^:]+):(?P<value>.*)$", line)
-            if match:
-                metadata[match.group(0)] = match.group(1)
+            try:
+                ext_name = slice_name.split(".")[0]
+                package_name = slice.__class__.__module__.split(".")[0]
+                distribution = importlib_metadata.distribution(package_name)
 
-        response = StatusResponse(edition="community", version=util.get_compiler_version())
+                extension_names.add((ext_name, package_name, distribution.version))
+            except importlib_metadata.PackageNotFoundError:
+                # Ignore badly packaged extensions
+                pass
+
+        response = StatusResponse(
+            version=distr.version,
+            license=distr.metadata["License"] if "License" in distr.metadata else "unknown",
+            extensions=[ExtensionStatus(name=name, package=package, version=version) for name, package, version in extension_names],
+            slices=slices,
+        )
 
         return response

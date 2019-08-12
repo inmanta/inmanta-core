@@ -18,9 +18,9 @@
 
 # flake8: noqa: F401
 
-SLICE_SERVER = "server"
-SLICE_AGENT_MANAGER = "agentmanager"
-SLICE_SESSION_MANAGER = "session"
+SLICE_SERVER = "core.server"
+SLICE_AGENT_MANAGER = "core.agentmanager"
+SLICE_SESSION_MANAGER = "core.session"
 SLICE_DATABASE = "core.database"
 SLICE_TRANSPORT = "core.transport"
 SLICE_COMPILER = "core.compiler"

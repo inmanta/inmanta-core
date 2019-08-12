@@ -40,6 +40,7 @@ class ExtensionStatus(BaseModel):
 
     name: str
     version: str
+    package: str
 
 
 class SliceStatus(BaseModel):
@@ -56,7 +57,6 @@ class StatusResponse(BaseModel):
         Response for the status method call
     """
 
-    edition: str
     version: str
     license: Union[str, Dict[str, SimpleTypes]]
     extensions: List[ExtensionStatus]
