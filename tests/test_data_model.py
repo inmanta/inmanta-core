@@ -15,8 +15,15 @@
 
     Contact: code@inmanta.com
 """
+import json
+
+import sys
+import typing
 from enum import Enum
 
+import pydantic
+
+from inmanta import types
 from inmanta.data.model import BaseModel
 
 
@@ -37,3 +44,26 @@ def test_model_inheritance():
 
     assert ser["opts"] == "no"
     assert not isinstance(ser["opts"], Enum)
+
+
+def test_union_bool_json():
+    """ Test if pydantic correctly serializes a bool to bool and not int when using a Union.
+
+        Union in python < 3.7 removes all strict subtypes. bool and strictbool are subtypes of int
+    """
+    class Test(pydantic.BaseModel):
+        attr1: typing.Union[pydantic.StrictBool, int]
+        attr2: typing.Union[pydantic.StrictBool]
+        attr3: pydantic.StrictBool
+        attr4: typing.Union[types.StrictNonIntBool, int]
+
+    x = Test(attr1=True, attr2=True, attr3=True, attr4=True)
+
+    if sys.version_info[0] == 3 and sys.version_info[1] < 7:
+        assert x.attr1 is not True and x.attr1 == 1
+    else:
+        assert x.attr1 is True
+
+    assert x.attr2 is True
+    assert x.attr3 is True
+    assert x.attr4 is True
