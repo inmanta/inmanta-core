@@ -8,7 +8,7 @@ import pytest
 from agent_server.conftest import _wait_until_deployment_finishes
 from inmanta import const, data
 from inmanta.agent import Agent
-from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from utils import LogSequence, no_error_in_logs, retry_limited
 
 
@@ -27,7 +27,7 @@ async def test_get_facts(resource_container, client, server, caplog):
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     await agent.start()
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -67,7 +67,7 @@ async def test_purged_facts(resource_container, client, server, environment, no_
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     await agent.start()
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 

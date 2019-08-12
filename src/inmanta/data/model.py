@@ -15,8 +15,11 @@
 
     Contact: code@inmanta.com
 """
+from typing import Dict, List, Union
 
 import pydantic
+
+from inmanta.types import ArgumentTypes, SimpleTypes
 
 
 class BaseModel(pydantic.BaseModel):
@@ -28,3 +31,33 @@ class BaseModel(pydantic.BaseModel):
         # Populate models with the value property of enums, rather than the raw enum.
         # This is useful to serialise model.dict() later
         use_enum_values = True
+
+
+class ExtensionStatus(BaseModel):
+    """
+        Status response for extensions loaded in the server
+    """
+
+    name: str
+    version: str
+    package: str
+
+
+class SliceStatus(BaseModel):
+    """
+        Status response for slices loaded in the the server
+    """
+
+    name: str
+    status: Dict[str, ArgumentTypes]
+
+
+class StatusResponse(BaseModel):
+    """
+        Response for the status method call
+    """
+
+    version: str
+    license: Union[str, Dict[str, SimpleTypes]]
+    extensions: List[ExtensionStatus]
+    slices: List[SliceStatus]

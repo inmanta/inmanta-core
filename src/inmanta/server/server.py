@@ -29,12 +29,14 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
 from uuid import UUID
 
 import asyncpg
+import importlib_metadata
 from tornado import locks
 
 from inmanta import const, data
 from inmanta.ast import type
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
-from inmanta.protocol import encode_token, methods
+from inmanta.data.model import ExtensionStatus, SliceStatus, StatusResponse
+from inmanta.protocol import encode_token, exceptions, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.reporter import InfluxReporter
@@ -49,7 +51,7 @@ from inmanta.server import (
 )
 from inmanta.server import config as opt
 from inmanta.server import protocol
-from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ReturnTupple, Warnings
+from inmanta.types import Apireturn, ArgumentTypes, JsonType, PrimitiveTypes, ReturnTupple, Warnings
 from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
@@ -98,12 +100,14 @@ class DatabaseSlice(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super(DatabaseSlice, self).__init__(SLICE_DATABASE)
+        self._pool: Optional[asyncpg.pool.Pool] = None
 
     async def start(self) -> None:
         await self.connect_database()
 
     async def stop(self) -> None:
         await self.disconnect_database()
+        self._pool = None
 
     def get_dependencies(self) -> List[str]:
         return []
@@ -116,13 +120,24 @@ class DatabaseSlice(protocol.ServerSlice):
 
         database_username = opt.db_username.get()
         database_password = opt.db_password.get()
-        await data.connect(database_host, database_port, opt.db_name.get(), database_username, database_password)
+        self._pool = await data.connect(database_host, database_port, opt.db_name.get(), database_username, database_password)
         LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
 
     async def disconnect_database(self) -> None:
         """ Disconnect the database
         """
         await data.disconnect()
+
+    async def get_status(self) -> Dict[str, ArgumentTypes]:
+        """ Get the status of the database connection
+        """
+        return {
+            "connected": self._pool is not None,
+            "max_pool": self._pool._maxsize,
+            "open_connections": len([x for x in self._pool._holders if x._con is not None and not x._con.is_closed()]),
+            "database": opt.db_name.get(),
+            "host": opt.db_host.get(),
+        }
 
 
 class Server(protocol.ServerSlice):
@@ -133,6 +148,7 @@ class Server(protocol.ServerSlice):
 
     _server_storage: Dict[str, str]
     compiler: "CompilerService"
+    _server: protocol.Server
 
     def __init__(self, agent_no_log: bool = False) -> None:
         super().__init__(name=SLICE_SERVER)
@@ -160,6 +176,7 @@ class Server(protocol.ServerSlice):
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
+        self._server = server
         self._server_storage: Dict[str, str] = self.check_storage()
         self.agentmanager: "AgentManager" = server.get_slice(SLICE_AGENT_MANAGER)
         self.compiler: "CompilerService" = server.get_slice(SLICE_COMPILER)
@@ -2013,3 +2030,41 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             Create a new auth token for this environment
         """
         return 200, {"token": encode_token(client_types, str(env.id), idempotent)}
+
+    @protocol.handle(methods.get_server_status)
+    async def get_server_status(self) -> StatusResponse:
+        try:
+            distr = importlib_metadata.distribution("inmanta")
+        except importlib_metadata.PackageNotFoundError:
+            raise exceptions.ServerError(
+                "Could not find version number for the inmanta compiler."
+                "Is inmanta installed? Use stuptools install or setuptools dev to install."
+            )
+        slices = []
+        extension_names = set()
+        for slice_name, slice in self._server.get_slices().items():
+            slices.append(SliceStatus(name=slice_name, status=await slice.get_status()))
+
+            try:
+                ext_name = slice_name.split(".")[0]
+                package_name = slice.__class__.__module__.split(".")[0]
+                distribution = importlib_metadata.distribution(package_name)
+
+                extension_names.add((ext_name, package_name, distribution.version))
+            except importlib_metadata.PackageNotFoundError:
+                LOGGER.info(
+                    "Package %s of slice %s is not packaged in a distribution. Unable to determine its extension.",
+                    package_name,
+                    slice_name,
+                )
+
+        response = StatusResponse(
+            version=distr.version,
+            license=distr.metadata["License"] if "License" in distr.metadata else "unknown",
+            extensions=[
+                ExtensionStatus(name=name, package=package, version=version) for name, package, version in extension_names
+            ],
+            slices=slices,
+        )
+
+        return response

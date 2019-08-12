@@ -1,5 +1,5 @@
 """
-    Copyright 2018 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,12 +15,19 @@
 
     Contact: code@inmanta.com
 """
+import pytest
 
-# flake8: noqa: F401
 
-SLICE_SERVER = "core.server"
-SLICE_AGENT_MANAGER = "core.agentmanager"
-SLICE_SESSION_MANAGER = "core.session"
-SLICE_DATABASE = "core.database"
-SLICE_TRANSPORT = "core.transport"
-SLICE_COMPILER = "core.compiler"
+@pytest.mark.asyncio
+async def test_server_status(server, client):
+    result = await client.get_server_status()
+
+    assert result.code == 200
+    status = result.result
+    assert "version" in status
+
+    assert len([x for x in status["slices"] if x["name"] == "core.server"]) == 1
+
+    db_status = [x for x in status["slices"] if x["name"] == "core.database"]
+    assert len([x for x in status["slices"] if x["name"] == "core.database"]) == 1
+    assert db_status[0]["status"]["connected"] is True

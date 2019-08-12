@@ -5,6 +5,7 @@ Changes in this release:
 - Use native coroutines everywhere (async def)
 - Updated dockerfile and docker-compose to use postgres and centos
 - Added extensions mechanism (#565, #1185)
+- Add /serverstatus api call to get version info, loaded slices and extensions (#1184)
 - Support to set environment variables on the Inmanta server and its agents
 - Split of server recompile into separate extension (#1183)
 - Define explicit path in protocol methods

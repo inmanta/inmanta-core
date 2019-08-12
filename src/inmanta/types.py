@@ -22,14 +22,36 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
-from pydantic import StrictBool
+from pydantic import errors, types
 
 if TYPE_CHECKING:
     # Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
     from inmanta.data.model import BaseModel  # noqa: F401
     from inmanta.protocol.common import ReturnValue  # noqa: F401
 
-PrimitiveTypes = Union[uuid.UUID, str, float, int, StrictBool, datetime]
+
+class StrictNonIntBool(object):
+    """
+    StrictNonIntBool to allow for bools which are not type-coerced and that are not a subclass of int
+    Based on StrictBool from pydantic
+    """
+
+    @classmethod
+    def __get_validators__(cls) -> "types.CallableGenerator":
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, value: Any) -> bool:
+        """
+        Ensure that we only allow bools.
+        """
+        if isinstance(value, bool):
+            return value
+
+        raise errors.StrictBoolError()
+
+
+PrimitiveTypes = Union[uuid.UUID, StrictNonIntBool, int, float, datetime, str]
 SimpleTypes = Union["BaseModel", Enum, PrimitiveTypes]
 
 JsonType = Dict[str, Any]
