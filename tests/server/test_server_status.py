@@ -31,5 +31,3 @@ async def test_server_status(server, client):
     db_status = [x for x in status["slices"] if x["name"] == "core.database"]
     assert len([x for x in status["slices"] if x["name"] == "core.database"]) == 1
     assert db_status[0]["status"]["connected"] is True
-
-    print(status["slices"])
