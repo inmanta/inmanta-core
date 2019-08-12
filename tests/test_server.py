@@ -29,7 +29,7 @@ from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.export import unknown_parameters, upload_code
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_SERVER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER
 from inmanta.server import config as opt
 from inmanta.server import server
 from inmanta.util import hash_file

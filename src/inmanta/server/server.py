@@ -35,7 +35,7 @@ from tornado import locks
 from inmanta import const, data
 from inmanta.ast import type
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
-from inmanta.data.model import StatusResponse, SliceStatus, ExtensionStatus
+from inmanta.data.model import ExtensionStatus, SliceStatus, StatusResponse
 from inmanta.protocol import encode_token, exceptions, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -51,7 +51,7 @@ from inmanta.server import (
 )
 from inmanta.server import config as opt
 from inmanta.server import protocol
-from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ReturnTupple, Warnings
+from inmanta.types import Apireturn, ArgumentTypes, JsonType, PrimitiveTypes, ReturnTupple, Warnings
 from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
@@ -100,12 +100,14 @@ class DatabaseSlice(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super(DatabaseSlice, self).__init__(SLICE_DATABASE)
+        self._pool: Optional[asyncpg.pool.Pool] = None
 
     async def start(self) -> None:
         await self.connect_database()
 
     async def stop(self) -> None:
         await self.disconnect_database()
+        self._pool = None
 
     def get_dependencies(self) -> List[str]:
         return []
@@ -118,13 +120,23 @@ class DatabaseSlice(protocol.ServerSlice):
 
         database_username = opt.db_username.get()
         database_password = opt.db_password.get()
-        await data.connect(database_host, database_port, opt.db_name.get(), database_username, database_password)
+        self._pool = await data.connect(database_host, database_port, opt.db_name.get(), database_username, database_password)
         LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
 
     async def disconnect_database(self) -> None:
         """ Disconnect the database
         """
         await data.disconnect()
+
+    async def get_status(self) -> Dict[str, ArgumentTypes]:
+        """ Get the status of the database connection
+        """
+        return {
+            "connected": self._pool is not None,
+            "poolsize": self._pool._queue.qsize(),
+            "database": opt.db_name.get(),
+            "host": opt.db_host.get(),
+        }
 
 
 class Server(protocol.ServerSlice):
@@ -2030,10 +2042,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         slices = []
         extension_names = set()
         for slice_name, slice in self._server.get_slices().items():
-            slices.append(SliceStatus(
-                name=slice_name,
-                status=await slice.get_status(),
-            ))
+            slices.append(SliceStatus(name=slice_name, status=await slice.get_status()))
 
             try:
                 ext_name = slice_name.split(".")[0]
@@ -2048,7 +2057,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         response = StatusResponse(
             version=distr.version,
             license=distr.metadata["License"] if "License" in distr.metadata else "unknown",
-            extensions=[ExtensionStatus(name=name, package=package, version=version) for name, package, version in extension_names],
+            extensions=[
+                ExtensionStatus(name=name, package=package, version=version) for name, package, version in extension_names
+            ],
             slices=slices,
         )
 

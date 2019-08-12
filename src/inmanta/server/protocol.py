@@ -17,6 +17,7 @@
 """
 import asyncio
 import logging
+import socket
 import time
 import uuid
 from collections import defaultdict
@@ -209,6 +210,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         To schedule recurring tasks, use :func:`schedule` or `self._sched`
         To schedule background tasks, use :func:`add_background_task`
     """
+
     def __init__(self, name: str) -> None:
         super().__init__()
 
@@ -483,6 +485,21 @@ class TransportSlice(ServerSlice):
         await super(TransportSlice, self).stop()
         await self.server._transport.join()
 
+    async def get_status(self) -> Dict[str, ArgumentTypes]:
+        def format_socket(sock: socket.socket) -> str:
+            sname = sock.getsockname()
+            return f"{sname[0]}:{sname[1]}"
+
+        return {
+            "inflight": self.server._transport.inflight_counter,
+            "running": self.server._transport.running,
+            "sockets": [
+                format_socket(s)
+                for s in self.server._transport._http_server._sockets.values()
+                if s.family in [socket.AF_INET, socket.AF_INET6]
+            ],
+        }
+
 
 class SessionManager(ServerSlice):
     """
@@ -509,6 +526,14 @@ class SessionManager(ServerSlice):
 
         # Listeners
         self.listeners: List[SessionListener] = []
+
+    async def get_status(self) -> Dict[str, ArgumentTypes]:
+        return {
+            "hangtime": self.hangtime,
+            "interval": self.interval,
+            "sessions": len(self._sessions),
+            "listeners": len(self.listeners),
+        }
 
     def add_listener(self, listener: SessionListener) -> None:
         self.listeners.append(listener)

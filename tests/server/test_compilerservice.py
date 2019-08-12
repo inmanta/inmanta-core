@@ -10,7 +10,8 @@ from typing import List
 import pytest
 
 from inmanta import config, data
-from inmanta.server import config as server_config, SLICE_SERVER
+from inmanta.server import SLICE_SERVER
+from inmanta.server import config as server_config
 from inmanta.server.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.server.protocol import Server
 from inmanta.util import ensure_directory_exist
