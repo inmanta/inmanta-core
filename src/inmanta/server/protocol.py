@@ -527,12 +527,7 @@ class SessionManager(ServerSlice):
         self.listeners: List[SessionListener] = []
 
     async def get_status(self) -> Dict[str, ArgumentTypes]:
-        return {
-            "hangtime": self.hangtime,
-            "interval": self.interval,
-            "sessions": len(self._sessions),
-            "listeners": len(self.listeners),
-        }
+        return {"hangtime": self.hangtime, "interval": self.interval, "sessions": len(self._sessions)}
 
     def add_listener(self, listener: SessionListener) -> None:
         self.listeners.append(listener)

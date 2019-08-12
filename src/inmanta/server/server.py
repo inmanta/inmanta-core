@@ -133,7 +133,8 @@ class DatabaseSlice(protocol.ServerSlice):
         """
         return {
             "connected": self._pool is not None,
-            "poolsize": self._pool._queue.qsize(),
+            "max_pool": self._pool._maxsize,
+            "open_connections": len([x for x in self._pool._holders if x._con is not None and not x._con.is_closed()]),
             "database": opt.db_name.get(),
             "host": opt.db_host.get(),
         }
@@ -2051,8 +2052,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
                 extension_names.add((ext_name, package_name, distribution.version))
             except importlib_metadata.PackageNotFoundError:
-                # Ignore badly packaged extensions
-                pass
+                LOGGER.info(
+                    "Package %s of slice %s is not packaged in a distribution. Unable to determine its extension.",
+                    package_name,
+                    slice_name,
+                )
 
         response = StatusResponse(
             version=distr.version,
