@@ -33,7 +33,6 @@ from logging import Logger
 from typing import Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
 
 import pkg_resources
-from pkg_resources import DistributionNotFound
 from tornado import gen
 from tornado.ioloop import IOLoop
 
@@ -63,7 +62,7 @@ def memoize(obj):
 def get_compiler_version() -> Optional[str]:
     try:
         return pkg_resources.get_distribution("inmanta").version
-    except DistributionNotFound:
+    except pkg_resources.DistributionNotFound:
         LOGGER.error(
             "Could not find version number for the inmanta compiler."
             "Is inmanta installed? Use stuptools install or setuptools dev to install."

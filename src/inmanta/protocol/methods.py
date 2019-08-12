@@ -21,6 +21,7 @@ import uuid
 from typing import Any, Union
 
 from inmanta import const, data
+from inmanta.data.model import StatusResponse
 from inmanta.types import JsonType, PrimitiveTypes
 
 from . import exceptions
@@ -948,4 +949,11 @@ def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
         {
          enabled: bool
         }
+    """
+
+
+@method(path="/serverstatus", operation="GET", client_types=["api"])
+def get_server_status() -> StatusResponse:
+    """
+        Get the status of the server
     """

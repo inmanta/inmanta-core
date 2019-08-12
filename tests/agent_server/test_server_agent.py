@@ -31,7 +31,7 @@ from inmanta import agent, config, const, data, execute
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from utils import UNKWN, assert_equal_ish, log_contains, log_index, retry_limited
 
@@ -552,7 +552,7 @@ async def test_dual_agent(resource_container, server, client, environment, no_ag
     myagent.add_end_point_name("agent1")
     myagent.add_end_point_name("agent2")
     await myagent.start()
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "incorrect_value")
     resource_container.Provider.set("agent2", "key1", "incorrect_value")
@@ -780,7 +780,7 @@ async def test_unkown_parameters(resource_container, environment, client, server
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
-    await server.get_slice("server").renew_expired_facts()
+    await server.get_slice(SLICE_SERVER).renew_expired_facts()
 
     env_id = uuid.UUID(environment)
     params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
@@ -808,7 +808,7 @@ async def test_fail(resource_container, client, server, async_finalizer, no_agen
     agent.add_end_point_name("agent1")
     async_finalizer.add(agent.stop)
     await agent.start()
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -908,7 +908,7 @@ async def test_wait(resource_container, client, server, no_agent_backoff):
     await agent.start()
 
     # wait for agent
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
@@ -1055,7 +1055,7 @@ async def test_multi_instance(resource_container, client, server, no_agent_backo
     await agent.start()
 
     # wait for agent
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
@@ -2030,7 +2030,7 @@ async def test_s_repair_postponed_due_to_running_deploy(
     myagent.add_end_point_name("agent1")
     await myagent.start()
     myagent_instance = myagent._instances[agent_name]
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "value1")
 
@@ -2113,7 +2113,7 @@ async def test_s_repair_interrupted_by_deploy_request(
     myagent.add_end_point_name("agent1")
     await myagent.start()
     myagent_instance = myagent._instances[agent_name]
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "value1")
     resource_container.Provider.set("agent1", "key2", "value1")
@@ -2245,7 +2245,7 @@ async def test_s_repair_during_repair(resource_container, server, client, enviro
     myagent.add_end_point_name("agent1")
     await myagent.start()
     myagent_instance = myagent._instances[agent_name]
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "value1")
     resource_container.Provider.set("agent1", "key1", "value1")
@@ -2330,7 +2330,7 @@ async def test_s_deploy_during_deploy(resource_container, server, client, enviro
     myagent.add_end_point_name("agent1")
     await myagent.start()
     myagent_instance = myagent._instances[agent_name]
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "value1")
     resource_container.Provider.set("agent1", "key1", "value1")
@@ -2415,7 +2415,7 @@ async def test_s_full_deploy_interrupts_incremental_deploy(
     myagent.add_end_point_name("agent1")
     await myagent.start()
     myagent_instance = myagent._instances[agent_name]
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "value1")
     resource_container.Provider.set("agent1", "key1", "value1")
@@ -2499,7 +2499,7 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
     myagent.add_end_point_name("agent1")
     await myagent.start()
     myagent_instance = myagent._instances[agent_name]
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "value1")
     resource_container.Provider.set("agent1", "key1", "value1")
@@ -2581,7 +2581,7 @@ async def test_bad_post_get_facts(resource_container, client, server, environmen
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     await agent.start()
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -2683,7 +2683,7 @@ async def test_inprogress(resource_container, client, server, environment, no_ag
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     await agent.start()
-    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 

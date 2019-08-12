@@ -2486,7 +2486,9 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
-async def connect(host, port, database, username, password, create_db_schema=True):
+async def connect(
+    host: str, port: int, database: str, username: str, password: str, create_db_schema: bool = True
+) -> asyncpg.pool.Pool:
     pool = await asyncpg.create_pool(host=host, port=port, database=database, user=username, password=password)
     set_connection_pool(pool)
     if create_db_schema:

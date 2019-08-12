@@ -20,6 +20,7 @@ requires = [
     "pymongo",
     "pydantic",
     "typing_inspect",
+    "importlib_metadata",
 ]
 
 # Package a dummy extensions so that the namespace package for extensions is not empty
@@ -71,6 +72,6 @@ setup(
             "inmanta-cli = inmanta.main:main",
             "inmanta = inmanta.app:app",
             "inmanta-migrate-db = inmanta.db.migrate_to_postgresql:main",
-        ]
+        ],
     },
 )
