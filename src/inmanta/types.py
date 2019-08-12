@@ -20,7 +20,6 @@
 import uuid
 from datetime import datetime
 from enum import Enum
-
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from pydantic import errors, types
@@ -38,7 +37,7 @@ class StrictNonIntBool(object):
     """
 
     @classmethod
-    def __get_validators__(cls) -> 'types.CallableGenerator':
+    def __get_validators__(cls) -> "types.CallableGenerator":
         yield cls.validate
 
     @classmethod

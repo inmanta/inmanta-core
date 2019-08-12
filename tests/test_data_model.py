@@ -15,8 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import json
-
 import sys
 import typing
 from enum import Enum
@@ -51,6 +49,7 @@ def test_union_bool_json():
 
         Union in python < 3.7 removes all strict subtypes. bool and strictbool are subtypes of int
     """
+
     class Test(pydantic.BaseModel):
         attr1: typing.Union[pydantic.StrictBool, int]
         attr2: typing.Union[pydantic.StrictBool]
