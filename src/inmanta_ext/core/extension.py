@@ -17,8 +17,11 @@
 """
 
 from inmanta.server.extensions import ApplicationContext
+from inmanta.server import server, agentmanager, compilerservice
 
 
 def setup(application: ApplicationContext) -> None:
-    # dummy to allow packaging
-    pass
+    application.register_slice(server.Server())
+    application.register_slice(agentmanager.AgentManager())
+    application.register_slice(server.DatabaseSlice())
+    application.register_slice(compilerservice.CompilerService())

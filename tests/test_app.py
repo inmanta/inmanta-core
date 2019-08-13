@@ -39,6 +39,7 @@ def get_command(
     dbport=None,
     dbname="inmanta",
     config_dir=None,
+    server_extensions=[],
 ):
     root_dir = tmp_dir.mkdir("root").strpath
     log_dir = os.path.join(root_dir, "log")
@@ -59,6 +60,8 @@ def get_command(
         f.write("[database]\n")
         f.write("port=" + str(port) + "\n")
         f.write("name=" + dbname + "\n")
+        f.write("[server]\n")
+        f.write(f"enabled_extensions={', '.join(server_extensions)}\n")
 
     args = [sys.executable, "-m", "inmanta.app"]
     if stdout_log_level:
@@ -333,12 +336,11 @@ def test_check_bad_shutdown():
 
 
 def test_startup_failure(tmpdir, postgres_db, database_name):
-    (args, log_dir) = get_command(tmpdir, dbport=postgres_db.port, dbname=database_name)
+    (args, log_dir) = get_command(tmpdir, dbport=postgres_db.port, dbname=database_name, server_extensions=["badplugin"])
     pp = ":".join(sys.path)
     # Add a bad module
     extrapath = os.path.join(os.path.dirname(__file__), "data", "bad_module_path")
     (stdout, stderr, code) = run_without_tty(args, env={"PYTHONPATH": pp + ":" + extrapath})
-    print(stdout, stderr)
     assert "Server setup failed" in stdout
     assert "Slice badplugin.badslice failed to start because: Too bad, this plugin is broken" in stdout
     assert "Server Shutdown complete" in stdout

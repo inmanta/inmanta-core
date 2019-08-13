@@ -26,7 +26,7 @@ import pytest
 
 import inmanta.server
 import inmanta_ext
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT, config
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
 from inmanta.server.extensions import InvalidSliceNameException
@@ -50,6 +50,9 @@ def splice_extension_in(name: str) -> Generator[Any, Any, None]:
 
 def test_discover_and_load():
     with splice_extension_in("test_module_path"):
+
+        config.server_enabled_extensions.set("testplugin")
+
         ibl = InmantaBootloader()
         print("plugins: ", ibl._discover_plugin_packages())
 
@@ -70,6 +73,8 @@ def test_phase_1(caplog):
     with splice_extension_in("test_module_path"):
         ibl = InmantaBootloader()
 
+        config.server_enabled_extensions.set("testplugin,noext")
+
         all = ibl._load_extensions()
 
         assert "testplugin" in all
@@ -78,7 +83,7 @@ def test_phase_1(caplog):
         log_contains(caplog, "inmanta.server.bootloader", logging.WARNING, "Could not load extension inmanta_ext.noext")
 
 
-def test_phase_2(caplog):
+def test_phase_2():
     ibl = InmantaBootloader()
     all = {"testplugin": inmanta_ext.testplugin.extension.setup}
 
@@ -94,7 +99,7 @@ def test_phase_2(caplog):
         ctx = ibl._collect_slices(all)
 
 
-def test_phase_3(caplog):
+def test_phase_3():
     server = Server()
     server.add_slice(XTestSlice())
     server.add_slice(inmanta.server.server.Server())
@@ -111,32 +116,59 @@ def test_phase_3(caplog):
     ]
 
 
-def test_end_to_end(caplog):
+def test_end_to_end():
     ibl = InmantaBootloader()
+
+    config.server_enabled_extensions.set("testplugin")
+
     slices = ibl.load_slices()
     byname = {sl.name: sl for sl in slices}
     assert "testplugin.testslice" in byname
 
 
-def test_end_to_end_2(caplog):
+def test_end_to_end_2():
     with splice_extension_in("bad_module_path"):
+        config.server_enabled_extensions.set("badplugin")
+
         ibl = InmantaBootloader()
         all = ibl._load_extensions()
         print(all)
         assert "badplugin" in all
 
+    config.server_enabled_extensions.set("")
     all = ibl._load_extensions()
     assert "badplugin" not in all
 
 
 @pytest.mark.asyncio
-async def test_startup_failure(caplog, async_finalizer, server_config):
+async def test_startup_failure(async_finalizer, server_config):
     with splice_extension_in("bad_module_path"):
+        config.server_enabled_extensions.set("badplugin")
+
         ibl = InmantaBootloader()
         async_finalizer.add(ibl.stop)
         with pytest.raises(Exception) as e:
             await ibl.start()
         assert str(e.value) == "Slice badplugin.badslice failed to start because: Too bad, this plugin is broken"
 
+    config.server_enabled_extensions.set("")
     all = ibl._load_extensions()
     assert "badplugin" not in all
+
+
+def test_load_and_filter(caplog):
+    caplog.set_level(logging.INFO)
+
+    with splice_extension_in("test_module_path"):
+        ibl = InmantaBootloader()
+
+        plugin_pkgs = ibl._discover_plugin_packages()
+        assert "inmanta_ext.core" in plugin_pkgs
+        assert len(plugin_pkgs) == 1
+
+        # When extensions are available but not enabled, log a message with the correct option
+        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Load extensions by setting configuration option")
+
+        with pytest.raises(PluginLoadFailed):
+            config.server_enabled_extensions.set("unknown")
+            plugin_pkgs = ibl._discover_plugin_packages()
