@@ -92,8 +92,7 @@ async def wait_for_proc_bounded(procs: List[process.Subprocess], timeout: float 
 
 
 class AgentManager(ServerSlice, SessionListener):
-    """
-    This class contains all server functionality related to the management of agents
+    """ This class contains all server functionality related to the management of agents
     """
 
     def __init__(self, closesessionsonstart: bool = True, fact_back_off: int = None) -> None:
@@ -501,12 +500,8 @@ class AgentManager(ServerSlice, SessionListener):
         with open(config_path, "w+") as fd:
             fd.write(config)
 
-        if not self._server._agent_no_log:
-            out: Optional[str] = os.path.join(self._server_storage["logs"], "agent-%s.out" % env.id)
-            err: Optional[str] = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
-        else:
-            out = None
-            err = None
+        out: str = os.path.join(self._server_storage["logs"], "agent-%s.out" % env.id)
+        err: str = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
 
         agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
         proc = self._fork_inmanta(

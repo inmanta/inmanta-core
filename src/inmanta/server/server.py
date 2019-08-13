@@ -150,11 +150,9 @@ class Server(protocol.ServerSlice):
     compiler: "CompilerService"
     _server: protocol.Server
 
-    def __init__(self, agent_no_log: bool = False) -> None:
+    def __init__(self) -> None:
         super().__init__(name=SLICE_SERVER)
         LOGGER.info("Starting server endpoint")
-
-        self._agent_no_log: bool = agent_no_log
 
         self.setup_dashboard()
         self.dryrun_lock = locks.Lock()

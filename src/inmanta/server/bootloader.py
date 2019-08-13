@@ -23,12 +23,9 @@ from types import ModuleType
 from typing import Callable, Dict, Generator, List
 
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
-from inmanta.server import server, config
-from inmanta.server.agentmanager import AgentManager
-from inmanta.server.compilerservice import CompilerService
+from inmanta.server import config
 from inmanta.server.extensions import ApplicationContext, InvalidSliceNameException
 from inmanta.server.protocol import Server, ServerSlice
-from inmanta.server.server import DatabaseSlice
 
 LOGGER = logging.getLogger(__name__)
 
@@ -60,13 +57,15 @@ class ConstrainedApplicationContext(ApplicationContext):
 
 
 class InmantaBootloader(object):
-    def __init__(self, agent_no_log: bool = False) -> None:
+    """ The inmanta bootloader is responsible for:
+        - discovering extensions
+        - loading extensions
+        - loading core and extension slices
+        - starting the server and its slices in the correct order
+    """
+    def __init__(self) -> None:
         self.restserver = Server()
-        self.agent_no_log = agent_no_log
         self.started = False
-
-    def get_bootstrap_slices(self) -> List[ServerSlice]:
-        return [server.Server(agent_no_log=self.agent_no_log), AgentManager(), DatabaseSlice(), CompilerService()]
 
     async def start(self) -> None:
         for mypart in self.load_slices():
@@ -79,10 +78,44 @@ class InmantaBootloader(object):
 
     # Extension loading Phase I: from start to setup functions collected
     def _discover_plugin_packages(self) -> List[str]:
+        """ Discover all packages that are defined in the inmanta_ext namespace package. Filter available extensions based on
+            enabled_extensions and disabled_extensions config in the server configuration.
+
+            :return: A list of all subpackages defined in inmanta_ext
+        """
         inmanta_ext = importlib.import_module(EXTENSION_NAMESPACE)
-        return [name for finder, name, ispkg in iter_namespace(inmanta_ext)]
+        available = {name[len(EXTENSION_NAMESPACE) + 1 :]: name for finder, name, ispkg in iter_namespace(inmanta_ext)}
+
+        LOGGER.info("Discoverd extensions: %s", ", ".join(available.keys()))
+
+        extensions = []
+        enabled = [x for x in config.server_enabled_extensions.get() if len(x)]
+
+        if enabled:
+            for ext in enabled:
+                if ext not in available:
+                    raise PluginLoadFailed(
+                        f"Extension {ext} in config option {config.server_enabled_extensions.name} in section "
+                        f"{config.server_enabled_extensions.section} is not available."
+                    )
+
+                extensions.append(available[ext])
+        elif len(available) > 1:
+            # More than core is available
+            LOGGER.info(
+                f"Load extensions by setting configuration option {config.server_enabled_extensions.name} in section "
+                f"{config.server_enabled_extensions.section}. {len(available) - 1} extensions available but none are enabled."
+            )
+
+        if "core" not in extensions:
+            extensions.append(available["core"])
+
+        return extensions
 
     def _load_extension(self, name: str) -> Callable[[ApplicationContext], None]:
+        """ Import the extension defined in the package in name and return the setup function that needs to be called for the
+            extension to register its slices in the application context.
+        """
         try:
             importlib.import_module(name)
         except Exception as e:
@@ -94,16 +127,9 @@ class InmantaBootloader(object):
         except Exception as e:
             raise PluginLoadFailed(f"Could not load module {name}.{EXTENSION_MODULE}") from e
 
-    def _filter_extensions(self, extensions:  Dict[str, Callable[[ApplicationContext], None]]) ->  Dict[str, Callable[[ApplicationContext], None]]:
-        """ Filter a dict of extensions and their entrypoint based on the enabled_extensions and disabled_extensions setting
-            in the server configuration.
-        """
-        enabled = config.server_enabled_extensions.get()
-        disabled = config.server_disabled_extensions.get()
-
-        return extensions
-
     def _load_extensions(self) -> Dict[str, Callable[[ApplicationContext], None]]:
+        """ Discover all extensions, validate correct naming and load its setup function
+        """
         plugins: Dict[str, Callable[[ApplicationContext], None]] = {}
         for name in self._discover_plugin_packages():
             try:
@@ -117,15 +143,20 @@ class InmantaBootloader(object):
 
     # Extension loading Phase II: collect slices
     def _collect_slices(self, extensions: Dict[str, Callable[[ApplicationContext], None]]) -> ApplicationContext:
+        """
+            Call the setup function on all extensions and let them register their slices in the ApplicationContext. Core slices
+            are statically
+        """
         ctx = ApplicationContext()
-        for slice in self.get_bootstrap_slices():
-            ctx.register_slice(slice)
         for name, setup in extensions.items():
             myctx = ConstrainedApplicationContext(ctx, name)
             setup(myctx)
         return ctx
 
     def load_slices(self) -> List[ServerSlice]:
-        exts = self._filter_extensions(self._load_extensions())
+        """
+            Load all slices in the server
+        """
+        exts = self._load_extensions()
         ctx = self._collect_slices(exts)
         return ctx.get_slices()
