@@ -178,7 +178,7 @@ server_enabled_extensions = Option(
     "server",
     "enabled_extensions",
     "",
-    "A list of extensions the server must load. "
+    "A list of extensions the server must load. Core is always loaded."
     "If an extension listed in this list is not available, the server will refuse to start.",
     is_list,
 )
