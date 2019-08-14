@@ -1283,6 +1283,21 @@ class Compile(BaseDocument):
         return results
 
     @classmethod
+    async def get_unhandled_compiles_for_environment(cls, environment_id: uuid.UUID) -> "List[Compile]":
+        results = await cls.select_query(
+            f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND NOT handled and completed IS NOT NULL ORDER BY requested ASC",
+            [environment_id]
+        )
+        return results
+
+    @classmethod
+    async def get_unhandled_compiles_count(cls) -> int:
+        result = await cls._fetchval(
+            f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL"
+        )
+        return result
+
+    @classmethod
     async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "List[Compile]":
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND remote_id=$2",

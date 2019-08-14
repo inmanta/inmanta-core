@@ -17,6 +17,11 @@
 """
 import asyncio
 import concurrent
+import queue
+
+from datetime import time
+
+import datetime
 import logging
 import os
 import random
@@ -52,8 +57,9 @@ from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import Project
 from inmanta.postgresproc import PostgresProc
-from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.compilerservice import CompilerService, CompileRun
 from inmanta.util import get_free_tcp_port
 
 # Import the utils module differently when conftest is put into the inmanta_tests package
@@ -727,3 +733,57 @@ async def async_finalizer():
     cleaner = AsyncCleaner()
     yield cleaner
     await asyncio.gather(*[item() for item in cleaner.register])
+
+
+class CompileRunnerMock(object):
+    def __init__(self, request: data.Compile, make_compile_fail: bool = False, runner_queue: Optional[queue.Queue] = None) -> None:
+        self.request = request
+        self.version: Optional[int] = None
+        self._make_compile_fail = make_compile_fail
+        self._runner_queue = runner_queue
+        self.block = False
+
+    async def run(self) -> bool:
+        now = datetime.datetime.now()
+        returncode = 1 if self._make_compile_fail else 0
+        report = data.Report(
+            compile=self.request.id, started=now, name="CompileRunnerMock", command="", completed=now, returncode=returncode
+        )
+        await report.insert()
+        self.version = int(time.time())
+        success = not self._make_compile_fail
+
+        if self._runner_queue is not None:
+            self._runner_queue.put(self)
+            self.block = True
+            while self.block:
+                await asyncio.sleep(0.01)
+
+        return success
+
+
+def monkey_patch_compiler_service(monkeypatch, server, make_compile_fail, runner_queue=None):
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+
+    def patch(compile: data.Compile, project_dir: str) -> CompileRun:
+        return CompileRunnerMock(compile, make_compile_fail, runner_queue)
+
+    monkeypatch.setattr(compilerslice, "_get_compile_runner", patch, raising=True)
+
+
+@pytest.fixture
+async def mocked_compiler_service(server, monkeypatch):
+    monkey_patch_compiler_service(monkeypatch, server, False)
+
+
+@pytest.fixture
+async def mocked_compiler_service_failing_compile(server, monkeypatch):
+    monkey_patch_compiler_service(monkeypatch, server, True)
+
+
+@pytest.fixture
+async def mocked_compiler_service_block(server, monkeypatch):
+    runner_queue = queue.Queue()
+    monkey_patch_compiler_service(monkeypatch, server, True, runner_queue)
+
+    yield runner_queue

@@ -15,11 +15,15 @@
 
     Contact: code@inmanta.com
 """
-from typing import Dict, List, Union
+import datetime
+
+import uuid
+
+from typing import Dict, List, Union, Optional
 
 import pydantic
 
-from inmanta.types import ArgumentTypes, SimpleTypes
+from inmanta.types import ArgumentTypes, SimpleTypes, JsonType
 
 
 class BaseModel(pydantic.BaseModel):
@@ -61,3 +65,23 @@ class StatusResponse(BaseModel):
     license: Union[str, Dict[str, SimpleTypes]]
     extensions: List[ExtensionStatus]
     slices: List[SliceStatus]
+
+
+class CompileRun(BaseModel):
+    id: uuid.UUID
+    remote_id: Optional[uuid.UUID]
+    environment: uuid.UUID
+    requested: Optional[datetime.datetime]
+    started: Optional[datetime.datetime]
+
+    do_export: bool
+    force_update: bool
+    metadata: JsonType
+    environment_variables: Dict[str, str]
+
+
+class CompileQueueResponse(BaseModel):
+    """
+        Response for the call to inspect the queue in the compiler service
+    """
+    queue: List[CompileRun]

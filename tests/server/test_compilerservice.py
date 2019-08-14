@@ -511,3 +511,18 @@ async def test_server_recompile(server_multi, client_multi, environment_multi):
     await client.clear_environment(environment)
 
     assert not os.path.exists(project_dir)
+
+
+@pytest.mark.asyncio(timeout=90)
+async def test_compileservice_queue(mocked_compiler_service_block, server, client, environment):
+    config.Config.set("server", "auto-recompile-wait", "0")
+
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 0
+    assert result.code == 200
+
+    result = await client.notify_change(environment)
+    assert result.code == 200
+
+
+    print(result.result)

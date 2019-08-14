@@ -21,7 +21,7 @@ import uuid
 from typing import Any, Union
 
 from inmanta import const, data
-from inmanta.data.model import StatusResponse
+from inmanta.data import model
 from inmanta.types import JsonType, PrimitiveTypes
 
 from . import exceptions
@@ -953,7 +953,14 @@ def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
 
 
 @method(path="/serverstatus", operation="GET", client_types=["api"])
-def get_server_status() -> StatusResponse:
+def get_server_status() -> model.StatusResponse:
     """
         Get the status of the server
+    """
+
+
+@method(path="/compilequeue", operation="GET", arg_options=ENV_OPTS, client_types=["api"])
+def get_compile_queue(tid: uuid.UUID) -> model.CompileQueueResponse:
+    """
+        Get the current compiler queue on the server
     """
