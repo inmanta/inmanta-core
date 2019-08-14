@@ -33,6 +33,7 @@ import inmanta.db.versions
 from inmanta import const, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
 from inmanta.data import schema
+from inmanta.data.model import CompileRun
 from inmanta.resources import Id
 from inmanta.types import JsonType
 
@@ -1277,6 +1278,7 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_unhandled_compiles(cls) -> "List[Compile]":
+        # TODO: is not null? very strange
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL ORDER BY requested ASC", []
         )
@@ -1285,16 +1287,15 @@ class Compile(BaseDocument):
     @classmethod
     async def get_unhandled_compiles_for_environment(cls, environment_id: uuid.UUID) -> "List[Compile]":
         results = await cls.select_query(
-            f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND NOT handled and completed IS NOT NULL ORDER BY requested ASC",
-            [environment_id]
+            f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND NOT handled and completed IS NULL "
+            "ORDER BY requested ASC",
+            [environment_id],
         )
         return results
 
     @classmethod
     async def get_unhandled_compiles_count(cls) -> int:
-        result = await cls._fetchval(
-            f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL"
-        )
+        result = await cls._fetchval(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL")
         return result
 
     @classmethod
@@ -1304,6 +1305,19 @@ class Compile(BaseDocument):
             [cls._get_value(environment_id), cls._get_value(remote_id)],
         )
         return results
+
+    def to_dto(self) -> CompileRun:
+        return CompileRun(
+            id=self.id,
+            remote_id=self.remote_id,
+            environment=self.environment,
+            requested=self.requested,
+            started=self.started,
+            do_export=self.do_export,
+            force_update=self.force_update,
+            metadata=self.metadata,
+            environment_variables=self.environment_variables,
+        )
 
 
 class Form(BaseDocument):

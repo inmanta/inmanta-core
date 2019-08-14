@@ -16,14 +16,12 @@
     Contact: code@inmanta.com
 """
 import datetime
-
 import uuid
-
-from typing import Dict, List, Union, Optional
+from typing import Dict, List, Optional, Union
 
 import pydantic
 
-from inmanta.types import ArgumentTypes, SimpleTypes, JsonType
+from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
 
 
 class BaseModel(pydantic.BaseModel):
@@ -84,4 +82,5 @@ class CompileQueueResponse(BaseModel):
     """
         Response for the call to inspect the queue in the compiler service
     """
+
     queue: List[CompileRun]

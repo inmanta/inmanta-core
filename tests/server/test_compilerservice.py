@@ -27,7 +27,7 @@ from typing import List
 import pytest
 
 from inmanta import config, data
-from inmanta.server import SLICE_SERVER
+from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server import config as server_config
 from inmanta.server.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.server.protocol import Server
@@ -515,14 +515,64 @@ async def test_server_recompile(server_multi, client_multi, environment_multi):
 
 @pytest.mark.asyncio(timeout=90)
 async def test_compileservice_queue(mocked_compiler_service_block, server, client, environment):
+    """
+        Test the inspection of the compile queue. The compile runner is mocked out so the "started" field does not have the
+        correct value in this test.
+    """
+    env = await data.Environment.get_by_id(environment)
     config.Config.set("server", "auto-recompile-wait", "0")
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 0
     assert result.code == 200
 
-    result = await client.notify_change(environment)
+    # request a compile
+    compile_id1 = uuid.uuid4()
+    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=compile_id1)
+
+    # api should return one
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 1
+    assert result.result["queue"][0]["remote_id"] == str(compile_id1)
     assert result.code == 200
 
+    # request a compile
+    compile_id2 = uuid.uuid4()
+    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=compile_id2)
 
-    print(result.result)
+    # api should return two
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 2
+    assert result.result["queue"][1]["remote_id"] == str(compile_id2)
+    assert result.code == 200
+
+    # finish a compile and wait for service to take on next
+    current_task = compilerslice._recompiles[env.id]
+
+    run = mocked_compiler_service_block.get()
+    run.block = False
+
+    while current_task is compilerslice._recompiles[env.id]:
+        await asyncio.sleep(0.01)
+
+    # api should return one when ready
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 1
+    assert result.code == 200
+
+    # finish a compile
+    current_task = compilerslice._recompiles[env.id]
+
+    run = mocked_compiler_service_block.get()
+    run.block = False
+
+    while env.id in compilerslice._recompiles and current_task is compilerslice._recompiles[env.id]:
+        await asyncio.sleep(0.01)
+
+    # return
+
+    # api should return none
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 0
+    assert result.code == 200

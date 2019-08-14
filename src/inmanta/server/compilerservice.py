@@ -376,6 +376,8 @@ class CompilerService(ServerSlice):
             if nextrun:
                 task = self.add_background_task(self._run(nextrun))
                 self._recompiles[environment] = task
+            else:
+                del self._recompiles[environment]
 
     async def _notify_listeners(self, compile: data.Compile) -> None:
         async def notify(listener: CompileStateListener) -> None:
@@ -473,6 +475,4 @@ class CompilerService(ServerSlice):
             Get the current compiler queue on the server
         """
         compiles = await data.Compile.get_unhandled_compiles_for_environment(env.id)
-        print(len(compiles))
-
-        return model.CompileQueueResponse(queue=[model.CompileRun() for x in compiles])
+        return model.CompileQueueResponse(queue=[x.to_dto() for x in compiles])

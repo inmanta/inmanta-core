@@ -17,13 +17,10 @@
 """
 import asyncio
 import concurrent
-import queue
-
-from datetime import time
-
 import datetime
 import logging
 import os
+import queue
 import random
 import re
 import shutil
@@ -31,6 +28,7 @@ import socket
 import string
 import sys
 import tempfile
+import time
 import traceback
 from tempfile import mktemp
 from typing import Dict, Optional
@@ -736,7 +734,9 @@ async def async_finalizer():
 
 
 class CompileRunnerMock(object):
-    def __init__(self, request: data.Compile, make_compile_fail: bool = False, runner_queue: Optional[queue.Queue] = None) -> None:
+    def __init__(
+        self, request: data.Compile, make_compile_fail: bool = False, runner_queue: Optional[queue.Queue] = None
+    ) -> None:
         self.request = request
         self.version: Optional[int] = None
         self._make_compile_fail = make_compile_fail
@@ -757,7 +757,7 @@ class CompileRunnerMock(object):
             self._runner_queue.put(self)
             self.block = True
             while self.block:
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(1)
 
         return success
 
