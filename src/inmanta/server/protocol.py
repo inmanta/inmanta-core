@@ -381,14 +381,11 @@ class Session(object):
     def seen(self) -> None:
         self._seen = time.time()
 
-    def _set_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
-        def on_timeout():
-            if not self.expired:
-                LOGGER.warning(log_message)
-            future.set_exception(gen.TimeoutError())
-
-        timeout_handle = IOLoop.current().add_timeout(IOLoop.current().time() + timeout, on_timeout)
-        future.add_done_callback(lambda _: IOLoop.current().remove_timeout(timeout_handle))
+    async def handle_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
+        try:
+            await asyncio.wait_for(future, timeout)
+        except asyncio.TimeoutError:
+            LOGGER.warning(log_message)
 
     def put_call(self, call_spec: common.Request, timeout: int = 10) -> asyncio.Future:
         future = asyncio.Future()
@@ -399,8 +396,12 @@ class Session(object):
 
         call_spec.reply_id = reply_id
         self._queue.put(call_spec)
-        self._set_timeout(
-            future, timeout, "Call %s: %s %s for agent %s timed out." % (reply_id, call_spec.method, call_spec.url, self._sid)
+        self._sessionstore.add_background_task(
+            self.handle_timeout(
+                future,
+                timeout,
+                "Call %s: %s %s for agent %s timed out." % (reply_id, call_spec.method, call_spec.url, self._sid),
+            )
         )
         self._replies[reply_id] = future
 
