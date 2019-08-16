@@ -1249,6 +1249,8 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_last_run(cls, environment_id: uuid.UUID) -> "Compile":
+        """ Get the last run for the given environment
+        """
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} where environment=$1 AND completed IS NOT NULL ORDER BY completed DESC LIMIT 1",
             [cls._get_value(environment_id)],
@@ -1259,6 +1261,8 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_next_run(cls, environment_id: uuid.UUID) -> "Compile":
+        """ Get the next compile in the queue for the given environment
+        """
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND completed IS NULL ORDER BY requested ASC LIMIT 1",
             [cls._get_value(environment_id)],
@@ -1269,6 +1273,8 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_next_run_all(cls) -> "List[Compile]":
+        """ Get the next compile in the queue for each environment
+        """
         results = await cls.select_query(
             f"SELECT DISTINCT ON (environment) * FROM {cls.table_name()} WHERE completed IS NULL ORDER BY environment, "
             f"requested ASC",
@@ -1278,14 +1284,17 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_unhandled_compiles(cls) -> "List[Compile]":
-        # TODO: is not null? very strange
+        """ Get all compiles that have completed but for which listeners have not been notified yet.
+        """
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL ORDER BY requested ASC", []
         )
         return results
 
     @classmethod
-    async def get_unhandled_compiles_for_environment(cls, environment_id: uuid.UUID) -> "List[Compile]":
+    async def get_next_compiles_for_environment(cls, environment_id: uuid.UUID) -> "List[Compile]":
+        """ Get the queue of compiles that are scheduled in FIFO order.
+        """
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND NOT handled and completed IS NULL "
             "ORDER BY requested ASC",
@@ -1294,7 +1303,9 @@ class Compile(BaseDocument):
         return results
 
     @classmethod
-    async def get_unhandled_compiles_count(cls) -> int:
+    async def get_next_compiles_count(cls) -> int:
+        """ Get the number of compiles in the queue for ALL environments
+        """
         result = await cls._fetchval(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL")
         return result
 

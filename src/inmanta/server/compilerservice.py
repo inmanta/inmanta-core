@@ -310,7 +310,7 @@ class CompilerService(ServerSlice):
         self.listeners: List[CompileStateListener] = []
 
     async def get_status(self) -> Dict[str, ArgumentTypes]:
-        return {"task_queue": await data.Compile.get_unhandled_compiles_count(), "listeners": len(self.listeners)}
+        return {"task_queue": await data.Compile.get_next_compiles_count(), "listeners": len(self.listeners)}
 
     def add_listener(self, listener: CompileStateListener) -> None:
         self.listeners.append(listener)
@@ -474,5 +474,5 @@ class CompilerService(ServerSlice):
         """
             Get the current compiler queue on the server
         """
-        compiles = await data.Compile.get_unhandled_compiles_for_environment(env.id)
+        compiles = await data.Compile.get_next_compiles_for_environment(env.id)
         return model.CompileQueueResponse(queue=[x.to_dto() for x in compiles])
