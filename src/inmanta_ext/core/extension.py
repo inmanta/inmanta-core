@@ -16,8 +16,8 @@
     Contact: code@inmanta.com
 """
 
+from inmanta.server import agentmanager, compilerservice, server
 from inmanta.server.extensions import ApplicationContext
-from inmanta.server import server, agentmanager, compilerservice
 
 
 def setup(application: ApplicationContext) -> None:

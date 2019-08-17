@@ -51,7 +51,7 @@ from inmanta.server import (
 )
 from inmanta.server import config as opt
 from inmanta.server import protocol
-from inmanta.types import Apireturn, ArgumentTypes, JsonType, PrimitiveTypes, ReturnTupple, Warnings, SimpleTypes
+from inmanta.types import Apireturn, ArgumentTypes, JsonType, PrimitiveTypes, ReturnTupple, Warnings
 from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)

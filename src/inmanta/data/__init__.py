@@ -1734,7 +1734,7 @@ class Resource(BaseDocument):
         ra_table_name = ResourceAction.table_name()
         rvid_table_name = ResourceVersionId.table_name()
 
-        ## Delete all resource actions of this resource
+        # Delete all resource actions of this resource
         sub_query = (
             f"SELECT r.action_id FROM {ra_table_name} r INNER JOIN {rvid_table_name} i ON (r.action_id=i.action_id) "
             "WHERE i.environment=$1 AND i.resource_version_id=$2"
@@ -1743,7 +1743,7 @@ class Resource(BaseDocument):
 
         await self._execute_query(query, self.environment, self.resource_version_id)
 
-        ## Delete the resource itself
+        # Delete the resource itself
         await self.delete()
 
     @classmethod
@@ -2177,14 +2177,14 @@ class ConfigurationModel(BaseDocument):
                 # Delete version and all resources (FK)
                 await self.delete(connection=con)
 
-                ## Delete facts when the resources in this version are the only
+                # Delete facts when the resources in this version are the only
                 resource_table_name = Resource.table_name()
                 param_table_name = Parameter.table_name()
 
                 await con.execute(
                     f"DELETE FROM {param_table_name} p WHERE environment=$1 AND NOT EXISTS "
                     f"(SELECT * FROM {resource_table_name} r WHERE p.resource_id=r.resource_id)",
-                    self.environment
+                    self.environment,
                 )
 
     async def get_undeployable(self):
