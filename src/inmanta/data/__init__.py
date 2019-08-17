@@ -1730,20 +1730,20 @@ class Resource(BaseDocument):
         resources = await cls.select_query(query, values)
         return resources
 
-    async def delete_cascade(self):
+    async def delete_cascade(self) -> None:
         ra_table_name = ResourceAction.table_name()
         rvid_table_name = ResourceVersionId.table_name()
+
+        ## Delete all resource actions of this resource
         sub_query = (
-            "SELECT r.action_id FROM "
-            + ra_table_name
-            + " r INNER JOIN "
-            + rvid_table_name
-            + " i"
-            + " ON (r.action_id=i.action_id)"
-            + " WHERE i.environment=$1 AND i.resource_version_id=$2"
+            f"SELECT r.action_id FROM {ra_table_name} r INNER JOIN {rvid_table_name} i ON (r.action_id=i.action_id) "
+            "WHERE i.environment=$1 AND i.resource_version_id=$2"
         )
-        query = "DELETE FROM " + ra_table_name + " WHERE action_id=ANY(" + sub_query + ")"
+        query = f"DELETE FROM {ra_table_name} WHERE action_id=ANY({sub_query})"
+
         await self._execute_query(query, self.environment, self.resource_version_id)
+
+        ## Delete the resource itself
         await self.delete()
 
     @classmethod
@@ -1761,7 +1761,7 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    async def get_resources_report(cls, environment):
+    async def get_resources_report(cls, environment: uuid.UUID) -> List[JsonType]:
         """
             This method generates a report of all resources in the given environment,
             with their latest version and when they are last deployed.
@@ -2168,11 +2168,24 @@ class ConfigurationModel(BaseDocument):
         )
         return versions
 
-    async def delete_cascade(self):
+    async def delete_cascade(self) -> None:
         async with self._connection_pool.acquire() as con:
             async with con.transaction():
+                # Delete all code associated with this version
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
+
+                # Delete version and all resources (FK)
                 await self.delete(connection=con)
+
+                ## Delete facts when the resources in this version are the only
+                resource_table_name = Resource.table_name()
+                param_table_name = Parameter.table_name()
+
+                await con.execute(
+                    f"DELETE FROM {param_table_name} p WHERE environment=$1 AND NOT EXISTS "
+                    f"(SELECT * FROM {resource_table_name} r WHERE p.resource_id=r.resource_id)",
+                    self.environment
+                )
 
     async def get_undeployable(self):
         """
