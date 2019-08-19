@@ -1298,7 +1298,7 @@ class Compile(BaseDocument):
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND NOT handled and completed IS NULL "
             "ORDER BY requested ASC",
-            [environment_id],
+            [cls._get_value(environment_id)],
         )
         return results
 
