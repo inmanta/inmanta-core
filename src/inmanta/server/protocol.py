@@ -66,7 +66,7 @@ class ReturnClient(Client):
         call_spec = method_properties.build_call(args, kwargs)
         try:
             return_value = await self.session.put_call(call_spec, timeout=method_properties.timeout)
-        except gen.TimeoutError:
+        except asyncio.CancelledError:
             return common.Result(code=500, result={"message": "Call timed out"})
 
         return common.Result(code=return_value["code"], result=return_value["result"])
@@ -382,6 +382,11 @@ class Session(object):
         self._seen = time.time()
 
     async def handle_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
+        """ A function that awaits a future until its value is ready or until timeout. When the call times out, a message is
+            logged. The future itself will be cancelled.
+
+            Any other exceptions (which should not occur) will be logged in background task.
+        """
         try:
             await asyncio.wait_for(future, timeout)
         except asyncio.TimeoutError:
