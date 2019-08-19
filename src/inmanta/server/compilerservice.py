@@ -34,6 +34,7 @@ import dateutil
 import dateutil.parser
 
 from inmanta import config, const, data, protocol, server
+from inmanta.data import model
 from inmanta.protocol import encode_token, methods
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.server import config as opt
@@ -309,7 +310,7 @@ class CompilerService(ServerSlice):
         self.listeners: List[CompileStateListener] = []
 
     async def get_status(self) -> Dict[str, ArgumentTypes]:
-        return {"task_queue": len(self._recompiles), "listeners": len(self.listeners)}
+        return {"task_queue": await data.Compile.get_next_compiles_count(), "listeners": len(self.listeners)}
 
     def add_listener(self, listener: CompileStateListener) -> None:
         self.listeners.append(listener)
@@ -375,6 +376,8 @@ class CompilerService(ServerSlice):
             if nextrun:
                 task = self.add_background_task(self._run(nextrun))
                 self._recompiles[environment] = task
+            else:
+                del self._recompiles[environment]
 
     async def _notify_listeners(self, compile: data.Compile) -> None:
         async def notify(listener: CompileStateListener) -> None:
@@ -465,3 +468,11 @@ class CompilerService(ServerSlice):
             return 404
 
         return 200, {"report": report}
+
+    @protocol.handle(methods.get_compile_queue, env="tid")
+    async def get_compile_queue(self, env: data.Environment) -> model.CompileQueueResponse:
+        """
+            Get the current compiler queue on the server
+        """
+        compiles = await data.Compile.get_next_compiles_for_environment(env.id)
+        return model.CompileQueueResponse(queue=[x.to_dto() for x in compiles])

@@ -33,6 +33,7 @@ import inmanta.db.versions
 from inmanta import const, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
 from inmanta.data import schema
+from inmanta.data.model import CompileRun
 from inmanta.resources import Id
 from inmanta.types import JsonType
 
@@ -1248,6 +1249,8 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_last_run(cls, environment_id: uuid.UUID) -> "Compile":
+        """ Get the last run for the given environment
+        """
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} where environment=$1 AND completed IS NOT NULL ORDER BY completed DESC LIMIT 1",
             [cls._get_value(environment_id)],
@@ -1258,6 +1261,8 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_next_run(cls, environment_id: uuid.UUID) -> "Compile":
+        """ Get the next compile in the queue for the given environment
+        """
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND completed IS NULL ORDER BY requested ASC LIMIT 1",
             [cls._get_value(environment_id)],
@@ -1268,6 +1273,8 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_next_run_all(cls) -> "List[Compile]":
+        """ Get the next compile in the queue for each environment
+        """
         results = await cls.select_query(
             f"SELECT DISTINCT ON (environment) * FROM {cls.table_name()} WHERE completed IS NULL ORDER BY environment, "
             f"requested ASC",
@@ -1277,10 +1284,30 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_unhandled_compiles(cls) -> "List[Compile]":
+        """ Get all compiles that have completed but for which listeners have not been notified yet.
+        """
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL ORDER BY requested ASC", []
         )
         return results
+
+    @classmethod
+    async def get_next_compiles_for_environment(cls, environment_id: uuid.UUID) -> "List[Compile]":
+        """ Get the queue of compiles that are scheduled in FIFO order.
+        """
+        results = await cls.select_query(
+            f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND NOT handled and completed IS NULL "
+            "ORDER BY requested ASC",
+            [cls._get_value(environment_id)],
+        )
+        return results
+
+    @classmethod
+    async def get_next_compiles_count(cls) -> int:
+        """ Get the number of compiles in the queue for ALL environments
+        """
+        result = await cls._fetchval(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL")
+        return result
 
     @classmethod
     async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "List[Compile]":
@@ -1289,6 +1316,19 @@ class Compile(BaseDocument):
             [cls._get_value(environment_id), cls._get_value(remote_id)],
         )
         return results
+
+    def to_dto(self) -> CompileRun:
+        return CompileRun(
+            id=self.id,
+            remote_id=self.remote_id,
+            environment=self.environment,
+            requested=self.requested,
+            started=self.started,
+            do_export=self.do_export,
+            force_update=self.force_update,
+            metadata=self.metadata,
+            environment_variables=self.environment_variables,
+        )
 
 
 class Form(BaseDocument):
