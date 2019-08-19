@@ -63,6 +63,7 @@ class InmantaBootloader(object):
         - loading core and extension slices
         - starting the server and its slices in the correct order
     """
+
     def __init__(self) -> None:
         self.restserver = Server()
         self.started = False

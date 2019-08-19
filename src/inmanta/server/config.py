@@ -18,7 +18,7 @@
 
 import logging
 
-from inmanta.config import Option, is_bool, is_int, is_map, is_str_opt, is_time, log_dir, state_dir, is_list
+from inmanta.config import Option, is_bool, is_int, is_list, is_map, is_str_opt, is_time, log_dir, state_dir
 
 LOGGER = logging.getLogger(__name__)
 
