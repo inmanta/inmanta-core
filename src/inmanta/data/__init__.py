@@ -687,6 +687,9 @@ class Setting(object):
         }
 
 
+EnvSettingType = Union[str, int, bool, JsonType]
+
+
 class Environment(BaseDocument):
     """
         A deployment environment of a project
@@ -704,7 +707,7 @@ class Environment(BaseDocument):
     project: uuid.UUID = Field(field_type=uuid.UUID, required=True)
     repo_url: str = Field(field_type=str, default="")
     repo_branch: str = Field(field_type=str, default="")
-    settings: Dict[str, Any] = Field(field_type=dict, default={})
+    settings: Dict[str, EnvSettingType] = Field(field_type=dict, default={})
 
     _settings = {
         AUTO_DEPLOY: Setting(
@@ -814,7 +817,7 @@ class Environment(BaseDocument):
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
     }  # name new_option -> name deprecated_option
 
-    async def get(self, key: str) -> Union[str, int, bool, dict]:
+    async def get(self, key: str) -> EnvSettingType:
         """
             Get a setting in this environment.
 
@@ -842,7 +845,7 @@ class Environment(BaseDocument):
         await self.set(key, value)
         return value
 
-    async def set(self, key, value):
+    async def set(self, key: str, value: EnvSettingType) -> None:
         """
             Set a new setting in this environment.
 
@@ -870,7 +873,7 @@ class Environment(BaseDocument):
         await self._execute_query(query, *values)
         self.settings[key] = value
 
-    async def unset(self, key):
+    async def unset(self, key: str) -> None:
         """
             Unset a setting in this environment. If a default value is provided, this value will replace the current value.
 
@@ -888,7 +891,7 @@ class Environment(BaseDocument):
         else:
             await self.set(key, self._settings[key].default)
 
-    async def delete_cascade(self, only_content=False):
+    async def delete_cascade(self, only_content=False) -> None:
         if only_content:
             await Agent.delete_all(environment=self.id)
 
