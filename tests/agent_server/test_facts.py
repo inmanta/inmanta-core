@@ -297,3 +297,94 @@ async def test_get_facts_extended(server, client, resource_container, environmen
     ).contains(
         "inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact"
     ).no_more_errors()
+
+
+@pytest.mark.asyncio
+async def test_purged_resources(resource_container, client, server, environment, no_agent_backoff):
+    """
+        Test if facts are purged when the resource is no longer available in any version
+    """
+    resource_container.Provider.reset()
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    agent.add_end_point_name("agent1")
+    await agent.start()
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
+
+    resource_container.Provider.set("agent1", "key1", "value")
+
+    res1 = "test::Resource[agent1,key=key1]"
+    res2 = "test::Resource[agent1,key=key2]"
+
+    # Create version 1 with 1 unknown
+    version = 1
+
+    resources = [
+        {"key": "key1", "value": "value", "id": f"{res1},v={version}", "requires": [], "purged": False, "send_event": False},
+        {"key": "key2", "value": "value", "id": f"{res2},v={version}", "requires": [], "purged": False, "send_event": False},
+    ]
+
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+
+    # Make sure we get facts
+    result = await client.get_param(environment, "length", res1)
+    assert result.code == 503
+
+    result = await client.get_param(environment, "length", res2)
+    assert result.code == 503
+
+    env_uuid = uuid.UUID(environment)
+    params = await data.Parameter.get_list(environment=env_uuid)
+    while len(params) < 6:
+        params = await data.Parameter.get_list(environment=env_uuid)
+        await asyncio.sleep(0.1)
+
+    result = await client.get_param(environment, "key1", res1)
+    assert result.code == 200
+
+    result = await client.get_param(environment, "key2", res2)
+    assert result.code == 200
+
+    # Create version 2
+    version = 2
+
+    resources = [
+        {"key": "key1", "value": "value", "id": f"{res1},v={version}", "requires": [], "purged": False, "send_event": False}
+    ]
+
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+
+    # Remove version 1
+    result = await client.delete_version(tid=environment, id=1)
+    assert result.code == 200
+
+    # There should be only one resource
+    result = await client.get_environment(id=environment, resources=1)
+    assert result.code == 200
+    assert len(result.result["environment"]["resources"]) == 1
+
+    # Facts of only one should be there
+    result = await client.list_params(environment)
+    assert result.code == 200
+    assert len(result.result["parameters"]) == 3
+
+    # Remove version 2
+    result = await client.delete_version(tid=environment, id=2)
+    assert result.code == 200
+
+    # Verify there are no resources anymore
+    result = await client.get_environment(id=environment, resources=1)
+    assert result.code == 200
+    assert len(result.result["environment"]["resources"]) == 0
+
+    # The resource facts should be purged
+    result = await client.list_params(environment)
+    assert result.code == 200
+    assert len(result.result["parameters"]) == 0
+
+    await agent.stop()

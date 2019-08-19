@@ -570,7 +570,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return attach_warnings(200, None, warnings)
 
     @protocol.handle(methods.list_params, env="tid")
-    async def list_param(self, env: data.Environment, query: Dict[str, str]) -> Apireturn:
+    async def list_params(self, env: data.Environment, query: Dict[str, str]) -> Apireturn:
         params = await data.Parameter.list_parameters(env.id, **query)
         return (
             200,
@@ -1101,7 +1101,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         version: int,
         resources: List[JsonType],
         resource_state: Dict[str, const.ResourceState],
-        unknowns: List[str],
+        unknowns: List[Dict[str, PrimitiveTypes]],
         version_info: JsonType,
     ) -> Apireturn:
         started = datetime.datetime.now()
