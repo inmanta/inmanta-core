@@ -310,14 +310,18 @@ async def test_purged_resources(resource_container, client, server, environment,
     await agent.start()
     await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
-    resource_container.Provider.set("agent1", "key", "value")
+    resource_container.Provider.set("agent1", "key1", "value")
+
+    res1 = "test::Resource[agent1,key=key1]"
+    res2 = "test::Resource[agent1,key=key2]"
 
     # Create version 1 with 1 unknown
     version = 1
-    resource_id_wov = "test::Resource[agent1,key=key]"
-    resource_id = "%s,v=%d" % (resource_id_wov, version)
 
-    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
+    resources = [
+        {"key": "key1", "value": "value", "id": f"{res1},v={version}", "requires": [], "purged": False, "send_event": False},
+        {"key": "key2", "value": "value", "id": f"{res2},v={version}", "requires": [], "purged": False, "send_event": False},
+    ]
 
     result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
@@ -325,24 +329,30 @@ async def test_purged_resources(resource_container, client, server, environment,
     assert result.code == 200
 
     # Make sure we get facts
-    result = await client.get_param(environment, "length", resource_id_wov)
+    result = await client.get_param(environment, "length", res1)
+    assert result.code == 503
+
+    result = await client.get_param(environment, "length", res2)
     assert result.code == 503
 
     env_uuid = uuid.UUID(environment)
-    params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-    while len(params) < 3:
-        params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
+    params = await data.Parameter.get_list(environment=env_uuid)
+    while len(params) < 6:
+        params = await data.Parameter.get_list(environment=env_uuid)
         await asyncio.sleep(0.1)
 
-    result = await client.get_param(environment, "key1", resource_id_wov)
+    result = await client.get_param(environment, "key1", res1)
+    assert result.code == 200
+
+    result = await client.get_param(environment, "key2", res2)
     assert result.code == 200
 
     # Create version 2
     version = 2
-    resource_id_wov = "test::Resource[agent1,key=key]"
-    resource_id = "%s,v=%d" % (resource_id_wov, version)
 
-    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
+    resources = [
+        {"key": "key1", "value": "value", "id": f"{res1},v={version}", "requires": [], "purged": False, "send_event": False}
+    ]
 
     result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
@@ -353,7 +363,12 @@ async def test_purged_resources(resource_container, client, server, environment,
     result = await client.delete_version(tid=environment, id=1)
     assert result.code == 200
 
-    # Facts and unknowns should still be there
+    # There should be only one resource
+    result = await client.get_environment(id=environment, resources=1)
+    assert result.code == 200
+    assert len(result.result["environment"]["resources"]) == 1
+
+    # Facts of only one should be there
     result = await client.list_params(environment)
     assert result.code == 200
     assert len(result.result["parameters"]) == 3
