@@ -381,11 +381,12 @@ class Session(object):
     def seen(self) -> None:
         self._seen = time.time()
 
-    async def handle_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
+    async def _handle_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
         """ A function that awaits a future until its value is ready or until timeout. When the call times out, a message is
             logged. The future itself will be cancelled.
 
-            Any other exceptions (which should not occur) will be logged in background task.
+            This method should be called as a background task. Any other exceptions (which should not occur) will be logged in
+            the background task.
         """
         try:
             await asyncio.wait_for(future, timeout)
@@ -402,7 +403,7 @@ class Session(object):
         call_spec.reply_id = reply_id
         self._queue.put(call_spec)
         self._sessionstore.add_background_task(
-            self.handle_timeout(
+            self._handle_timeout(
                 future,
                 timeout,
                 "Call %s: %s %s for agent %s timed out." % (reply_id, call_spec.method, call_spec.url, self._sid),
