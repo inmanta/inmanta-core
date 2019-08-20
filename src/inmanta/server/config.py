@@ -197,8 +197,6 @@ dash_path = Option(
 dash_realm = Option("dashboard", "realm", "inmanta", "The realm to use for keycloak authentication.")
 dash_auth_url = Option("dashboard", "auth_url", None, "The auth url of the keycloak server to use.")
 dash_client_id = Option("dashboard", "client_id", None, "The client id configured in keycloak for this application.")
-# LCM support should move to a server extension
-dash_lcm_enable = Option("dashboard", "lcm", False, "Enable lifecycle manager in the dashboard", is_bool)
 
 
 def default_hangtime():

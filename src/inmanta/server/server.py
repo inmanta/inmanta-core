@@ -313,21 +313,12 @@ class Server(protocol.ServerSlice):
                 opt.dash_client_id.get(),
             )
 
-        # LCM support should move to a server extension
-        lcm = ""
-        if opt.dash_lcm_enable.get():
-            lcm = """,
-    'lcm': '%s://' + window.location.hostname + ':8889/'
-""" % (
-                "https" if opt.server_ssl_key.get() else "http"
-            )
-
         content = """
 angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     'backend': window.location.origin+'/'%s
 });
         """ % (
-            lcm + auth
+            auth
         )
         self.add_static_content("/dashboard/config.js", content=content)
         self.add_static_handler("/dashboard", dashboard_path, start=True)
