@@ -789,6 +789,14 @@ async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_
             assert "test" in data
             return Result(val=data["test"])
 
+        @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
+        def test_method2(data: Optional[str] = None) -> None:  # NOQA
+            pass
+
+        @protocol.handle(test_method2)
+        async def test_method2(self, data: Optional[str] = None) -> None:
+            assert data is None
+
     rs = Server()
     server = ProjectServer(name="projectserver")
     rs.add_slice(server)
@@ -799,15 +807,19 @@ async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_
     assert result.code == 200
     assert result.result["data"]["val"] is None
 
-    client = protocol.Client("client")
     result = await client.test_method(data={"test": 5})
     assert result.code == 200
     assert result.result["data"]["val"] == 5
 
-    client = protocol.Client("client")
     result = await client.test_method(data={"test": "test123"})
     assert result.code == 200
     assert result.result["data"]["val"] == "test123"
+
+    result = await client.test_method2()
+    assert result.code == 200
+
+    result = await client.test_method2(data=None)
+    assert result.code == 200
 
     await server.stop()
     await rs.stop()
