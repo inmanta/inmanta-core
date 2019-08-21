@@ -600,13 +600,11 @@ class MethodProperties(object):
                     del msg[arg_name]
 
         if self.operation not in ("POST", "PUT", "PATCH"):
-            qs_map = msg.copy()
-            if "id" in qs_map:
-                del qs_map["id"]
+            qs_map = {k: v for k, v in msg.items() if v is not None and k != "id"}
 
             # encode arguments in url
             if len(qs_map) > 0:
-                url += "?" + parse.urlencode({k: v for k, v in qs_map.items() if v is not None})
+                url += "?" + parse.urlencode(qs_map)
 
             body = None
         else:
