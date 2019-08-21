@@ -25,7 +25,7 @@ import uuid
 import warnings
 from collections import defaultdict
 from configparser import RawConfigParser
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 import asyncpg
 
@@ -135,6 +135,9 @@ class DocumentMeta(type):
                 dct["_fields"].update(base._fields)
 
         return type.__new__(cls, class_name, bases, dct)
+
+
+T = TypeVar("T")
 
 
 class BaseDocument(object, metaclass=DocumentMeta):
@@ -416,7 +419,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self._execute_query(query, *values)
 
     @classmethod
-    async def get_by_id(cls, doc_id: uuid.UUID) -> Optional["BaseDocument"]:
+    async def get_by_id(cls: Type[T], doc_id: uuid.UUID) -> Optional[T]:
         """
             Get a specific document based on its ID
 
