@@ -606,7 +606,7 @@ class MethodProperties(object):
 
             # encode arguments in url
             if len(qs_map) > 0:
-                url += "?" + parse.urlencode(qs_map)
+                url += "?" + parse.urlencode({k: v for k, v in qs_map.items() if v is not None})
 
             body = None
         else:
