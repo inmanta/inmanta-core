@@ -21,6 +21,7 @@ Changes in this release:
 - Added the --export-plugin option to the export command (#1277)
 - Only one of set_created, set_updated or set_purged may be called now from a handler
 - Remove facts when the resource is no longer present in any version (#1027)
+- Successful exports without resources or unknowns will now be exported
 
 DEPRECATIONS:
 * The files /etc/inmanta/agent.cfg and /etc/inmanta/server.cfg are not used anymore. More information about the available
