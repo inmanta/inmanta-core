@@ -173,13 +173,17 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
 
 
 @pytest.mark.asyncio
-async def test_empty_server_export(snippetcompiler, server, client):
+async def test_empty_server_export(snippetcompiler, server, client, environment):
     snippetcompiler.setup_for_snippet(
         """
             h = std::Host(name="test", os=std::linux)
         """
     )
     await snippetcompiler.do_export_and_deploy()
+
+    response = await client.list_versions(tid=environment)
+    assert response.code == 200
+    assert len(response.result["versions"]) == 1
 
 
 @pytest.mark.asyncio
