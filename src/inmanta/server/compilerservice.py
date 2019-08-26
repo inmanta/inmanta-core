@@ -192,8 +192,8 @@ class CompileRun(object):
             repo_url: str = env.repo_url
             repo_branch: str = env.repo_branch
             if not repo_url:
-                if not os.path.exists(os.path.join(project_dir, ".git")):
-                    await self._warning("Project not found and repository not set %s" % project_dir)
+                if not os.path.exists(os.path.join(project_dir, "project.yml")):
+                    await self._warning(f"Failed to compile: no project found in {project_dir} and no repository set set")
                 await self._end_stage(0)
             else:
                 await self._end_stage(0)
@@ -226,6 +226,7 @@ class CompileRun(object):
             cmd = inmanta_path + [
                 "-vvv",
                 "export",
+                "-X",
                 "-e",
                 str(environment_id),
                 "--server_address",
@@ -259,8 +260,9 @@ class CompileRun(object):
             )
             success = result.returncode == 0
             if not success:
-                LOGGER.debug("Compile %d failed", self.request.id)
+                LOGGER.debug("Compile %s failed", self.request.id)
 
+            print("---", self.tail_stdout, result.errstream)
             match = re.search(r"Committed resources with version (\d+)", self.tail_stdout)
             if match:
                 self.version = int(match.group(1))
