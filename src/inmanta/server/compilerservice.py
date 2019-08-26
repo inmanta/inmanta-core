@@ -27,6 +27,7 @@ import sys
 import traceback
 import uuid
 from asyncio import CancelledError, Task
+from logging import Logger
 from tempfile import NamedTemporaryFile
 from typing import Dict, List, Optional, Tuple, cast
 
@@ -44,7 +45,8 @@ from inmanta.util import ensure_directory_exist
 
 RETURNCODE_INTERNAL_ERROR = -1
 
-LOGGER = logging.getLogger(__name__)
+LOGGER: Logger = logging.getLogger(__name__)
+COMPILER_LOGGER: Logger = LOGGER.getChild("report")
 
 
 class CompileStateListener(object):
@@ -115,12 +117,14 @@ class CompileRun(object):
         while not stream.at_eof():
             part = (await stream.read(8192)).decode()
             self._add_to_tail(part)
+            COMPILER_LOGGER.log(const.LOG_LEVEL_TRACE, "%s %s Out:", self.request.id, part)
             await self.stage.update_streams(out=part)
 
     async def drain_err(self, stream: asyncio.StreamReader) -> None:
         assert self.stage is not None
         while not stream.at_eof():
             part = (await stream.read(8192)).decode()
+            COMPILER_LOGGER.log(const.LOG_LEVEL_TRACE, "%s %s Err:", self.request.id, part)
             await self.stage.update_streams(err=part)
 
     async def drain(self, sub_process: asyncio.subprocess.Process) -> int:
