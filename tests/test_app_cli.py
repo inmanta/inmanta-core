@@ -246,4 +246,27 @@ def other_exporter(exporter: Exporter) -> None:
     assert "test_exporter ran" in stdout.decode("utf-8")
     assert "other_exporter" not in stdout.decode("utf-8")
 
+    # ## Failure
+
+    path_main_file.write("""import test
+
+vm1=std::Host(name="non-existing-machine", os=std::linux)
+
+vm1.name = "other"
+""")
+
+    process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+
+    # Make sure exitcode is zero
+    assert process.returncode == 1
+
+    assert "test_exporter ran"  not in stdout.decode("utf-8")
+    assert "other_exporter" not in stdout.decode("utf-8")
+
     shutil.rmtree(workspace)

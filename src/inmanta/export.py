@@ -294,11 +294,12 @@ class Exporter(object):
             self.failed = True
             LOGGER.warning("Compilation of model failed.")
 
-        if export_plugin is not None:
-            # Run export plugin specified on CLI
-            self.run_export_plugin(export_plugin)
-        else:
-            self._run_export_plugins_specified_in_config_file()
+        if not self.failed:
+            if export_plugin is not None:
+                # Run export plugin specified on CLI
+                self.run_export_plugin(export_plugin)
+            else:
+                self._run_export_plugins_specified_in_config_file()
 
         # validate the dependency graph
         self._validate_graph()
