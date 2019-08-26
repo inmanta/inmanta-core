@@ -248,12 +248,14 @@ def other_exporter(exporter: Exporter) -> None:
 
     # ## Failure
 
-    path_main_file.write("""import test
+    path_main_file.write(
+        """import test
 
 vm1=std::Host(name="non-existing-machine", os=std::linux)
 
 vm1.name = "other"
-""")
+"""
+    )
 
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
@@ -266,7 +268,7 @@ vm1.name = "other"
     # Make sure exitcode is zero
     assert process.returncode == 1
 
-    assert "test_exporter ran"  not in stdout.decode("utf-8")
+    assert "test_exporter ran" not in stdout.decode("utf-8")
     assert "other_exporter" not in stdout.decode("utf-8")
 
     shutil.rmtree(workspace)

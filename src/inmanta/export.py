@@ -23,12 +23,12 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import inmanta.model as model
 from inmanta import const, loader, protocol
 from inmanta.agent.handler import Commander
-from inmanta.ast import CompilerException, Locatable, Namespace, OptionalValueException, type
+from inmanta.ast import CompilerException, Locatable, Namespace, OptionalValueException
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_str, is_uuid_opt
@@ -36,7 +36,7 @@ from inmanta.const import ResourceState
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
-from inmanta.resources import IgnoreResourceException, Resource, resource, to_id, Id
+from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.util import groupby, hash_file
 
 LOGGER = logging.getLogger(__name__)
@@ -318,11 +318,7 @@ class Exporter(object):
                 model = ModelExporter(types).export_all()
                 with open(self.options.json + ".types", "wb+") as fd:
                     fd.write(protocol.json_encode(model).encode("utf-8"))
-        elif (
-            not self.failed
-            or len(self._resources) > 0
-            or len(unknown_parameters) > 0
-        ) and not no_commit:
+        elif (not self.failed or len(self._resources) > 0 or len(unknown_parameters) > 0) and not no_commit:
             model = None
             if types is not None and model_export:
                 model = ModelExporter(types).export_all()
