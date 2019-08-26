@@ -226,6 +226,7 @@ class CompileRun(object):
             cmd = inmanta_path + [
                 "-vvv",
                 "export",
+                "-X",
                 "-e",
                 str(environment_id),
                 "--server_address",
@@ -261,6 +262,7 @@ class CompileRun(object):
             if not success:
                 LOGGER.debug("Compile %s failed", self.request.id)
 
+            print("---", self.tail_stdout, result.errstream)
             match = re.search(r"Committed resources with version (\d+)", self.tail_stdout)
             if match:
                 self.version = int(match.group(1))

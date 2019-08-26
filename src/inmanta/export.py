@@ -292,6 +292,7 @@ class Exporter(object):
             metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success.name
         else:
             metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.failed.name
+            LOGGER.warning("Compilation of model failed.")
 
         # validate the dependency graph
         self._validate_graph()
@@ -311,7 +312,7 @@ class Exporter(object):
                 with open(self.options.json + ".types", "wb+") as fd:
                     fd.write(protocol.json_encode(model).encode("utf-8"))
         elif (
-            metadata[const.META_DATA_COMPILE_STATE] == const.Compilestate.success
+            metadata[const.META_DATA_COMPILE_STATE] == const.Compilestate.success.name
             or len(self._resources) > 0
             or len(unknown_parameters) > 0
         ) and not no_commit:
