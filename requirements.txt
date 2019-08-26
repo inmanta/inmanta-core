@@ -46,4 +46,4 @@ black==19.3b0
 typing_inspect==0.4.0
 importlib_metadata==0.19
 setuptools==41.2.0
-pip==19.2.2
+pip==19.2.3
