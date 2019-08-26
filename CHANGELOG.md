@@ -22,6 +22,7 @@ Changes in this release:
 - Only one of set_created, set_updated or set_purged may be called now from a handler
 - Remove facts when the resource is no longer present in any version (#1027)
 - Successful exports without resources or unknowns will now be exported
+- Export plugins will not run when the compile has failed
 
 DEPRECATIONS:
 * The files /etc/inmanta/agent.cfg and /etc/inmanta/server.cfg are not used anymore. More information about the available

@@ -104,6 +104,7 @@ class Exporter(object):
     # instance vars
     types: Optional[Dict[str, Entity]]
     scopes: Optional[Namespace]
+    failed: bool  # did the compile fail?
 
     # class vars
     __export_functions: Dict[str, Tuple[List[str], Callable[["Exporter", ProxiedType], None]]] = {}
@@ -132,6 +133,7 @@ class Exporter(object):
         self._unknown_objects = set()
         self._version = 0
         self._scope = None
+        self.failed = False
 
         self._file_store = {}
 
@@ -277,12 +279,6 @@ class Exporter(object):
         self.scopes = scopes
         self._version = int(time.time())
 
-        if export_plugin is not None:
-            # Run export plugin specified on CLI
-            self.run_export_plugin(export_plugin)
-        else:
-            self._run_export_plugins_specified_in_config_file()
-
         if types is not None:
             # then process the configuration model to submit it to the mgmt server
             self._load_resources(types)
@@ -290,9 +286,17 @@ class Exporter(object):
             # call dependency managers
             self._call_dep_manager(types)
             metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success.name
+            self.failed = False
         else:
             metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.failed.name
+            self.failed = True
             LOGGER.warning("Compilation of model failed.")
+
+        if export_plugin is not None:
+            # Run export plugin specified on CLI
+            self.run_export_plugin(export_plugin)
+        else:
+            self._run_export_plugins_specified_in_config_file()
 
         # validate the dependency graph
         self._validate_graph()
@@ -312,7 +316,7 @@ class Exporter(object):
                 with open(self.options.json + ".types", "wb+") as fd:
                     fd.write(protocol.json_encode(model).encode("utf-8"))
         elif (
-            metadata[const.META_DATA_COMPILE_STATE] == const.Compilestate.success.name
+            not self.failed
             or len(self._resources) > 0
             or len(unknown_parameters) > 0
         ) and not no_commit:
