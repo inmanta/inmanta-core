@@ -334,6 +334,7 @@ def stable_depth_first(nodes: List[str], edges: Dict[str, List[str]]) -> List[st
     """Creates a linear sequence based on a set of "comes after" edges, same graph yields the same solution,
     independent of order given to this function"""
     nodes = sorted(nodes)
+    edges = {k: sorted(v) for k,v in edges.items()}
     out = []
 
     def dfs(node: str, seen: Set[str] = set()) -> None:
@@ -343,7 +344,7 @@ def stable_depth_first(nodes: List[str], edges: Dict[str, List[str]]) -> List[st
             raise CycleException(node)
         try:
             if node in edges:
-                for edge in sorted(edges[node]):
+                for edge in edges[node]:
                     dfs(edge, seen | set(node))
             out.append(node)
         except CycleException as e:
