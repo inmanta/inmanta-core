@@ -81,7 +81,7 @@ def ensure_directory_exist(directory: str, *subdirs: str) -> str:
     return directory
 
 
-def hash_file(content: str) -> str:
+def hash_file(content: bytes) -> str:
     """
         Create a hash from the given content
     """

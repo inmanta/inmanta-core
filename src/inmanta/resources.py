@@ -264,14 +264,14 @@ class Resource(metaclass=ResourceMeta):
         return Id(entity_name, agent_value, attribute_name, attribute_value)
 
     @classmethod
-    def map_field(cls, exporter: "export.Exporter", entity_name: str, field_name: str, model_object: runtime.Instance) -> str:
+    def map_field(cls, exporter: "export.Exporter", entity_name: str, field_name: str, model_object: DynamicProxy) -> str:
         try:
             try:
                 if hasattr(cls, "get_" + field_name):
                     mthd = getattr(cls, "get_" + field_name)
-                    value = mthd(exporter, DynamicProxy.return_value(model_object))
+                    value = mthd(exporter, model_object)
                 elif hasattr(cls, "map") and field_name in cls.map:
-                    value = cls.map[field_name](exporter, DynamicProxy.return_value(model_object))
+                    value = cls.map[field_name](exporter, model_object)
                 else:
                     value = getattr(model_object, field_name)
 
@@ -287,7 +287,7 @@ class Resource(metaclass=ResourceMeta):
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))
 
     @classmethod
-    def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: runtime.Instance) -> "Resource":
+    def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: DynamicProxy) -> "Resource":
         """
         Build a resource from a given configuration model entity
         """
