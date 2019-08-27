@@ -198,7 +198,7 @@ class HandlerContext(object):
         self._purged = True
 
         if self._change is not const.Change.nochange:
-            raise InvalidOperation(f"Unable to set {const.Change.created} operation, {self._change} already set.")
+            raise InvalidOperation(f"Unable to set {const.Change.purged} operation, {self._change} already set.")
 
         self._change = const.Change.purged
 
@@ -206,7 +206,7 @@ class HandlerContext(object):
         self._updated = True
 
         if self._change is not const.Change.nochange:
-            raise InvalidOperation(f"Unable to set {const.Change.created} operation, {self._change} already set.")
+            raise InvalidOperation(f"Unable to set {const.Change.updated} operation, {self._change} already set.")
 
         self._change = const.Change.updated
 
