@@ -1,13 +1,13 @@
-***************************
-Creating a server extension
-***************************
+*******************************
+Creating a new server extension
+*******************************
 
 An Inmanta server extension adds extra functionality to the Inmanta core. Each extension consists of one or more server slices
 that provide certain functionality. This page describes how to create a new extension and the associated server slice(s).
 
 
-Define a server extension
-#########################
+The package layout of a server extension
+########################################
 
 Each Inmanta server extension is defined as a subpackage of the ``inmanta_ext`` package. The following directory structure is
 required for a new extension called ``new_extension``.
@@ -39,8 +39,8 @@ required for a new extension called ``new_extension``.
          Inmanta core in the ``requirements.txt`` file of the extension.
 
 
-Create a server slice
-#####################
+Adding server slices to the extension
+#####################################
 
 A server slice is defined by creating a class that extends from ``ServerSlice``.
 
