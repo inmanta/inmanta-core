@@ -187,6 +187,7 @@ to the new virtual machine. Update ``main.cf`` to the following (or use the cont
 
 .. code-block:: inmanta
     :linenos:
+
     import ip
     import redhat
     import redhat::epel
