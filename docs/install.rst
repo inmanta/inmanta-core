@@ -79,7 +79,7 @@ Inmanta requires at least the latest Python 3.6 or 3.7 and git.
             grunt dist
 
         This creates a dist.tgz file in the current directory. Unpack this tarball in ``/opt/inmanta/dashboard`` and point
-        the server in ``/etc/inmanta/inmanta.d/<custom-config>.cfg`` to this location: set
+        the server in ``/etc/inmanta/inmanta.cfg`` to this location: set
         :inmanta.config:option:`dashboard.path` to ``/opt/inmanta/dashboard``
 
 
@@ -191,7 +191,7 @@ Step 4: Set the database connection details
 -------------------------------------------
 
 Add a ``/etc/inmanta/inmanta.d/<custom-config>.cfg`` file as such that it contains the correct database connection details.
-Add the database section to that file in the following way:
+That file should look as follows:
 
 .. code-block:: text
 
