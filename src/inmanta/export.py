@@ -23,24 +23,25 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import inmanta.model as model
 from inmanta import const, loader, protocol
 from inmanta.agent.handler import Commander
-from inmanta.ast import CompilerException, Locatable, Namespace, OptionalValueException, type
+from inmanta.ast import CompilerException, Locatable, Namespace, OptionalValueException
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_str, is_uuid_opt
+from inmanta.const import ResourceState
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
-from inmanta.resources import IgnoreResourceException, Resource, resource, to_id
+from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.util import groupby, hash_file
 
 LOGGER = logging.getLogger(__name__)
 
-unknown_parameters = []
+unknown_parameters: List[Dict[str, str]] = []
 
 cfg_env = Option("config", "environment", None, "The environment this model is associated with", is_uuid_opt)
 cfg_export = Option(
@@ -53,9 +54,9 @@ cfg_export = Option(
 cfg_unknown_handler = Option("unknown_handler", "default", "prune-agent", "default method to handle unknown values ", is_str)
 
 
-ModelDict = Dict[str, List[type.Type]]
-ResourceDict = Dict[str, Resource]
-ProxiedType = Dict[str, List[Union[str, tuple, int, float, bool, "DynamicProxy"]]]
+ModelDict = Dict[str, Entity]
+ResourceDict = Dict[Id, Resource]
+ProxiedType = Dict[str, Sequence[Union[str, tuple, int, float, bool, "DynamicProxy"]]]
 
 
 class DependencyCycleException(Exception):
@@ -104,9 +105,11 @@ class Exporter(object):
     # instance vars
     types: Optional[Dict[str, Entity]]
     scopes: Optional[Namespace]
+    failed: bool  # did the compile fail?
 
     # class vars
     __export_functions: Dict[str, Tuple[List[str], Callable[["Exporter", ProxiedType], None]]] = {}
+    # type is not entirely right, ProxiedType argument can be absent
     __dep_manager: List[Callable[[ModelDict, ResourceDict], None]] = []
 
     @classmethod
@@ -127,18 +130,19 @@ class Exporter(object):
         self.options = options
 
         self._resources: ResourceDict = {}
-        self._resource_to_host = {}
-        self._resource_state = {}
-        self._unknown_objects = set()
+        self._resource_to_host: Dict[Id, str] = {}
+        self._resource_state: Dict[str, ResourceState] = {}
+        self._unknown_objects: Set[str] = set()
         self._version = 0
         self._scope = None
+        self.failed = False
 
-        self._file_store = {}
+        self._file_store: Dict[str, bytes] = {}
 
     def _get_instance_proxies_of_types(self, types: List[str]) -> Dict[str, ProxiedType]:
         """ Returns a dict of instances for the given types
         """
-        proxies = {}
+        proxies: Dict[str, ProxiedType] = {}
         for t in types:
             if self.types is not None and t in self.types:
                 proxies[t] = [DynamicProxy.return_value(i) for i in self.types[t].get_all_instances()]
@@ -262,7 +266,7 @@ class Exporter(object):
 
     def run(
         self,
-        types: Optional[Dict[str, type.Type]],
+        types: Optional[Dict[str, Entity]],
         scopes: Optional[Namespace],
         metadata: Dict[str, str] = {},
         no_commit: bool = False,
@@ -277,12 +281,6 @@ class Exporter(object):
         self.scopes = scopes
         self._version = int(time.time())
 
-        if export_plugin is not None:
-            # Run export plugin specified on CLI
-            self.run_export_plugin(export_plugin)
-        else:
-            self._run_export_plugins_specified_in_config_file()
-
         if types is not None:
             # then process the configuration model to submit it to the mgmt server
             self._load_resources(types)
@@ -290,9 +288,18 @@ class Exporter(object):
             # call dependency managers
             self._call_dep_manager(types)
             metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success.name
+            self.failed = False
         else:
             metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.failed.name
+            self.failed = True
             LOGGER.warning("Compilation of model failed.")
+
+        if not self.failed:
+            if export_plugin is not None:
+                # Run export plugin specified on CLI
+                self.run_export_plugin(export_plugin)
+            else:
+                self._run_export_plugins_specified_in_config_file()
 
         # validate the dependency graph
         self._validate_graph()
@@ -302,7 +309,7 @@ class Exporter(object):
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
 
-        model = {}
+        model: Optional[Dict[str, Any]] = {}
 
         if self.options and self.options.json:
             with open(self.options.json, "wb+") as fd:
@@ -311,11 +318,7 @@ class Exporter(object):
                 model = ModelExporter(types).export_all()
                 with open(self.options.json + ".types", "wb+") as fd:
                     fd.write(protocol.json_encode(model).encode("utf-8"))
-        elif (
-            metadata[const.META_DATA_COMPILE_STATE] == const.Compilestate.success.name
-            or len(self._resources) > 0
-            or len(unknown_parameters) > 0
-        ) and not no_commit:
+        elif (not self.failed or len(self._resources) > 0 or len(unknown_parameters) > 0) and not no_commit:
             model = None
             if types is not None and model_export:
                 model = ModelExporter(types).export_all()
@@ -369,7 +372,7 @@ class Exporter(object):
 
         return resources
 
-    def deploy_code(self, conn: protocol.Client, tid: uuid, version: int = None) -> None:
+    def deploy_code(self, conn: protocol.Client, tid: uuid.UUID, version: int = None) -> None:
         """ Deploy code to the server
         """
         if version is None:
@@ -446,16 +449,20 @@ class Exporter(object):
             LOGGER.error("Failed to commit resource updates (%s)", res.result["message"])
             raise Exception("Failed to commit resource updates (%s)" % res.result["message"])
 
-    def upload_file(self, content: Union[str, bytes] = None) -> str:
+    def upload_file(self, content: Union[str, bytes]) -> str:
         """
             Upload a file to the configuration server. This operation is not
             executed in the transaction.
         """
-        if not isinstance(content, bytes):
-            content = content.encode("utf-8")
+        bcontent: bytes
 
-        hash_id = hash_file(content)
-        self._file_store[hash_id] = content
+        if not isinstance(content, bytes):
+            bcontent = content.encode("utf-8")
+        else:
+            bcontent = content
+
+        hash_id = hash_file(bcontent)
+        self._file_store[hash_id] = bcontent
 
         return hash_id
 
