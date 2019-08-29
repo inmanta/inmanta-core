@@ -265,7 +265,7 @@ vm1.name = "other"
         await process.communicate()
         raise e
 
-    # Make sure exitcode is zero
+    # Make sure exitcode is one
     assert process.returncode == 1
 
     assert "test_exporter ran" not in stdout.decode("utf-8")
