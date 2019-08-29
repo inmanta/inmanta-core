@@ -334,7 +334,7 @@ def stable_depth_first(nodes: List[str], edges: Dict[str, List[str]]) -> List[st
     """Creates a linear sequence based on a set of "comes after" edges, same graph yields the same solution,
     independent of order given to this function"""
     nodes = sorted(nodes)
-    edges = {k: sorted(v) for k,v in edges.items()}
+    edges = {k: sorted(v) for k, v in edges.items()}
     out = []
 
     def dfs(node: str, seen: Set[str] = set()) -> None:
