@@ -2,14 +2,16 @@
 Creating a new server extension
 *******************************
 
-An Inmanta server extension adds extra functionality to the Inmanta core. Each extension consists of one or more server slices
-that provide certain functionality. This page describes how to create a new extension and the associated server slice(s).
+Inmanta server extensions are separate Python packages with their own release cycle that can add additional server slices
+to the orchestrator. Server slices are components in the service orchestrator. A slice can be responsible for API endpoints or
+provide internal services to other slices. The core server extension provides all slices of the core service orchestrator.
 
 
 The package layout of a server extension
 ########################################
 
-Each Inmanta server extension is defined as a subpackage of the ``inmanta_ext`` package. The following directory structure is
+Each Inmanta server extension is defined as a subpackage of the ``inmanta_ext`` package. ``inmanta_ext`` is a namespace package
+used by the service orchestrator to discover new extensions. The following directory structure is
 required for a new extension called ``new_extension``.
 
 .. code-block:: sh
@@ -42,71 +44,13 @@ required for a new extension called ``new_extension``.
 Adding server slices to the extension
 #####################################
 
-A server slice is defined by creating a class that extends from ``ServerSlice``.
+A server slice is defined by creating a class that extends from :class:`inmanta.server.protocol.ServerSlice`.
 
-.. code-block::
-
-    class NewSlice(ServerSlice):
-
-        def __init__():
-            super().__init__("<slice-name>")
-
-        async def prestart(self, server: Server) -> None:
-            """
-            Called by the RestServer host prior to start, can be used to collect references to other server slices
-            Dependencies are not up yet.
-            """
-            await super(NewSlice, self).prestart(server)
-            # TODO: Custom implementation here
-
-        async def start(self) -> None:
-            """
-                Start the server slice.
-
-                This method `blocks` until the slice is ready to receive calls
-
-                Dependencies are up (if present) prior to invocation of this call
-            """
-            await super(NewSlice, self).start()
-            # TODO: Custom implementation here
-
-        async def prestop(self) -> None:
-            """
-                Always called before stop
-
-                Stop producing new work:
-                - stop timers
-                - stop listeners
-                - notify shutdown to systems depending on us (like agents)
-
-                Slice should remain functional.
-
-                All dependencies are up (if present)
-            """
-            await super(NewSlice, self).prestop()
-            # TODO: Custom implementation here
-
-        async def stop(self) -> None:
-            """
-                Go down
-
-                All dependencies are up (if present)
-
-                This method `blocks` until the slice is down
-            """
-            await super(NewSlice, self).stop()
-            # TODO: Custom implementation here
-
-        def get_dependencies(self) -> List[str]:
-            """List of names of slices that must be started before this one."""
-            return []
-
-        def get_depended_by(self) -> List[str]:
-            """List of names of slices that must be started after this one."""
-            return []
+.. autoclass:: inmanta.server.protocol.ServerSlice
+    :members: prestart, start, prestop, stop, get_dependencies, get_depended_by
 
 
-* Replace ``<slice-name>`` with the name of the extension. This name should have the format
+* The constructor of the ServerSlice class expects the name of the slice as an argument. This name should have the format
   ``"<extension-name>.<server-slice-name>"``. ``<extension-name>`` is the name of the package that contains the
   ``extension.py`` file. ``<server-slice-name>`` can be chosen by the developer.
 * The ``prestart()``, ``start()``, ``prestop()``, ``stop()``, ``get_dependencies()`` and ``get_depended_by()`` methods can be
