@@ -2,7 +2,8 @@ PyJWT==1.7.1
 click==7.0
 colorlog==4.0.2
 cryptography==2.7
-execnet==1.7.0
+#Execnet version 1.7.0 contains a bug. Due to this bug, the source code of the module to be executed is not serialized. An issue exists on the GitHub repo of execnet to resolve this problem (pytest-dev/execnet#108). For the time being the only solution is to downgrade to version 1.6.1
+execnet==1.6.1
 inmanta-sphinx>=1.0.0.dev0
 netifaces==0.10.9
 ply==3.11
