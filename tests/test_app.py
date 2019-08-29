@@ -105,8 +105,6 @@ def do_kill(process, killtime=3, termtime=2):
 
     out, err = process.communicate()
 
-    print(process.returncode)
-
     t1.cancel()
     t2.cancel()
 
@@ -341,9 +339,11 @@ def test_startup_failure(tmpdir, postgres_db, database_name):
     # Add a bad module
     extrapath = os.path.join(os.path.dirname(__file__), "data", "bad_module_path")
     (stdout, stderr, code) = run_without_tty(args, env={"PYTHONPATH": pp + ":" + extrapath})
-    assert "Server setup failed" in stdout
-    assert "Slice badplugin.badslice failed to start because: Too bad, this plugin is broken" in stdout
-    assert "Server Shutdown complete" in stdout
+    assert "inmanta                  ERROR   Server setup failed" in stdout
+    assert (
+        "inmanta.server.protocol.SliceStartupException: "
+        "Slice badplugin.badslice failed to start because: Too bad, this plugin is broken"
+    ) in stdout
     assert code == 4
 
 
