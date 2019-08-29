@@ -59,7 +59,7 @@ from inmanta.const import EXIT_START_FAILED
 from inmanta.export import ModelExporter, cfg_env
 from inmanta.server.bootloader import InmantaBootloader
 
-LOGGER = logging.getLogger()
+LOGGER = logging.getLogger("inmanta")
 
 
 @command("server", help_msg="Start the inmanta server")
@@ -82,17 +82,20 @@ def start_server(options):
         else:
             exc = fut.exception()
             if exc is not None:
+                LOGGER.exception("Server setup failed", exc_info=exc)
                 print("Server setup failed")
                 print(exc)
                 traceback.print_exception(type(exc), exc, exc.__traceback__)
                 safe_shutdown(ioloop, ibl.stop)
             else:
-                print("Server Startup complete")
+                print("Server startup complete")
+                LOGGER.info("Server startup complete")
 
     ensure_future(ibl.start()).add_done_callback(_handle_startup_done)
 
     ioloop.start()
-    print("Server Shutdown complete")
+    print("Server shutdown complete")
+    LOGGER.info("Server shutdown complete")
     if not ibl.started:
         exit(EXIT_START_FAILED)
 
@@ -318,7 +321,9 @@ def deploy(options):
 
     run = deploy.Deploy(options)
     try:
-        run.setup()
+        if not run.setup():
+            LOGGER.error("Failed to setup the orchestrator.")
+            return
         run.run()
     finally:
         run.stop()
