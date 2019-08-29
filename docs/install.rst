@@ -65,7 +65,7 @@ Inmanta requires at least the latest Python 3.6 or 3.7 and git.
 
 
         The misc folder in the source distribution contains systemd service files for both the server and the agent. Also
-        install ``server.cfg`` from the misc folder in ``/etc/inmanta/server.cfg``
+        install ``inmanta.cfg`` from the misc folder in ``/etc/inmanta/inmanta.cfg``
 
         If you want to use the dashboard you need to install it as well. Get the source from
         `our github page <https://github.com/inmanta/inmanta-dashboard/releases>`_ Next, build and install the dashboard. For
@@ -79,8 +79,8 @@ Inmanta requires at least the latest Python 3.6 or 3.7 and git.
             grunt dist
 
         This creates a dist.tgz file in the current directory. Unpack this tarball in ``/opt/inmanta/dashboard`` and point
-        the server in ``/etc/inmanta/server.cfg`` to this location: change :inmanta.config:option:`dashboard.path` to
-        ``/opt/inmanta/dashboard``
+        the server in ``/etc/inmanta/inmanta.d/<custom-config>.cfg`` to this location: set
+        :inmanta.config:option:`dashboard.path` to ``/opt/inmanta/dashboard``
 
 
     .. tab:: Windows
@@ -115,7 +115,7 @@ Inmanta requires at least the latest Python 3.6 or 3.7 and git.
 Configure server
 ################
 This guide goes through the steps to setup an Inmanta service orchestrator server. This guide assumes a RHEL 7 or CentOS 7
-server. The rpm packages install the server configuration file in /etc/inmanta/server.cfg
+server. The rpm packages install the server configuration file in /etc/inmanta/inmanta.cfg
 
 Optional step 1: Setup SSL and authentication
 ---------------------------------------------
@@ -190,8 +190,8 @@ Restart the PostgreSQL server to apply the changes made in the ``pg_hba.conf`` f
 Step 4: Set the database connection details
 -------------------------------------------
 
-Adjust the ``/etc/inmanta/server.cfg`` file as such that it contains the correct database connection details. Add/Change the
-database section of that file in the following way:
+Add a ``/etc/inmanta/inmanta.d/<custom-config>.cfg`` file as such that it contains the correct database connection details.
+Add the database section to that file in the following way:
 
 .. code-block:: text
 
@@ -213,7 +213,7 @@ When virtual machines are started by this server that install the inmanta agent,
 configured. This address is used to create the correct boot script for the virtual machine.
 
 Set this value to the hostname or IP address that others systems use to connect to the server
-in the configuration file stored at ``/etc/inmanta/server.cfg``.
+in the configuration file stored at ``/etc/inmanta/inmanta.d/<custom-config>.cfg``.
 
 .. note:: If you deploy configuration models that modify resolver configuration it is recommended to use the IP address instead
   of the hostname.
