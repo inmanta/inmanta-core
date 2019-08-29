@@ -83,18 +83,14 @@ def start_server(options):
             exc = fut.exception()
             if exc is not None:
                 LOGGER.exception("Server setup failed", exc_info=exc)
-                print("Server setup failed")
-                print(exc)
                 traceback.print_exception(type(exc), exc, exc.__traceback__)
                 safe_shutdown(ioloop, ibl.stop)
             else:
-                print("Server startup complete")
                 LOGGER.info("Server startup complete")
 
     ensure_future(ibl.start()).add_done_callback(_handle_startup_done)
 
     ioloop.start()
-    print("Server shutdown complete")
     LOGGER.info("Server shutdown complete")
     if not ibl.started:
         exit(EXIT_START_FAILED)
@@ -108,7 +104,7 @@ def start_agent(options):
     setup_signal_handlers(a.stop)
     IOLoop.current().add_callback(a.start)
     IOLoop.current().start()
-    print("Agent Shutdown complete")
+    LOGGER.info("Agent Shutdown complete")
 
 
 def dump_threads():
