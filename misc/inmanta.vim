@@ -12,10 +12,13 @@ if exists("b:current_syntax")
 endif
 
 syn region Comment start="#" end="$"
-syn region String start="\"" end="\""
+syn region String start="\"" skip="\\\"" end="\""
 syn region String start="\"\"\"" end="\"\"\""
+syn region regex start="/" skip="\\/" end="/"
+syn match number "\<[0123456789]*\>'\@!"
 
 syn keyword Keyword implementation end using entity when implement extends in or and as matching index for
+syn keyword PreProc import
 syn keyword Typedef typedef
 syn keyword Boolean true false
 syn keyword Type string number
@@ -25,5 +28,7 @@ syn keyword Type string number
 "syntax region Function start="(" end=")"
 
 "highlight link cfComment Comment
+
+hi def link regex String
 
 let b:current_syntax = "inmanta"
