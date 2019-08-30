@@ -16,17 +16,23 @@
     Contact: code@inmanta.com
 """
 import logging
+import typing
+
 import re
 import urllib
 
 from inmanta.agent.cache import AgentCache
-
 from . import local, remote
+
+
+if typing.TYPE_CHECKING:
+    from inmanta.agent.io.local import IOBase
+
 
 LOGGER = logging.getLogger(__name__)
 
 
-def parse_agent_uri(uri: str) -> (str, dict):
+def parse_agent_uri(uri: str) -> typing.Tuple[str, dict]:
     """
         Parse an agent uri and return the settings
 
@@ -61,7 +67,7 @@ def parse_agent_uri(uri: str) -> (str, dict):
     return scheme, config
 
 
-def _get_io_class(scheme) -> local.IOBase:
+def _get_io_class(scheme: str) -> typing.Type[local.IOBase]:
     """
         Get an IO instance.
     """
@@ -72,7 +78,7 @@ def _get_io_class(scheme) -> local.IOBase:
         return remote.SshIO
 
 
-def _get_io_instance(uri):
+def _get_io_instance(uri: str) -> "IOBase":
     scheme, config = parse_agent_uri(uri)
     io_class = _get_io_class(scheme)
     LOGGER.debug("Using io class %s for uri %s (%s, %s)", io_class, uri, scheme, config)
@@ -80,7 +86,7 @@ def _get_io_instance(uri):
     return io
 
 
-def get_io(cache: AgentCache, uri: str, version: int):
+def get_io(cache: AgentCache, uri: str, version: int) -> "IOBase":
     """
         Get an IO instance for the given uri and version
     """

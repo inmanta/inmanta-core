@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -24,13 +24,20 @@ import typing
 import uuid
 from collections import defaultdict
 from concurrent.futures import Future
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Type
 
 from tornado import concurrent
 
 from inmanta import const, data, protocol, resources
 from inmanta.agent.cache import AgentCache
-from inmanta.agent.io import get_io
+from inmanta.agent import io
+from inmanta.protocol import Result
+from inmanta.resources import Resource
+
+if typing.TYPE_CHECKING:
+    from inmanta import agent
+    from inmanta.agent.io.local import IOBase
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -347,7 +354,7 @@ class ResourceHandler(object):
         :param io: The io object to use.
     """
 
-    def __init__(self, agent, io=None) -> None:
+    def __init__(self, agent: "agent.AgentInstance" , io=None) -> None:
         self._agent = agent
 
         if io is None:
@@ -650,7 +657,7 @@ class ResourceHandler(object):
             :return: The content in the form of a bytestring or none is the content does not exist.
         """
 
-        def call():
+        def call() -> Result:
             return self.get_client().get_file(hash_id)
 
         result = self.run_sync(call)
@@ -669,7 +676,7 @@ class ResourceHandler(object):
             :return: True if the file is available on the server.
         """
 
-        def call():
+        def call() -> Result:
             return self.get_client().stat_file(hash_id)
 
         result = self.run_sync(call)
@@ -683,7 +690,7 @@ class ResourceHandler(object):
             :param content: A byte string with the content
         """
 
-        def call():
+        def call() -> Result:
             return self.get_client().upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
         try:
@@ -810,7 +817,7 @@ class Commander(object):
         This class handles commands
     """
 
-    __command_functions = defaultdict(dict)
+    __command_functions: Dict[str, Dict[str, ResourceHandler]] = defaultdict(dict)
     __handlers = []
     __handler_cache = {}
 
@@ -819,41 +826,41 @@ class Commander(object):
         return cls.__command_functions
 
     @classmethod
-    def reset(cls):
+    def reset(cls) -> None:
         cls.__command_functions = defaultdict(dict)
         cls.__handlers = []
         cls.__handler_cache = {}
 
     @classmethod
-    def close(cls):
+    def close(cls) -> None:
         pass
 
     @classmethod
-    def _get_instance(cls, handler_class: type, agent, io) -> ResourceHandler:
+    def _get_instance(cls, handler_class: Type[ResourceHandler], agent: "agent.AgentInstance", io: "IOBase") -> ResourceHandler:
         new_instance = handler_class(agent, io)
         return new_instance
 
     @classmethod
-    def get_provider(cls, cache, agent, resource) -> ResourceHandler:
+    def get_provider(cls, cache: AgentCache, agent: "agent.AgentInstance", resource: Resource) -> ResourceHandler:
         """
             Return a provider to handle the given resource
         """
         resource_id = resource.id
         resource_type = resource_id.entity_type
         try:
-            io = get_io(cache, agent.uri, resource_id.version)
+            agent_io = io.get_io(cache, agent.uri, resource_id.version)
         except Exception:
             LOGGER.exception("Exception raised during creation of IO for uri %s", agent.uri)
             raise Exception("No handler available for %s (no io available)" % resource_id)
 
-        if io is None:
+        if agent_io is None:
             # Skip this resource
             raise Exception("No handler available for %s (no io available)" % resource_id)
 
         available = []
         if resource_type in cls.__command_functions:
             for handlr in cls.__command_functions[resource_type].values():
-                h = cls._get_instance(handlr, agent, io)
+                h = cls._get_instance(handlr, agent, agent_io)
                 if h.available(resource):
                     available.append(h)
                 else:
@@ -863,7 +870,7 @@ class Commander(object):
             for h in available:
                 h.close()
 
-            io.close()
+            agent_io.close()
             raise Exception("More than one handler selected for resource %s" % resource.id)
 
         elif len(available) == 1:
@@ -872,7 +879,7 @@ class Commander(object):
         raise Exception("No resource handler registered for resource of type %s" % resource_type)
 
     @classmethod
-    def add_provider(cls, resource: str, name: str, provider):
+    def add_provider(cls, resource: str, name: str, provider: ResourceHandler) -> None:
         """
             Register a new provider
 
@@ -894,7 +901,7 @@ class Commander(object):
                 yield (resource_type, handler_class)
 
     @classmethod
-    def get_provider_class(cls, resource_type, name):
+    def get_provider_class(cls, resource_type: str, name: str) -> typing.Type["ResourceHandler"]:
         """
             Return the class of the handler for the given type and with the given name
         """
