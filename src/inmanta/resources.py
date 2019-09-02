@@ -199,7 +199,7 @@ class Resource(metaclass=ResourceMeta):
         """
             Convert all requires
 
-            :param resources A dict with a mapping from model objects to resource objects
+            :param resources: A dict with a mapping from model objects to resource objects
             :param ignored_resources A set of model objects that have been ignored (and not converted to resources)
         """
         for res in resources.values():

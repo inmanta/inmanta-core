@@ -32,7 +32,7 @@ class Unknown(AnyType):
     """
         An instance of this class is used to indicate that this value can not be determined yet.
 
-        :param source The source object that can determine the value
+        :param source: The source object that can determine the value
     """
 
     def __init__(self, source):
