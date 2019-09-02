@@ -1264,3 +1264,45 @@ a = c["test"]["xx"]
     assert stmt.value.key.value == "xx"
     assert isinstance(stmt.value.themap.key, Literal)
     assert stmt.value.themap.key.value == "test"
+
+
+def test_if_statement():
+    """Test for the if statement
+    """
+    statements = parse_code(
+        """
+if test.field == "value":
+    test.other = "otherValue"
+end
+"""
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, ExpressionStatement)
+    assert isinstance(stmt.if_branch, BasicBlock)
+    assert len(stmt.if_branch.get_stmts()) == 1
+    assert isinstance(stmt.else_branch, BasicBlock)
+    assert len(stmt.else_branch.get_stmts()) == 0
+
+
+def test_if_else():
+    """Test for the if statement with an else clause
+    """
+    statements = parse_code(
+        """
+if test.field == "value":
+    test.other = "otherValue"
+else:
+    test.other = "altValue"
+end
+"""
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, ExpressionStatement)
+    assert isinstance(stmt.if_branch, BasicBlock)
+    assert len(stmt.if_branch.get_stmts()) == 1
+    assert isinstance(stmt.else_branch, BasicBlock)
+    assert len(stmt.else_branch.get_stmts()) == 1
