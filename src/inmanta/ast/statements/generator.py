@@ -183,6 +183,51 @@ class For(GeneratorStatement):
         return None
 
 
+class If(GeneratorStatement):
+    """
+        An if Statement
+    """
+
+    def __init__(self, condition: ExpressionStatement, if_branch: BasicBlock, else_branch: BasicBlock) -> None:
+        GeneratorStatement.__init__(self)
+        self.condition: ExpressionStatement = condition
+        self.if_branch: BasicBlock = if_branch
+        self.else_branch: BasicBlock = else_branch
+        self.anchors.extend(condition.get_anchors())
+        self.anchors.extend(if_branch.get_anchors())
+        self.anchors.extend(else_branch.get_anchors())
+
+    def __repr__(self) -> str:
+        # TODO: implement
+        raise Exception("Not implemented")
+
+    def normalize(self) -> None:
+        self.condition.normalize()
+        self.if_branch.normalize()
+        self.else_branch.normalize()
+
+    def requires(self) -> List[str]:
+        # TODO: implement
+        raise Exception("Not implemented")
+
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        return self.condition.requires_emit(resolver, queue)
+
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        """
+            Evaluate this statement.
+        """
+        cond: object = self.condition.execute(requires, resolver, queue)
+        if isinstance(cond, Unknown):
+            return None
+        if not isinstance(cond, bool):
+            raise TypingException(self, "The condition for an if statement can only be a boolean expression")
+        branch: BasicBlock = self.if_branch if cond else self.else_branch
+        xc = ExecutionContext(branch, resolver.for_namespace(branch.namespace))
+        xc.emit(queue)
+        return None
+
+
 class Constructor(GeneratorStatement):
     """
         This class represents the usage of a constructor to create a new object.
