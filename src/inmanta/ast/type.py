@@ -157,6 +157,9 @@ class NullableType(Type):
     def __str__(self):
         return "%s" % (self.basetype)
 
+    def normalize(self):
+        self.basetype.normalize()
+
 
 class Number(Type):
     """
@@ -321,6 +324,9 @@ class TypedList(Type):
         Type.__init__(self)
         self.basetype = basetype
 
+    def normalize(self):
+        self.basetype.normalize
+
     def cast(self, value):
         """
             Cast the value to the basetype of this constraint
@@ -469,6 +475,9 @@ class ConstraintType(NamedType):
         self.name = name
         self.namespace = namespace
         self.comment = None
+
+    def normalize(self):
+        self.expression.normalize()
 
     def set_constraint(self, expression):
         """
