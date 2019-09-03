@@ -190,7 +190,7 @@ Restart the PostgreSQL server to apply the changes made in the ``pg_hba.conf`` f
 Step 4: Set the database connection details
 -------------------------------------------
 
-Add a ``/etc/inmanta/inmanta.d/<custom-config>.cfg`` file as such that it contains the correct database connection details.
+Add a ``/etc/inmanta/inmanta.d/database.cfg`` file as such that it contains the correct database connection details.
 That file should look as follows:
 
 .. code-block:: text
@@ -213,7 +213,7 @@ When virtual machines are started by this server that install the inmanta agent,
 configured. This address is used to create the correct boot script for the virtual machine.
 
 Set this value to the hostname or IP address that others systems use to connect to the server
-in the configuration file stored at ``/etc/inmanta/inmanta.d/<custom-config>.cfg``.
+in the configuration file stored at ``/etc/inmanta/inmanta.d/server.cfg``.
 
 .. note:: If you deploy configuration models that modify resolver configuration it is recommended to use the IP address instead
   of the hostname.
