@@ -63,7 +63,7 @@ class ResultCollector(Generic[T]):
         """
             receive a possibly partial result
         """
-        raise Exception("Not Implemented" + str(type(self)))
+        raise NotImplementedError()
 
 
 class IPromise(Generic[T]):

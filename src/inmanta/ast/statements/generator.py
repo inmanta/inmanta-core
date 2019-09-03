@@ -201,8 +201,6 @@ class Constructor(GeneratorStatement):
         GeneratorStatement.__init__(self)
         self.class_type = str(class_type)
         self.__attributes = {}  # type: Dict[str,ExpressionStatement]
-        self.implemented = False
-        self.register = False
         self.location = location
         self.namespace = namespace
         self.anchors.append(TypeReferenceAnchor(class_type.get_location(), namespace, str(class_type)))
@@ -308,18 +306,9 @@ class Constructor(GeneratorStatement):
             reqs = valueexpression.requires_emit_gradual(resolver, queue, var)
             SetAttributeHelper(queue, resolver, var, reqs, valueexpression, self, object_instance, attributename)
 
-        # add anonymous implementations
-        if self.implemented:
-            # generate an import for the module
-            raise Exception("don't know this feature")
-
-        else:
-            # generate an implementation
-            for stmt in type_class.get_sub_constructor():
-                stmt.emit(object_instance, queue)
-
-        if self.register:
-            raise Exception("don't know this feature")
+        # generate an implementation
+        for stmt in type_class.get_sub_constructor():
+            stmt.emit(object_instance, queue)
 
         object_instance.trackers.append(queue.get_tracker())
 

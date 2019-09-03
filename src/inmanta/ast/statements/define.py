@@ -352,7 +352,7 @@ class DefineImplement(DefinitionStatement):
                 if impl_obj.entity is not None and not (
                     entity_type is impl_obj.entity or entity_type.is_parent(impl_obj.entity)
                 ):
-                    raise Exception(
+                    raise TypingException(self,
                         "Type mismatch: cannot use %s as implementation for "
                         " %s because its implementing type is %s" % (impl_obj.name, entity_type, impl_obj.entity)
                     )

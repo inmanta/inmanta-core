@@ -20,7 +20,7 @@ import re
 from abc import ABCMeta, abstractmethod
 from typing import Dict
 
-from inmanta.ast import LocatableString
+from inmanta.ast import LocatableString, TypingException
 from inmanta.ast.statements import Literal, ReferenceStatement
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedReferenceHelper, Reference
@@ -294,7 +294,7 @@ class Regex(BinaryOperator):
             @see Operator#_op
         """
         if not isinstance(arg1, str):
-            raise Exception("Regex can only be match with strings. %s is of type %s" % arg1)
+            raise TypingException(self, "Regex can only be match with strings. %s is of type %s" % arg1)
 
         return arg2.match(arg1) is not None
 
@@ -337,7 +337,7 @@ class LessThan(BinaryOperator):
             @see Operator#_op
         """
         if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
-            raise Exception("Can only compare numbers.")
+            raise TypingException(self, "Can only compare numbers.")
         return arg1 < arg2
 
 
@@ -356,7 +356,7 @@ class GreaterThan(BinaryOperator):
             @see Operator#_op
         """
         if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
-            raise Exception("Can only compare numbers.")
+            raise TypingException(self, "Can only compare numbers.")
         return arg1 > arg2
 
 
@@ -375,7 +375,7 @@ class LessThanOrEqual(BinaryOperator):
             @see Operator#_op
         """
         if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
-            raise Exception("Can only compare numbers.")
+            raise TypingException(self, "Can only compare numbers.")
         return arg1 <= arg2
 
 
@@ -394,7 +394,7 @@ class GreaterThanOrEqual(BinaryOperator):
             @see Operator#_op
         """
         if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
-            raise Exception("Can only compare numbers.")
+            raise TypingException(self, "Can only compare numbers.")
         return arg1 >= arg2
 
 
@@ -464,6 +464,6 @@ class In(BinaryOperator):
                 if arg == arg1:
                     return True
         else:
-            raise Exception("Operand two of 'in' can only be a list or dict (%s)" % arg2[0])
+            raise TypingException(self, "Operand two of 'in' can only be a list or dict (%s)" % arg2[0])
 
         return False
