@@ -16,122 +16,111 @@
     Contact: code@inmanta.com
 """
 
-import sys
-from io import StringIO
-
 import inmanta.compiler as compiler
 
 
 def test_if_true(snippetcompiler):
-    print_str: str = "Success!"
     snippetcompiler.setup_for_snippet(
         """
-if true:
-    std::print("%s")
+entity Test:
+    string field
+end
+implement Test using std::none
+test = Test()
+if 1 == 1:
+    test.field = "substitute"
 end
         """
-        % print_str
     )
-
-    saved_stdout = sys.stdout
-    try:
-        out = StringIO()
-        sys.stdout = out
-        compiler.do_compile()
-        output = out.getvalue().strip()
-        assert output == print_str
-    finally:
-        sys.stdout = saved_stdout
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    assert "substitute" == root.lookup("test").get_value().lookup("field").get_value()
 
 
 def test_if_false(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
+    snippetcompiler.setup_for_error(
         """
-if false:
-    std::print(1)
+entity Test:
+    string field
 end
-        """
+implement Test using std::none
+test = Test()
+if 0 == 1:
+    test.field = "substitute"
+end
+        """,
+        "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete: attribute field ({dir}/main.cf:3) is not set",
     )
-
-    saved_stdout = sys.stdout
-    try:
-        out = StringIO()
-        sys.stdout = out
-        compiler.do_compile()
-        output = out.getvalue().strip()
-        assert output == ""
-    finally:
-        sys.stdout = saved_stdout
 
 
 def test_if_else_true(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-if true:
-    std::print("It's true")
+entity Test:
+    string field
+end
+implement Test using std::none
+test = Test()
+if 1 == 1:
+    test.field = "substitute"
 else:
-    std::print("It's false")
+    test.field = "alt"
 end
         """
     )
-
-    saved_stdout = sys.stdout
-    try:
-        out = StringIO()
-        sys.stdout = out
-        compiler.do_compile()
-        output = out.getvalue().strip()
-        assert output == "It's true"
-    finally:
-        sys.stdout = saved_stdout
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    assert "substitute" == root.lookup("test").get_value().lookup("field").get_value()
 
 
 def test_if_else_false(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-if false:
-    std::print("It's true")
+entity Test:
+    string field
+end
+implement Test using std::none
+test = Test()
+if 0 == 1:
+    test.field = "substitute"
 else:
-    std::print("It's false")
+    test.field = "alt"
 end
         """
     )
-
-    saved_stdout = sys.stdout
-    try:
-        out = StringIO()
-        sys.stdout = out
-        compiler.do_compile()
-        output = out.getvalue().strip()
-        assert output == "It's false"
-    finally:
-        sys.stdout = saved_stdout
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    assert "alt" == root.lookup("test").get_value().lookup("field").get_value()
 
 
 def test_if_else_extended(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
+entity Test:
+    string field
+    string field2
+end
+implement Test using std::none
+
 entity A:
     string a = ""
 end
 implement A using std::none
+
+test = Test()
 a = A(a="a")
+
 if a.a == "b":
-    std::print("It's")
-    std::print("true")
+    test.field = "substitute"
+    test.field2 = "substitute2"
 else:
-    std::print("It's")
-    std::print("false")
+    test.field = "alt"
+    test.field2 = "alt2"
 end
         """
     )
-
-    saved_stdout = sys.stdout
-    try:
-        out = StringIO()
-        sys.stdout = out
-        compiler.do_compile()
-        output = out.getvalue().strip()
-        assert output == r"It's\nfalse"
-    finally:
-        sys.stdout = saved_stdout
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    test = root.lookup("test").get_value()
+    assert "alt" == test.lookup("field").get_value()
+    assert "alt2" == test.lookup("field2").get_value()
