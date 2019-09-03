@@ -475,6 +475,7 @@ class ConstraintType(NamedType):
         self.name = name
         self.namespace = namespace
         self.comment = None
+        self.expression = None
 
     def normalize(self):
         self.expression.normalize()
