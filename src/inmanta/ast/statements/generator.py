@@ -198,17 +198,12 @@ class If(GeneratorStatement):
         self.anchors.extend(else_branch.get_anchors())
 
     def __repr__(self) -> str:
-        # TODO: implement
-        raise Exception("Not implemented")
+        return "If"
 
     def normalize(self) -> None:
         self.condition.normalize()
         self.if_branch.normalize()
         self.else_branch.normalize()
-
-    def requires(self) -> List[str]:
-        # TODO: implement
-        raise Exception("Not implemented")
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return self.condition.requires_emit(resolver, queue)
