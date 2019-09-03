@@ -33,11 +33,10 @@ from inmanta.ast import (
     TypingException,
 )
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import ExpressionStatement, GeneratorStatement, DynamicStatement
+from inmanta.ast.statements import DynamicStatement, ExpressionStatement
 from inmanta.ast.statements.assign import SetAttributeHelper
 from inmanta.const import LOG_LEVEL_TRACE
-from inmanta.execute.runtime import ExecutionContext, QueueScheduler, Resolver, ResultCollector, ResultVariable, \
-    ExecutionUnit
+from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver, ResultCollector, ResultVariable
 from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
 
