@@ -43,7 +43,7 @@ from inmanta.ast.statements.define import (
     DefineTypeConstraint,
     DefineTypeDefault,
 )
-from inmanta.ast.statements.generator import Constructor, For
+from inmanta.ast.statements.generator import Constructor, For, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException, plyInmantaLex
@@ -150,7 +150,8 @@ def p_stmt(p: YaccProduction) -> None:
     """statement : assign
                 | constructor
                 | function_call
-                | for"""
+                | for
+                | if"""
     p[0] = p[1]
 
 
@@ -191,6 +192,16 @@ def p_for(p: YaccProduction) -> None:
     "for : FOR ID IN operand ':' block"
     p[0] = For(p[4], p[2], BasicBlock(namespace, p[6]))
     attach_lnr(p, 1)
+
+
+def p_if(p: YaccProduction) -> None:
+    "if : IF condition ':' block"
+    p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, []))
+
+
+def p_if_else(p: YaccProduction) -> None:
+    "if : IF condition ':' stmt_list ELSE ':' block"
+    p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, p[7]))
 
 
 #######################
