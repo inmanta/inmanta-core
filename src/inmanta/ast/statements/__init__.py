@@ -72,10 +72,6 @@ class DynamicStatement(Statement):
     def normalize(self) -> None:
         raise Exception("Not Implemented" + str(type(self)))
 
-    def requires(self) -> List[str]:
-        """List of all variable names used by this statement"""
-        raise Exception("Not Implemented" + str(type(self)))
-
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """Emit new instructions to the queue, executing this instruction in the context of the resolver"""
         raise Exception("Not Implemented" + str(type(self)))
@@ -92,6 +88,10 @@ class ExpressionStatement(DynamicStatement):
         target = ResultVariable()
         reqs = self.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self)
+
+    def requires(self) -> List[str]:
+        """List of all variable names used by this statement"""
+        raise Exception("Not Implemented" + str(type(self)))
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         """
@@ -162,15 +162,6 @@ class AssignStatement(DynamicStatement):
         out = self.lhs.requires()  # type : List[str]
         out.extend(self.rhs.requires())  # type : List[str]
         return out
-
-
-class GeneratorStatement(ExpressionStatement):
-    """
-        This statement models a statement that generates new statements
-    """
-
-    def __init__(self) -> None:
-        ExpressionStatement.__init__(self)
 
 
 class Literal(ExpressionStatement):

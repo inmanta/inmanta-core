@@ -33,10 +33,11 @@ from inmanta.ast import (
     TypingException,
 )
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import ExpressionStatement, GeneratorStatement
+from inmanta.ast.statements import ExpressionStatement, GeneratorStatement, DynamicStatement
 from inmanta.ast.statements.assign import SetAttributeHelper
 from inmanta.const import LOG_LEVEL_TRACE
-from inmanta.execute.runtime import ExecutionContext, QueueScheduler, Resolver, ResultCollector, ResultVariable
+from inmanta.execute.runtime import ExecutionContext, QueueScheduler, Resolver, ResultCollector, ResultVariable, \
+    ExecutionUnit
 from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
 
@@ -51,14 +52,14 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class SubConstructor(GeneratorStatement):
+class SubConstructor(ExpressionStatement):
     """
         This statement selects an implementation for a given object and
         imports the statements
     """
 
     def __init__(self, instance_type: "Entity", implements: "Implement") -> None:
-        GeneratorStatement.__init__(self)
+        super().__init__()
         self.type = instance_type
         self.location = instance_type.get_location()
         self.implements = implements
@@ -121,13 +122,13 @@ class GradualFor(ResultCollector):
         xc.emit(self.queue)
 
 
-class For(GeneratorStatement):
+class For(DynamicStatement):
     """
         A for loop
     """
 
     def __init__(self, variable: ExpressionStatement, loop_var: LocatableString, module: BasicBlock) -> None:
-        GeneratorStatement.__init__(self)
+        super().__init__()
         self.base = variable
         self.loop_var = str(loop_var)
         self.loop_var_loc = loop_var.get_location()
@@ -150,7 +151,14 @@ class For(GeneratorStatement):
         ext = self.module.requires
         return list(set(base).union(ext) - set(var))
 
+    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        target = ResultVariable()
+        reqs = self.requires_emit(resolver, queue)
+        ExecutionUnit(queue, resolver, target, reqs, self)
+
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        """Not an actual expression, but following the pattern"""
+
         # pass context via requires!
         helper = GradualFor(self, resolver, queue)
 
@@ -183,7 +191,7 @@ class For(GeneratorStatement):
         return None
 
 
-class Constructor(GeneratorStatement):
+class Constructor(ExpressionStatement):
     """
         This class represents the usage of a constructor to create a new object.
 
@@ -198,7 +206,7 @@ class Constructor(GeneratorStatement):
         location: Location,
         namespace: Namespace,
     ) -> None:
-        GeneratorStatement.__init__(self)
+        super().__init__()
         self.class_type = str(class_type)
         self.__attributes = {}  # type: Dict[str,ExpressionStatement]
         self.implemented = False
