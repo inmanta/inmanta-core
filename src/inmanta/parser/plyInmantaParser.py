@@ -197,11 +197,13 @@ def p_for(p: YaccProduction) -> None:
 def p_if(p: YaccProduction) -> None:
     "if : IF condition ':' block"
     p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, []))
+    attach_lnr(p, 1)
 
 
 def p_if_else(p: YaccProduction) -> None:
     "if : IF condition ':' stmt_list ELSE ':' block"
     p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, p[7]))
+    attach_lnr(p, 1)
 
 
 #######################
