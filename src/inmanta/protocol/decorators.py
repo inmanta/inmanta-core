@@ -29,7 +29,7 @@ class handle(object):  # noqa: N801
     """
         Decorator for subclasses of an endpoint to handle protocol methods
 
-        :param method A subclass of method that defines the method
+        :param method: A subclass of method that defines the method
         :param kwargs: Map arguments in the message from one name to an other
     """
 
@@ -75,12 +75,12 @@ def method(
                      should be enclosed in < > brackets.
         :param operation: The type of HTTP operation (verb)
         :param timeout: nr of seconds before request it terminated
-        :param api This is a call from the client to the Server (True if not server_agent and not agent_server)
+        :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
         :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
         :param agent_server: This is a call from the Agent to the Server
         :param validate_sid: This call requires a valid session, true by default if agent_server and not api
         :param client_types: The allowed client types for this call
-        :param arg_options Options related to arguments passed to the method. The key of this dict is the name of the arg to
+        :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
             which the options apply. The value is another dict that can contain the following options:
                 header: Map this argument to a header with the following name.
                 reply_header: If the argument is mapped to a header, this header will also be included in the reply
