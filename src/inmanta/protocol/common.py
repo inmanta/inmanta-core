@@ -317,7 +317,7 @@ class MethodProperties(object):
             :param path: The path in the url
             :param operation: The type of HTTP operation (verb)
             :param timeout: nr of seconds before request it terminated
-            :param api This is a call from the client to the Server (True if not server_agent and not agent_server)
+            :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
             :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
             :param agent_server: This is a call from the Agent to the Server
             :param validate_sid: This call requires a valid session, true by default if agent_server and not api

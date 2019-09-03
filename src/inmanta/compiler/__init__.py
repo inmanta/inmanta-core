@@ -70,8 +70,8 @@ class Compiler(object):
     """
         An inmanta compiler
 
-        @param options: Options passed to the application
-        @param config: The parsed configuration file
+        :param options: Options passed to the application
+        :param config: The parsed configuration file
     """
 
     def __init__(self, cf_file="main.cf", refs={}):

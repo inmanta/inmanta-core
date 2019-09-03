@@ -298,8 +298,8 @@ def upload_file(id: str, content: str):
     """
         Upload a new file
 
-        :param id The id of the file
-        :param content The base64 encoded content of the file
+        :param id: The id of the file
+        :param content: The base64 encoded content of the file
     """
 
 
@@ -315,7 +315,7 @@ def stat_file(id: str):
     """
         Does the file exist
 
-        :param id The id of the file to check
+        :param id: The id of the file to check
     """
 
 
@@ -363,13 +363,13 @@ def get_resource(
     """
         Return a resource with the given id.
 
-        :param tid The id of the environment this resource belongs to
-        :param id Get the resource with the given id
-        :param logs Include the logs in the response
-        :param status return only resources of this status
-        :param log_action The log action to include, leave empty/none for all actions. Valid actions are one of
+        :param tid: The id of the environment this resource belongs to
+        :param id: Get the resource with the given id
+        :param logs: Include the logs in the response
+        :param status: return only resources of this status
+        :param log_action: The log action to include, leave empty/none for all actions. Valid actions are one of
                           the action strings in const.ResourceAction
-        :param log_limit Limit the number of logs included in the response
+        :param log_limit: Limit the number of logs included in the response
     """
 
 
@@ -485,7 +485,7 @@ def release_version(tid: uuid.UUID, id: int, push: bool = False, agent_trigger_m
         :param tid: The id of the environment
         :param id: The version of the CM to deploy
         :param push: Notify all agents to deploy the version
-        :param agent_trigger_method Indicates whether the agents should perform a full or an incremental deploy when
+        :param agent_trigger_method: Indicates whether the agents should perform a full or an incremental deploy when
                                     push is true.
     """
 
@@ -869,8 +869,8 @@ def trigger_agent(tid: uuid.UUID, id: str):
     """
         Request the server to reload an agent
 
-        :param tid The environment this agent is defined in
-        :param id The name of the agent
+        :param tid: The environment this agent is defined in
+        :param id: The name of the agent
         :return The requested node
     """
 
@@ -880,7 +880,7 @@ def list_agents(tid: uuid.UUID):
     """
         List all agent for an environment
 
-        :param tid The environment the agents are defined in
+        :param tid: The environment the agents are defined in
     """
 
 
@@ -911,9 +911,9 @@ def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
     """
         Request an agent to reload resources
 
-        :param tid The environment this agent is defined in
-        :param id The name of the agent
-        :param incremental_deploy Indicates whether the agent should perform an incremental deploy or a full deploy
+        :param tid: The environment this agent is defined in
+        :param id: The name of the agent
+        :param incremental_deploy: Indicates whether the agent should perform an incremental deploy or a full deploy
     """
 
 
@@ -927,13 +927,13 @@ def resource_event(
     """
         Tell an agent a resource it waits for has been updated
 
-        :param tid The environment this agent is defined in
-        :param id The name of the agent
-        :param resource The resource ID of the resource being updated
-        :param send_events Does the resource have send_events enabled?
-        :param state State the resource acquired (deployed, skipped, canceled)
-        :param change The change that was made to the resource
-        :param changes The changes made to the resource
+        :param tid: The environment this agent is defined in
+        :param id: The name of the agent
+        :param resource: The resource ID of the resource being updated
+        :param send_events: Does the resource have send_events enabled?
+        :param state: State the resource acquired (deployed, skipped, canceled)
+        :param change: The change that was made to the resource
+        :param changes: The changes made to the resource
     """
 
 

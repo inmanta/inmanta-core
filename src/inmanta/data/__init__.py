@@ -564,7 +564,7 @@ class Project(BaseDocument):
     """
         An inmanta configuration project
 
-        :param name The name of the configuration project.
+        :param name: The name of the configuration project.
     """
 
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -698,12 +698,12 @@ class Environment(BaseDocument):
     """
         A deployment environment of a project
 
-        :param id A unique, machine generated id
-        :param name The name of the deployment environment.
-        :param project The project this environment belongs to.
-        :param repo_url The repository url that contains the configuration model code for this environment
-        :param repo_url The repository branch that contains the configuration model code for this environment
-        :param settings Key/value settings for this environment
+        :param id: A unique, machine generated id
+        :param name: The name of the deployment environment.
+        :param project: The project this environment belongs to.
+        :param repo_url: The repository url that contains the configuration model code for this environment
+        :param repo_branch: The repository branch that contains the configuration model code for this environment
+        :param settings: Key/value settings for this environment
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -927,12 +927,12 @@ class Parameter(BaseDocument):
     """
         A parameter that can be used in the configuration model
 
-        :param name The name of the parameter
-        :param value The value of the parameter
-        :param environment The environment this parameter belongs to
-        :param source The source of the parameter
-        :param resource_id An optional resource id
-        :param updated When was the parameter updated last
+        :param name: The name of the parameter
+        :param value: The value of the parameter
+        :param environment: The environment this parameter belongs to
+        :param source: The source of the parameter
+        :param resource_id: An optional resource id
+        :param updated: When was the parameter updated last
 
         :todo Add history
     """
@@ -971,11 +971,11 @@ class UnknownParameter(BaseDocument):
         A parameter that the compiler indicated that was unknown. This parameter causes the configuration model to be
         incomplete for a specific environment.
 
-        :param name
-        :param resource_id
-        :param source
-        :param environment
-        :param version The version id of the configuration model on which this parameter was reported
+        :param name:
+        :param resource_id:
+        :param source:
+        :param environment:
+        :param version: The version id of the configuration model on which this parameter was reported
     """
 
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -992,9 +992,9 @@ class AgentProcess(BaseDocument):
     """
         A process in the infrastructure that has (had) a session as an agent.
 
-        :param hostname The hostname of the device.
-        :prama environment To what environment is this process bound
-        :param last_seen When did the server receive data from the node for the last time.
+        :param hostname: The hostname of the device.
+        :param environment: To what environment is this process bound
+        :param last_seen: When did the server receive data from the node for the last time.
     """
 
     hostname = Field(field_type=str, required=True)
@@ -1046,8 +1046,8 @@ class AgentInstance(BaseDocument):
     """
         A physical server/node in the infrastructure that reports to the management server.
 
-        :param hostname The hostname of the device.
-        :param last_seen When did the server receive data from the node for the last time.
+        :param hostname: The hostname of the device.
+        :param last_seen: When did the server receive data from the node for the last time.
     """
 
     # TODO: add env to speed up cleanup
@@ -1072,11 +1072,11 @@ class Agent(BaseDocument):
     """
         An inmanta agent
 
-        :param environment The environment this resource is defined in
-        :param name The name of this agent
-        :param last_failover Moment at which the primary was last changed
-        :param paused is this agent paused (if so, skip it)
-        :param primary what is the current active instance (if none, state is down)
+        :param environment: The environment this resource is defined in
+        :param name: The name of this agent
+        :param last_failover: Moment at which the primary was last changed
+        :param paused: is this agent paused (if so, skip it)
+        :param primary: what is the current active instance (if none, state is down)
     """
 
     environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1140,12 +1140,12 @@ class Report(BaseDocument):
     """
         A report of a substep of compilation
 
-        :param started when the substep started
-        :param completed when it ended
-        :param command the command that was executed
-        :param name The name of this step
-        :param errstream what was reported on system err
-        :param outstream what was reported on system out
+        :param started: when the substep started
+        :param completed: when it ended
+        :param command: the command that was executed
+        :param name: The name of this step
+        :param errstream: what was reported on system err
+        :param outstream: what was reported on system out
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1409,18 +1409,18 @@ class ResourceAction(BaseDocument):
     """
         Log related to actions performed on a specific resource version by Inmanta.
 
-        :param resource_version The resource on which the actions are performed
-        :param environment The environment this action belongs to.
-        :param action_id This is id distinguishes action from each other. Action ids have to be unique per environment.
-        :param action The action performed on the resource
-        :param started When did the action start
-        :param finished When did the action finish
-        :param messages The log messages associated with this action
-        :param status The status of the resource when this action was finished
-        :param changes A dict with key the resource id and value a dict of fields -> value. Value is a dict that can
+        :param resource_version: The resource on which the actions are performed
+        :param environment: The environment this action belongs to.
+        :param action_id: This is id distinguishes action from each other. Action ids have to be unique per environment.
+        :param action: The action performed on the resource
+        :param started: When did the action start
+        :param finished: When did the action finish
+        :param messages: The log messages associated with this action
+        :param status: The status of the resource when this action was finished
+        :param changes: A dict with key the resource id and value a dict of fields -> value. Value is a dict that can
                        contain old and current keys and the associated values. An empty dict indicates that the field
                        was changed but not data was provided by the agent.
-        :param change The change result of an action
+        :param change: The change result of an action
     """
 
     resource_version_ids = Field(field_type=list, required=True, reference=True, default=[])
@@ -1691,11 +1691,11 @@ class Resource(BaseDocument):
     """
         A specific version of a resource. This entity contains the desired state of a resource.
 
-        :param environment The environment this resource version is defined in
-        :param rid The id of the resource and its version
-        :param resource The resource for which this defines the state
-        :param model The configuration model (versioned) this resource state is associated with
-        :param attributes The state of this version of the resource
+        :param environment: The environment this resource version is defined in
+        :param rid: The id of the resource and its version
+        :param resource: The resource for which this defines the state
+        :param model: The configuration model (versioned) this resource state is associated with
+        :param attributes: The state of this version of the resource
         :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                                used to determine if a resource describes the same state across versions
     """
@@ -2421,13 +2421,13 @@ class Code(BaseDocument):
     """
         A code deployment
 
-        :param environment The environment this code belongs to
-        :param version The version of configuration model it belongs to
-        :param resource The resource type this code belongs to
-        :param sources The source code of plugins (phasing out)  form:
+        :param environment: The environment this code belongs to
+        :param version: The version of configuration model it belongs to
+        :param resource: The resource type this code belongs to
+        :param sources: The source code of plugins (phasing out)  form:
             {code_hash:(file_name, provider.__module__, source_code, [req])}
-        :param requires Python requires for the source code above
-        :param source_refs file hashes refering to files in the file store
+        :param requires: Python requires for the source code above
+        :param source_refs: file hashes refering to files in the file store
             {code_hash:(file_name, provider.__module__, [req])}
     """
 
@@ -2454,13 +2454,13 @@ class DryRun(BaseDocument):
     """
         A dryrun of a model version
 
-        :param id The id of this dryrun
-        :param environment The environment this code belongs to
-        :param model The configuration model
-        :param date The date the run was requested
-        :param resource_total The number of resources that do a dryrun for
-        :param resource_todo The number of resources left to do
-        :param resources Changes for each of the resources in the version
+        :param id: The id of this dryrun
+        :param environment: The environment this code belongs to
+        :param model: The configuration model
+        :param date: The date the run was requested
+        :param resource_total: The number of resources that do a dryrun for
+        :param resource_todo: The number of resources left to do
+        :param resources: Changes for each of the resources in the version
     """
 
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
