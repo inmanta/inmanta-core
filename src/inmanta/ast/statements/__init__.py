@@ -85,7 +85,6 @@ class DynamicStatement(Statement):
 
 
 class ExpressionStatement(DynamicStatement):
-
     def __init__(self) -> None:
         DynamicStatement.__init__(self)
 
