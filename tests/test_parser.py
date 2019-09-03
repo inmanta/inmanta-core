@@ -21,8 +21,9 @@ import re
 import pytest
 
 from inmanta.ast import LocatableString, Namespace
+from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, GreaterThan, In, IsDefined, Not, Regex
-from inmanta.ast.statements import Literal, define
+from inmanta.ast.statements import ExpressionStatement, Literal, define
 from inmanta.ast.statements.assign import (
     Assign,
     CreateDict,
@@ -42,7 +43,7 @@ from inmanta.ast.statements.define import (
     DefineTypeConstraint,
     DefineTypeDefault,
 )
-from inmanta.ast.statements.generator import Constructor
+from inmanta.ast.statements.generator import Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
