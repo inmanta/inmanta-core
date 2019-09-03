@@ -325,7 +325,7 @@ class TypedList(Type):
         self.basetype = basetype
 
     def normalize(self):
-        self.basetype.normalize
+        self.basetype.normalize()
 
     def cast(self, value):
         """
