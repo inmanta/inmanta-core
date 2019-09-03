@@ -187,7 +187,7 @@ class Constructor(GeneratorStatement):
     """
         This class represents the usage of a constructor to create a new object.
 
-        @param class_type: The type of the object that is created by this
+        :param class_type: The type of the object that is created by this
             constructor call.
     """
 

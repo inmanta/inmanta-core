@@ -182,8 +182,8 @@ class Assign(AssignStatement):
     """
         This class represents the assignment of a value to a variable -> alias
 
-        @param name: The name of the value
-        @param value: The value that is to be assigned to the variable
+        :param name: The name of the value
+        :param value: The value that is to be assigned to the variable
 
         uses:          value
         provides:      variable

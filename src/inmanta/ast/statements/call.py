@@ -32,8 +32,8 @@ class FunctionCall(ReferenceStatement):
     """
         This class models a call to a function
 
-        @param name: The name of the function that needs to be called
-        @param arguments: A list of arguments
+        :param name: The name of the function that needs to be called
+        :param arguments: A list of arguments
 
         uses:          args
         provides:      return value

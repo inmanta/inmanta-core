@@ -38,7 +38,7 @@ class Attribute(Locatable):
     """
         The attribute base class for entity attributes.
 
-        @param entity: The entity this attribute belongs to
+        :param entity: The entity this attribute belongs to
     """
 
     def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool = False, nullable: bool = False) -> None:

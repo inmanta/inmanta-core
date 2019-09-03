@@ -105,7 +105,7 @@ class Type(Locatable):
             Cast the given value to this type. If this fails a CastException
             is thrown.
 
-            @param value: The value to cast
+            :param value: The value to cast
         """
         raise NotImplementedError()
 
