@@ -80,7 +80,7 @@ def method(
         :param agent_server: This is a call from the Agent to the Server
         :param validate_sid: This call requires a valid session, true by default if agent_server and not api
         :param client_types: The allowed client types for this call
-        :param arg_options Options related to arguments passed to the method. The key of this dict is the name of the arg to
+        :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
             which the options apply. The value is another dict that can contain the following options:
                 header: Map this argument to a header with the following name.
                 reply_header: If the argument is mapped to a header, this header will also be included in the reply
@@ -142,7 +142,7 @@ def typedmethod(
         :param agent_server: This is a call from the Agent to the Server
         :param validate_sid: This call requires a valid session, true by default if agent_server and not api
         :param client_types: The allowed client types for this call
-        :param arg_options Options related to arguments passed to the method. The key of this dict is the name of the arg to
+        :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
             which the options apply. The value is another dict that can contain the following options:
                 header: Map this argument to a header with the following name.
                 reply_header: If the argument is mapped to a header, this header will also be included in the reply

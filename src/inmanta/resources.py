@@ -200,7 +200,7 @@ class Resource(metaclass=ResourceMeta):
             Convert all requires
 
             :param resources: A dict with a mapping from model objects to resource objects
-            :param ignored_resources A set of model objects that have been ignored (and not converted to resources)
+            :param ignored_resources: A set of model objects that have been ignored (and not converted to resources)
         """
         for res in resources.values():
             final_requires = set()
@@ -231,10 +231,10 @@ class Resource(metaclass=ResourceMeta):
         """
         Convert the given object to a textual id
 
-        :param model_object The object to convert to an id
-        :param entity_name The entity type
-        :param attribute_name The name of the attribute that uniquely identifies the entity
-        :param agent_attribute The "path" to the attribute that defines the agent
+        :param model_object: The object to convert to an id
+        :param entity_name: The entity type
+        :param attribute_name: The name of the attribute that uniquely identifies the entity
+        :param agent_attribute: The "path" to the attribute that defines the agent
         """
         # first get the agent attribute
         path_elements = agent_attribute.split(".")

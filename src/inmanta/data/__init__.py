@@ -701,8 +701,8 @@ class Environment(BaseDocument):
         :param id: A unique, machine generated id
         :param name: The name of the deployment environment.
         :param project: The project this environment belongs to.
-        :param repo_url The repository url that contains the configuration model code for this environment
-        :param repo_url The repository branch that contains the configuration model code for this environment
+        :param repo_url: The repository url that contains the configuration model code for this environment
+        :param repo_branch: The repository branch that contains the configuration model code for this environment
         :param settings: Key/value settings for this environment
     """
 
@@ -931,7 +931,7 @@ class Parameter(BaseDocument):
         :param value: The value of the parameter
         :param environment: The environment this parameter belongs to
         :param source: The source of the parameter
-        :param resource_id An optional resource id
+        :param resource_id: An optional resource id
         :param updated: When was the parameter updated last
 
         :todo Add history
@@ -971,10 +971,10 @@ class UnknownParameter(BaseDocument):
         A parameter that the compiler indicated that was unknown. This parameter causes the configuration model to be
         incomplete for a specific environment.
 
-        :param name
-        :param resource_id
-        :param source
-        :param environment
+        :param name:
+        :param resource_id:
+        :param source:
+        :param environment:
         :param version: The version id of the configuration model on which this parameter was reported
     """
 
@@ -993,8 +993,8 @@ class AgentProcess(BaseDocument):
         A process in the infrastructure that has (had) a session as an agent.
 
         :param hostname: The hostname of the device.
-        :prama environment To what environment is this process bound
-        :param last_seen When did the server receive data from the node for the last time.
+        :param environment: To what environment is this process bound
+        :param last_seen: When did the server receive data from the node for the last time.
     """
 
     hostname = Field(field_type=str, required=True)
@@ -1047,7 +1047,7 @@ class AgentInstance(BaseDocument):
         A physical server/node in the infrastructure that reports to the management server.
 
         :param hostname: The hostname of the device.
-        :param last_seen When did the server receive data from the node for the last time.
+        :param last_seen: When did the server receive data from the node for the last time.
     """
 
     # TODO: add env to speed up cleanup
@@ -1074,9 +1074,9 @@ class Agent(BaseDocument):
 
         :param environment: The environment this resource is defined in
         :param name: The name of this agent
-        :param last_failover Moment at which the primary was last changed
+        :param last_failover: Moment at which the primary was last changed
         :param paused: is this agent paused (if so, skip it)
-        :param primary what is the current active instance (if none, state is down)
+        :param primary: what is the current active instance (if none, state is down)
     """
 
     environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1409,9 +1409,9 @@ class ResourceAction(BaseDocument):
     """
         Log related to actions performed on a specific resource version by Inmanta.
 
-        :param resource_version The resource on which the actions are performed
+        :param resource_version: The resource on which the actions are performed
         :param environment: The environment this action belongs to.
-        :param action_id This is id distinguishes action from each other. Action ids have to be unique per environment.
+        :param action_id: This is id distinguishes action from each other. Action ids have to be unique per environment.
         :param action: The action performed on the resource
         :param started: When did the action start
         :param finished: When did the action finish
@@ -2427,7 +2427,7 @@ class Code(BaseDocument):
         :param sources: The source code of plugins (phasing out)  form:
             {code_hash:(file_name, provider.__module__, source_code, [req])}
         :param requires: Python requires for the source code above
-        :param source_refs file hashes refering to files in the file store
+        :param source_refs: file hashes refering to files in the file store
             {code_hash:(file_name, provider.__module__, [req])}
     """
 
@@ -2458,8 +2458,8 @@ class DryRun(BaseDocument):
         :param environment: The environment this code belongs to
         :param model: The configuration model
         :param date: The date the run was requested
-        :param resource_total The number of resources that do a dryrun for
-        :param resource_todo The number of resources left to do
+        :param resource_total: The number of resources that do a dryrun for
+        :param resource_todo: The number of resources left to do
         :param resources: Changes for each of the resources in the version
     """
 
