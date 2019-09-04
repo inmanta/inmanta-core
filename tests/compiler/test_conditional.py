@@ -49,7 +49,8 @@ if 0 == 1:
     test.field = "substitute"
 end
         """,
-        "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete: attribute field ({dir}/main.cf:3) is not set",
+        "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete: "
+        "attribute field ({dir}/main.cf:3) is not set",
     )
 
 
