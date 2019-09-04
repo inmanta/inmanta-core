@@ -29,8 +29,8 @@ from typing import Dict, Tuple, Type
 from tornado import concurrent
 
 from inmanta import const, data, protocol, resources
-from inmanta.agent.cache import AgentCache
 from inmanta.agent import io
+from inmanta.agent.cache import AgentCache
 from inmanta.protocol import Result
 from inmanta.resources import Resource
 
@@ -354,7 +354,7 @@ class ResourceHandler(object):
         :param io: The io object to use.
     """
 
-    def __init__(self, agent: "agent.AgentInstance" , io=None) -> None:
+    def __init__(self, agent: "agent.AgentInstance", io=None) -> None:
         self._agent = agent
 
         if io is None:
@@ -437,7 +437,7 @@ class ResourceHandler(object):
             :param resource: The resource to process the events for.
             :param dict: A dict with events of the resource the given resource requires. The keys of the dict are the resources.
                          Each value is a dict with the items status (const.ResourceState), changes (dict) and
-                         change (const.Change).
+                         change (const.Change). The value is also defined by inmanta.data.model.Event
         """
 
         # ctx.status == const.ResourceState.deployed is only true if

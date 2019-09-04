@@ -20,6 +20,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Type
 
+from inmanta.data.model import ResourceIdStr
 from inmanta.execute import runtime, util
 from inmanta.execute.proxy import DictProxy, DynamicProxy, SequenceProxy, UnknownException, UnsetException
 from inmanta.types import JsonType
@@ -237,7 +238,7 @@ class Resource(metaclass=ResourceMeta):
         :param agent_attribute The "path" to the attribute that defines the agent
         """
         # first get the agent attribute
-        path_elements = agent_attribute.split(".")
+        path_elements: List[str] = agent_attribute.split(".")
         agent_value = model_object
         for el in path_elements:
             try:
@@ -497,7 +498,7 @@ class Id(object):
     def __eq__(self, other: object) -> bool:
         return str(self) == str(other) and type(self) == type(other)
 
-    def resource_str(self) -> str:
+    def resource_str(self) -> ResourceIdStr:
         return "%(type)s[%(agent)s,%(attribute)s=%(value)s]" % {
             "type": self._entity_type,
             "agent": self._agent_name,

@@ -16,14 +16,13 @@
     Contact: code@inmanta.com
 """
 import logging
-import typing
-
 import re
+import typing
 import urllib
 
 from inmanta.agent.cache import AgentCache
-from . import local, remote
 
+from . import local, remote
 
 if typing.TYPE_CHECKING:
     from inmanta.agent.io.local import IOBase

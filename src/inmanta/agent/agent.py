@@ -36,6 +36,7 @@ from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import ResourceHandler
 from inmanta.agent.reporting import collect_report
+from inmanta.data.model import Event, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader
 from inmanta.protocol import SessionEndpoint, methods
 from inmanta.resources import Id, Resource
@@ -72,6 +73,7 @@ class ResourceAction(object):
     resource: Resource
     resource_id: Id
     future: ResourceActionResultFuture
+    dependencies: List["ResourceAction"]
 
     def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
         """
@@ -116,7 +118,12 @@ class ResourceAction(object):
         )
 
     async def _execute(
-        self, ctx: handler.HandlerContext, events: dict, cache: AgentCache, start: float, event_only: bool = False
+        self,
+        ctx: handler.HandlerContext,
+        events: Dict[ResourceVersionIdStr, Event],
+        cache: AgentCache,
+        start: float,
+        event_only: bool = False,
     ) -> Tuple[bool, bool]:
         """
             :param ctx The context to use during execution of this deploy
@@ -173,6 +180,7 @@ class ResourceAction(object):
 
         # event processing
         if len(events) > 0 and provider.can_process_events():
+            events = {k: v.dict() for k, v in events.items()}
             if not event_only:
                 await self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
             try:
@@ -193,7 +201,7 @@ class ResourceAction(object):
 
         return success, send_event
 
-    def skipped_because(self, results):
+    def skipped_because(self, results: List[ResourceActionResult]) -> List[ResourceIdStr]:
         return [
             resource.resource_id.resource_str() for resource, result in zip(self.dependencies, results) if not result.success
         ]
@@ -244,12 +252,12 @@ class ResourceAction(object):
                 return
 
             if result.receive_events:
-                received_events = {
+                received_events: Dict[Id, Event] = {
                     x.resource_id: dict(status=x.status, change=x.change, changes=x.changes.get(str(x.resource_id), {}))
                     for x in self.dependencies
                 }
             else:
-                received_events = {}
+                received_events: Dict[Id, Event] = {}
 
             if self.undeployable is not None:
                 ctx.set_status(self.undeployable)
