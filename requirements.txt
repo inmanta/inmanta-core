@@ -52,7 +52,7 @@ pip==19.2.3
 MarkupSafe==1.1.1
 mypy-extensions==0.4.1
 pycparser==2.19
-zipp==0.5.1
+zipp==0.6.0
 apipkg==1.5
 asn1crypto==0.24.0
 cffi==1.12.3
