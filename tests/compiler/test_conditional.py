@@ -16,7 +16,10 @@
     Contact: code@inmanta.com
 """
 
+import pytest
+
 import inmanta.compiler as compiler
+from inmanta.ast import Namespace, NotFoundException
 
 
 def test_if_true(snippetcompiler):
@@ -125,3 +128,60 @@ end
     test = root.lookup("test").get_value()
     assert "alt" == test.lookup("field").get_value()
     assert "alt2" == test.lookup("field2").get_value()
+
+
+def test_if_scope_new(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+a = 1
+if 1 == 1:
+    a = 2
+end
+        """
+    )
+    compiler.do_compile()
+
+
+def test_if_scope_double_assignment(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    string field
+end
+implement Test using std::none
+a = Test()
+if 1 == 1:
+    a.field = "val"
+    a = 3
+end
+        """,
+        "The object at a is not an Entity but a <class 'int'> with value 3 (reported in a.field = 'val' ({dir}/main.cf:8))",
+    )
+
+
+def test_if_scope_capture(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    string field
+end
+implement Test using std::none
+
+b = 1
+if 1 == 1:
+    b = 2
+    if 1 == 1:
+        b = 3
+        a.field = "val"
+    end
+    a = Test()
+end
+        """
+    )
+    (types, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    assert 1 == root.lookup("b").get_value()
+    with pytest.raises(NotFoundException):
+        root.lookup("a")
+    test_instances = types["__config__::Test"].get_all_instances()
+    assert 1 == len(test_instances)
