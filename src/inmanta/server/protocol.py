@@ -15,30 +15,41 @@
 
     Contact: code@inmanta.com
 """
-import inmanta.protocol.endpoints
-from inmanta.types import JsonType, NoneGen
-from inmanta.util import Scheduler
-from inmanta.protocol import Client, handle, methods
-from inmanta.protocol import common, endpoints
-from inmanta.protocol.rest import server
-
-from inmanta import config as inmanta_config
-from inmanta.server import config as opt, SLICE_SESSION_MANAGER
-
-from tornado import gen, queues, web, routing
-from tornado.ioloop import IOLoop
-
-from typing import Dict, Tuple, Callable, Optional, List, Union
-
-import logging
 import asyncio
+import logging
+import socket
 import time
 import uuid
-import abc
-from asyncio.tasks import ensure_future
+from collections import defaultdict
+from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 
+from tornado import gen, queues, routing, web
+from tornado.ioloop import IOLoop
+
+import inmanta.protocol.endpoints
+from inmanta import config as inmanta_config
+from inmanta.protocol import Client, common, endpoints, handle, methods
+from inmanta.protocol.rest import server
+from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
+from inmanta.server import config as opt
+from inmanta.types import ArgumentTypes, JsonType
+from inmanta.util import CycleException, Scheduler, TaskHandler, stable_depth_first
 
 LOGGER = logging.getLogger(__name__)
+
+
+class ServerStartFailure(Exception):
+    pass
+
+
+class SliceStartupException(ServerStartFailure):
+    def __init__(self, slice_name: str, cause: Exception):
+        super(SliceStartupException, self).__init__()
+        self.__cause__ = cause
+        self.in_slice = slice_name
+
+    def __str__(self):
+        return f"Slice {self.in_slice} failed to start because: {str(self.__cause__)}"
 
 
 class ReturnClient(Client):
@@ -51,12 +62,11 @@ class ReturnClient(Client):
         super().__init__(name)
         self.session = session
 
-    @gen.coroutine
-    def _call(self, method_properties: common.MethodProperties, args, kwargs) -> common.Result:
+    async def _call(self, method_properties: common.MethodProperties, args, kwargs) -> common.Result:
         call_spec = method_properties.build_call(args, kwargs)
         try:
-            return_value = yield self.session.put_call(call_spec, timeout=method_properties.timeout)
-        except gen.TimeoutError:
+            return_value = await self.session.put_call(call_spec, timeout=method_properties.timeout)
+        except asyncio.CancelledError:
             return common.Result(code=500, result={"message": "Call timed out"})
 
         return common.Result(code=return_value["code"], result=return_value["result"])
@@ -68,6 +78,7 @@ class Server(endpoints.Endpoint):
         super().__init__("server")
 
         self._slices: Dict[str, ServerSlice] = {}
+        self._slice_sequence: List[ServerSlice] = None
         self._handlers: List[routing.Rule] = []
         self.token: Optional[str] = inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout = connection_timout
@@ -75,6 +86,7 @@ class Server(endpoints.Endpoint):
         self.add_slice(self.sessions_handler)
 
         self._transport = server.RESTServer(self.sessions_handler, self.id)
+        self.add_slice(TransportSlice(self))
         self.running = False
 
     def add_slice(self, slice: "ServerSlice") -> None:
@@ -82,6 +94,7 @@ class Server(endpoints.Endpoint):
             Add new endpoints to this rest transport
         """
         self._slices[slice.name] = slice
+        self._slice_sequence = None
 
     def get_slices(self) -> Dict[str, "ServerSlice"]:
         return self._slices
@@ -97,8 +110,35 @@ class Server(endpoints.Endpoint):
 
     id = property(get_id)
 
-    @gen.coroutine
-    def start(self) -> NoneGen:
+    def _order_slices(self) -> List["ServerSlice"]:
+        edges: Dict[str, Set[str]] = defaultdict(set)
+
+        for slice in self.get_slices().values():
+            edges[slice.name].update(slice.get_dependencies())
+            for depby in slice.get_depended_by():
+                edges[depby].add(slice.name)
+
+        names = list(edges.keys())
+        try:
+            order = stable_depth_first(names, {k: list(v) for k, v in edges.items()})
+        except CycleException as e:
+            raise ServerStartFailure("Dependency cycle between server slices " + ",".join(e.nodes)) from e
+
+        def resolve(name: str) -> Optional["ServerSlice"]:
+            if name in self._slices:
+                return self._slices[name]
+            LOGGER.debug("Slice %s is depended on but does not exist", name)
+            return None
+
+        return [s for s in (resolve(name) for name in order) if s is not None]
+
+    def _get_slice_sequence(self):
+        if self._slice_sequence is not None:
+            return self._slice_sequence
+        self._slice_sequence = self._order_slices()
+        return self._slice_sequence
+
+    async def start(self) -> None:
         """
             Start the transport.
 
@@ -111,17 +151,22 @@ class Server(endpoints.Endpoint):
         LOGGER.debug("Starting Server Rest Endpoint")
         self.running = True
 
-        for slice in self.get_slices().values():
-            yield slice.prestart(self)
+        for my_slice in self._get_slice_sequence():
+            try:
+                LOGGER.debug("Pre Starting %s", my_slice.name)
+                await my_slice.prestart(self)
+            except Exception as e:
+                raise SliceStartupException(my_slice.name, e)
 
-        for slice in self.get_slices().values():
-            yield slice.start()
-            self._handlers.extend(slice.get_handlers())
+        for my_slice in self._get_slice_sequence():
+            try:
+                LOGGER.debug("Starting %s", my_slice.name)
+                await my_slice.start()
+                self._handlers.extend(my_slice.get_handlers())
+            except Exception as e:
+                raise SliceStartupException(my_slice.name, e)
 
-        yield self._transport.start(self.get_slices().values(), self._handlers)
-
-    @gen.coroutine
-    def stop(self) -> NoneGen:
+    async def stop(self) -> None:
         """
             Stop the transport.
 
@@ -132,16 +177,37 @@ class Server(endpoints.Endpoint):
         if not self.running:
             return
         self.running = False
-        LOGGER.debug("Stopping Server Rest Endpoint")
-        yield self._transport.stop()
-        for endpoint in reversed(list(self.get_slices().values())):
-            yield endpoint.stop()
-        yield self._transport.join()
+
+        await super(Server, self).stop()
+
+        order = list(reversed(self._get_slice_sequence()))
+
+        for endpoint in order:
+            LOGGER.debug("Pre Stopping %s", endpoint.name)
+            await endpoint.prestop()
+
+        for endpoint in order:
+            LOGGER.debug("Stopping %s", endpoint.name)
+            await endpoint.stop()
 
 
-class ServerSlice(inmanta.protocol.endpoints.CallTarget):
+class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
     """
-        An API serving part of the server.
+        Base class for server extensions offering zero or more api endpoints
+
+        Extensions developers should override the lifecycle methods:
+
+        * :func:`ServerSlice.prestart`
+        * :func:`ServerSlice.start`
+        * :func:`ServerSlice.prestop`
+        * :func:`ServerSlice.stop`
+        * :func:`ServerSlice.get_dependencies`
+
+        To register endpoints that server static content, either use :func:'add_static_handler' or :func:'add_static_content'
+        To create endpoints, use the annotation based mechanism
+
+        To schedule recurring tasks, use :func:`schedule` or `self._sched`
+        To schedule background tasks, use :func:`add_background_task`
     """
 
     def __init__(self, name: str) -> None:
@@ -149,45 +215,75 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
 
         self._name: str = name
         self._handlers: List[routing.Rule] = []
-        self._sched = Scheduler("server slice")  # FIXME: why has each slice its own scheduler?
-        self.running: bool = False  # for debugging
+        self._sched = Scheduler(f"server slice {name}")
+        # is shutdown in progress?
+        self._stopping: bool = False
 
-    @abc.abstractmethod
-    @gen.coroutine
-    def prestart(self, server: Server) -> NoneGen:
-        """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
+    def is_stopping(self):
+        """True when prestop has been called."""
+        return self._stopping
 
-    @gen.coroutine
-    @abc.abstractmethod
-    def start(self) -> NoneGen:
+    async def prestart(self, server: Server) -> None:
+        """
+        Called by the RestServer host prior to start, can be used to collect references to other server slices
+        Dependencies are not up yet.
+        """
+        pass
+
+    async def start(self) -> None:
         """
             Start the server slice.
-        """
-        self.running = True
 
-    @gen.coroutine
-    def stop(self) -> NoneGen:
-        self.running = False
+            This method `blocks` until the slice is ready to receive calls
+
+            Dependencies are up (if present) prior to invocation of this call
+        """
+        pass
+
+    async def prestop(self) -> None:
+        """
+            Always called before stop
+
+            Stop producing new work:
+            - stop timers
+            - stop listeners
+            - notify shutdown to systems depending on us (like agents)
+
+            sets is_stopping to true
+
+            But remain functional
+
+            All dependencies are up (if present)
+        """
+        self._stopping = True
         self._sched.stop()
 
+    async def stop(self) -> None:
+        """
+            Go down
+
+            All dependencies are up (if present)
+
+            This method `blocks` until the slice is down
+        """
+        await super(ServerSlice, self).stop()
+
+    def get_dependencies(self) -> List[str]:
+        """List of names of slices that must be started before this one."""
+        return []
+
+    def get_depended_by(self) -> List[str]:
+        """List of names of slices that must be started after this one."""
+        return []
+
+    # internal API towards extension framework
     name = property(lambda self: self._name)
 
     def get_handlers(self) -> List[routing.Rule]:
+        """Get the list of """
         return self._handlers
 
-    def add_future(self, future: asyncio.Future) -> None:
-        """
-            Add a future to the ioloop to be handled, but do not require the result.
-        """
-
-        def handle_result(f: asyncio.Future) -> None:
-            try:
-                f.result()
-            except Exception as e:
-                LOGGER.exception("An exception occurred while handling a future: %s", str(e))
-
-        IOLoop.current().add_future(ensure_future(future), handle_result)
-
+    # utility methods for extensions developers
     def schedule(self, call: Callable, interval: int = 60) -> None:
         self._sched.add_action(call, interval)
 
@@ -219,6 +315,12 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
                 {"transport": self, "content": content, "content_type": content_type},
             )
         )
+
+    async def get_status(self) -> Dict[str, ArgumentTypes]:
+        """
+            Get the status of this slice.
+        """
+        return {}
 
 
 class Session(object):
@@ -269,6 +371,8 @@ class Session(object):
     id = property(get_id)
 
     def expire(self, timeout: float) -> None:
+        if self.expired:
+            return
         self.expired = True
         if self._callhandle is not None:
             IOLoop.current().remove_timeout(self._callhandle)
@@ -277,14 +381,17 @@ class Session(object):
     def seen(self) -> None:
         self._seen = time.time()
 
-    def _set_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
-        def on_timeout():
-            if not self.expired:
-                LOGGER.warning(log_message)
-            future.set_exception(gen.TimeoutError())
+    async def _handle_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
+        """ A function that awaits a future until its value is ready or until timeout. When the call times out, a message is
+            logged. The future itself will be cancelled.
 
-        timeout_handle = IOLoop.current().add_timeout(IOLoop.current().time() + timeout, on_timeout)
-        future.add_done_callback(lambda _: IOLoop.current().remove_timeout(timeout_handle))
+            This method should be called as a background task. Any other exceptions (which should not occur) will be logged in
+            the background task.
+        """
+        try:
+            await asyncio.wait_for(future, timeout)
+        except asyncio.TimeoutError:
+            LOGGER.warning(log_message)
 
     def put_call(self, call_spec: common.Request, timeout: int = 10) -> asyncio.Future:
         future = asyncio.Future()
@@ -295,28 +402,31 @@ class Session(object):
 
         call_spec.reply_id = reply_id
         self._queue.put(call_spec)
-        self._set_timeout(
-            future, timeout, "Call %s: %s %s for agent %s timed out." % (reply_id, call_spec.method, call_spec.url, self._sid)
+        self._sessionstore.add_background_task(
+            self._handle_timeout(
+                future,
+                timeout,
+                "Call %s: %s %s for agent %s timed out." % (reply_id, call_spec.method, call_spec.url, self._sid),
+            )
         )
         self._replies[reply_id] = future
 
         return future
 
-    @gen.coroutine
-    def get_calls(self) -> Optional[List[common.Request]]:
+    async def get_calls(self) -> Optional[List[common.Request]]:
         """
             Get all calls queued for a node. If no work is available, wait until timeout. This method returns none if a call
             fails.
         """
         try:
             call_list: List[common.Request] = []
-            call = yield self._queue.get(timeout=IOLoop.current().time() + self._interval)
+            call = await self._queue.get(timeout=IOLoop.current().time() + self._interval)
             if call is None:
                 # aborting session
                 return None
             call_list.append(call)
             while self._queue.qsize() > 0:
-                call = yield self._queue.get()
+                call = await self._queue.get()
                 if call is None:
                     # aborting session
                     return None
@@ -357,6 +467,46 @@ class SessionListener(object):
 
 
 # Internals
+class TransportSlice(ServerSlice):
+    """Slice to manage the listening socket"""
+
+    def __init__(self, server: Server):
+        super(TransportSlice, self).__init__(SLICE_TRANSPORT)
+        self.server = server
+
+    def get_dependencies(self) -> List[str]:
+        """All Slices with an http endpoint should depend on this one using :func:`get_dependened_by`"""
+        return []
+
+    async def start(self) -> None:
+        await super(TransportSlice, self).start()
+        await self.server._transport.start(self.server.get_slices().values(), self.server._handlers)
+
+    async def prestop(self) -> None:
+        await super(TransportSlice, self).prestop()
+        LOGGER.debug("Stopping Server Rest Endpoint")
+        await self.server._transport.stop()
+
+    async def stop(self) -> None:
+        await super(TransportSlice, self).stop()
+        await self.server._transport.join()
+
+    async def get_status(self) -> Dict[str, ArgumentTypes]:
+        def format_socket(sock: socket.socket) -> str:
+            sname = sock.getsockname()
+            return f"{sname[0]}:{sname[1]}"
+
+        return {
+            "inflight": self.server._transport.inflight_counter,
+            "running": self.server._transport.running,
+            "sockets": [
+                format_socket(s)
+                for s in self.server._transport._http_server._sockets.values()
+                if s.family in [socket.AF_INET, socket.AF_INET6]
+            ],
+        }
+
+
 class SessionManager(ServerSlice):
     """
         A service that receives method calls over one or more transports
@@ -383,30 +533,21 @@ class SessionManager(ServerSlice):
         # Listeners
         self.listeners: List[SessionListener] = []
 
+    async def get_status(self) -> Dict[str, ArgumentTypes]:
+        return {"hangtime": self.hangtime, "interval": self.interval, "sessions": len(self._sessions)}
+
     def add_listener(self, listener: SessionListener) -> None:
         self.listeners.append(listener)
 
-    @gen.coroutine
-    def prestart(self, server: Server) -> None:
-        """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
-
-    @gen.coroutine
-    def start(self) -> None:
-        """
-            Start the server slice.
-        """
-        yield super().start()
-
-    @gen.coroutine
-    def stop(self) -> None:
-        """
-            Stop the end-point and all of its transports
-        """
-        yield super().stop()
+    async def prestop(self) -> None:
+        await super(SessionManager, self).prestop()
         # terminate all sessions cleanly
         for session in self._sessions.copy().values():
             session.expire(0)
             session.abort()
+
+    def get_depended_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
 
     def validate_sid(self, sid: uuid.UUID) -> bool:
         if isinstance(sid, str):
@@ -436,17 +577,16 @@ class SessionManager(ServerSlice):
 
     def expire(self, session: Session, timeout: float) -> None:
         LOGGER.debug("Expired session with id %s, last seen %d seconds ago" % (session.get_id(), timeout))
+        del self._sessions[session.id]
         for listener in self.listeners:
             listener.expire(session, timeout)
-        del self._sessions[session.id]
 
     def seen(self, session: Session, endpoint_names: List[str]) -> None:
         LOGGER.debug("Seen session with id %s" % (session.get_id()))
         session.seen()
 
     @handle(methods.heartbeat, env="tid")
-    @gen.coroutine
-    def heartbeat(
+    async def heartbeat(
         self, sid: uuid.UUID, env: "inmanta.data.Environment", endpoint_names, nodename
     ) -> Union[int, Tuple[int, Dict[str, str]]]:
         LOGGER.debug("Received heartbeat from %s for agents %s in %s", nodename, ",".join(endpoint_names), env.id)
@@ -454,7 +594,7 @@ class SessionManager(ServerSlice):
         session: Session = self.get_or_create_session(sid, env.id, endpoint_names, nodename)
 
         LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
-        call_list = yield session.get_calls()
+        call_list = await session.get_calls()
         if call_list is not None:
             LOGGER.debug("Pushing %d method calls to node %s", len(call_list), nodename)
             return 200, {"method_calls": call_list}
@@ -464,8 +604,7 @@ class SessionManager(ServerSlice):
         return 200
 
     @handle(methods.heartbeat_reply)
-    @gen.coroutine
-    def heartbeat_reply(
+    async def heartbeat_reply(
         self, sid: uuid.UUID, reply_id: uuid.UUID, data: JsonType
     ) -> Union[int, Tuple[int, Dict[str, str]]]:
         try:

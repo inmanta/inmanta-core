@@ -16,21 +16,30 @@
     Contact: code@inmanta.com
 """
 
-import sys
 import os
-import subprocess
-import pytest
 import re
+import signal
+import subprocess
+import sys
+from subprocess import TimeoutExpired
 from threading import Timer
+
+import pytest
 
 import inmanta.util
 from inmanta import const
-import signal
-from subprocess import TimeoutExpired
 
 
 def get_command(
-    tmp_dir, stdout_log_level=None, log_file=None, log_level_log_file=None, timed=False
+    tmp_dir,
+    stdout_log_level=None,
+    log_file=None,
+    log_level_log_file=None,
+    timed=False,
+    dbport=None,
+    dbname="inmanta",
+    config_dir=None,
+    server_extensions=[],
 ):
     root_dir = tmp_dir.mkdir("root").strpath
     log_dir = os.path.join(root_dir, "log")
@@ -39,7 +48,10 @@ def get_command(
         os.mkdir(directory)
     config_file = os.path.join(root_dir, "inmanta.cfg")
 
-    port = inmanta.util.get_free_tcp_port()
+    if dbport is not None:
+        port = dbport
+    else:
+        port = inmanta.util.get_free_tcp_port()
 
     with open(config_file, "w+") as f:
         f.write("[config]\n")
@@ -47,6 +59,9 @@ def get_command(
         f.write("state-dir=" + state_dir + "\n")
         f.write("[database]\n")
         f.write("port=" + str(port) + "\n")
+        f.write("name=" + dbname + "\n")
+        f.write("[server]\n")
+        f.write(f"enabled_extensions={', '.join(server_extensions)}\n")
 
     args = [sys.executable, "-m", "inmanta.app"]
     if stdout_log_level:
@@ -58,6 +73,8 @@ def get_command(
         args += ["--log-file-level", str(log_level_log_file)]
     if timed:
         args += ["--timed-logs"]
+    if config_dir:
+        args += ["--config-dir", config_dir]
     args += ["-c", config_file, "server"]
     return (args, log_dir)
 
@@ -65,9 +82,7 @@ def get_command(
 def do_run(args, env={}, cwd=None):
     baseenv = os.environ.copy()
     baseenv.update(env)
-    process = subprocess.Popen(
-        args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=baseenv
-    )
+    process = subprocess.Popen(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=baseenv)
     return process
 
 
@@ -90,14 +105,12 @@ def do_kill(process, killtime=3, termtime=2):
 
     out, err = process.communicate()
 
-    print(process.returncode)
-
     t1.cancel()
     t2.cancel()
 
     stdout = convert_to_ascii(out)
     stderr = convert_to_ascii(err)
-    return (stdout, stderr)
+    return (stdout, stderr, process.returncode)
 
 
 def run_without_tty(args, env={}, killtime=3, termtime=2):
@@ -148,10 +161,7 @@ def test_verify_that_colorama_package_is_not_present():
             3,
             False,
             False,
-            [
-                r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint",
-                r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint",
-            ],
+            [r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint", r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint"],
             [],
         ),
         (
@@ -175,21 +185,14 @@ def test_verify_that_colorama_package_is_not_present():
             2,
             False,
             True,
-            [
-                r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint"
-            ],
-            [
-                r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint"
-            ],
+            [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint"],
+            [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint"],
         ),
         (
             3,
             True,
             False,
-            [
-                r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint",
-                r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint",
-            ],
+            [r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint", r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint"],
             [],
         ),
         (
@@ -213,27 +216,21 @@ def test_verify_that_colorama_package_is_not_present():
             2,
             True,
             True,
-            [
-                r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint"
-            ],
-            [
-                r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint"
-            ],
+            [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint"],
+            [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint"],
         ),
     ],
 )
 @pytest.mark.timeout(20)
-def test_no_log_file_set(
-    tmpdir, log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines
-):
+def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines):
     if is_colorama_package_available() and with_tty:
         pytest.skip("Colorama is present")
 
     (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, timed=timed)
     if with_tty:
-        (stdout, _) = run_with_tty(args)
+        (stdout, _, _) = run_with_tty(args)
     else:
-        (stdout, _) = run_without_tty(args)
+        (stdout, _, _) = run_without_tty(args)
     log_file = "server.log"
     assert log_file not in os.listdir(log_dir)
     assert len(stdout) != 0
@@ -276,23 +273,16 @@ def test_no_log_file_set(
     ],
 )
 @pytest.mark.timeout(60)
-def test_log_file_set(
-    tmpdir, log_level, with_tty, regexes_required_lines, regexes_forbidden_lines
-):
+def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regexes_forbidden_lines):
     if is_colorama_package_available() and with_tty:
         pytest.skip("Colorama is present")
 
     log_file = "server.log"
-    (args, log_dir) = get_command(
-        tmpdir,
-        stdout_log_level=log_level,
-        log_file=log_file,
-        log_level_log_file=log_level,
-    )
+    (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, log_file=log_file, log_level_log_file=log_level)
     if with_tty:
-        (stdout, _) = run_with_tty(args)
+        (stdout, _, _) = run_with_tty(args)
     else:
-        (stdout, _) = run_without_tty(args)
+        (stdout, _, _) = run_without_tty(args)
     assert log_file in os.listdir(log_dir)
     log_file = os.path.join(log_dir, log_file)
     with open(log_file, "r") as f:
@@ -303,53 +293,58 @@ def test_log_file_set(
 
 
 def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed):
-    compiled_regexes_requires_lines = get_compiled_regexes(
-        regexes_required_lines, timed
-    )
-    compiled_regexes_forbidden_lines = get_compiled_regexes(
-        regexes_forbidden_lines, timed
-    )
+    compiled_regexes_requires_lines = get_compiled_regexes(regexes_required_lines, timed)
+    compiled_regexes_forbidden_lines = get_compiled_regexes(regexes_forbidden_lines, timed)
     for line in log_lines:
         print(line)
     for regex in compiled_regexes_requires_lines:
         if not any(regex.match(line) for line in log_lines):
-            pytest.fail(
-                "Required pattern was not found in log lines: %s" % (regex.pattern,)
-            )
+            pytest.fail("Required pattern was not found in log lines: %s" % (regex.pattern,))
     for regex in compiled_regexes_forbidden_lines:
         if any(regex.match(line) for line in log_lines):
             pytest.fail("Forbidden pattern found in log lines: %s" % (regex.pattern,))
 
 
 def test_check_shutdown():
-    process = do_run(
-        [sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py")]
-    )
+    process = do_run([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py")])
     # wait for handler to be in place
     try:
         process.communicate(timeout=2)
     except TimeoutExpired:
         pass
     process.send_signal(signal.SIGUSR1)
-    out, err = do_kill(process, killtime=6, termtime=3)
+    out, err, code = do_kill(process, killtime=6, termtime=3)
     print(out, err)
+    assert code == 0
     assert "----- Thread Dump ----" in out
     assert "STOP" in out
     assert "SHUTDOWN COMPLETE" in out
 
 
 def test_check_bad_shutdown():
-    print(
-        [sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"]
-    )
-    process = do_run(
-        [sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"]
-    )
-    out, err = do_kill(process, killtime=5, termtime=2)
+    print([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"])
+    process = do_run([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"])
+    out, err, code = do_kill(process, killtime=5, termtime=2)
     print(out, err)
+    assert code == 3
     assert "----- Thread Dump ----" in out
     assert "STOP" not in out
     assert "SHUTDOWN COMPLETE" not in out
+    assert not err
+
+
+def test_startup_failure(tmpdir, postgres_db, database_name):
+    (args, log_dir) = get_command(tmpdir, dbport=postgres_db.port, dbname=database_name, server_extensions=["badplugin"])
+    pp = ":".join(sys.path)
+    # Add a bad module
+    extrapath = os.path.join(os.path.dirname(__file__), "data", "bad_module_path")
+    (stdout, stderr, code) = run_without_tty(args, env={"PYTHONPATH": pp + ":" + extrapath})
+    assert "inmanta                  ERROR   Server setup failed" in stdout
+    assert (
+        "inmanta.server.protocol.SliceStartupException: "
+        "Slice badplugin.badslice failed to start because: Too bad, this plugin is broken"
+    ) in stdout
+    assert code == 4
 
 
 def test_compiler_exception_output(snippetcompiler):
@@ -365,20 +360,79 @@ o = Test(attr="1234")
 """
     )
 
-    output = """Could not set attribute `attr` on instance `__config__::Test (instantiated at ./main.cf:8)` """ \
+    output = (
+        """Could not set attribute `attr` on instance `__config__::Test (instantiated at ./main.cf:8)` """
         """(reported in Construct(Test) (./main.cf:8))
 caused by:
   Invalid value '1234', expected Number (reported in Construct(Test) (./main.cf:8))
 """
+    )
 
     def exec(*cmd):
-        process = do_run(
-            [sys.executable, "-m", "inmanta.app"] + list(cmd),
-            cwd=snippetcompiler.project_dir,
-        )
+        process = do_run([sys.executable, "-m", "inmanta.app"] + list(cmd), cwd=snippetcompiler.project_dir)
         out, err = process.communicate(timeout=5)
         assert out.decode() == ""
         assert err.decode() == output
 
     exec("compile")
     exec("export", "-J", "out.json")
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.parametrize(
+    "cmd", [(["-X", "compile"]), (["compile", "-X"]), (["compile"]), (["export", "-X"]), (["-X", "export"]), (["export"])]
+)
+def test_minus_x_option(snippetcompiler, cmd):
+    snippetcompiler.setup_for_snippet_external(
+        """
+entity Test:
+    nuber attr
+end
+"""
+    )
+
+    process = do_run([sys.executable, "-m", "inmanta.app"] + cmd, cwd=snippetcompiler.project_dir)
+    out, err = process.communicate(timeout=5)
+    assert out.decode() == ""
+    if "-X" in cmd:
+        assert "inmanta.ast.TypeNotFoundException: could not find type nuber in namespace" in str(err)
+    else:
+        assert "inmanta.ast.TypeNotFoundException: could not find type nuber in namespace" not in str(err)
+
+
+@pytest.mark.timeout(20)
+def test_warning_config_dir_option_on_server_command(tmpdir):
+    non_existing_dir = os.path.join(tmpdir, "non_existing_dir")
+    assert not os.path.isdir(non_existing_dir)
+    (args, _) = get_command(tmpdir, stdout_log_level=3, config_dir=non_existing_dir)
+    (stdout, _, _) = run_without_tty(args)
+    stdout = "".join(stdout)
+    assert "Starting server endpoint" in stdout
+    assert f"Config directory {non_existing_dir} doesn't exist" in stdout
+
+
+@pytest.mark.timeout(20)
+def test_warning_config_options_on_compile_command(snippetcompiler, tmpdir):
+    non_existing_config_dir = os.path.join(tmpdir, "non_existing_config_dir")
+    non_existing_config_file = os.path.join(tmpdir, "non_existing_config_file")
+    snippetcompiler.setup_for_snippet_external(
+        """
+entity Test:
+    number attr
+end
+"""
+    )
+    config_options = ["--config-dir", non_existing_config_dir, "-c", non_existing_config_file, "-vvv"]
+    args = [sys.executable, "-m", "inmanta.app"] + config_options + ["compile"]
+    process = do_run(args, cwd=snippetcompiler.project_dir)
+    out, err = process.communicate(timeout=5)
+    assert process.returncode == 0
+
+    out = out.decode()
+    err = err.decode()
+    all_output = out + err
+
+    assert "Starting compile" in all_output
+    assert "Compile done" in all_output
+    assert f"Config directory {non_existing_config_dir} doesn't exist" not in all_output
+    assert f"Config file {non_existing_config_file} doesn't exist" not in all_output

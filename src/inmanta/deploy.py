@@ -15,19 +15,17 @@
 
     Contact: code@inmanta.com
 """
+import argparse
 import logging
 import os
+import socket
 import subprocess
 import sys
 import time
-import socket
-import argparse
+from typing import Dict, List, Optional, Set, Tuple
 
-from inmanta import module, config, protocol, const, postgresproc
+from inmanta import config, const, module, postgresproc, protocol
 from inmanta.server import config as server_opts
-
-from typing import Optional, Tuple, List, Dict, Set
-
 from inmanta.types import JsonType
 from inmanta.util import get_free_tcp_port
 
@@ -64,7 +62,7 @@ class Deploy(object):
         loud_logger = logging.getLogger("tornado")
         loud_logger.propagate = False
 
-    def _check_result(self, result: protocol.Result, fatal: bool=True) -> protocol.Result:
+    def _check_result(self, result: protocol.Result, fatal: bool = True) -> protocol.Result:
         """ Check the result of a call protocol call. If the result is not 200, issue an error
         """
         if result.code != 200:
@@ -282,9 +280,7 @@ port=%(server_port)s
             os.symlink(full_path, server_env)
 
         if not os.path.exists(os.path.join(full_path, ".git")) and self._options.dashboard:
-            LOGGER.error(
-                "Make sure the project is a git repository, otherwise the embedded server cannot recompile the model."
-            )
+            LOGGER.error("Make sure the project is a git repository, otherwise the embedded server cannot recompile the model.")
 
         return True
 
@@ -353,9 +349,14 @@ port=%(server_port)s
 
         # release the version!
         if not dry_run:
-            self._check_result(self._client.release_version(
-                tid=self._environment_id, id=version, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-            ))
+            self._check_result(
+                self._client.release_version(
+                    tid=self._environment_id,
+                    id=version,
+                    push=True,
+                    agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
+                )
+            )
             if report:
                 self.progress_deploy_report(version)
 

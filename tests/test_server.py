@@ -16,23 +16,24 @@
     Contact: code@inmanta.com
 """
 
-import time
-import logging
-import uuid
-import os
-
-from utils import retry_limited
-import pytest
-from inmanta.agent.agent import Agent
-from inmanta.agent import handler
-from inmanta import data, config, const, loader, resources
-from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, server
-
-from datetime import datetime
-from inmanta.util import hash_file
-from inmanta.export import upload_code, unknown_parameters
 import asyncio
+import logging
+import os
+import time
+import uuid
+from datetime import datetime
 
+import pytest
+
+from inmanta import config, const, data, loader, resources
+from inmanta.agent import handler
+from inmanta.agent.agent import Agent
+from inmanta.export import unknown_parameters, upload_code
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER
+from inmanta.server import config as opt
+from inmanta.server import server
+from inmanta.util import hash_file
+from utils import retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,6 +66,8 @@ async def test_autostart(server, client, environment):
     agentmanager._agent_procs[env.id].proc.terminate()
     await agentmanager._agent_procs[env.id].wait_for_exit(raise_error=False)
     await retry_limited(lambda: len(sessionendpoint._sessions) == 0, 20)
+    # Prevent race condition
+    await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 20)
     res = await agentmanager._ensure_agents(env, ["iaas_agent"])
     assert res
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 3)
@@ -88,8 +91,8 @@ async def test_autostart_dual_env(client, server):
     """
         Test auto start of agent
     """
-    agentmanager = server.get_slice("server").agentmanager
-    sessionendpoint = server.get_slice("session")
+    agentmanager = server.get_slice(SLICE_SERVER).agentmanager
+    sessionendpoint = server.get_slice(SLICE_SESSION_MANAGER)
 
     result = await client.create_project("env-test")
     assert result.code == 200
@@ -152,6 +155,8 @@ async def test_autostart_batched(client, server, environment):
     agentmanager._agent_procs[env.id].proc.terminate()
     await agentmanager._agent_procs[env.id].wait_for_exit(raise_error=False)
     await retry_limited(lambda: len(sessionendpoint._sessions) == 0, 20)
+    # Prevent race condition
+    await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 20)
     res = await agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
     assert res
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 3)
@@ -175,7 +180,7 @@ async def test_version_removal(client, server):
     for _i in range(20):
         version += 1
 
-        await server.get_slice("server")._purge_versions()
+        await server.get_slice(SLICE_SERVER)._purge_versions()
         res = await client.put_version(tid=env_id, version=version, resources=[], unknowns=[], version_info={})
         assert res.code == 200
         result = await client.get_project(id=project_id)
@@ -198,45 +203,56 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
 
     version = 1
 
-    resources = [{'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/etc/sysconfig/network',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'version': version},
-                 {'group': 'root',
-                  'hash': 'b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba',
-                  'id': 'std::File[vm2.dev.inmanta.com,path=/etc/motd],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/etc/motd',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'version': version},
-                 {'group': 'root',
-                  'hash': '3bfcdad9ab7f9d916a954f1a96b28d31d95593e4',
-                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/etc/hostname',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'version': version},
-                 {'id': 'std::Service[vm1.dev.inmanta.com,name=network],v=%d' % version,
-                  'name': 'network',
-                  'onboot': True,
-                  'requires': ['std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version],
-                  'state': 'running',
-                  'version': version}]
+    resources = [
+        {
+            "group": "root",
+            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+            "id": "std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version,
+            "owner": "root",
+            "path": "/etc/sysconfig/network",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "version": version,
+        },
+        {
+            "group": "root",
+            "hash": "b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba",
+            "id": "std::File[vm2.dev.inmanta.com,path=/etc/motd],v=%d" % version,
+            "owner": "root",
+            "path": "/etc/motd",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "version": version,
+        },
+        {
+            "group": "root",
+            "hash": "3bfcdad9ab7f9d916a954f1a96b28d31d95593e4",
+            "id": "std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d" % version,
+            "owner": "root",
+            "path": "/etc/hostname",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "version": version,
+        },
+        {
+            "id": "std::Service[vm1.dev.inmanta.com,name=network],v=%d" % version,
+            "name": "network",
+            "onboot": True,
+            "requires": ["std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version],
+            "state": "running",
+            "version": version,
+        },
+    ]
 
-    res = await client_multi.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[],
-                                         version_info={})
+    res = await client_multi.put_version(
+        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
+    )
     assert res.code == 200
 
     result = await client_multi.list_versions(environment_multi)
@@ -259,9 +275,17 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
 
     action_id = uuid.uuid4()
     now = datetime.now()
-    result = await aclient.resource_action_update(environment_multi,
-                                                  ["std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version],
-                                                  action_id, "deploy", now, now, "deployed", [], {})
+    result = await aclient.resource_action_update(
+        environment_multi,
+        ["std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version],
+        action_id,
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
+    )
 
     assert result.code == 200
 
@@ -271,9 +295,17 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
 
     action_id = uuid.uuid4()
     now = datetime.now()
-    result = await aclient.resource_action_update(environment_multi,
-                                                  ["std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d" % version],
-                                                  action_id, "deploy", now, now, "deployed", [], {})
+    result = await aclient.resource_action_update(
+        environment_multi,
+        ["std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d" % version],
+        action_id,
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
+    )
     assert result.code == 200
 
     result = await client_multi.get_version(environment_multi, version)
@@ -291,25 +323,28 @@ async def test_get_environment(client, server, environment):
 
         resources = []
         for j in range(i):
-            resources.append({
-                'group': 'root',
-                'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                'id': 'std::File[vm1.dev.inmanta.com,path=/tmp/file%d],v=%d' % (j, version),
-                'owner': 'root',
-                'path': '/tmp/file%d' % j,
-                'permissions': 644,
-                'purged': False,
-                'reload': False,
-                'requires': [],
-                'version': version})
+            resources.append(
+                {
+                    "group": "root",
+                    "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+                    "id": "std::File[vm1.dev.inmanta.com,path=/tmp/file%d],v=%d" % (j, version),
+                    "owner": "root",
+                    "path": "/tmp/file%d" % j,
+                    "permissions": 644,
+                    "purged": False,
+                    "reload": False,
+                    "requires": [],
+                    "version": version,
+                }
+            )
 
         res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
         assert res.code == 200
 
     result = await client.get_environment(environment, versions=5, resources=1)
-    assert(result.code == 200)
-    assert(len(result.result["environment"]["versions"]) == 5)
-    assert(len(result.result["environment"]["resources"]) == 9)
+    assert result.code == 200
+    assert len(result.result["environment"]["versions"]) == 5
+    assert len(result.result["environment"]["resources"]) == 9
 
 
 @pytest.mark.asyncio
@@ -325,20 +360,23 @@ async def test_resource_update(postgresql_client, client, server, environment):
 
     resources = []
     for j in range(10):
-        resources.append({
-            'group': 'root',
-            'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-            'id': 'std::File[vm1,path=/tmp/file%d],v=%d' % (j, version),
-            'owner': 'root',
-            'path': '/tmp/file%d' % j,
-            'permissions': 644,
-            'purged': False,
-            'reload': False,
-            'requires': [],
-            'version': version})
+        resources.append(
+            {
+                "group": "root",
+                "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+                "id": "std::File[vm1,path=/tmp/file%d],v=%d" % (j, version),
+                "owner": "root",
+                "path": "/tmp/file%d" % j,
+                "permissions": 644,
+                "purged": False,
+                "reload": False,
+                "requires": [],
+                "version": version,
+            }
+        )
 
     res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert(res.code == 200)
+    assert res.code == 200
 
     result = await client.release_version(environment, version, False)
     assert result.code == 200
@@ -348,52 +386,57 @@ async def test_resource_update(postgresql_client, client, server, environment):
     # Start the deploy
     action_id = uuid.uuid4()
     now = datetime.now()
-    result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy", now,
-                                                  status=const.ResourceState.deploying)
-    assert(result.code == 200)
+    result = await aclient.resource_action_update(
+        environment, resource_ids, action_id, "deploy", now, status=const.ResourceState.deploying
+    )
+    assert result.code == 200
 
     # Get the status from a resource
     result = await client.get_resource(tid=environment, id=resource_ids[0], logs=True)
-    assert(result.code == 200)
+    assert result.code == 200
     logs = {x["action"]: x for x in result.result["logs"]}
 
-    assert("deploy" in logs)
-    assert("finished" not in logs["deploy"])
-    assert("messages" not in logs["deploy"])
-    assert("changes" not in logs["deploy"])
+    assert "deploy" in logs
+    assert "finished" not in logs["deploy"]
+    assert "messages" not in logs["deploy"]
+    assert "changes" not in logs["deploy"]
 
     # Send some logs
-    result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy",
-                                                  status=const.ResourceState.deploying,
-                                                  messages=[data.LogLine.log(const.LogLevel.INFO,
-                                                                             "Test log %(a)s %(b)s", a="a", b="b")])
-    assert(result.code == 200)
+    result = await aclient.resource_action_update(
+        environment,
+        resource_ids,
+        action_id,
+        "deploy",
+        status=const.ResourceState.deploying,
+        messages=[data.LogLine.log(const.LogLevel.INFO, "Test log %(a)s %(b)s", a="a", b="b")],
+    )
+    assert result.code == 200
 
     # Get the status from a resource
     result = await client.get_resource(tid=environment, id=resource_ids[0], logs=True)
-    assert(result.code == 200)
+    assert result.code == 200
     logs = {x["action"]: x for x in result.result["logs"]}
 
-    assert("deploy" in logs)
-    assert("messages" in logs["deploy"])
-    assert(len(logs["deploy"]["messages"]) == 1)
-    assert(logs["deploy"]["messages"][0]["msg"] == "Test log a b")
-    assert("finished" not in logs["deploy"])
-    assert("changes" not in logs["deploy"])
+    assert "deploy" in logs
+    assert "messages" in logs["deploy"]
+    assert len(logs["deploy"]["messages"]) == 1
+    assert logs["deploy"]["messages"][0]["msg"] == "Test log a b"
+    assert "finished" not in logs["deploy"]
+    assert "changes" not in logs["deploy"]
 
     # Finish the deploy
     now = datetime.now()
     changes = {x: {"owner": {"old": "root", "current": "inmanta"}} for x in resource_ids}
     result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy", finished=now, changes=changes)
-    assert(result.code == 400)
+    assert result.code == 400
 
-    result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy",
-                                                  status=const.ResourceState.deployed,
-                                                  finished=now, changes=changes)
-    assert (result.code == 200)
+    result = await aclient.resource_action_update(
+        environment, resource_ids, action_id, "deploy", status=const.ResourceState.deployed, finished=now, changes=changes
+    )
+    assert result.code == 200
 
     result = await client.get_version(environment, version)
-    assert(result.code == 200)
+    assert result.code == 200
     assert result.result["model"]["done"] == 10
     await agent.stop()
 
@@ -458,8 +501,9 @@ async def test_environment_settings(client, server, environment):
     result = await client.delete_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
     assert result.code == 200
 
-    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP, value={"agent1": "", "agent2": "localhost",
-                                                                                           "agent3": "user@agent3"})
+    result = await client.set_setting(
+        tid=environment, id=data.AUTOSTART_AGENT_MAP, value={"agent1": "", "agent2": "localhost", "agent3": "user@agent3"}
+    )
     assert result.code == 200
 
     result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP, value="")
@@ -498,28 +542,34 @@ async def test_purge_on_delete_requires(client, server, environment):
 
     version = 1
 
-    resources = [{'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1,path=/tmp/file1],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/tmp/file1',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'purge_on_delete': True,
-                  'version': version},
-                 {'group': 'root',
-                  'hash': 'b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba',
-                  'id': 'std::File[vm2,path=/tmp/file2],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/tmp/file2',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'purge_on_delete': True,
-                  'requires': ['std::File[vm1,path=/tmp/file1],v=%d' % version],
-                  'version': version}]
+    resources = [
+        {
+            "group": "root",
+            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
+            "owner": "root",
+            "path": "/tmp/file1",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "purge_on_delete": True,
+            "version": version,
+        },
+        {
+            "group": "root",
+            "hash": "b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba",
+            "id": "std::File[vm2,path=/tmp/file2],v=%d" % version,
+            "owner": "root",
+            "path": "/tmp/file2",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "purge_on_delete": True,
+            "requires": ["std::File[vm1,path=/tmp/file1],v=%d" % version],
+            "version": version,
+        },
+    ]
 
     res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert res.code == 200
@@ -529,14 +579,14 @@ async def test_purge_on_delete_requires(client, server, environment):
     assert result.code == 200
 
     now = datetime.now()
-    result = await aclient.resource_action_update(environment,
-                                                  ['std::File[vm1,path=/tmp/file1],v=%d' % version],
-                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    result = await aclient.resource_action_update(
+        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+    )
     assert result.code == 200
 
-    result = await aclient.resource_action_update(environment,
-                                                  ['std::File[vm2,path=/tmp/file2],v=%d' % version],
-                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    result = await aclient.resource_action_update(
+        environment, ["std::File[vm2,path=/tmp/file2],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+    )
     assert result.code == 200
 
     result = await client.get_version(environment, version)
@@ -582,19 +632,23 @@ async def test_purge_on_delete_requires(client, server, environment):
 async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, server, environment, snippetcompiler):
     config.Config.set("compiler_rest_transport", "request_timeout", "1")
 
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
     h = std::Host(name="test", os=std::linux)
     f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
-    """)
+    """
+    )
     version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
 
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["total"] == 1
 
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
     h = std::Host(name="test")
-    """)
+    """
+    )
 
     # force deploy by having unknown
     unknown_parameters.append({"parameter": "a", "source": "b"})
@@ -619,39 +673,47 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
 
     version = 1
 
-    resources = [{'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1,path=/tmp/file1],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/tmp/file1',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'purge_on_delete': True,
-                  'version': version},
-                 {'group': 'root',
-                  'hash': 'b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba',
-                  'id': 'std::File[vm1,path=/tmp/file2],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/tmp/file2',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'purge_on_delete': True,
-                  'requires': ['std::File[vm1,path=/tmp/file1],v=%d' % version],
-                  'version': version},
-                 {'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1,path=/tmp/file3],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/tmp/file3',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'purge_on_delete': True,
-                  'version': version}]
+    resources = [
+        {
+            "group": "root",
+            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
+            "owner": "root",
+            "path": "/tmp/file1",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "purge_on_delete": True,
+            "version": version,
+        },
+        {
+            "group": "root",
+            "hash": "b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba",
+            "id": "std::File[vm1,path=/tmp/file2],v=%d" % version,
+            "owner": "root",
+            "path": "/tmp/file2",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "purge_on_delete": True,
+            "requires": ["std::File[vm1,path=/tmp/file1],v=%d" % version],
+            "version": version,
+        },
+        {
+            "group": "root",
+            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+            "id": "std::File[vm1,path=/tmp/file3],v=%d" % version,
+            "owner": "root",
+            "path": "/tmp/file3",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "purge_on_delete": True,
+            "version": version,
+        },
+    ]
 
     result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
@@ -661,19 +723,19 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
     assert result.code == 200
 
     now = datetime.now()
-    result = await aclient.resource_action_update(environment,
-                                                  ['std::File[vm1,path=/tmp/file1],v=%d' % version],
-                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    result = await aclient.resource_action_update(
+        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+    )
     assert result.code == 200
 
-    result = await aclient.resource_action_update(environment,
-                                                  ['std::File[vm1,path=/tmp/file2],v=%d' % version],
-                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    result = await aclient.resource_action_update(
+        environment, ["std::File[vm1,path=/tmp/file2],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+    )
     assert result.code == 200
 
-    result = await aclient.resource_action_update(environment,
-                                                  ['std::File[vm1,path=/tmp/file3],v=%d' % version],
-                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    result = await aclient.resource_action_update(
+        environment, ["std::File[vm1,path=/tmp/file3],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+    )
     assert result.code == 200
 
     result = await client.get_version(environment, version)
@@ -686,9 +748,13 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
 
     # New version with only file3
     version = 2
-    result = await client.put_version(tid=environment, version=version, resources=[],
-                                      unknowns=[{"parameter": "a", "source": "b"}], version_info={const.EXPORT_META_DATA:
-                                      {const.META_DATA_COMPILE_STATE: const.Compilestate.failed}})
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=[],
+        unknowns=[{"parameter": "a", "source": "b"}],
+        version_info={const.EXPORT_META_DATA: {const.META_DATA_COMPILE_STATE: const.Compilestate.failed}},
+    )
     assert result.code == 200
 
     result = await client.get_version(environment, version)
@@ -709,39 +775,47 @@ async def test_purge_on_delete(client, server, environment):
 
     version = 1
 
-    resources = [{'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1,path=/tmp/file1],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/tmp/file1',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'purge_on_delete': True,
-                  'version': version},
-                 {'group': 'root',
-                  'hash': 'b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba',
-                  'id': 'std::File[vm1,path=/tmp/file2],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/tmp/file2',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'purge_on_delete': True,
-                  'requires': ['std::File[vm1,path=/tmp/file1],v=%d' % version],
-                  'version': version},
-                 {'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1,path=/tmp/file3],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/tmp/file3',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'purge_on_delete': True,
-                  'version': version}]
+    resources = [
+        {
+            "group": "root",
+            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
+            "owner": "root",
+            "path": "/tmp/file1",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "purge_on_delete": True,
+            "version": version,
+        },
+        {
+            "group": "root",
+            "hash": "b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba",
+            "id": "std::File[vm1,path=/tmp/file2],v=%d" % version,
+            "owner": "root",
+            "path": "/tmp/file2",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "purge_on_delete": True,
+            "requires": ["std::File[vm1,path=/tmp/file1],v=%d" % version],
+            "version": version,
+        },
+        {
+            "group": "root",
+            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+            "id": "std::File[vm1,path=/tmp/file3],v=%d" % version,
+            "owner": "root",
+            "path": "/tmp/file3",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "purge_on_delete": True,
+            "version": version,
+        },
+    ]
 
     res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert res.code == 200
@@ -751,19 +825,19 @@ async def test_purge_on_delete(client, server, environment):
     assert result.code == 200
 
     now = datetime.now()
-    result = await aclient.resource_action_update(environment,
-                                                  ['std::File[vm1,path=/tmp/file1],v=%d' % version],
-                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    result = await aclient.resource_action_update(
+        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+    )
     assert result.code == 200
 
-    result = await aclient.resource_action_update(environment,
-                                                  ['std::File[vm1,path=/tmp/file2],v=%d' % version],
-                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    result = await aclient.resource_action_update(
+        environment, ["std::File[vm1,path=/tmp/file2],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+    )
     assert result.code == 200
 
-    result = await aclient.resource_action_update(environment,
-                                                  ['std::File[vm1,path=/tmp/file3],v=%d' % version],
-                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    result = await aclient.resource_action_update(
+        environment, ["std::File[vm1,path=/tmp/file3],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+    )
     assert result.code == 200
 
     result = await client.get_version(environment, version)
@@ -776,17 +850,19 @@ async def test_purge_on_delete(client, server, environment):
 
     # New version with only file3
     version = 2
-    res3 = {'group': 'root',
-            'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-            'id': 'std::File[vm1,path=/tmp/file3],v=%d' % version,
-            'owner': 'root',
-            'path': '/tmp/file3',
-            'permissions': 644,
-            'purged': False,
-            'reload': False,
-            'requires': [],
-            'purge_on_delete': True,
-            'version': version}
+    res3 = {
+        "group": "root",
+        "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+        "id": "std::File[vm1,path=/tmp/file3],v=%d" % version,
+        "owner": "root",
+        "path": "/tmp/file3",
+        "permissions": 644,
+        "purged": False,
+        "reload": False,
+        "requires": [],
+        "purge_on_delete": True,
+        "version": version,
+    }
     result = await client.put_version(tid=environment, version=version, resources=[res3], unknowns=[], version_info={})
     assert result.code == 200
 
@@ -817,17 +893,21 @@ async def test_purge_on_delete_ignore(client, server, environment):
     # Version 1 with purge_on_delete true
     version = 1
 
-    resources = [{'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1,path=/tmp/file1],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/tmp/file1',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'purge_on_delete': True,
-                  'version': version}]
+    resources = [
+        {
+            "group": "root",
+            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
+            "owner": "root",
+            "path": "/tmp/file1",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "purge_on_delete": True,
+            "version": version,
+        }
+    ]
 
     res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert res.code == 200
@@ -837,9 +917,9 @@ async def test_purge_on_delete_ignore(client, server, environment):
     assert result.code == 200
 
     now = datetime.now()
-    result = await aclient.resource_action_update(environment,
-                                                  ['std::File[vm1,path=/tmp/file1],v=%d' % version],
-                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    result = await aclient.resource_action_update(
+        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+    )
     assert result.code == 200
 
     result = await client.get_version(environment, version)
@@ -853,17 +933,21 @@ async def test_purge_on_delete_ignore(client, server, environment):
     # Version 2 with purge_on_delete false
     version = 2
 
-    resources = [{'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1,path=/tmp/file1],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/tmp/file1',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'purge_on_delete': False,
-                  'version': version}]
+    resources = [
+        {
+            "group": "root",
+            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
+            "owner": "root",
+            "path": "/tmp/file1",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "purge_on_delete": False,
+            "version": version,
+        }
+    ]
 
     res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert res.code == 200
@@ -873,9 +957,9 @@ async def test_purge_on_delete_ignore(client, server, environment):
     assert result.code == 200
 
     now = datetime.now()
-    result = await aclient.resource_action_update(environment,
-                                                  ['std::File[vm1,path=/tmp/file1],v=%d' % version],
-                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    result = await aclient.resource_action_update(
+        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+    )
     assert result.code == 200
 
     result = await client.get_version(environment, version)
@@ -937,16 +1021,20 @@ async def test_code_upload(server_multi, client_multi, agent_multi, environment_
     """
     version = 1
 
-    resources = [{'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/etc/sysconfig/network',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'version': version}]
+    resources = [
+        {
+            "group": "root",
+            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+            "id": "std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version,
+            "owner": "root",
+            "path": "/etc/sysconfig/network",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "version": version,
+        }
+    ]
 
     res = await client_multi.put_version(
         tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
@@ -972,10 +1060,12 @@ async def test_batched_code_upload(
     """
     config.Config.set("compiler_rest_transport", "request_timeout", "1")
 
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
     h = std::Host(name="test", os=std::linux)
     f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
-    """)
+    """
+    )
     version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
 
     code_manager = loader.CodeManager()
@@ -1005,18 +1095,23 @@ async def test_batched_code_upload(
 @pytest.mark.asyncio(timeout=30)
 async def test_resource_action_log(server_multi, client_multi, environment_multi):
     version = 1
-    resources = [{'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/etc/sysconfig/network',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'version': version}]
-    res = await client_multi.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[],
-                                         version_info={})
+    resources = [
+        {
+            "group": "root",
+            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+            "id": "std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version,
+            "owner": "root",
+            "path": "/etc/sysconfig/network",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "version": version,
+        }
+    ]
+    res = await client_multi.put_version(
+        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
+    )
     assert res.code == 200
 
     resource_action_log = server.Server.get_resource_action_log_file(environment_multi)

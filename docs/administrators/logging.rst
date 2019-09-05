@@ -86,8 +86,7 @@ file can be found at ``/usr/lib/systemd/system/inmanta-server.service``.
   Type=simple
   User=inmanta
   Group=inmanta
-  ExecStart=/usr/bin/inmanta -c /etc/inmanta/server.cfg --log-file /var/log/inmanta/server.log --log-file-level 2
-  --timed-logs server
+  ExecStart=/usr/bin/inmanta --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs server
   Restart=on-failure
 
   [Install]

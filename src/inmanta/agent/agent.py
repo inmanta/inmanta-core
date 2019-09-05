@@ -16,46 +16,45 @@
     Contact: code@inmanta.com
 """
 
-from concurrent.futures.thread import ThreadPoolExecutor
+import asyncio
 import datetime
 import logging
 import os
 import random
-import uuid
 import time
-import asyncio
+import uuid
+from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
-from tornado import gen, locks, ioloop
-from inmanta import env, const
-from inmanta import protocol
+from tornado import ioloop, locks
+from tornado.concurrent import Future
+
+from inmanta import const, env, protocol
+from inmanta.agent import config as cfg
 from inmanta.agent import handler
+from inmanta.agent.cache import AgentCache
+from inmanta.agent.handler import ResourceHandler
+from inmanta.agent.reporting import collect_report
 from inmanta.loader import CodeLoader
 from inmanta.protocol import SessionEndpoint, methods
-from inmanta.resources import Resource, Id
-from tornado.concurrent import Future
-from inmanta.agent.cache import AgentCache
-from inmanta.agent import config as cfg
-from inmanta.agent.reporting import collect_report
-from typing import Tuple, Optional, Generator, Any, Dict, List, TYPE_CHECKING
-from inmanta.agent.handler import ResourceHandler
-from inmanta.types import NoneGen
+from inmanta.resources import Id, Resource
+from inmanta.util import add_future
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
 
 
 class ResourceActionResult(object):
-
     def __init__(self, success: bool, receive_events: bool, cancel: bool) -> None:
         self.success = success
         self.receive_events = receive_events
         self.cancel = cancel
 
     def __add__(self, other: "ResourceActionResult") -> "ResourceActionResult":
-        return ResourceActionResult(self.success and other.success,
-                                    self.receive_events or other.receive_events,
-                                    self.cancel or other.cancel)
+        return ResourceActionResult(
+            self.success and other.success, self.receive_events or other.receive_events, self.cancel or other.cancel
+        )
 
     def __str__(self) -> str:
         return "%r %r %r" % (self.success, self.receive_events, self.cancel)
@@ -76,7 +75,7 @@ class ResourceAction(object):
 
     def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
         """
-            :param gid A unique identifier to identify a deploy. This is local to this agent.
+            :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
         self.scheduler: "ResourceScheduler" = scheduler
         self.resource: Resource = resource
@@ -104,42 +103,41 @@ class ResourceAction(object):
             LOGGER.info("Cancelled deploy of %s %s", self.gid, self.resource)
             self.future.set_result(ResourceActionResult(False, False, True))
 
-    @gen.coroutine
-    def send_in_progress(self,
-                         action_id: uuid.UUID,
-                         start: float,
-                         status: const.ResourceState = const.ResourceState.deploying) -> NoneGen:
-        yield self.scheduler.get_client().resource_action_update(tid=self.scheduler._env_id,
-                                                                 resource_ids=[str(self.resource.id)],
-                                                                 action_id=action_id,
-                                                                 action=const.ResourceAction.deploy,
-                                                                 started=start,
-                                                                 status=status)
+    async def send_in_progress(
+        self, action_id: uuid.UUID, start: float, status: const.ResourceState = const.ResourceState.deploying
+    ) -> None:
+        await self.scheduler.get_client().resource_action_update(
+            tid=self.scheduler._env_id,
+            resource_ids=[str(self.resource.id)],
+            action_id=action_id,
+            action=const.ResourceAction.deploy,
+            started=start,
+            status=status,
+        )
 
-    @gen.coroutine
-    def _execute(self, ctx: handler.HandlerContext, events: dict, cache: AgentCache, start: float,
-                 event_only: bool=False) -> Generator[Any, Any, Tuple[bool, bool]]:
+    async def _execute(
+        self, ctx: handler.HandlerContext, events: dict, cache: AgentCache, start: float, event_only: bool = False
+    ) -> Tuple[bool, bool]:
         """
-            :param ctx The context to use during execution of this deploy
-            :param events Possible events that are available for this resource
-            :param cache The cache instance to use
+            :param ctx: The context to use during execution of this deploy
+            :param events: Possible events that are available for this resource
+            :param cache: The cache instance to use
             :param event_only: don't execute, only do event propagation
             :param state: start time
             :return (success, send_event) Return whether the execution was successful and whether a change event should be sent
                                           to provides of this resource.
         """
-        ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s",
-                  deploy_id=self.gid, resource_id=self.resource_id)
+        ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
         provider: Optional[ResourceHandler] = None
 
         if not event_only:
-            yield self.send_in_progress(ctx.action_id, start)
+            await self.send_in_progress(ctx.action_id, start)
         else:
-            yield self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
+            await self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
 
         # setup provider
         try:
-            provider = yield self.scheduler.agent.get_provider(self.resource)
+            provider = await self.scheduler.agent.get_provider(self.resource)
         except Exception:
             if provider is not None:
                 provider.close()
@@ -155,14 +153,20 @@ class ResourceAction(object):
 
         # main execution
         if not event_only:
-            send_event = (hasattr(self.resource, "send_event") and self.resource.send_event)
+            send_event = hasattr(self.resource, "send_event") and self.resource.send_event
 
             try:
-                yield self.scheduler.agent.thread_pool.submit(provider.execute, ctx, self.resource)
+                await asyncio.get_event_loop().run_in_executor(
+                    self.scheduler.agent.thread_pool, provider.execute, ctx, self.resource
+                )
+
             except Exception as e:
                 ctx.set_status(const.ResourceState.failed)
-                ctx.exception("An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
-                              resource_id=self.resource.id, exception=repr(e))
+                ctx.exception(
+                    "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
+                    resource_id=self.resource.id,
+                    exception=repr(e),
+                )
 
             if ctx.status is not const.ResourceState.deployed:
                 success = False
@@ -170,15 +174,19 @@ class ResourceAction(object):
         # event processing
         if len(events) > 0 and provider.can_process_events():
             if not event_only:
-                yield self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
+                await self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
             try:
-                ctx.info("Sending events to %(resource_id)s because of modified dependencies",
-                         resource_id=str(self.resource.id))
-                yield self.scheduler.agent.thread_pool.submit(provider.process_events, ctx, self.resource, events)
+                ctx.info(
+                    "Sending events to %(resource_id)s because of modified dependencies", resource_id=str(self.resource.id)
+                )
+
+                await asyncio.get_event_loop().run_in_executor(
+                    self.scheduler.agent.thread_pool, provider.process_events, ctx, self.resource, events
+                )
             except Exception:
-                ctx.exception("Could not send events for %(resource_id)s",
-                              resource_id=str(self.resource.id),
-                              events=str(events))
+                ctx.exception(
+                    "Could not send events for %(resource_id)s", resource_id=str(self.resource.id), events=str(events)
+                )
 
         provider.close()
         cache.close_version(self.resource_id.version)
@@ -186,20 +194,20 @@ class ResourceAction(object):
         return success, send_event
 
     def skipped_because(self, results):
-        return [resource.resource_id.resource_str()
-                for resource, result in zip(self.dependencies, results) if not result.success]
+        return [
+            resource.resource_id.resource_str() for resource, result in zip(self.dependencies, results) if not result.success
+        ]
 
-    @gen.coroutine
-    def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> NoneGen:
+    async def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> None:
         self.logger.log(const.LogLevel.TRACE.value, "Entering %s %s", self.gid, self.resource)
         cache.open_version(self.resource.id.version)
 
         self.dependencies = [generation[x.resource_str()] for x in self.resource.requires]
         waiters = [x.future for x in self.dependencies]
         waiters.append(dummy.future)
-        results = yield waiters
+        results = await asyncio.gather(*waiters)
 
-        with (yield self.scheduler.ratelimiter.acquire()):
+        with (await self.scheduler.ratelimiter.acquire()):
             start = datetime.datetime.now()
             ctx = handler.HandlerContext(self.resource, logger=self.logger)
 
@@ -208,7 +216,7 @@ class ResourceAction(object):
                 resource=str(self.resource.id),
                 deploy_id=self.gid,
                 agent=self.scheduler.agent.name,
-                reason=self.reason
+                reason=self.reason,
             )
 
             self.running = True
@@ -236,9 +244,10 @@ class ResourceAction(object):
                 return
 
             if result.receive_events:
-                received_events = {x.resource_id: dict(status=x.status, change=x.change,
-                                                       changes=x.changes.get(str(x.resource_id), {}))
-                                   for x in self.dependencies}
+                received_events = {
+                    x.resource_id: dict(status=x.status, change=x.change, changes=x.changes.get(str(x.resource_id), {}))
+                    for x in self.dependencies
+                }
             else:
                 received_events = {}
 
@@ -251,13 +260,13 @@ class ResourceAction(object):
                 ctx.info(
                     "Resource %(resource)s skipped due to failed dependency %(failed)s",
                     resource=str(self.resource.id),
-                    failed=self.skipped_because(results)
+                    failed=self.skipped_because(results),
                 )
                 success = False
                 send_event = False
-                yield self._execute(ctx=ctx, events=received_events, cache=cache, event_only=True, start=start)
+                await self._execute(ctx=ctx, events=received_events, cache=cache, event_only=True, start=start)
             else:
-                success, send_event = yield self._execute(ctx=ctx, events=received_events, cache=cache, start=start)
+                success, send_event = await self._execute(ctx=ctx, events=received_events, cache=cache, start=start)
 
             ctx.debug(
                 "End run for resource %(resource)s in deploy %(deploy_id)s", resource=str(self.resource.id), deploy_id=self.gid
@@ -265,14 +274,19 @@ class ResourceAction(object):
 
             end = datetime.datetime.now()
             changes = {str(self.resource.id): ctx.changes}
-            result = yield self.scheduler.get_client().resource_action_update(tid=self.scheduler._env_id,
-                                                                              resource_ids=[str(self.resource.id)],
-                                                                              action_id=ctx.action_id,
-                                                                              action=const.ResourceAction.deploy,
-                                                                              started=start, finished=end, status=ctx.status,
-                                                                              changes=changes,
-                                                                              messages=ctx.logs, change=ctx.change,
-                                                                              send_events=send_event)
+            result = await self.scheduler.get_client().resource_action_update(
+                tid=self.scheduler._env_id,
+                resource_ids=[str(self.resource.id)],
+                action_id=ctx.action_id,
+                action=const.ResourceAction.deploy,
+                started=start,
+                finished=end,
+                status=ctx.status,
+                changes=changes,
+                messages=ctx.logs,
+                change=ctx.change,
+                send_events=send_event,
+            )
             if result.code != 200:
                 LOGGER.error("Resource status update failed %s", result.result)
 
@@ -299,21 +313,22 @@ class ResourceAction(object):
 
 
 class RemoteResourceAction(ResourceAction):
-
     def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str):
         super(RemoteResourceAction, self).__init__(scheduler, None, gid, reason)
         self.resource_id = resource_id
 
-    @gen.coroutine
-    def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> NoneGen:
-        yield dummy.future
+    async def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> None:
+        await dummy.future
         try:
-            result = yield self.scheduler.get_client().get_resource(self.scheduler.agent._env_id, str(self.resource_id),
-                                                                    logs=True, log_action=const.ResourceAction.deploy,
-                                                                    log_limit=1)
+            result = await self.scheduler.get_client().get_resource(
+                self.scheduler.agent._env_id,
+                str(self.resource_id),
+                logs=True,
+                log_action=const.ResourceAction.deploy,
+                log_limit=1,
+            )
             if result.code != 200:
-                LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id),
-                             result.result)
+                LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id), result.result)
 
             status = const.ResourceState[result.result["resource"]["status"]]
             if status in const.TRANSIENT_STATES or self.future.done():
@@ -347,11 +362,13 @@ class RemoteResourceAction(ResourceAction):
         except Exception:
             LOGGER.exception("could not get status for remote resource")
 
-    def notify(self,
-               send_events: bool,
-               status: const.ResourceState,
-               change: const.Change,
-               changes: Dict[str, Dict[str, Dict[str, str]]]) -> None:
+    def notify(
+        self,
+        send_events: bool,
+        status: const.ResourceState,
+        change: const.Change,
+        changes: Dict[str, Dict[str, Dict[str, str]]],
+    ) -> None:
         if not self.future.done():
             self.status = status
             self.change = change
@@ -369,12 +386,9 @@ class ResourceScheduler(object):
     2 - we don't need to figure out exactly when a run is done
     """
 
-    def __init__(self,
-                 agent: "AgentInstance",
-                 env_id: uuid.UUID,
-                 name: str,
-                 cache: AgentCache,
-                 ratelimiter: locks.Semaphore) -> None:
+    def __init__(
+        self, agent: "AgentInstance", env_id: uuid.UUID, name: str, cache: AgentCache, ratelimiter: locks.Semaphore
+    ) -> None:
         self.generation: Dict[str, ResourceAction] = {}
         self.cad: Dict[str, RemoteResourceAction] = {}
         self._env_id = env_id
@@ -404,7 +418,7 @@ class ResourceScheduler(object):
     def is_normal_deploy_running(self) -> bool:
         return not self.finished() and not self.is_repair
 
-    def reload(self, resources, undeployable={}, reason: str="RELOAD", is_repair=False) -> None:
+    def reload(self, resources, undeployable={}, reason: str = "RELOAD", is_repair=False) -> None:
         """
         Schedule a new set of resources for execution.
 
@@ -422,8 +436,7 @@ class ResourceScheduler(object):
                 else:
                     # increment interrupts repair
                     self.logger.info("Interrupting run '%s' for '%s'", self.reason, reason)
-                    self._resume_reason = "Restarting run '%s', interrupted for '%s'" % (self.reason,
-                                                                                         reason)
+                    self._resume_reason = "Restarting run '%s', interrupted for '%s'" % (self.reason, reason)
             else:
                 # now running increment
                 if is_repair:
@@ -467,25 +480,26 @@ class ResourceScheduler(object):
         # Dispatch all actions
         # Will block on dependencies and dummy
         for r in self.generation.values():
-            self.agent.add_future(r.execute(dummy, self.generation, self.cache))
+            add_future(r.execute(dummy, self.generation, self.cache))
 
         # Listen for completion
-        self.agent.add_future(self.mark_deployment_as_finished(self.generation.values(), reason, gid))
+        self.agent.process.add_background_task(self.mark_deployment_as_finished(self.generation.values(), reason, gid))
 
         # Start running
         dummy.future.set_result(ResourceActionResult(True, False, False))
 
-    @gen.coroutine
-    def mark_deployment_as_finished(self, resource_actions, reason, gid):
-        futures = [resource_action.future for resource_action in resource_actions]
-        yield futures  # Wait until deployment finishes
-        with (yield self.agent.critical_ratelimiter.acquire()):
+    async def mark_deployment_as_finished(self, resource_actions, reason, gid):
+        await asyncio.gather(*[resource_action.future for resource_action in resource_actions])
+        with (await self.agent.critical_ratelimiter.acquire()):
             if not self.finished():
                 return
             if self._resume_reason is not None:
                 self.logger.info("Resuming run '%s'", self._resume_reason)
-                self.agent.add_future(self.agent.get_latest_version_for_agent(reason=self._resume_reason,
-                                                                              incremental_deploy=False, is_repair_run=True))
+                self.agent.process.add_background_task(
+                    self.agent.get_latest_version_for_agent(
+                        reason=self._resume_reason, incremental_deploy=False, is_repair_run=True
+                    )
+                )
                 self._resume_reason = None
 
     def notify_ready(self, resourceid, send_events, state, change, changes):
@@ -507,7 +521,6 @@ class ResourceScheduler(object):
 
 
 class AgentInstance(object):
-
     def __init__(self, process: "Agent", name: str, uri: str) -> None:
         self.process = process
         self.name = name
@@ -550,8 +563,7 @@ class AgentInstance(object):
         self._getting_resources = False
         self._get_resource_timeout = 0
 
-    @gen.coroutine
-    def stop(self):
+    async def stop(self):
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
 
@@ -568,9 +580,6 @@ class AgentInstance(object):
 
     def is_enabled(self):
         return self._enabled
-
-    def add_future(self, future):
-        self.process.add_future(future)
 
     def unpause(self):
         if self.is_enabled():
@@ -593,37 +602,38 @@ class AgentInstance(object):
         return 200, "paused"
 
     def _enable_time_triggers(self):
-
-        @gen.coroutine
-        def deploy_action():
+        async def deploy_action():
             now = datetime.datetime.now()
-            yield self.get_latest_version_for_agent(
+            await self.get_latest_version_for_agent(
                 reason="Periodic deploy started at %s" % (now.strftime(const.TIME_LOGFMT)),
                 incremental_deploy=True,
-                is_repair_run=False)
+                is_repair_run=False,
+            )
 
-        @gen.coroutine
-        def repair_action():
+        async def repair_action():
             now = datetime.datetime.now()
-            yield self.get_latest_version_for_agent(
+            await self.get_latest_version_for_agent(
                 reason="Repair run started at %s" % (now.strftime(const.TIME_LOGFMT)),
                 incremental_deploy=False,
-                is_repair_run=True)
+                is_repair_run=True,
+            )
 
         now = datetime.datetime.now()
         if self._deploy_interval > 0:
-            self.logger.info("Scheduling periodic deploy with interval %d and splay %d (first run at %s)",
-                             self._deploy_interval,
-                             self._deploy_splay_value,
-                             (now + datetime.timedelta(seconds=self._deploy_splay_value)).strftime(const.TIME_LOGFMT)
-                             )
+            self.logger.info(
+                "Scheduling periodic deploy with interval %d and splay %d (first run at %s)",
+                self._deploy_interval,
+                self._deploy_splay_value,
+                (now + datetime.timedelta(seconds=self._deploy_splay_value)).strftime(const.TIME_LOGFMT),
+            )
             self._enable_time_trigger(deploy_action, self._deploy_interval, self._deploy_splay_value)
         if self._repair_interval > 0:
-            self.logger.info("Scheduling repair with interval %d and splay %d (first run at %s)",
-                             self._repair_interval,
-                             self._repair_splay_value,
-                             (now + datetime.timedelta(seconds=self._repair_splay_value)).strftime(const.TIME_LOGFMT)
-                             )
+            self.logger.info(
+                "Scheduling repair with interval %d and splay %d (first run at %s)",
+                self._repair_interval,
+                self._repair_splay_value,
+                (now + datetime.timedelta(seconds=self._repair_splay_value)).strftime(const.TIME_LOGFMT),
+            )
             self._enable_time_trigger(repair_action, self._repair_interval, self._repair_splay_value)
 
     def _enable_time_trigger(self, action, interval, splay):
@@ -643,19 +653,22 @@ class AgentInstance(object):
             self.logger.info("Attempting to get resource while get is in progress")
             return False
         if time.time() < self._get_resource_timeout:
-            self.logger.info("Attempting to get resources during backoff %g seconds left, last download took %d seconds",
-                             self._get_resource_timeout - time.time(), self._get_resource_duration)
+            self.logger.info(
+                "Attempting to get resources during backoff %g seconds left, last download took %d seconds",
+                self._get_resource_timeout - time.time(),
+                self._get_resource_duration,
+            )
             return False
         return True
 
-    @gen.coroutine
-    def get_provider(self, resource: Resource) -> Generator[Any, Any, ResourceHandler]:
-        provider = yield self.provider_thread_pool.submit(handler.Commander.get_provider, self._cache, self, resource)
+    async def get_provider(self, resource: Resource) -> ResourceHandler:
+        provider = await asyncio.get_event_loop().run_in_executor(
+            self.provider_thread_pool, handler.Commander.get_provider, self._cache, self, resource
+        )
         provider.set_cache(self._cache)
         return provider
 
-    @gen.coroutine
-    def get_latest_version_for_agent(self, reason="Unknown", incremental_deploy=False, is_repair_run=False):
+    async def get_latest_version_for_agent(self, reason="Unknown", incremental_deploy=False, is_repair_run=False):
         """
             Get the latest version for the given agent (this is also how we are notified)
 
@@ -664,7 +677,7 @@ class AgentInstance(object):
         if not self._can_get_resources():
             self.logger.warning("%s aborted by rate limiter", reason)
             return
-        with (yield self.critical_ratelimiter.acquire()):
+        with (await self.critical_ratelimiter.acquire()):
             if not self._can_get_resources():
                 self.logger.warning("%s aborted by rate limiter", reason)
                 return
@@ -673,8 +686,9 @@ class AgentInstance(object):
             self._getting_resources = True
             start = time.time()
             try:
-                result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name,
-                                                                         incremental_deploy=incremental_deploy)
+                result = await self.get_client().get_resources_for_agent(
+                    tid=self._env_id, agent=self.name, incremental_deploy=incremental_deploy
+                )
             finally:
                 self._getting_resources = False
             end = time.time()
@@ -685,14 +699,12 @@ class AgentInstance(object):
             elif result.code == 409:
                 self.logger.warning("We are not currently primary during %s: %s", reason, result.result)
             elif result.code != 200:
-                self.logger.warning("Got an error while pulling resources for %s. %s",
-                                    reason,
-                                    result.result)
+                self.logger.warning("Got an error while pulling resources for %s. %s", reason, result.result)
 
             else:
                 restypes = set([res["resource_type"] for res in result.result["resources"]])
                 resources = []
-                yield self.process._ensure_code(self._env_id, result.result["version"], restypes)
+                await self.process._ensure_code(self._env_id, result.result["version"], restypes)
                 try:
                     undeployable = {}
                     for res in result.result["resources"]:
@@ -713,16 +725,14 @@ class AgentInstance(object):
                 if len(resources) > 0:
                     self._nq.reload(resources, undeployable, reason=reason, is_repair=is_repair_run)
 
-    @gen.coroutine
-    def dryrun(self, dry_run_id, version):
-        self.add_future(self.do_run_dryrun(version, dry_run_id))
+    async def dryrun(self, dry_run_id, version):
+        self.process.add_background_task(self.do_run_dryrun(version, dry_run_id))
         return 200
 
-    @gen.coroutine
-    def do_run_dryrun(self, version, dry_run_id):
-        with (yield self.dryrunlock.acquire()):
-            with (yield self.ratelimiter.acquire()):
-                result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
+    async def do_run_dryrun(self, version, dry_run_id):
+        with (await self.dryrunlock.acquire()):
+            with (await self.ratelimiter.acquire()):
+                result = await self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
                 if result.code == 404:
                     self.logger.warning("Version %s does not exist, can not run dryrun", version)
                     return
@@ -735,7 +745,7 @@ class AgentInstance(object):
                 restypes = set([res["resource_type"] for res in resources])
 
                 # TODO: handle different versions for dryrun and deploy!
-                yield self.process._ensure_code(self._env_id, version, restypes)
+                await self.process._ensure_code(self._env_id, version, restypes)
 
                 self._cache.open_version(version)
 
@@ -745,10 +755,14 @@ class AgentInstance(object):
                     provider = None
                     try:
                         if const.ResourceState[res["status"]] in const.UNDEPLOYABLE_STATES:
-                            ctx.exception("Skipping %(resource_id)s because in undeployable state %(status)s",
-                                          resource_id=res["id"], status=res["status"])
-                            yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
-                                                                  changes={})
+                            ctx.exception(
+                                "Skipping %(resource_id)s because in undeployable state %(status)s",
+                                resource_id=res["id"],
+                                status=res["status"],
+                            )
+                            await self.get_client().dryrun_update(
+                                tid=self._env_id, id=dry_run_id, resource=res["id"], changes={}
+                            )
                             continue
 
                         data = res["attributes"]
@@ -757,58 +771,75 @@ class AgentInstance(object):
                         self.logger.debug("Running dryrun for %s", resource.id)
 
                         try:
-                            provider = yield self.get_provider(resource)
+                            provider = await self.get_provider(resource)
                         except Exception as e:
-                            ctx.exception("Unable to find a handler for %(resource_id)s (exception: %(exception)s",
-                                          resource_id=str(resource.id), exception=str(e))
-                            yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
-                                                                  changes={"handler": {"current": "FAILED",
-                                                                                       "desired": "Unable to find a handler"}})
+                            ctx.exception(
+                                "Unable to find a handler for %(resource_id)s (exception: %(exception)s",
+                                resource_id=str(resource.id),
+                                exception=str(e),
+                            )
+                            await self.get_client().dryrun_update(
+                                tid=self._env_id,
+                                id=dry_run_id,
+                                resource=res["id"],
+                                changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
+                            )
                         else:
                             try:
-                                yield self.thread_pool.submit(provider.execute, ctx, resource, dry_run=True)
+                                await asyncio.get_event_loop().run_in_executor(
+                                    self.thread_pool, provider.execute, ctx, resource, True
+                                )
+
                                 changes = ctx.changes
                                 if changes is None:
                                     changes = {}
-                                if(ctx.status == const.ResourceState.failed):
+                                if ctx.status == const.ResourceState.failed:
                                     changes["handler"] = {"current": "FAILED", "desired": "Handler failed"}
-                                yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
-                                                                      changes=changes)
+                                await self.get_client().dryrun_update(
+                                    tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
+                                )
                             except Exception as e:
-                                ctx.exception("Exception during dryrun for %(resource_id)s (exception: %(exception)s",
-                                              resource_id=str(resource.id), exception=str(e))
+                                ctx.exception(
+                                    "Exception during dryrun for %(resource_id)s (exception: %(exception)s",
+                                    resource_id=str(resource.id),
+                                    exception=str(e),
+                                )
                                 changes = ctx.changes
                                 if changes is None:
                                     changes = {}
                                 changes["handler"] = {"current": "FAILED", "desired": "Handler failed"}
-                                yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
-                                                                      changes=changes)
+                                await self.get_client().dryrun_update(
+                                    tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
+                                )
 
                     except Exception:
                         ctx.exception("Unable to process resource for dryrun.")
                         changes = {}
                         changes["handler"] = {"current": "FAILED", "desired": "Resource Deserialization Failed"}
-                        yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
-                                                              changes=changes)
+                        await self.get_client().dryrun_update(
+                            tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
+                        )
                     finally:
                         if provider is not None:
                             provider.close()
 
                         finished = datetime.datetime.now()
-                        yield self.get_client().resource_action_update(tid=self._env_id, resource_ids=[res["id"]],
-                                                                       action_id=ctx.action_id,
-                                                                       action=const.ResourceAction.dryrun,
-                                                                       started=started,
-                                                                       finished=finished,
-                                                                       messages=ctx.logs,
-                                                                       status=const.ResourceState.dry)
+                        await self.get_client().resource_action_update(
+                            tid=self._env_id,
+                            resource_ids=[res["id"]],
+                            action_id=ctx.action_id,
+                            action=const.ResourceAction.dryrun,
+                            started=started,
+                            finished=finished,
+                            messages=ctx.logs,
+                            status=const.ResourceState.dry,
+                        )
 
                 self._cache.close_version(version)
 
-    @gen.coroutine
-    def get_facts(self, resource):
-        with (yield self.ratelimiter.acquire()):
-            yield self.process._ensure_code(self._env_id, resource["model"], [resource["resource_type"]])
+    async def get_facts(self, resource):
+        with (await self.ratelimiter.acquire()):
+            await self.process._ensure_code(self._env_id, resource["model"], [resource["resource_type"]])
             ctx = handler.HandlerContext(resource)
             started = datetime.datetime.now()
             provider = None
@@ -820,19 +851,26 @@ class AgentInstance(object):
                 version = resource_obj.id.version
                 try:
                     self._cache.open_version(version)
-                    provider = yield self.get_provider(resource_obj)
-                    result = yield self.thread_pool.submit(provider.check_facts, ctx, resource_obj)
-                    parameters = [{"id": name, "value": value, "resource_id": resource_obj.id.resource_str(), "source": "fact"}
-                                  for name, value in result.items()]
-                    yield self.get_client().set_parameters(tid=self._env_id, parameters=parameters)
+                    provider = await self.get_provider(resource_obj)
+                    result = await asyncio.get_event_loop().run_in_executor(
+                        self.thread_pool, provider.check_facts, ctx, resource_obj
+                    )
+
+                    parameters = [
+                        {"id": name, "value": value, "resource_id": resource_obj.id.resource_str(), "source": "fact"}
+                        for name, value in result.items()
+                    ]
+                    await self.get_client().set_parameters(tid=self._env_id, parameters=parameters)
                     finished = datetime.datetime.now()
-                    yield self.get_client().resource_action_update(tid=self._env_id,
-                                                                   resource_ids=[resource_obj.id.resource_str()],
-                                                                   action_id=ctx.action_id,
-                                                                   action=const.ResourceAction.getfact,
-                                                                   started=started,
-                                                                   finished=finished,
-                                                                   messages=ctx.logs)
+                    await self.get_client().resource_action_update(
+                        tid=self._env_id,
+                        resource_ids=[resource_obj.id.resource_str()],
+                        action_id=ctx.action_id,
+                        action=const.ResourceAction.getfact,
+                        started=started,
+                        finished=finished,
+                        messages=ctx.logs,
+                    )
 
                 except Exception:
                     self.logger.exception("Unable to retrieve fact")
@@ -854,8 +892,7 @@ class Agent(SessionEndpoint):
         message bus for changes.
     """
 
-    def __init__(self, hostname=None, agent_map=None, code_loader=True, environment=None, poolsize=1,
-                 cricital_pool_size=5):
+    def __init__(self, hostname=None, agent_map=None, code_loader=True, environment=None, poolsize=1, cricital_pool_size=5):
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.poolsize = poolsize
@@ -902,18 +939,16 @@ class Agent(SessionEndpoint):
         # defer to start, just to be sure
         self._io_loop = None
 
-    @gen.coroutine
-    def stop(self):
-        yield super(Agent, self).stop()
+    async def stop(self):
+        await super(Agent, self).stop()
         self.thread_pool.shutdown(wait=False)
         for instance in self._instances.values():
-            yield instance.stop()
+            await instance.stop()
 
-    @gen.coroutine
-    def start(self):
+    async def start(self):
         # cache reference to THIS ioloop for handlers to push requests on it
         self._io_loop = ioloop.IOLoop.current()
-        yield super(Agent, self).start()
+        await super(Agent, self).start()
 
     def add_end_point_name(self, name):
         SessionEndpoint.add_end_point_name(self, name)
@@ -937,66 +972,61 @@ class Agent(SessionEndpoint):
         return self._instances[name].pause()
 
     @protocol.handle(methods.set_state)
-    @gen.coroutine
-    def set_state(self, agent, enabled):
+    async def set_state(self, agent, enabled):
         if enabled:
             return self.unpause(agent)
         else:
             return self.pause(agent)
 
-    @gen.coroutine
-    def on_reconnect(self) -> NoneGen:
+    async def on_reconnect(self) -> None:
         for name in self._instances.keys():
-            result = yield self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=name)
+            result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=name)
             if result.code == 200:
                 state = result.result
                 if "enabled" in state and isinstance(state["enabled"], bool):
-                    self.set_state(name, state["enabled"])
+                    await self.set_state(name, state["enabled"])
                 else:
                     LOGGER.warning("Server reported invalid state %s" % (repr(state)))
             else:
                 LOGGER.warning("could not get state from the server")
 
-    @gen.coroutine
-    def on_disconnect(self) -> NoneGen:
+    async def on_disconnect(self) -> None:
         LOGGER.warning("Connection to server lost, taking agents offline")
         for agent_instance in self._instances.values():
             agent_instance.pause("Connection to server lost")
 
-    @gen.coroutine
-    def get_latest_version(self):
+    async def get_latest_version(self):
         """
             Get the latest version of managed resources for all agents
         """
         for agent in self._instances.values():
-            yield agent.get_latest_version_for_agent(reason="call to get_latest_version on agent")
+            await agent.get_latest_version_for_agent(reason="call to get_latest_version on agent")
 
-    @gen.coroutine
-    def _ensure_code(self, environment, version, resourcetypes):
+    async def _ensure_code(self, environment, version, resourcetypes):
         """
             Ensure that the code for the given environment and version is loaded
         """
         if self._loader is not None:
             for rt in resourcetypes:
-                result = yield self._client.get_code(environment, version, rt)
+                result = await self._client.get_code(environment, version, rt)
 
                 if result.code == 200:
                     for hash_value, (path, name, content, requires) in result.result["sources"].items():
                         try:
                             LOGGER.debug("Installing handler %s for %s", rt, name)
-                            yield self._install(hash_value, name, content, requires)
+                            await self._install(hash_value, name, content, requires)
                             LOGGER.debug("Installed handler %s for %s", rt, name)
                         except Exception:
                             LOGGER.exception("Failed to install handler %s for %s", rt, name)
 
-    @gen.coroutine
-    def _install(self, hash_value, module_name, module_source, module_requires):
-        yield self.thread_pool.submit(self._env.install_from_list, module_requires, True)
-        yield self.thread_pool.submit(self._loader.deploy_version, hash_value, module_name, module_source)
+    async def _install(self, hash_value, module_name, module_source, module_requires):
+        loop = asyncio.get_event_loop()
+
+        await loop.run_in_executor(self.thread_pool, self._env.install_from_list, module_requires, True)
+        await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, hash_value, module_name, module_source)
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
-    @gen.coroutine
-    def trigger_update(self, env, agent, incremental_deploy):
+    async def trigger_update(self, env, agent, incremental_deploy):
         """
             Trigger an update
         """
@@ -1007,34 +1037,46 @@ class Agent(SessionEndpoint):
             return 500, "Agent is not _enabled"
 
         LOGGER.info("Agent %s got a trigger to update in environment %s", agent, env)
-        future = self._instances[agent].get_latest_version_for_agent(reason="call to trigger_update",
-                                                                     incremental_deploy=incremental_deploy)
-        self.add_future(future)
+        self.add_background_task(
+            self._instances[agent].get_latest_version_for_agent(
+                reason="call to trigger_update", incremental_deploy=incremental_deploy
+            )
+        )
         return 200
 
     @protocol.handle(methods.resource_event, env="tid", agent="id")
-    @gen.coroutine
-    def resource_event(self, env, agent: str, resource: str, send_events: bool,
-                       state: const.ResourceState, change: const.Change, changes: dict):
+    async def resource_event(
+        self, env, agent: str, resource: str, send_events: bool, state: const.ResourceState, change: const.Change, changes: dict
+    ):
         if env != self._env_id:
-            LOGGER.warning("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
-                           env, agent, resource, state)
+            LOGGER.warning(
+                "received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
+                env,
+                agent,
+                resource,
+                state,
+            )
             return 200
 
         if agent not in self._instances:
-            LOGGER.warning("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
-                           env, agent, resource, state)
+            LOGGER.warning(
+                "received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
+                env,
+                agent,
+                resource,
+                state,
+            )
             return 200
 
-        LOGGER.debug("Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s",
-                     agent, env, agent, resource, state)
+        LOGGER.debug(
+            "Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s", agent, env, agent, resource, state
+        )
         self._instances[agent].notify_ready(resource, send_events, state, change, changes)
 
         return 200
 
     @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
-    @gen.coroutine
-    def run_dryrun(self, env, dry_run_id, agent, version):
+    async def run_dryrun(self, env, dry_run_id, agent, version):
         """
            Run a dryrun of the given version
         """
@@ -1043,10 +1085,9 @@ class Agent(SessionEndpoint):
         if agent not in self._instances:
             return 200
 
-        LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s",
-                    agent, dry_run_id, version, env)
+        LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s", agent, dry_run_id, version, env)
 
-        return (yield self._instances[agent].dryrun(dry_run_id, version))
+        return await self._instances[agent].dryrun(dry_run_id, version)
 
     def check_storage(self):
         """
@@ -1078,14 +1119,12 @@ class Agent(SessionEndpoint):
         return dir_map
 
     @protocol.handle(methods.get_parameter, env="tid")
-    @gen.coroutine
-    def get_facts(self, env, agent, resource):
+    async def get_facts(self, env, agent, resource):
         if agent not in self._instances:
             return 200
 
-        return (yield self._instances[agent].get_facts(resource))
+        return await self._instances[agent].get_facts(resource)
 
     @protocol.handle(methods.get_status)
-    @gen.coroutine
-    def get_status(self):
+    async def get_status(self):
         return 200, collect_report(self)

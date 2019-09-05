@@ -1,6 +1,6 @@
+from _collections import defaultdict
 from inmanta.execute.util import Unknown
 from inmanta.plugins import plugin
-from _collections import defaultdict
 
 
 @plugin

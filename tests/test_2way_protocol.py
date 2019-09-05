@@ -19,36 +19,33 @@
 import logging
 import uuid
 
-from pytest import fixture
-
-from inmanta import data
 import pytest
+from pytest import fixture
 from tornado.gen import sleep
-from utils import retry_limited
-from inmanta.server.protocol import Server, SessionListener, ServerSlice
-from inmanta.server import SLICE_SESSION_MANAGER
-from inmanta.protocol.methods import ENV_OPTS
+
+# Methods need to be defined before the Client class is loaded by Python
+from inmanta import protocol  # NOQA
+from inmanta import data
 from inmanta.protocol import method
+from inmanta.protocol.methods import ENV_OPTS
+from inmanta.server import SLICE_SESSION_MANAGER
+from inmanta.server.protocol import Server, ServerSlice, SessionListener
+from utils import configure, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
 
-@method(method_name="status", operation="GET", index=True)
+@method(path="/status", operation="GET")
 def get_status_x(tid: uuid.UUID):
     pass
 
 
-@method(method_name="status", operation="GET", id=True, server_agent=True, timeout=10)
-def get_agent_status_x(id):
+@method(path="/status/<id>", operation="GET", server_agent=True, timeout=10)
+def get_agent_status_x(id: str):
     pass
 
 
-# Methods need to be defined before the Client class is loaded by Python
-from inmanta import protocol  # NOQA
-
-
 class SessionSpy(SessionListener, ServerSlice):
-
     def __init__(self):
         ServerSlice.__init__(self, "sessionspy")
         self.expires = 0
@@ -78,7 +75,6 @@ class SessionSpy(SessionListener, ServerSlice):
 
 
 class Agent(protocol.SessionEndpoint):
-
     def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
         super(Agent, self).__init__(name, timeout, reconnect_delay)
         self.reconnect = 0
@@ -109,8 +105,8 @@ def no_tid_check():
 
 
 @pytest.mark.asyncio
-async def test_2way_protocol(unused_tcp_port, no_tid_check):
-    configure(unused_tcp_port)
+async def test_2way_protocol(unused_tcp_port, no_tid_check, postgres_db, database_name):
+    configure(unused_tcp_port, database_name, postgres_db.port)
 
     rs = Server()
     server = SessionSpy()
@@ -138,22 +134,6 @@ async def test_2way_protocol(unused_tcp_port, no_tid_check):
     await agent.stop()
 
 
-def configure(unused_tcp_port):
-
-    from inmanta.config import Config
-
-    import inmanta.agent.config  # noqa: F401
-    import inmanta.server.config  # noqa: F401
-
-    free_port = str(unused_tcp_port)
-    Config.load_config()
-    Config.set("server_rest_transport", "port", free_port)
-    Config.set("agent_rest_transport", "port", free_port)
-    Config.set("compiler_rest_transport", "port", free_port)
-    Config.set("client_rest_transport", "port", free_port)
-    Config.set("cmdline_rest_transport", "port", free_port)
-
-
 async def check_sessions(sessions):
     for s in sessions:
         a = await s.client.get_agent_status_x("X")
@@ -162,10 +142,10 @@ async def check_sessions(sessions):
 
 @pytest.mark.slowtest
 @pytest.mark.asyncio(timeout=30)
-async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer):
+async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, postgres_db, database_name):
     from inmanta.config import Config
 
-    configure(unused_tcp_port)
+    configure(unused_tcp_port, database_name, postgres_db.port)
 
     Config.set("server", "agent-timeout", "1")
 
@@ -220,10 +200,10 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer):
 
 @pytest.mark.slowtest
 @pytest.mark.asyncio(timeout=30)
-async def test_server_timeout(unused_tcp_port, no_tid_check, async_finalizer):
+async def test_server_timeout(unused_tcp_port, no_tid_check, async_finalizer, postgres_db, database_name):
     from inmanta.config import Config
 
-    configure(unused_tcp_port)
+    configure(unused_tcp_port, database_name, postgres_db.port)
 
     Config.set("server", "agent-timeout", "1")
 

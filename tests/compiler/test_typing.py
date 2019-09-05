@@ -18,9 +18,8 @@
 
 import pytest
 
-from inmanta.ast import AttributeException
-from inmanta.ast import TypingException
 import inmanta.compiler as compiler
+from inmanta.ast import AttributeException, TypingException
 
 
 def test_lnr_on_double_is_defined(snippetcompiler):

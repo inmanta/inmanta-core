@@ -18,10 +18,8 @@
 
 import pytest
 
-from inmanta.ast import AttributeException
-from inmanta.ast import MultiException
-
 import inmanta.compiler as compiler
+from inmanta.ast import AttributeException, MultiException
 
 
 def test_issue_139_scheduler(snippetcompiler):
@@ -154,22 +152,13 @@ a.requires = b.provides
     # a.requires = b  ==> b.provides = a
     # a.requires = b.provides => a.requires = a ==> a.provides = a
 
-    ab = [
-        alpha.get_attribute("name").get_value()
-        for alpha in a.get_attribute("requires").get_value()
-    ]
+    ab = [alpha.get_attribute("name").get_value() for alpha in a.get_attribute("requires").get_value()]
     assert sorted(ab) == ["a", "b"]
 
-    ab = [
-        alpha.get_attribute("name").get_value()
-        for alpha in a.get_attribute("provides").get_value()
-    ]
+    ab = [alpha.get_attribute("name").get_value() for alpha in a.get_attribute("provides").get_value()]
     assert sorted(ab) == ["a"]
 
-    ab = [
-        alpha.get_attribute("name").get_value()
-        for alpha in b.get_attribute("provides").get_value()
-    ]
+    ab = [alpha.get_attribute("name").get_value() for alpha in b.get_attribute("provides").get_value()]
     assert sorted(ab) == ["a"]
 
 
@@ -215,12 +204,7 @@ b.alink = a
     d = root.lookup("d").get_value()
 
     def get_names(a):
-        return sorted(
-            [
-                alpha.get_attribute("name").get_value()
-                for alpha in a.get_attribute("alink").get_value()
-            ]
-        )
+        return sorted([alpha.get_attribute("name").get_value() for alpha in a.get_attribute("alink").get_value()])
 
     assert get_names(a) == ["a", "b", "c", "d"]
     assert get_names(b) == ["a", "b", "c", "d"]
@@ -270,12 +254,7 @@ b.alink = a
     d = root.lookup("d").get_value()
 
     def get_names(a, name="alink"):
-        return sorted(
-            [
-                alpha.get_attribute("name").get_value()
-                for alpha in a.get_attribute(name).get_value()
-            ]
-        )
+        return sorted([alpha.get_attribute("name").get_value() for alpha in a.get_attribute(name).get_value()])
 
     assert get_names(a) == ["a", "b", "c", "d"]
     assert get_names(b) == ["a", "b", "c", "d"]
@@ -361,15 +340,7 @@ a = Thing(id=5, value=StringWrapper(value="{{a.id}}"))
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
 
-    assert (
-        "5"
-        == root.lookup("a")
-        .get_value()
-        .lookup("value")
-        .get_value()
-        .lookup("value")
-        .get_value()
-    )
+    assert "5" == root.lookup("a").get_value().lookup("value").get_value().lookup("value").get_value()
 
 
 def test_veryhardsequencing(snippetcompiler):

@@ -18,9 +18,8 @@
 
 import pytest
 
-from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import DuplicateException, TypeNotFoundException
 import inmanta.compiler as compiler
+from inmanta.ast import DuplicateException, NotFoundException, TypeNotFoundException, TypingException
 
 
 def test_issue_92(snippetcompiler):
@@ -237,6 +236,5 @@ def test_672_missing_type(snippetcompiler):
         end
 
         """,
-        "could not find type Testt in namespace __config__"
-        " (reported in Implementation(test) ({dir}/main.cf:5))",
+        "could not find type Testt in namespace __config__" " (reported in Implementation(test) ({dir}/main.cf:5))",
     )

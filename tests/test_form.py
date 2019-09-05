@@ -70,7 +70,9 @@ async def test_update_form(client, environment):
     assert len(result.result["form"]["field_options"]) == 2
 
     form_data["attributes"]["sprout"] = {
-        "default": 1, "options": {"min": 1, "max": 100, "widget": "slider", "help": "help"}, "type": "number"
+        "default": 1,
+        "options": {"min": 1, "max": 100, "widget": "slider", "help": "help"},
+        "type": "number",
     }
     result = await client.put_form(tid=environment, id=form_id, form=form_data)
     assert result.code == 200

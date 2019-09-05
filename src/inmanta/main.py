@@ -16,25 +16,22 @@
     Contact: code@inmanta.com
 """
 
-import os
-import logging
-import uuid
 import datetime
 import json
+import logging
+import os
+import uuid
 from collections import defaultdict
+from time import sleep
+from typing import Callable, Dict, List, Optional, cast
 
+import click
+import texttable
 
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
-from inmanta.const import AgentTriggerMethod, TIME_ISOFMT
+from inmanta.const import TIME_ISOFMT, AgentTriggerMethod
 from inmanta.resources import Id
-import click
-import texttable
-from time import sleep
-
-
-from typing import Optional, cast, Dict, List, Callable
-
 from inmanta.types import JsonType
 
 
@@ -57,14 +54,12 @@ class Client(object):
         self._client = protocol.SyncClient("cmdline")
 
     def do_request(
-        self, method_name: str, key_name: Optional[str]=None, arguments: JsonType={}, allow_none: bool=False
+        self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}, allow_none: bool = False
     ) -> Optional[JsonType]:
         """
             Do a request and return the response
         """
-        self.log.debug(
-            "Calling method %s on server %s:%s with arguments %s", method_name, self.host, self.host, arguments
-        )
+        self.log.debug("Calling method %s on server %s:%s with arguments %s", method_name, self.host, self.host, arguments)
 
         if not hasattr(self._client, method_name):
             raise Exception("API call %s is not available." % method_name)
@@ -97,7 +92,7 @@ class Client(object):
 
             raise Exception(("An error occurred while requesting %s" % key_name) + msg)
 
-    def get_list(self, method_name: str, key_name: Optional[str]=None, arguments: JsonType={}) -> List[Dict[str, str]]:
+    def get_list(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> List[Dict[str, str]]:
         """
             Same as do request, but return type is a list of dicts
         """
@@ -135,7 +130,7 @@ class Client(object):
 
         return project_id
 
-    def to_environment_id(self, ref: str, project_id: uuid.UUID=None) -> uuid.UUID:
+    def to_environment_id(self, ref: str, project_id: uuid.UUID = None) -> uuid.UUID:
         """
             Convert ref to an env uuid, optionally scoped to a project
         """
@@ -189,7 +184,7 @@ class Client(object):
         return env_id
 
 
-def print_table(header: List[str], rows: List[List[str]], data_type: List[str]=None) -> None:
+def print_table(header: List[str], rows: List[List[str]], data_type: List[str] = None) -> None:
     width, _ = click.get_terminal_size()
 
     table = texttable.Texttable(max_width=width)
@@ -222,7 +217,7 @@ def project_list(client: Client) -> None:
     projects = client.get_list("list_projects", "projects")
 
     if len(projects) > 0:
-        print_table(['ID', 'Name'], [[n['id'], n['name']] for n in projects])
+        print_table(["ID", "Name"], [[n["id"], n["name"]] for n in projects])
 
     else:
         click.echo("No projects defined.", err=True)
@@ -274,19 +269,28 @@ def environment(ctx: click.Context) -> None:
 @environment.command(name="create")
 @click.option("--name", "-n", help="The name of the new environment", required=True)
 @click.option("--project", "-p", help="The id of the project this environment belongs to", required=True)
-@click.option("--repo-url", "-r", required=False, default="",
-              help="The url of the repository that contains the configuration model")
-@click.option("--branch", "-b", required=False, default="master",
-              help="The branch in the repository that contains the configuration model")
-@click.option("--save", "-s", default=False, is_flag=True,
-              help="Save the ID of the environment and the server to the .inmanta config file")
+@click.option(
+    "--repo-url", "-r", required=False, default="", help="The url of the repository that contains the configuration model"
+)
+@click.option(
+    "--branch",
+    "-b",
+    required=False,
+    default="master",
+    help="The branch in the repository that contains the configuration model",
+)
+@click.option(
+    "--save",
+    "-s",
+    default=False,
+    is_flag=True,
+    help="Save the ID of the environment and the server to the .inmanta config file",
+)
 @click.pass_obj
 def environment_create(client: Client, name: str, project: str, repo_url: str, branch: str, save: bool) -> None:
     project_id = client.to_project_id(project)
     env = client.get_dict(
-        "create_environment",
-        "environment",
-        dict(project_id=project_id, name=name, repository=repo_url, branch=branch)
+        "create_environment", "environment", dict(project_id=project_id, name=name, repository=repo_url, branch=branch)
     )
     project_data = client.get_dict("get_project", "project", {"id": project_id})
 
@@ -303,16 +307,20 @@ port=%(port)s
 [cmdline_rest_transport]
 host=%(host)s
 port=%(port)s
-""" % {"env": env["id"], "host": client.host, "port": client.port}
+""" % {
+            "env": env["id"],
+            "host": client.host,
+            "port": client.port,
+        }
         if os.path.exists(".inmanta"):
             click.echo(".inmanta exits, not writing config", err=True)
         else:
-            with open(".inmanta", 'w') as f:
+            with open(".inmanta", "w") as f:
                 f.write(cfg)
 
     print_table(
-        ['Environment ID', 'Environment name', 'Project ID', 'Project name'],
-        [[env["id"], env["name"], project_data["id"], project_data["name"]]]
+        ["Environment ID", "Environment name", "Project ID", "Project name"],
+        [[env["id"], env["name"], project_data["id"], project_data["name"]]],
     )
 
 
@@ -324,11 +332,11 @@ def environment_list(client: Client) -> None:
     data = []
     for env in environments:
         prj = client.get_dict("get_project", "project", dict(id=env["project"]))
-        prj_name = prj['name']
-        data.append([prj_name, env['project'], env['name'], env['id']])
+        prj_name = prj["name"]
+        data.append([prj_name, env["project"], env["name"], env["id"]])
 
     if len(data) > 0:
-        print_table(['Project name', 'Project ID', 'Environment', 'Environment ID'], data)
+        print_table(["Project name", "Project ID", "Environment", "Environment ID"], data)
     else:
         click.echo("No environment defined.")
 
@@ -339,29 +347,33 @@ def environment_list(client: Client) -> None:
 def environment_show(client: Client, environment: str) -> None:
     env = client.get_dict("get_environment", "environment", dict(id=client.to_environment_id(environment)))
     print_table(
-        ['ID', 'Name', 'Repository URL', 'Branch Name'],
-        [[env["id"], env["name"], env["repo_url"], env["repo_branch"]]],
+        ["ID", "Name", "Repository URL", "Branch Name"], [[env["id"], env["name"], env["repo_url"], env["repo_branch"]]]
     )
 
 
 @environment.command(name="modify")
 @click.option("--name", "-n", help="The name of the new environment", required=True)
-@click.option("--repo-url", "-r", required=False, default="",
-              help="The url of the repository that contains the configuration model")
-@click.option("--branch", "-b", required=False, default="master",
-              help="The branch in the repository that contains the configuration model")
+@click.option(
+    "--repo-url", "-r", required=False, default="", help="The url of the repository that contains the configuration model"
+)
+@click.option(
+    "--branch",
+    "-b",
+    required=False,
+    default="master",
+    help="The branch in the repository that contains the configuration model",
+)
 @click.argument("environment")
 @click.pass_obj
 def environment_modify(client: Client, environment: str, name: str, repo_url: str, branch: str) -> None:
     env = client.get_dict(
         "modify_environment",
         "environment",
-        dict(id=client.to_environment_id(environment), name=name, repository=repo_url, branch=branch)
+        dict(id=client.to_environment_id(environment), name=name, repository=repo_url, branch=branch),
     )
 
     print_table(
-        ['ID', 'Name', 'Repository URL', 'Branch Name'],
-        [[env["id"], env["name"], env["repo_url"], env["repo_branch"]]]
+        ["ID", "Name", "Repository URL", "Branch Name"], [[env["id"], env["name"], env["repo_url"], env["repo_branch"]]]
     )
 
 
@@ -449,7 +461,7 @@ def agent_list(client: Client, environment: str) -> None:
     for agent in agents:
         data.append([agent["name"], agent["environment"], agent["last_failover"]])
 
-    print_table(['Agent', 'Environment', 'Last fail over'], data)
+    print_table(["Agent", "Environment", "Last fail over"], data)
 
 
 @cmd.group("version")
@@ -466,31 +478,36 @@ def version_list(client: Client, environment: str) -> None:
     versions = client.get_list("list_versions", "versions", arguments=dict(tid=env_id))
 
     print_table(
-        ['Created at', 'Version', 'Released', 'Deployed', '# Resources', '# Done', 'State'],
-        [[x['date'], x['version'], x['released'], x['deployed'], x['total'], x['done'], x['result']] for x in versions],
-        ["t", "t", "t", "t", "t", "t", "t"]
+        ["Created at", "Version", "Released", "Deployed", "# Resources", "# Done", "State"],
+        [[x["date"], x["version"], x["released"], x["deployed"], x["total"], x["done"], x["result"]] for x in versions],
+        ["t", "t", "t", "t", "t", "t", "t"],
     )
 
 
 @version.command(name="release")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option("--push", "-p", help="Push the version to the deployment agents", is_flag=True)
-@click.option("--full", help="Make the agents execute a full deploy instead of an incremental deploy. "
-                             "Should be used together with the --push option", is_flag=True)
+@click.option(
+    "--full",
+    help="Make the agents execute a full deploy instead of an incremental deploy. "
+    "Should be used together with the --push option",
+    is_flag=True,
+)
 @click.argument("version")
 @click.pass_obj
 def version_release(client: Client, environment: str, push: bool, full: bool, version: str) -> None:
     env_id = client.to_environment_id(environment)
     if push:
         trigger_method = AgentTriggerMethod.get_agent_trigger_method(full)
-        x = client.get_dict("release_version", "model", dict(tid=env_id, id=version, push=True,
-                                                             agent_trigger_method=trigger_method))
+        x = client.get_dict(
+            "release_version", "model", dict(tid=env_id, id=version, push=True, agent_trigger_method=trigger_method)
+        )
     else:
         x = client.get_dict("release_version", "model", dict(tid=env_id, id=version))
 
     print_table(
-        ['Created at', 'Version', 'Released', 'Deployed', '# Resources', '# Done', 'State'],
-        [[x['date'], x['version'], x['released'], x['deployed'], x['total'], x['done'], x['result']]]
+        ["Created at", "Version", "Released", "Deployed", "# Resources", "# Done", "State"],
+        [[x["date"], x["version"], x["released"], x["deployed"], x["total"], x["done"], x["result"]]],
     )
 
 
@@ -515,14 +532,14 @@ def param_list(client: Client, environment: str) -> None:
         data.append(
             [
                 p["resource_id"],
-                p['name'],
-                p['source'],
-                p['updated'],
-                str(float(datetime.datetime.strptime(p["updated"], TIME_ISOFMT) < when))
+                p["name"],
+                p["source"],
+                p["updated"],
+                str(float(datetime.datetime.strptime(p["updated"], TIME_ISOFMT) < when)),
             ]
         )
 
-    print_table(['Resource', 'Name', 'Source', 'Updated', 'Expired'], data)
+    print_table(["Resource", "Name", "Source", "Updated", "Expired"], data)
 
 
 @param.command(name="set")
@@ -535,19 +552,19 @@ def param_set(client: Client, environment: str, name: str, value: str) -> None:
     # first fetch the parameter
     param_data = cast(
         Optional[Dict[str, str]],
-        client.do_request("get_param", "parameter", dict(tid=tid, id=name, resource_id=""), allow_none=True)
+        client.do_request("get_param", "parameter", dict(tid=tid, id=name, resource_id=""), allow_none=True),
     )
 
     param = {"source": "user", "metadata": {}} if param_data is None else param_data
     param_return = client.get_dict(
         "set_param",
         "parameter",
-        dict(tid=tid, id=name, value=value, source=param["source"], resource_id="", metadata=param["metadata"])
+        dict(tid=tid, id=name, value=value, source=param["source"], resource_id="", metadata=param["metadata"]),
     )
 
     print_table(
-        ['Name', 'Value', 'Source', 'Updated'],
-        [[param_return['name'], param_return['value'], param_return['source'], param_return['updated']]]
+        ["Name", "Value", "Source", "Updated"],
+        [[param_return["name"], param_return["value"], param_return["source"], param_return["updated"]]],
     )
 
 
@@ -565,10 +582,7 @@ def param_get(client: Client, environment: str, name: str, resource: str) -> Non
     # first fetch the parameter
     param = client.get_dict("get_param", "parameter", dict(tid=tid, id=name, resource_id=resource))
 
-    print_table(
-        ['Name', 'Value', 'Source', 'Updated'],
-        [[param['name'], param['value'], param['source'], param['updated']]]
-    )
+    print_table(["Name", "Value", "Source", "Updated"], [[param["name"], param["value"], param["source"], param["updated"]]])
 
 
 @version.command(name="report")
@@ -591,8 +605,10 @@ def version_report(client: Client, environment: str, version: str, l: bool) -> N
 
         for t in sorted(agents[agent].keys()):
             parsed_resource_version_id = Id.parse_id(agents[agent][t][0]["resource_version_id"])
-            click.echo(click.style("Resource type:", bold=True)
-                       + "{type} ({attr})".format(type=t, attr=parsed_resource_version_id.attribute))
+            click.echo(
+                click.style("Resource type:", bold=True)
+                + "{type} ({attr})".format(type=t, attr=parsed_resource_version_id.attribute)
+            )
             click.echo("-" * 72)
 
             for res in agents[agent][t]:
@@ -642,9 +658,9 @@ def form_list(client: Client, environment: str) -> None:
 
     data = []
     for p in result:
-        data.append([p["form_type"], p['form_id']])
+        data.append([p["form_type"], p["form_id"]])
 
-    print_table(['Form Type', 'Form ID'], data)
+    print_table(["Form Type", "Form ID"], data)
 
 
 @form.command(name="show")
@@ -670,11 +686,7 @@ def form_show(client: Client, environment: str, form_type: str) -> None:
 def form_export(client: Client, environment: str, form_type: str) -> None:
     tid = client.to_environment_id(environment)
     form_def = client.get_dict("get_form", "form", arguments=dict(tid=tid, id=form_type))
-    form_records = client.get_list(
-        "list_records",
-        "records",
-        arguments=dict(tid=tid, form_type=form_type, include_record=True)
-    )
+    form_records = client.get_list("list_records", "records", arguments=dict(tid=tid, form_type=form_type, include_record=True))
 
     click.echo(json.dumps({"form_type": form_def, "records": form_records}))
 
@@ -727,20 +739,20 @@ def record_list(client: Client, environment: str, form_type: str, show_all: bool
         result = client.get_list("list_records", "records", arguments=dict(tid=tid, form_type=form_type))
         data = []
         for p in result:
-            data.append([p["id"], p['changed']])
+            data.append([p["id"], p["changed"]])
 
-        print_table(['Record ID', 'Changed'], data)
+        print_table(["Record ID", "Changed"], data)
     else:
         result = client.get_list("list_records", "records", arguments=dict(tid=tid, form_type=form_type, include_record=True))
         fields = []
         data = []
         for p in result:
             fields = p["fields"].keys()
-            values = [p["id"], p['changed']]
+            values = [p["id"], p["changed"]]
             values.extend(p["fields"].values())
             data.append(values)
 
-        allfields = ['Record ID', 'Changed']
+        allfields = ["Record ID", "Changed"]
         allfields.extend(fields)
         print_table(allfields, data)
 
@@ -794,8 +806,7 @@ def record_update(client: Client, environment: str, record: str, field: List[str
         fields[parts[0].strip()] = parts[1].strip()
 
     result = cast(
-        Dict[str, Dict[str, str]],
-        client.do_request("update_record", "record", arguments=dict(tid=tid, id=record, form=fields))
+        Dict[str, Dict[str, str]], client.do_request("update_record", "record", arguments=dict(tid=tid, id=record, form=fields))
     )
 
     values = []
@@ -845,8 +856,7 @@ def monitor_deploy(client: Client, environment: str) -> None:
                 last = done
             sleep(1)
             version = cast(
-                Dict[str, Dict[str, int]],
-                client.get_dict("get_version", arguments=dict(tid=tid, id=int(ident), limit=0))
+                Dict[str, Dict[str, int]], client.get_dict("get_version", arguments=dict(tid=tid, id=int(ident), limit=0))
             )
             done = version["model"]["done"]
         if done != last:
@@ -900,5 +910,5 @@ def main() -> None:
     cmd()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

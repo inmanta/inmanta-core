@@ -1,16 +1,32 @@
+"""
+    Copyright 2019 Inmanta
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
 # Adapted from pyformance
 
 import asyncio
-import time
 import base64
 import logging
+import time
 from asyncio import Task
-
-from pyformance import global_registry, MetricsRegistry
-from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPError
+from typing import Dict, Optional
 from urllib.parse import quote
 
-from typing import Optional, Dict
+from pyformance import MetricsRegistry, global_registry
+from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -23,11 +39,7 @@ DEFAULT_INFLUX_PROTOCOL = "http"
 
 
 class AsyncReporter(object):
-    def __init__(
-        self,
-        registry: MetricsRegistry = None,
-        reporting_interval: int = 30
-    ) -> None:
+    def __init__(self, registry: MetricsRegistry = None, reporting_interval: int = 30) -> None:
         self.registry = registry or global_registry()
         self.reporting_interval = reporting_interval
         self._stopped = False
@@ -56,9 +68,7 @@ class AsyncReporter(object):
             wait = max(0, next_loop_time - loop.time())
             await asyncio.sleep(wait)
 
-    async def report_now(
-        self, registry: MetricsRegistry = None, timestamp: float = None
-    ) -> None:
+    async def report_now(self, registry: MetricsRegistry = None, timestamp: float = None) -> None:
         raise NotImplementedError(self.report_now)
 
 
@@ -94,9 +104,7 @@ class InfluxReporter(AsyncReporter):
         self.tags = tags
         self.key = "metrics"
         if self.tags:
-            tagstring = ",".join(
-                "%s=%s" % (key, value) for key, value in self.tags.items()
-            )
+            tagstring = ",".join("%s=%s" % (key, value) for key, value in self.tags.items())
             self.key = "%s,%s" % (self.key, tagstring)
         self.key = "%s,key=" % self.key
 
@@ -113,18 +121,9 @@ class InfluxReporter(AsyncReporter):
             # Only set if we actually were able to get a successful response
             self._did_create_database = True
         except Exception:
-            LOGGER.warning(
-                "Cannot create database %s to %s",
-                self.database,
-                self.server,
-                exc_info=True
-            )
+            LOGGER.warning("Cannot create database %s to %s", self.database, self.server, exc_info=True)
 
-    async def report_now(
-        self,
-        registry: Optional[MetricsRegistry] = None,
-        timestamp: Optional[float] = None,
-    ):
+    async def report_now(self, registry: Optional[MetricsRegistry] = None, timestamp: Optional[float] = None):
         http_client = AsyncHTTPClient()
 
         if self.autocreate_database and not self._did_create_database:
@@ -135,10 +134,7 @@ class InfluxReporter(AsyncReporter):
         for key, metric_values in metrics.items():
             table = self.key + key
             values = ",".join(
-                [
-                    "%s=%s" % (k, v if type(v) is not str else '"{}"'.format(v))
-                    for (k, v) in metric_values.items()
-                ]
+                ["%s=%s" % (k, v if type(v) is not str else '"{}"'.format(v)) for (k, v) in metric_values.items()]
             )
             line = "%s %s %s" % (table, values, timestamp)
             post_data.append(line)

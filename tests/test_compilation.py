@@ -16,24 +16,22 @@
     Contact: code@inmanta.com
 """
 
-from itertools import groupby
 import os
 import re
 import shutil
 import tempfile
 import unittest
+from itertools import groupby
 
 import pytest
 
-from inmanta import config
-from inmanta.ast import AttributeException
-from inmanta.ast import RuntimeException
 import inmanta.compiler as compiler
+from inmanta import config
+from inmanta.ast import AttributeException, RuntimeException
 from inmanta.module import Project
 
 
 class CompilerBaseTest(object):
-
     def __init__(self, name, mainfile=None):
         config.Config.load_config()
         self.project_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", name)
@@ -54,8 +52,7 @@ class CompilerBaseTest(object):
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
-
-    def __init__(self, methodName='runTest'):  # noqa: N803
+    def __init__(self, methodName="runTest"):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_1")
 
@@ -69,8 +66,7 @@ class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
 
 class TestForCompile(CompilerBaseTest, unittest.TestCase):
-
-    def __init__(self, methodName='runTest'):  # noqa: N803
+    def __init__(self, methodName="runTest"):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_2")
 
@@ -81,8 +77,7 @@ class TestForCompile(CompilerBaseTest, unittest.TestCase):
 
 
 class TestIndexCompileCollision(CompilerBaseTest, unittest.TestCase):
-
-    def __init__(self, methodName='runTest'):  # noqa: N803
+    def __init__(self, methodName="runTest"):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_index_collission")
 
@@ -92,8 +87,7 @@ class TestIndexCompileCollision(CompilerBaseTest, unittest.TestCase):
 
 
 class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
-
-    def __init__(self, methodName='runTest'):  # noqa: N803
+    def __init__(self, methodName="runTest"):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_index")
 
@@ -101,10 +95,11 @@ class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
         (_, scopes) = compiler.do_compile()
         variables = {k: x.get_value() for k, x in scopes.get_child("__config__").scope.slots.items()}
 
-        p = re.compile(r'(f\d+h\d+)(a\d+)?')
+        p = re.compile(r"(f\d+h\d+)(a\d+)?")
 
-        items = [(m.groups()[0], m.groups()[1], v)
-                 for m, v in [(re.search(p, k), v)for k, v in variables.items()] if m is not None]
+        items = [
+            (m.groups()[0], m.groups()[1], v) for m, v in [(re.search(p, k), v) for k, v in variables.items()] if m is not None
+        ]
         groups = groupby(sorted(items, key=lambda x: x[0]), lambda x: x[0])
         firsts = []
         for k, v in groups:
@@ -117,13 +112,15 @@ class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
         for i in range(len(firsts)):
             for j in range(len(firsts)):
                 if not i == j:
-                    self.assertNotEqual(firsts[i][2], firsts[j][2], "Variable %s%s should not be equal to %s%s" % (
-                        firsts[i][0], firsts[i][1], firsts[j][0], firsts[j][1]))
+                    self.assertNotEqual(
+                        firsts[i][2],
+                        firsts[j][2],
+                        "Variable %s%s should not be equal to %s%s" % (firsts[i][0], firsts[i][1], firsts[j][0], firsts[j][1]),
+                    )
 
 
 class TestDoubleSet(CompilerBaseTest, unittest.TestCase):
-
-    def __init__(self, methodName='runTest'):  # noqa: N803
+    def __init__(self, methodName="runTest"):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_double_assign")
 
@@ -133,20 +130,20 @@ class TestDoubleSet(CompilerBaseTest, unittest.TestCase):
 
 
 class TestCompileIssue138(CompilerBaseTest, unittest.TestCase):
-
-    def __init__(self, methodName='runTest'):  # noqa: N803
+    def __init__(self, methodName="runTest"):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_138")
 
     def test_compile(self):
         (types, _) = compiler.do_compile()
-        assert (types['std::Host'].get_all_instances()[0].get_attribute("agent").get_value().
-                get_attribute("names").get_value() is not None)
+        assert (
+            types["std::Host"].get_all_instances()[0].get_attribute("agent").get_value().get_attribute("names").get_value()
+            is not None
+        )
 
 
 class TestCompileluginTyping(CompilerBaseTest, unittest.TestCase):
-
-    def __init__(self, methodName='runTest'):  # noqa: N803
+    def __init__(self, methodName="runTest"):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_plugin_typing")
 
@@ -171,8 +168,7 @@ class TestCompileluginTyping(CompilerBaseTest, unittest.TestCase):
 
 
 class TestCompileluginTypingErr(CompilerBaseTest, unittest.TestCase):
-
-    def __init__(self, methodName='runTest'):  # noqa: N803
+    def __init__(self, methodName="runTest"):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_plugin_typing", "invalid.cf")
 
@@ -181,7 +177,11 @@ class TestCompileluginTypingErr(CompilerBaseTest, unittest.TestCase):
             compiler.do_compile()
         text = e.value.format_trace(indent="  ")
         print(text)
-        assert text == """Exception in plugin test::badtype (reported in test::badtype(c1.items) ({dir}/invalid.cf:16))
+        assert (
+            text
+            == """Exception in plugin test::badtype (reported in test::badtype(c1.items) ({dir}/invalid.cf:16))
 caused by:
   Invalid type for value 'a', should be type test::Item (reported in test::badtype(c1.items) ({dir}/invalid.cf:16))""".format(
-            dir=self.project_dir)
+                dir=self.project_dir
+            )
+        )

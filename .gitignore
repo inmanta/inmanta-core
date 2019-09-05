@@ -1,50 +1,71 @@
+# Compiler artifacts
 *.pyc
 *.pyo
 *.tokens
 *.class
 *.orig
 *.cfc
+__pycache__
 
+# Pydev
 .project
 .pydevproject
 .settings
 
+# Vim et al
 *.swp
-
-run.profile
-
-__pycache__
-
 *~
 
+# Vscode
+.vscode
+
+# Pycharm
+.idea
+
+# Profiler
+run.profile
+
+# Packaging
 dist
 build
-src/*.egg-info
+*.egg-info
 MANIFEST
+.eggs/*
 
+# Test runs
 *.log
 tests/.coverage
 .tox
 junit*.xml
-
-build-result
-/env/
-.cache
-.coverage
-.coverage*
-src/*/parser/parser.out
-src/*/parser/parsetab.py
-.env
-.eggs/*
-docs/reference/modules
-.vscode
-docs/moduleguides
-.idea
 .pytest_cache
 
+# Generated
+src/*/parser/parser.out
+src/*/parser/parsetab.py
+
+# Venv
+.env
+
+# Inmanta Release Tool
+docs/reference/modules
+docs/moduleguides
+
+# Mypy
 .mypy
 .mypy_cache
 mypy
 types
 mypy.xml
 coverage
+
+# Duplicate Files for text_common package, copied by tests_common/copy_files_from_core.py
+tests_common/src/inmanta_tests/conftest.py
+tests_common/src/inmanta_tests/data/*
+tests_common/src/inmanta_tests/utils.py
+
+# ??
+build-result
+/env/
+.cache
+.coverage
+.coverage*

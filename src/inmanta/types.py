@@ -16,8 +16,53 @@
     Contact: code@inmanta.com
 """
 # This file defines named type definition for the Inmanta code base
-from typing import Generator, Any, Tuple, Dict
 
-NoneGen = Generator[Any, Any, None]
+import uuid
+from datetime import datetime
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+
+from pydantic import errors, types
+
+if TYPE_CHECKING:
+    # Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
+    from inmanta.data.model import BaseModel  # noqa: F401
+    from inmanta.protocol.common import ReturnValue  # noqa: F401
+
+
+class StrictNonIntBool(object):
+    """
+    StrictNonIntBool to allow for bools which are not type-coerced and that are not a subclass of int
+    Based on StrictBool from pydantic
+    """
+
+    @classmethod
+    def __get_validators__(cls) -> "types.CallableGenerator":
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, value: Any) -> bool:
+        """
+        Ensure that we only allow bools.
+        """
+        if isinstance(value, bool):
+            return value
+
+        raise errors.StrictBoolError()
+
+
+PrimitiveTypes = Union[uuid.UUID, StrictNonIntBool, int, float, datetime, str]
+SimpleTypes = Union["BaseModel", Enum, PrimitiveTypes]
+
 JsonType = Dict[str, Any]
-Apireturn = Generator[Any, Any, Tuple[int, JsonType]]
+ReturnTupple = Tuple[int, Optional[JsonType]]
+
+ArgumentTypes = Union[SimpleTypes, Sequence[SimpleTypes], Mapping[str, SimpleTypes]]
+
+ReturnTypes = Union[None, ArgumentTypes]
+MethodReturn = Union[ReturnTypes, "ReturnValue[ReturnTypes]"]
+MethodType = Callable[..., MethodReturn]
+
+Apireturn = Union[int, ReturnTupple, "ReturnValue[ReturnTypes]", ReturnTypes]
+Warnings = Optional[List[str]]
+HandlerType = Callable[..., Coroutine[Any, Any, Apireturn]]

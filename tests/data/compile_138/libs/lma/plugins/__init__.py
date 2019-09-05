@@ -19,6 +19,7 @@
 from inmanta import ast
 from inmanta.plugins import plugin
 
+
 @plugin
 def get_lma(host: "std::Host") -> "bool":
     host.host_groups

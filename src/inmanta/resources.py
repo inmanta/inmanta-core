@@ -18,13 +18,11 @@
 
 import logging
 import re
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Type
 
-from inmanta.execute import util, runtime
-from inmanta.execute.proxy import DynamicProxy, UnknownException, UnsetException, DictProxy, SequenceProxy
+from inmanta.execute import runtime, util
+from inmanta.execute.proxy import DictProxy, DynamicProxy, SequenceProxy, UnknownException, UnsetException
 from inmanta.types import JsonType
-
-from typing import Dict, Tuple, Type, Iterator, Optional, List, Set, Any, TYPE_CHECKING, Callable
-
 
 if TYPE_CHECKING:
     from inmanta import export
@@ -49,6 +47,7 @@ class resource(object):  # noqa: N801
                       but it can navigate relations (this value cannot be mapped). For example, the agent argument could be
                       ``host.name``
     """
+
     _resources: Dict[str, Tuple[Type["Resource"], Dict[str, str]]] = {}
 
     def __init__(self, name: str, id_attribute: str, agent: str):
@@ -135,7 +134,6 @@ def to_id(entity: runtime.Instance) -> Optional[str]:
 
 
 class ResourceMeta(type):
-
     @classmethod
     def _get_parent_fields(cls, bases: Type["Resource"]) -> List[str]:
         fields: List[str] = []
@@ -184,6 +182,7 @@ class Resource(metaclass=ResourceMeta):
         itself and all superclasses. If a field it not available directly in the model object the serializer will look for
         static methods in the class with the name "get_$fieldname".
     """
+
     fields: Tuple[str, ...] = ("send_event",)
     model: DynamicProxy
     map: Dict[str, Callable[["export.Exporter", DynamicProxy], Any]]
@@ -200,8 +199,8 @@ class Resource(metaclass=ResourceMeta):
         """
             Convert all requires
 
-            :param resources A dict with a mapping from model objects to resource objects
-            :param ignored_resources A set of model objects that have been ignored (and not converted to resources)
+            :param resources: A dict with a mapping from model objects to resource objects
+            :param ignored_resources: A set of model objects that have been ignored (and not converted to resources)
         """
         for res in resources.values():
             final_requires = set()
@@ -218,9 +217,12 @@ class Resource(metaclass=ResourceMeta):
                         initial_requires.remove(r)
 
                 if len(initial_requires) > 0:
-                    LOGGER.warning("The resource %s had requirements before flattening, but not after flattening."
-                                   " Initial set was %s. Perhaps provides relation is not wired through correctly?",
-                                   res, initial_requires)
+                    LOGGER.warning(
+                        "The resource %s had requirements before flattening, but not after flattening."
+                        " Initial set was %s. Perhaps provides relation is not wired through correctly?",
+                        res,
+                        initial_requires,
+                    )
 
             res.requires = final_requires
 
@@ -229,10 +231,10 @@ class Resource(metaclass=ResourceMeta):
         """
         Convert the given object to a textual id
 
-        :param model_object The object to convert to an id
-        :param entity_name The entity type
-        :param attribute_name The name of the attribute that uniquely identifies the entity
-        :param agent_attribute The "path" to the attribute that defines the agent
+        :param model_object: The object to convert to an id
+        :param entity_name: The entity type
+        :param attribute_name: The name of the attribute that uniquely identifies the entity
+        :param agent_attribute: The "path" to the attribute that defines the agent
         """
         # first get the agent attribute
         path_elements = agent_attribute.split(".")
@@ -250,8 +252,10 @@ class Resource(metaclass=ResourceMeta):
             except UnknownException as e:
                 raise e
             except Exception:
-                raise Exception("Unable to get the name of agent %s belongs to. In path %s, '%s' does not exist"
-                                % (model_object, agent_attribute, el))
+                raise Exception(
+                    "Unable to get the name of agent %s belongs to. In path %s, '%s' does not exist"
+                    % (model_object, agent_attribute, el)
+                )
 
         attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
         if isinstance(attribute_value, util.Unknown):
@@ -260,14 +264,14 @@ class Resource(metaclass=ResourceMeta):
         return Id(entity_name, agent_value, attribute_name, attribute_value)
 
     @classmethod
-    def map_field(cls, exporter: "export.Exporter", entity_name: str, field_name: str, model_object: runtime.Instance) -> str:
+    def map_field(cls, exporter: "export.Exporter", entity_name: str, field_name: str, model_object: DynamicProxy) -> str:
         try:
             try:
                 if hasattr(cls, "get_" + field_name):
                     mthd = getattr(cls, "get_" + field_name)
-                    value = mthd(exporter, DynamicProxy.return_value(model_object))
+                    value = mthd(exporter, model_object)
                 elif hasattr(cls, "map") and field_name in cls.map:
-                    value = cls.map[field_name](exporter, DynamicProxy.return_value(model_object))
+                    value = cls.map[field_name](exporter, model_object)
                 else:
                     value = getattr(model_object, field_name)
 
@@ -283,7 +287,7 @@ class Resource(metaclass=ResourceMeta):
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))
 
     @classmethod
-    def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: runtime.Instance) -> "Resource":
+    def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: DynamicProxy) -> "Resource":
         """
         Build a resource from a given configuration model entity
         """
@@ -295,13 +299,13 @@ class Resource(metaclass=ResourceMeta):
         # build the id of the object
         obj_id = cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
 
+        # map all fields
+        fields = {field: cls.map_field(exporter, entity_name, field, model_object) for field in cls.fields}
+
         obj = cls(obj_id)
-
-        for field in cls.fields:
-            value = cls.map_field(exporter, entity_name, field, model_object)
-            setattr(obj, field, value)
-
+        obj.populate(fields)
         obj.requires = getattr(model_object, "requires")
+
         obj.model = model_object
 
         return obj
@@ -318,15 +322,7 @@ class Resource(metaclass=ResourceMeta):
             raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
 
         obj = cls(obj_id)
-
-        for field in cls.fields:
-            if field in obj_map:
-                setattr(obj, field, obj_map[field])
-            else:
-                raise Exception("Resource with id %s does not have field %s" % (obj_map["id"], field))
-
-        for require in obj_map["requires"]:
-            obj.requires.add(Id.parse_id(require))
+        obj.populate(obj_map)
 
         return obj
 
@@ -336,8 +332,9 @@ class Resource(metaclass=ResourceMeta):
             if field.startswith("_"):
                 raise ResourceException("Resource field names can not start with _, reported in %s" % cls.__name__)
             if field in RESERVED_FOR_RESOURCE:
-                raise ResourceException("Resource %s is a reserved keyword and not a valid field name, reported in %s" %
-                                        (field, cls.__name__))
+                raise ResourceException(
+                    "Resource %s is a reserved keyword and not a valid field name, reported in %s" % (field, cls.__name__)
+                )
 
     def __init__(self, _id: "Id") -> None:
         self.id = _id
@@ -348,9 +345,19 @@ class Resource(metaclass=ResourceMeta):
         if not hasattr(self.__class__, "fields"):
             raise Exception("A resource should have a list of fields")
 
-        else:
-            for field in self.__class__.fields:
-                setattr(self, field, None)
+        for field in self.__class__.fields:
+            setattr(self, field, None)
+
+    def populate(self, fields: JsonType = None):
+        for field in self.__class__.fields:
+            if field in fields:
+                setattr(self, field, fields[field])
+            else:
+                raise Exception("Resource with id %s does not have field %s" % (fields["id"], field))
+        if "requires" in fields:
+            # parse requires into ID's
+            for require in fields["requires"]:
+                self.requires.add(Id.parse_id(require))
 
     def set_version(self, version: int) -> None:
         """
@@ -406,6 +413,7 @@ class PurgeableResource(Resource):
     """
         See :inmanta:entity:`std::PurgeableResource` for more information.
     """
+
     fields = ("purged", "purge_on_delete")
 
 
@@ -413,6 +421,7 @@ class ManagedResource(Resource):
     """
         See :inmanta:entity:`std::ManagedResource` for more information.
     """
+
     fields = ("managed",)
 
     @staticmethod
@@ -420,6 +429,12 @@ class ManagedResource(Resource):
         if not obj.managed:
             raise IgnoreResourceException()
         return obj.managed
+
+
+PARSE_ID_REGEX = re.compile(
+    r"^(?P<id>(?P<type>(?P<ns>[\w-]+::)+(?P<class>[\w-]+))\[(?P<hostname>[^,]+),"
+    r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\])(,v=(?P<version>[0-9]+))?$"
+)
 
 
 class Id(object):
@@ -435,12 +450,13 @@ class Id(object):
         self._version = version
 
     def to_dict(self) -> JsonType:
-        return {"entity_type": self._entity_type,
-                "agent_name": self.agent_name,
-                "attribute": self.attribute,
-                "attribute_value": self.attribute_value,
-                "version": self.version
-                }
+        return {
+            "entity_type": self._entity_type,
+            "agent_name": self.agent_name,
+            "attribute": self.attribute,
+            "attribute_value": self.attribute_value,
+            "version": self.version,
+        }
 
     def get_entity_type(self) -> str:
         return self._entity_type
@@ -512,8 +528,7 @@ class Id(object):
             Parse the resource id and return the type, the hostname and the
             resource identifier.
         """
-        result = re.search(r"^(?P<id>(?P<type>(?P<ns>[\w-]+::)+(?P<class>[\w-]+))\[(?P<hostname>[^,]+),"
-                           r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\])(,v=(?P<version>[0-9]+))?$", resource_id)
+        result = PARSE_ID_REGEX.search(resource_id)
 
         if result is None:
             raise Exception("Invalid id for resource %s" % resource_id)
@@ -555,6 +570,7 @@ class HostNotFoundException(Exception):
 
     def to_action(self):
         from inmanta.data import ResourceAction
+
         ra = ResourceAction()  # @UndefinedVariable
         ra.message = "Failed to access host %s as user %s over ssh." % (self.hostname, self.user)
         ra.data = {"host": self.hostname, "user": self.user, "error": self.error}

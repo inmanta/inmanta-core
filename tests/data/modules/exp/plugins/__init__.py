@@ -24,6 +24,7 @@ class Test(resources.ManagedResource):
     """
         This class represents a service on a system.
     """
+
     fields = ("name", "agent", "field1")
 
     @staticmethod
@@ -36,4 +37,5 @@ class Test2(resources.PurgeableResource):
     """
         This class represents a service on a system.
     """
+
     fields = ("name", "agent", "mydict", "mylist")

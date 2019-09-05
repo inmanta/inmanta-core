@@ -188,6 +188,14 @@ to the new virtual machine. Update ``main.cf`` to the following (or use the cont
 .. code-block:: inmanta
     :linenos:
 
+    import ip
+    import redhat
+    import redhat::epel
+    import apache
+    import mysql
+    import web
+    import drupal
+
     # define the machine we want to deploy Drupal on
     vm1=ip::Host(name="vm1", os=redhat::centos7, ip="192.168.33.101", remote_agent=true,
                  remote_user="vagrant")

@@ -18,9 +18,8 @@
 
 import pytest
 
-from inmanta.ast import TypingException
-from inmanta.ast import DuplicateException
 import inmanta.compiler as compiler
+from inmanta.ast import DuplicateException, TypingException
 from inmanta.execute.proxy import UnsetException
 
 
@@ -198,12 +197,14 @@ typedef Server2 as Server(b="b")
 Server2()
 
 implement Server using std::none
-""")
+"""
+    )
     compiler.do_compile()
 
 
 def test_default_on_relation(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Server:
     string a="a"
     string b
@@ -222,5 +223,6 @@ Server2()
 
 implement Server using std::none
 implement Option using std::none
-""")
+"""
+    )
     compiler.do_compile()

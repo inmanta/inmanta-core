@@ -16,16 +16,17 @@
     Contact: code@inmanta.com
 """
 
-import pytest
+import asyncio
 import os
-import sys
 import shutil
+import sys
+from asyncio import subprocess
+
+import pytest
 
 from inmanta.app import cmd_parser
 from inmanta.config import Config
 from inmanta.const import VersionState
-from asyncio import subprocess
-import asyncio
 
 
 def app(args):
@@ -84,9 +85,7 @@ def test_help_sub(inmanta_config, capsys):
     assert "update" in out
 
 
-@pytest.mark.parametrize("push_method", [([]),
-                                         (["-d"]),
-                                         (["-d", "--full"])])
+@pytest.mark.parametrize("push_method", [([]), (["-d"]), (["-d", "--full"])])
 @pytest.mark.asyncio
 async def test_export(tmpdir, server, client, push_method):
     server_port = Config.get("client_rest_transport", "port")
@@ -94,36 +93,48 @@ async def test_export(tmpdir, server, client, push_method):
 
     result = await client.create_project("test")
     assert result.code == 200
-    proj_id = result.result['project']['id']
+    proj_id = result.result["project"]["id"]
     result = await client.create_environment(proj_id, "test", None, None)
     assert result.code == 200
-    env_id = result.result['environment']['id']
+    env_id = result.result["environment"]["id"]
 
     workspace = tmpdir.mkdir("tmp")
     path_main_file = workspace.join("main.cf")
     path_project_yml_file = workspace.join("project.yml")
     libs_dir = workspace.join("libs")
 
-    content_project_yml_file = """
+    path_project_yml_file.write(
+        f"""
 name: testproject
-modulepath: %s
-downloadpath: %s
+modulepath: {libs_dir}
+downloadpath: {libs_dir}
 repo: https://github.com/inmanta/
-""" % (libs_dir, libs_dir)
-    path_project_yml_file.write(content_project_yml_file)
+"""
+    )
 
-    content_main_file = """
+    path_main_file.write(
+        """
 import ip
 import redhat
 import redhat::epel
 vm1=ip::Host(name="non-existing-machine", os=redhat::centos7, ip="127.0.0.1")
 """
-    path_main_file.write(content_main_file)
+    )
 
     os.chdir(workspace)
 
-    args = [sys.executable, "-m", "inmanta.app", "export", "-e", str(env_id), "--server_port", str(server_port),
-            "--server_address", str(server_host)]
+    args = [
+        sys.executable,
+        "-m",
+        "inmanta.app",
+        "export",
+        "-e",
+        str(env_id),
+        "--server_port",
+        str(server_port),
+        "--server_address",
+        str(server_host),
+    ]
     args += push_method
 
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -139,12 +150,125 @@ vm1=ip::Host(name="non-existing-machine", os=redhat::centos7, ip="127.0.0.1")
 
     result = await client.list_versions(env_id)
     assert result.code == 200
-    assert len(result.result['versions']) == 1
+    assert len(result.result["versions"]) == 1
 
-    details_exported_version = result.result['versions'][0]
+    details_exported_version = result.result["versions"][0]
     if push_method:
-        assert details_exported_version['result'] == VersionState.deploying.name
+        assert details_exported_version["result"] == VersionState.deploying.name
     else:
-        assert details_exported_version['result'] == VersionState.pending.name
+        assert details_exported_version["result"] == VersionState.pending.name
+
+    shutil.rmtree(workspace)
+
+
+@pytest.mark.asyncio
+async def test_export_with_specific_export_plugin(tmpdir):
+    workspace = tmpdir.mkdir("tmp")
+    libs_dir = workspace.join("libs")
+
+    # project.yml
+    path_project_yml_file = workspace.join("project.yml")
+    path_project_yml_file.write(
+        f"""
+name: testproject
+modulepath: {libs_dir}
+downloadpath: {libs_dir}
+repo: https://github.com/inmanta/
+"""
+    )
+
+    # main.cf
+    path_main_file = workspace.join("main.cf")
+    path_main_file.write("import test")
+
+    # test module
+    module_dir = libs_dir.join("test")
+    os.makedirs(module_dir)
+
+    # Module.yml
+    module_yml_file = module_dir.join("module.yml")
+    module_yml_file.write(
+        """
+name: test
+license: test
+version: 1.0.0
+    """
+    )
+
+    # .inmanta
+    dot_inmanta_cfg_file = workspace.join(".inmanta")
+    dot_inmanta_cfg_file.write(
+        """
+[config]
+export=other_exporter
+    """
+    )
+
+    # plugin/__init__.py
+    plugins_dir = module_dir.join("plugins")
+    os.makedirs(plugins_dir)
+    init_file = plugins_dir.join("__init__.py")
+    init_file.write(
+        """
+from inmanta.export import export, Exporter
+
+@export("test_exporter")
+def test_exporter(exporter: Exporter) -> None:
+    print("test_exporter ran")
+
+@export("other_exporter")
+def other_exporter(exporter: Exporter) -> None:
+    print("other_exporter ran")
+    """
+    )
+
+    # model/_init.cf
+    model_dir = module_dir.join("model")
+    os.makedirs(model_dir)
+    init_cf_file = model_dir.join("_init.cf")
+    init_cf_file.write("")
+
+    os.chdir(workspace)
+
+    args = [sys.executable, "-m", "inmanta.app", "export", "--export-plugin", "test_exporter"]
+
+    process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+
+    # Make sure exitcode is zero
+    assert process.returncode == 0
+
+    assert "test_exporter ran" in stdout.decode("utf-8")
+    assert "other_exporter" not in stdout.decode("utf-8")
+
+    # ## Failure
+
+    path_main_file.write(
+        """import test
+
+vm1=std::Host(name="non-existing-machine", os=std::linux)
+
+vm1.name = "other"
+"""
+    )
+
+    process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+
+    # Make sure exitcode is one
+    assert process.returncode == 1
+
+    assert "test_exporter ran" not in stdout.decode("utf-8")
+    assert "other_exporter" not in stdout.decode("utf-8")
 
     shutil.rmtree(workspace)

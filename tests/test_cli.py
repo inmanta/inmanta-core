@@ -17,6 +17,8 @@
 """
 import pytest
 
+from inmanta import data
+
 
 @pytest.mark.asyncio
 async def test_project(server, client, cli):
@@ -129,34 +131,36 @@ async def test_agent(server, client, environment, cli):
     assert result.exit_code == 0
 
 
-@pytest.mark.parametrize("push_method", [([]),
-                                         (["-p"]),
-                                         (["-p", "--full"])])
+@pytest.mark.parametrize("push_method", [([]), (["-p"]), (["-p", "--full"])])
 @pytest.mark.asyncio
 async def test_version(server, client, environment, cli, push_method):
     version = "12345"
-    resources = [{'key': 'key1',
-                  'value': 'value1',
-                  'id': 'test::Resource[agent1,key=key1],v=' + version,
-                  'send_event': False,
-                  'purged': False,
-                  'requires': ['test::Resource[agent1,key=key2],v=' + version],
-                  },
-                 {'key': 'key2',
-                  'value': 'value2',
-                  'id': 'test::Resource[agent1,key=key2],v=' + version,
-                  'send_event': False,
-                  'requires': [],
-                  'purged': False,
-                  },
-                 {'key': 'key3',
-                  'value': None,
-                  'id': 'test::Resource[agent1,key=key3],v=' + version,
-                  'send_event': False,
-                  'requires': [],
-                  'purged': True,
-                  }
-                 ]
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=" + version,
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key2],v=" + version],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=" + version,
+            "send_event": False,
+            "requires": [],
+            "purged": False,
+        },
+        {
+            "key": "key3",
+            "value": None,
+            "id": "test::Resource[agent1,key=key3],v=" + version,
+            "send_event": False,
+            "requires": [],
+            "purged": True,
+        },
+    ]
 
     result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
@@ -180,6 +184,8 @@ async def test_version(server, client, environment, cli, push_method):
 
 @pytest.mark.asyncio
 async def test_param(server, client, environment, cli):
+    await client.set_setting(environment, data.SERVER_COMPILE, False)
+
     result = await cli.run("param", "set", "-e", environment, "--name", "var1", "--value", "value1")
     assert result.exit_code == 0
     assert "value1" in result.output
@@ -196,14 +202,19 @@ async def test_param(server, client, environment, cli):
 @pytest.mark.asyncio
 async def test_form_and_records(server, client, environment, cli):
     form_type = "FormType"
-    result = await client.put_form(tid=environment, id=form_type,
-                                   form={'attributes': {'field1': {'default': 1, 'options': {'min': 1, 'max': 100},
-                                                                   'type': 'number'},
-                                                        'field2': {'default': "", 'options': {}, 'type': 'string'}},
-                                         'options': {},
-                                         'type': form_type}
-                                   )
-    assert(result.code == 200)
+    result = await client.put_form(
+        tid=environment,
+        id=form_type,
+        form={
+            "attributes": {
+                "field1": {"default": 1, "options": {"min": 1, "max": 100}, "type": "number"},
+                "field2": {"default": "", "options": {}, "type": "string"},
+            },
+            "options": {},
+            "type": form_type,
+        },
+    )
+    assert result.code == 200
     form_id = result.result["form"]["id"]
 
     result = await cli.run("form", "list", "-e", environment)
@@ -247,13 +258,18 @@ async def test_form_and_records(server, client, environment, cli):
 @pytest.mark.asyncio
 async def test_import_export(server, client, environment, cli, tmpdir):
     form_type = "FormType"
-    result = await client.put_form(tid=environment, id=form_type,
-                                   form={'attributes': {'field1': {'default': 1, 'options': {'min': 1, 'max': 100},
-                                                                   'type': 'number'},
-                                                        'field2': {'default': "", 'options': {}, 'type': 'string'}},
-                                         'options': {},
-                                         'type': form_type}
-                                   )
+    result = await client.put_form(
+        tid=environment,
+        id=form_type,
+        form={
+            "attributes": {
+                "field1": {"default": 1, "options": {"min": 1, "max": 100}, "type": "number"},
+                "field2": {"default": "", "options": {}, "type": "string"},
+            },
+            "options": {},
+            "type": form_type,
+        },
+    )
     form_id = result.result["form"]["id"]
 
     result = await cli.run("record", "create", "-e", environment, "-t", form_type, "-p", "field1=1234", "-p", "field2=test456")

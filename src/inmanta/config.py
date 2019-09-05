@@ -17,24 +17,24 @@
 """
 
 import base64
-from urllib import request, error
-from collections import defaultdict
-from configparser import ConfigParser, Interpolation
 import json
 import logging
 import os
 import re
+import ssl
 import sys
 import uuid
 import warnings
-import ssl
+from collections import defaultdict
+from configparser import ConfigParser, Interpolation
+from typing import Callable, Dict, Generic, List, Optional, TypeVar, Union, cast
+from urllib import error, request
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
-from inmanta import const
 
-from typing import Optional, Callable, TypeVar, Generic, Dict, List, cast, Union
+from inmanta import const
 
 LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +44,6 @@ def _normalize_name(name: str) -> str:
 
 
 class LenientConfigParser(ConfigParser):
-
     def optionxform(self, name: str) -> str:
         name = _normalize_name(name)
         return super(LenientConfigParser, self).optionxform(name)
@@ -59,17 +58,26 @@ class Config(object):
         return cls.__config_definition
 
     @classmethod
-    def load_config(cls, config_file: str = None) -> None:
+    def load_config(cls, config_file: str = None, config_dir: str = None) -> None:
         """
         Load the configuration file
         """
-        config = LenientConfigParser(interpolation=Interpolation())
+        if config_dir and os.path.isdir(config_dir):
+            cfg_files_in_config_dir = sorted(
+                [os.path.join(config_dir, f) for f in os.listdir(config_dir) if f.endswith(".cfg")]
+            )
+        else:
+            cfg_files_in_config_dir = []
 
-        files = ["/etc/inmanta.cfg", os.path.expanduser("~/.inmanta.cfg"), ".inmanta",
-                 ".inmanta.cfg"]
+        local_dot_inmanta_cfg_files: List[str] = [os.path.expanduser("~/.inmanta.cfg"), ".inmanta", ".inmanta.cfg"]
+
+        # Files with a higher index in the list, override config options defined by files with a lower index
         if config_file is not None:
-            files.append(config_file)
+            files = [config_file] + cfg_files_in_config_dir + local_dot_inmanta_cfg_files
+        else:
+            files = cfg_files_in_config_dir + local_dot_inmanta_cfg_files
 
+        config = LenientConfigParser(interpolation=Interpolation())
         config.read(files)
         cls.__instance = config
 
@@ -137,8 +145,10 @@ class Config(object):
             return
         opt = cls.__config_definition[section][name]
         if default_value is not None and opt.get_default_value() != default_value:
-            LOGGER.warning("Inconsistent default value for option %s.%s: defined as %s, got %s" %
-                        (section, name, opt.default, default_value))
+            LOGGER.warning(
+                "Inconsistent default value for option %s.%s: defined as %s, got %s"
+                % (section, name, opt.default, default_value)
+            )
 
         return opt
 
@@ -203,6 +213,7 @@ def is_uuid_opt(value: str) -> uuid.UUID:
 
 T = TypeVar("T")
 
+
 class Option(Generic[T]):
     """
     Defines an option and exposes it for use
@@ -230,7 +241,7 @@ class Option(Generic[T]):
         default: Union[str, bool, int, None, Callable],
         documentation: str,
         validator: Callable[[str], T] = is_str,
-        predecessor_option: "Option" = None
+        predecessor_option: "Option" = None,
     ) -> None:
         self.section = section
         self.name = _normalize_name(name)
@@ -246,8 +257,10 @@ class Option(Generic[T]):
             has_deprecated_option = cfg.has_option(self.predecessor_option.section, self.predecessor_option.name)
             has_new_option = cfg.has_option(self.section, self.name)
             if has_deprecated_option and not has_new_option:
-                warnings.warn("Config option %s is deprecated. Use %s instead." % (self.predecessor_option.name, self.name),
-                              category=DeprecationWarning)
+                warnings.warn(
+                    "Config option %s is deprecated. Use %s instead." % (self.predecessor_option.name, self.name),
+                    category=DeprecationWarning,
+                )
                 return self.predecessor_option.get()
         out = cfg.get(self.section, self.name, fallback=self.get_default_value())
         return self.validate(out)
@@ -260,9 +273,9 @@ class Option(Generic[T]):
     def get_default_desc(self) -> str:
         defa = self.default
         if callable(defa):
-            return "$%s" % defa.__doc__
+            return "%s" % defa.__doc__
         else:
-            return defa
+            return f"``{defa}``"
 
     def validate(self, value: str) -> T:
         return self.validator(value)
@@ -276,8 +289,20 @@ class Option(Generic[T]):
 
     def set(self, value: str) -> None:
         """ Only for tests"""
-        cfg = Config._get_instance()
-        cfg.set(self.section, self.name, value)
+        Config.set(self.section, self.name, value)
+
+
+def option_as_default(opt: Option[T]) -> Callable[[], T]:
+    """
+    Wrap an option to be used as default value
+    """
+
+    def default_func():
+        return opt.get()
+
+    default_func.__doc__ = f""":inmanta.config:option:`{opt.section}.{opt.name}`"""
+    return default_func
+
 
 #############################
 # Config
@@ -285,15 +310,18 @@ class Option(Generic[T]):
 # Global config options are defined here
 #############################
 # flake8: noqa: H904
-state_dir = Option("config", "state_dir", "/var/lib/inmanta",
-                   "The directory where the server stores its state")
+state_dir: Option[str] = Option("config", "state_dir", "/var/lib/inmanta", "The directory where the server stores its state")
 
-log_dir = Option("config", "log_dir", "/var/log/inmanta",
-                 "The directory where the resource action log is stored and the logs of auto-started agents.")
+log_dir = Option(
+    "config",
+    "log_dir",
+    "/var/log/inmanta",
+    "The directory where the resource action log is stored and the logs of auto-started agents.",
+)
 
 
 def get_executable():
-    """os.path.abspath(sys.argv[0]) """
+    """``os.path.abspath(sys.argv[0])``"""
     try:
         return os.path.abspath(sys.argv[0])
     except:
@@ -301,13 +329,13 @@ def get_executable():
 
 
 def get_default_nodename():
-    """ socket.gethostname() """
+    """``socket.gethostname()``"""
     import socket
+
     return socket.gethostname()
 
 
-nodename = Option("config", "node-name", get_default_nodename,
-                  "Force the hostname of this machine to a specific value", is_str)
+nodename = Option("config", "node-name", get_default_nodename, "Force the hostname of this machine to a specific value", is_str)
 
 
 ###############################
@@ -317,22 +345,24 @@ class TransportConfig(object):
     """
         A class to register the config options for Client classes
     """
-    def __init__(self, name: str, port: int=8888) -> None:
+
+    def __init__(self, name: str, port: int = 8888) -> None:
         self.prefix = "%s_rest_transport" % name
         self.host = Option(self.prefix, "host", "localhost", "IP address or hostname of the server", is_str)
         self.port = Option(self.prefix, "port", port, "Server port", is_int)
         self.ssl = Option(self.prefix, "ssl", False, "Connect using SSL?", is_bool)
-        self.ssl_ca_cert_file = Option(self.prefix, "ssl_ca_cert_file", None,
-                                       "CA cert file used to validate the server certificate against", is_str_opt)
+        self.ssl_ca_cert_file = Option(
+            self.prefix, "ssl_ca_cert_file", None, "CA cert file used to validate the server certificate against", is_str_opt
+        )
         self.token = Option(self.prefix, "token", None, "The bearer token to use to connect to the API", is_str_opt)
-        self.request_timeout = Option(self.prefix, "request_timeout", 120, "The time before a request times out in seconds", is_int)
+        self.request_timeout = Option(
+            self.prefix, "request_timeout", 120, "The time before a request times out in seconds", is_int
+        )
 
 
 compiler_transport = TransportConfig("compiler")
 TransportConfig("client")
 cmdline_rest_transport = TransportConfig("cmdline")
-# LCM support should move to a server extension
-service_api_transport = TransportConfig("service_api", port=8889)
 
 
 #############################
@@ -340,10 +370,12 @@ service_api_transport = TransportConfig("service_api", port=8889)
 #############################
 AUTH_JWT_PREFIX = "auth_jwt_"
 
+
 class AuthJWTConfig(object):
     """
         Auth JWT configuration manager
     """
+
     sections: Dict[str, "AuthJWTConfig"] = {}
     issuers: Dict[str, "AuthJWTConfig"] = {}
 
@@ -486,8 +518,7 @@ class AuthJWTConfig(object):
         numbers = RSAPublicNumbers(ei, ni)
         public_key = numbers.public_key(backend=default_backend())
         pem = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
+            encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo
         )
         return pem
 
@@ -513,12 +544,13 @@ class AuthJWTConfig(object):
 
         try:
             with request.urlopen(self.jwks_uri, context=ctx) as response:
-                key_data = json.loads(response.read().decode('utf-8'))
+                key_data = json.loads(response.read().decode("utf-8"))
         except error.URLError as e:
             # HTTPError is raised for non-200 responses; the response
             # can be found in e.response.
-            raise ValueError("Unable to load key data for %s using the provided jwks_uri. Got error: %s" %
-                             (self.section, e.response))
+            raise ValueError(
+                "Unable to load key data for %s using the provided jwks_uri. Got error: %s" % (self.section, e.response)
+            )
         except Exception as e:
             # Other errors are possible, such as IOError.
             raise ValueError("Unable to load key data for %s using the provided jwks_uri." % (self.section))

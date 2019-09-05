@@ -15,25 +15,53 @@
 
     Contact: code@inmanta.com
 """
-
-import inspect
 import enum
-import uuid
-import logging
-import json
 import gzip
+import inspect
 import io
+import json
+import logging
+import re
 import time
+import uuid
+from collections import defaultdict
+from datetime import datetime
+from enum import Enum
+from inspect import Parameter
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Coroutine,
+    Dict,
+    Generic,
+    Iterable,
+    List,
+    MutableMapping,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+    get_type_hints,
+)
+from urllib import parse
 
 import jwt
-
+import pydantic
+import typing_inspect
+from pydantic.error_wrappers import ValidationError
+from pydantic.main import create_model
 from tornado import web
-from urllib import parse
-from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator, cast, TYPE_CHECKING  # noqa: F401
 
-from inmanta import execute, const, util
 from inmanta import config as inmanta_config
-from inmanta.types import JsonType
+from inmanta import const, execute, util
+from inmanta.data.model import BaseModel
+from inmanta.protocol.exceptions import BadRequest
+from inmanta.types import HandlerType, JsonType, MethodType
+
 from . import exceptions
 
 if TYPE_CHECKING:
@@ -48,7 +76,13 @@ class ArgOption(object):
         Argument options to transform arguments before dispatch
     """
 
-    def __init__(self, header: Optional[str] = None, reply_header: bool = True, getter: Optional[Generator] = None) -> None:
+    def __init__(
+        self,
+        getter: Callable[[Any, Dict[str, str]], Coroutine[Any, Any, Any]],
+        # Type is Any to Any because it transforms from method to handler but in the current typing there is no link
+        header: Optional[str] = None,
+        reply_header: bool = True,
+    ) -> None:
         """
             :param header: Map this argument to a header with the following name.
             :param reply_header: If the argument is mapped to a header, this header will also be included in the reply
@@ -65,7 +99,7 @@ class Request(object):
         A protocol request
     """
 
-    def __init__(self, url: str, method: str, headers: Dict[str, str], body: Dict[str, Any]) -> None:
+    def __init__(self, url: str, method: str, headers: Dict[str, str], body: Optional[JsonType]) -> None:
         self._url = url
         self._method = method
         self._headers = headers
@@ -73,7 +107,7 @@ class Request(object):
         self._reply_id: Optional[uuid.UUID] = None
 
     @property
-    def body(self) -> Dict[str, Any]:
+    def body(self) -> Optional[JsonType]:
         return self._body
 
     @property
@@ -96,15 +130,15 @@ class Request(object):
 
     reply_id = property(get_reply_id, set_reply_id)
 
-    def to_dict(self) -> Dict[str, Any]:
-        return_dict: Dict[str, Any] = {"url": self._url, "headers": self._headers, "body": self._body, "method": self._method}
+    def to_dict(self) -> JsonType:
+        return_dict: JsonType = {"url": self._url, "headers": self._headers, "body": self._body, "method": self._method}
         if self._reply_id is not None:
             return_dict["reply_id"] = self._reply_id
 
         return return_dict
 
     @classmethod
-    def from_dict(cls, value: Dict[str, Any]) -> "Request":
+    def from_dict(cls, value: JsonType) -> "Request":
         reply_id: Optional[str] = None
         if "reply_id" in value:
             reply_id = cast(str, value["reply_id"])
@@ -118,18 +152,68 @@ class Request(object):
         return req
 
 
+T = TypeVar("T", bound=BaseModel)
+
+
+class ReturnValue(Generic[T]):
+    """
+        An object that handlers can return to provide a response to a method call.
+    """
+
+    def __init__(self, status_code: int = 200, headers: MutableMapping[str, str] = {}, response: Optional[T] = None) -> None:
+        self._status_code = status_code
+        self._headers = headers
+        self._response = response
+
+    @property
+    def status_code(self) -> int:
+        return self._status_code
+
+    @property
+    def headers(self) -> MutableMapping[str, str]:
+        return self._headers
+
+    def get_body(self, wrap_data: bool = False) -> Optional[BaseModel]:
+        """ Get the response body
+
+            :param wrap_data: Should the response be mapped into a data key
+        """
+        if self._response is None:
+            return None
+
+        if wrap_data:
+            return {"data": self._response}
+
+        return self._response
+
+    def __repr__(self) -> str:
+        return f"ReturnValue<code={self.status_code} headers=<{self.headers}> response=<{self._response}>>"
+
+    def __str__(self) -> str:
+        return repr(self)
+
+
 class Response(object):
     """
         A response object of a call
     """
 
-    def __init__(self, status_code: int, headers: Dict[str, str], body: Optional[Dict[str, Any]] = None) -> None:
+    @classmethod
+    def create(
+        cls, result: ReturnValue, additional_headers: MutableMapping[str, str] = {}, wrap_data: bool = False
+    ) -> "Response":
+        """
+            Create a response from a return value
+        """
+        return cls(status_code=result.status_code, headers=additional_headers, body=result.get_body(wrap_data))
+
+    def __init__(self, status_code: int, headers: Dict[str, str], body: Optional[JsonType] = None) -> None:
         self._status_code = status_code
         self._headers = headers
         self._body = body
 
     @property
-    def body(self) -> Optional[Dict[str, Any]]:
+    def body(self) -> Optional[JsonType]:
         return self._body
 
     @property
@@ -141,6 +225,66 @@ class Response(object):
         return self._status_code
 
 
+class InvalidPathException(Exception):
+    """ This exception is raised when a path definition is invalid.
+    """
+
+
+class UrlPath(object):
+    """ Class to handle manipulation of method paths
+    """
+
+    def __init__(self, path: str) -> None:
+        self._path = path
+        self._vars = self._parse_path()
+
+    def _parse_path(self) -> List[str]:
+        if self._path[0] != "/":
+            raise InvalidPathException(f"{self._path} should start with a /")
+
+        return re.findall("<([^<>]+)>", self._path)
+
+    def validate_vars(self, method_vars: Iterable[str], function_name: str) -> None:
+        """ Are all variable defined in the method
+        """
+        for var in self._vars:
+            if var not in method_vars:
+                raise InvalidPathException(f"Variable {var} in path {self._path} is not defined in function {function_name}.")
+
+    @property
+    def path(self) -> str:
+        return self._path
+
+    def generate_path(self, variables: Dict[str, str]) -> str:
+        """ Create a path with all variables substituted
+        """
+        path = self._path
+        for var in self._vars:
+            if var not in variables:
+                raise KeyError(f"No value provided for variable {var}")
+            path = path.replace(f"<{var}>", variables[var])
+
+        return path
+
+    def generate_regex_path(self) -> str:
+        """ Generate a path that uses regex named groups for tornado
+        """
+        path = self._path
+        for var in self._vars:
+            path = path.replace(f"<{var}>", f"(?P<{var}>[^/]+)")
+
+        return path
+
+
+class InvalidMethodDefinition(Exception):
+    """ This exception is raised when the definition of a method is invalid.
+    """
+
+
+VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
+VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime)
+
+
 class MethodProperties(object):
     """
         This class stores the information from a method definition
@@ -150,10 +294,8 @@ class MethodProperties(object):
 
     def __init__(
         self,
-        function: Callable[..., Dict[str, Any]],
-        method_name: str,
-        index: bool,
-        id: bool,
+        function: MethodType,
+        path: str,
         operation: str,
         reply: bool,
         arg_options: Dict[str, ArgOption],
@@ -164,17 +306,18 @@ class MethodProperties(object):
         validate_sid: Optional[bool],
         client_types: List[str],
         api_version: int,
+        api_prefix: str,
+        wrap_data: bool,
+        typed: bool = False,
     ) -> None:
         """
             Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
             and model the protocol.
 
-            :param method_name: The method name in the url
-            :param index: A method that returns a list of resources. The url of this method is only the method/resource name.
-            :param id: This method requires an id of a resource. The python function should have an id parameter.
+            :param path: The path in the url
             :param operation: The type of HTTP operation (verb)
             :param timeout: nr of seconds before request it terminated
-            :param api This is a call from the client to the Server (True if not server_agent and not agent_server)
+            :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
             :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
             :param agent_server: This is a call from the Agent to the Server
             :param validate_sid: This call requires a valid session, true by default if agent_server and not api
@@ -182,7 +325,9 @@ class MethodProperties(object):
             :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg
                                 to which the options apply.
             :param api_version: The version of the api this method belongs to
-
+            :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
+            :param wrap_data: Put the response of the call under a "data" key.
+            :param typed: Is the method definition typed or not
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -190,9 +335,7 @@ class MethodProperties(object):
         if validate_sid is None:
             validate_sid = agent_server and not api
 
-        self._method_name = method_name
-        self._index = index
-        self._id = id
+        self._path = UrlPath(path)
         self._operation = operation
         self._reply = reply
         self._arg_options = arg_options
@@ -203,15 +346,172 @@ class MethodProperties(object):
         self._validate_sid: bool = validate_sid
         self._client_types = client_types
         self._api_version = api_version
+        self._api_prefix = api_prefix
+        self._wrap_data = wrap_data
         self.function = function
-
-        MethodProperties.methods[function.__name__] = self
-        function.__method_properties__ = self
 
         # validate client types
         for ct in self._client_types:
             if ct not in const.VALID_CLIENT_TYPES:
-                raise Exception("Invalid client type %s specified for function %s" % (ct, function))
+                raise InvalidMethodDefinition("Invalid client type %s specified for function %s" % (ct, function))
+
+        self._validate_function_types(typed)
+        self.argument_validator = self.arguments_to_pydantic()
+
+    def validate_arguments(self, values: Dict[str, Any]) -> Dict[str, Any]:
+        """
+            Validate methods arguments. Values is a dict with key/value pairs for the arguments (similar to kwargs). This method
+            validates and converts types if required (e.g. str to int). The returns value has the correct typing to dispatch
+            to method handlers.
+        """
+        try:
+            out = self.argument_validator(**values)
+            return {f: getattr(out, f) for f in out.fields.keys()}
+        except ValidationError as e:
+            error_msg = f"Failed to validate argument\n{str(e)}"
+            LOGGER.exception(error_msg)
+            raise BadRequest(error_msg, e.errors())
+
+    def arguments_to_pydantic(self) -> Type[pydantic.BaseModel]:
+        """
+            Convert the method arguments to a pydantic model that allows to validate a message body with pydantic
+        """
+        sig = inspect.signature(self.function)
+
+        def to_tuple(param: Parameter):
+            if param.annotation is Parameter.empty:
+                return (Any, param.default if param.default is not Parameter.empty else None)
+            if param.default is not Parameter.empty:
+                return (param.annotation, param.default)
+            else:
+                return (param.annotation, None)
+
+        return create_model(
+            f"{self.function.__name__}_arguments", **{param.name: to_tuple(param) for param in sig.parameters.values()}
+        )
+
+    def arguments_in_url(self) -> bool:
+        return self.operation == "GET"
+
+    def _validate_function_types(self, typed: bool) -> None:
+        """ Validate the type hints used in the method definition.
+
+            For arguments the following types are supported:
+            - Simpletypes: BaseModel, datetime, Enum, uuid.UUID, str, float, int, bool
+            - List[Simpletypes]: A list of simple types
+            - Dict[str, Simpletypes]: A dict with string keys and simple types
+
+            For return types:
+            - Everything for arguments
+            - None is allowed
+            - ReturnValue with a type parameter. The type must be the allowed types for arguments or none
+        """
+        type_hints = get_type_hints(self.function)
+        if "return" not in type_hints and self._wrap_data:
+            raise InvalidMethodDefinition(f"Wrap data is only supported on methods that define a return type ({self.function}")
+
+        # TODO: only primitive types are allowed in the path
+        # TODO: body and get does not work
+        self._path.validate_vars(type_hints.keys(), str(self.function))
+
+        if not typed:
+            return
+
+        # now validate the arguments and return type
+        full_spec = inspect.getfullargspec(self.function)
+        for arg in full_spec.args:
+            if arg not in type_hints:
+                raise InvalidMethodDefinition(f"{arg} in function {self.function} has no type annotation.")
+
+            self._validate_type_arg(arg, type_hints[arg], allow_none_type=True, in_url=self.arguments_in_url())
+
+        self._validate_return_type(type_hints["return"])
+
+    def _validate_return_type(self, arg_type: Type) -> None:
+        """ Validate the return type
+        """
+        # Note: we cannot call issubclass on a generic type!
+        arg = "return type"
+        if typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
+            self._validate_type_arg(arg, typing_inspect.get_args(arg_type, evaluate=True)[0])
+
+        elif not typing_inspect.is_generic_type(arg_type) and issubclass(arg_type, ReturnValue):
+            raise InvalidMethodDefinition("ReturnValue should have a type specified.")
+
+        elif not typing_inspect.is_generic_type(arg_type) and issubclass(arg_type, type(None)):
+            pass
+
+        else:
+            self._validate_type_arg(arg, arg_type)
+
+    def _validate_type_arg(self, arg: str, arg_type: Type, allow_none_type: bool = False, in_url: bool = False) -> None:
+        """ Validate the given type arg recursively
+
+            :param arg: The name of the argument
+            :param arg_type: The annotated type fo the argument
+            :param in_url: This argument is passed in the URL
+        """
+
+        if typing_inspect.is_union_type(arg_type):
+            # Make sure there is only one list and one dict in the union, otherwise we cannot process the arguments
+            cnt = defaultdict(lambda: 0)
+            for sub_arg in typing_inspect.get_args(arg_type, evaluate=True):
+                self._validate_type_arg(arg, sub_arg, allow_none_type, in_url)
+
+                if typing_inspect.is_generic_type(sub_arg):
+                    # there is a difference between python 3.6 and >=3.7
+                    if hasattr(sub_arg, "__name__"):
+                        cnt[sub_arg.__name__] += 1
+                    else:
+                        cnt[sub_arg._name] += 1
+
+            for name, n in cnt.items():
+                if n > 1:
+                    raise InvalidMethodDefinition(f"Union of argument {arg} can contain only one generic {name}")
+
+        elif typing_inspect.is_generic_type(arg_type):
+            if in_url:
+                raise InvalidMethodDefinition(
+                    f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, as it can not be part of the URL"
+                )
+
+            orig = typing_inspect.get_origin(arg_type)
+            if not issubclass(orig, (list, dict)):
+                raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} can only be generic List or Dict")
+
+            args = typing_inspect.get_args(arg_type, evaluate=True)
+            if len(args) == 0:
+                raise InvalidMethodDefinition(
+                    f"Type {arg_type} of argument {arg} must be have a subtype plain List or Dict is not allowed."
+                )
+
+            elif len(args) == 1:  # A generic list
+                self._validate_type_arg(arg, args[0], allow_none_type, in_url)
+
+            elif len(args) == 2:  # Generic Dict
+                if not issubclass(args[0], str):
+                    raise InvalidMethodDefinition(
+                        f"Type {arg_type} of argument {arg} must be a Dict with str keys and not {args[0].__name__}"
+                    )
+
+                self._validate_type_arg(arg, args[1], allow_none_type=True, in_url=in_url)
+
+            elif len(args) > 2:
+                raise InvalidMethodDefinition(f"Failed to validate type {arg_type} of argument {arg}.")
+
+        elif not in_url and issubclass(arg_type, VALID_SIMPLE_ARG_TYPES):
+            pass
+        elif in_url and issubclass(arg_type, VALID_URL_ARG_TYPES):
+            pass
+        elif allow_none_type and issubclass(arg_type, type(None)):
+            # A check for optional arguments
+            pass
+        else:
+            valid_types = ", ".join([x.__name__ for x in VALID_SIMPLE_ARG_TYPES])
+            raise InvalidMethodDefinition(
+                f"Type {arg_type.__name__} of argument {arg} must be a either {valid_types} or a List of these types or a "
+                "Dict with str keys and values of these types."
+            )
 
     @property
     def operation(self) -> str:
@@ -223,11 +523,8 @@ class MethodProperties(object):
 
     @property
     def timeout(self) -> Optional[int]:
-        return self._timeout
 
-    @property
-    def id(self) -> bool:
-        return self._id
+        return self._timeout
 
     @property
     def validate_sid(self) -> bool:
@@ -244,6 +541,10 @@ class MethodProperties(object):
     @property
     def client_types(self) -> List[str]:
         return self._client_types
+
+    @property
+    def wrap_data(self) -> bool:
+        return self._wrap_data
 
     def get_call_headers(self) -> Set[str]:
         """
@@ -262,31 +563,15 @@ class MethodProperties(object):
         """
             Create a listen url for this method
         """
-        url = "/api/v%d" % self._api_version
-
-        if self._id:
-            url += "/%s/(?P<id>[^/]+)" % self._method_name
-        elif self._index:
-            url += "/%s" % self._method_name
-        else:
-            url += "/%s" % self._method_name
-
-        return url
+        url = "/%s/v%d" % (self._api_prefix, self._api_version)
+        return url + self._path.generate_regex_path()
 
     def get_call_url(self, msg: Dict[str, str]) -> str:
         """
              Create a calling url for the client
         """
-        url = "/api/v%d" % self._api_version
-
-        if self._id:
-            url += "/%s/%s" % (self._method_name, parse.quote(str(msg["id"]), safe=""))
-        elif self._index:
-            url += "/%s" % self._method_name
-        else:
-            url += "/%s" % self._method_name
-
-        return url
+        url = "/%s/v%d" % (self._api_prefix, self._api_version)
+        return url + self._path.generate_path({k: parse.quote(str(v), safe="") for k, v in msg.items()})
 
     def build_call(self, args: List, kwargs: Dict[str, Any] = {}) -> Request:
         """
@@ -315,9 +600,7 @@ class MethodProperties(object):
                     del msg[arg_name]
 
         if self.operation not in ("POST", "PUT", "PATCH"):
-            qs_map = msg.copy()
-            if "id" in qs_map:
-                del qs_map["id"]
+            qs_map = {k: v for k, v in msg.items() if v is not None and k != "id"}
 
             # encode arguments in url
             if len(qs_map) > 0:
@@ -340,13 +623,7 @@ class UrlMethod(object):
         :param method_name: The name of the method to call on the endpoint
     """
 
-    def __init__(
-        self,
-        properties: MethodProperties,
-        slice: "CallTarget",
-        handler: Callable[..., Dict[int, Dict[str, Any]]],
-        method_name: str,
-    ):
+    def __init__(self, properties: MethodProperties, slice: "CallTarget", handler: HandlerType, method_name: str):
         self._properties = properties
         self._handler = handler
         self._slice = slice
@@ -357,7 +634,7 @@ class UrlMethod(object):
         return self._properties
 
     @property
-    def handler(self) -> Callable[..., Dict[int, Dict[str, Any]]]:
+    def handler(self) -> HandlerType:
         return self._handler
 
     @property
@@ -383,6 +660,8 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
 
 def attach_warnings(code: int, value: JsonType, warnings: Optional[List[str]]) -> Tuple[int, JsonType]:
     if warnings:
+        if value is None:
+            value = {}
         meta = value.setdefault("metadata", {})
         warns = meta.setdefault("warnings", [])
         warns.extend(warnings)
@@ -411,7 +690,7 @@ def gzipped_json(value: JsonType) -> Tuple[bool, Union[bytes, str]]:
 def shorten(msg: str, max_len: int = 10) -> str:
     if len(msg) < max_len:
         return msg
-    return msg[0: max_len - 3] + "..."
+    return msg[0 : max_len - 3] + "..."
 
 
 def encode_token(client_types: List[str], environment: str = None, idempotent: bool = False, expire: float = None) -> str:
@@ -480,12 +759,12 @@ class Result(object):
         A result of a method call
     """
 
-    def __init__(self, code: int = 0, result: Dict[str, Any] = None):
+    def __init__(self, code: int = 0, result: Optional[JsonType] = None) -> None:
         self._result = result
         self.code = code
-        self._callback = None
+        self._callback: Optional[Callable[["Result"], None]] = None
 
-    def get_result(self) -> Dict[str, Any]:
+    def get_result(self) -> Optional[JsonType]:
         """
             Only when the result is marked as available the result can be returned
         """
@@ -493,7 +772,7 @@ class Result(object):
             return self._result
         raise Exception("The result is not yet available")
 
-    def set_result(self, value):
+    def set_result(self, value: Optional[JsonType]) -> None:
         if not self.available():
             self._result = value
             if self._callback:
@@ -513,7 +792,7 @@ class Result(object):
 
     result = property(get_result, set_result)
 
-    def callback(self, fnc):
+    def callback(self, fnc: Callable[["Result"], None]) -> None:
         """
             Set a callback function that is to be called when the result is ready.
         """
@@ -524,6 +803,7 @@ class SessionManagerInterface(object):
     """
         An interface for a sessionmanager
     """
+
     def validate_sid(self, sid: uuid.UUID) -> bool:
         """
         Check if the given sid is a valid session

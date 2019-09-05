@@ -18,20 +18,20 @@
 import logging
 import socket
 import uuid
+from asyncio import CancelledError, sleep
 from collections import defaultdict
-
+from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Set, Tuple, Union  # noqa: F401
 from urllib import parse
-from asyncio import Future, ensure_future
-from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator  # noqa: F401
+
+from tornado import ioloop
 
 from inmanta import config as inmanta_config
 from inmanta import util
 from inmanta.protocol.common import UrlMethod
-from inmanta.types import NoneGen
+from inmanta.util import TaskHandler
+
 from . import common
 from .rest import client
-
-from tornado import ioloop, gen
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -72,12 +72,13 @@ class CallTarget(object):
         return url_map
 
 
-class Endpoint(object):
+class Endpoint(TaskHandler):
     """
         An end-point in the rpc framework
     """
 
     def __init__(self, name: str):
+        super(Endpoint, self).__init__()
         self._name: str = name
         self._node_name: str = inmanta_config.nodename.get()
         self._end_point_names: List[str] = []
@@ -89,19 +90,6 @@ class Endpoint(object):
     @property
     def call_targets(self) -> List[CallTarget]:
         return self._targets
-
-    def add_future(self, future: Future) -> None:
-        """
-            Add a future to the ioloop to be handled, but do not require the result.
-        """
-
-        def handle_result(f: Future) -> None:
-            try:
-                f.result()
-            except Exception as e:
-                LOGGER.exception("An exception occurred while handling a future: %s", str(e))
-
-        ioloop.IOLoop.current().add_future(ensure_future(future), handle_result)
 
     def get_end_point_names(self) -> List[str]:
         return self._end_point_names
@@ -133,6 +121,11 @@ class Endpoint(object):
 
     node_name = property(get_node_name)
 
+    async def stop(self) -> None:
+        """ Stop this endpoint
+        """
+        await super(Endpoint, self).stop()
+
 
 class SessionEndpoint(Endpoint, CallTarget):
     """
@@ -151,7 +144,6 @@ class SessionEndpoint(Endpoint, CallTarget):
         self.running: bool = True
         self.server_timeout = timeout
         self.reconnect_delay = reconnect_delay
-
         self.add_call_target(self)
 
     def get_environment(self) -> Optional[uuid.UUID]:
@@ -168,31 +160,26 @@ class SessionEndpoint(Endpoint, CallTarget):
         else:
             self._env_id = environment_id
 
-    @gen.coroutine
-    def start(self) -> NoneGen:
+    async def start(self) -> None:
         """
             Connect to the server and use a heartbeat and long-poll for two-way communication
         """
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
-        ioloop.IOLoop.current().add_callback(self.perform_heartbeat)
+        self.add_background_task(self.perform_heartbeat())
 
-    @gen.coroutine
-    def stop(self) -> NoneGen:
+    async def stop(self) -> None:
         self._sched.stop()
-        self.running = False
+        await super(SessionEndpoint, self).stop()
 
-    @gen.coroutine
-    def on_reconnect(self) -> NoneGen:
+    async def on_reconnect(self) -> None:
         pass
 
-    @gen.coroutine
-    def on_disconnect(self) -> NoneGen:
+    async def on_disconnect(self) -> None:
         pass
 
-    @gen.coroutine
-    def perform_heartbeat(self) -> NoneGen:
+    async def perform_heartbeat(self) -> None:
         """
             Start a continuous heartbeat call
         """
@@ -200,38 +187,41 @@ class SessionEndpoint(Endpoint, CallTarget):
             raise Exception("AgentEndpoint not started")
 
         connected: bool = False
-        while self.running:
-            LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
-            result = yield self._client.heartbeat(
-                sid=str(self.sessionid), tid=str(self._env_id), endpoint_names=self.end_point_names, nodename=self.node_name
-            )
-            LOGGER.log(3, "returned heartbeat for %s", str(self.sessionid))
-            if result.code == 200:
-                if not connected:
-                    connected = True
-                    self.add_future(self.on_reconnect())
-                if result.result is not None:
-                    if "method_calls" in result.result:
-                        method_calls: List[common.Request] = [
-                            common.Request.from_dict(req) for req in result.result["method_calls"]
-                        ]
-                        # FIXME: reuse transport?
-                        transport = self._transport(self)
-
-                        for method_call in method_calls:
-                            self.dispatch_method(transport, method_call)
-            else:
-                LOGGER.warning(
-                    "Heartbeat failed with status %d and message: %s, going to sleep for %d s",
-                    result.code,
-                    result.result,
-                    self.reconnect_delay,
+        try:
+            while True:
+                LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
+                result = await self._client.heartbeat(
+                    sid=str(self.sessionid), tid=str(self._env_id), endpoint_names=self.end_point_names, nodename=self.node_name
                 )
-                connected = False
-                yield self.on_disconnect()
-                yield gen.sleep(self.reconnect_delay)
+                LOGGER.log(3, "returned heartbeat for %s", str(self.sessionid))
+                if result.code == 200:
+                    if not connected:
+                        connected = True
+                        self.add_background_task(self.on_reconnect())
+                    if result.result is not None:
+                        if "method_calls" in result.result:
+                            method_calls: List[common.Request] = [
+                                common.Request.from_dict(req) for req in result.result["method_calls"]
+                            ]
+                            # FIXME: reuse transport?
+                            transport = self._transport(self)
 
-    def dispatch_method(self, transport: client.RESTClient, method_call: common.Request) -> None:
+                            for method_call in method_calls:
+                                self.add_background_task(self.dispatch_method(transport, method_call))
+                else:
+                    LOGGER.warning(
+                        "Heartbeat failed with status %d and message: %s, going to sleep for %d s",
+                        result.code,
+                        result.result,
+                        self.reconnect_delay,
+                    )
+                    connected = False
+                    await self.on_disconnect()
+                    await sleep(self.reconnect_delay)
+        except CancelledError:
+            pass
+
+    async def dispatch_method(self, transport: client.RESTClient, method_call: common.Request) -> None:
         if self._client is None:
             raise Exception("AgentEndpoint not started")
 
@@ -246,7 +236,9 @@ class SessionEndpoint(Endpoint, CallTarget):
                 "No such method",
             )
             LOGGER.error(msg)
-            self.add_future(self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500}))
+            self.add_background_task(
+                self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500})
+            )
 
         body = method_call.body or {}
         query_string = parse.urlparse(method_call.url).query
@@ -257,33 +249,26 @@ class SessionEndpoint(Endpoint, CallTarget):
                 body[key] = [v.decode("latin-1") for v in value]
 
         # FIXME: why create a new transport instance on each call? keep-alive?
-        call_result: common.Response = transport._execute_call(kwargs, method_call.method, config, body, method_call.headers)
+        response: common.Response = await transport._execute_call(kwargs, method_call.method, config, body, method_call.headers)
 
-        def submit_result(future: Future) -> None:
-            if future is None:
-                return
-
-            response: common.Response = future.result()
-            if response.status_code == 500:
-                msg = ""
-                if response.body is not None and "message" in response.body:
-                    msg = response.body["message"]
-                LOGGER.error(
-                    "An error occurred during heartbeat method call (%s %s %s): %s",
-                    method_call.reply_id,
-                    method_call.method,
-                    method_call.url,
-                    msg,
-                )
-
-            if self._client is None:
-                raise Exception("AgentEndpoint not started")
-
-            self._client.heartbeat_reply(
-                self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
+        if response.status_code == 500:
+            msg = ""
+            if response.body is not None and "message" in response.body:
+                msg = response.body["message"]
+            LOGGER.error(
+                "An error occurred during heartbeat method call (%s %s %s): %s",
+                method_call.reply_id,
+                method_call.method,
+                method_call.url,
+                msg,
             )
 
-        ioloop.IOLoop.current().add_future(call_result, submit_result)
+        if self._client is None:
+            raise Exception("AgentEndpoint not started")
+
+        await self._client.heartbeat_reply(
+            self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
+        )
 
 
 class Client(Endpoint):
@@ -297,12 +282,11 @@ class Client(Endpoint):
         LOGGER.debug("Start transport for client %s", self.name)
         self._transport_instance = client.RESTClient(self, connection_timout=timeout)
 
-    @gen.coroutine
-    def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
+    async def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
         """
             Execute a call and return the result
         """
-        result = yield self._transport_instance.call(method_properties, args, kwargs)
+        result = await self._transport_instance.call(method_properties, args, kwargs)
         return result
 
     def __getattr__(self, name: str) -> Callable:
@@ -350,17 +334,17 @@ class SessionClient(Client):
     """
         A client that communicates with server endpoints over a session.
     """
+
     def __init__(self, name: str, sid: uuid.UUID, timeout: int = 120) -> None:
         super().__init__(name, timeout)
         self._sid = sid
 
-    @gen.coroutine
-    def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
+    async def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
         """
             Execute the rpc call
         """
         if "sid" not in kwargs:
             kwargs["sid"] = self._sid
 
-        result = yield self._transport_instance.call(method_properties, args, kwargs)
+        result = await self._transport_instance.call(method_properties, args, kwargs)
         return result

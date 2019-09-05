@@ -16,11 +16,12 @@
     Contact: code@inmanta.com
 """
 
+from typing import List, Optional, Tuple
+
 from inmanta.ast import Locatable, RuntimeException, TypingException
-from inmanta.ast.type import TypedList, NullableType
-from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable, QueueScheduler
+from inmanta.ast.type import NullableType, TypedList
+from inmanta.execute.runtime import AttributeVariable, ListVariable, OptionVariable, QueueScheduler, ResultVariable
 from inmanta.execute.util import Unknown
-from typing import List, Tuple, Optional
 
 try:
     from typing import TYPE_CHECKING
@@ -37,10 +38,10 @@ class Attribute(Locatable):
     """
         The attribute base class for entity attributes.
 
-        @param entity: The entity this attribute belongs to
+        :param entity: The entity this attribute belongs to
     """
 
-    def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool=False, nullable: bool=False) -> None:
+    def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool = False, nullable: bool = False) -> None:
         Locatable.__init__(self)
         self.__name: str = name
         entity.add_attribute(self)
@@ -95,13 +96,13 @@ class Attribute(Locatable):
 
     def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
         if self.__multi:
-            mytype = (TypedList(self.__type))
+            mytype = TypedList(self.__type)
         else:
-            mytype = (self.__type)
+            mytype = self.__type
 
         out: ResultVariable["Instance"]
 
-        if(self.__nullallble):
+        if self.__nullallble:
             # be a 0-1 relation
             self.end = None
             self.low = 0
@@ -128,6 +129,7 @@ class RelationAttribute(Attribute):
     """
         An attribute that is a relation
     """
+
     def __init__(self, entity: "Entity", value_type: "Type", name: str) -> None:
         Attribute.__init__(self, entity, value_type, name)
         self.end: Optional[RelationAttribute] = None

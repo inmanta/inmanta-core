@@ -16,12 +16,12 @@
     Contact: code@inmanta.com
 """
 
-from copy import copy
 from collections import Mapping
-from typing import Union, Any
+from copy import copy
+from typing import Any, Union
 
-from inmanta.execute.util import Unknown, NoneValue
 from inmanta.ast import RuntimeException
+from inmanta.execute.util import NoneValue, Unknown
 
 
 class UnsetException(RuntimeException):
@@ -146,7 +146,6 @@ class DynamicProxy(object):
 
 
 class SequenceProxy(DynamicProxy):
-
     def __init__(self, iterator):
         DynamicProxy.__init__(self, iterator)
 
@@ -167,7 +166,6 @@ class SequenceProxy(DynamicProxy):
 
 
 class DictProxy(DynamicProxy, Mapping):
-
     def __init__(self, mydict):
         DynamicProxy.__init__(self, mydict)
 

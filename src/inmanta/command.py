@@ -18,7 +18,6 @@
 
 
 class CLIException(Exception):
-
     def __init__(self, exitcode, *args, **kwargs):
         self.exitcode = exitcode
         super(CLIException, self).__init__(*args, **kwargs)
@@ -28,6 +27,7 @@ class Commander(object):
     """
         This class handles commands
     """
+
     __command_functions = {}
 
     @classmethod
@@ -43,7 +43,7 @@ class Commander(object):
             "help": help_msg,
             "parser_config": parser_config,
             "require_project": require_project,
-            "aliases": aliases
+            "aliases": aliases,
         }
 
     config = None

@@ -1,7 +1,32 @@
-v 2019.2.1 (2019-05-08)
-Changes in this release:
-- Various bugfixes (#1144)
-- Updated mongo to postgres upgrade documentation
+v 2019.3 (2019-09-05) Changes in this release:
+- Various bugfixes (#1148, #1157, #1163, #1167, #1188)
+- Abort server startup if the database can not be reached (#1153)
+- Use native coroutines everywhere (async def)
+- Updated dockerfile and docker-compose to use postgres and centos
+- Added extensions mechanism (#565, #1185)
+- Add /serverstatus api call to get version info, loaded slices and extensions (#1184)
+- Support to set environment variables on the Inmanta server and its agents
+- Split of server recompile into separate server slice (#1183)
+- Add API to inspect compiler service queue (#1252)
+- Define explicit path in protocol methods
+- Added support for schema management for multiple slices in the same database (#1207)
+- Marked pypi package as typed
+- Create pytest-inmanta-extensions package for extensions testing
+- Added support for /etc/inmanta/inmanta.d style configuration files (#183)
+- Increased the iteration limit to 10000. This value is controlled with INMANTA_MAX_ITERATIONS
+  environment variable.
+- Added support for custom resource deserialization by adding the 'populate' method
+- Improve compiler scaling by using more efficient data structures
+- Added the --export-plugin option to the export command (#1277)
+- Only one of set_created, set_updated or set_purged may be called now from a handler
+- Remove facts when the resource is no longer present in any version (#1027)
+- Successful exports without resources or unknowns will now be exported
+- Export plugins will not run when the compile has failed
+- Documentation updates and improvements (#1209)
+
+DEPRECATIONS:
+* The files /etc/inmanta/agent.cfg and /etc/inmanta/server.cfg are not used anymore. More information about the available
+configuration files can be found in the documentation pages under `Administrator Documentation -> Configuration files`.
 
 v 2019.2 (2019-04-30)
 Changes in this release:

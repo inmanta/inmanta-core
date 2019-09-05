@@ -16,16 +16,16 @@
     Contact: code@inmanta.com
 """
 
+from typing import List
+
+from inmanta.ast import Anchor, Namespace, RuntimeException, TypeNotFoundException
 from inmanta.ast.statements import DynamicStatement
 from inmanta.ast.statements.assign import Assign
-from inmanta.ast import TypeNotFoundException, RuntimeException, Namespace, Anchor
-from typing import List
-from inmanta.execute.runtime import Resolver, QueueScheduler
+from inmanta.execute.runtime import QueueScheduler, Resolver
 
 
 class BasicBlock(object):
-
-    def __init__(self, namespace: Namespace, stmts: List[DynamicStatement]=[]) -> None:
+    def __init__(self, namespace: Namespace, stmts: List[DynamicStatement] = []) -> None:
         self.__stmts = []  # type: List[DynamicStatement]
         self.variables = []  # type: List[str]
         self.namespace = namespace
@@ -65,8 +65,8 @@ class BasicBlock(object):
 
         # self.external_not_global = [x for x in self.external if "::" not in x]
 
-#     def get_requires(self) -> List[str]:
-#         return self.external
+    #     def get_requires(self) -> List[str]:
+    #         return self.external
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         for s in self.__stmts:
