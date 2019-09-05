@@ -23,6 +23,7 @@ Changes in this release:
 - Remove facts when the resource is no longer present in any version (#1027)
 - Successful exports without resources or unknowns will now be exported
 - Export plugins will not run when the compile has failed
+- Documentation updates and improvements (#1209)
 
 DEPRECATIONS:
 * The files /etc/inmanta/agent.cfg and /etc/inmanta/server.cfg are not used anymore. More information about the available
