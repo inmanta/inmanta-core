@@ -441,8 +441,10 @@ An if statement allows to branch on a condition.
 
 .. code-block:: inmanta
 
-    if 1 == 1:
-        std::print("1 == 1")
+    if nodecount > 1:
+        self.cluster_mode = true
+    else:
+        self.cluster_mode = false
     end
 
 The syntax is:
