@@ -511,4 +511,4 @@ Plug-ins
 
 For more complex operations, python plugins can be used. Plugins are exposed in the Inmanta language as function calls, such as the template function call. A template
 accepts parameters and returns a value that it computed out of the variables. Each module that is included can also provide plug-ins. These plug-ins are accessible within the namespace of the
-module. The :ref:`module-plugins` section of the module guid provides more details about how to write a plugin.
+module. The :ref:`module-plugins` section of the module guide provides more details about how to write a plugin.
