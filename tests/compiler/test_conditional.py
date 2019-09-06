@@ -185,3 +185,63 @@ end
         root.lookup("a")
     test_instances = types["__config__::Test"].get_all_instances()
     assert 1 == len(test_instances)
+
+
+def test_if_relation_count(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    bool multiple
+end
+entity Ref:
+end
+
+implement Test using std::none
+implement Ref using std::none
+
+Ref.test [1] -- Test.refs [0:]
+
+r1 = Ref()
+r2 = Ref()
+t = Test()
+if std::count(t.refs) > 1:
+    t.multiple = true
+else:
+    t.multiple = false
+end
+r1.test = t
+r2.test = t
+        """
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    assert root.lookup("t").get_value().lookup("multiple").get_value()
+
+
+def test_if_relation_count_false(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    bool multiple
+end
+entity Ref:
+end
+
+implement Test using std::none
+implement Ref using std::none
+
+Ref.test [1] -- Test.refs [0:]
+
+r1 = Ref()
+r1.test = t
+if std::count(t.refs) > 1:
+    t.multiple = true
+else:
+    t.multiple = false
+end
+t = Test()
+        """
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    assert not root.lookup("t").get_value().lookup("multiple").get_value()
