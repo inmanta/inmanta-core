@@ -144,7 +144,7 @@ Lists of primitive types are also primitive types: ``string[]``, ``number[]``, `
 ``dict`` is the primitive type that represents a dictionary, with string keys. Dict values can be accessed using the ``[]`` operator. All members of a dict have to be set when the dict is constructed. e.g.
 
 .. code-block:: inmanta
-    
+
     #correct
     a = {"key":"value", "number":7}
     value = a["key"]
@@ -152,6 +152,8 @@ Lists of primitive types are also primitive types: ``string[]``, ``number[]``, `
     # incorrect, can't assign to dict after construction
     # a["otherkey"] = "othervalue"
 
+
+.. _lang-conditions:
 
 Conditions
 ==========================
@@ -431,6 +433,25 @@ The syntax is:
 
     for: 'for' ID 'in' value ':' statement* 'end';
 
+
+If statement
+============
+
+An if statement allows to branch on a condition.
+
+.. code-block:: inmanta
+
+    if 1 == 1:
+        std::print("1 == 1")
+    end
+
+The syntax is:
+
+.. code-block:: antlr
+
+    if : 'if' condition ':' statement* ('else' ':' statement*)? 'end';
+
+The :ref:`lang-conditions` section describes allowed forms for the condition.
 
 
 Transformations
