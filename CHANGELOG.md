@@ -1,3 +1,7 @@
+v 2019.4
+Changes in this release:
+- Added if statement (#1325)
+
 v 2019.3 (2019-06-30)
 Changes in this release:
 - Various bugfixes (#1148, #1157, #1163, #1167, #1188)
