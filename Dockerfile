@@ -15,7 +15,7 @@ RUN /opt/inmanta/env/bin/pip install -U pip
 RUN git clone https://github.com/inmanta/inmanta-dashboard
 RUN (cd inmanta-dashboard; yarn install; grunt dist; mkdir -p /usr/share/inmanta/; mv dist /usr/share/inmanta/dashboard)
 
-RUN mkdir /etc/inmanta
+RUN mkdir -p /etc/inmanta/inmanta.d
 
 ADD . /code
 ADD misc/docker-server.cfg /etc/inmanta/server.cfg

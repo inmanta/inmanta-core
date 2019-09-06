@@ -271,7 +271,7 @@ class ModuleLike(object):
 
     def __init__(self, path: str) -> None:
         """
-            @param path: root git directory
+            :param path: root git directory
         """
         self._path = path
         self._meta = {}  # type: JsonType
@@ -347,7 +347,7 @@ class Project(ModuleLike):
             It does not include
              * verify if project.yml corresponds to the modules in self.modules
 
-            @param path: The directory where the project is located
+            :param path: The directory where the project is located
 
         """
         super().__init__(path)

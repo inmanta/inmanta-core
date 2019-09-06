@@ -1,9 +1,7 @@
-v 2019.4
-Changes in this release:
+v 2019.4 Changes in this release:
 - Added if statement (#1325)
 
-v 2019.3 (2019-06-30)
-Changes in this release:
+v 2019.3 (2019-09-05) Changes in this release:
 - Various bugfixes (#1148, #1157, #1163, #1167, #1188)
 - Abort server startup if the database can not be reached (#1153)
 - Use native coroutines everywhere (async def)
@@ -17,7 +15,7 @@ Changes in this release:
 - Added support for schema management for multiple slices in the same database (#1207)
 - Marked pypi package as typed
 - Create pytest-inmanta-extensions package for extensions testing
-- Added support for /etc/inmanta.d style configuration files (#183)
+- Added support for /etc/inmanta/inmanta.d style configuration files (#183)
 - Increased the iteration limit to 10000. This value is controlled with INMANTA_MAX_ITERATIONS
   environment variable.
 - Added support for custom resource deserialization by adding the 'populate' method
@@ -27,6 +25,7 @@ Changes in this release:
 - Remove facts when the resource is no longer present in any version (#1027)
 - Successful exports without resources or unknowns will now be exported
 - Export plugins will not run when the compile has failed
+- Documentation updates and improvements (#1209)
 
 DEPRECATIONS:
 * The files /etc/inmanta/agent.cfg and /etc/inmanta/server.cfg are not used anymore. More information about the available

@@ -158,7 +158,7 @@ class CodeLoader(object):
     """
         Class responsible for managing code loaded from modules received from the compiler
 
-        :param code_dir The directory where the code is stored
+        :param code_dir: The directory where the code is stored
     """
 
     def __init__(self, code_dir: str) -> None:

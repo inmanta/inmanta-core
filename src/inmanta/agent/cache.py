@@ -81,7 +81,7 @@ class AgentCache(object):
         """
             Open the cache for the specific version
 
-            :param verion the version id to open the cache for
+            :param version: the version id to open the cache for
         """
         if version in self.counterforVersion:
             self.counterforVersion[version] += 1
@@ -96,7 +96,7 @@ class AgentCache(object):
 
             when a version is closed as many times as it was opened, all cache items linked to this version are dropped
 
-            :param verion the version id to close the cache for
+            :param version: the version id to close the cache for
         """
         if version not in self.counterforVersion:
             raise Exception("Closed version that does not exist")
