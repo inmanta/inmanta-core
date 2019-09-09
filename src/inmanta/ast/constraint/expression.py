@@ -16,15 +16,15 @@
     Contact: code@inmanta.com
 """
 
-from abc import ABCMeta, abstractmethod
 import re
+from abc import ABCMeta, abstractmethod
+from typing import Dict
 
-from inmanta.ast.statements import ReferenceStatement, Literal
-from inmanta.execute.runtime import ResultVariable, HangUnit, ExecutionUnit, RawUnit, Resolver, QueueScheduler
+from inmanta.ast import LocatableString
+from inmanta.ast.statements import Literal, ReferenceStatement
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedReferenceHelper, Reference
-from typing import Dict
-from inmanta.ast import LocatableString
+from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, RawUnit, Resolver, ResultVariable
 
 
 class InvalidNumberOfArgumentsException(Exception):
@@ -62,7 +62,6 @@ class OpMetaClass(ABCMeta):
 
 
 class IsDefined(ReferenceStatement):
-
     def __init__(self, attr: Reference, name: LocatableString) -> None:
         super(IsDefined, self).__init__([attr])
         self.attr = attr.root_in_self()
@@ -86,8 +85,8 @@ class IsDefined(ReferenceStatement):
 
     def pretty_print(self) -> str:
         name = "%s.%s is defined" % (self.attr, self.name)
-        if name[:len("self.")] == "self.":
-            name = name[len("self."):]
+        if name[: len("self.")] == "self.":
+            name = name[len("self.") :]
 
         return "%s is defined" % name
 
@@ -96,6 +95,7 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
     """
         This class is an abstract base class for all operators that can be used in expressions
     """
+
     # A hash to lookup each handler
     __operator = {}
 
@@ -211,9 +211,9 @@ class LazyBinaryOperator(BinaryOperator):
         if self._is_final(result):
             target.set_value(result, self.location)
         else:
-            ExecutionUnit(queue, resolver, target,
-                          self.children[1].requires_emit(resolver, queue),
-                          self.children[1])
+            ExecutionUnit(
+                queue, resolver, target, self.children[1].requires_emit(resolver, queue), self.children[1], owner=self
+            )
 
     def execute_direct(self, requires):
         result = self.children[0].execute_direct(requires)
@@ -265,6 +265,7 @@ class Not(UnaryOperator):
     """
         The negation operator
     """
+
     __op = "not"
 
     def __init__(self, arg):
@@ -301,14 +302,14 @@ class Regex(BinaryOperator):
         """
             Return a representation of the op
         """
-        return "%s(%s, %s)" % (self.__class__.__name__, self._arguments[0],
-                               self._arguments[1].value)
+        return "%s(%s, %s)" % (self.__class__.__name__, self._arguments[0], self._arguments[1].value)
 
 
 class Equals(BinaryOperator):
     """
         The equality operator
     """
+
     __op = "=="
 
     def __init__(self, op1, op2):
@@ -325,6 +326,7 @@ class LessThan(BinaryOperator):
     """
         The less than operator
     """
+
     __op = "<"
 
     def __init__(self, op1, op2):
@@ -343,6 +345,7 @@ class GreaterThan(BinaryOperator):
     """
         The more than operator
     """
+
     __op = ">"
 
     def __init__(self, op1, op2):
@@ -361,6 +364,7 @@ class LessThanOrEqual(BinaryOperator):
     """
         The less than or equal operator
     """
+
     __op = "<="
 
     def __init__(self, op1, op2):
@@ -379,6 +383,7 @@ class GreaterThanOrEqual(BinaryOperator):
     """
         The more than or equal operator
     """
+
     __op = ">="
 
     def __init__(self, op1, op2):
@@ -397,6 +402,7 @@ class NotEqual(BinaryOperator):
     """
         The not equal operator
     """
+
     __op = "!="
 
     def __init__(self, op1, op2):
@@ -413,6 +419,7 @@ class And(LazyBinaryOperator):
     """
         The and boolean operator
     """
+
     __op = "and"
 
     def __init__(self, op1, op2):
@@ -426,6 +433,7 @@ class Or(LazyBinaryOperator):
     """
         The or boolean operator
     """
+
     __op = "or"
 
     def __init__(self, op1, op2):
@@ -439,6 +447,7 @@ class In(BinaryOperator):
     """
         The in operator for iterable types and dicts
     """
+
     __op = "in"
 
     def __init__(self, op1, op2):

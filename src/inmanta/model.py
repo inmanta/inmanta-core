@@ -1,4 +1,4 @@
-'''
+"""
   Copyright 2018 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,9 +14,10 @@
     limitations under the License.
 
     Contact: code@inmanta.com
-'''
+"""
 from builtins import str
-from typing import List, Dict, Tuple
+from typing import Dict, List, Tuple
+
 
 """
     Objects defining the serialization format for type information.
@@ -48,10 +49,7 @@ class Location(object):
                     "lnr": self.lnr
                 }
         """
-        return {
-            "file": self.file,
-            "lnr": self.lnr
-        }
+        return {"file": self.file, "lnr": self.lnr}
 
     @staticmethod
     def from_dict(ctx):
@@ -93,20 +91,24 @@ class Attribute(object):
                     "location": self.location.to_dict()
                 }
         """
-        return {"type": self.type,
-                "multi": self.multi,
-                "nullable": self.nullable,
-                "comment": self.comment,
-                "location": self.location.to_dict()}
+        return {
+            "type": self.type,
+            "multi": self.multi,
+            "nullable": self.nullable,
+            "comment": self.comment,
+            "location": self.location.to_dict(),
+        }
 
     @staticmethod
     def from_dict(ctx):
 
-        return Attribute(mytype=ctx["type"],
-                         nullable=ctx["nullable"],
-                         multi=ctx["multi"],
-                         comment=ctx["comment"],
-                         location=Location.from_dict(ctx["location"]))
+        return Attribute(
+            mytype=ctx["type"],
+            nullable=ctx["nullable"],
+            multi=ctx["multi"],
+            comment=ctx["comment"],
+            location=Location.from_dict(ctx["location"]),
+        )
 
     @staticmethod
     def from_list(l):
@@ -190,8 +192,16 @@ class Relation(object):
     :param List[Value] target_annotations: annotations on this relation on the target side
     """
 
-    def __init__(self, mytype: str, multi: Tuple[int, int], reverse: str, comment: str, location: Location,
-                 source_annotations: List[Value], target_annotations: List[Value]) -> None:
+    def __init__(
+        self,
+        mytype: str,
+        multi: Tuple[int, int],
+        reverse: str,
+        comment: str,
+        location: Location,
+        source_annotations: List[Value],
+        target_annotations: List[Value],
+    ) -> None:
         self.type = mytype
         lower = multi[0]
         if lower is None:
@@ -224,24 +234,28 @@ class Relation(object):
                 "target_annotations": [x.to_dict() for x in self.target_annotations]
                 }
         """
-        return {"type": self.type,
-                "multi": [self.multi[0], self.multi[1]],
-                "reverse": self.reverse,
-                "comment": self.comment,
-                "location": self.location.to_dict(),
-                "source_annotations": [x.to_dict() for x in self.source_annotations],
-                "target_annotations": [x.to_dict() for x in self.target_annotations]}
+        return {
+            "type": self.type,
+            "multi": [self.multi[0], self.multi[1]],
+            "reverse": self.reverse,
+            "comment": self.comment,
+            "location": self.location.to_dict(),
+            "source_annotations": [x.to_dict() for x in self.source_annotations],
+            "target_annotations": [x.to_dict() for x in self.target_annotations],
+        }
 
     @staticmethod
     def from_dict(ctx):
         multi = ctx["multi"]
-        return Relation(ctx["type"],
-                        (multi[0], multi[1]),
-                        ctx["reverse"],
-                        ctx["comment"],
-                        Location.from_dict(ctx["location"]),
-                        Value.from_list(ctx["source_annotations"]),
-                        Value.from_list(ctx["target_annotations"]))
+        return Relation(
+            ctx["type"],
+            (multi[0], multi[1]),
+            ctx["reverse"],
+            ctx["comment"],
+            Location.from_dict(ctx["location"]),
+            Value.from_list(ctx["source_annotations"]),
+            Value.from_list(ctx["target_annotations"]),
+        )
 
     @staticmethod
     def from_list(l):
@@ -258,8 +272,9 @@ class Entity(object):
         :param Location location: source location this entity was defined at
     """
 
-    def __init__(self, parents: List[str], attributes: Dict[str, Attribute],
-                 relations: Dict[str, Relation], location: Location) -> None:
+    def __init__(
+        self, parents: List[str], attributes: Dict[str, Attribute], relations: Dict[str, Relation], location: Location
+    ) -> None:
         self.parents = parents
         self.attributes = attributes
         self.relations = relations
@@ -278,15 +293,18 @@ class Entity(object):
                 "location": self.location.to_dict(),
                 }
         """
-        return {"parents": self.parents,
-                "attributes": {n: a.to_dict() for n, a in self.attributes.items()},
-                "relations": {n: r.to_dict() for n, r in self.relations.items()},
-                "location": self.location.to_dict(),
-                }
+        return {
+            "parents": self.parents,
+            "attributes": {n: a.to_dict() for n, a in self.attributes.items()},
+            "relations": {n: r.to_dict() for n, r in self.relations.items()},
+            "location": self.location.to_dict(),
+        }
 
     @staticmethod
     def from_dict(ctx):
-        return Entity(ctx["parents"],
-                      Attribute.from_list(ctx["attributes"]),
-                      Relation.from_list(ctx["relations"]),
-                      Location.from_dict(ctx["location"]))
+        return Entity(
+            ctx["parents"],
+            Attribute.from_list(ctx["attributes"]),
+            Relation.from_list(ctx["relations"]),
+            Location.from_dict(ctx["location"]),
+        )

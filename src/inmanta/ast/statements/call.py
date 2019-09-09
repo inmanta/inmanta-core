@@ -18,13 +18,12 @@
 
 import logging
 
-from inmanta.ast.statements import ReferenceStatement
-from inmanta.execute.runtime import ResultVariable, Waiter
-from inmanta.execute.proxy import UnsetException, UnknownException
-from inmanta.execute.util import Unknown
-from inmanta.ast import RuntimeException, WrappingRuntimeException, ExternalException
 from inmanta import plugins
-
+from inmanta.ast import ExternalException, RuntimeException, WrappingRuntimeException
+from inmanta.ast.statements import ReferenceStatement
+from inmanta.execute.proxy import UnknownException, UnsetException
+from inmanta.execute.runtime import ResultVariable, Waiter
+from inmanta.execute.util import Unknown
 
 LOGGER = logging.getLogger(__name__)
 
@@ -33,8 +32,8 @@ class FunctionCall(ReferenceStatement):
     """
         This class models a call to a function
 
-        @param name: The name of the function that needs to be called
-        @param arguments: A list of arguments
+        :param name: The name of the function that needs to be called
+        :param arguments: A list of arguments
 
         uses:          args
         provides:      return value
@@ -112,14 +111,13 @@ class FunctionCall(ReferenceStatement):
                 raise ExternalException(self, "Exception in plugin %s" % self.name, e)
 
     def __repr__(self):
-        return "%s(%s)" % (self.name, ','.join([repr(a) for a in self.arguments]))
+        return "%s(%s)" % (self.name, ",".join([repr(a) for a in self.arguments]))
 
     def pretty_print(self):
-        return "%s(%s)" % (self.name, ','.join([a.pretty_print() for a in self.arguments]))
+        return "%s(%s)" % (self.name, ",".join([a.pretty_print() for a in self.arguments]))
 
 
 class FunctionUnit(Waiter):
-
     def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall):
         Waiter.__init__(self, queue_scheduler)
         self.result = result

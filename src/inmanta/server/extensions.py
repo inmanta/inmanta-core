@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,14 +15,24 @@
 
     Contact: code@inmanta.com
 """
-import time
+from typing import TYPE_CHECKING, List
 
-from tornado import gen
-from typing import Callable
+if TYPE_CHECKING:
+    from inmanta.server.protocol import ServerSlice
 
 
-@gen.coroutine
-def retry_limited(fun: Callable[[], bool], timeout: float, interval: float = 0.1) -> None:
-    start = time.time()
-    while time.time() - start < timeout and not fun():
-        yield gen.sleep(interval)
+class InvalidSliceNameException(Exception):
+
+    pass
+
+
+class ApplicationContext(object):
+    def __init__(self) -> None:
+        self._slices: List[ServerSlice] = []
+
+    def register_slice(self, slice: "ServerSlice") -> None:
+        assert slice is not None
+        self._slices.append(slice)
+
+    def get_slices(self) -> "List[ServerSlice]":
+        return self._slices

@@ -17,17 +17,16 @@
 """
 
 import inspect
-import subprocess
 import os
+import subprocess
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Type, TypeVar
 
-from inmanta.execute.proxy import DynamicProxy
-from inmanta.execute.util import Unknown
-from inmanta.ast import Namespace, CompilerException, TypeNotFoundException, RuntimeException
-from inmanta.execute.runtime import ExecutionUnit, Resolver, QueueScheduler, ResultVariable
+from inmanta import const, protocol
+from inmanta.ast import CompilerException, Namespace, RuntimeException, TypeNotFoundException
 from inmanta.ast.type import TypedList
-from inmanta import protocol, const
-
-from typing import Optional, Callable, List, TYPE_CHECKING, TypeVar, Any, Type
+from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
+from inmanta.execute.util import Unknown
 
 T = TypeVar("T")
 
@@ -41,6 +40,7 @@ class Context(object):
     """
         An instance of this class is used to pass context to the plugin
     """
+
     __client: Optional[protocol.Client] = None
     __sync_client = None
 
@@ -103,7 +103,7 @@ class Context(object):
             self.__class__.__sync_client = protocol.SyncClient("compiler")
         return self.__class__.__sync_client
 
-    def run_sync(self, function: Callable[..., T], timeout: int=5) -> T:
+    def run_sync(self, function: Callable[..., T], timeout: int = 5) -> T:
         """
             Execute the async function and return its result. This method takes care of starting and stopping the ioloop. The
             main use for this function is to use the inmanta internal rpc to communicate with the server.
@@ -114,6 +114,7 @@ class Context(object):
             :raises ConnectionRefusedError: When the function timeouts this exception is raised.
         """
         from tornado.ioloop import IOLoop, TimeoutError
+
         try:
             return IOLoop.current().run_sync(function, timeout)
         except TimeoutError:
@@ -124,6 +125,7 @@ class PluginMeta(type):
     """
         A metaclass that registers subclasses in the parent class.
     """
+
     def __new__(cls, name, bases, dct):
         subclass = type.__new__(cls, name, bases, dct)
         if hasattr(subclass, "__function_name__"):
@@ -141,8 +143,7 @@ class PluginMeta(type):
         ns_parts = str(plugin_class.__module__).split(".")
         ns_parts.append(name)
         if ns_parts[0] != const.PLUGINS_PACKAGE:
-            raise Exception(
-                "All plugin modules should be loaded in the %s package" % const.PLUGINS_PACKAGE)
+            raise Exception("All plugin modules should be loaded in the %s package" % const.PLUGINS_PACKAGE)
 
         name = "::".join(ns_parts[1:])
         cls.__functions[name] = plugin_class
@@ -250,8 +251,10 @@ class Plugin(object, metaclass=PluginMeta):
             return None
 
         if not isinstance(arg_type, str):
-            raise CompilerException("bad annotation in plugin %s::%s, expected str but got %s (%s)" %
-                                    (self.ns, self.__class__.__function_name__, type(arg_type), arg_type))
+            raise CompilerException(
+                "bad annotation in plugin %s::%s, expected str but got %s (%s)"
+                % (self.ns, self.__class__.__function_name__, type(arg_type), arg_type)
+            )
 
         if arg_type == "any":
             return None
@@ -289,17 +292,20 @@ class Plugin(object, metaclass=PluginMeta):
         required = len([x for x in self.arguments if len(x) == 2])
 
         if len(args) < required or len(args) > max_arg:
-            raise Exception("Incorrect number of arguments for %s. Expected at least %d, got %d" %
-                            (self.get_signature(), required, len(args)))
+            raise Exception(
+                "Incorrect number of arguments for %s. Expected at least %d, got %d"
+                % (self.get_signature(), required, len(args))
+            )
 
         for i in range(len(args)):
             if isinstance(args[i], Unknown):
                 return False
 
             if self.arguments[i][0] is not None and not self._is_instance(args[i], self.argtypes[i]):
-                raise Exception(("Invalid type for argument %d of '%s', it should be "
-                                 "%s and %s given.") % (i + 1, self.__class__.__function_name__,
-                                                        self.arguments[i][1], args[i].__class__.__name__))
+                raise Exception(
+                    ("Invalid type for argument %d of '%s', it should be " "%s and %s given.")
+                    % (i + 1, self.__class__.__function_name__, self.arguments[i][1], args[i].__class__.__name__)
+                )
         return True
 
     def emit_statement(self) -> "DynamicStatement":
@@ -353,7 +359,7 @@ class Plugin(object, metaclass=PluginMeta):
             exception = None
 
             try:
-                valid = (value is None or self._is_instance(value, self.returntype))
+                valid = value is None or self._is_instance(value, self.returntype)
             except RuntimeException as e:
                 raise e
             except Exception as exp:
@@ -364,14 +370,17 @@ class Plugin(object, metaclass=PluginMeta):
                 if exception is not None:
                     msg = "\n\tException details: " + str(exception)
 
-                raise Exception("Plugin %s should return value of type %s ('%s' was returned) %s" %
-                                (self.__class__.__function_name__, self.returntype, value, msg))
+                raise Exception(
+                    "Plugin %s should return value of type %s ('%s' was returned) %s"
+                    % (self.__class__.__function_name__, self.returntype, value, msg)
+                )
 
         return value
 
 
-def plugin(function: Callable=None, commands: List[str]=None, emits_statements: bool=False,
-           allow_unknown: bool=False) -> None:  # noqa: H801
+def plugin(
+    function: Callable = None, commands: List[str] = None, emits_statements: bool = False, allow_unknown: bool = False
+) -> None:  # noqa: H801
     """
         Python decorator to register functions with inmanta as plugin
 
@@ -382,10 +391,12 @@ def plugin(function: Callable=None, commands: List[str]=None, emits_statements: 
                                  required for complex plugins such as integrating a template engine.
         :param allow_unknown: Set to true if this plugin accepts Unknown values as valid input.
     """
+
     def curry_name(name=None, commands=None, emits_statements=False, allow_unknown=False):
         """
             Function to curry the name of the function
         """
+
         def call(fnc):
             """
                 Create class to register the function and return the function itself

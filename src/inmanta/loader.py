@@ -15,17 +15,16 @@
 
     Contact: code@inmanta.com
 """
-import os
 import glob
-import imp
 import hashlib
-import logging
+import imp
 import inspect
+import logging
+import os
 import types
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import pkg_resources
-
-from typing import Dict, Set, Iterable, List, Tuple, Optional
 
 from inmanta import const
 from inmanta.module import Project
@@ -83,8 +82,7 @@ class SourceInfo(object):
         if module_parts[0] != const.PLUGINS_PACKAGE:
             raise Exception(
                 "All instances from which the source is loaded, should be defined in the inmanta plugins package. "
-                "%s does not match"
-                % self.module_name
+                "%s does not match" % self.module_name
             )
 
         return module_parts[1]
@@ -160,7 +158,7 @@ class CodeLoader(object):
     """
         Class responsible for managing code loaded from modules received from the compiler
 
-        :param code_dir The directory where the code is stored
+        :param code_dir: The directory where the code is stored
     """
 
     def __init__(self, code_dir: str) -> None:
@@ -179,7 +177,7 @@ class CodeLoader(object):
 
         for py in glob.glob(os.path.join(mod_dir, "*.py")):
             if mod_dir in py:
-                mod_name = py[len(mod_dir) + 1: -3]
+                mod_name = py[len(mod_dir) + 1 : -3]
             else:
                 mod_name = py[:-3]
 

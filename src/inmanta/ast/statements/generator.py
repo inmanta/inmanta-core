@@ -19,18 +19,26 @@
 # pylint: disable-msg=W0613,R0201
 
 import logging
+from typing import Dict, List, Set, Tuple  # noqa: F401
 
-from inmanta.ast.statements import GeneratorStatement
-from inmanta.const import LOG_LEVEL_TRACE
-from inmanta.execute.util import Unknown
-from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable, ResultCollector
-from inmanta.ast import RuntimeException, TypingException, NotFoundException, Location, Namespace, DuplicateException,\
-    LocatableString, TypeReferenceAnchor, AttributeReferenceAnchor
-from inmanta.execute.tracking import ImplementsTracker
-from typing import List, Dict, Tuple, Set  # noqa: F401
-from inmanta.ast.statements import ExpressionStatement
+from inmanta.ast import (
+    AttributeReferenceAnchor,
+    DuplicateException,
+    LocatableString,
+    Location,
+    Namespace,
+    NotFoundException,
+    RuntimeException,
+    TypeReferenceAnchor,
+    TypingException,
+)
 from inmanta.ast.blocks import BasicBlock
+from inmanta.ast.statements import ExpressionStatement, GeneratorStatement
 from inmanta.ast.statements.assign import SetAttributeHelper
+from inmanta.const import LOG_LEVEL_TRACE
+from inmanta.execute.runtime import ExecutionContext, QueueScheduler, Resolver, ResultCollector, ResultVariable
+from inmanta.execute.tracking import ImplementsTracker
+from inmanta.execute.util import Unknown
 
 try:
     from typing import TYPE_CHECKING
@@ -179,15 +187,17 @@ class Constructor(GeneratorStatement):
     """
         This class represents the usage of a constructor to create a new object.
 
-        @param class_type: The type of the object that is created by this
+        :param class_type: The type of the object that is created by this
             constructor call.
     """
 
-    def __init__(self,
-                 class_type: LocatableString,
-                 attributes: List[Tuple[LocatableString, ExpressionStatement]],
-                 location: Location,
-                 namespace: Namespace) -> None:
+    def __init__(
+        self,
+        class_type: LocatableString,
+        attributes: List[Tuple[LocatableString, ExpressionStatement]],
+        location: Location,
+        namespace: Namespace,
+    ) -> None:
         GeneratorStatement.__init__(self)
         self.class_type = str(class_type)
         self.__attributes = {}  # type: Dict[str,ExpressionStatement]
@@ -245,11 +255,9 @@ class Constructor(GeneratorStatement):
         direct = [x for x in self._direct_attributes.items()]
 
         direct_requires = {rk: rv for (k, v) in direct for (rk, rv) in v.requires_emit(resolver, queue).items()}
-        LOGGER.log(LOG_LEVEL_TRACE,
-                   "emitting constructor for %s at %s with %s",
-                   self.class_type,
-                   self.location,
-                   direct_requires)
+        LOGGER.log(
+            LOG_LEVEL_TRACE, "emitting constructor for %s at %s with %s", self.class_type, self.location, direct_requires
+        )
 
         return direct_requires
 
@@ -276,7 +284,7 @@ class Constructor(GeneratorStatement):
 
             if obj is not None:
                 if obj.get_type().get_entity() != type_class:
-                    raise DuplicateException(self, object, "Type found in index is not an exact match")
+                    raise DuplicateException(self, obj, "Type found in index is not an exact match")
                 instances.append(obj)
 
         if len(instances) > 0:
@@ -327,8 +335,9 @@ class Constructor(GeneratorStatement):
             self.anchors.append(AttributeReferenceAnchor(lname.get_location(), lname.namespace, self.class_type, name))
             self.anchors.extend(value.get_anchors())
         else:
-            raise RuntimeException(self, "The attribute %s in the constructor call of %s is already set."
-                                   % (name, self.class_type))
+            raise RuntimeException(
+                self, "The attribute %s in the constructor call of %s is already set." % (name, self.class_type)
+            )
 
     def get_attributes(self) -> Dict[str, ExpressionStatement]:
         """

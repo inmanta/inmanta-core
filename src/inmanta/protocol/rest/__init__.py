@@ -15,20 +15,21 @@
 
     Contact: code@inmanta.com
 """
-import logging
 import inspect
 import json
+import logging
 import uuid
-from datetime import datetime
-import enum
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Type, cast  # noqa: F401
 
-from tornado import gen, escape
-from inmanta import const
-from inmanta.types import JsonType
+import pydantic
+import typing_inspect
+from tornado import escape
+
+from inmanta import const, util
+from inmanta.data.model import BaseModel
 from inmanta.protocol import common, exceptions
-from inmanta import config as inmanta_config
-
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, cast, Mapping, Generator  # noqa: F401
+from inmanta.protocol.common import ReturnValue
+from inmanta.types import Apireturn, JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -46,9 +47,7 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 """
 
 
-def authorize_request(
-    auth_data: Dict[str, str], metadata: Dict[str, str], message: JsonType, config: common.UrlMethod
-) -> None:
+def authorize_request(auth_data: Dict[str, str], metadata: Dict[str, str], message: JsonType, config: common.UrlMethod) -> None:
     """
         Authorize a request based on the given data
     """
@@ -138,46 +137,6 @@ class CallArguments(object):
 
         return value
 
-    def _process_typing(self, arg: str, value: Optional[Any]) -> Optional[Any]:
-        """
-            Validate and coerce if required
-            :param arg: The name of the arugment
-            :param value: The current value of the argument
-            :return: The processed value of the argument
-        """
-        if arg not in self._argspec.annotations:
-            return value
-
-        if value is None:
-            return value
-
-        arg_type = self._argspec.annotations[arg]
-        if isinstance(value, arg_type):
-            return value
-
-        try:
-            if arg_type == datetime:
-                return datetime.strptime(value, const.TIME_ISOFMT)
-
-            elif issubclass(arg_type, enum.Enum):
-                return arg_type[value]
-
-            elif arg_type == bool:
-                return inmanta_config.is_bool(value)
-
-            else:
-                return arg_type(value)
-
-        except (ValueError, TypeError):
-            error_msg = "Invalid type for argument %s. Expected %s but received %s, %s" % (
-                arg,
-                arg_type,
-                value.__class__,
-                value,
-            )
-            LOGGER.exception(error_msg)
-            raise exceptions.BadRequest(error_msg)
-
     def get_default_value(self, arg_name: str, arg_position: int, default_start: int) -> Optional[Any]:
         """
             Get a default value for an argument
@@ -187,8 +146,7 @@ class CallArguments(object):
         else:
             raise exceptions.BadRequest("Invalid request. Field '%s' is required." % arg_name)
 
-    @gen.coroutine
-    def _run_getters(self, arg: str, value: Optional[Any]) -> Optional[Any]:
+    async def _run_getters(self, arg: str, value: Optional[Any]) -> Optional[Any]:
         """
             Run ant available getters on value
         """
@@ -196,14 +154,13 @@ class CallArguments(object):
             return value
 
         try:
-            value = yield self._properties.arg_options[arg].getter(value, self._metadata)
+            value = await self._properties.arg_options[arg].getter(value, self._metadata)
             return value
         except Exception as e:
             LOGGER.exception("Failed to use getter for arg %s", arg)
             raise e
 
-    @gen.coroutine
-    def process(self) -> None:
+    async def process(self) -> None:
         """
             Process the message
         """
@@ -217,6 +174,8 @@ class CallArguments(object):
         if self._argspec.defaults is not None:
             defaults_start = len(args) - len(self._argspec.defaults)
 
+        call_args = {}
+
         for i, arg in enumerate(args):
             # get value from headers, defaults or message
             value = self._map_headers(arg)
@@ -228,11 +187,14 @@ class CallArguments(object):
                 else:  # get default value
                     value = self.get_default_value(arg, i, defaults_start)
 
-            # validate type
-            value = self._process_typing(arg, value)
+            call_args[arg] = value
 
+        # validate types
+        call_args = self._properties.validate_arguments(call_args)
+
+        for arg, value in call_args.items():
             # run getters
-            value = yield self._run_getters(arg, value)
+            value = await self._run_getters(arg, value)
 
             self._call_args[arg] = value
 
@@ -247,9 +209,139 @@ class CallArguments(object):
 
         self._processed = True
 
+    def _validate_union_return(self, arg_type: Type, value: Any) -> None:
+        """ Validate a return with a union type
+            :see: protocol.common.MethodProperties._validate_function_types
+        """
+        matching_type = None
+        for t in typing_inspect.get_args(arg_type, evaluate=True):
+            instanceof_type = t
+            if typing_inspect.is_generic_type(t):
+                instanceof_type = typing_inspect.get_origin(t)
+
+            if isinstance(value, instanceof_type):
+                if matching_type is not None:
+                    raise exceptions.ServerError(
+                        f"Return type is defined as a union {arg_type} for which multiple "
+                        f"types match the provided value {value}"
+                    )
+                matching_type = t
+
+        if matching_type is None:
+            raise exceptions.BadRequest(
+                f"Invalid return value, no matching type found in union {arg_type} for value type {type(value)}"
+            )
+
+        if typing_inspect.is_generic_type(matching_type):
+            self._validate_generic_return(arg_type, matching_type)
+
+    def _validate_generic_return(self, arg_type: Type, value: Any) -> None:
+        """ Validate List or Dict types.
+
+            :note: we return any here because the calling function also returns any.
+        """
+        if issubclass(typing_inspect.get_origin(arg_type), list):
+            if not isinstance(value, list):
+                raise exceptions.ServerError(
+                    f"Invalid return value, type needs to be a list. Argument type should be {arg_type}"
+                )
+
+            el_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+            for el in value:
+                if typing_inspect.is_union_type(el_type):
+                    self._validate_union_return(el_type, el)
+                elif not isinstance(el, el_type):
+                    raise exceptions.ServerError(f"Element {el} of returned list is not of type {el_type}.")
+
+        elif issubclass(typing_inspect.get_origin(arg_type), dict):
+            if not isinstance(value, dict):
+                raise exceptions.ServerError(
+                    f"Invalid return value, type needs to be a dict. Argument type should be {arg_type}"
+                )
+
+            el_type = typing_inspect.get_args(arg_type, evaluate=True)[1]
+            for k, v in value.items():
+                if not isinstance(k, str):
+                    raise exceptions.ServerError(f"Keys of return dict need to be strings.")
+
+                if typing_inspect.is_union_type(el_type):
+                    self._validate_union_return(el_type, v)
+                elif not isinstance(v, el_type):
+                    raise exceptions.ServerError(f"Element {v} of returned list is not of type {el_type}.")
+
+        else:
+            # This should not happen because of MethodProperties validation
+            raise exceptions.BadRequest(
+                f"Failed to validate generic type {arg_type} of return value, only List and Dict are supported"
+            )
+
+    async def process_return(self, config: common.UrlMethod, headers: Dict[str, str], result: Apireturn) -> common.Response:
+        """ A handler can return ApiReturn, so lets handle all possible return types and convert it to a Response
+
+            Apireturn = Union[int, Tuple[int, Optional[JsonType]], "ReturnValue", "BaseModel"]
+        """
+        if "return" in self._argspec.annotations:  # new style with return type
+            return_type = self._argspec.annotations["return"]
+
+            if return_type is None:
+                if result is not None:
+                    raise exceptions.ServerError(f"Method {config.method_name} returned a result but is defined as -> None")
+
+                return common.Response(headers=headers, status_code=200)
+
+            # There is no obvious method to check if the return_type is a specific version of the generic ReturnValue
+            # The way this is implemented in typing is different for python 3.6 and 3.7. In this code we "trust" that the
+            # signature of the handler and the method definition matches and the returned value matches this return value
+            # Both isubclass and isinstance fail on this type
+            # This check needs to be first because isinstance fails on generic types.
+            # TODO: also validate the value inside a ReturnValue
+            if typing_inspect.is_union_type(return_type):
+                self._validate_union_return(return_type, result)
+                return common.Response.create(ReturnValue(response=result), headers, config.properties.wrap_data)
+
+            if typing_inspect.is_generic_type(return_type):
+                if isinstance(result, ReturnValue):
+                    return common.Response.create(result, headers, config.properties.wrap_data)
+                else:
+                    self._validate_generic_return(return_type, result)
+                    return common.Response.create(ReturnValue(response=result), headers, config.properties.wrap_data)
+
+            elif isinstance(result, BaseModel):
+                return common.Response.create(ReturnValue(response=result), headers, config.properties.wrap_data)
+
+            else:
+                raise exceptions.ServerError(
+                    f"Method {config.method_name} returned an invalid result {result} instead of a BaseModel or ReturnValue"
+                )
+
+        else:  # "old" style method definition
+            if isinstance(result, tuple):
+                if len(result) == 2:
+                    code, body = result
+                else:
+                    raise exceptions.ServerError("Handlers for method call can only return a status code and a reply")
+
+            elif isinstance(result, int):
+                code = result
+                body = None
+
+            else:
+                raise exceptions.ServerError(
+                    f"Method {config.method_name} returned an invalid result {result} instead of a status code or tupple"
+                )
+
+            if body is not None:
+                if config.properties.reply:
+                    return common.Response(body=body, headers=headers, status_code=code)
+
+                else:
+                    LOGGER.warning("Method %s returned a result although it has no reply!")
+
+            return common.Response(headers=headers, status_code=code)
+
 
 # Shared
-class RESTBase(object):
+class RESTBase(util.TaskHandler):
     """
         Base class for REST based client and servers
     """
@@ -273,8 +365,7 @@ class RESTBase(object):
     def validate_sid(self, sid: uuid.UUID) -> bool:
         raise NotImplementedError()
 
-    @gen.coroutine
-    def _execute_call(
+    async def _execute_call(
         self,
         kwargs: Dict[str, str],
         http_method: str,
@@ -282,20 +373,15 @@ class RESTBase(object):
         message: Dict[str, Any],
         request_headers: Mapping[str, str],
         auth=None,
-    ) -> Generator[Any, Any, common.Response]:
+    ) -> common.Response:
 
         headers: Dict[str, str] = {}
         try:
             if kwargs is None or config is None:
                 raise Exception("This method is unknown! This should not occur!")
 
-            # create message that contains all arguments (id, query args and body)
-            if "id" in kwargs and (message is None or "id" not in message):
-                message["id"] = kwargs["id"]
-
-            # validate message against config
-            if config.properties.id and "id" not in message:
-                raise exceptions.BadRequest("the request should contain an id in the url.")
+            # create message that contains all arguments
+            message.update(kwargs)
 
             if config.properties.validate_sid:
                 if "sid" not in message:
@@ -305,7 +391,7 @@ class RESTBase(object):
                     raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 
             arguments = CallArguments(config.properties, message, request_headers)
-            yield arguments.process()
+            await arguments.process()
             authorize_request(auth, arguments.metadata, arguments.call_args, config)
 
             # rename arguments if handler requests this
@@ -322,35 +408,13 @@ class RESTBase(object):
                 ", ".join(["%s='%s'" % (name, common.shorten(str(value))) for name, value in arguments.call_args.items()]),
             )
 
-            result = yield config.handler(**arguments.call_args)
+            result = await config.handler(**arguments.call_args)
+            return await arguments.process_return(config, headers, result)
+        except pydantic.ValidationError:
+            LOGGER.exception(f"The handler {config.handler} caused a validation error in a data model (pydantic).")
+            raise exceptions.ServerError("data validation error.")
 
-            if result is None:
-                raise exceptions.BadRequest(
-                    "Handlers for method calls should at least return a status code. %s on %s"
-                    % (config.method_name, config.endpoint)
-                )
-
-            reply = None
-            if isinstance(result, tuple):
-                if len(result) == 2:
-                    code, reply = result
-                else:
-                    raise exceptions.BadRequest("Handlers for method call can only return a status code and a reply")
-
-            else:
-                code = result
-
-            if reply is not None:
-                if config.properties.reply:
-                    LOGGER.debug("%s returned %d: %s", config.method_name, code, common.shorten(str(reply), 70))
-                    return common.Response(body=reply, headers=headers, status_code=code)
-
-                else:
-                    LOGGER.warning("Method %s returned a result although it is has not reply!")
-
-            return common.Response(headers=headers, status_code=code)
-
-        except exceptions.BaseException:
+        except exceptions.BaseHttpException:
             LOGGER.exception("")
             raise
 

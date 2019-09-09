@@ -2,6 +2,8 @@ include LICENSE
 graft docs
 include tox.ini
 include setup.py
+include setup.cfg
+include src/inmanta/py.typed
 
 recursive-include src *.j2
 recursive-include docs *

@@ -17,9 +17,8 @@
 """
 import pytest
 
-from inmanta.ast import AttributeException
-from inmanta.ast import RuntimeException, OptionalValueException
 import inmanta.compiler as compiler
+from inmanta.ast import AttributeException, OptionalValueException, RuntimeException
 from inmanta.parser import ParserException
 
 

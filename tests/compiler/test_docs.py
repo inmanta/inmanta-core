@@ -34,10 +34,7 @@ Each file needs to be associated with a host
 """
     )
     (types, _) = compiler.do_compile()
-    assert (
-        types["__config__::File"].get_attribute("host").comment.strip()
-        == "Each file needs to be associated with a host"
-    )
+    assert types["__config__::File"].get_attribute("host").comment.strip() == "Each file needs to be associated with a host"
 
 
 def test_doc_string_on_relation(snippetcompiler):
@@ -56,14 +53,8 @@ Each file needs to be associated with a host
 """
     )
     (types, _) = compiler.do_compile()
-    assert (
-        types["__config__::File"].get_attribute("host").comment.strip()
-        == "Each file needs to be associated with a host"
-    )
-    assert (
-        types["__config__::Host"].get_attribute("file").comment.strip()
-        == "Each file needs to be associated with a host"
-    )
+    assert types["__config__::File"].get_attribute("host").comment.strip() == "Each file needs to be associated with a host"
+    assert types["__config__::Host"].get_attribute("file").comment.strip() == "Each file needs to be associated with a host"
 
 
 def test_function_in_typedef(snippetcompiler):
@@ -96,10 +87,7 @@ typedef foo as string matching /^a+$/
 """
     )
     (types, _) = compiler.do_compile()
-    assert (
-        types["__config__::foo"].comment.strip()
-        == 'Foo is a stringtype that only allows "a"'
-    )
+    assert types["__config__::foo"].comment.strip() == 'Foo is a stringtype that only allows "a"'
 
 
 def test_doc_string_on_typedefault(snippetcompiler):
@@ -116,10 +104,7 @@ typedef Foo as File(x=5)
 """
     )
     (types, _) = compiler.do_compile()
-    assert (
-        types["__config__::Foo"].comment.strip()
-        == 'Foo is a stringtype that only allows "a"'
-    )
+    assert types["__config__::Foo"].comment.strip() == 'Foo is a stringtype that only allows "a"'
 
 
 def test_doc_string_on_impl(snippetcompiler):

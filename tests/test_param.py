@@ -30,7 +30,7 @@ async def test_param(client, environment):
     """
     fake_uuid = uuid.uuid4()
     result = await client.list_params(tid=fake_uuid)
-    assert(result.code == 404)
+    assert result.code == 404
 
     result = await client.list_params(tid=environment)
-    assert(result.code == 200)
+    assert result.code == 200

@@ -103,19 +103,22 @@ ln -s /opt/inmanta/bin/inmanta-cli %{buildroot}%{_bindir}/inmanta-cli
 chmod -x LICENSE
 mkdir -p %{buildroot}%{_localstatedir}/lib/inmanta
 mkdir -p %{buildroot}/etc/inmanta
+mkdir -p %{buildroot}/etc/inmanta/inmanta.d
 mkdir -p %{buildroot}/var/log/inmanta
 mkdir -p %{buildroot}/etc/logrotate.d
-install -p -m 644 misc/inmanta.cfg %{buildroot}/etc/inmanta.cfg
+install -p -m 644 misc/inmanta.cfg %{buildroot}/etc/inmanta/inmanta.cfg
 install -p -m 644 misc/logrotation_config %{buildroot}/etc/logrotate.d/inmanta
 
 # Setup systemd
 mkdir -p %{buildroot}%{_unitdir}
 install -p -m 644 misc/inmanta-agent.service $RPM_BUILD_ROOT%{_unitdir}/inmanta-agent.service
 install -p -m 644 misc/inmanta-server.service $RPM_BUILD_ROOT%{_unitdir}/inmanta-server.service
+mkdir -p %{buildroot}/etc/sysconfig
+touch %{buildroot}/etc/sysconfig/inmanta-server
+touch %{buildroot}/etc/sysconfig/inmanta-agent
 
 # Install the dashboard
 cp -a dist %{venv}/dashboard
-install -p -m 644 misc/server.cfg %{buildroot}/etc/inmanta/server.cfg
 
 %clean
 rm -rf %{buildroot}
@@ -131,10 +134,13 @@ rm -rf %{buildroot}
 %{_bindir}/inmanta
 %{_bindir}/inmanta-cli
 %attr(-, inmanta, inmanta) %{_localstatedir}/lib/inmanta
-%config %attr(-, root, root) /etc/inmanta.cfg
 %attr(-, inmanta, inmanta) /var/log/inmanta
 %config %attr(-, root, root)/etc/inmanta
-%config %attr(-, root, root)/etc/logrotate.d/inmanta
+%config %attr(-, root, root)/etc/inmanta/inmanta.cfg
+%config %attr(-, root, root)/etc/inmanta/inmanta.d
+%config(noreplace) %attr(-, root, root)/etc/logrotate.d/inmanta
+%config(noreplace) %attr(-, root, root)/etc/sysconfig/inmanta-server
+%config(noreplace) %attr(-, root, root)/etc/sysconfig/inmanta-agent
 
 %files server
 /opt/inmanta/dashboard
@@ -147,13 +153,18 @@ rm -rf %{buildroot}
 %systemd_post inmanta-agent.service
 
 %preun agent
-%systemd_preun inmanta-server.service
+%systemd_preun inmanta-agent.service
 
 %postun agent
-%systemd_postun_with_restart inmanta-server.service
+%systemd_postun_with_restart inmanta-agent.service
 
 %post server
-%systemd_post inmanta-agent.service
+%systemd_post inmanta-server.service
+
+# Move server.cfg file for backward compatibility
+if [ -e "/etc/inmanta/server.cfg" ]; then
+  mv /etc/inmanta/server.cfg /etc/inmanta/inmanta.d/
+fi
 
 %preun server
 %systemd_preun inmanta-server.service

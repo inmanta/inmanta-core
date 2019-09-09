@@ -15,13 +15,13 @@
 
     Contact: code@inmanta.com
 """
+import logging
 import re
 import urllib
-import logging
 
-from . import local, remote
 from inmanta.agent.cache import AgentCache
 
+from . import local, remote
 
 LOGGER = logging.getLogger(__name__)
 

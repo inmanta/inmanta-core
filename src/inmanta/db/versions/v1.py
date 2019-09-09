@@ -1,4 +1,25 @@
-async def update(connection):
+"""
+    Copyright 2019 Inmanta
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
+
+import asyncpg
+
+
+async def update(connection: asyncpg.connection) -> None:
     schema = """
 CREATE TYPE versionstate AS ENUM('success', 'failed', 'deploying', 'pending');
 CREATE TYPE resourcestate AS ENUM('unavailable', 'skipped', 'dry', 'deployed', 'failed', 'deploying', 'available',
@@ -313,12 +334,6 @@ CREATE TABLE IF NOT EXISTS public.dryrun(
 --      * server.dryrun_list()
 -- => Prevent sequential scan through all dryruns
 CREATE INDEX dryrun_env_model_index ON dryrun (environment, model);
-
--- Table: public.schemaversion
-CREATE TABLE IF NOT EXISTS public.schemaversion(
-    id uuid PRIMARY KEY,
-    current_version integer NOT NULL UNIQUE
-);
 """
     async with connection.transaction():
         await connection.execute(schema)

@@ -16,30 +16,35 @@
     Contact: code@inmanta.com
 """
 
+import datetime
+import enum
 import functools
 import hashlib
 import inspect
 import itertools
 import logging
+import os
 import socket
-import warnings
+import time
 import uuid
-import datetime
-import enum
-from asyncio import ensure_future, CancelledError
+import warnings
+from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
 from logging import Logger
+from typing import Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
 
 import pkg_resources
-from pkg_resources import DistributionNotFound
-from tornado.ioloop import IOLoop
-from typing import Callable, Dict, Union, Tuple, List, Coroutine
 from tornado import gen
+from tornado.ioloop import IOLoop
 
+from inmanta.data.model import BaseModel
 from inmanta.types import JsonType
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
 HASH_ROUNDS = 100000
+
+T = TypeVar("T")
+S = TypeVar("S")
 
 
 def memoize(obj):
@@ -54,10 +59,10 @@ def memoize(obj):
     return memoizer
 
 
-def get_compiler_version() -> str:
+def get_compiler_version() -> Optional[str]:
     try:
         return pkg_resources.get_distribution("inmanta").version
-    except DistributionNotFound:
+    except pkg_resources.DistributionNotFound:
         LOGGER.error(
             "Could not find version number for the inmanta compiler."
             "Is inmanta installed? Use stuptools install or setuptools dev to install."
@@ -65,11 +70,18 @@ def get_compiler_version() -> str:
         return None
 
 
-def groupby(mylist, f):
+def groupby(mylist: List[T], f: Callable[[T], S]) -> Iterator[Tuple[S, Iterator[T]]]:
     return itertools.groupby(sorted(mylist, key=f), f)
 
 
-def hash_file(content: str) -> str:
+def ensure_directory_exist(directory: str, *subdirs: str) -> str:
+    directory = os.path.join(directory, *subdirs)
+    if not os.path.exists(directory):
+        os.mkdir(directory)
+    return directory
+
+
+def hash_file(content: bytes) -> str:
     """
         Create a hash from the given content
     """
@@ -111,6 +123,7 @@ class Scheduler(object):
     """
         An event scheduler class
     """
+
     def __init__(self, name: str) -> None:
         self.name = name
         self._scheduled: Dict[Callable, object] = {}
@@ -134,11 +147,7 @@ class Scheduler(object):
             LOGGER.info("Calling %s" % action)
             if action in self._scheduled:
                 try:
-                    ensure_future_and_handle_exception(
-                        LOGGER,
-                        "Uncaught exception while executing scheduled action",
-                        action()
-                    )
+                    ensure_future_and_handle_exception(LOGGER, "Uncaught exception while executing scheduled action", action())
                 except Exception:
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
@@ -179,7 +188,7 @@ def get_free_tcp_port() -> str:
         Semi safe method for getting a random port. This may contain a race condition.
     """
     tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tcp.bind(('', 0))
+    tcp.bind(("", 0))
     _addr, port = tcp.getsockname()
     tcp.close()
     return str(port)
@@ -193,7 +202,7 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
         return str(o)
 
     if isinstance(o, datetime.datetime):
-        return o.isoformat(timespec='microseconds')
+        return o.isoformat(timespec="microseconds")
 
     if hasattr(o, "to_dict"):
         return o.to_dict()
@@ -205,5 +214,144 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
         # Logs can push exceptions through RPC. Return a string representation.
         return str(o)
 
+    if isinstance(o, BaseModel):
+        return o.dict(by_alias=True)
+
     LOGGER.error("Unable to serialize %s", o)
     raise TypeError(repr(o) + " is not JSON serializable")
+
+
+def add_future(future: Union[Future, Coroutine]) -> Task:
+    """
+        Add a future to the ioloop to be handled, but do not require the result.
+    """
+
+    def handle_result(f: Task) -> None:
+        try:
+            f.result()
+        except Exception as e:
+            LOGGER.exception("An exception occurred while handling a future: %s", str(e))
+
+    task = ensure_future(future)
+    task.add_done_callback(handle_result)
+    return task
+
+
+async def retry_limited(fun: Callable[[], bool], timeout: float, interval: float = 0.1) -> None:
+    start = time.time()
+    while time.time() - start < timeout and not fun():
+        await sleep(interval)
+
+
+class StoppedException(Exception):
+    """ This exception is raised when a background task is added to the taskhandler when it is shutting down.
+    """
+
+
+class TaskHandler(object):
+    """
+        This class provides a method to add a background task based on a coroutine. When the coroutine ends, any exceptions
+        are reported. If stop is invoked, all background tasks are cancelled.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._background_tasks: Set[Task] = set()
+        self._await_tasks: Set[Task] = set()
+        self._stopped = False
+
+    def is_stopped(self):
+        return self._stopped
+
+    def is_running(self):
+        return not self._stopped
+
+    def add_background_task(self, future: Union[Future, Coroutine], cancel_on_stop=True) -> Task:
+        """ Add a background task to the event loop. When stop is called, the task is cancelled.
+
+        :param future: The future or coroutine to run as background task.
+        :param cancel_on_stop: Cancel the task when stop is called. If false, the coroutine is awaited.
+        """
+        if self._stopped:
+            LOGGER.warning("Not adding background task because we are stopping.")
+            raise StoppedException("A background tasks are not added to the event loop while stopping")
+
+        task = ensure_future(future)
+
+        def handle_result(task: Task) -> None:
+            try:
+                task.result()
+            except CancelledError:
+                LOGGER.warning("Task %s was cancelled.", task)
+
+            except Exception as e:
+                LOGGER.exception("An exception occurred while handling a future: %s", str(e))
+            finally:
+                if task in self._background_tasks:
+                    self._background_tasks.remove(task)
+
+        task.add_done_callback(handle_result)
+        self._background_tasks.add(task)
+
+        if not cancel_on_stop:
+            self._await_tasks.add(task)
+
+        return task
+
+    async def stop(self) -> None:
+        """ Stop all background tasks by requesting a cancel
+        """
+        self._stopped = True
+        await gather(*self._await_tasks)
+        self._background_tasks.difference_update(self._await_tasks)
+
+        cancelled_tasks = []
+        try:
+            while True:
+                task = self._background_tasks.pop()
+                task.cancel()
+                cancelled_tasks.append(task)
+        except KeyError:
+            pass
+
+        await gather(*cancelled_tasks, return_exceptions=True)
+
+
+class CycleException(Exception):
+    def __init__(self, node):
+        self.nodes = [node]
+        self.done = False
+
+    def add(self, node):
+        if not self.done:
+            if node not in self.nodes:
+                self.nodes.insert(0, node)
+            else:
+                self.done = True
+
+
+def stable_depth_first(nodes: List[str], edges: Dict[str, List[str]]) -> List[str]:
+    """Creates a linear sequence based on a set of "comes after" edges, same graph yields the same solution,
+    independent of order given to this function"""
+    nodes = sorted(nodes)
+    edges = {k: sorted(v) for k, v in edges.items()}
+    out = []
+
+    def dfs(node: str, seen: Set[str] = set()) -> None:
+        if node in out:
+            return
+        if node in seen:
+            raise CycleException(node)
+        try:
+            if node in edges:
+                for edge in edges[node]:
+                    dfs(edge, seen | set(node))
+            out.append(node)
+        except CycleException as e:
+            e.add(node)
+            raise e
+
+    while nodes:
+        dfs(nodes.pop(0))
+
+    return out

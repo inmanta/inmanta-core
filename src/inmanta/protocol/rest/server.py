@@ -18,18 +18,21 @@
 import asyncio
 import ssl
 import uuid
-
-from typing import Optional, Dict, List
+from asyncio import CancelledError
+from collections import defaultdict
+from typing import Dict, List, MutableMapping, Optional
 
 import tornado
 from pyformance import timer
-from tornado import gen, httpserver, web, routing
+from tornado import httpserver, iostream, routing, web
 
 import inmanta.protocol.endpoints
-from inmanta import config as inmanta_config, const
-from inmanta.protocol import exceptions, common
-from inmanta.protocol.rest import LOGGER, CONTENT_TYPE, JSON_CONTENT, RESTBase
-from inmanta.types import NoneGen, JsonType
+from inmanta import config as inmanta_config
+from inmanta import const
+from inmanta.protocol import common, exceptions
+from inmanta.protocol.common import UrlMethod
+from inmanta.protocol.rest import CONTENT_TYPE, JSON_CONTENT, LOGGER, RESTBase
+from inmanta.types import JsonType
 
 
 class RESTHandler(tornado.web.RequestHandler):
@@ -45,13 +48,13 @@ class RESTHandler(tornado.web.RequestHandler):
         if http_method.upper() not in self._config:
             allowed = ", ".join(self._config.keys())
             self.set_header("Allow", allowed)
-            raise exceptions.BaseException(
+            raise exceptions.BaseHttpException(
                 405, "%s is not supported for this url. Supported methods: %s" % (http_method, allowed)
             )
 
         return self._config[http_method]
 
-    def get_auth_token(self, headers: Dict[str, str]) -> Optional[Dict[str, str]]:
+    def get_auth_token(self, headers: MutableMapping[str, str]) -> Optional[MutableMapping[str, str]]:
         """
             Get the auth token provided by the caller. The token is provided as a bearer token.
         """
@@ -81,13 +84,15 @@ class RESTHandler(tornado.web.RequestHandler):
 
         self.set_status(status)
 
-    @gen.coroutine
-    def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> NoneGen:
+    async def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> None:
         """
             An rpc like call
         """
         if call_config is None:
             raise exceptions.NotFound("This method does not exist")
+
+        if not self._transport.running:
+            return
 
         with timer("rpc." + call_config.method_name).time():
             self._transport.start_request()
@@ -108,7 +113,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
                 auth_enabled: bool = inmanta_config.Config.get("server", "auth", False)
                 if not auth_enabled or auth_token is not None:
-                    result = yield self._transport._execute_call(
+                    result = await self._transport._execute_call(
                         kwargs, http_method, call_config, message, request_headers, auth_token
                     )
                     self.respond(result.body, result.headers, result.status_code)
@@ -119,51 +124,63 @@ class RESTHandler(tornado.web.RequestHandler):
                 LOGGER.exception("An exception occured")
                 self.respond({"message": "Unable to decode request body"}, {}, 400)
 
-            except exceptions.BaseException as e:
+            except exceptions.BaseHttpException as e:
                 self.respond(e.to_body(), {}, e.to_status())
+
+            except CancelledError:
+                self.respond({"message": "Request is cancelled on the server"}, {}, 500)
 
             finally:
                 try:
-                    yield self.finish()
+                    await self.finish()
+                except iostream.StreamClosedError:
+                    # The connection has been closed already.
+                    pass
                 except Exception:
                     LOGGER.exception("An exception occurred responding to %s", self.request.remote_ip)
                 self._transport.end_request()
 
-    @gen.coroutine
-    def head(self, *args: str, **kwargs: str) -> NoneGen:
+    async def head(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs), cancel_on_stop=False
+        )
 
-    @gen.coroutine
-    def get(self, *args: str, **kwargs: str) -> NoneGen:
+    async def get(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs), cancel_on_stop=False
+        )
 
-    @gen.coroutine
-    def post(self, *args: str, **kwargs: str) -> NoneGen:
+    async def post(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs), cancel_on_stop=False
+        )
 
-    @gen.coroutine
-    def delete(self, *args: str, **kwargs: str) -> NoneGen:
+    async def delete(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs), cancel_on_stop=False
+        )
 
-    @gen.coroutine
-    def patch(self, *args: str, **kwargs: str) -> NoneGen:
+    async def patch(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs), cancel_on_stop=False
+        )
 
-    @gen.coroutine
-    def put(self, *args: str, **kwargs: str) -> NoneGen:
+    async def put(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs), cancel_on_stop=False
+        )
 
     def options(self, *args: str, **kwargs: str) -> None:
         if args:
@@ -197,7 +214,7 @@ class RESTServer(RESTBase):
         A tornado based rest server
     """
 
-    _http_server: httpserver.HTTPServer
+    _http_server: Optional[httpserver.HTTPServer]
 
     def __init__(self, session_manager: common.SessionManagerInterface, id: str) -> None:
         super().__init__()
@@ -210,6 +227,8 @@ class RESTServer(RESTBase):
         # event indicating no more in flight requests
         self.idle_event = asyncio.Event()
         self.idle_event.set()
+        self.running = False
+        self._http_server = None
 
     def start_request(self):
         self.idle_event.clear()
@@ -223,24 +242,26 @@ class RESTServer(RESTBase):
     def validate_sid(self, sid: uuid.UUID) -> bool:
         return self.session_manager.validate_sid(sid)
 
-    @gen.coroutine
-    def start(self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []) -> NoneGen:
+    async def start(
+        self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
+    ) -> None:
         """
             Start the server on the current ioloop
         """
-        rules: List[routing.Rule] = []
-        rules.extend(additional_rules)
-
+        global_url_map: Dict[str, Dict[str, UrlMethod]] = defaultdict(dict)
         for slice in targets:
             url_map = slice.get_op_mapping()
-
             for url, configs in url_map.items():
-                handler_config = {}
+                handler_config = global_url_map[url]
                 for op, cfg in configs.items():
                     handler_config[op] = cfg
 
-                rules.append(routing.Rule(routing.PathMatches(url), RESTHandler, {"transport": self, "config": handler_config}))
-                LOGGER.debug("Registering handler(s) for url %s and methods %s" % (url, ", ".join(handler_config.keys())))
+        rules: List[routing.Rule] = []
+        rules.extend(additional_rules)
+
+        for url, handler_config in global_url_map.items():
+            rules.append(routing.Rule(routing.PathMatches(url), RESTHandler, {"transport": self, "config": handler_config}))
+            LOGGER.debug("Registering handler(s) for url %s and methods %s", url, ", ".join(handler_config.keys()))
 
         port = 8888
         if self.id in inmanta_config.Config.get() and "port" in inmanta_config.Config.get()[self.id]:
@@ -260,6 +281,7 @@ class RESTServer(RESTBase):
         else:
             self._http_server = httpserver.HTTPServer(application, decompress_request=True)
         self._http_server.listen(port)
+        self.running = True
 
         LOGGER.debug("Start REST transport")
 
@@ -267,11 +289,12 @@ class RESTServer(RESTBase):
         """
             Stop the current server
         """
+        self.running = False
         LOGGER.debug("Stopping Server Rest Endpoint")
         if self._http_server is not None:
             self._http_server.stop()
 
-    @gen.coroutine
-    def join(self) -> NoneGen:
-        yield self.idle_event.wait()
-        yield self._http_server.close_all_connections()
+    async def join(self) -> None:
+        await self.idle_event.wait()
+        if self._http_server is not None:
+            await self._http_server.close_all_connections()

@@ -18,18 +18,25 @@
 
 # pylint: disable-msg=R0902,R0904
 
-from inmanta.ast.type import Type, NamedType
-from inmanta.ast.blocks import BasicBlock
-from inmanta.execute.runtime import Resolver, QueueScheduler
-from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespace, Location, \
-    Named, Locatable, CompilerException
-from inmanta.util import memoize
-from inmanta.execute.runtime import Instance
-from inmanta.execute.util import AnyType
-
-from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set  # noqa: F401
 from abc import abstractmethod
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union  # noqa: F401
+
+from inmanta.ast import (
+    CompilerException,
+    DuplicateException,
+    Locatable,
+    Location,
+    Named,
+    Namespace,
+    NotFoundException,
+    RuntimeException,
+)
+from inmanta.ast.blocks import BasicBlock
+from inmanta.ast.statements.generator import SubConstructor
+from inmanta.ast.type import NamedType, Type
+from inmanta.execute.runtime import Instance, QueueScheduler, Resolver
+from inmanta.execute.util import AnyType
+from inmanta.util import memoize
 
 try:
     from typing import TYPE_CHECKING
@@ -91,6 +98,7 @@ class Entity(EntityLike, NamedType):
         :param name: The name of this entity. This name can not be changed
             after this object has been created
     """
+
     comment: Optional[str]
 
     def __init__(self, name: str, namespace: Namespace) -> None:
@@ -317,11 +325,9 @@ class Entity(EntityLike, NamedType):
         for parent in self.parent_entities:
             parent.add_instance(obj)
 
-    def get_instance(self,
-                     attributes: Dict[str, object],
-                     resolver: Resolver,
-                     queue: QueueScheduler,
-                     location: Location) -> "Instance":
+    def get_instance(
+        self, attributes: Dict[str, object], resolver: Resolver, queue: QueueScheduler, location: Location
+    ) -> "Instance":
         """
             Return an instance of the class defined in this entity
         """
@@ -440,10 +446,9 @@ class Entity(EntityLike, NamedType):
                         x.set_value(instance, stmt.location)
                     self.index_queue.pop(keys)
 
-    def lookup_index(self,
-                     params: "List[str,object]",
-                     stmt: "Statement",
-                     target: "Optional[ResultVariable]"=None) -> "Optional[Instance]":
+    def lookup_index(
+        self, params: "List[str,object]", stmt: "Statement", target: "Optional[ResultVariable]" = None
+    ) -> "Optional[Instance]":
         """
             Search an instance in the index.
         """
@@ -456,9 +461,10 @@ class Entity(EntityLike, NamedType):
 
         if not found_index:
             raise NotFoundException(
-                stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params))
+                stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params)
+            )
 
-        key = ", ".join(["%s=%s" % (k, repr(v)) for (k, v) in sorted(params, key=lambda x:x[0])])
+        key = ", ".join(["%s=%s" % (k, repr(v)) for (k, v) in sorted(params, key=lambda x: x[0])])
 
         if target is None:
             if key in self._index:
@@ -483,14 +489,14 @@ class Entity(EntityLike, NamedType):
     def final(self, excns: List[Exception]) -> None:
         for key, indices in self.index_queue.items():
             for _, stmt in indices:
-                excns.append(NotFoundException(stmt, key,
-                                               "No match in index on type %s with key %s" % (self.get_full_name(), key)))
+                excns.append(
+                    NotFoundException(stmt, key, "No match in index on type %s with key %s" % (self.get_full_name(), key))
+                )
         for _, attr in self.get_attributes().items():
             attr.final(excns)
 
     def get_double_defined_exception(self, other: "Namespaced") -> "DuplicateException":
-        return DuplicateException(
-            self, other, "Entity %s is already defined" % (self.get_full_name()))
+        return DuplicateException(self, other, "Entity %s is already defined" % (self.get_full_name()))
 
     def get_location(self) -> Location:
         return self.location
@@ -503,12 +509,9 @@ class Implementation(NamedType):
         to create mixin like aspects.
     """
 
-    def __init__(self,
-                 name: str,
-                 stmts: BasicBlock,
-                 namespace: Namespace,
-                 target_type: str,
-                 comment: Optional[str]=None) -> None:
+    def __init__(
+        self, name: str, stmts: BasicBlock, namespace: Namespace, target_type: str, comment: Optional[str] = None
+    ) -> None:
         Named.__init__(self)
         self.name = name
         self.statements = stmts
@@ -537,8 +540,9 @@ class Implementation(NamedType):
         return self.namespace
 
     def get_double_defined_exception(self, other: "Namespaced") -> "DuplicateException":
-        raise DuplicateException(self, other, "Implementation %s for type %s is already defined" %
-                                 (self.get_full_name(), self.target_type))
+        raise DuplicateException(
+            self, other, "Implementation %s for type %s is already defined" % (self.get_full_name(), self.target_type)
+        )
 
     def get_location(self) -> Location:
         return self.location
@@ -548,6 +552,7 @@ class Implement(Locatable):
     """
         Define an implementation of an entity in functions of implementations
     """
+
     comment: Optional[str]
 
     def __init__(self) -> None:

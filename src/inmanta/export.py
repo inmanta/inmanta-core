@@ -16,46 +16,50 @@
     Contact: code@inmanta.com
 """
 
+import argparse
+import base64
+import itertools
 import logging
 import os
 import time
-import base64
 import uuid
-import argparse
-from typing import Dict, List, Callable, Any, Union, Optional, Tuple, Set
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
-from inmanta import protocol, const, loader
-from inmanta.agent.handler import Commander
-from inmanta.execute.util import Unknown, NoneValue
-from inmanta.resources import resource, Resource, to_id, IgnoreResourceException
-from inmanta.config import Option, is_uuid_opt, is_list, is_str
-from inmanta.execute.proxy import DynamicProxy, UnknownException
-from inmanta.ast import CompilerException, Locatable, OptionalValueException, type, Namespace
-from inmanta.execute.runtime import Instance, ResultVariable
-from inmanta.util import hash_file
-import itertools
-from inmanta.ast.entity import Entity
-from inmanta.util import groupby
-from inmanta.ast.attribute import RelationAttribute
 import inmanta.model as model
-
+from inmanta import const, loader, protocol
+from inmanta.agent.handler import Commander
+from inmanta.ast import CompilerException, Locatable, Namespace, OptionalValueException
+from inmanta.ast.attribute import RelationAttribute
+from inmanta.ast.entity import Entity
+from inmanta.config import Option, is_list, is_str, is_uuid_opt
+from inmanta.const import ResourceState
+from inmanta.execute.proxy import DynamicProxy, UnknownException
+from inmanta.execute.runtime import Instance, ResultVariable
+from inmanta.execute.util import NoneValue, Unknown
+from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
+from inmanta.util import groupby, hash_file
 
 LOGGER = logging.getLogger(__name__)
 
-unknown_parameters = []
+unknown_parameters: List[Dict[str, str]] = []
 
 cfg_env = Option("config", "environment", None, "The environment this model is associated with", is_uuid_opt)
-cfg_export = Option("config", "export", "", "The list of exporters to use", is_list)
+cfg_export = Option(
+    "config",
+    "export",
+    "",
+    "The list of exporters to use. This option is ignored when the --export-plugin option is used.",
+    is_list,
+)
 cfg_unknown_handler = Option("unknown_handler", "default", "prune-agent", "default method to handle unknown values ", is_str)
 
 
-ModelDict = Dict[str, List[type.Type]]
-ResourceDict = Dict[str, Resource]
-ProxiedType = Dict[str, List[Union[str, tuple, int, float, bool, "DynamicProxy"]]]
+ModelDict = Dict[str, Entity]
+ResourceDict = Dict[Id, Resource]
+ProxiedType = Dict[str, Sequence[Union[str, tuple, int, float, bool, "DynamicProxy"]]]
 
 
 class DependencyCycleException(Exception):
-
     def __init__(self, start: Resource) -> None:
         super().__init__()
         self.start = start
@@ -84,9 +88,8 @@ def upload_code(conn: protocol.Client, tid: uuid.UUID, version: int, code_manage
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
     source_map = {
-        resource_name: {
-            source.hash: (source.path, source.module_name, source.requires) for source in sources
-        } for resource_name, sources in code_manager.get_types()
+        resource_name: {source.hash: (source.path, source.module_name, source.requires) for source in sources}
+        for resource_name, sources in code_manager.get_types()
     }
 
     res = conn.upload_code_batched(tid=tid, id=version, resources=source_map)
@@ -98,12 +101,15 @@ class Exporter(object):
     """
         This class handles exporting the compiled configuration model
     """
+
     # instance vars
     types: Optional[Dict[str, Entity]]
     scopes: Optional[Namespace]
+    failed: bool  # did the compile fail?
 
     # class vars
     __export_functions: Dict[str, Tuple[List[str], Callable[["Exporter", ProxiedType], None]]] = {}
+    # type is not entirely right, ProxiedType argument can be absent
     __dep_manager: List[Callable[[ModelDict, ResourceDict], None]] = []
 
     @classmethod
@@ -120,22 +126,23 @@ class Exporter(object):
         """
         cls.__dep_manager.append(function)
 
-    def __init__(self, options: argparse.Namespace=None) -> None:
+    def __init__(self, options: argparse.Namespace = None) -> None:
         self.options = options
 
         self._resources: ResourceDict = {}
-        self._resource_to_host = {}
-        self._resource_state = {}
-        self._unknown_objects = set()
+        self._resource_to_host: Dict[Id, str] = {}
+        self._resource_state: Dict[str, ResourceState] = {}
+        self._unknown_objects: Set[str] = set()
         self._version = 0
         self._scope = None
+        self.failed = False
 
-        self._file_store = {}
+        self._file_store: Dict[str, bytes] = {}
 
     def _get_instance_proxies_of_types(self, types: List[str]) -> Dict[str, ProxiedType]:
         """ Returns a dict of instances for the given types
         """
-        proxies = {}
+        proxies: Dict[str, ProxiedType] = {}
         for t in types:
             if self.types is not None and t in self.types:
                 proxies[t] = [DynamicProxy.return_value(i) for i in self.types[t].get_all_instances()]
@@ -167,17 +174,23 @@ class Exporter(object):
                         ignored_set.add(instance)
                         # We get this exception when the attribute that is used to create the object id contains an unknown.
                         # We can safely ignore this resource == prune it
-                        LOGGER.debug("Skipped resource of type %s because its id contains an unknown (location: %s)",
-                                     entity, instance.location)
+                        LOGGER.debug(
+                            "Skipped resource of type %s because its id contains an unknown (location: %s)",
+                            entity,
+                            instance.location,
+                        )
 
                     except IgnoreResourceException:
                         ignored_set.add(instance)
-                        LOGGER.info("Ignoring resource of type %s because it requested to ignore it. (location: %s)",
-                                    entity, instance.location)
+                        LOGGER.info(
+                            "Ignoring resource of type %s because it requested to ignore it. (location: %s)",
+                            entity,
+                            instance.location,
+                        )
 
         Resource.convert_requires(resource_mapping, ignored_set)
 
-    def _run_export_plugins(self) -> None:
+    def _run_export_plugins_specified_in_config_file(self) -> None:
         """
             Run any additional export plug-ins
         """
@@ -186,18 +199,19 @@ class Exporter(object):
             export.append(pl.strip())
 
         for name in export:
-            if name.strip() == '':
+            if name.strip() == "":
                 continue
+            self.run_export_plugin(name)
 
-            if name not in self.__class__.__export_functions:
-                raise Exception("Export function %s does not exist." % name)
+    def run_export_plugin(self, name: str) -> None:
+        if name not in Exporter.__export_functions:
+            raise Exception("Export function %s does not exist." % name)
 
-            types, function = Exporter.__export_functions[name]
-
-            if len(types) > 0:
-                function(self, types=self._get_instance_proxies_of_types(types))
-            else:
-                function(self)
+        types, function = Exporter.__export_functions[name]
+        if len(types) > 0:
+            function(self, types=self._get_instance_proxies_of_types(types))
+        else:
+            function(self)
 
     def _call_dep_manager(self, types: ModelDict) -> None:
         """
@@ -252,12 +266,13 @@ class Exporter(object):
 
     def run(
         self,
-        types: Optional[Dict[str, type.Type]],
+        types: Optional[Dict[str, Entity]],
         scopes: Optional[Namespace],
-        metadata: Dict[str, str]={},
-        no_commit: bool=False,
-        include_status: bool=False,
-        model_export: bool=False
+        metadata: Dict[str, str] = {},
+        no_commit: bool = False,
+        include_status: bool = False,
+        model_export: bool = False,
+        export_plugin: Optional[str] = None,
     ) -> None:
         """
         Run the export functions
@@ -266,9 +281,6 @@ class Exporter(object):
         self.scopes = scopes
         self._version = int(time.time())
 
-        # first run other export plugins
-        self._run_export_plugins()
-
         if types is not None:
             # then process the configuration model to submit it to the mgmt server
             self._load_resources(types)
@@ -276,8 +288,18 @@ class Exporter(object):
             # call dependency managers
             self._call_dep_manager(types)
             metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success.name
+            self.failed = False
         else:
             metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.failed.name
+            self.failed = True
+            LOGGER.warning("Compilation of model failed.")
+
+        if not self.failed:
+            if export_plugin is not None:
+                # Run export plugin specified on CLI
+                self.run_export_plugin(export_plugin)
+            else:
+                self._run_export_plugins_specified_in_config_file()
 
         # validate the dependency graph
         self._validate_graph()
@@ -287,7 +309,7 @@ class Exporter(object):
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
 
-        model = {}
+        model: Optional[Dict[str, Any]] = {}
 
         if self.options and self.options.json:
             with open(self.options.json, "wb+") as fd:
@@ -296,7 +318,7 @@ class Exporter(object):
                 model = ModelExporter(types).export_all()
                 with open(self.options.json + ".types", "wb+") as fd:
                     fd.write(protocol.json_encode(model).encode("utf-8"))
-        elif len(self._resources) > 0 or len(unknown_parameters) > 0 and not no_commit:
+        elif (not self.failed or len(self._resources) > 0 or len(unknown_parameters) > 0) and not no_commit:
             model = None
             if types is not None and model_export:
                 model = ModelExporter(types).export_all()
@@ -350,7 +372,7 @@ class Exporter(object):
 
         return resources
 
-    def deploy_code(self, conn: protocol.Client, tid: uuid, version: int=None) -> None:
+    def deploy_code(self, conn: protocol.Client, tid: uuid.UUID, version: int = None) -> None:
         """ Deploy code to the server
         """
         if version is None:
@@ -370,9 +392,7 @@ class Exporter(object):
 
         upload_code(conn, tid, version, code_manager)
 
-    def commit_resources(
-        self, version: int, resources: List[Dict[str, str]], metadata: Dict[str, str], model: Dict
-    ) -> None:
+    def commit_resources(self, version: int, resources: List[Dict[str, str]], metadata: Dict[str, str], model: Dict) -> None:
         """
             Commit the entire list of resource to the configurations server.
         """
@@ -409,31 +429,40 @@ class Exporter(object):
                 LOGGER.debug("Uploaded file with hash %s" % hash_id)
 
         # Collecting version information
-        version_info = {const.EXPORT_META_DATA: metadata,
-                        "model": model}
+        version_info = {const.EXPORT_META_DATA: metadata, "model": model}
 
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")
         for res in resources:
             LOGGER.debug("  %s", res["id"])
 
-        res = conn.put_version(tid=tid, version=version, resources=resources, unknowns=unknown_parameters,
-                               resource_state=self._resource_state, version_info=version_info)
+        res = conn.put_version(
+            tid=tid,
+            version=version,
+            resources=resources,
+            unknowns=unknown_parameters,
+            resource_state=self._resource_state,
+            version_info=version_info,
+        )
 
         if res.code != 200:
             LOGGER.error("Failed to commit resource updates (%s)", res.result["message"])
             raise Exception("Failed to commit resource updates (%s)" % res.result["message"])
 
-    def upload_file(self, content: Union[str, bytes] = None) -> str:
+    def upload_file(self, content: Union[str, bytes]) -> str:
         """
             Upload a file to the configuration server. This operation is not
             executed in the transaction.
         """
-        if not isinstance(content, bytes):
-            content = content.encode('utf-8')
+        bcontent: bytes
 
-        hash_id = hash_file(content)
-        self._file_store[hash_id] = content
+        if not isinstance(content, bytes):
+            bcontent = content.encode("utf-8")
+        else:
+            bcontent = content
+
+        hash_id = hash_file(bcontent)
+        self._file_store[hash_id] = bcontent
 
         return hash_id
 
@@ -451,6 +480,7 @@ class code_manager(object):  # noqa: N801
     """ Register a function that will be invoked after all resource and handler code is collected. A code manager can add
     or modify code before it is uploaded to the server.
     """
+
     def __init__(self, function: Callable[[], None]) -> None:
         pass
 
@@ -510,7 +540,6 @@ def relation_name(type: Entity, rel: RelationAttribute) -> str:
 
 
 class ModelExporter(object):
-
     def __init__(self, types: ModelDict):
         self.root_type = types["std::Entity"]
         self.types = types
@@ -519,9 +548,10 @@ class ModelExporter(object):
         """
             Run after export_model!!
         """
+
         def convert_comment(value):
             if value is None:
-                return ''
+                return ""
             else:
                 return str(value)
 
@@ -534,25 +564,38 @@ class ModelExporter(object):
                 return model.DirectValue(value)
 
         def convert_attribute(attr):
-            return model.Attribute(attr.type.type_string(), attr.is_optional(), attr.is_multi(),
-                                   convert_comment(attr.comment), location(attr))
+            return model.Attribute(
+                attr.type.type_string(), attr.is_optional(), attr.is_multi(), convert_comment(attr.comment), location(attr)
+            )
 
         def convert_relation(relation: RelationAttribute):
 
-            return model.Relation(relation.type.get_full_name(),
-                                  (relation.low, relation.high),
-                                  relation_name(relation.type, relation.end),
-                                  convert_comment(relation.comment), location(relation),
-                                  [convert_value_for_type(x.get_value()) for x in relation.source_annotations],
-                                  [convert_value_for_type(x.get_value()) for x in relation.target_annotations])
+            return model.Relation(
+                relation.type.get_full_name(),
+                (relation.low, relation.high),
+                relation_name(relation.type, relation.end),
+                convert_comment(relation.comment),
+                location(relation),
+                [convert_value_for_type(x.get_value()) for x in relation.source_annotations],
+                [convert_value_for_type(x.get_value()) for x in relation.target_annotations],
+            )
 
         def convert_type(mytype):
-            return model.Entity([x.get_full_name() for x in mytype.parent_entities],
-                                {n: convert_attribute(attr) for n, attr in mytype.get_attributes().items()
-                                 if not isinstance(attr, RelationAttribute)},
-                                {n: convert_relation(attr) for n, attr in mytype.get_attributes().items()
-                                 if isinstance(attr, RelationAttribute)},
-                                location(mytype))
+            return model.Entity(
+                [x.get_full_name() for x in mytype.parent_entities],
+                {
+                    n: convert_attribute(attr)
+                    for n, attr in mytype.get_attributes().items()
+                    if not isinstance(attr, RelationAttribute)
+                },
+                {
+                    n: convert_relation(attr)
+                    for n, attr in mytype.get_attributes().items()
+                    if isinstance(attr, RelationAttribute)
+                },
+                location(mytype),
+            )
+
         return {k: convert_type(v).to_dict() for k, v in self.types.items() if isinstance(v, Entity)}
 
     def export_model(self) -> Dict[str, Any]:
@@ -624,7 +667,4 @@ class ModelExporter(object):
         return maps
 
     def export_all(self) -> Dict[str, Any]:
-        return {
-            "instances": self.export_model(),
-            "types": self.export_types()
-        }
+        return {"instances": self.export_model(), "types": self.export_types()}

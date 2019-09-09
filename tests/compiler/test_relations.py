@@ -17,9 +17,8 @@
 """
 import pytest
 
-from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException
 import inmanta.compiler as compiler
+from inmanta.ast import DuplicateException, NotFoundException, RuntimeException, TypingException
 
 
 def test_issue_93(snippetcompiler):
@@ -208,9 +207,7 @@ std::print([c1,c2,lf1,lf2,lf3,lf4,lf5,lf6,lf7,lf8])
 
     (types, _) = compiler.do_compile()
     for lf in types["__config__::LogFile"].get_all_instances():
-        assert lf.get_attribute("members").get_value() == len(
-            lf.get_attribute("collectors").get_value()
-        )
+        assert lf.get_attribute("members").get_value() == len(lf.get_attribute("collectors").get_value())
 
 
 def test_new_relation_syntax(snippetcompiler):

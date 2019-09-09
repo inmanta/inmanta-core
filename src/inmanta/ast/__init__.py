@@ -16,11 +16,10 @@
     Contact: code@inmanta.com
 """
 
-from typing import Dict, Sequence, List, Optional, Union  # noqa: F401
-from abc import abstractmethod
 import traceback
+from abc import abstractmethod
 from functools import lru_cache
-
+from typing import Dict, List, Optional, Sequence, Union  # noqa: F401
 
 try:
     from typing import TYPE_CHECKING
@@ -39,6 +38,8 @@ if TYPE_CHECKING:
 
 
 class Location(object):
+
+    __slots__ = ("file", "lnr")
 
     def __init__(self, file: str, lnr: int) -> None:
         self.file = file
@@ -63,6 +64,8 @@ class Location(object):
 
 
 class Range(Location):
+
+    __slots__ = ("start_char", "end_lnr", "end_char")
 
     def __init__(self, file: str, start_lnr: int, start_char: int, end_lnr: int, end_char: int) -> None:
         Location.__init__(self, file, start_lnr)
@@ -160,7 +163,6 @@ class LocatableString(object):
 
 
 class Anchor(object):
-
     def __init__(self, range: Range) -> None:
         self.range = range
 
@@ -176,7 +178,6 @@ class Anchor(object):
 
 
 class TypeReferenceAnchor(Anchor):
-
     def __init__(self, range: Range, namespace: "Namespace", type: str) -> None:
         Anchor.__init__(self, range=range)
         self.namespace = namespace
@@ -188,7 +189,6 @@ class TypeReferenceAnchor(Anchor):
 
 
 class AttributeReferenceAnchor(Anchor):
-
     def __init__(self, range: Range, namespace: "Namespace", type: str, attribute: str) -> None:
         Anchor.__init__(self, range=range)
         self.namespace = namespace
@@ -203,28 +203,24 @@ class AttributeReferenceAnchor(Anchor):
 
 
 class Namespaced(Locatable):
-
     @abstractmethod
     def get_namespace(self) -> "Namespace":
         raise NotImplementedError()
 
 
 class Named(Namespaced):
-
     @abstractmethod
     def get_full_name(self) -> str:
         raise NotImplementedError()
 
 
 class Import(Locatable):
-
     def __init__(self, target: "Namespace") -> None:
         Locatable.__init__(self)
         self.target = target
 
 
 class MockImport(Import):
-
     def __init__(self, target: "Namespace") -> None:
         Locatable.__init__(self)
         self.target = target
@@ -234,6 +230,8 @@ class Namespace(Namespaced):
     """
         This class models a namespace that contains defined types, modules, ...
     """
+
+    __slots__ = ("__name", "__parent", "__children", "defines_types", "visible_namespaces", "primitives", "scope")
 
     def __init__(self, name: str, parent: "Optional[Namespace]" = None) -> None:
         Namespaced.__init__(self)
@@ -322,7 +320,7 @@ class Namespace(Namespaced):
         """
             Get the fully qualified name of this namespace
         """
-        if(self.__parent is None):
+        if self.__parent is None:
             raise Exception("Should not occur, compiler corrupt")
         if self.__parent.__parent is None:
             return self.get_name()
@@ -369,7 +367,7 @@ class Namespace(Namespaced):
 
         return self.__name
 
-    def children(self, recursive: bool=False) -> "List[Namespace]":
+    def children(self, recursive: bool = False) -> "List[Namespace]":
         """
             Get the children of this namespace
         """
@@ -486,7 +484,7 @@ class CompilerException(Exception):
         else:
             return self.get_message()
 
-    def format_trace(self, indent: str="", indent_level: int=0) -> str:
+    def format_trace(self, indent: str = "", indent_level: int = 0) -> str:
         """Make a representation of this exception and its causes"""
         out = indent * indent_level + self.format()
 
@@ -496,6 +494,15 @@ class CompilerException(Exception):
             out += "\n" + part
 
         return out
+
+    def importantance(self):
+        """
+        Importance used to order exceptions when reporting multiple, lower is more important
+
+        default is 100
+        below 50 is for pure compiler errors (type, syntax)
+        """
+        return 100
 
     def __str__(self) -> str:
         return self.format()
@@ -535,6 +542,9 @@ class TypeNotFoundException(RuntimeException):
         self.type = type
         self.ns = ns
 
+    def importantance(self):
+        return 20
+
 
 def stringify_exception(exn: Exception) -> str:
     if isinstance(exn, CompilerException):
@@ -556,7 +566,7 @@ class ExternalException(RuntimeException):
     def get_causes(self) -> List[CompilerException]:
         return []
 
-    def format_trace(self, indent: str="", indent_level: int=0) -> str:
+    def format_trace(self, indent: str = "", indent_level: int = 0) -> str:
         """Make a representation of this exception and its causes"""
         out = indent * indent_level + self.format()
 
@@ -566,6 +576,9 @@ class ExternalException(RuntimeException):
             out += indent * (indent_level + 1) + line
 
         return out
+
+    def importantance(self):
+        return 60
 
 
 class WrappingRuntimeException(RuntimeException):
@@ -582,13 +595,18 @@ class WrappingRuntimeException(RuntimeException):
     def get_causes(self) -> List[CompilerException]:
         return [self.__cause__]
 
+    def importantance(self):
+        # less likely to be the cause then out child
+        return self.__cause__.importantance() + 1
+
 
 class AttributeException(WrappingRuntimeException):
     """ Exception raise when an attribute could not be set, always wraps another exception """
 
     def __init__(self, stmt: "Locatable", instance: "Instance", attribute: str, cause: RuntimeException) -> None:
         WrappingRuntimeException.__init__(
-            self, stmt=stmt, msg="Could not set attribute `%s` on instance `%s`" % (attribute, str(instance)), cause=cause)
+            self, stmt=stmt, msg="Could not set attribute `%s` on instance `%s`" % (attribute, str(instance)), cause=cause
+        )
         self.attribute = attribute
         self.instance = instance
 
@@ -597,24 +615,42 @@ class OptionalValueException(RuntimeException):
     """Exception raised when an optional value is accessed that has no value (and is frozen)"""
 
     def __init__(self, instance: "Instance", attribute: "Attribute") -> None:
-        RuntimeException.__init__(self, instance, "Optional variable accessed that has no value (%s.%s)" %
-                                  (instance, attribute))
+        RuntimeException.__init__(
+            self, instance, "Optional variable accessed that has no value (%s.%s)" % (instance, attribute)
+        )
         self.instance = instance
         self.attribute = attribute
+
+    def importantance(self):
+        return 61
 
 
 class IndexException(RuntimeException):
     """Exception raised when an index definition is invalid"""
-    pass
+
+    def importantance(self):
+        return 10
 
 
 class TypingException(RuntimeException):
     """Base class for exceptions raised during the typing phase of compilation"""
-    pass
+
+    def importantance(self):
+        return 10
+
+
+class DirectExecuteException(TypingException):
+    """Exception raised when direct execute is called on a wrong object"""
+
+    def importantance(self):
+        return 11
 
 
 class KeyException(RuntimeException):
     pass
+
+    def importantance(self):
+        return 70
 
 
 class CycleExcpetion(TypingException):
@@ -628,7 +664,7 @@ class CycleExcpetion(TypingException):
 
     def add(self, element: "DefineEntity") -> None:
         """Collect parent entities while traveling up the stack"""
-        if(self.complete):
+        if self.complete:
             return
         if element.get_full_name() == self.final_name:
             self.complete = True
@@ -639,50 +675,58 @@ class CycleExcpetion(TypingException):
         return "Entity can not be its own parent %s" % (trace)
 
 
-class ModuleNotFoundException(RuntimeException):
-
-    def __init__(self, name: str, stmt: "Statement", msg: str=None) -> None:
+class ModuleNotFoundException(WrappingRuntimeException):
+    def __init__(self, name: str, stmt: "Statement", cause: RuntimeException, msg: str = None) -> None:
         if msg is None:
             msg = "could not find module %s" % name
-        RuntimeException.__init__(self, stmt, msg)
+        WrappingRuntimeException.__init__(self, stmt, msg, cause)
         self.name = name
+
+    def importantance(self):
+        return 5
 
 
 class NotFoundException(RuntimeException):
-
-    def __init__(self, stmt: "Optional[Statement]", name: str, msg: "Optional[str]"=None) -> None:
+    def __init__(self, stmt: "Optional[Statement]", name: str, msg: "Optional[str]" = None) -> None:
         if msg is None:
             msg = "could not find value %s" % name
         RuntimeException.__init__(self, stmt, msg)
         self.name = name
 
+    def importantance(self):
+        return 20
+
 
 class DoubleSetException(RuntimeException):
-
-    def __init__(self,
-                 stmt: "Optional[Statement]",
-                 value: object,
-                 location: Location,
-                 newvalue: object,
-                 newlocation: Location) -> None:
+    def __init__(
+        self, stmt: "Optional[Statement]", value: object, location: Location, newvalue: object, newlocation: Location
+    ) -> None:
         self.value = value  # type: object
         self.location = location
         self.newvalue = newvalue  # type: object
         self.newlocation = newlocation
-        msg = ("value set twice:\n\told value: %s\n\t\tset at %s\n\tnew value: %s\n\t\tset at %s\n"
-               % (self.value, self.location, self.newvalue, self.newlocation))
+        msg = "value set twice:\n\told value: %s\n\t\tset at %s\n\tnew value: %s\n\t\tset at %s\n" % (
+            self.value,
+            self.location,
+            self.newvalue,
+            self.newlocation,
+        )
         RuntimeException.__init__(self, stmt, msg)
+
+    def importantance(self):
+        return 51
 
 
 class ModifiedAfterFreezeException(RuntimeException):
-
-    def __init__(self,
-                 rv: "DelayedResultVariable",
-                 instance: "Instance",
-                 attribute: "Attribute",
-                 value: object,
-                 location: Location,
-                 reverse: bool) -> None:
+    def __init__(
+        self,
+        rv: "DelayedResultVariable",
+        instance: "Instance",
+        attribute: "Attribute",
+        value: object,
+        location: Location,
+        reverse: bool,
+    ) -> None:
         RuntimeException.__init__(self, None, "List modified after freeze")
         self.instance = instance
         self.attribute = attribute
@@ -690,6 +734,9 @@ class ModifiedAfterFreezeException(RuntimeException):
         self.location = location
         self.resultvariable = rv
         self.reverse = reverse
+
+    def importantance(self):
+        return 50
 
 
 class DuplicateException(TypingException):
@@ -701,6 +748,9 @@ class DuplicateException(TypingException):
 
     def format(self) -> str:
         return "%s (original at (%s)) (duplicate at (%s))" % (self.get_message(), self.location, self.other.get_location())
+
+    def importantance(self):
+        return 40
 
 
 class CompilerError(Exception):
@@ -716,10 +766,32 @@ class MultiException(CompilerException):
         self.others = others
 
     def get_causes(self) -> List[CompilerException]:
-        return self.others
+        def sortkey(item: CompilerException):
+            location = item.get_location()
+            if not location:
+                file = ""
+                line = 0
+            else:
+                file = location.file
+                line = location.lnr
+
+            return (item.importantance(), file, line)
+
+        return sorted(self.others, key=sortkey)
 
     def format(self) -> str:
         return "Reported %d errors" % len(self.others)
 
     def __str__(self) -> str:
-        return "Reported %d errors:\n\t" % len(self.others) + '\n\t'.join([str(e) for e in self.others])
+        return "Reported %d errors:\n\t" % len(self.others) + "\n\t".join([str(e) for e in self.others])
+
+    def format_trace(self, indent: str = "", indent_level: int = 0) -> str:
+        """Make a representation of this exception and its causes"""
+        out = indent * indent_level + self.format()
+
+        for i, cause in enumerate(self.get_causes()):
+            part = cause.format_trace(indent=indent, indent_level=indent_level + 1)
+            out += "\n" + indent * indent_level + f"error {i}:"
+            out += "\n" + part
+
+        return out

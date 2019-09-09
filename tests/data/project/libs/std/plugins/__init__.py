@@ -17,37 +17,33 @@
 """
 
 import hashlib
+import logging
 import os
 import random
 import re
 import time
-import logging
-from operator import attrgetter
-from itertools import chain
 from collections import defaultdict
-
-
-from inmanta.ast import OptionalValueException, RuntimeException
-from inmanta.execute.proxy import DynamicProxy, UnknownException
-from inmanta.execute.util import Unknown, NoneValue
-from inmanta.export import dependency_manager
-from inmanta.plugins import plugin, Context
-from inmanta.export import unknown_parameters
-from inmanta import resources
-from inmanta.module import Project
-from inmanta.config import Config
-
-
 from copy import copy
-from inmanta.ast import NotFoundException
+from itertools import chain
+from operator import attrgetter
+
+import jinja2
 from jinja2 import Environment, FileSystemLoader, PrefixLoader
 from jinja2.exceptions import UndefinedError
 from jinja2.runtime import Undefined
-import jinja2
+
+from inmanta import resources
+from inmanta.ast import NotFoundException, OptionalValueException, RuntimeException
+from inmanta.config import Config
+from inmanta.execute.proxy import DynamicProxy, UnknownException
+from inmanta.execute.util import NoneValue, Unknown
+from inmanta.export import dependency_manager, unknown_parameters
+from inmanta.module import Project
+from inmanta.plugins import Context, plugin
 
 
 @plugin
-def unique_file(prefix: "string", seed: "string", suffix: "string", length: "number"=20) -> "string":
+def unique_file(prefix: "string", seed: "string", suffix: "string", length: "number" = 20) -> "string":
     return prefix + hashlib.md5(seed.encode("utf-8")).hexdigest() + suffix
 
 
@@ -57,7 +53,6 @@ engine_cache = None
 
 
 class JinjaDynamicProxy(DynamicProxy):
-
     def __init__(self, instance):
         super(JinjaDynamicProxy, self).__init__(instance)
 
@@ -100,7 +95,6 @@ class JinjaDynamicProxy(DynamicProxy):
 
 
 class SequenceProxy(JinjaDynamicProxy):
-
     def __init__(self, iterator):
         JinjaDynamicProxy.__init__(self, iterator)
 
@@ -151,7 +145,6 @@ class IteratorProxy(JinjaDynamicProxy):
 
 
 class ResolverContext(jinja2.runtime.Context):
-
     def resolve(self, key):
         resolver = self.parent["{{resolver"]
         try:
@@ -184,10 +177,13 @@ def _get_template_engine(ctx):
 
     # register all plugins as filters
     for name, cls in ctx.get_compiler().get_plugins().items():
+
         def curywrapper(func):
             def safewrapper(*args):
                 return JinjaDynamicProxy.return_value(func(*args))
+
             return safewrapper
+
         env.filters[name.replace("::", ".")] = curywrapper(cls)
 
     engine_cache = env
@@ -236,7 +232,7 @@ def dir_before_file(model, resources):
     for host, files in per_host.items():
         for hfile in files:
             for pdir in per_host_dirs[host]:
-                if hfile.path != pdir.path and hfile.path[:len(pdir.path)] == pdir.path:
+                if hfile.path != pdir.path and hfile.path[: len(pdir.path)] == pdir.path:
                     # Make the File resource require the directory
                     hfile.requires.add(pdir)
 
@@ -252,7 +248,7 @@ def get_passwords(pw_file):
                     i = line.index("=")
 
                     try:
-                        records[line[:i].strip()] = line[i + 1:].strip()
+                        records[line[:i].strip()] = line[i + 1 :].strip()
                     except ValueError:
                         pass
 
@@ -266,7 +262,7 @@ def save_passwords(pw_file, records):
 
 
 @plugin
-def generate_password(context: Context, pw_id: "string", length: "number"=20) -> "string":
+def generate_password(context: Context, pw_id: "string", length: "number" = 20) -> "string":
     """
     Generate a new random password and store it in the data directory of the
     project. On next invocations the stored password will be used.
@@ -335,7 +331,7 @@ def replace(string: "string", old: "string", new: "string") -> "string":
 
 
 @plugin
-def equals(arg1: "any", arg2: "any", desc: "string"=None):
+def equals(arg1: "any", arg2: "any", desc: "string" = None):
     """
         Compare arg1 and arg2
     """
@@ -347,7 +343,7 @@ def equals(arg1: "any", arg2: "any", desc: "string"=None):
 
 
 @plugin("assert")
-def assert_function(expression: "bool", message: "string"=""):
+def assert_function(expression: "bool", message: "string" = ""):
     """
         Raise assertion error is expression is false
     """
@@ -413,7 +409,7 @@ def key_sort(items: "list", key: "any") -> "list":
 
 
 @plugin
-def timestamp(dummy: "any"=None) -> "number":
+def timestamp(dummy: "any" = None) -> "number":
     """
         Return an integer with the current unix timestamp
 
@@ -437,7 +433,7 @@ def type(obj: "any") -> "any":
 
 
 @plugin
-def sequence(i: "number", start: "number"=0, offset: "number"=0) -> "list":
+def sequence(i: "number", start: "number" = 0, offset: "number" = 0) -> "list":
     """
         Return a sequence of i numbers, starting from zero or start if supplied.
     """
@@ -552,7 +548,7 @@ def each(item_list: "list", expression: "expression") -> "list":
 
 
 @plugin
-def order_by(item_list: "list", expression: "expression"=None, comparator: "expression"=None) -> "list":
+def order_by(item_list: "list", expression: "expression" = None, comparator: "expression" = None) -> "list":
     """
         This operation orders a list using the object returned by
         expression and optionally using the comparator function to determine
@@ -630,8 +626,7 @@ def select_attr(item_list: "list", attr: "string") -> "list":
 
 
 @plugin
-def select_many(item_list: "list", expression: "expression",
-                selector_expression: "expression"=None) -> "list":
+def select_many(item_list: "list", expression: "expression", selector_expression: "expression" = None) -> "list":
     """
         This query method is similar to the select query but it merges
         the results into one list.
@@ -741,8 +736,7 @@ def determine_path(ctx, module_dir, path):
     if parts[0] == "":
         module_path = Project.get().project_path
     elif parts[0] not in modules:
-        raise Exception("Module %s does not exist for path %s" %
-                        (parts[0], path))
+        raise Exception("Module %s does not exist for path %s" % (parts[0], path))
     else:
         module_path = modules[parts[0]]._path
 
@@ -761,7 +755,7 @@ def get_file_content(ctx, module_dir, path):
     if not os.path.isfile(filename):
         raise Exception("%s isn't a valid file (%s)" % (path, filename))
 
-    file_fd = open(filename, 'r')
+    file_fd = open(filename, "r")
     if file_fd is None:
         raise Exception("Unable to open file %s" % filename)
 
@@ -776,7 +770,7 @@ def source(ctx: Context, path: "string") -> "string":
     """
         Return the textual contents of the given file
     """
-    return get_file_content(ctx, 'files', path)
+    return get_file_content(ctx, "files", path)
 
 
 @plugin
@@ -784,7 +778,7 @@ def file(ctx: Context, path: "string") -> "string":
     """
         Return the textual contents of the given file
     """
-    filename = determine_path(ctx, 'files', path)
+    filename = determine_path(ctx, "files", path)
     any
     if filename is None:
         raise Exception("%s does not exist" % path)
@@ -817,7 +811,7 @@ def familyof(member: "std::OS", family: "string") -> "bool":
 
 
 @plugin
-def getfact(context: Context, resource: "any", fact_name: "string", default_value: "any"=None) -> "any":
+def getfact(context: Context, resource: "any", fact_name: "string", default_value: "any" = None) -> "any":
     """
         Retrieve a fact of the given resource
     """
@@ -859,8 +853,9 @@ def getfact(context: Context, resource: "any", fact_name: "string", default_valu
             unknown_parameters.append({"resource": resource_id, "parameter": fact_name, "source": "fact"})
 
     except ConnectionRefusedError:
-        logging.getLogger(__name__).warning("Param %s of resource %s is unknown because connection to server was refused",
-                                            fact_name, resource_id)
+        logging.getLogger(__name__).warning(
+            "Param %s of resource %s is unknown because connection to server was refused", fact_name, resource_id
+        )
         fact_value = Unknown(source=resource)
         unknown_parameters.append({"resource": resource_id, "parameter": fact_name, "source": "fact"})
 
@@ -892,6 +887,7 @@ def environment_name(ctx: Context) -> "string":
 
     def call():
         return ctx.get_client().get_environment(id=env)
+
     result = ctx.run_sync(call)
     if result.code != 200:
         return Unknown(source=env)
@@ -931,7 +927,7 @@ def server_ca() -> "string":
     if not os.path.isfile(filename):
         raise Exception("%s isn't a valid file" % filename)
 
-    file_fd = open(filename, 'r')
+    file_fd = open(filename, "r")
     if file_fd is None:
         raise Exception("Unable to open file %s" % filename)
 
@@ -977,7 +973,7 @@ def server_port() -> "number":
 
 
 @plugin
-def get_env(name: "string", default_value: "string"=None) -> "string":
+def get_env(name: "string", default_value: "string" = None) -> "string":
     env = os.environ
     if name in env:
         return env[name]
@@ -988,7 +984,7 @@ def get_env(name: "string", default_value: "string"=None) -> "string":
 
 
 @plugin
-def get_env_int(name: "string", default_value: "number"=None) -> "number":
+def get_env_int(name: "string", default_value: "number" = None) -> "number":
     env = os.environ
     if name in env:
         return int(env[name])

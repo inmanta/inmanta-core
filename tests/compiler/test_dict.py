@@ -17,9 +17,8 @@
 """
 import pytest
 
-from inmanta.ast import TypingException
-from inmanta.ast import RuntimeException, DuplicateException
 import inmanta.compiler as compiler
+from inmanta.ast import DuplicateException, RuntimeException, TypingException
 
 
 def test_dict(snippetcompiler):
@@ -177,5 +176,41 @@ def test_bad_map_lookup(snippetcompiler):
         b = {"c" : 3}
         c=b["a"]
         """,
-        "key a not found in dict, options are [c] (reported in b['a'] ({dir}/main.cf:3))",
+        "key a not found in dict, options are [c] (reported in c = b['a'] ({dir}/main.cf:3))",
+    )
+
+
+def test_1168_const_dict(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """typedef test as string matching std::contains({"1234":"xxx"}, self)
+
+entity X:
+    test x
+end
+
+X(x="1234")
+
+implement X using std::none
+"""
+    )
+
+    compiler.do_compile()
+
+
+def test_1168_const_dict_failure(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """typedef test as string matching std::contains({"1234":z}, self)
+z = "1234"
+
+entity X:
+    test x
+end
+
+X(x="1234")
+
+implement X using std::none
+""",
+        """Could not set attribute `x` on instance `__config__::X (instantiated at {dir}/main.cf:8)` (reported in Construct(X) ({dir}/main.cf:8))
+caused by:
+  Could not resolve the value z in this static context (reported in z ({dir}/main.cf:1:55))""",  # noqa: E501,
     )

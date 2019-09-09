@@ -1,12 +1,30 @@
-import pytest
-import tornado
-from tornado.web import url
+"""
+    Copyright 2019 Inmanta
 
-from tornado.httpserver import HTTPServer
-from inmanta.reporter import InfluxReporter, AsyncReporter
-from pyformance import timer
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
 import asyncio
 import re
+
+import pytest
+import tornado
+from pyformance import timer
+from tornado.httpserver import HTTPServer
+from tornado.web import url
+
+from inmanta.reporter import AsyncReporter, InfluxReporter
 
 
 class QueryMockHandler(tornado.web.RequestHandler):
@@ -83,9 +101,7 @@ def influxdb(event_loop, free_socket):
 
 @pytest.mark.asyncio
 async def test_influxdb(influxdb):
-    rep = InfluxReporter(
-        port=influxdb.port, tags={"mark": "X"}, autocreate_database=True
-    )
+    rep = InfluxReporter(port=influxdb.port, tags={"mark": "X"}, autocreate_database=True)
     with timer("test").time():
         pass
 

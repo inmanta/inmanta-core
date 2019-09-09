@@ -19,7 +19,8 @@ from inmanta import compiler
 
 
 def test_anchors_basic(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test:
     string a = "a"
     string b
@@ -46,7 +47,9 @@ implement Test using a
 typedef Test3 as Test(b="a")
 
 y = Test3(a="xx")
-""", autostd=False)
+""",
+        autostd=False,
+    )
     anchormap = compiler.anchormap()
 
     assert len(anchormap) == 13
@@ -74,7 +77,8 @@ y = Test3(a="xx")
 
 
 def test_anchors_two(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test:
     list a = ["a"]
     dict b
@@ -89,7 +93,9 @@ implementation a for Test:
 end
 
 implement Test using a
-""", autostd=False)
+""",
+        autostd=False,
+    )
     anchormap = compiler.anchormap()
 
     assert len(anchormap) == 5

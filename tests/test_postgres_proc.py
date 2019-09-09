@@ -49,7 +49,7 @@ def test_stop_already_stopped_process(postgres_proc):
 
 def assert_proc_state(proc, is_running):
     assert proc.running() == is_running
-    assert can_connect_to_tcp_port('localhost', proc.port) == is_running
+    assert can_connect_to_tcp_port("localhost", proc.port) == is_running
 
 
 def can_connect_to_tcp_port(host, port):

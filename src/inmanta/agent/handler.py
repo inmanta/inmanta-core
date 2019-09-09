@@ -16,23 +16,21 @@
     Contact: code@inmanta.com
 """
 
+import base64
 import inspect
 import logging
-import base64
 import traceback
-from concurrent.futures import Future
-from collections import defaultdict
 import typing
-
+import uuid
+from collections import defaultdict
+from concurrent.futures import Future
+from typing import Dict, Tuple
 
 from tornado import concurrent
-from typing import Tuple
 
-from inmanta.agent.io import get_io
-from inmanta import protocol, resources, const, data
+from inmanta import const, data, protocol, resources
 from inmanta.agent.cache import AgentCache
-import uuid
-from typing import Dict
+from inmanta.agent.io import get_io
 
 LOGGER = logging.getLogger(__name__)
 
@@ -72,8 +70,20 @@ class ResourcePurged(Exception):
     """
 
 
-def cache(f=None, ignore: typing.List[str]=[], timeout: int=5000, for_version: bool=True, cache_none: bool=True,
-          cacheNone: bool=True):  # noqa: N803
+class InvalidOperation(Exception):
+    """
+        This exception is raised by the context or handler methods when an invalid operation is performed.
+    """
+
+
+def cache(
+    f=None,
+    ignore: typing.List[str] = [],
+    timeout: int = 5000,
+    for_version: bool = True,
+    cache_none: bool = True,
+    cacheNone: bool = True,  # noqa: N803
+):
     """
         decorator for methods in resource handlers to provide caching
 
@@ -179,18 +189,26 @@ class HandlerContext(object):
 
     def set_created(self):
         self._created = True
-        if self._change is None or self._change.value < const.Change.created.value:
-            self._change = const.Change.created
+        if self._change is not const.Change.nochange:
+            raise InvalidOperation(f"Unable to set {const.Change.created} operation, {self._change} already set.")
+
+        self._change = const.Change.created
 
     def set_purged(self):
         self._purged = True
-        if self._change is None or self._change.value < const.Change.purged.value:
-            self._change = const.Change.purged
+
+        if self._change is not const.Change.nochange:
+            raise InvalidOperation(f"Unable to set {const.Change.purged} operation, {self._change} already set.")
+
+        self._change = const.Change.purged
 
     def set_updated(self):
         self._updated = True
-        if self._change is None or self._change.value < const.Change.updated.value:
-            self._change = const.Change.updated
+
+        if self._change is not const.Change.nochange:
+            raise InvalidOperation(f"Unable to set {const.Change.updated} operation, {self._change} already set.")
+
+        self._change = const.Change.updated
 
     @property
     def changed(self):
@@ -200,7 +218,7 @@ class HandlerContext(object):
     def change(self) -> const.Change:
         return self._change
 
-    def add_change(self, name: str, desired: typing.Any, current: typing.Any=None) -> None:
+    def add_change(self, name: str, desired: typing.Any, current: typing.Any = None) -> None:
         """
             Report a change of a field. This field is added to the set of updated fields
 
@@ -356,6 +374,7 @@ class ResourceHandler(object):
                 result = func()
                 if result is not None:
                     from tornado.gen import convert_yielded
+
                     result = convert_yielded(result)
                     concurrent.chain_future(result, f)
             except Exception as e:
@@ -531,7 +550,7 @@ class ResourceHandler(object):
         """
         raise NotImplementedError()
 
-    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool=False) -> None:
+    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
         """
             Update the given resource. This method is called by the agent. Most handlers will not override this method
             and will only override :func:`~inmanta.agent.handler.ResourceHandler.check_resource`, optionally
@@ -561,14 +580,20 @@ class ResourceHandler(object):
 
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
-            ctx.exception("An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
-                          resource_id=resource.id, exception=repr(e))
+            ctx.exception(
+                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
+                resource_id=resource.id,
+                exception=repr(e),
+            )
         finally:
             try:
                 self.post(ctx, resource)
             except Exception as e:
-                ctx.exception("An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
-                              resource_id=resource.id, exception=repr(e))
+                ctx.exception(
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=repr(e),
+                )
 
     def facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
         """
@@ -599,8 +624,11 @@ class ResourceHandler(object):
             try:
                 self.post(ctx, resource)
             except Exception as e:
-                ctx.exception("An error occurred after getting facts about %(resource_id)s (exception: %(exception)s",
-                              resource_id=resource.id, exception=repr(e))
+                ctx.exception(
+                    "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=repr(e),
+                )
 
         return facts
 
@@ -621,6 +649,7 @@ class ResourceHandler(object):
             :param hash_id: The id of the content/file to retrieve from the server.
             :return: The content in the form of a bytestring or none is the content does not exist.
         """
+
         def call():
             return self.get_client().get_file(hash_id)
 
@@ -639,6 +668,7 @@ class ResourceHandler(object):
             :param hash_id: The id of the file on the server. The convention is the use the sha1sum of the content as id.
             :return: True if the file is available on the server.
         """
+
         def call():
             return self.get_client().stat_file(hash_id)
 
@@ -652,6 +682,7 @@ class ResourceHandler(object):
             :param hash_id: The id to identify the content. The convention is to use the sha1sum of the content to identify it.
             :param content: A byte string with the content
         """
+
         def call():
             return self.get_client().upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
@@ -711,7 +742,7 @@ class CRUDHandler(ResourceHandler):
             :param resource: The desired resource state.
         """
 
-    def execute(self, ctx: HandlerContext, resource: resources.PurgeableResource, dry_run: bool=None) -> None:
+    def execute(self, ctx: HandlerContext, resource: resources.PurgeableResource, dry_run: bool = None) -> None:
         """
             Update the given resource. This method is called by the agent. Override the CRUD methods of this class.
 
@@ -757,20 +788,28 @@ class CRUDHandler(ResourceHandler):
 
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
-            ctx.exception("An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
-                          resource_id=resource.id, exception=repr(e), traceback=traceback.format_exc())
+            ctx.exception(
+                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
+                resource_id=resource.id,
+                exception=repr(e),
+                traceback=traceback.format_exc(),
+            )
         finally:
             try:
                 self.post(ctx, resource)
             except Exception as e:
-                ctx.exception("An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
-                              resource_id=resource.id, exception=repr(e))
+                ctx.exception(
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=repr(e),
+                )
 
 
 class Commander(object):
     """
         This class handles commands
     """
+
     __command_functions = defaultdict(dict)
     __handlers = []
     __handler_cache = {}

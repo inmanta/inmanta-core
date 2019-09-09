@@ -37,25 +37,25 @@ async def test_project_api(client):
     assert "projects" in result.result
     assert len(result.result["projects"]) == 1
 
-    assert result.result["projects"][0]['id'] == project_id
+    assert result.result["projects"][0]["id"] == project_id
 
     result = await client.get_project(id=project_id)
     assert result.code == 200
     assert "project" in result.result
-    assert result.result["project"]['id'] == project_id
-    assert result.result["project"]['name'] == "project-test"
+    assert result.result["project"]["id"] == project_id
+    assert result.result["project"]["name"] == "project-test"
 
     result = await client.modify_project(id=project_id, name="project-test2")
     assert result.code == 200
     assert "project" in result.result
-    assert result.result["project"]['id'] == project_id
-    assert result.result["project"]['name'] == "project-test2"
+    assert result.result["project"]["id"] == project_id
+    assert result.result["project"]["name"] == "project-test2"
 
     result = await client.get_project(id=project_id)
     assert result.code == 200
     assert "project" in result.result
-    assert result.result["project"]['id'] == project_id
-    assert result.result["project"]['name'] == "project-test2"
+    assert result.result["project"]["id"] == project_id
+    assert result.result["project"]["name"] == "project-test2"
 
     result = await client.delete_project(id=project_id)
     assert result.code == 200
@@ -87,15 +87,15 @@ async def test_env_api(client):
     result = await client.modify_environment(id=env_id, name="dev2")
     assert result.code == 200
     assert "environment" in result.result
-    assert result.result["environment"]['id'] == env_id
-    assert result.result["environment"]['name'] == "dev2"
+    assert result.result["environment"]["id"] == env_id
+    assert result.result["environment"]["name"] == "dev2"
 
     result = await client.get_environment(id=env_id)
     assert result.code == 200
     assert "environment" in result.result
-    assert result.result["environment"]['id'] == env_id
-    assert result.result["environment"]['project'] == project_id
-    assert result.result["environment"]['name'] == "dev2"
+    assert result.result["environment"]["id"] == env_id
+    assert result.result["environment"]["project"] == project_id
+    assert result.result["environment"]["name"] == "dev2"
 
     project_result = await client.get_project(id=project_id)
     assert project_result.code == 200

@@ -16,9 +16,10 @@
     Contact: code@inmanta.com
 """
 
-from inmanta import resources
 import pytest
-from inmanta.resources import resource, ResourceException
+
+from inmanta import resources
+from inmanta.resources import ResourceException, resource
 
 
 class Base(resources.Resource):
@@ -36,19 +37,21 @@ class Resource(Base):
 
 
 def test_field_merge():
-    assert(len(Resource.fields) == 5)
+    assert len(Resource.fields) == 5
 
 
 def test_fields_type():
     with pytest.raises(Exception):
+
         class Test(resources.Resource):
-            fields = ("z")
+            fields = "z"
 
 
 def test_fields_parent_type():
     with pytest.raises(Exception):
+
         class Base(resources.Resource):
-            fields = ("y")
+            fields = "y"
 
         class Test(Base):
             fields = ("z",)
@@ -63,9 +66,11 @@ def test_resource_base(snippetcompiler):
         """
             A file on a filesystem
         """
+
         fields = ("key", "value", "agent")
 
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity XResource:
             string key
             string agent
@@ -78,7 +83,9 @@ def test_resource_base(snippetcompiler):
         end
 
         XResource(key="key", agent="agent", value="value")
-        """, autostd=False)
+        """,
+        autostd=False,
+    )
     _version, json_value = snippetcompiler.do_export()
 
     assert len(json_value) == 1
@@ -98,13 +105,15 @@ def test_resource_base_with_method_key(snippetcompiler):
         """
             A file on a filesystem
         """
+
         fields = ("key", "value", "agent", "serialize")
 
         @staticmethod
         def get_serialize(_exporter, resource):
             return resource.key
 
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity XResource:
             string key
             string agent
@@ -117,7 +126,9 @@ def test_resource_base_with_method_key(snippetcompiler):
         end
 
         XResource(key="key", agent="agent", value="value")
-        """, autostd=False)
+        """,
+        autostd=False,
+    )
     with pytest.raises(ResourceException):
         snippetcompiler.do_export()
 
@@ -131,13 +142,15 @@ def test_resource_with_keyword(snippetcompiler):
         """
             A file on a filesystem
         """
+
         fields = ("key", "value", "agent", "model")
 
         @staticmethod
         def get_model(_exporter, resource):
             return resource.key
 
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
          entity YResource:
              string key
              string agent
@@ -150,7 +163,9 @@ def test_resource_with_keyword(snippetcompiler):
          end
 
          YResource(key="key", agent="agent", value="value")
-         """, autostd=False)
+         """,
+        autostd=False,
+    )
 
     with pytest.raises(ResourceException):
         snippetcompiler.do_export()
@@ -165,9 +180,11 @@ def test_resource_with_private_method(snippetcompiler):
         """
             A file on a filesystem
         """
+
         fields = ("__setattr__", "key", "value", "agent")
 
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity YResource:
             string key
             string agent
@@ -180,7 +197,9 @@ def test_resource_with_private_method(snippetcompiler):
         end
 
         YResource(key="key", agent="agent", value="value")
-        """, autostd=False)
+        """,
+        autostd=False,
+    )
 
     with pytest.raises(ResourceException):
         snippetcompiler.do_export()

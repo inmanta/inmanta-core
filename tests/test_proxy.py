@@ -17,6 +17,7 @@
 """
 
 import pytest
+
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import DynamicProxy
 
@@ -32,14 +33,18 @@ def proxy_object(snippetcompiler, snippet, var):
 
 
 def test_basic_object(snippetcompiler):
-    px = proxy_object(snippetcompiler, """
+    px = proxy_object(
+        snippetcompiler,
+        """
 entity Test1:
 string x
 end
 implement Test1 using std::none
 
 a = Test1(x="a")
-""", "a")
+""",
+        "a",
+    )
 
     assert px.x == "a"
     with pytest.raises(Exception):
@@ -47,14 +52,18 @@ a = Test1(x="a")
 
 
 def test_dict_attr(snippetcompiler):
-    px = proxy_object(snippetcompiler, """
+    px = proxy_object(
+        snippetcompiler,
+        """
 entity Test1:
 dict x = {}
 end
 implement Test1 using std::none
 
 a = Test1(x={"a":"A"})
-""", "a")
+""",
+        "a",
+    )
 
     dic = px.x
     assert dic["a"] == "A"

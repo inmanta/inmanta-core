@@ -15,37 +15,45 @@
 
     Contact: code@inmanta.com
 """
-from asyncio import Future
+import inspect
+from typing import Callable, Dict, List, Optional, TypeVar
+
+from inmanta.types import Apireturn, HandlerType, MethodType
+
 from . import common
 
-from typing import Any, Dict, List, Optional, Tuple, Set, Callable, Generator  # noqa: F401
+FuncT = TypeVar("FuncT", bound=HandlerType)
 
 
 class handle(object):  # noqa: N801
     """
         Decorator for subclasses of an endpoint to handle protocol methods
 
-        :param method A subclass of method that defines the method
+        :param method: A subclass of method that defines the method
         :param kwargs: Map arguments in the message from one name to an other
     """
 
-    def __init__(self, method: Callable[..., Any], **kwargs: str) -> None:
+    def __init__(self, method: Callable[..., Apireturn], **kwargs: str) -> None:
         self.method = method
         self.mapping: Dict[str, str] = kwargs
 
-    def __call__(self, function: Callable[..., Future]):
+    def __call__(self, function: FuncT) -> FuncT:
         """
             The wrapping
         """
+        if not inspect.iscoroutinefunction(function):
+            raise ValueError(f"{function} is not an async function. Only async def functions may handle requests.")
+
         function.__protocol_method__ = self.method
         function.__protocol_mapping__ = self.mapping
         return function
 
 
+MethodT = TypeVar("MethodT", bound=MethodType)
+
+
 def method(
-    method_name: str,
-    index: bool = False,
-    id: bool = False,
+    path: str,
     operation: str = "POST",
     reply: bool = True,
     arg_options: Dict[str, common.ArgOption] = {},
@@ -56,34 +64,37 @@ def method(
     validate_sid: bool = None,
     client_types: List[str] = ["public"],
     api_version: int = 1,
+    api_prefix: str = "api",
+    wrap_data: bool = False,
 ) -> Callable[..., Callable]:
     """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
         and model the protocol.
 
-        :param index: A method that returns a list of resources. The url of this method is only the method/resource name.
-        :param id: This method requires an id of a resource. The python function should have an id parameter.
+        :param path: The url path to use for this call. This path can contain parameter names of the function. These names
+                     should be enclosed in < > brackets.
         :param operation: The type of HTTP operation (verb)
         :param timeout: nr of seconds before request it terminated
-        :param api This is a call from the client to the Server (True if not server_agent and not agent_server)
+        :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
         :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
         :param agent_server: This is a call from the Agent to the Server
         :param validate_sid: This call requires a valid session, true by default if agent_server and not api
         :param client_types: The allowed client types for this call
-        :param arg_options Options related to arguments passed to the method. The key of this dict is the name of the arg to
+        :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
             which the options apply. The value is another dict that can contain the following options:
                 header: Map this argument to a header with the following name.
                 reply_header: If the argument is mapped to a header, this header will also be included in the reply
                 getter: Call this method after validation and pass its return value to the method call. This may change the
                         type of the argument. This method can raise an HTTPException to return a 404 for example.
+        :param api_version: The version of the api this method belongs to
+        :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
+        :param wrap_data: Put the response of the call under a "data" key.
     """
 
-    def wrapper(func: Callable[..., Dict[str, Any]]) -> Callable[..., Dict[str, Any]]:
-        common.MethodProperties(
+    def wrapper(func: MethodT) -> MethodT:
+        properties = common.MethodProperties(
             func,
-            method_name,
-            index,
-            id,
+            path,
             operation,
             reply,
             arg_options,
@@ -94,7 +105,73 @@ def method(
             validate_sid,
             client_types,
             api_version,
+            api_prefix,
+            wrap_data,
         )
+        common.MethodProperties.methods[func.__name__] = properties
+        func.__method_properties__ = properties
+        return func
+
+    return wrapper
+
+
+def typedmethod(
+    path: str,
+    operation: str = "POST",
+    reply: bool = True,
+    arg_options: Dict[str, common.ArgOption] = {},
+    timeout: Optional[int] = None,
+    server_agent: bool = False,
+    api: bool = None,
+    agent_server: bool = False,
+    validate_sid: bool = None,
+    client_types: List[str] = ["public"],
+    api_version: int = 1,
+    api_prefix: str = "api",
+) -> Callable[..., Callable]:
+    """
+        Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
+        and model the protocol.
+
+        :param path: The url path to use for this call. This path can contain parameter names of the function. These names
+                     should be enclosed in < > brackets.
+        :param operation: The type of HTTP operation (verb)
+        :param timeout: nr of seconds before request it terminated
+        :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
+        :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
+        :param agent_server: This is a call from the Agent to the Server
+        :param validate_sid: This call requires a valid session, true by default if agent_server and not api
+        :param client_types: The allowed client types for this call
+        :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
+            which the options apply. The value is another dict that can contain the following options:
+                header: Map this argument to a header with the following name.
+                reply_header: If the argument is mapped to a header, this header will also be included in the reply
+                getter: Call this method after validation and pass its return value to the method call. This may change the
+                        type of the argument. This method can raise an HTTPException to return a 404 for example.
+        :param api_version: The version of the api this method belongs to
+        :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
+    """
+
+    def wrapper(func: MethodT) -> MethodT:
+        properties = common.MethodProperties(
+            func,
+            path,
+            operation,
+            reply,
+            arg_options,
+            timeout,
+            server_agent,
+            api,
+            agent_server,
+            validate_sid,
+            client_types,
+            api_version,
+            api_prefix,
+            True,
+            True,
+        )
+        common.MethodProperties.methods[func.__name__] = properties
+        func.__method_properties__ = properties
         return func
 
     return wrapper

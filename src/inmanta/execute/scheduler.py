@@ -16,27 +16,29 @@
     Contact: code@inmanta.com
 """
 
+import itertools
 import logging
+import os
 import time
+from collections import deque
+from typing import Dict, List, Set, Tuple
 
+from inmanta import plugins
+from inmanta.ast import CompilerException, CycleExcpetion, Location, MultiException, RuntimeException
+from inmanta.ast.entity import Entity
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
+from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineRelation, DefineTypeDefault
+from inmanta.ast.type import TYPES, Type
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.proxy import UnsetException
-from inmanta import plugins
-from inmanta.ast.type import TYPES, Type
-
-from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineTypeDefault, DefineIndex, DefineRelation
-from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler, ExecutionUnit
-from inmanta.ast.entity import Entity
-from inmanta.ast import RuntimeException, MultiException, CycleExcpetion, Location
+from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver
 from inmanta.execute.tracking import ModuleTracker
-import itertools
-from typing import Dict, List, Set, Tuple
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
 
-MAX_ITERATIONS = 2000
+
+MAX_ITERATIONS = 10000
 
 
 class Scheduler(object):
@@ -90,11 +92,9 @@ class Scheduler(object):
             self.do_sort_entities(entity_map, workon, out, loopstack)
         return out
 
-    def do_sort_entities(self,
-                         entity_map: Dict[str, DefineEntity],
-                         name: str,
-                         acc: List[DefineEntity],
-                         loopstack: Set[str]) -> None:
+    def do_sort_entities(
+        self, entity_map: Dict[str, DefineEntity], name: str, acc: List[DefineEntity], loopstack: Set[str]
+    ) -> None:
         nexte = entity_map[name]
         try:
             del entity_map[name]
@@ -128,8 +128,9 @@ class Scheduler(object):
         compiler.get_ns().set_primitives(TYPES)
 
         # all stmts contributing types and impls
-        newtypes = [k for k in [t.register_types()
-                                for t in definitions if isinstance(t, TypeDefinitionStatement)] if k is not None]
+        newtypes = [
+            k for k in [t.register_types() for t in definitions if isinstance(t, TypeDefinitionStatement)] if k is not None
+        ]
 
         for (name, type_symbol) in newtypes:
             types_and_impl[name] = type_symbol
@@ -183,8 +184,12 @@ class Scheduler(object):
 
         # relations are also in blocks
         statements = (s for s in statements if not isinstance(s, DefineRelation))
-        anchors = (anchor for container in itertools.chain(statements, blocks)
-                   for anchor in container.get_anchors() if anchor is not None)
+        anchors = (
+            anchor
+            for container in itertools.chain(statements, blocks)
+            for anchor in container.get_anchors()
+            if anchor is not None
+        )
 
         rangetorange = [(anchor.get_location(), anchor.resolve()) for anchor in anchors]
         rangetorange = [(f, t) for f, t in rangetorange if t is not None]
@@ -214,13 +219,13 @@ class Scheduler(object):
 
         # setup queues
         # queue for runnable items
-        basequeue = []
+        basequeue = deque()
         # queue for RV's that are delayed
-        waitqueue = []
+        waitqueue = deque()
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
-        zerowaiters = []
+        zerowaiters = deque()
         # queue containing everything, to find hanging statements
-        all_statements = []
+        all_statements = set()
 
         # Wrap in object to pass around
         queue = QueueScheduler(compiler, basequeue, waitqueue, self.types, all_statements)
@@ -232,7 +237,8 @@ class Scheduler(object):
         # start an evaluation loop
         i = 0
         count = 0
-        while i < MAX_ITERATIONS:
+        max_iterations = int(os.getenv("INMANTA_MAX_ITERATIONS", MAX_ITERATIONS))
+        while i < max_iterations:
             now = time.time()
 
             # check if we can stop the execution
@@ -241,15 +247,23 @@ class Scheduler(object):
             else:
                 i += 1
 
-            LOGGER.debug("Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)", i,
-                         len(basequeue), len(waitqueue), len(zerowaiters), count, now - prev)
+            LOGGER.debug(
+                "Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)",
+                i,
+                len(basequeue),
+                len(waitqueue),
+                len(zerowaiters),
+                count,
+                now - prev,
+            )
             prev = now
 
             # evaluate all that is ready
             while len(basequeue) > 0:
-                next = basequeue.pop(0)
+                next = basequeue.popleft()
                 try:
                     next.execute()
+                    all_statements.discard(next)
                     count = count + 1
                 except UnsetException as e:
                     # some statements don't know all their dependencies up front,...
@@ -260,7 +274,10 @@ class Scheduler(object):
 
             # find a RV that has waiters, so freezing creates progress
             while len(waitqueue) > 0 and not progress:
-                next = waitqueue.pop(0)
+                next = waitqueue.popleft()
+                if next.hasValue:
+                    # already froze itself
+                    continue
                 if next.get_progress_potential() == 0:
                     zerowaiters.append(next)
                 elif next.get_waiting_providers() > 0:
@@ -277,12 +294,12 @@ class Scheduler(object):
             # no waiters in waitqueue,...
             # see if any zerowaiters have become gotten waiters
             if not progress:
-                waitqueue = [w for w in zerowaiters if w.get_progress_potential() != 0]
+                waitqueue = deque(w for w in zerowaiters if w.get_progress_potential() != 0)
                 queue.waitqueue = waitqueue
-                zerowaiters = [w for w in zerowaiters if w.get_progress_potential() == 0]
+                zerowaiters = deque(w for w in zerowaiters if w.get_progress_potential() == 0)
                 while len(waitqueue) > 0 and not progress:
                     LOGGER.debug("Moved zerowaiters to waiters")
-                    next = waitqueue.pop(0)
+                    next = waitqueue.popleft()
                     if next.get_waiting_providers() > 0:
                         next.unqueue()
                     else:
@@ -298,12 +315,19 @@ class Scheduler(object):
                     next.freeze()
 
         now = time.time()
-        LOGGER.debug("Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)", i,
-                     len(basequeue), len(waitqueue), len(zerowaiters), count, now - prev)
+        LOGGER.info(
+            "Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)",
+            i,
+            len(basequeue),
+            len(waitqueue),
+            len(zerowaiters),
+            count,
+            now - prev,
+        )
 
-        if i == MAX_ITERATIONS:
-            print("could not complete model")
-            return False
+        if i == max_iterations:
+            raise CompilerException(f"Could not complete model, max_iterations {max_iterations} reached.")
+
         # now = time.time()
         # print(now - prev)
         # end evaluation loop
@@ -322,8 +346,6 @@ class Scheduler(object):
             raise excns[0]
         else:
             raise MultiException(excns)
-
-        all_statements = [x for x in all_statements if not x.done]
 
         if all_statements:
             stmt = None

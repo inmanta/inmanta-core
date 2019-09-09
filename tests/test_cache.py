@@ -16,14 +16,15 @@
     Contact: code@inmanta.com
 """
 import unittest
+from threading import Lock, Thread
 from time import sleep
 
-from inmanta.agent.handler import cache
-from inmanta.agent.cache import AgentCache
-from inmanta.resources import resource, Resource, Id
 import pytest
-from _pytest.fixtures import fixture
-from threading import Lock, Thread
+from pytest import fixture
+
+from inmanta.agent.cache import AgentCache
+from inmanta.agent.handler import cache
+from inmanta.resources import Id, Resource, resource
 
 
 @fixture(autouse=True)
@@ -33,11 +34,11 @@ def my_resource():
         """
             A file on a filesystem
         """
+
         fields = ("key", "value", "purged")
 
 
 class CacheTests(unittest.TestCase):
-
     def test_base(self):
         cache = AgentCache()
         value = "test too"
@@ -120,7 +121,6 @@ class CacheTests(unittest.TestCase):
 
     def test_multi_threaded(self):
         class Spy(object):
-
             def __init__(self):
                 self.created = 0
                 self.deleted = 0
@@ -143,10 +143,16 @@ class CacheTests(unittest.TestCase):
         beta = Spy()
         alpha.lock.acquire()
 
-        t1 = Thread(target=lambda: cache.get_or_else(
-            "test", lambda version: alpha.create(), version=version, call_on_delete=lambda x: x.delete()))
-        t2 = Thread(target=lambda: cache.get_or_else(
-            "test", lambda version: beta.create(), version=version, call_on_delete=lambda x: x.delete()))
+        t1 = Thread(
+            target=lambda: cache.get_or_else(
+                "test", lambda version: alpha.create(), version=version, call_on_delete=lambda x: x.delete()
+            )
+        )
+        t2 = Thread(
+            target=lambda: cache.get_or_else(
+                "test", lambda version: beta.create(), version=version, call_on_delete=lambda x: x.delete()
+            )
+        )
 
         t1.start()
         t2.start()
@@ -259,7 +265,6 @@ class CacheTests(unittest.TestCase):
             return param
 
         class Sequencer(object):
-
             def __init__(self, sequence):
                 self.seq = sequence
                 self.count = 0
@@ -299,7 +304,6 @@ class CacheTests(unittest.TestCase):
         xcache = AgentCache()
 
         class DT(object):
-
             def __init__(self, cache):
                 self.cache = cache
                 self.count = 0

@@ -30,67 +30,93 @@
     @command annotation to register new command
 """
 
-from argparse import ArgumentParser
-import logging
-import sys
-import time
-import json
-import os
-import socket
-import signal
-
-import colorlog
-
-from inmanta.command import command, Commander, CLIException
-from inmanta.compiler import do_compile
-from inmanta.config import Config
-from tornado.ioloop import IOLoop
-from tornado.util import TimeoutError
-from tornado import gen
-from inmanta import protocol, module, moduletool, const
-from inmanta.export import cfg_env, ModelExporter
-import yaml
-
-from inmanta.server.bootloader import InmantaBootloader
-from inmanta.ast import CompilerException
 import asyncio
-import traceback
+import json
+import logging
+import os
+import signal
+import socket
+import sys
 import threading
+import time
+import traceback
+from argparse import ArgumentParser
+from asyncio import ensure_future
 from threading import Timer
 
-LOGGER = logging.getLogger()
+import colorlog
+import yaml
+from tornado import gen
+from tornado.ioloop import IOLoop
+from tornado.util import TimeoutError
+
+from inmanta import const, module, moduletool, protocol
+from inmanta.ast import CompilerException
+from inmanta.command import CLIException, Commander, command
+from inmanta.compiler import do_compile
+from inmanta.config import Config
+from inmanta.const import EXIT_START_FAILED
+from inmanta.export import ModelExporter, cfg_env
+from inmanta.server.bootloader import InmantaBootloader
+
+LOGGER = logging.getLogger("inmanta")
 
 
 @command("server", help_msg="Start the inmanta server")
 def start_server(options):
+    if options.config_file and not os.path.exists(options.config_file):
+        LOGGER.warning("Config file %s doesn't exist", options.config_file)
+
+    if options.config_dir and not os.path.isdir(options.config_dir):
+        LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
+
     ibl = InmantaBootloader()
     setup_signal_handlers(ibl.stop)
-    IOLoop.current().add_callback(ibl.start)
-    IOLoop.current().start()
-    print("Server Shutdown complete")
+
+    ioloop = IOLoop.current()
+
+    # handle startup exceptions
+    def _handle_startup_done(fut):
+        if fut.cancelled():
+            safe_shutdown(ioloop, ibl.stop)
+        else:
+            exc = fut.exception()
+            if exc is not None:
+                LOGGER.exception("Server setup failed", exc_info=exc)
+                traceback.print_exception(type(exc), exc, exc.__traceback__)
+                safe_shutdown(ioloop, ibl.stop)
+            else:
+                LOGGER.info("Server startup complete")
+
+    ensure_future(ibl.start()).add_done_callback(_handle_startup_done)
+
+    ioloop.start()
+    LOGGER.info("Server shutdown complete")
+    if not ibl.started:
+        exit(EXIT_START_FAILED)
 
 
 @command("agent", help_msg="Start the inmanta agent")
 def start_agent(options):
     from inmanta import agent
+
     a = agent.Agent()
     setup_signal_handlers(a.stop)
     IOLoop.current().add_callback(a.start)
     IOLoop.current().start()
-    print("Agent Shutdown complete")
+    LOGGER.info("Agent Shutdown complete")
 
 
 def dump_threads():
     print("----- Thread Dump ----")
     for th in threading.enumerate():
         print("---", th)
-        traceback.print_stack(sys._current_frames()[th.ident])
+        traceback.print_stack(sys._current_frames()[th.ident], file=sys.stdout)
         print()
     sys.stdout.flush()
 
 
-@gen.coroutine
-def dump_ioloop_running():
+async def dump_ioloop_running():
     # dump async IO
     print("----- Async IO tasks ----")
     for task in asyncio.all_tasks():
@@ -137,8 +163,23 @@ def setup_signal_handlers(shutdown_function):
     signal.signal(signal.SIGUSR1, handle_signal_dump)
 
 
-@gen.coroutine
-def safe_shutdown_wrapper(shutdown_function):
+def safe_shutdown(ioloop, shutdown_function):
+    def hard_exit():
+        context_dump(ioloop)
+        sys.stdout.flush()
+        # Hard exit, not sys.exit
+        # ensure shutdown when the ioloop is stuck
+        os._exit(const.EXIT_HARD)
+
+    # force shutdown, even when the ioloop is stuck
+    # schedule off the loop
+    t = Timer(const.SHUTDOWN_GRACE_HARD, hard_exit)
+    t.daemon = True
+    t.start()
+    ioloop.add_callback(safe_shutdown_wrapper, shutdown_function)
+
+
+async def safe_shutdown_wrapper(shutdown_function):
     """
         Wait 10 seconds to gracefully shutdown the instance.
         Afterwards stop the IOLoop
@@ -147,7 +188,7 @@ def safe_shutdown_wrapper(shutdown_function):
     future = shutdown_function()
     try:
         timeout = IOLoop.current().time() + const.SHUTDOWN_GRACE_IOLOOP
-        yield gen.with_timeout(timeout, future)
+        await gen.with_timeout(timeout, future)
     except TimeoutError:
         pass
     finally:
@@ -159,8 +200,14 @@ def compiler_config(parser):
         Configure the compiler of the export function
     """
     parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
-    parser.add_argument("-X", "--extended-errors", dest="errors",
-                        help="Show stack traces for compile errors", action="store_true", default=False)
+    parser.add_argument(
+        "-X",
+        "--extended-errors",
+        dest="errors_subcommand",
+        help="Show stack traces for compile errors",
+        action="store_true",
+        default=False,
+    )
     parser.add_argument("--server_address", dest="server", help="The address of the server hosting the environment")
     parser.add_argument("--server_port", dest="port", help="The port of the server hosting the environment")
     parser.add_argument("--username", dest="user", help="The username of the server")
@@ -170,8 +217,9 @@ def compiler_config(parser):
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
 
 
-@command("compile", help_msg="Compile the project to a configuration model",
-         parser_config=compiler_config, require_project=True)
+@command(
+    "compile", help_msg="Compile the project to a configuration model", parser_config=compiler_config, require_project=True
+)
 def compile_project(options):
     if options.environment is not None:
         Config.set("config", "environment", options.environment)
@@ -199,8 +247,9 @@ def compile_project(options):
     if options.profile:
         import cProfile
         import pstats
-        result = cProfile.runctx('do_compile()', globals(), {}, "run.profile")
-        p = pstats.Stats('run.profile')
+
+        result = cProfile.runctx("do_compile()", globals(), {}, "run.profile")
+        p = pstats.Stats("run.profile")
         p.strip_dirs().sort_stats("time").print_stats(20)
     else:
         t1 = time.time()
@@ -217,8 +266,7 @@ def list_commands(options):
 
 
 def help_parser_config(parser: ArgumentParser):
-    parser.add_argument("subcommand", help="Output help for a particular subcommand",
-                        nargs="?", default=None)
+    parser.add_argument("subcommand", help="Output help for a particular subcommand", nargs="?", default=None)
 
 
 @command("help", help_msg="show a help message and exit", parser_config=help_parser_config)
@@ -232,16 +280,18 @@ def help_command(options):
     sys.exit(0)
 
 
-@command("modules", help_msg="Subcommand to manage modules",
-         parser_config=moduletool.ModuleTool.modules_parser_config,
-         aliases=["module"])
+@command(
+    "modules",
+    help_msg="Subcommand to manage modules",
+    parser_config=moduletool.ModuleTool.modules_parser_config,
+    aliases=["module"],
+)
 def modules(options):
     tool = moduletool.ModuleTool()
     tool.execute(options.cmd, options)
 
 
-@command("project", help_msg="Subcommand to manage the project",
-         parser_config=moduletool.ProjectTool.parser_config)
+@command("project", help_msg="Subcommand to manage the project", parser_config=moduletool.ProjectTool.parser_config)
 def project(options):
     tool = moduletool.ProjectTool()
     tool.execute(options.cmd, options)
@@ -254,9 +304,9 @@ def deploy_parser_config(parser):
         "--dashboard",
         dest="dashboard",
         help="Start the dashboard and keep the server running. "
-             "The server uses the current project as the source for server recompiles",
+        "The server uses the current project as the source for server recompiles",
         action="store_true",
-        default=False
+        default=False,
     )
 
 
@@ -267,7 +317,9 @@ def deploy(options):
 
     run = deploy.Deploy(options)
     try:
-        run.setup()
+        if not run.setup():
+            LOGGER.error("Failed to setup the orchestrator.")
+            return
         run.run()
     finally:
         run.stop()
@@ -278,28 +330,57 @@ def export_parser_config(parser):
         Configure the compiler of the export function
     """
     parser.add_argument("-g", dest="depgraph", help="Dump the dependency graph", action="store_true")
-    parser.add_argument("-j", dest="json", help="Do not submit to the server but only store the json that would have been "
-                                                "submitted in the supplied file")
+    parser.add_argument(
+        "-j",
+        dest="json",
+        help="Do not submit to the server but only store the json that would have been " "submitted in the supplied file",
+    )
     parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
     parser.add_argument("-d", dest="deploy", help="Trigger a deploy for the exported version", action="store_true")
-    parser.add_argument("--full", dest="full_deploy",
-                        help="Make the agents execute a full deploy instead of an incremental deploy. "
-                             "Should be used together with the -d option",
-                        action="store_true", default=False)
+    parser.add_argument(
+        "--full",
+        dest="full_deploy",
+        help="Make the agents execute a full deploy instead of an incremental deploy. "
+        "Should be used together with the -d option",
+        action="store_true",
+        default=False,
+    )
     parser.add_argument("-m", dest="model", help="Also export the complete model", action="store_true", default=False)
     parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
     parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
     parser.add_argument("--token", dest="token", help="The token to auth to the server")
     parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
-    parser.add_argument("-X", "--extended-errors", dest="errors",
-                        help="Show stack traces for compile errors", action="store_true", default=False)
+    parser.add_argument(
+        "-X",
+        "--extended-errors",
+        dest="errors_subcommand",
+        help="Show stack traces for compile errors",
+        action="store_true",
+        default=False,
+    )
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
-    parser.add_argument("--metadata", dest="metadata", help="JSON metadata why this compile happened. If a non-json string is "
-                        "passed it is used as the 'message' attribute in the metadata.",
-                        default=None)
-    parser.add_argument("--model-export", dest="model_export", help="Export the configuration model to the server as metadata.",
-                        action="store_true", default=False)
+    parser.add_argument(
+        "--metadata",
+        dest="metadata",
+        help="JSON metadata why this compile happened. If a non-json string is "
+        "passed it is used as the 'message' attribute in the metadata.",
+        default=None,
+    )
+    parser.add_argument(
+        "--model-export",
+        dest="model_export",
+        help="Export the configuration model to the server as metadata.",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--export-plugin",
+        dest="export_plugin",
+        help="Only use this export plugin. This option also disables the execution of the plugins listed in "
+        "the configuration file in the export setting.",
+        default=None,
+    )
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
@@ -355,7 +436,9 @@ def export(options):
     # continue the export
 
     export = Exporter(options)
-    version, _ = export.run(types, scopes, metadata=metadata, model_export=options.model_export)
+    version, _ = export.run(
+        types, scopes, metadata=metadata, model_export=options.model_export, export_plugin=options.export_plugin
+    )
 
     if exp is not None:
         raise exp
@@ -374,29 +457,40 @@ def export(options):
         conn.release_version(tid, version, True, agent_trigger_method)
 
 
-log_levels = {
-    0: logging.ERROR,
-    1: logging.WARNING,
-    2: logging.INFO,
-    3: logging.DEBUG,
-    4: 2
-}
+log_levels = {0: logging.ERROR, 1: logging.WARNING, 2: logging.INFO, 3: logging.DEBUG, 4: 2}
 
 
 def cmd_parser():
     # create the argument compiler
     parser = ArgumentParser()
-    parser.add_argument("-p", action="store_true", dest="profile", help='Profile this run of the program')
-    parser.add_argument("-c", "--config", dest="config_file", help="Use this config file")
+    parser.add_argument("-p", action="store_true", dest="profile", help="Profile this run of the program")
+    parser.add_argument("-c", "--config", dest="config_file", help="Use this config file", default="/etc/inmanta/inmanta.cfg")
+    parser.add_argument(
+        "--config-dir",
+        dest="config_dir",
+        help="The directory containing the Inmanta configuration files",
+        default="/etc/inmanta/inmanta.d",
+    )
     parser.add_argument("--log-file", dest="log_file", help="Path to the logfile")
-    parser.add_argument("--log-file-level", dest="log_file_level", default=2, type=int,
-                        help="Log level for messages going to the logfile: 0=ERROR, 1=WARNING, 2=INFO, 3=DEBUG")
+    parser.add_argument(
+        "--log-file-level",
+        dest="log_file_level",
+        default=2,
+        type=int,
+        help="Log level for messages going to the logfile: 0=ERROR, 1=WARNING, 2=INFO, 3=DEBUG",
+    )
     parser.add_argument("--timed-logs", dest="timed", help="Add timestamps to logs", action="store_true")
-    parser.add_argument('-v', '--verbose', action='count', default=0,
-                        help="Log level for messages going to the console. Default is only errors,"
-                        "-v warning, -vv info and -vvv debug and -vvvv trace")
-    parser.add_argument("-X", "--extended-errors", dest="errors",
-                        help="Show stack traces for errors", action="store_true", default=False)
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Log level for messages going to the console. Default is only errors,"
+        "-v warning, -vv info and -vvv debug and -vvvv trace",
+    )
+    parser.add_argument(
+        "-X", "--extended-errors", dest="errors", help="Show stack traces for errors", action="store_true", default=False
+    )
     subparsers = parser.add_subparsers(title="commands")
     for cmd_name, cmd_options in Commander.commands().items():
         cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"], aliases=cmd_options["aliases"])
@@ -409,7 +503,7 @@ def cmd_parser():
 
 
 def _is_on_tty() -> bool:
-    return (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ
+    return (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ
 
 
 def _get_default_stream_handler():
@@ -427,7 +521,7 @@ def _get_watched_file_handler(options):
         raise Exception("No logfile was provided.")
     level = _convert_to_log_level(options.log_file_level)
     formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
-    file_handler = logging.handlers.WatchedFileHandler(filename=options.log_file, mode='a+')
+    file_handler = logging.handlers.WatchedFileHandler(filename=options.log_file, mode="a+")
     file_handler.setFormatter(formatter)
     file_handler.setLevel(level)
 
@@ -448,13 +542,7 @@ def _get_log_formatter_for_stream_handler(timed):
             log_format,
             datefmt=None,
             reset=True,
-            log_colors={
-                'DEBUG': 'cyan',
-                'INFO': 'green',
-                'WARNING': 'yellow',
-                'ERROR': 'red',
-                'CRITICAL': 'red',
-            }
+            log_colors={"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"},
         )
     else:
         log_format += "%(name)-25s%(levelname)-8s%(message)s"
@@ -493,7 +581,7 @@ def app():
     logging.captureWarnings(True)
 
     # Load the configuration
-    Config.load_config(options.config_file)
+    Config.load_config(options.config_file, options.config_dir)
 
     # start the command
     if not hasattr(options, "func"):
@@ -502,7 +590,9 @@ def app():
         return
 
     def report(e):
-        if not options.errors:
+        minus_x_set_top_level_command = options.errors
+        minus_x_set_subcommand = hasattr(options, "errors_subcommand") and options.errors_subcommand
+        if not minus_x_set_top_level_command and not minus_x_set_subcommand:
             if isinstance(e, CompilerException):
                 print(e.format_trace(indent="  "), file=sys.stderr)
             else:
@@ -512,6 +602,7 @@ def app():
 
         if isinstance(e, CompilerException):
             from inmanta.compiler.help.explainer import ExplainerFactory
+
             helpmsg = ExplainerFactory().explain_and_format(e, plain=not _is_on_tty())
             if helpmsg is not None:
                 print(helpmsg)

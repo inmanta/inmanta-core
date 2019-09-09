@@ -16,25 +16,22 @@
     Contact: code@inmanta.com
 """
 
-import time
-import sys
 import bisect
 import logging
+import sys
+import time
 from threading import Lock
-
 
 LOGGER = logging.getLogger()
 
 
 class Scope(object):
-
-    def __init__(self, timeout: int=24 * 3600, version: int=0):
+    def __init__(self, timeout: int = 24 * 3600, version: int = 0):
         self.timeout = timeout
         self.version = version
 
 
 class CacheItem(object):
-
     def __init__(self, key, scope: Scope, value, call_on_delete):
         self.key = key
         self.scope = scope
@@ -84,7 +81,7 @@ class AgentCache(object):
         """
             Open the cache for the specific version
 
-            :param verion the version id to open the cache for
+            :param version: the version id to open the cache for
         """
         if version in self.counterforVersion:
             self.counterforVersion[version] += 1
@@ -99,7 +96,7 @@ class AgentCache(object):
 
             when a version is closed as many times as it was opened, all cache items linked to this version are dropped
 
-            :param verion the version id to close the cache for
+            :param version: the version id to close the cache for
         """
         if version not in self.counterforVersion:
             raise Exception("Closed version that does not exist")
@@ -173,7 +170,7 @@ class AgentCache(object):
             key.append(str(resource.id.resource_str()))
         if version != 0:
             key.append(str(version))
-        key = '__'.join(key)
+        key = "__".join(key)
         self._cache(CacheItem(key, Scope(timeout, version), value, call_on_delete))
 
     def find(self, key, resource=None, version=0):
@@ -189,11 +186,12 @@ class AgentCache(object):
             key.append(resource.id.resource_str())
         if version != 0:
             key.append(str(version))
-        key = '__'.join(key)
+        key = "__".join(key)
         return self._get(key).value
 
-    def get_or_else(self, key, function, for_version=True, timeout=5000, ignore=set(),
-                    cache_none=True, call_on_delete=None, **kwargs):
+    def get_or_else(
+        self, key, function, for_version=True, timeout=5000, ignore=set(), cache_none=True, call_on_delete=None, **kwargs
+    ):
         """
             Attempt to find a value in the cache.
 

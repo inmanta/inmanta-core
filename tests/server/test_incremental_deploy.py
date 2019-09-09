@@ -15,24 +15,22 @@
 
     Contact: code@inmanta.com
 """
+import logging
+import time
+import uuid
 from collections import defaultdict
+from datetime import datetime
 from re import sub
+from typing import Any, Dict, List
 from uuid import UUID, uuid4
 
 import pytest
-import time
 
 import utils
+from inmanta import config, const, data
 from inmanta.agent.agent import Agent
-
-from inmanta.server import SLICE_SERVER, SLICE_AGENT_MANAGER
-import uuid
-from datetime import datetime
-from inmanta import data, const, config
-from inmanta.const import ResourceState, ResourceAction
-import logging
-from typing import List, Dict, Any
-
+from inmanta.const import ResourceAction, ResourceState
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER
 from inmanta.server.server import Server
 
 
@@ -85,13 +83,7 @@ class MultiVersionSetup(object):
         assert False
 
     def make_resource(
-        self,
-        name: str,
-        value: str,
-        version: int,
-        agent: str = "agent1",
-        requires: List[str] = [],
-        send_event: bool = False,
+        self, name: str, value: str, version: int, agent: str = "agent1", requires: List[str] = [], send_event: bool = False
     ) -> str:
         """
             requires: list of resource identifiers
@@ -108,13 +100,7 @@ class MultiVersionSetup(object):
         return id
 
     def add_resource(
-        self,
-        name: str,
-        scenario: str,
-        increment: bool,
-        agent="agent1",
-        requires=[],
-        send_event: bool = False,
+        self, name: str, scenario: str, increment: bool, agent="agent1", requires=[], send_event: bool = False
     ) -> str:
         v = self.firstversion
         rid = "test::Resource[%s,key=%s]" % (agent, name)
@@ -141,12 +127,7 @@ class MultiVersionSetup(object):
         config.Config.set("config", "agent-deploy-interval", "0")
         config.Config.set("config", "agent-repair-interval", "0")
 
-        a = Agent(
-            hostname="node1",
-            environment=environment,
-            agent_map={e: "localhost" for e in endpoints},
-            code_loader=False,
-        )
+        a = Agent(hostname="node1", environment=environment, agent_map={e: "localhost" for e in endpoints}, code_loader=False)
         for e in endpoints:
             a.add_end_point_name(e)
         await a.start()
@@ -158,12 +139,7 @@ class MultiVersionSetup(object):
         for version in range(0, len(self.versions)):
             if self.versions[version]:
                 res = await serverdirect.put_version(
-                    env=env,
-                    version=version,
-                    resources=self.versions[version],
-                    unknowns=[],
-                    version_info={},
-                    resource_state={},
+                    env=env, version=version, resources=self.versions[version], unknowns=[], version_info={}, resource_state={}
                 )
                 assert res == 200
 
@@ -202,9 +178,7 @@ class MultiVersionSetup(object):
                 env, agent, version=None, incremental_deploy=True, sid=sid
             )
 
-            assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(
-                results
-            )
+            assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(results)
             allresources.update({r["resource_id"]: r for r in payload["resources"]})
 
         return allresources
@@ -248,22 +222,12 @@ async def test_deploy(server, agent: Agent, environment, caplog):
                     "requires": ["test::Resource[agent2,key=key4],v=%d" % version],
                     "purged": True,
                 },
-                {
-                    "key": "key4",
-                    "id": "test::Resource[agent2,key=key4],v=%d" % version,
-                    "send_event": False,
-                    "requires": [],
-                },
+                {"key": "key4", "id": "test::Resource[agent2,key=key4],v=%d" % version, "send_event": False, "requires": []},
             ]
 
         resources = make_resources(version)
         res = await serverdirect.put_version(
-            env=env,
-            version=version,
-            resources=resources,
-            unknowns=[],
-            version_info={},
-            resource_state={},
+            env=env, version=version, resources=resources, unknowns=[], version_info={}, resource_state={}
         )
         assert res == 200
 
@@ -298,12 +262,7 @@ async def test_deploy(server, agent: Agent, environment, caplog):
         v2 = version + 1
         resources = make_resources(v2)
         res = await serverdirect.put_version(
-            env=env,
-            version=v2,
-            resources=resources,
-            unknowns=[],
-            version_info={},
-            resource_state={},
+            env=env, version=v2, resources=resources, unknowns=[], version_info={}, resource_state={}
         )
         assert res == 200
 
@@ -313,13 +272,9 @@ async def test_deploy(server, agent: Agent, environment, caplog):
         assert len(payload["resources"]) == 0
 
         # Cannot request increment for specific version
-        result, _ = await serverdirect.get_resources_for_agent(
-            env, "agent1", version=version, incremental_deploy=True, sid=sid
-        )
+        result, _ = await serverdirect.get_resources_for_agent(env, "agent1", version=version, incremental_deploy=True, sid=sid)
         assert result == 500
-        result, _ = await serverdirect.get_resources_for_agent(
-            env, "agent1", version=v2, incremental_deploy=True, sid=sid
-        )
+        result, _ = await serverdirect.get_resources_for_agent(env, "agent1", version=v2, incremental_deploy=True, sid=sid)
         assert result == 500
 
     for record in caplog.records:
@@ -355,6 +310,12 @@ async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
         setup.add_resource("R13", "A1 A1 A1 A1 A1", True)
         setup.add_resource("R14", "A1 A1 d1 D1", True)
         setup.add_resource("R15", "A1 A1 p1 D1", True)
+        setup.add_resource("R16", "S1 A1", False)
+        setup.add_resource("R17", "A1 S1 A1", True)
+        setup.add_resource("R18", "D1 S1 A1", False)
+        setup.add_resource("R19", "U1 A1", False)
+        setup.add_resource("R20", "U1 D1", False)
+        setup.add_resource("R21", "A1 U1", True)
 
         await setup.setup(serverdirect, env, sid)
 
@@ -363,9 +324,7 @@ async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
 
 
 @pytest.mark.asyncio
-async def test_deploy_scenarios_removed_req_by_increment(
-    server, agent: Agent, environment, caplog
-):
+async def test_deploy_scenarios_removed_req_by_increment(server, agent: Agent, environment, caplog):
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         serverdirect = server.get_slice(SLICE_SERVER)
@@ -410,9 +369,7 @@ async def test_deploy_scenarios_removed_req_by_increment2(server, environment, c
             resources = await setup.setup(serverdirect, env, sid)
             print(sorted(resources[id2]["attributes"]["requires"]))
             print(sorted(sorted([id3, id4])))
-            assert sorted(
-                [strip_version(r) for r in resources[id2]["attributes"]["requires"]]
-            ) == sorted([id3, id4])
+            assert sorted([strip_version(r) for r in resources[id2]["attributes"]["requires"]]) == sorted([id3, id4])
 
         finally:
             await agent.stop()
@@ -422,9 +379,7 @@ async def test_deploy_scenarios_removed_req_by_increment2(server, environment, c
 
 
 @pytest.mark.asyncio
-async def test_deploy_scenarios_added_by_send_event(
-    server, agent: Agent, environment, caplog
-):
+async def test_deploy_scenarios_added_by_send_event(server, agent: Agent, environment, caplog):
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         serverdirect = server.get_slice(SLICE_SERVER)
@@ -448,9 +403,7 @@ async def test_deploy_scenarios_added_by_send_event(
 
 
 @pytest.mark.asyncio
-async def test_deploy_scenarios_added_by_send_event_cad(
-    server, agent: Agent, environment, caplog
-):
+async def test_deploy_scenarios_added_by_send_event_cad(server, agent: Agent, environment, caplog):
     # ensure CAD does not change send_event
     with caplog.at_level(logging.WARNING):
         # acquire raw server

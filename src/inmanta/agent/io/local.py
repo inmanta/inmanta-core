@@ -18,10 +18,9 @@
 
 import hashlib
 import os
-import subprocess
 import shutil
+import subprocess
 import sys
-
 
 try:
     import pwd
@@ -46,6 +45,7 @@ class IOBase(object):
     """
         Base class for an IO module. This class is python2 compatible so IOs that work remote can load this module on python2.
     """
+
     def __init__(self, uri, config):
         """
             Initialize the IO
@@ -82,6 +82,7 @@ class BashIO(IOBase):
     """
         This class provides handler IO methods
     """
+
     def __init__(self, uri, config, run_as=None):
         super(BashIO, self).__init__(uri, config)
         self.run_as = run_as
@@ -153,8 +154,9 @@ class BashIO(IOBase):
             current_env.update(env)
 
         cmds = [command] + arguments
-        result = subprocess.Popen(self._run_as_args(*cmds),
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd)
+        result = subprocess.Popen(
+            self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd
+        )
 
         if sys.version_info < (3, 0, 0):
             # TODO timeout is not supported
@@ -219,8 +221,9 @@ class BashIO(IOBase):
         """
             Do a statcall on a file
         """
-        result = subprocess.Popen(self._run_as_args("stat", "-c", "%a %U %G", path),
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.Popen(
+            self._run_as_args("stat", "-c", "%a %U %G", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
         data = result.communicate()
 
         if result.returncode > 0:
@@ -253,8 +256,9 @@ class BashIO(IOBase):
         """
             Put the given content at the given path in UTF-8
         """
-        result = subprocess.Popen(self._run_as_args("dd", "of=" + path), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                  stdin=subprocess.PIPE)
+        result = subprocess.Popen(
+            self._run_as_args("dd", "of=" + path), stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE
+        )
         result.communicate(input=content)
 
         if result.returncode > 0:
@@ -288,8 +292,7 @@ class BashIO(IOBase):
         """
             Change the permissions
         """
-        result = subprocess.Popen(self._run_as_args("chmod", permissions, path),
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.Popen(self._run_as_args("chmod", permissions, path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         result.communicate()
 
         return result.returncode > 0
@@ -298,8 +301,7 @@ class BashIO(IOBase):
         """
             Create a directory
         """
-        result = subprocess.Popen(self._run_as_args("mkdir", path),
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.Popen(self._run_as_args("mkdir", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         result.communicate()
 
         return result.returncode > 0
@@ -314,8 +316,7 @@ class BashIO(IOBase):
         if "*" in path:
             raise Exception("Do not use wildward in an rm -rf")
 
-        result = subprocess.Popen(self._run_as_args("rm", "-rf", path),
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.Popen(self._run_as_args("rm", "-rf", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         result.communicate()
 
         return result.returncode > 0
@@ -335,6 +336,7 @@ class LocalIO(IOBase):
     """
         This class provides handler IO methods
     """
+
     def is_remote(self):
         """
             Are operation executed remote
@@ -353,7 +355,7 @@ class LocalIO(IOBase):
             :rtype: str
         """
         sha1sum = hashlib.sha1()
-        with open(path, 'rb') as f:
+        with open(path, "rb") as f:
             sha1sum.update(f.read())
 
         return sha1sum.hexdigest()
@@ -572,7 +574,7 @@ class LocalIO(IOBase):
         shutil.rmtree(path)
 
 
-if __name__ == '__channelexec__':
+if __name__ == "__channelexec__":
     global channel
 
     if os.getuid() == 0:
@@ -588,8 +590,15 @@ if __name__ == '__channelexec__':
                 channel.send(result)  # NOQA
             except Exception as e:
                 import traceback
-                channel.send({"__type__": "RemoteException", "exception_type": str(e.__class__),  # noqa
-                              "exception_string": str(e), "traceback": str(traceback.format_exc())})
+
+                channel.send(  # NOQA
+                    {
+                        "__type__": "RemoteException",
+                        "exception_type": str(e.__class__),
+                        "exception_string": str(e),
+                        "traceback": str(traceback.format_exc()),
+                    }
+                )
 
         else:
             raise AttributeError("Method %s is not supported" % item[0])
