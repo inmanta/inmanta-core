@@ -69,3 +69,11 @@ comma-separated list of extensions that should be enabled.
     # File: /etc/inmanta/inmanta.d/0-extensions.cfg
     [server]
     enabled_extensions=new_extension
+
+
+The Inmanta extension template
+##############################
+
+A new Inmanta extension can be created via the Inmanta extension template. This is a cookiecutter template to generate the
+initial Python project for a new Inmanta extension. The documentation regarding this template is available on
+https://github.com/inmanta/inmanta-extension-template.
