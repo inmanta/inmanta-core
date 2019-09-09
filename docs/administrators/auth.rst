@@ -242,7 +242,7 @@ issued by keycloak.
    Show the correct configuration parameters in JSON format.
 
 Add a keycloak configuration parameters to the dashboard section of the server configuration file.
-(/etc/inmanta/server.cfg in most installs.) This section should already contain enabled=true and the
+(/etc/inmanta/inmanta.d/dashboard.cfg in most installs.) This section should already contain enabled=true and the
 path to the dashboard source.
 
 Add the realm, auth_url and client_id to the dashboard section. Use the parameters from the installation json file created
