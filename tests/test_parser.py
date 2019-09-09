@@ -21,8 +21,9 @@ import re
 import pytest
 
 from inmanta.ast import LocatableString, Namespace
+from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, GreaterThan, In, IsDefined, Not, Regex
-from inmanta.ast.statements import Literal, define
+from inmanta.ast.statements import ExpressionStatement, Literal, define
 from inmanta.ast.statements.assign import (
     Assign,
     CreateDict,
@@ -42,7 +43,7 @@ from inmanta.ast.statements.define import (
     DefineTypeConstraint,
     DefineTypeDefault,
 )
-from inmanta.ast.statements.generator import Constructor
+from inmanta.ast.statements.generator import Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
@@ -1264,3 +1265,45 @@ a = c["test"]["xx"]
     assert stmt.value.key.value == "xx"
     assert isinstance(stmt.value.themap.key, Literal)
     assert stmt.value.themap.key.value == "test"
+
+
+def test_if_statement():
+    """Test for the if statement
+    """
+    statements = parse_code(
+        """
+if test.field == "value":
+    test.other = "otherValue"
+end
+"""
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, ExpressionStatement)
+    assert isinstance(stmt.if_branch, BasicBlock)
+    assert len(stmt.if_branch.get_stmts()) == 1
+    assert isinstance(stmt.else_branch, BasicBlock)
+    assert len(stmt.else_branch.get_stmts()) == 0
+
+
+def test_if_else():
+    """Test for the if statement with an else clause
+    """
+    statements = parse_code(
+        """
+if test.field == "value":
+    test.other = "otherValue"
+else:
+    test.other = "altValue"
+end
+"""
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, ExpressionStatement)
+    assert isinstance(stmt.if_branch, BasicBlock)
+    assert len(stmt.if_branch.get_stmts()) == 1
+    assert isinstance(stmt.else_branch, BasicBlock)
+    assert len(stmt.else_branch.get_stmts()) == 1
