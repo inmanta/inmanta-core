@@ -151,7 +151,9 @@ class Compiler(object):
 
             mod_ns = cls.__module__.split(".")
             if mod_ns[0] != const.PLUGINS_PACKAGE:
-                raise Exception("All plugin modules should be loaded in the %s package not in %s" % (const.PLUGINS_PACKAGE, cls.__module__))
+                raise Exception(
+                    "All plugin modules should be loaded in the %s package not in %s" % (const.PLUGINS_PACKAGE, cls.__module__)
+                )
 
             mod_ns = mod_ns[1:]
 
