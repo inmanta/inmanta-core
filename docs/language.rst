@@ -144,7 +144,7 @@ Lists of primitive types are also primitive types: ``string[]``, ``number[]``, `
 ``dict`` is the primitive type that represents a dictionary, with string keys. Dict values can be accessed using the ``[]`` operator. All members of a dict have to be set when the dict is constructed. e.g.
 
 .. code-block:: inmanta
-    
+
     #correct
     a = {"key":"value", "number":7}
     value = a["key"]
@@ -152,6 +152,8 @@ Lists of primitive types are also primitive types: ``string[]``, ``number[]``, `
     # incorrect, can't assign to dict after construction
     # a["otherkey"] = "othervalue"
 
+
+.. _lang-conditions:
 
 Conditions
 ==========================
@@ -432,6 +434,27 @@ The syntax is:
     for: 'for' ID 'in' value ':' statement* 'end';
 
 
+If statement
+============
+
+An if statement allows to branch on a condition.
+
+.. code-block:: inmanta
+
+    if nodecount > 1:
+        self.cluster_mode = true
+    else:
+        self.cluster_mode = false
+    end
+
+The syntax is:
+
+.. code-block:: antlr
+
+    if : 'if' condition ':' statement* ('else' ':' statement*)? 'end';
+
+The :ref:`lang-conditions` section describes allowed forms for the condition.
+
 
 Transformations
 ==============================================================
@@ -490,4 +513,4 @@ Plug-ins
 
 For more complex operations, python plugins can be used. Plugins are exposed in the Inmanta language as function calls, such as the template function call. A template
 accepts parameters and returns a value that it computed out of the variables. Each module that is included can also provide plug-ins. These plug-ins are accessible within the namespace of the
-module. The :ref:`module-plugins` section of the module guid provides more details about how to write a plugin.
+module. The :ref:`module-plugins` section of the module guide provides more details about how to write a plugin.
