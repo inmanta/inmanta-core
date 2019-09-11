@@ -40,6 +40,7 @@ def get_command(
     dbname="inmanta",
     config_dir=None,
     server_extensions=[],
+    version=False,
 ):
     root_dir = tmp_dir.mkdir("root").strpath
     log_dir = os.path.join(root_dir, "log")
@@ -75,6 +76,8 @@ def get_command(
         args += ["--timed-logs"]
     if config_dir:
         args += ["--config-dir", config_dir]
+    if version:
+        args += ["--version"]
     args += ["-c", config_file, "server"]
     return (args, log_dir)
 
@@ -436,3 +439,18 @@ end
     assert "Compile done" in all_output
     assert f"Config directory {non_existing_config_dir} doesn't exist" not in all_output
     assert f"Config file {non_existing_config_file} doesn't exist" not in all_output
+
+
+@pytest.mark.parametrize(
+    "with_tty, regexes_required_lines, regexes_forbidden_lines",
+    [(False, [r"Current Inmanta version:"], []), (True, [r"Current Inmanta version:"], [])],
+)
+@pytest.mark.timeout(20)
+def test_version_argument_is_set(tmpdir, with_tty, regexes_required_lines, regexes_forbidden_lines):
+    (args, log_dir) = get_command(tmpdir, version=True)
+    if with_tty:
+        (stdout, _, _) = run_with_tty(args)
+    else:
+        (stdout, _, _) = run_without_tty(args)
+    assert len(stdout) != 0
+    check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, False)
