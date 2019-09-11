@@ -44,6 +44,12 @@ class RESTHandler(tornado.web.RequestHandler):
         self._transport: "RESTServer" = transport
         self._config = config
 
+        # Setting "Access-Control-Allow-Origin": null can be exploited.
+        # better not set it all instead.
+        # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin
+        if inmanta_config.Config.get("server", "access_control_allow_origin"):
+            self.set_header("Access-Control-Allow-Origin", inmanta_config.Config.get("server", "access_control_allow_origin"))
+
     def _get_config(self, http_method: str) -> common.UrlMethod:
         if http_method.upper() not in self._config:
             allowed = ", ".join(self._config.keys())
@@ -96,7 +102,6 @@ class RESTHandler(tornado.web.RequestHandler):
 
         with timer("rpc." + call_config.method_name).time():
             self._transport.start_request()
-            self.set_header("Access-Control-Allow-Origin", "*")
             try:
                 message = self._transport._decode(self.request.body)
                 if message is None:
@@ -190,7 +195,6 @@ class RESTHandler(tornado.web.RequestHandler):
         if len(self._transport.headers):
             allow_headers += ", " + ", ".join(self._transport.headers)
 
-        self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
         self.set_header("Access-Control-Allow-Headers", allow_headers)
 

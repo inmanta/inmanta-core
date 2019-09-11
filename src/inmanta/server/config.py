@@ -80,7 +80,6 @@ server_fact_expire = Option(
     "server", "fact-expire", 3600, "After how many seconds will discovered facts/parameters expire", is_time
 )
 
-
 def default_fact_renew():
     """:inmanta.config:option:`server.fact-expire` /3 """
     return int(server_fact_expire.get() / 3)
@@ -163,7 +162,7 @@ server_delete_currupt_files = Option(
 )
 
 server_purge_resource_action_logs_interval = Option(
-    "server", "purge-resource-action-logs-interval", 3600, "The number of seconds between resource-action log purging", is_time
+    "server", "purge-resource-action-logs-interval", 3600, "The number of seconds between resource-action log fpurging", is_time
 )
 
 server_resource_action_log_prefix = Option(
@@ -183,6 +182,14 @@ server_enabled_extensions = Option(
     is_list,
 )
 
+server_access_control_allow_origin = Option(
+    "server",
+    "access-control-allow-origin",
+    None,
+    "Configures the access_control_allow_origin setting of the http server."
+    "Defaults to not sending an AOCA header.",
+    is_str_opt
+)
 
 #############################
 # Dashboard
