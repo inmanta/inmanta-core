@@ -1987,7 +1987,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             Recompile an environment in a different thread and taking wait time into account.
         """
         _, warnings = await self.compiler.request_recompile(
-            env=env, force_update=update_repo, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
+            env=env,
+            force_update=update_repo,
+            do_export=True,
+            remote_id=uuid.uuid4(),
+            metadata=metadata,
+            env_vars=os.environ.copy()
         )
         return warnings
 

@@ -457,12 +457,18 @@ async def test_server_recompile(server_multi, client_multi, environment_multi):
     subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=project_dir)
     subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_dir)
 
+    # Set environment variable to be passed to the compiler
+    key_env_var = "TEST_MESSAGE"
+    value_env_var = "a_message"
+    os.environ[key_env_var] = value_env_var
+
     # add main.cf
     with open(os.path.join(project_dir, "main.cf"), "w") as fd:
         fd.write(
-            """
+            f"""
         host = std::Host(name="test", os=std::linux)
         std::ConfigFile(host=host, path="/etc/motd", content="1234")
+        std::print(std::get_env("{key_env_var}"))
 """
         )
 
@@ -477,7 +483,17 @@ async def test_server_recompile(server_multi, client_multi, environment_multi):
 
     # get compile reports
     reports = await client.get_reports(environment)
+    assert reports.code == 200
     assert len(reports.result["reports"]) == 1
+    env_vars_compile = reports.result["reports"][0]["environment_variables"]
+    assert key_env_var in env_vars_compile
+    assert env_vars_compile[key_env_var] == value_env_var
+
+    # get report
+    compile_report = await client.get_report(reports.result["reports"][0]["id"])
+    assert compile_report.code == 200
+    report_map = {r["name"]: r for r in compile_report.result["report"]["reports"]}
+    assert value_env_var in report_map["Recompiling configuration model"]["outstream"]
 
     # set a parameter without requesting a recompile
     await client.set_param(environment, id="param1", value="test", source="plugin")
