@@ -93,6 +93,10 @@ class ExpressionStatement(DynamicStatement):
         reqs = self.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self)
 
+    def requires(self) -> List[str]:
+        """List of all variable names used by this statement"""
+        raise NotImplementedError()
+
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         """
             returns a dict of the result variables required, names are an opaque identifier
@@ -162,15 +166,6 @@ class AssignStatement(DynamicStatement):
         out = self.lhs.requires()  # type : List[str]
         out.extend(self.rhs.requires())  # type : List[str]
         return out
-
-
-class GeneratorStatement(ExpressionStatement):
-    """
-        This statement models a statement that generates new statements
-    """
-
-    def __init__(self) -> None:
-        ExpressionStatement.__init__(self)
 
 
 class Literal(ExpressionStatement):
