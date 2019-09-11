@@ -507,7 +507,7 @@ def cmd_parser():
 
 
 def get_current_version_and_exit():
-    print("Current Inmanta version:", get_compiler_version())
+    print(f"Current Inmanta version: {get_compiler_version()}")
     sys.exit(0)
 
 

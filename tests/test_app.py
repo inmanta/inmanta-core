@@ -442,12 +442,17 @@ end
 
 
 @pytest.mark.parametrize(
-    "with_tty, regexes_required_lines, regexes_forbidden_lines",
-    [(False, [r"Current Inmanta version:"], []), (True, [r"Current Inmanta version:"], [])],
+    "with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines",
+    [
+        (False, True, [r"Current Inmanta version:"], []),
+        (True, True, [r"Current Inmanta version:"], []),
+        (True, False, [], [r"Current Inmanta version:"]),
+        (True, False, [], [r"Current Inmanta version:"]),
+    ],
 )
 @pytest.mark.timeout(20)
-def test_version_argument_is_set(tmpdir, with_tty, regexes_required_lines, regexes_forbidden_lines):
-    (args, log_dir) = get_command(tmpdir, version=True)
+def test_version_argument_is_set(tmpdir, with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines):
+    (args, log_dir) = get_command(tmpdir, version=version_should_be_shown)
     if with_tty:
         (stdout, _, _) = run_with_tty(args)
     else:
