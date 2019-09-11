@@ -58,6 +58,7 @@ from inmanta.config import Config
 from inmanta.const import EXIT_START_FAILED
 from inmanta.export import ModelExporter, cfg_env
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.util import get_compiler_version
 
 LOGGER = logging.getLogger("inmanta")
 
@@ -491,6 +492,9 @@ def cmd_parser():
     parser.add_argument(
         "-X", "--extended-errors", dest="errors", help="Show stack traces for errors", action="store_true", default=False
     )
+    parser.add_argument(
+        "--version", action="store_true", dest="version", help="Show current version of Inmanta", default=False, required=False
+    )
     subparsers = parser.add_subparsers(title="commands")
     for cmd_name, cmd_options in Commander.commands().items():
         cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"], aliases=cmd_options["aliases"])
@@ -500,6 +504,11 @@ def cmd_parser():
         cmd_subparser.set_defaults(require_project=cmd_options["require_project"])
 
     return parser
+
+
+def get_current_version_and_exit():
+    print("Current Inmanta version:", get_compiler_version())
+    sys.exit(0)
 
 
 def _is_on_tty() -> bool:
@@ -565,6 +574,9 @@ def app():
     parser = cmd_parser()
     options, other = parser.parse_known_args()
     options.other = other
+
+    if options.version:
+        get_current_version_and_exit()
 
     # Log everything to a log_file if logfile is provided
     if options.log_file:
