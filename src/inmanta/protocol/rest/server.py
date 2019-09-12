@@ -32,6 +32,7 @@ from inmanta import const
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.common import UrlMethod
 from inmanta.protocol.rest import CONTENT_TYPE, JSON_CONTENT, LOGGER, RESTBase
+from inmanta.server.config import server_access_control_allow_origin
 from inmanta.types import JsonType
 
 
@@ -74,8 +75,8 @@ class RESTHandler(tornado.web.RequestHandler):
         # Setting "Access-Control-Allow-Origin": null can be exploited.
         # better not set it all instead.
         # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin
-        if inmanta_config.server_access_control_allow_origin.get():
-            self.set_header("Access-Control-Allow-Origin", inmanta_config.server_access_control_allow_origin.get())
+        if server_access_control_allow_origin.get():
+            self.set_header("Access-Control-Allow-Origin", server_access_control_allow_origin.get())
 
     def respond(self, body: Optional[JsonType], headers: Dict[str, str], status: int) -> None:
         if CONTENT_TYPE not in headers:
