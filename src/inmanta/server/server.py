@@ -1991,8 +1991,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             force_update=update_repo,
             do_export=True,
             remote_id=uuid.uuid4(),
-            metadata=metadata,
-            env_vars=os.environ.copy()
+            metadata=metadata
         )
         return warnings
 
