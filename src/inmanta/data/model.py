@@ -17,7 +17,7 @@
 """
 import datetime
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import pydantic
 
@@ -88,13 +88,13 @@ class CompileQueueResponse(BaseModel):
 
 
 ResourceVersionIdStr = str
-""" 
+"""
     The resource id with the version included.
 """
 
 
 ResourceIdStr = str
-""" 
+"""
     The resource id without the version
 """
 
@@ -104,8 +104,8 @@ class AttributeStateChange(BaseModel):
         Changes in the attribute
     """
 
-    current: Optional[SimpleTypes]
-    desired: Optional[SimpleTypes]
+    current: Optional[SimpleTypes] = None
+    desired: Optional[SimpleTypes] = None
 
 
 class Event(BaseModel):

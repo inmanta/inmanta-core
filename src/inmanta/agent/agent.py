@@ -25,7 +25,7 @@ import time
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, ValuesView
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from tornado import ioloop, locks
 from tornado.concurrent import Future

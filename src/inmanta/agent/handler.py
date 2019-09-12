@@ -24,7 +24,7 @@ import typing
 import uuid
 from collections import defaultdict
 from concurrent.futures import Future
-from typing import Dict, Tuple, Type
+from typing import Any, Dict, Optional, Tuple, Type
 
 from tornado import concurrent
 
@@ -141,7 +141,9 @@ class HandlerContext(object):
         Context passed to handler methods for state related "things"
     """
 
-    def __init__(self, resource, dry_run=False, action_id=None, logger=None):
+    def __init__(
+        self, resource: Resource, dry_run: bool = False, action_id: Optional[uuid.UUID] = None, logger: logging.Logger = None
+    ) -> None:
         self._resource = resource
         self._dry_run = dry_run
         self._cache = {}
@@ -181,29 +183,29 @@ class HandlerContext(object):
         """
         self._status = status
 
-    def is_dry_run(self):
+    def is_dry_run(self) -> bool:
         """
             Is this a dryrun?
         """
         return self._dry_run
 
-    def get(self, name):
+    def get(self, name: str) -> Any:
         return self._cache[name]
 
-    def contains(self, key):
+    def contains(self, key: str) -> bool:
         return key in self._cache
 
-    def set(self, name, value):
+    def set(self, name: str, value: Any) -> None:
         self._cache[name] = value
 
-    def set_created(self):
+    def set_created(self) -> None:
         self._created = True
         if self._change is not const.Change.nochange:
             raise InvalidOperation(f"Unable to set {const.Change.created} operation, {self._change} already set.")
 
         self._change = const.Change.created
 
-    def set_purged(self):
+    def set_purged(self) -> None:
         self._purged = True
 
         if self._change is not const.Change.nochange:
@@ -211,7 +213,7 @@ class HandlerContext(object):
 
         self._change = const.Change.purged
 
-    def set_updated(self):
+    def set_updated(self) -> None:
         self._updated = True
 
         if self._change is not const.Change.nochange:
@@ -220,7 +222,7 @@ class HandlerContext(object):
         self._change = const.Change.updated
 
     @property
-    def changed(self):
+    def changed(self) -> bool:
         return self._created or self._updated or self._purged
 
     @property
@@ -237,7 +239,7 @@ class HandlerContext(object):
         """
         self._changes[name] = AttributeStateChange(current=current, desired=desired)
 
-    def add_changes(self, **kwargs: SimpleTypes):
+    def add_changes(self, **kwargs: SimpleTypes) -> None:
         """
             Report a list of changes at once as kwargs
 
@@ -247,17 +249,17 @@ class HandlerContext(object):
             To report the previous value of the field, use the add_change method
         """
         for field, value in kwargs.items():
-            self._changes[field] = AttributeStateChange(current=None, desired=value)
+            self._changes[field] = AttributeStateChange(desired=value)
 
-    def fields_updated(self, fields):
+    def fields_updated(self, fields: str) -> None:
         """
             Report that fields have been updated
         """
         for field in fields:
             if field not in self._changes:
-                self._changes[fields] = {}
+                self._changes[fields] = AttributeStateChange()
 
-    def update_changes(self, changes: Dict[str, AttributeStateChange]):
+    def update_changes(self, changes: Dict[str, AttributeStateChange]) -> None:
         """
             Update the changes list with changes
 
