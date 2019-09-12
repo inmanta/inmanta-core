@@ -28,28 +28,6 @@ Inmanta requires at least the latest Python 3.6 or 3.7 and git.
         The first package (python3-inmanta) contains all the code and the commands. The server and the agent packages install config
         files and systemd unit files. The dashboard is installed with the server package.
 
-    .. tab:: Fedora
-
-        For Fedora use dnf:
-
-        .. code-block:: sh
-
-          cat > /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
-          [inmanta-oss-stable]
-          name=Inmanta OSS stable
-          baseurl=https://pkg.inmanta.com/inmanta-oss-stable/f\$releasever/
-          gpgcheck=1
-          gpgkey=https://pkg.inmanta.com/inmanta-oss-stable/inmanta-oss-stable-public-key
-          repo_gpgcheck=1
-          enabled=1
-          enabled_metadata=1
-          EOF
-          sudo dnf install -y python3-inmanta python3-inmanta-server python3-inmanta-agent
-
-        The first package (python3-inmanta) contains all the code and the commands. The server and the agent
-        packages install config files and systemd unit files. The dashboard is installed with the server
-        package.
-
 
     .. tab:: Other Linux and Mac
 
