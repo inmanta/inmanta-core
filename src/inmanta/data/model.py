@@ -104,8 +104,8 @@ class AttributeStateChange(BaseModel):
         Changes in the attribute
     """
 
-    current: SimpleTypes
-    desired: SimpleTypes
+    current: Optional[SimpleTypes]
+    desired: Optional[SimpleTypes]
 
 
 class Event(BaseModel):

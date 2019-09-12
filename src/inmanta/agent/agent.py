@@ -25,7 +25,7 @@ import time
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Any
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, ValuesView
 
 from tornado import ioloop, locks
 from tornado.concurrent import Future
@@ -37,7 +37,7 @@ from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import ResourceHandler
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ResourceState
-from inmanta.data.model import Event, ResourceIdStr, ResourceVersionIdStr, AttributeStateChange
+from inmanta.data.model import AttributeStateChange, Event, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader
 from inmanta.protocol import SessionEndpoint, methods
 from inmanta.resources import Id, Resource
@@ -285,7 +285,7 @@ class ResourceAction(object):
             )
 
             end = datetime.datetime.now()
-            changes = {str(self.resource.id): ctx.changes}
+            changes: Dict[ResourceVersionIdStr, Dict[str, Dict[str, str]]] = {str(self.resource.id): ctx.changes}
             result = await self.scheduler.get_client().resource_action_update(
                 tid=self.scheduler._env_id,
                 resource_ids=[str(self.resource.id)],
@@ -478,7 +478,9 @@ class ResourceScheduler(object):
         self.logger.info("Running %s for reason: %s" % (gid, reason))
 
         # re-generate generation
-        self.generation = {r.id.resource_str(): ResourceAction(self, r, gid, reason) for r in resources}
+        self.generation: Dict[str, ResourceAction] = {
+            r.id.resource_str(): ResourceAction(self, r, gid, reason) for r in resources
+        }
 
         # mark undeployable
         for key, res in self.generation.items():
@@ -506,7 +508,7 @@ class ResourceScheduler(object):
         # Start running
         dummy.future.set_result(ResourceActionResult(True, False, False))
 
-    async def mark_deployment_as_finished(self, resource_actions, reason, gid):
+    async def mark_deployment_as_finished(self, resource_actions: List[ResourceAction], reason: str, gid: uuid.UUID) -> None:
         await asyncio.gather(*[resource_action.future for resource_action in resource_actions])
         with (await self.agent.critical_ratelimiter.acquire()):
             if not self.finished():
@@ -520,13 +522,13 @@ class ResourceScheduler(object):
                 )
                 self._resume_reason = None
 
-    def notify_ready(self, resourceid, send_events, state, change, changes):
+    def notify_ready(self, resourceid, send_events, state, change, changes) -> None:
         if resourceid not in self.cad:
             # received CAD notification for which no resource are waiting, so return
             return
         self.cad[resourceid].notify(send_events, state, change, changes)
 
-    def dump(self):
+    def dump(self) -> None:
         print("Waiting:")
         for r in self.generation.values():
             print(r.long_string())
@@ -534,7 +536,7 @@ class ResourceScheduler(object):
         for r in self.queue:
             print(r.long_string())
 
-    def get_client(self):
+    def get_client(self) -> protocol.Client:
         return self.agent.get_client()
 
 
@@ -663,7 +665,9 @@ class AgentInstance(object):
             self.process._sched.remove(action)
         self._time_triggered_actions.clear()
 
-    def notify_ready(self, resourceid, send_events, state, change, changes):
+    def notify_ready(
+        self, resourceid: ResourceVersionIdStr, send_events: bool, state: const.ResourceState, change: const.Change, changes
+    ) -> None:
         self._nq.notify_ready(resourceid, send_events, state, change, changes)
 
     def _can_get_resources(self):
@@ -1067,7 +1071,7 @@ class Agent(SessionEndpoint):
         self,
         env: uuid.UUID,
         agent: str,
-        resource: str,
+        resource: ResourceVersionIdStr,
         send_events: bool,
         state: const.ResourceState,
         change: const.Change,

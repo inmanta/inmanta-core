@@ -31,8 +31,10 @@ from tornado import concurrent
 from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
+from inmanta.data.model import AttributeStateChange
 from inmanta.protocol import Result
 from inmanta.resources import Resource
+from inmanta.types import SimpleTypes
 
 if typing.TYPE_CHECKING:
     from inmanta import agent
@@ -149,7 +151,7 @@ class HandlerContext(object):
         self._created = False
         self._change = const.Change.nochange
 
-        self._changes: Dict[str, Dict[str, str]] = {}
+        self._changes: Dict[str, AttributeStateChange] = {}
 
         if action_id is None:
             action_id = uuid.uuid4()
@@ -233,9 +235,9 @@ class HandlerContext(object):
             :param desired: The desired value to which the field was updated (or should be updated)
             :param current: The value of the field before it was updated
         """
-        self._changes[name] = {"current": current, "desired": desired}
+        self._changes[name] = AttributeStateChange(current=current, desired=desired)
 
-    def add_changes(self, **kwargs):
+    def add_changes(self, **kwargs: SimpleTypes):
         """
             Report a list of changes at once as kwargs
 
@@ -245,7 +247,7 @@ class HandlerContext(object):
             To report the previous value of the field, use the add_change method
         """
         for field, value in kwargs.items():
-            self._changes[field] = {"desired": value}
+            self._changes[field] = AttributeStateChange(current=None, desired=value)
 
     def fields_updated(self, fields):
         """
@@ -255,7 +257,7 @@ class HandlerContext(object):
             if field not in self._changes:
                 self._changes[fields] = {}
 
-    def update_changes(self, changes: dict):
+    def update_changes(self, changes: Dict[str, AttributeStateChange]):
         """
             Update the changes list with changes
 
@@ -264,7 +266,7 @@ class HandlerContext(object):
         self._changes.update(changes)
 
     @property
-    def changes(self) -> Dict[str, Dict[str, str]]:
+    def changes(self) -> Dict[str, AttributeStateChange]:
         return self._changes
 
     def log_msg(self, level: int, msg: str, args: list, kwargs: dict) -> dict:
