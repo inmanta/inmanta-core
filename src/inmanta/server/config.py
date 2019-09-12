@@ -18,7 +18,7 @@
 
 import logging
 
-from inmanta.config import Option, is_bool, is_int, is_list, is_map, is_str_opt, is_time, is_float, log_dir, state_dir
+from inmanta.config import Option, is_bool, is_float, is_int, is_list, is_map, is_str_opt, is_time, log_dir, state_dir
 
 LOGGER = logging.getLogger(__name__)
 
@@ -33,12 +33,13 @@ db_port = Option("database", "port", 5432, "The port of the postgresql server", 
 db_name = Option("database", "name", "inmanta", "The name of the database on the postgresql server")
 db_username = Option("database", "username", "postgres", "The username to access the database in the PostgreSQL server")
 db_password = Option("database", "password", None, "The password that belong to the database user")
-db_connection_pool_min_size = Option("database", "connection_pool_min_size", 10,
-                                     "Number of connections the pool will be initialized with", is_int)
-db_connection_pool_max_size = Option("database", "connection_pool_max_size", 10,
-                                     "Max number of connections in the pool", is_int)
-db_connection_timeout = Option("database", "connection_timeout", 60,
-                               "Connection timeout in seconds", is_float)
+db_connection_pool_min_size = Option(
+    "database", "connection_pool_min_size", 10, "Number of connections the pool will be initialized with", is_int
+)
+db_connection_pool_max_size = Option(
+    "database", "connection_pool_max_size", 10, "Max number of connections in the pool", is_int
+)
+db_connection_timeout = Option("database", "connection_timeout", 60, "Connection timeout in seconds", is_float)
 
 #############################
 # server_rest_transport

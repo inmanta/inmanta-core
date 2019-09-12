@@ -157,9 +157,11 @@ def is_int(value: str) -> int:
     """int"""
     return int(value)
 
+
 def is_float(value: str) -> float:
     """float"""
     return float(value)
+
 
 def is_time(value: str) -> int:
     """time"""

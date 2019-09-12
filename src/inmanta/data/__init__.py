@@ -719,7 +719,7 @@ class Environment(BaseDocument):
             typ="bool",
             default=False,
             doc="When this boolean is set to true, the orchestrator will automatically release a new version "
-                "that was compiled by the orchestrator itself.",
+            "that was compiled by the orchestrator itself.",
             validator=convert_boolean,
         ),
         PUSH_ON_AUTO_DEPLOY: Setting(
@@ -789,7 +789,7 @@ class Environment(BaseDocument):
             typ="dict",
             validator=convert_agent_map,
             doc="A dict with key the name of agents that should be automatically started. The value "
-                "is either an empty string or an agent map string.",
+            "is either an empty string or an agent map string.",
             agent_restart=True,
         ),
         AUTOSTART_AGENT_INTERVAL: Setting(
@@ -2259,7 +2259,7 @@ class ConfigurationModel(BaseDocument):
             f"UPDATE {self.table_name()} "
             + f"SET "
             + f"deployed=True, result=(CASE WHEN {subquery} THEN $4::versionstate ELSE $5::versionstate END) "
-              f"WHERE environment=$1 AND version=$2 RETURNING result"
+            f"WHERE environment=$1 AND version=$2 RETURNING result"
         )
         values = [
             self._get_value(self.environment),
@@ -2546,14 +2546,27 @@ CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
 async def connect(
-    host: str, port: int, database: str, username: str, password: str, create_db_schema: bool = True,
-    connection_pool_min_size: int = 10, connection_pool_max_size: int = 10, database_connection_timeout=60
+    host: str,
+    port: int,
+    database: str,
+    username: str,
+    password: str,
+    create_db_schema: bool = True,
+    connection_pool_min_size: int = 10,
+    connection_pool_max_size: int = 10,
+    database_connection_timeout=60,
 ) -> asyncpg.pool.Pool:
-    connection_kwargs = {
-        "timeout": database_connection_timeout
-    }
-    pool = await asyncpg.create_pool(host=host, port=port, database=database, user=username, password=password,
-                                     min_size=connection_pool_min_size, max_size=connection_pool_max_size, **connection_kwargs)
+    connection_kwargs = {"timeout": database_connection_timeout}
+    pool = await asyncpg.create_pool(
+        host=host,
+        port=port,
+        database=database,
+        user=username,
+        password=password,
+        min_size=connection_pool_min_size,
+        max_size=connection_pool_max_size,
+        **connection_kwargs,
+    )
     set_connection_pool(pool)
     if create_db_schema:
         try:
