@@ -37,7 +37,7 @@ from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import ResourceHandler
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ResourceState
-from inmanta.data.model import Event, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import Event, ResourceIdStr, ResourceVersionIdStr, AttributeStateChange
 from inmanta.loader import CodeLoader
 from inmanta.protocol import SessionEndpoint, methods
 from inmanta.resources import Id, Resource
@@ -91,7 +91,7 @@ class ResourceAction(object):
         self.status: Optional[const.ResourceState] = None
         self.change: Optional[const.Change] = None
         # resourceid -> attribute -> {current: , desired:}
-        self.changes: Optional[Dict[str, Dict[str, Dict[str, str]]]] = None
+        self.changes: Optional[Dict[Id, Dict[str, AttributeStateChange]]] = None
         self.undeployable: Optional[const.ResourceState] = None
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
@@ -137,7 +137,6 @@ class ResourceAction(object):
                                           to provides of this resource.
         """
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
-        provider: Optional[ResourceHandler] = None
 
         if not event_only:
             await self.send_in_progress(ctx.action_id, start)
@@ -146,10 +145,12 @@ class ResourceAction(object):
 
         # setup provider
         try:
-            provider = await self.scheduler.agent.get_provider(self.resource)
+            provider: ResourceHandler = await self.scheduler.agent.get_provider(self.resource)
         except Exception:
-            if provider is not None:
+            try:
                 provider.close()
+            except NameError:
+                pass
 
             cache.close_version(self.resource.id.version)
             ctx.set_status(const.ResourceState.unavailable)
@@ -182,7 +183,8 @@ class ResourceAction(object):
 
         # event processing
         if len(events) > 0 and provider.can_process_events():
-            events = {k: v.dict() for k, v in events.items()}
+            # The handler still expects a dict
+            events_dict = {k: v.dict() for k, v in events.items()}
             if not event_only:
                 await self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
             try:
@@ -191,11 +193,11 @@ class ResourceAction(object):
                 )
 
                 await asyncio.get_event_loop().run_in_executor(
-                    self.scheduler.agent.thread_pool, provider.process_events, ctx, self.resource, events
+                    self.scheduler.agent.thread_pool, provider.process_events, ctx, self.resource, events_dict
                 )
             except Exception:
                 ctx.exception(
-                    "Could not send events for %(resource_id)s", resource_id=str(self.resource.id), events=str(events)
+                    "Could not send events for %(resource_id)s", resource_id=str(self.resource.id), events=str(events_dict)
                 )
 
         provider.close()
@@ -741,11 +743,11 @@ class AgentInstance(object):
                 if len(resources) > 0:
                     self._nq.reload(resources, undeployable, reason=reason, is_repair=is_repair_run)
 
-    async def dryrun(self, dry_run_id, version):
+    async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> Apireturn:
         self.process.add_background_task(self.do_run_dryrun(version, dry_run_id))
         return 200
 
-    async def do_run_dryrun(self, version, dry_run_id):
+    async def do_run_dryrun(self, version: int, dry_run_id: uuid.UUID) -> None:
         with (await self.dryrunlock.acquire()):
             with (await self.ratelimiter.acquire()):
                 result = await self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)

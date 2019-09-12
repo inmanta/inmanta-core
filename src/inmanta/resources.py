@@ -185,6 +185,7 @@ class Resource(metaclass=ResourceMeta):
     """
 
     fields: Tuple[str, ...] = ("send_event",)
+    send_event: bool
     model: DynamicProxy
     map: Dict[str, Callable[["export.Exporter", DynamicProxy], Any]]
 
@@ -340,7 +341,7 @@ class Resource(metaclass=ResourceMeta):
     def __init__(self, _id: "Id") -> None:
         self.id = _id
         self.version = 0
-        self.requires: Set[Resource] = set()
+        self.requires: Set[Id] = set()
         self.unknowns: Set[str] = set()
 
         if not hasattr(self.__class__, "fields"):
