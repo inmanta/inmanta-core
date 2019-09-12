@@ -80,6 +80,7 @@ server_fact_expire = Option(
     "server", "fact-expire", 3600, "After how many seconds will discovered facts/parameters expire", is_time
 )
 
+
 def default_fact_renew():
     """:inmanta.config:option:`server.fact-expire` /3 """
     return int(server_fact_expire.get() / 3)
@@ -188,7 +189,7 @@ server_access_control_allow_origin = Option(
     None,
     "Configures the Access-Control-Allow-Origin setting of the http server."
     "Defaults to not sending an Access-Control-Allow-Origin header.",
-    is_str_opt
+    is_str_opt,
 )
 
 #############################

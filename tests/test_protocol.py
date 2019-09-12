@@ -1054,6 +1054,7 @@ async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name)
     await server.stop()
     await rs.stop()
 
+
 @pytest.mark.asyncio
 async def test_ACOA_header(server):
     """
@@ -1062,10 +1063,7 @@ async def test_ACOA_header(server):
     port = config.Config.get("server_rest_transport", "port")
     url = f"http://localhost:{port}/api/v1/environment"
 
-    request = HTTPRequest(
-        url=url,
-        method="GET",
-    )
+    request = HTTPRequest(url=url, method="GET")
     client = AsyncHTTPClient()
     response = await client.fetch(request)
     assert response.code == 200
