@@ -197,7 +197,7 @@ class DefineImplementation(TypeDefinitionStatement):
     """
         Define a new implementation that has a name and contains statements
 
-        @param name: The name of the implementation
+        :param name: The name of the implementation
     """
 
     comment: Optional[str]
@@ -289,9 +289,9 @@ class DefineImplement(DefinitionStatement):
     """
         Define a new implementation for a given entity
 
-        @param entity: The name of the entity that is implemented
-        @param implementations: A list of implementations
-        @param whem: A clause that determines when this implementation is "active"
+        :param entity: The name of the entity that is implemented
+        :param implementations: A list of implementations
+        :param whem: A clause that determines when this implementation is "active"
     """
 
     comment: Optional[str]
@@ -371,8 +371,8 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         Define a new data type in the configuration. This type is a constrained
         version of a the built-in datatypes
 
-        @param name: The name of the new  type
-        @param basetype: The name of the type that is "refined"
+        :param name: The name of the new  type
+        :param basetype: The name of the type that is "refined"
     """
 
     comment: Optional[str]
@@ -445,8 +445,8 @@ class DefineTypeDefault(TypeDefinitionStatement):
     """
         Define a new entity that is based on an existing entity and default values for attributes.
 
-        @param name: The name of the new type
-        @param class_ctor: A constructor statement
+        :param name: The name of the new type
+        :param class_ctor: A constructor statement
     """
 
     type: Default

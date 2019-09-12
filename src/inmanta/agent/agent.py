@@ -77,7 +77,7 @@ class ResourceAction(object):
 
     def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
         """
-            :param gid A unique identifier to identify a deploy. This is local to this agent.
+            :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
         self.scheduler: "ResourceScheduler" = scheduler
         self.resource: Resource = resource
@@ -126,9 +126,9 @@ class ResourceAction(object):
         event_only: bool = False,
     ) -> Tuple[bool, bool]:
         """
-            :param ctx The context to use during execution of this deploy
-            :param events Possible events that are available for this resource
-            :param cache The cache instance to use
+            :param ctx: The context to use during execution of this deploy
+            :param events: Possible events that are available for this resource
+            :param cache: The cache instance to use
             :param event_only: don't execute, only do event propagation
             :param state: start time
             :return (success, send_event) Return whether the execution was successful and whether a change event should be sent
