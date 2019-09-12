@@ -36,10 +36,12 @@ from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import ResourceHandler
 from inmanta.agent.reporting import collect_report
+from inmanta.const import ResourceState
 from inmanta.data.model import Event, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader
 from inmanta.protocol import SessionEndpoint, methods
 from inmanta.resources import Id, Resource
+from inmanta.types import Apireturn
 from inmanta.util import add_future
 
 LOGGER = logging.getLogger(__name__)
@@ -253,7 +255,7 @@ class ResourceAction(object):
 
             if result.receive_events:
                 received_events: Dict[Id, Event] = {
-                    x.resource_id: dict(status=x.status, change=x.change, changes=x.changes.get(str(x.resource_id), {}))
+                    x.resource_id: Event(status=x.status, change=x.change, changes=x.changes.get(str(x.resource_id), {}))
                     for x in self.dependencies
                 }
             else:
@@ -426,7 +428,13 @@ class ResourceScheduler(object):
     def is_normal_deploy_running(self) -> bool:
         return not self.finished() and not self.is_repair
 
-    def reload(self, resources, undeployable={}, reason: str = "RELOAD", is_repair=False) -> None:
+    def reload(
+        self,
+        resources: List[Resource],
+        undeployable: Dict[ResourceVersionIdStr, ResourceState] = {},
+        reason: str = "RELOAD",
+        is_repair: bool = False,
+    ) -> None:
         """
         Schedule a new set of resources for execution.
 
@@ -576,20 +584,20 @@ class AgentInstance(object):
         self.thread_pool.shutdown(wait=False)
 
     @property
-    def environment(self):
+    def environment(self) -> uuid.UUID:
         return self.process.environment
 
-    def get_client(self):
+    def get_client(self) -> protocol.Client:
         return self.process._client
 
     @property
-    def uri(self):
+    def uri(self) -> str:
         return self._uri
 
-    def is_enabled(self):
+    def is_enabled(self) -> bool:
         return self._enabled
 
-    def unpause(self):
+    def unpause(self) -> Apireturn:
         if self.is_enabled():
             return 200, "already running"
 
@@ -599,7 +607,7 @@ class AgentInstance(object):
         self._enabled = True
         return 200, "unpaused"
 
-    def pause(self, reason="agent lost primary role"):
+    def pause(self, reason="agent lost primary role") -> Apireturn:
         if not self.is_enabled():
             return 200, "already paused"
 
@@ -920,7 +928,7 @@ class Agent(SessionEndpoint):
                 raise Exception("The agent requires an environment to be set.")
         self.set_environment(environment)
 
-        self._instances = {}
+        self._instances: Dict[str, AgentInstance] = {}
 
         if code_loader:
             self._env = env.VirtualEnv(self._storage["env"])
@@ -967,20 +975,20 @@ class Agent(SessionEndpoint):
 
         self._instances[name] = AgentInstance(self, name, hostname)
 
-    def unpause(self, name):
+    def unpause(self, name) -> Apireturn:
         if name not in self._instances:
             return 404, "No such agent"
 
         return self._instances[name].unpause()
 
-    def pause(self, name):
+    def pause(self, name) -> Apireturn:
         if name not in self._instances:
             return 404, "No such agent"
 
         return self._instances[name].pause()
 
     @protocol.handle(methods.set_state)
-    async def set_state(self, agent, enabled):
+    async def set_state(self, agent, enabled) -> Apireturn:
         if enabled:
             return self.unpause(agent)
         else:
@@ -1003,7 +1011,7 @@ class Agent(SessionEndpoint):
         for agent_instance in self._instances.values():
             agent_instance.pause("Connection to server lost")
 
-    async def get_latest_version(self):
+    async def get_latest_version(self) -> None:
         """
             Get the latest version of managed resources for all agents
         """
@@ -1054,8 +1062,15 @@ class Agent(SessionEndpoint):
 
     @protocol.handle(methods.resource_event, env="tid", agent="id")
     async def resource_event(
-        self, env, agent: str, resource: str, send_events: bool, state: const.ResourceState, change: const.Change, changes: dict
-    ):
+        self,
+        env: uuid.UUID,
+        agent: str,
+        resource: str,
+        send_events: bool,
+        state: const.ResourceState,
+        change: const.Change,
+        changes: dict,
+    ) -> int:
         if env != self._env_id:
             LOGGER.warning(
                 "received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
@@ -1084,7 +1099,7 @@ class Agent(SessionEndpoint):
         return 200
 
     @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
-    async def run_dryrun(self, env, dry_run_id, agent, version):
+    async def run_dryrun(self, env: uuid.UUID, dry_run_id: uuid.UUID, agent: str, version: int) -> Apireturn:
         """
            Run a dryrun of the given version
         """
@@ -1097,7 +1112,7 @@ class Agent(SessionEndpoint):
 
         return await self._instances[agent].dryrun(dry_run_id, version)
 
-    def check_storage(self):
+    def check_storage(self) -> None:
         """
             Check if the server storage is configured and ready to use.
         """
@@ -1127,12 +1142,12 @@ class Agent(SessionEndpoint):
         return dir_map
 
     @protocol.handle(methods.get_parameter, env="tid")
-    async def get_facts(self, env, agent, resource):
+    async def get_facts(self, env: uuid.UUID, agent: str, resource: Dict[str, Any]) -> Apireturn:
         if agent not in self._instances:
             return 200
 
         return await self._instances[agent].get_facts(resource)
 
     @protocol.handle(methods.get_status)
-    async def get_status(self):
+    async def get_status(self) -> Apireturn:
         return 200, collect_report(self)
