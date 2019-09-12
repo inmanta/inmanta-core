@@ -719,7 +719,7 @@ class Environment(BaseDocument):
             typ="bool",
             default=False,
             doc="When this boolean is set to true, the orchestrator will automatically release a new version "
-            "that was compiled by the orchestrator itself.",
+                "that was compiled by the orchestrator itself.",
             validator=convert_boolean,
         ),
         PUSH_ON_AUTO_DEPLOY: Setting(
@@ -789,7 +789,7 @@ class Environment(BaseDocument):
             typ="dict",
             validator=convert_agent_map,
             doc="A dict with key the name of agents that should be automatically started. The value "
-            "is either an empty string or an agent map string.",
+                "is either an empty string or an agent map string.",
             agent_restart=True,
         ),
         AUTOSTART_AGENT_INTERVAL: Setting(
@@ -2259,7 +2259,7 @@ class ConfigurationModel(BaseDocument):
             f"UPDATE {self.table_name()} "
             + f"SET "
             + f"deployed=True, result=(CASE WHEN {subquery} THEN $4::versionstate ELSE $5::versionstate END) "
-            f"WHERE environment=$1 AND version=$2 RETURNING result"
+              f"WHERE environment=$1 AND version=$2 RETURNING result"
         )
         values = [
             self._get_value(self.environment),
