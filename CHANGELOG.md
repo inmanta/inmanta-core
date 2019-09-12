@@ -1,5 +1,6 @@
 v 2019.4 (?) Changes in this release:
 - Added if statement (#1325)
+- Added CORS Access-Control-Allow-Origin header configuration (#1306)
 - Added --version option (#1291)
 
 v 2019.3 (2019-09-05) Changes in this release:
