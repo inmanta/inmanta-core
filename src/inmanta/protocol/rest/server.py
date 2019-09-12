@@ -70,13 +70,6 @@ class RESTHandler(tornado.web.RequestHandler):
 
         return common.decode_token(parts[1])
 
-    def prepare() -> None:
-        # Setting "Access-Control-Allow-Origin": null can be exploited.
-        # better not set it all instead.
-        # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin
-        if inmanta_config.server_access_control_allow_origin.get():
-            self.set_header("Access-Control-Allow-Origin", inmanta_config.server_access_control_allow_origin.get())
-
     def respond(self, body: Optional[JsonType], headers: Dict[str, str], status: int) -> None:
         if CONTENT_TYPE not in headers:
             headers[CONTENT_TYPE] = JSON_CONTENT
@@ -103,6 +96,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
         with timer("rpc." + call_config.method_name).time():
             self._transport.start_request()
+            self.set_header("Access-Control-Allow-Origin", "*")
             try:
                 message = self._transport._decode(self.request.body)
                 if message is None:
@@ -196,6 +190,7 @@ class RESTHandler(tornado.web.RequestHandler):
         if len(self._transport.headers):
             allow_headers += ", " + ", ".join(self._transport.headers)
 
+        self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
         self.set_header("Access-Control-Allow-Headers", allow_headers)
 
