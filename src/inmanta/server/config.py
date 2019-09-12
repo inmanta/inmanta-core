@@ -162,7 +162,7 @@ server_delete_currupt_files = Option(
 )
 
 server_purge_resource_action_logs_interval = Option(
-    "server", "purge-resource-action-logs-interval", 3600, "The number of seconds between resource-action log fpurging", is_time
+    "server", "purge-resource-action-logs-interval", 3600, "The number of seconds between resource-action log purging", is_time
 )
 
 server_resource_action_log_prefix = Option(
@@ -186,8 +186,8 @@ server_access_control_allow_origin = Option(
     "server",
     "access-control-allow-origin",
     None,
-    "Configures the access_control_allow_origin setting of the http server."
-    "Defaults to not sending an AOCA header.",
+    "Configures the Access-Control-Allow-Origin setting of the http server."
+    "Defaults to not sending an Access-Control-Allow-Origin header.",
     is_str_opt
 )
 
