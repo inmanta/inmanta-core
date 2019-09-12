@@ -70,7 +70,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
         return common.decode_token(parts[1])
 
-    def prepare() -> None:
+    def prepare(self) -> None:
         # Setting "Access-Control-Allow-Origin": null can be exploited.
         # better not set it all instead.
         # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin
