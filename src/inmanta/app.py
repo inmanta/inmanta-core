@@ -65,9 +65,6 @@ LOGGER = logging.getLogger("inmanta")
 
 @command("server", help_msg="Start the inmanta server")
 def start_server(options):
-    if options.config_file and not os.path.exists(options.config_file):
-        LOGGER.warning("Config file %s doesn't exist", options.config_file)
-
     if options.config_dir and not os.path.isdir(options.config_dir):
         LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
 
@@ -465,7 +462,7 @@ def cmd_parser():
     # create the argument compiler
     parser = ArgumentParser()
     parser.add_argument("-p", action="store_true", dest="profile", help="Profile this run of the program")
-    parser.add_argument("-c", "--config", dest="config_file", help="Use this config file", default="/etc/inmanta/inmanta.cfg")
+    parser.add_argument("-c", "--config", dest="config_file", help="Use this config file", default=None)
     parser.add_argument(
         "--config-dir",
         dest="config_dir",
@@ -591,6 +588,9 @@ def app():
         stream_handler.setLevel(log_level)
 
     logging.captureWarnings(True)
+
+    if options.config_file and not os.path.exists(options.config_file):
+        LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
     # Load the configuration
     Config.load_config(options.config_file, options.config_dir)

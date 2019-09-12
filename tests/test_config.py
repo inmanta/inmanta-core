@@ -77,7 +77,9 @@ def test_configfile_hierarchy(tmpdir):
     dot_inmanta_file = os.path.join(tmpdir, ".inmanta")
     dot_inmanta_cfg_file = os.path.join(tmpdir, ".inmanta.cfg")
 
-    with open(main_inmanta_cfg_file, "w+") as f:
+    min_c_file = os.path.join(tmpdir, "custom.cfg")
+
+    with open(main_inmanta_cfg_file, "w") as f:
         f.write(
             """
 [config]
@@ -92,10 +94,11 @@ interval=10
 tags=tag1=value1
 [dashboard]
 path=/some/directory
+client-id=test
         """
         )
 
-    with open(inmanta_d_cfg_file01, "w+") as f:
+    with open(inmanta_d_cfg_file01, "w") as f:
         f.write(
             """
 [database]
@@ -106,7 +109,7 @@ host=host2
         """
         )
 
-    with open(inmanta_d_cfg_file02, "w+") as f:
+    with open(inmanta_d_cfg_file02, "w") as f:
         f.write(
             """
 [database]
@@ -117,7 +120,7 @@ interval=20
         """
         )
 
-    with open(inmanta_d_cfg_file_no_cfg_extension, "w+") as f:
+    with open(inmanta_d_cfg_file_no_cfg_extension, "w") as f:
         f.write(
             """
 [database]
@@ -125,7 +128,7 @@ port=9999
         """
         )
 
-    with open(dot_inmanta_file, "w+") as f:
+    with open(dot_inmanta_file, "w") as f:
         f.write(
             """
 [database]
@@ -137,16 +140,25 @@ path=/some/other/directory
         """
         )
 
-    with open(dot_inmanta_cfg_file, "w+") as f:
+    with open(dot_inmanta_cfg_file, "w") as f:
         f.write(
             """
 [dashboard]
 path=/directory
+client-id=test123
+        """
+        )
+
+    with open(min_c_file, "w") as f:
+        f.write(
+            """
+[dashboard]
+client-id=test456
         """
         )
 
     os.chdir(tmpdir)
-    Config.load_config(config_file=main_inmanta_cfg_file, config_dir=inmanta_d_dir)
+    Config.load_config(min_c_config_file=min_c_file, config_dir=inmanta_d_dir, main_cfg_file=main_inmanta_cfg_file)
 
     assert Config.get("config", "log-dir") == "/log"
     assert Config.get("database", "host") == "host3"
@@ -156,3 +168,4 @@ path=/directory
     assert Config.get("influxdb", "interval") == 20
     assert Config.get("influxdb", "tags")["tag2"] == "value2"
     assert Config.get("dashboard", "path") == "/directory"
+    assert Config.get("dashboard", "client-id") == "test456"
