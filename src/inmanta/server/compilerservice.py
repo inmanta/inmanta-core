@@ -357,7 +357,8 @@ class CompilerService(ServerSlice):
             return None, ["Skipping compile because server compile not enabled for this environment."]
 
         env_vars_compile: Dict[str, str] = os.environ.copy()
-        env_vars_compile.update(extra_env_vars)
+        if extra_env_vars:
+            env_vars_compile.update(extra_env_vars)
 
         requested = datetime.datetime.now()
         compile = data.Compile(
