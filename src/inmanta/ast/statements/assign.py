@@ -194,9 +194,6 @@ class Assign(AssignStatement):
         self.name = name
         self.value = value
 
-    def requires(self) -> typing.List[str]:
-        return self.value.requires()
-
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         target = resolver.lookup(self.name)
         assert isinstance(target, ResultVariable)
