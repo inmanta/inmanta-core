@@ -446,7 +446,7 @@ end
     [
         (False, True, [r"Current Inmanta version:"], []),
         (True, True, [r"Current Inmanta version:"], []),
-        (True, False, [], [r"Current Inmanta version:"]),
+        (False, False, [], [r"Current Inmanta version:"]),
         (True, False, [], [r"Current Inmanta version:"]),
     ],
 )
