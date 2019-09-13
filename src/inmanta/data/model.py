@@ -17,7 +17,7 @@
 """
 import datetime
 import uuid
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, NewType, Optional, Union
 
 import pydantic
 
@@ -87,13 +87,13 @@ class CompileQueueResponse(BaseModel):
     queue: List[CompileRun]
 
 
-ResourceVersionIdStr = str
+ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)
 """
     The resource id with the version included.
 """
 
 
-ResourceIdStr = str
+ResourceIdStr = NewType("ResourceIdStr", str)
 """
     The resource id without the version
 """

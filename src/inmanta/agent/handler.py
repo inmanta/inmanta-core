@@ -24,7 +24,7 @@ import typing
 import uuid
 from collections import defaultdict
 from concurrent.futures import Future
-from typing import Any, Dict, Optional, Tuple, Type
+from typing import Any, Callable, Dict, Optional, Tuple, Type
 
 from tornado import concurrent
 
@@ -86,7 +86,7 @@ class InvalidOperation(Exception):
 
 
 def cache(
-    f=None,
+    func: Callable[..., Any] = None,
     ignore: typing.List[str] = [],
     timeout: int = 5000,
     for_version: bool = True,
@@ -130,10 +130,10 @@ def cache(
 
         return wrapper
 
-    if f is None:
+    if func is None:
         return actual
     else:
-        return actual(f)
+        return actual(func)
 
 
 class HandlerContext(object):
@@ -265,7 +265,11 @@ class HandlerContext(object):
 
             :param changes: This should be a dict with a value a dict containing "current" and "desired" keys
         """
-        self._changes.update(changes)
+        for attribute, change in changes.items():
+            if isinstance(change, dict):
+                change = AttributeStateChange(current=change.get("current", None), desired=change.get("desired", None))
+
+            self._changes[attribute] = change
 
     @property
     def changes(self) -> Dict[str, AttributeStateChange]:
@@ -826,7 +830,7 @@ class Commander(object):
     __handler_cache = {}
 
     @classmethod
-    def get_handlers(cls):
+    def get_handlers(cls) -> Dict[str, Dict[str, ResourceHandler]]:
         return cls.__command_functions
 
     @classmethod

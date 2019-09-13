@@ -25,7 +25,7 @@ import time
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, Tuple, Set, Iterable
 
 from tornado import ioloop, locks
 from tornado.concurrent import Future
@@ -76,13 +76,15 @@ class ResourceAction(object):
     resource_id: Id
     future: ResourceActionResultFuture
     dependencies: List["ResourceAction"]
+    # resourceid -> attribute -> {current: , desired:}
+    changes: Dict[Id, Dict[str, AttributeStateChange]]
 
-    def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
+    def __init__(self, scheduler: "ResourceScheduler", resource: Optional[Resource], gid: uuid.UUID, reason: str) -> None:
         """
             :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
         self.scheduler: "ResourceScheduler" = scheduler
-        self.resource: Resource = resource
+        self.resource: Optional[Resource] = resource
         if self.resource is not None:
             self.resource_id: Id = resource.id
         self.future: ResourceActionResultFuture = Future()
@@ -90,8 +92,6 @@ class ResourceAction(object):
         self.gid: uuid.UUID = gid
         self.status: Optional[const.ResourceState] = None
         self.change: Optional[const.Change] = None
-        # resourceid -> attribute -> {current: , desired:}
-        self.changes: Optional[Dict[Id, Dict[str, AttributeStateChange]]] = None
         self.undeployable: Optional[const.ResourceState] = None
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
@@ -285,7 +285,7 @@ class ResourceAction(object):
             )
 
             end = datetime.datetime.now()
-            changes: Dict[ResourceVersionIdStr, Dict[str, Dict[str, str]]] = {str(self.resource.id): ctx.changes}
+            changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {str(self.resource.id): ctx.changes}
             result = await self.scheduler.get_client().resource_action_update(
                 tid=self.scheduler._env_id,
                 resource_ids=[str(self.resource.id)],
@@ -325,7 +325,7 @@ class ResourceAction(object):
 
 
 class RemoteResourceAction(ResourceAction):
-    def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str):
+    def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str) -> None:
         super(RemoteResourceAction, self).__init__(scheduler, None, gid, reason)
         self.resource_id = resource_id
 
@@ -379,7 +379,7 @@ class RemoteResourceAction(ResourceAction):
         send_events: bool,
         status: const.ResourceState,
         change: const.Change,
-        changes: Dict[str, Dict[str, Dict[str, str]]],
+        changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]],
     ) -> None:
         if not self.future.done():
             self.status = status
@@ -478,7 +478,7 @@ class ResourceScheduler(object):
         self.logger.info("Running %s for reason: %s" % (gid, reason))
 
         # re-generate generation
-        self.generation: Dict[str, ResourceAction] = {
+        self.generation: Dict[ResourceIdStr, ResourceAction] = {
             r.id.resource_str(): ResourceAction(self, r, gid, reason) for r in resources
         }
 
@@ -508,7 +508,7 @@ class ResourceScheduler(object):
         # Start running
         dummy.future.set_result(ResourceActionResult(True, False, False))
 
-    async def mark_deployment_as_finished(self, resource_actions: List[ResourceAction], reason: str, gid: uuid.UUID) -> None:
+    async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceAction], reason: str, gid: uuid.UUID) -> None:
         await asyncio.gather(*[resource_action.future for resource_action in resource_actions])
         with (await self.agent.critical_ratelimiter.acquire()):
             if not self.finished():
@@ -522,7 +522,14 @@ class ResourceScheduler(object):
                 )
                 self._resume_reason = None
 
-    def notify_ready(self, resourceid, send_events, state, change, changes) -> None:
+    def notify_ready(
+        self,
+        resourceid: ResourceVersionIdStr,
+        send_events: bool,
+        state: const.ResourceState,
+        change: const.Change,
+        changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]],
+    ) -> None:
         if resourceid not in self.cad:
             # received CAD notification for which no resource are waiting, so return
             return
@@ -532,15 +539,15 @@ class ResourceScheduler(object):
         print("Waiting:")
         for r in self.generation.values():
             print(r.long_string())
-        print("Ready to run:")
-        for r in self.queue:
-            print(r.long_string())
 
     def get_client(self) -> protocol.Client:
         return self.agent.get_client()
 
 
 class AgentInstance(object):
+    _get_resource_timeout: float
+    _get_resource_duration: float
+
     def __init__(self, process: "Agent", name: str, uri: str) -> None:
         self.process = process
         self.name = name
@@ -560,6 +567,9 @@ class AgentInstance(object):
         self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(process.poolsize, thread_name_prefix="Pool_%s" % name)
         self.ratelimiter = locks.Semaphore(process.poolsize)
 
+        if process._env_id is None:
+            raise Exception("Agent instance started without a valid environment id set.")
+
         self._env_id: uuid.UUID = process._env_id
 
         self.sessionid = process.sessionid
@@ -567,7 +577,7 @@ class AgentInstance(object):
         # init
         self._cache = AgentCache()
         self._nq = ResourceScheduler(self, self.process.environment, name, self._cache, ratelimiter=self.ratelimiter)
-        self._time_triggered_actions = set()
+        self._time_triggered_actions: Set[Callable[[], Awaitable[None]]] = set()
         self._enabled = False
 
         # do regular deploys
@@ -583,7 +593,7 @@ class AgentInstance(object):
         self._getting_resources = False
         self._get_resource_timeout = 0
 
-    async def stop(self):
+    async def stop(self) -> None:
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
 
@@ -611,7 +621,7 @@ class AgentInstance(object):
         self._enabled = True
         return 200, "unpaused"
 
-    def pause(self, reason="agent lost primary role") -> Apireturn:
+    def pause(self, reason: str = "agent lost primary role") -> Apireturn:
         if not self.is_enabled():
             return 200, "already paused"
 
@@ -621,8 +631,8 @@ class AgentInstance(object):
         self._enabled = False
         return 200, "paused"
 
-    def _enable_time_triggers(self):
-        async def deploy_action():
+    def _enable_time_triggers(self) -> None:
+        async def deploy_action() -> None:
             now = datetime.datetime.now()
             await self.get_latest_version_for_agent(
                 reason="Periodic deploy started at %s" % (now.strftime(const.TIME_LOGFMT)),
@@ -630,7 +640,7 @@ class AgentInstance(object):
                 is_repair_run=False,
             )
 
-        async def repair_action():
+        async def repair_action() -> None:
             now = datetime.datetime.now()
             await self.get_latest_version_for_agent(
                 reason="Repair run started at %s" % (now.strftime(const.TIME_LOGFMT)),
@@ -656,21 +666,26 @@ class AgentInstance(object):
             )
             self._enable_time_trigger(repair_action, self._repair_interval, self._repair_splay_value)
 
-    def _enable_time_trigger(self, action, interval, splay):
+    def _enable_time_trigger(self, action: Callable[[], Awaitable[None]], interval: int, splay: int) -> None:
         self.process._sched.add_action(action, interval, splay)
         self._time_triggered_actions.add(action)
 
-    def _disable_time_triggers(self):
+    def _disable_time_triggers(self) -> None:
         for action in self._time_triggered_actions:
             self.process._sched.remove(action)
         self._time_triggered_actions.clear()
 
     def notify_ready(
-        self, resourceid: ResourceVersionIdStr, send_events: bool, state: const.ResourceState, change: const.Change, changes
+        self,
+        resourceid: ResourceVersionIdStr,
+        send_events: bool,
+        state: const.ResourceState,
+        change: const.Change,
+        changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]],
     ) -> None:
         self._nq.notify_ready(resourceid, send_events, state, change, changes)
 
-    def _can_get_resources(self):
+    def _can_get_resources(self) -> bool:
         if self._getting_resources:
             self.logger.info("Attempting to get resource while get is in progress")
             return False
@@ -690,7 +705,9 @@ class AgentInstance(object):
         provider.set_cache(self._cache)
         return provider
 
-    async def get_latest_version_for_agent(self, reason="Unknown", incremental_deploy=False, is_repair_run=False):
+    async def get_latest_version_for_agent(
+        self, reason: str = "Unknown", incremental_deploy: bool = False, is_repair_run: bool = False
+    ) -> None:
         """
             Get the latest version for the given agent (this is also how we are notified)
 
@@ -724,11 +741,11 @@ class AgentInstance(object):
                 self.logger.warning("Got an error while pulling resources for %s. %s", reason, result.result)
 
             else:
-                restypes = set([res["resource_type"] for res in result.result["resources"]])
+                restypes: Set[str] = set([res["resource_type"] for res in result.result["resources"]])
                 resources = []
                 await self.process._ensure_code(self._env_id, result.result["version"], restypes)
                 try:
-                    undeployable = {}
+                    undeployable: Dict[ResourceVersionIdStr, const.ResourceState] = {}
                     for res in result.result["resources"]:
                         state = const.ResourceState[res["status"]]
                         if state in const.UNDEPLOYABLE_STATES:
@@ -816,7 +833,7 @@ class AgentInstance(object):
                                 if changes is None:
                                     changes = {}
                                 if ctx.status == const.ResourceState.failed:
-                                    changes["handler"] = {"current": "FAILED", "desired": "Handler failed"}
+                                    changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
                                 await self.get_client().dryrun_update(
                                     tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
                                 )
@@ -829,7 +846,7 @@ class AgentInstance(object):
                                 changes = ctx.changes
                                 if changes is None:
                                     changes = {}
-                                changes["handler"] = {"current": "FAILED", "desired": "Handler failed"}
+                                changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
                                 await self.get_client().dryrun_update(
                                     tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
                                 )
@@ -837,7 +854,7 @@ class AgentInstance(object):
                     except Exception:
                         ctx.exception("Unable to process resource for dryrun.")
                         changes = {}
-                        changes["handler"] = {"current": "FAILED", "desired": "Resource Deserialization Failed"}
+                        changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
                         await self.get_client().dryrun_update(
                             tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
                         )
@@ -1024,7 +1041,7 @@ class Agent(SessionEndpoint):
         for agent in self._instances.values():
             await agent.get_latest_version_for_agent(reason="call to get_latest_version on agent")
 
-    async def _ensure_code(self, environment, version, resourcetypes):
+    async def _ensure_code(self, environment: uuid.UUID, version: int, resourcetypes: Set[str]) -> None:
         """
             Ensure that the code for the given environment and version is loaded
         """
@@ -1048,7 +1065,7 @@ class Agent(SessionEndpoint):
         await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, hash_value, module_name, module_source)
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
-    async def trigger_update(self, env, agent, incremental_deploy):
+    async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
         """
             Trigger an update
         """
@@ -1075,8 +1092,8 @@ class Agent(SessionEndpoint):
         send_events: bool,
         state: const.ResourceState,
         change: const.Change,
-        changes: dict,
-    ) -> int:
+        changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]],
+    ) -> Apireturn:
         if env != self._env_id:
             LOGGER.warning(
                 "received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
@@ -1118,7 +1135,7 @@ class Agent(SessionEndpoint):
 
         return await self._instances[agent].dryrun(dry_run_id, version)
 
-    def check_storage(self) -> None:
+    def check_storage(self) -> Dict[str, str]:
         """
             Check if the server storage is configured and ready to use.
         """

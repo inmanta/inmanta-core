@@ -493,6 +493,8 @@ class Id(object):
 
         return self.resource_str()
 
+    
+
     def __hash__(self) -> int:
         return hash(str(self))
 
