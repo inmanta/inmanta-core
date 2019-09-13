@@ -2554,7 +2554,7 @@ async def connect(
     create_db_schema: bool = True,
     connection_pool_min_size: int = 10,
     connection_pool_max_size: int = 10,
-    connection_timeout=60,
+    connection_timeout: float = 60,
 ) -> asyncpg.pool.Pool:
     pool = await asyncpg.create_pool(
         host=host,
