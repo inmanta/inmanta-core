@@ -41,7 +41,7 @@ from inmanta.data.model import AttributeStateChange, Event, ResourceIdStr, Resou
 from inmanta.loader import CodeLoader
 from inmanta.protocol import SessionEndpoint, methods
 from inmanta.resources import Id, Resource
-from inmanta.types import Apireturn
+from inmanta.types import Apireturn, JsonType
 from inmanta.util import add_future
 
 LOGGER = logging.getLogger(__name__)
@@ -108,7 +108,7 @@ class ResourceAction(object):
             self.future.set_result(ResourceActionResult(False, False, True))
 
     async def send_in_progress(
-        self, action_id: uuid.UUID, start: float, status: const.ResourceState = const.ResourceState.deploying
+        self, action_id: uuid.UUID, start: datetime.datetime, status: const.ResourceState = const.ResourceState.deploying
     ) -> None:
         await self.scheduler.get_client().resource_action_update(
             tid=self.scheduler._env_id,
@@ -124,7 +124,7 @@ class ResourceAction(object):
         ctx: handler.HandlerContext,
         events: Dict[ResourceVersionIdStr, Event],
         cache: AgentCache,
-        start: float,
+        start: datetime.datetime,
         event_only: bool = False,
     ) -> Tuple[bool, bool]:
         """
@@ -256,12 +256,14 @@ class ResourceAction(object):
                 return
 
             if result.receive_events:
-                received_events: Dict[Id, Event] = {
-                    x.resource_id: Event(status=x.status, change=x.change, changes=x.changes.get(x.resource_id.resource_version_str(), {}))
+                received_events: Dict[ResourceVersionIdStr, Event] = {
+                    x.resource_id.resource_version_str(): Event(
+                        status=x.status, change=x.change, changes=x.changes.get(x.resource_id.resource_version_str(), {})
+                    )
                     for x in self.dependencies
                 }
             else:
-                received_events: Dict[Id, Event] = {}
+                received_events: Dict[ResourceVersionIdStr, Event] = {}
 
             if self.undeployable is not None:
                 ctx.set_status(self.undeployable)
@@ -285,7 +287,9 @@ class ResourceAction(object):
             )
 
             end = datetime.datetime.now()
-            changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {str(self.resource.id): ctx.changes}
+            changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
+                self.resource.id.resource_version_str(): ctx.changes
+            }
             result = await self.scheduler.get_client().resource_action_update(
                 tid=self.scheduler._env_id,
                 resource_ids=[str(self.resource.id)],
@@ -877,16 +881,17 @@ class AgentInstance(object):
 
                 self._cache.close_version(version)
 
-    async def get_facts(self, resource):
+    async def get_facts(self, resource: JsonType) -> Apireturn:
         with (await self.ratelimiter.acquire()):
-            await self.process._ensure_code(self._env_id, resource["model"], [resource["resource_type"]])
-            ctx = handler.HandlerContext(resource)
+            resource_type = str(resource["resource_type"])
+            await self.process._ensure_code(self._env_id, resource["model"], {resource_type})
             started = datetime.datetime.now()
             provider = None
             try:
                 data = resource["attributes"]
                 data["id"] = resource["id"]
                 resource_obj = Resource.deserialize(data)
+                ctx = handler.HandlerContext(resource_obj)
 
                 version = resource_obj.id.version
                 try:
@@ -931,8 +936,19 @@ class Agent(SessionEndpoint):
         An agent to enact changes upon resources. This agent listens to the
         message bus for changes.
     """
+    # cache reference to THIS ioloop for handlers to push requests on it
+    # defer to start, just to be sure
+    _io_loop: ioloop.IOLoop
 
-    def __init__(self, hostname=None, agent_map=None, code_loader=True, environment=None, poolsize=1, cricital_pool_size=5):
+    def __init__(
+        self,
+        hostname: str = None,
+        agent_map: Dict[str, str] = None,
+        code_loader: bool = True,
+        environment: uuid.UUID = None,
+        poolsize: int = 1,
+        cricital_pool_size: int = 5,
+    ):
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.poolsize = poolsize
@@ -943,7 +959,7 @@ class Agent(SessionEndpoint):
         if agent_map is None:
             agent_map = cfg.agent_map.get()
 
-        self.agent_map = agent_map
+        self.agent_map: Dict[str, str] = agent_map
         self._storage = self.check_storage()
 
         if environment is None:
@@ -954,12 +970,12 @@ class Agent(SessionEndpoint):
 
         self._instances: Dict[str, AgentInstance] = {}
 
+        self._loader: Optional[CodeLoader] = None
+        self._env: Optional[env.VirtualEnv] = None
         if code_loader:
             self._env = env.VirtualEnv(self._storage["env"])
             self._env.use_virtual_env()
             self._loader = CodeLoader(self._storage["code"])
-        else:
-            self._loader = None
 
         if hostname is not None:
             self.add_end_point_name(hostname)
@@ -975,22 +991,18 @@ class Agent(SessionEndpoint):
 
                     self.add_end_point_name(name)
 
-        # cache reference to THIS ioloop for handlers to push requests on it
-        # defer to start, just to be sure
-        self._io_loop = None
-
-    async def stop(self):
+    async def stop(self) -> None:
         await super(Agent, self).stop()
         self.thread_pool.shutdown(wait=False)
         for instance in self._instances.values():
             await instance.stop()
 
-    async def start(self):
+    async def start(self) -> None:
         # cache reference to THIS ioloop for handlers to push requests on it
         self._io_loop = ioloop.IOLoop.current()
         await super(Agent, self).start()
 
-    def add_end_point_name(self, name):
+    def add_end_point_name(self, name: str) -> None:
         SessionEndpoint.add_end_point_name(self, name)
 
         hostname = "local:"
@@ -999,20 +1011,20 @@ class Agent(SessionEndpoint):
 
         self._instances[name] = AgentInstance(self, name, hostname)
 
-    def unpause(self, name) -> Apireturn:
+    def unpause(self, name: str) -> Apireturn:
         if name not in self._instances:
             return 404, "No such agent"
 
         return self._instances[name].unpause()
 
-    def pause(self, name) -> Apireturn:
+    def pause(self, name: str) -> Apireturn:
         if name not in self._instances:
             return 404, "No such agent"
 
         return self._instances[name].pause()
 
     @protocol.handle(methods.set_state)
-    async def set_state(self, agent, enabled) -> Apireturn:
+    async def set_state(self, agent: str, enabled: bool) -> Apireturn:
         if enabled:
             return self.unpause(agent)
         else:
