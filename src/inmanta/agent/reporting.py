@@ -18,8 +18,7 @@
 import logging
 import os
 import platform
-
-from typing import Callable, Dict, List, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Dict, List, Union
 
 if TYPE_CHECKING:
     from inmanta.agent import Agent

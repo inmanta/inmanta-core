@@ -24,7 +24,7 @@ import typing
 import uuid
 from collections import defaultdict
 from concurrent.futures import Future
-from typing import Any, Callable, Dict, Optional, Tuple, Type, List, Sequence, TypeVar, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar, Union, cast
 
 from tornado import concurrent
 
@@ -850,7 +850,9 @@ class Commander(object):
         pass
 
     @classmethod
-    def _get_instance(cls, handler_class: Type[ResourceHandler], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase") -> ResourceHandler:
+    def _get_instance(
+        cls, handler_class: Type[ResourceHandler], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
+    ) -> ResourceHandler:
         new_instance = handler_class(agent, io)
         return new_instance
 
