@@ -24,13 +24,14 @@ import typing
 import uuid
 from collections import defaultdict
 from concurrent.futures import Future
-from typing import Any, Callable, Dict, Optional, Tuple, Type
+from typing import Any, Callable, Dict, Optional, Tuple, Type, List, Sequence, TypeVar, Union, cast
 
 from tornado import concurrent
 
 from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
+from inmanta.const import ResourceState
 from inmanta.data.model import AttributeStateChange
 from inmanta.protocol import Result
 from inmanta.resources import Resource
@@ -38,10 +39,14 @@ from inmanta.types import SimpleTypes
 
 if typing.TYPE_CHECKING:
     from inmanta import agent
+    import inmanta.agent.agent
     from inmanta.agent.io.local import IOBase
 
 
 LOGGER = logging.getLogger(__name__)
+
+T = TypeVar("T")
+T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
 
 class provider(object):  # noqa: N801
@@ -86,13 +91,13 @@ class InvalidOperation(Exception):
 
 
 def cache(
-    func: Callable[..., Any] = None,
+    func: T_FUNC = None,
     ignore: typing.List[str] = [],
     timeout: int = 5000,
     for_version: bool = True,
     cache_none: bool = True,
     cacheNone: bool = True,  # noqa: N803
-):
+) -> Union[T_FUNC, Callable[[T_FUNC], T_FUNC]]:
     """
         decorator for methods in resource handlers to provide caching
 
@@ -113,7 +118,7 @@ def cache(
         :param cache_none: cache returned none values
     """
 
-    def actual(f):
+    def actual(f) -> T_FUNC:
         myignore = set(ignore)
         sig = inspect.signature(f)
         myargs = list(sig.parameters.keys())[1:]
@@ -128,7 +133,8 @@ def cache(
             cache_none = cacheNone
             return self.cache.get_or_else(f.__name__, bound, for_version, timeout, myignore, cache_none, **kwds)
 
-        return wrapper
+        # Too much magic to type statically
+        return cast(T_FUNC, wrapper)
 
     if func is None:
         return actual
@@ -146,7 +152,7 @@ class HandlerContext(object):
     ) -> None:
         self._resource = resource
         self._dry_run = dry_run
-        self._cache = {}
+        self._cache: Dict[str, Any] = {}
 
         self._purged = False
         self._updated = False
@@ -158,8 +164,8 @@ class HandlerContext(object):
         if action_id is None:
             action_id = uuid.uuid4()
         self._action_id = action_id
-        self._status = None
-        self._logs = []
+        self._status: Optional[ResourceState] = None
+        self._logs: List[data.LogLine] = []
         if logger is None:
             self.logger = LOGGER
         else:
@@ -170,7 +176,7 @@ class HandlerContext(object):
         return self._action_id
 
     @property
-    def status(self) -> const.ResourceState:
+    def status(self) -> Optional[const.ResourceState]:
         return self._status
 
     @property
@@ -275,7 +281,7 @@ class HandlerContext(object):
     def changes(self) -> Dict[str, AttributeStateChange]:
         return self._changes
 
-    def log_msg(self, level: int, msg: str, args: list, kwargs: dict) -> dict:
+    def log_msg(self, level: int, msg: str, args: Sequence, kwargs: dict) -> None:
         if len(args) > 0:
             raise Exception("Args not supported")
         if "exc_info" in kwargs:
@@ -362,7 +368,7 @@ class ResourceHandler(object):
         :param io: The io object to use.
     """
 
-    def __init__(self, agent: "agent.AgentInstance", io=None) -> None:
+    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io=None) -> None:
         self._agent = agent
 
         if io is None:
@@ -370,11 +376,11 @@ class ResourceHandler(object):
         else:
             self._io = io
 
-        self._client = None
+        self._client: Optional[protocol.SessionClient] = None
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
 
-    def run_sync(self, func: typing.Callable) -> typing.Any:
+    def run_sync(self, func: typing.Callable[[], T]) -> T:
         """
             Run a the given async function on the ioloop of the agent. It will block the current thread until the future
             resolves.
@@ -382,7 +388,7 @@ class ResourceHandler(object):
             :param func: A function that returns a yieldable future.
             :return: The result of the async function.
         """
-        f = Future()
+        f: Future[T] = Future()
 
         def run():
             try:
@@ -656,7 +662,7 @@ class ResourceHandler(object):
         """
         return True
 
-    def get_file(self, hash_id) -> bytes:
+    def get_file(self, hash_id) -> Optional[bytes]:
         """
             Retrieve a file from the fileserver identified with the given id. The convention is to use the sha1sum of the
             content to identify it.
@@ -771,7 +777,7 @@ class CRUDHandler(ResourceHandler):
             # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
             # state defines purged=true but the read_resource fails to set it to false if the resource does exist
             current = resource.clone(purged=False)
-            changes = {}
+            changes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
             try:
                 self.read_resource(ctx, current)
                 changes = self._diff(current, resource)
@@ -825,12 +831,12 @@ class Commander(object):
         This class handles commands
     """
 
-    __command_functions: Dict[str, Dict[str, ResourceHandler]] = defaultdict(dict)
+    __command_functions: Dict[str, Dict[str, Type[ResourceHandler]]] = defaultdict(dict)
     __handlers = []
     __handler_cache = {}
 
     @classmethod
-    def get_handlers(cls) -> Dict[str, Dict[str, ResourceHandler]]:
+    def get_handlers(cls) -> Dict[str, Dict[str, Type[ResourceHandler]]]:
         return cls.__command_functions
 
     @classmethod
@@ -844,12 +850,12 @@ class Commander(object):
         pass
 
     @classmethod
-    def _get_instance(cls, handler_class: Type[ResourceHandler], agent: "agent.AgentInstance", io: "IOBase") -> ResourceHandler:
+    def _get_instance(cls, handler_class: Type[ResourceHandler], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase") -> ResourceHandler:
         new_instance = handler_class(agent, io)
         return new_instance
 
     @classmethod
-    def get_provider(cls, cache: AgentCache, agent: "agent.AgentInstance", resource: Resource) -> ResourceHandler:
+    def get_provider(cls, cache: AgentCache, agent: "inmanta.agent.agent.AgentInstance", resource: Resource) -> ResourceHandler:
         """
             Return a provider to handle the given resource
         """
@@ -887,7 +893,7 @@ class Commander(object):
         raise Exception("No resource handler registered for resource of type %s" % resource_type)
 
     @classmethod
-    def add_provider(cls, resource: str, name: str, provider: ResourceHandler) -> None:
+    def add_provider(cls, resource: str, name: str, provider: Type["ResourceHandler"]) -> None:
         """
             Register a new provider
 
@@ -909,7 +915,7 @@ class Commander(object):
                 yield (resource_type, handler_class)
 
     @classmethod
-    def get_provider_class(cls, resource_type: str, name: str) -> typing.Type["ResourceHandler"]:
+    def get_provider_class(cls, resource_type: str, name: str) -> Optional[typing.Type["ResourceHandler"]]:
         """
             Return the class of the handler for the given type and with the given name
         """

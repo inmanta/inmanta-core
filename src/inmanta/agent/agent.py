@@ -579,7 +579,7 @@ class AgentInstance(object):
             raise Exception("Agent instance started without a valid environment id set.")
 
         self._env_id: uuid.UUID = process.environment
-        self.sessionid = process.sessionid
+        self.sessionid: uuid.UUID = process.sessionid
 
         # init
         self._cache = AgentCache()
