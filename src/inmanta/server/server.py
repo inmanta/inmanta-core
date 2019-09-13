@@ -129,8 +129,8 @@ class DatabaseSlice(protocol.ServerSlice):
             opt.db_name.get(),
             database_username,
             database_password,
-            connection_pool_min_size,
-            connection_pool_max_size,
+            connection_pool_min_size=connection_pool_min_size,
+            connection_pool_max_size=connection_pool_max_size,
             connection_timeout=connection_timeout,
         )
         LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
