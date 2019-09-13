@@ -11,7 +11,7 @@ Inmanta requires at least the latest Python 3.6 or 3.7 and git.
 
         .. code-block:: sh
 
-          cat > /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
+          sudo tee -a /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
           [inmanta-oss-stable]
           name=Inmanta OSS stable
           baseurl=https://pkg.inmanta.com/inmanta-oss-stable/el7/
