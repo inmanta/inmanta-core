@@ -25,7 +25,7 @@ import time
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional, Set, Tuple, cast
 
 from tornado import ioloop, locks
 from tornado.concurrent import Future
@@ -72,21 +72,20 @@ else:
 
 class ResourceAction(object):
 
-    resource: Resource
     resource_id: Id
     future: ResourceActionResultFuture
     dependencies: List["ResourceAction"]
     # resourceid -> attribute -> {current: , desired:}
     changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]]
 
-    def __init__(self, scheduler: "ResourceScheduler", resource: Optional[Resource], gid: uuid.UUID, reason: str) -> None:
+    def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
         """
             :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
         self.scheduler: "ResourceScheduler" = scheduler
-        self.resource: Optional[Resource] = resource
+        self.resource: Resource = resource
         if self.resource is not None:
-            self.resource_id: Id = resource.id
+            self.resource_id: Id = self.resource.id
         self.future: ResourceActionResultFuture = Future()
         self.running: bool = False
         self.gid: uuid.UUID = gid
@@ -144,18 +143,20 @@ class ResourceAction(object):
             await self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
 
         # setup provider
+        provider: Optional[ResourceHandler] = None
         try:
-            provider: ResourceHandler = await self.scheduler.agent.get_provider(self.resource)
+            provider = await self.scheduler.agent.get_provider(self.resource)
         except Exception:
-            try:
+            if provider is not None:
                 provider.close()
-            except NameError:
-                pass
 
             cache.close_version(self.resource.id.version)
             ctx.set_status(const.ResourceState.unavailable)
-            ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=str(self.resource.id))
+            ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=self.resource.id.resource_version_str())
             return False, False
+
+        # Assert to make the provider happy
+        assert provider is not None
 
         success = True
         # no events by default, i.e. don't send events if you are not executed
@@ -217,7 +218,8 @@ class ResourceAction(object):
         self.dependencies = [generation[x.resource_str()] for x in self.resource.requires]
         waiters = [x.future for x in self.dependencies]
         waiters.append(dummy.future)
-        results = await asyncio.gather(*waiters)
+        # Explicit cast is required because of non-generic ResourceActionResultFuture here above
+        results: List[ResourceActionResult] = cast(List[ResourceActionResult], await asyncio.gather(*waiters))
 
         with (await self.scheduler.ratelimiter.acquire()):
             start = datetime.datetime.now()
@@ -255,15 +257,16 @@ class ResourceAction(object):
                     ctx.set_status(const.ResourceState.cancelled)
                 return
 
+            received_events: Dict[ResourceVersionIdStr, Event]
             if result.receive_events:
-                received_events: Dict[ResourceVersionIdStr, Event] = {
+                received_events = {
                     x.resource_id.resource_version_str(): Event(
                         status=x.status, change=x.change, changes=x.changes.get(x.resource_id.resource_version_str(), {})
                     )
                     for x in self.dependencies
                 }
             else:
-                received_events: Dict[ResourceVersionIdStr, Event] = {}
+                received_events = {}
 
             if self.undeployable is not None:
                 ctx.set_status(self.undeployable)
@@ -273,7 +276,7 @@ class ResourceAction(object):
                 ctx.set_status(const.ResourceState.skipped)
                 ctx.info(
                     "Resource %(resource)s skipped due to failed dependency %(failed)s",
-                    resource=str(self.resource.id),
+                    resource=self.resource.id.resource_version_str(),
                     failed=self.skipped_because(results),
                 )
                 success = False
@@ -290,7 +293,7 @@ class ResourceAction(object):
             changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
                 self.resource.id.resource_version_str(): ctx.changes
             }
-            result = await self.scheduler.get_client().resource_action_update(
+            response = await self.scheduler.get_client().resource_action_update(
                 tid=self.scheduler._env_id,
                 resource_ids=[str(self.resource.id)],
                 action_id=ctx.action_id,
@@ -303,8 +306,8 @@ class ResourceAction(object):
                 change=ctx.change,
                 send_events=send_event,
             )
-            if result.code != 200:
-                LOGGER.error("Resource status update failed %s", result.result)
+            if response.code != 200:
+                LOGGER.error("Resource status update failed %s", response.result)
 
             self.status = ctx.status
             self.change = ctx.change
@@ -721,6 +724,7 @@ class AgentInstance(object):
         if not self._can_get_resources():
             self.logger.warning("%s aborted by rate limiter", reason)
             return
+
         with (await self.critical_ratelimiter.acquire()):
             if not self._can_get_resources():
                 self.logger.warning("%s aborted by rate limiter", reason)
