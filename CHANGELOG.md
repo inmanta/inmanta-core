@@ -3,6 +3,7 @@ v 2019.4 (?) Changes in this release:
 - Added CORS Access-Control-Allow-Origin header configuration (#1306)
 - Added --version option (#1291)
 - RPM-based installations on Fedora are not supported anymore
+- Added option to configure asyncpg pool (#1304)
 
 v 2019.3 (2019-09-05) Changes in this release:
 - Various bugfixes (#1148, #1157, #1163, #1167, #1188)
