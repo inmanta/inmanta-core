@@ -1,7 +1,7 @@
 Install Inmanta
 ****************
-This page explain how to install the Inmanta orchestrator software and setup an orchestration server. On any platform
-Inmanta requires at least the latest Python 3.6 or 3.7 and git.
+This page explain how to install the Inmanta orchestrator software and setup an orchestration server. Regardless what platform
+you installed it on, Inmanta requires at least the latest Python 3.6 or 3.7 and git.
 
 .. tabs::
 
@@ -31,7 +31,7 @@ Inmanta requires at least the latest Python 3.6 or 3.7 and git.
 
     .. tab:: Other Linux and Mac
 
-        First make sure you have Python >= 3.6 and git. Inmanta requires many dependencies so it is recommended to create a virtual env.
+        First make sure Python >= 3.6 and git are installed. Inmanta requires many dependencies so it is recommended to create a virtual env.
         Next install inmanta with pip install in the newly created virtual env.
 
         .. code-block:: sh
@@ -77,8 +77,7 @@ Inmanta requires at least the latest Python 3.6 or 3.7 and git.
 
     .. tab:: Source
 
-        Get the source either from our `release page on github <https://github.com/inmanta/inmanta/releases>`_ or from source
-        repo.
+        Get the source either from our `release page on github <https://github.com/inmanta/inmanta/releases>`_ or clone/download a branch directly.
 
         .. code-block:: sh
 
@@ -87,19 +86,19 @@ Inmanta requires at least the latest Python 3.6 or 3.7 and git.
             pip install -c requirements.txt .
 
 .. warning::
-    When you use Inmanta modules that depend on python libraries with native code, python headers and a working compiler is required as well.
+    When you use Inmanta modules that depend on python libraries with native code, python headers and a working compiler are required as well.
 
 
 Configure server
 ################
-This guide goes through the steps to setup an Inmanta service orchestrator server. This guide assumes a RHEL 7 or CentOS 7
-server. The rpm packages install the server configuration file in /etc/inmanta/inmanta.cfg
+This guide goes through the steps to set up an Inmanta service orchestrator server. This guide assumes a RHEL 7 or CentOS 7
+server is used. The rpm packages install the server configuration file in `/etc/inmanta/inmanta.cfg`.
 
 Optional step 1: Setup SSL and authentication
 ---------------------------------------------
 
-Follow the instructions in :ref:`auth-setup` to configure both SSL and authentication. It is not mandatory but still highly
-recommended.
+Follow the instructions in :ref:`auth-setup` to configure both SSL and authentication.
+While not mandatory, it is highly recommended you do so.
 
 .. _install-step-2:
 

@@ -50,7 +50,7 @@ To get a shell on the Inmanta server:
 Automatically deploying Drupal
 _______________________________
 
-At this point, you can go through the quickstart guide in two ways: via the dashboard or via the command line interface.
+At this point, you can go through the quickstart guide in one of two ways: via the dashboard or via the command line interface.
 For the CLI, go to the next section. For the Dashboard, go to :ref:`qsdashboard`.
 
 .. _cli:
@@ -62,7 +62,7 @@ An Inmanta project bundles modules that contain configuration information. A pro
 than a directory with a project.yml file, which contains parameters such as the location to search for
 modules and where to find the server.
 
-Here we will get a project from github.
+You can retrieve the quickstart module like so:
 
 .. code-block:: sh
 
@@ -72,7 +72,7 @@ Here we will get a project from github.
 
 The configuration file ``project.yml`` defines that reusable modules are stored in ``libs``.
 
-In the next section we will use existing modules to deploy our LAMP stack.
+In the next section we will use existing modules to deploy a LAMP stack.
 
 Reuse existing modules
 ------------------------------
@@ -88,8 +88,7 @@ The configuration model
 
 In this section we will use the configuration concepts defined in the existing modules to set up Drupal on the host named ``vm1``.
 
-First, create a new ``main.cf`` file or use the contents of ``single_machine.cf`` in the project
-directory:
+First, create a new ``main.cf`` file or use the contents of ``single_machine.cf`` in the project directory:
 
 
 .. code-block:: inmanta
