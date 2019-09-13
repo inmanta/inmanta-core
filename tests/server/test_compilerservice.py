@@ -437,7 +437,7 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
 
 
 @pytest.mark.asyncio(timeout=90)
-async def test_server_recompile(server_multi, client_multi, environment_multi):
+async def test_server_recompile(server_multi, client_multi, environment_multi, monkeypatch):
     """
         Test a recompile on the server and verify recompile triggers
     """
@@ -460,7 +460,7 @@ async def test_server_recompile(server_multi, client_multi, environment_multi):
     # Set environment variable to be passed to the compiler
     key_env_var = "TEST_MESSAGE"
     value_env_var = "a_message"
-    os.environ[key_env_var] = value_env_var
+    monkeypatch.setenv(key_env_var, value_env_var)
 
     # add main.cf
     with open(os.path.join(project_dir, "main.cf"), "w") as fd:
