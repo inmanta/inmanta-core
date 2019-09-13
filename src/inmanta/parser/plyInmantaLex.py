@@ -50,6 +50,8 @@ keyworldlist = [
     "null",
     "undef",
     "parents",
+    "if",
+    "else",
 ]
 literals = [":", "[", "]", "(", ")", "=", ",", ".", "{", "}", "?"]
 reserved = {k: k.upper() for k in keyworldlist}

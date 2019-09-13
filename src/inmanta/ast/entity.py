@@ -245,10 +245,10 @@ class Entity(EntityLike, NamedType):
         """
             Add an attribute to this entity. The attribute should not exist yet.
         """
-        if attribute not in self._attributes:
+        if attribute.name not in self._attributes:
             self._attributes[attribute.name] = attribute
         else:
-            raise Exception("attribute already exists")
+            raise DuplicateException(self._attributes[attribute.name], attribute, "attribute already exists")
 
     def get_attribute(self, name: str) -> "Attribute":
         """

@@ -70,15 +70,15 @@ class DynamicStatement(Statement):
         Statement.__init__(self)
 
     def normalize(self) -> None:
-        raise Exception("Not Implemented" + str(type(self)))
+        raise NotImplementedError()
 
     def requires(self) -> List[str]:
         """List of all variable names used by this statement"""
-        raise Exception("Not Implemented" + str(type(self)))
+        raise NotImplementedError()
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """Emit new instructions to the queue, executing this instruction in the context of the resolver"""
-        raise Exception("Not Implemented" + str(type(self)))
+        raise NotImplementedError()
 
     def execute_direct(self, requires):
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
@@ -93,19 +93,23 @@ class ExpressionStatement(DynamicStatement):
         reqs = self.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self)
 
+    def requires(self) -> List[str]:
+        """List of all variable names used by this statement"""
+        raise NotImplementedError()
+
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         """
             returns a dict of the result variables required, names are an opaque identifier
             may emit statements to break execution is smaller segments
         """
-        raise Exception("Not Implemented" + str(type(self)))
+        raise NotImplementedError()
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
             execute the expression, give the values provided in the requires dict.
             These values correspond to the values requested via requires_emit
         """
-        raise Exception("Not Implemented" + str(type(self)))
+        raise NotImplementedError()
 
     def requires_emit_gradual(self, resolver: Resolver, queue: QueueScheduler, resultcollector) -> Dict[object, ResultVariable]:
         return self.requires_emit(resolver, queue)
@@ -162,15 +166,6 @@ class AssignStatement(DynamicStatement):
         out = self.lhs.requires()  # type : List[str]
         out.extend(self.rhs.requires())  # type : List[str]
         return out
-
-
-class GeneratorStatement(ExpressionStatement):
-    """
-        This statement models a statement that generates new statements
-    """
-
-    def __init__(self) -> None:
-        ExpressionStatement.__init__(self)
 
 
 class Literal(ExpressionStatement):

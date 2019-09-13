@@ -33,10 +33,10 @@ from inmanta.ast import (
     TypingException,
 )
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import ExpressionStatement, GeneratorStatement
+from inmanta.ast.statements import DynamicStatement, ExpressionStatement
 from inmanta.ast.statements.assign import SetAttributeHelper
 from inmanta.const import LOG_LEVEL_TRACE
-from inmanta.execute.runtime import ExecutionContext, QueueScheduler, Resolver, ResultCollector, ResultVariable
+from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver, ResultCollector, ResultVariable
 from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
 
@@ -51,14 +51,14 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class SubConstructor(GeneratorStatement):
+class SubConstructor(ExpressionStatement):
     """
         This statement selects an implementation for a given object and
         imports the statements
     """
 
     def __init__(self, instance_type: "Entity", implements: "Implement") -> None:
-        GeneratorStatement.__init__(self)
+        super().__init__()
         self.type = instance_type
         self.location = instance_type.get_location()
         self.implements = implements
@@ -121,13 +121,13 @@ class GradualFor(ResultCollector):
         xc.emit(self.queue)
 
 
-class For(GeneratorStatement):
+class For(DynamicStatement):
     """
         A for loop
     """
 
     def __init__(self, variable: ExpressionStatement, loop_var: LocatableString, module: BasicBlock) -> None:
-        GeneratorStatement.__init__(self)
+        super().__init__()
         self.base = variable
         self.loop_var = str(loop_var)
         self.loop_var_loc = loop_var.get_location()
@@ -150,7 +150,14 @@ class For(GeneratorStatement):
         ext = self.module.requires
         return list(set(base).union(ext) - set(var))
 
+    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        target = ResultVariable()
+        reqs = self.requires_emit(resolver, queue)
+        ExecutionUnit(queue, resolver, target, reqs, self)
+
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        """Not an actual expression, but following the pattern"""
+
         # pass context via requires!
         helper = GradualFor(self, resolver, queue)
 
@@ -183,7 +190,52 @@ class For(GeneratorStatement):
         return None
 
 
-class Constructor(GeneratorStatement):
+class If(ExpressionStatement):
+    """
+        An if Statement
+    """
+
+    def __init__(self, condition: ExpressionStatement, if_branch: BasicBlock, else_branch: BasicBlock) -> None:
+        ExpressionStatement.__init__(self)
+        self.condition: ExpressionStatement = condition
+        self.if_branch: BasicBlock = if_branch
+        self.else_branch: BasicBlock = else_branch
+        self.anchors.extend(condition.get_anchors())
+        self.anchors.extend(if_branch.get_anchors())
+        self.anchors.extend(else_branch.get_anchors())
+
+    def __repr__(self) -> str:
+        return "If"
+
+    def normalize(self) -> None:
+        self.condition.normalize()
+        self.if_branch.normalize()
+        self.else_branch.normalize()
+
+    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        target = ResultVariable()
+        reqs = self.requires_emit(resolver, queue)
+        ExecutionUnit(queue, resolver, target, reqs, self)
+
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        return self.condition.requires_emit(resolver, queue)
+
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        """
+            Evaluate this statement.
+        """
+        cond: object = self.condition.execute(requires, resolver, queue)
+        if isinstance(cond, Unknown):
+            return None
+        if not isinstance(cond, bool):
+            raise TypingException(self, "The condition for an if statement can only be a boolean expression")
+        branch: BasicBlock = self.if_branch if cond else self.else_branch
+        xc = ExecutionContext(branch, resolver.for_namespace(branch.namespace))
+        xc.emit(queue)
+        return None
+
+
+class Constructor(ExpressionStatement):
     """
         This class represents the usage of a constructor to create a new object.
 
@@ -198,11 +250,9 @@ class Constructor(GeneratorStatement):
         location: Location,
         namespace: Namespace,
     ) -> None:
-        GeneratorStatement.__init__(self)
+        super().__init__()
         self.class_type = str(class_type)
         self.__attributes = {}  # type: Dict[str,ExpressionStatement]
-        self.implemented = False
-        self.register = False
         self.location = location
         self.namespace = namespace
         self.anchors.append(TypeReferenceAnchor(class_type.get_location(), namespace, str(class_type)))
@@ -308,18 +358,9 @@ class Constructor(GeneratorStatement):
             reqs = valueexpression.requires_emit_gradual(resolver, queue, var)
             SetAttributeHelper(queue, resolver, var, reqs, valueexpression, self, object_instance, attributename)
 
-        # add anonymous implementations
-        if self.implemented:
-            # generate an import for the module
-            raise Exception("don't know this feature")
-
-        else:
-            # generate an implementation
-            for stmt in type_class.get_sub_constructor():
-                stmt.emit(object_instance, queue)
-
-        if self.register:
-            raise Exception("don't know this feature")
+        # generate an implementation
+        for stmt in type_class.get_sub_constructor():
+            stmt.emit(object_instance, queue)
 
         object_instance.trackers.append(queue.get_tracker())
 

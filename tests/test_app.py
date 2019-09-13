@@ -40,6 +40,7 @@ def get_command(
     dbname="inmanta",
     config_dir=None,
     server_extensions=[],
+    version=False,
 ):
     root_dir = tmp_dir.mkdir("root").strpath
     log_dir = os.path.join(root_dir, "log")
@@ -75,6 +76,8 @@ def get_command(
         args += ["--timed-logs"]
     if config_dir:
         args += ["--config-dir", config_dir]
+    if version:
+        args += ["--version"]
     args += ["-c", config_file, "server"]
     return (args, log_dir)
 
@@ -412,8 +415,7 @@ def test_warning_config_dir_option_on_server_command(tmpdir):
 
 
 @pytest.mark.timeout(20)
-def test_warning_config_options_on_compile_command(snippetcompiler, tmpdir):
-    non_existing_config_dir = os.path.join(tmpdir, "non_existing_config_dir")
+def test_warning_min_c_option_file_doesnt_exist(snippetcompiler, tmpdir):
     non_existing_config_file = os.path.join(tmpdir, "non_existing_config_file")
     snippetcompiler.setup_for_snippet_external(
         """
@@ -422,7 +424,7 @@ entity Test:
 end
 """
     )
-    config_options = ["--config-dir", non_existing_config_dir, "-c", non_existing_config_file, "-vvv"]
+    config_options = ["-c", non_existing_config_file, "-vvv"]
     args = [sys.executable, "-m", "inmanta.app"] + config_options + ["compile"]
     process = do_run(args, cwd=snippetcompiler.project_dir)
     out, err = process.communicate(timeout=5)
@@ -434,5 +436,24 @@ end
 
     assert "Starting compile" in all_output
     assert "Compile done" in all_output
-    assert f"Config directory {non_existing_config_dir} doesn't exist" not in all_output
-    assert f"Config file {non_existing_config_file} doesn't exist" not in all_output
+    assert f"Config file {non_existing_config_file} doesn't exist" in all_output
+
+
+@pytest.mark.parametrize(
+    "with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines",
+    [
+        (False, True, [r"Current Inmanta version:"], []),
+        (True, True, [r"Current Inmanta version:"], []),
+        (False, False, [], [r"Current Inmanta version:"]),
+        (True, False, [], [r"Current Inmanta version:"]),
+    ],
+)
+@pytest.mark.timeout(20)
+def test_version_argument_is_set(tmpdir, with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines):
+    (args, log_dir) = get_command(tmpdir, version=version_should_be_shown)
+    if with_tty:
+        (stdout, _, _) = run_with_tty(args)
+    else:
+        (stdout, _, _) = run_without_tty(args)
+    assert len(stdout) != 0
+    check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, False)

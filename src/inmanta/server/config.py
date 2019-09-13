@@ -183,6 +183,14 @@ server_enabled_extensions = Option(
     is_list,
 )
 
+server_access_control_allow_origin = Option(
+    "server",
+    "access-control-allow-origin",
+    None,
+    "Configures the Access-Control-Allow-Origin setting of the http server."
+    "Defaults to not sending an Access-Control-Allow-Origin header.",
+    is_str_opt,
+)
 
 #############################
 # Dashboard
