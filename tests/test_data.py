@@ -57,10 +57,12 @@ async def test_connect_too_small_connection_pool(postgres_db, database_name: str
 async def test_connect_default_parameters(postgres_db, database_name: str, create_db_schema: bool = False):
     pool: Pool = await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None, create_db_schema)
     assert pool is not None
-    connection: Connection = await pool.acquire()
-    assert connection is not None
-    await connection.close()
-    await data.disconnect()
+    try:
+        connection: Connection = await pool.acquire()
+        assert connection is not None
+        await connection.close()
+    finally:
+        await data.disconnect()
 
 
 @pytest.mark.asyncio
