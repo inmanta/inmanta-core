@@ -121,7 +121,7 @@ class ResourceAction(object):
     async def _execute(
         self,
         ctx: handler.HandlerContext,
-        events: Dict[ResourceVersionIdStr, Event],
+        events: Dict[Id, Event],
         cache: AgentCache,
         start: datetime.datetime,
         event_only: bool = False,
@@ -150,7 +150,7 @@ class ResourceAction(object):
             if provider is not None:
                 provider.close()
 
-            cache.close_version(self.resource.id.version)
+            cache.close_version(self.resource.id.get_version())
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=self.resource.id.resource_version_str())
             return False, False
@@ -202,7 +202,7 @@ class ResourceAction(object):
                 )
 
         provider.close()
-        cache.close_version(self.resource_id.version)
+        cache.close_version(self.resource_id.get_version())
 
         return success, send_event
 
@@ -213,7 +213,7 @@ class ResourceAction(object):
 
     async def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> None:
         self.logger.log(const.LogLevel.TRACE.value, "Entering %s %s", self.gid, self.resource)
-        cache.open_version(self.resource.id.version)
+        cache.open_version(self.resource.id.get_version())
 
         self.dependencies = [generation[x.resource_str()] for x in self.resource.requires]
         waiters = [x.future for x in self.dependencies]
@@ -236,7 +236,7 @@ class ResourceAction(object):
             self.running = True
             if self.is_done():
                 # Action is cancelled
-                LOGGER.log(const.LogLevel.TRACE.value, "%s %s is no longer active" % (self.gid, self.resource))
+                self.logger.log(const.LogLevel.TRACE.value, "%s %s is no longer active" % (self.gid, self.resource))
                 self.running = False
                 if self.undeployable is not None:
                     # don't overwrite undeployable
@@ -257,10 +257,10 @@ class ResourceAction(object):
                     ctx.set_status(const.ResourceState.cancelled)
                 return
 
-            received_events: Dict[ResourceVersionIdStr, Event]
+            received_events: Dict[Id, Event]
             if result.receive_events:
                 received_events = {
-                    x.resource_id.resource_version_str(): Event(
+                    x.resource_id: Event(
                         status=x.status, change=x.change, changes=x.changes.get(x.resource_id.resource_version_str(), {})
                     )
                     for x in self.dependencies
@@ -341,7 +341,7 @@ class RemoteResourceAction(ResourceAction):
         try:
             result = await self.scheduler.get_client().get_resource(
                 self.scheduler.agent._env_id,
-                str(self.resource_id),
+                self.resource_id.resource_version_str(),
                 logs=True,
                 log_action=const.ResourceAction.deploy,
                 log_limit=1,
@@ -575,16 +575,15 @@ class AgentInstance(object):
         self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(process.poolsize, thread_name_prefix="Pool_%s" % name)
         self.ratelimiter = locks.Semaphore(process.poolsize)
 
-        if process._env_id is None:
+        if process.environment is None:
             raise Exception("Agent instance started without a valid environment id set.")
 
-        self._env_id: uuid.UUID = process._env_id
-
+        self._env_id: uuid.UUID = process.environment
         self.sessionid = process.sessionid
 
         # init
         self._cache = AgentCache()
-        self._nq = ResourceScheduler(self, self.process.environment, name, self._cache, ratelimiter=self.ratelimiter)
+        self._nq = ResourceScheduler(self, self._env_id, name, self._cache, ratelimiter=self.ratelimiter)
         self._time_triggered_actions: Set[Callable[[], Awaitable[None]]] = set()
         self._enabled = False
 
@@ -607,7 +606,7 @@ class AgentInstance(object):
 
     @property
     def environment(self) -> uuid.UUID:
-        return self.process.environment
+        return self._env_id
 
     def get_client(self) -> protocol.Client:
         return self.process._client
@@ -897,7 +896,7 @@ class AgentInstance(object):
                 resource_obj = Resource.deserialize(data)
                 ctx = handler.HandlerContext(resource_obj)
 
-                version = resource_obj.id.version
+                version = resource_obj.id.get_version()
                 try:
                     self._cache.open_version(version)
                     provider = await self.get_provider(resource_obj)
@@ -1064,7 +1063,7 @@ class Agent(SessionEndpoint):
         """
         if self._loader is not None:
             for rt in resourcetypes:
-                result = await self._client.get_code(environment, version, rt)
+                result: protocol.Result = await self._client.get_code(environment, version, rt)
 
                 if result.code == 200:
                     for hash_value, (path, name, content, requires) in result.result["sources"].items():
@@ -1075,9 +1074,11 @@ class Agent(SessionEndpoint):
                         except Exception:
                             LOGGER.exception("Failed to install handler %s for %s", rt, name)
 
-    async def _install(self, hash_value, module_name, module_source, module_requires):
-        loop = asyncio.get_event_loop()
+    async def _install(self, hash_value: str, module_name: str, module_source: str, module_requires: List[str]):
+        if self._env is None or self._loader is None:
+            raise Exception("Unable to load code when agent is started with code loading disabled.")
 
+        loop = asyncio.get_event_loop()
         await loop.run_in_executor(self.thread_pool, self._env.install_from_list, module_requires, True)
         await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, hash_value, module_name, module_source)
 

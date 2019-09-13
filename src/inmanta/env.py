@@ -28,6 +28,7 @@ import venv
 from subprocess import CalledProcessError
 
 import pkg_resources
+from typing import List
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ class VirtualEnv(object):
     _egg_fragment_re = re.compile(r"#egg=(?P<name>[^&]*)")
     _at_fragment_re = re.compile(r"^(?P<name>[^@]+)@(?P<req>.+)")
 
-    def __init__(self, env_path):
+    def __init__(self, env_path: str) -> None:
         LOGGER.info("Creating new virtual environment in %s", env_path)
         self.env_path = env_path
         self.virtual_python = None
@@ -48,7 +49,7 @@ class VirtualEnv(object):
 
         self._old = {}
 
-    def init_env(self):
+    def init_env(self) -> None:
         """
             Init the virtual environment
         """
@@ -84,7 +85,7 @@ class VirtualEnv(object):
         self.virtual_python = python_bin
         return True
 
-    def use_virtual_env(self):
+    def use_virtual_env(self) -> None:
         """
             Use the virtual environment
         """
@@ -96,7 +97,7 @@ class VirtualEnv(object):
         # patch up pkg
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
-    def activate_that(self):
+    def activate_that(self) -> None:
         # adapted from https://github.com/pypa/virtualenv/blob/master/virtualenv_embedded/activate_this.py
         # MIT license
         # Copyright (c) 2007 Ian Bicking and Contributors
@@ -242,7 +243,7 @@ class VirtualEnv(object):
         with open(path, "w+") as fd:
             fd.write(new_hash)
 
-    def install_from_list(self, requirements_list: list, detailed_cache=False, cache=True) -> None:
+    def install_from_list(self, requirements_list: List[str], detailed_cache: bool=False, cache:bool=True) -> None:
         """
             Install requirements from a list of requirement strings
         """

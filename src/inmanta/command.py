@@ -31,7 +31,7 @@ class Commander(object):
     __command_functions = {}
 
     @classmethod
-    def add(cls, name, function, help_msg, parser_config, require_project=False, aliases=[]):
+    def add(cls, name: str, function, help_msg: str, parser_config, require_project=False, aliases=[]):
         """
             Add a new export function
         """

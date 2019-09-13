@@ -19,6 +19,11 @@ import logging
 import os
 import platform
 
+from typing import Callable, Dict, List, Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from inmanta.agent import Agent
+
 try:
     import resource
 except ImportError:
@@ -26,10 +31,11 @@ except ImportError:
 
 LOGGER = logging.getLogger(__name__)
 
-reports = {}
+ReportReturn = Union[Dict[str, List[str]], Dict[str, str], Dict[str, float], str]
+reports: Dict[str, Callable[["Agent"], ReportReturn]] = {}
 
 
-def collect_report(agent):
+def collect_report(agent: "Agent") -> Dict[str, ReportReturn]:
     out = {}
     for name, report in reports.items():
         try:
@@ -41,34 +47,37 @@ def collect_report(agent):
     return out
 
 
-def report_environment(agent):
+def report_environment(agent: "Agent") -> str:
     return str(agent._env_id)
 
 
 reports["environment"] = report_environment
 
 
-def report_platform(agent):
-    return platform.platform()
+def report_platform(agent: "Agent") -> str:
+    value = platform.platform()
+    if value is None:
+        return "unknown"
+    return value
 
 
 reports["platform"] = report_platform
 
 
-def report_hostname(agent):
+def report_hostname(agent: "Agent") -> str:
     return platform.node()
 
 
 reports["hostname"] = report_hostname
 
 
-def report_ips(agent):
+def report_ips(agent: "Agent") -> Union[str, Dict[str, List[str]]]:
     try:
         import netifaces
 
         alladdresses = [netifaces.ifaddresses(i) for i in netifaces.interfaces()]
-        v4 = [[y["addr"] for x in alladdresses if netifaces.AF_INET in x for y in x[netifaces.AF_INET]]]
-        v6 = [[y["addr"] for x in alladdresses if netifaces.AF_INET6 in x for y in x[netifaces.AF_INET6]]]
+        v4 = [str(y["addr"]) for x in alladdresses if netifaces.AF_INET in x for y in x[netifaces.AF_INET]]
+        v6 = [str(y["addr"]) for x in alladdresses if netifaces.AF_INET6 in x for y in x[netifaces.AF_INET6]]
         out = {"v4": v4, "v6": v6}
         return out
     except ImportError:
@@ -80,28 +89,28 @@ def report_ips(agent):
 reports["ips"] = report_ips
 
 
-def report_python(agent):
+def report_python(agent: "Agent") -> str:
     return "%s %s %s" % (platform.python_implementation(), platform.python_version(), platform.python_build())
 
 
 reports["python"] = report_python
 
 
-def report_pid(agent):
-    return os.getpid()
+def report_pid(agent: "Agent") -> str:
+    return str(os.getpid())
 
 
 reports["pid"] = report_pid
 
 
-def report_env(agent):
+def report_env(agent: "Agent") -> Dict[str, str]:
     return {k: v for k, v in os.environ.items()}
 
 
 reports["env"] = report_env
 
 
-def report_resources(agent):
+def report_resources(agent: "Agent") -> Dict[str, float]:
     if resource is None:
         return {}
 

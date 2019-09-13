@@ -26,7 +26,7 @@ LOGGER = logging.getLogger()
 
 
 class Scope(object):
-    def __init__(self, timeout: int = 24 * 3600, version: int = 0):
+    def __init__(self, timeout: int = 24 * 3600, version: int = 0) -> None:
         self.timeout = timeout
         self.version = version
 
@@ -62,7 +62,7 @@ class AgentCache(object):
         when a version is closed as many times as it was opened, all cache items linked to this version are dropped
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.cache = {}
         self.counterforVersion = {}
         self.keysforVersion = {}
@@ -77,7 +77,7 @@ class AgentCache(object):
         """
         return version in self.counterforVersion
 
-    def open_version(self, version: int):
+    def open_version(self, version: int) -> None:
         """
             Open the cache for the specific version
 
@@ -90,7 +90,7 @@ class AgentCache(object):
             self.counterforVersion[version] = 1
             self.keysforVersion[version] = set()
 
-    def close_version(self, version: int):
+    def close_version(self, version: int) -> None:
         """
             Close the cache for the specific version
 
@@ -119,7 +119,7 @@ class AgentCache(object):
         del self.counterforVersion[version]
         del self.keysforVersion[version]
 
-    def _advance_time(self):
+    def _advance_time(self) -> None:
         now = time.time()
         while now > self.nextAction and len(self.timerqueue) > 0:
             item = self.timerqueue.pop(0)
@@ -133,11 +133,11 @@ class AgentCache(object):
             else:
                 self.nextAction = sys.maxsize
 
-    def _get(self, key):
+    def _get(self, key: str) -> None:
         self._advance_time()
         return self.cache[key]
 
-    def _cache(self, item: CacheItem):
+    def _cache(self, item: CacheItem) -> None:
         scope = item.scope
 
         if item.key in self.cache:

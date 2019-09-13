@@ -150,7 +150,9 @@ class SessionEndpoint(Endpoint, CallTarget):
     def get_environment(self) -> Optional[uuid.UUID]:
         return self._env_id
 
-    environment = property(get_environment)
+    @property
+    def environment(self) -> Optional[uuid.UUID]:
+        return self._env_id
 
     def set_environment(self, environment_id: uuid.UUID) -> None:
         """
