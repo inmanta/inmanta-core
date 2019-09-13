@@ -18,9 +18,9 @@
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Type
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Type, cast
 
-from inmanta.data.model import ResourceIdStr
+from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import runtime, util
 from inmanta.execute.proxy import DictProxy, DynamicProxy, SequenceProxy, UnknownException, UnsetException
 from inmanta.types import JsonType
@@ -483,17 +483,8 @@ class Id(object):
 
     def __str__(self) -> str:
         if self._version > 0:
-            return "%(type)s[%(agent)s,%(attribute)s=%(value)s],v=%(version)s" % {
-                "type": self._entity_type,
-                "agent": self._agent_name,
-                "attribute": self._attribute,
-                "value": self._attribute_value,
-                "version": self._version,
-            }
-
+            return self.resource_version_str()
         return self.resource_str()
-
-    
 
     def __hash__(self) -> int:
         return hash(str(self))
@@ -502,12 +493,29 @@ class Id(object):
         return str(self) == str(other) and type(self) == type(other)
 
     def resource_str(self) -> ResourceIdStr:
-        return "%(type)s[%(agent)s,%(attribute)s=%(value)s]" % {
-            "type": self._entity_type,
-            "agent": self._agent_name,
-            "attribute": self._attribute,
-            "value": self._attribute_value,
-        }
+        return cast(
+            ResourceIdStr,
+            "%(type)s[%(agent)s,%(attribute)s=%(value)s]"
+            % {
+                "type": self._entity_type,
+                "agent": self._agent_name,
+                "attribute": self._attribute,
+                "value": self._attribute_value,
+            },
+        )
+
+    def resource_version_str(self) -> ResourceVersionIdStr:
+        return cast(
+            ResourceVersionIdStr,
+            "%(type)s[%(agent)s,%(attribute)s=%(value)s],v=%(version)s"
+            % {
+                "type": self._entity_type,
+                "agent": self._agent_name,
+                "attribute": self._attribute,
+                "value": self._attribute_value,
+                "version": self._version,
+            },
+        )
 
     def __repr__(self) -> str:
         return str(self)

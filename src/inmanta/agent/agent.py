@@ -25,7 +25,7 @@ import time
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, Tuple, Set, Iterable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from tornado import ioloop, locks
 from tornado.concurrent import Future
@@ -77,7 +77,7 @@ class ResourceAction(object):
     future: ResourceActionResultFuture
     dependencies: List["ResourceAction"]
     # resourceid -> attribute -> {current: , desired:}
-    changes: Dict[Id, Dict[str, AttributeStateChange]]
+    changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]]
 
     def __init__(self, scheduler: "ResourceScheduler", resource: Optional[Resource], gid: uuid.UUID, reason: str) -> None:
         """
@@ -257,7 +257,7 @@ class ResourceAction(object):
 
             if result.receive_events:
                 received_events: Dict[Id, Event] = {
-                    x.resource_id: Event(status=x.status, change=x.change, changes=x.changes.get(str(x.resource_id), {}))
+                    x.resource_id: Event(status=x.status, change=x.change, changes=x.changes.get(x.resource_id.resource_version_str(), {}))
                     for x in self.dependencies
                 }
             else:
@@ -472,8 +472,7 @@ class ResourceScheduler(object):
         # start new run
         self.reason = reason
         self.is_repair = is_repair
-        version = resources[0].id.get_version
-        self.version = version
+        self.version = resources[0].id.get_version()
         gid = uuid.uuid4()
         self.logger.info("Running %s for reason: %s" % (gid, reason))
 
@@ -484,7 +483,7 @@ class ResourceScheduler(object):
 
         # mark undeployable
         for key, res in self.generation.items():
-            vid = str(res.resource.id)
+            vid = res.resource.id.resource_version_str()
             if vid in undeployable:
                 self.generation[key].undeployable = undeployable[vid]
 
@@ -508,7 +507,9 @@ class ResourceScheduler(object):
         # Start running
         dummy.future.set_result(ResourceActionResult(True, False, False))
 
-    async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceAction], reason: str, gid: uuid.UUID) -> None:
+    async def mark_deployment_as_finished(
+        self, resource_actions: Iterable[ResourceAction], reason: str, gid: uuid.UUID
+    ) -> None:
         await asyncio.gather(*[resource_action.future for resource_action in resource_actions])
         with (await self.agent.critical_ratelimiter.acquire()):
             if not self.finished():

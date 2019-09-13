@@ -131,6 +131,7 @@ class SessionEndpoint(Endpoint, CallTarget):
     """
         An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
     """
+
     _client: "SessionClient"
 
     def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
