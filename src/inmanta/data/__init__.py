@@ -2554,9 +2554,8 @@ async def connect(
     create_db_schema: bool = True,
     connection_pool_min_size: int = 10,
     connection_pool_max_size: int = 10,
-    database_connection_timeout=60,
+    connection_timeout=60,
 ) -> asyncpg.pool.Pool:
-    connection_kwargs = {"timeout": database_connection_timeout}
     pool = await asyncpg.create_pool(
         host=host,
         port=port,
@@ -2565,7 +2564,7 @@ async def connect(
         password=password,
         min_size=connection_pool_min_size,
         max_size=connection_pool_max_size,
-        **connection_kwargs,
+        timeout=connection_timeout,
     )
     set_connection_pool(pool)
     if create_db_schema:

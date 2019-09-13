@@ -163,11 +163,6 @@ def is_float(value: str) -> float:
     return float(value)
 
 
-def is_float(value: str) -> float:
-    """float"""
-    return float(value)
-
-
 def is_time(value: str) -> int:
     """time"""
     return int(value)
