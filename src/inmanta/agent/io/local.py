@@ -47,6 +47,7 @@ class IOBase(object):
     """
 
     def __init__(self, uri, config):
+        # type: (str, Dict[str, Optional[str]]) -> None
         """
             Initialize the IO
 
@@ -57,6 +58,7 @@ class IOBase(object):
         self.config = config
 
     def is_remote(self):
+        # type: () -> bool
         """
             Are operation executed remote
 
@@ -66,6 +68,7 @@ class IOBase(object):
         raise NotImplementedError()
 
     def close(self):
+        # type: () -> None
         """
             Close any resources
         """

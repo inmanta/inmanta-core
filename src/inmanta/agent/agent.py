@@ -939,6 +939,7 @@ class Agent(SessionEndpoint):
         An agent to enact changes upon resources. This agent listens to the
         message bus for changes.
     """
+
     # cache reference to THIS ioloop for handlers to push requests on it
     # defer to start, just to be sure
     _io_loop: ioloop.IOLoop

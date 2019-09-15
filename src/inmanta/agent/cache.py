@@ -21,6 +21,9 @@ import logging
 import sys
 import time
 from threading import Lock
+from typing import Any, Callable, Dict, Optional, Set, List
+
+from inmanta.resources import Resource
 
 LOGGER = logging.getLogger()
 
@@ -32,21 +35,21 @@ class Scope(object):
 
 
 class CacheItem(object):
-    def __init__(self, key, scope: Scope, value, call_on_delete):
+    def __init__(self, key: str, scope: Scope, value: Any, call_on_delete: Optional[Callable[[Any], None]]) -> None:
         self.key = key
         self.scope = scope
         self.value = value
-        self.time = time.time() + scope.timeout
+        self.time: float = time.time() + scope.timeout
         self.call_on_delete = call_on_delete
 
-    def __lt__(self, other):
+    def __lt__(self, other: "CacheItem") -> bool:
         return self.time < other.time
 
-    def delete(self):
+    def delete(self) -> None:
         if callable(self.call_on_delete):
             self.call_on_delete(self.value)
 
-    def __del__(self):
+    def __del__(self) -> None:
         self.delete()
 
 
@@ -63,11 +66,11 @@ class AgentCache(object):
     """
 
     def __init__(self) -> None:
-        self.cache = {}
-        self.counterforVersion = {}
-        self.keysforVersion = {}
-        self.timerqueue = []
-        self.nextAction = sys.maxsize
+        self.cache: Dict[str, Any] = {}
+        self.counterforVersion: Dict[int, int] = {}
+        self.keysforVersion: Dict[int, Set[str]] = {}
+        self.timerqueue: List[CacheItem] = []
+        self.nextAction: float = sys.maxsize
         self.addLock = Lock()
         self.addLocks = {}
 
@@ -133,7 +136,7 @@ class AgentCache(object):
             else:
                 self.nextAction = sys.maxsize
 
-    def _get(self, key: str) -> None:
+    def _get(self, key: str) -> Any:
         self._advance_time()
         return self.cache[key]
 
@@ -156,7 +159,23 @@ class AgentCache(object):
             self.nextAction = item.time
         self._advance_time()
 
-    def cache_value(self, key, value, resource=None, version=0, timeout=5000, call_on_delete=None):
+    def _get_key(self, key: str, resource: Optional[Resource], version: int) -> str:
+        key_parts = [key]
+        if resource is not None:
+            key_parts.append(str(resource.id.resource_str()))
+        if version != 0:
+            key_parts.append(str(version))
+        return "__".join(key_parts)
+
+    def cache_value(
+        self,
+        key: str,
+        value: Any,
+        resource: Optional[Resource] = None,
+        version: int = 0,
+        timeout: int = 5000,
+        call_on_delete: Optional[Callable[[Any], None]] = None,
+    ) -> None:
         """
             add a value to the cache with the given key
 
@@ -165,15 +184,9 @@ class AgentCache(object):
             :param timeout: nr of second before this value is expired
             :param call_on_delete: A callback function that is called when the value is removed from the cache.
         """
-        key = [key]
-        if resource is not None:
-            key.append(str(resource.id.resource_str()))
-        if version != 0:
-            key.append(str(version))
-        key = "__".join(key)
-        self._cache(CacheItem(key, Scope(timeout, version), value, call_on_delete))
+        self._cache(CacheItem(self._get_key(key, resource, version), Scope(timeout, version), value, call_on_delete))
 
-    def find(self, key, resource=None, version=0):
+    def find(self, key: str, resource: Optional[Resource] = None, version: int = 0) -> Any:
         """
             find a value in the cache with the given key
 
@@ -181,16 +194,18 @@ class AgentCache(object):
 
             :raise KeyError: if the value is not found
         """
-        key = [key]
-        if resource is not None:
-            key.append(resource.id.resource_str())
-        if version != 0:
-            key.append(str(version))
-        key = "__".join(key)
-        return self._get(key).value
+        return self._get(self._get_key(key, resource, version)).value
 
     def get_or_else(
-        self, key, function, for_version=True, timeout=5000, ignore=set(), cache_none=True, call_on_delete=None, **kwargs
+        self,
+        key: str,
+        function: Callable[[int], Any],
+        for_version: bool = True,
+        timeout: int = 5000,
+        ignore: Set[str] = set(),
+        cache_none: bool = True,
+        call_on_delete: Optional[Callable[[Any], None]] = None,
+        **kwargs,
     ):
         """
             Attempt to find a value in the cache.
@@ -233,5 +248,5 @@ class AgentCache(object):
                 del self.addLocks[key]
             return value
 
-    def report(self):
+    def report(self) -> str:
         return "\n".join([str(k) + " " + str(v) for k, v in self.counterforVersion.items()])

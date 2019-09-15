@@ -19,6 +19,7 @@ import logging
 import re
 import typing
 import urllib
+from typing import Dict, Optional
 
 from inmanta.agent.cache import AgentCache
 
@@ -31,7 +32,7 @@ if typing.TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-def parse_agent_uri(uri: str) -> typing.Tuple[str, dict]:
+def parse_agent_uri(uri: str) -> typing.Tuple[str, Dict[str, Optional[str]]]:
     """
         Parse an agent uri and return the settings
 
@@ -39,7 +40,7 @@ def parse_agent_uri(uri: str) -> typing.Tuple[str, dict]:
         :return: (scheme, config)
     """
     parts = urllib.parse.urlparse(uri)
-    config = {}
+    config: Dict[str, Optional[str]] = {}
     scheme = "local"
 
     if parts.query != "":
@@ -75,6 +76,8 @@ def _get_io_class(scheme: str) -> typing.Type[local.IOBase]:
 
     elif scheme == "ssh":
         return remote.SshIO
+
+    raise Exception("%s scheme is not supported" % scheme)
 
 
 def _get_io_instance(uri: str) -> "IOBase":

@@ -24,7 +24,7 @@ import typing
 import uuid
 from collections import defaultdict
 from concurrent.futures import Future
-from typing import Any, Callable, Dict, Optional, Tuple, Type, List, Sequence, TypeVar, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar, Union, cast, overload
 
 from tornado import concurrent
 
@@ -34,7 +34,7 @@ from inmanta.agent.cache import AgentCache
 from inmanta.const import ResourceState
 from inmanta.data.model import AttributeStateChange
 from inmanta.protocol import Result
-from inmanta.resources import Resource
+from inmanta.resources import PurgeableResource, Resource
 from inmanta.types import SimpleTypes
 
 if typing.TYPE_CHECKING:
@@ -265,7 +265,17 @@ class HandlerContext(object):
             if field not in self._changes:
                 self._changes[fields] = AttributeStateChange()
 
+    @overload
     def update_changes(self, changes: Dict[str, AttributeStateChange]) -> None:
+        pass
+
+    @overload
+    def update_changes(self, changes: Dict[str, Dict[str, Optional[SimpleTypes]]]) -> None:
+        pass
+
+    def update_changes(
+        self, changes: Union[Dict[str, AttributeStateChange], Dict[str, Dict[str, Optional[SimpleTypes]]]]
+    ) -> None:
         """
             Update the changes list with changes
 
@@ -368,7 +378,7 @@ class ResourceHandler(object):
         :param io: The io object to use.
     """
 
-    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io=None) -> None:
+    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: IOBase = None) -> None:
         self._agent = agent
 
         if io is None:
@@ -390,7 +400,7 @@ class ResourceHandler(object):
         """
         f: Future[T] = Future()
 
-        def run():
+        def run() -> None:
             try:
                 result = func()
                 if result is not None:
@@ -662,7 +672,7 @@ class ResourceHandler(object):
         """
         return True
 
-    def get_file(self, hash_id) -> Optional[bytes]:
+    def get_file(self, hash_id: str) -> Optional[bytes]:
         """
             Retrieve a file from the fileserver identified with the given id. The convention is to use the sha1sum of the
             content to identify it.
@@ -763,7 +773,7 @@ class CRUDHandler(ResourceHandler):
             :param resource: The desired resource state.
         """
 
-    def execute(self, ctx: HandlerContext, resource: resources.PurgeableResource, dry_run: bool = None) -> None:
+    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = None) -> None:
         """
             Update the given resource. This method is called by the agent. Override the CRUD methods of this class.
 
@@ -776,15 +786,16 @@ class CRUDHandler(ResourceHandler):
 
             # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
             # state defines purged=true but the read_resource fails to set it to false if the resource does exist
-            current = resource.clone(purged=False)
+            desired = cast(PurgeableResource, resource)
+            current = desired.clone(purged=False)
             changes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
             try:
                 self.read_resource(ctx, current)
-                changes = self._diff(current, resource)
+                changes = self._diff(current, desired)
 
             except ResourcePurged:
-                if not resource.purged:
-                    changes["purged"] = dict(desired=resource.purged, current=True)
+                if not desired.purged:
+                    changes["purged"] = dict(desired=desired.purged, current=True)
 
             for field, values in changes.items():
                 ctx.add_change(field, desired=values["desired"], current=values["current"])
@@ -792,12 +803,12 @@ class CRUDHandler(ResourceHandler):
             if not dry_run:
                 if "purged" in changes:
                     if not changes["purged"]["desired"]:
-                        self.create_resource(ctx, resource)
+                        self.create_resource(ctx, desired)
                     else:
-                        self.delete_resource(ctx, resource)
+                        self.delete_resource(ctx, desired)
 
                 elif len(changes) > 0:
-                    self.update_resource(ctx, changes, resource)
+                    self.update_resource(ctx, changes, desired)
 
                 ctx.set_status(const.ResourceState.deployed)
             else:
@@ -832,8 +843,6 @@ class Commander(object):
     """
 
     __command_functions: Dict[str, Dict[str, Type[ResourceHandler]]] = defaultdict(dict)
-    __handlers = []
-    __handler_cache = {}
 
     @classmethod
     def get_handlers(cls) -> Dict[str, Dict[str, Type[ResourceHandler]]]:
@@ -842,15 +851,15 @@ class Commander(object):
     @classmethod
     def reset(cls) -> None:
         cls.__command_functions = defaultdict(dict)
-        cls.__handlers = []
-        cls.__handler_cache = {}
 
     @classmethod
     def close(cls) -> None:
         pass
 
     @classmethod
-    def _get_instance(cls, handler_class: Type[ResourceHandler], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase") -> ResourceHandler:
+    def _get_instance(
+        cls, handler_class: Type[ResourceHandler], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
+    ) -> ResourceHandler:
         new_instance = handler_class(agent, io)
         return new_instance
 
@@ -860,9 +869,9 @@ class Commander(object):
             Return a provider to handle the given resource
         """
         resource_id = resource.id
-        resource_type = resource_id.entity_type
+        resource_type = resource_id.get_entity_type()
         try:
-            agent_io = io.get_io(cache, agent.uri, resource_id.version)
+            agent_io = io.get_io(cache, agent.uri, resource_id.get_version())
         except Exception:
             LOGGER.exception("Exception raised during creation of IO for uri %s", agent.uri)
             raise Exception("No handler available for %s (no io available)" % resource_id)

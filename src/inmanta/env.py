@@ -26,9 +26,9 @@ import sys
 import tempfile
 import venv
 from subprocess import CalledProcessError
+from typing import List
 
 import pkg_resources
-from typing import List
 
 LOGGER = logging.getLogger(__name__)
 
@@ -243,7 +243,7 @@ class VirtualEnv(object):
         with open(path, "w+") as fd:
             fd.write(new_hash)
 
-    def install_from_list(self, requirements_list: List[str], detailed_cache: bool=False, cache:bool=True) -> None:
+    def install_from_list(self, requirements_list: List[str], detailed_cache: bool = False, cache: bool = True) -> None:
         """
             Install requirements from a list of requirement strings
         """

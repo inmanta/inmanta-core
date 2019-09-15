@@ -18,7 +18,9 @@
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Type, cast
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, cast
+
+from scipy.interpolate.tests.test_polyint import TestPCHIP
 
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import runtime, util
@@ -27,6 +29,7 @@ from inmanta.types import JsonType
 
 if TYPE_CHECKING:
     from inmanta import export
+    from inmanta.data import ResourceAction
 
 LOGGER = logging.getLogger(__name__)
 
@@ -172,6 +175,9 @@ def serialize_proxy(d):
 
 
 RESERVED_FOR_RESOURCE = set(["id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"])
+
+
+T = TypeVar("T", bound="Resource")
 
 
 class Resource(metaclass=ResourceMeta):
@@ -350,7 +356,7 @@ class Resource(metaclass=ResourceMeta):
         for field in self.__class__.fields:
             setattr(self, field, None)
 
-    def populate(self, fields: JsonType = None):
+    def populate(self, fields: Optional[JsonType] = None) -> None:
         for field in self.__class__.fields:
             if field in fields:
                 setattr(self, field, fields[field])
@@ -380,13 +386,13 @@ class Resource(metaclass=ResourceMeta):
     def __repr__(self) -> str:
         return str(self)
 
-    def clone(self, **kwargs: Any) -> "Resource":
+    def clone(self: T, **kwargs: Any) -> T:
         """
             Create a clone of this resource. The given kwargs can be used to override attributes.
 
             :return: The cloned resource
         """
-        res = Resource.deserialize(Resource.serialize(self))
+        res = Resource.deserialize(self.serialize())
         for k, v in kwargs.items():
             setattr(res, k, v)
 
@@ -396,7 +402,7 @@ class Resource(metaclass=ResourceMeta):
         """
             Serialize this resource to its dictionary representation
         """
-        dictionary = {}
+        dictionary: Dict[str, Any] = {}
 
         for field in self.__class__.fields:
             dictionary[field] = getattr(self, field)
@@ -417,6 +423,8 @@ class PurgeableResource(Resource):
     """
 
     fields = ("purged", "purge_on_delete")
+    purged: bool
+    purge_on_delete: bool
 
 
 class ManagedResource(Resource):
@@ -426,8 +434,10 @@ class ManagedResource(Resource):
 
     fields = ("managed",)
 
+    managed: bool
+
     @staticmethod
-    def get_managed(exp, obj: "ManagedResource") -> bool:
+    def get_managed(exporter: "export.Exporter", obj: "ManagedResource") -> bool:
         if not obj.managed:
             raise IgnoreResourceException()
         return obj.managed
@@ -575,12 +585,12 @@ class HostNotFoundException(Exception):
         This exception is raise when the deployment agent cannot access a host to manage a resource (Use mainly with remote io)
     """
 
-    def __init__(self, hostname, user, error):
+    def __init__(self, hostname: str, user: str, error: str) -> None:
         self.hostname = hostname
         self.user = user
         self.error = error
 
-    def to_action(self):
+    def to_action(self) -> "ResourceAction":
         from inmanta.data import ResourceAction
 
         ra = ResourceAction()  # @UndefinedVariable

@@ -22,7 +22,7 @@ import sys
 import time
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Iterable
+from typing import Dict, Iterable, List, Optional, Tuple
 from uuid import UUID
 
 from tornado import locks, process

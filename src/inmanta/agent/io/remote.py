@@ -19,6 +19,7 @@
 import logging
 import threading
 import time
+from typing import Dict, Optional
 
 from execnet import gateway_bootstrap, multi
 
@@ -48,10 +49,10 @@ class SshIO(local.IOBase):
          * retry_wait: The time to wait between retries for the remote target to become available. The default wait is 30s
     """
 
-    def is_remote(self):
+    def is_remote(self) -> bool:
         return True
 
-    def __init__(self, uri, config):
+    def __init__(self, uri: str, config: Dict[str, Optional[str]]) -> None:
         super(SshIO, self).__init__(uri, config)
         self._host = config["host"]
         if "port" in config and config["port"] is not None:
@@ -108,7 +109,7 @@ class SshIO(local.IOBase):
         assert self._gw is not None
         LOGGER.info("Connected with %s", connect)
 
-    def _build_connect_string(self):
+    def _build_connect_string(self) -> str:
         """
             Build the connection string for execent based on the hostname
         """
@@ -137,14 +138,14 @@ class SshIO(local.IOBase):
 
         return result
 
-    def read_binary(self, path):
+    def read_binary(self, path: str):
         # remoting can turn this into a string
         result = self._execute("read_binary", path)
         if isinstance(result, str):
             return result.encode()
         return result
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str):
         """
             Proxy a function call to the local version on the other side of the channel.
         """
@@ -155,7 +156,7 @@ class SshIO(local.IOBase):
 
         return call
 
-    def close(self):
+    def close(self) -> None:
         LOGGER.info("Terminating execnet connection group %s", id(self._group))
         if self._group is not None:
             self._group.terminate(0.1)
