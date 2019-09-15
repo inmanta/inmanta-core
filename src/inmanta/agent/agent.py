@@ -155,7 +155,7 @@ class ResourceAction(object):
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=self.resource.id.resource_version_str())
             return False, False
 
-        # Assert to make the provider happy
+        # Assert to make mypy happy
         assert provider is not None
 
         success = True
@@ -184,7 +184,7 @@ class ResourceAction(object):
 
         # event processing
         if len(events) > 0 and provider.can_process_events():
-            # The handler still expects a dict
+            # The handler still expects a dict instead of Event. Therefore Event.dict()
             events_dict = {k: v.dict() for k, v in events.items()}
             if not event_only:
                 await self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
@@ -218,7 +218,7 @@ class ResourceAction(object):
         self.dependencies = [generation[x.resource_str()] for x in self.resource.requires]
         waiters = [x.future for x in self.dependencies]
         waiters.append(dummy.future)
-        # Explicit cast is required because of non-generic ResourceActionResultFuture here above
+        # Explicit cast is required because mypy has issues with * and generics
         results: List[ResourceActionResult] = cast(List[ResourceActionResult], await asyncio.gather(*waiters))
 
         with (await self.scheduler.ratelimiter.acquire()):
