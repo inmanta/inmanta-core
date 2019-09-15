@@ -40,6 +40,10 @@ try:
 except ImportError:
     getgrnam = None
 
+# This code needs to stay Py2 compatible without any external libs
+if False:
+    from typing import Optional, Dict
+
 
 class IOBase(object):
     """
@@ -74,6 +78,7 @@ class IOBase(object):
         """
 
     def __del__(self):
+        # type: () -> None
         """
             An agent caches IO instances to reuse them for multiple resources. This method is called when an item is removed
             from the cache, for example when a version in the cache is closed.
@@ -87,6 +92,7 @@ class BashIO(IOBase):
     """
 
     def __init__(self, uri, config, run_as=None):
+        # (str, Dict[str, Optional[str]], Optional[str]) -> None
         super(BashIO, self).__init__(uri, config)
         self.run_as = run_as
 
@@ -103,6 +109,7 @@ class BashIO(IOBase):
             return ret
 
     def is_remote(self):
+        # type: () -> bool
         return False
 
     def hash_file(self, path):

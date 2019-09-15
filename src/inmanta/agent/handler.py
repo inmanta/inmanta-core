@@ -38,7 +38,6 @@ from inmanta.resources import PurgeableResource, Resource
 from inmanta.types import SimpleTypes
 
 if typing.TYPE_CHECKING:
-    from inmanta import agent
     import inmanta.agent.agent
     from inmanta.agent.io.local import IOBase
 
@@ -265,15 +264,15 @@ class HandlerContext(object):
             if field not in self._changes:
                 self._changes[fields] = AttributeStateChange()
 
-    @overload
+    @overload  # noqa: F811
     def update_changes(self, changes: Dict[str, AttributeStateChange]) -> None:
         pass
 
-    @overload
+    @overload  # noqa: F811
     def update_changes(self, changes: Dict[str, Dict[str, Optional[SimpleTypes]]]) -> None:
         pass
 
-    def update_changes(
+    def update_changes(  # noqa: F811
         self, changes: Union[Dict[str, AttributeStateChange], Dict[str, Dict[str, Optional[SimpleTypes]]]]
     ) -> None:
         """
