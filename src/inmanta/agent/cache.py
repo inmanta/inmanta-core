@@ -21,7 +21,7 @@ import logging
 import sys
 import time
 from threading import Lock
-from typing import Any, Callable, Dict, Optional, Set, List
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from inmanta.resources import Resource
 
@@ -72,7 +72,7 @@ class AgentCache(object):
         self.timerqueue: List[CacheItem] = []
         self.nextAction: float = sys.maxsize
         self.addLock = Lock()
-        self.addLocks = {}
+        self.addLocks: Dict[str, Lock] = {}
 
     def is_open(self, version: int) -> bool:
         """
@@ -199,7 +199,7 @@ class AgentCache(object):
     def get_or_else(
         self,
         key: str,
-        function: Callable[[int], Any],
+        function: Callable[..., Any],
         for_version: bool = True,
         timeout: int = 5000,
         ignore: Set[str] = set(),

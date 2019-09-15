@@ -18,9 +18,22 @@
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, cast
-
-from scipy.interpolate.tests.test_polyint import TestPCHIP
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Type,
+    TypeVar,
+    cast,
+)
 
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import runtime, util
@@ -36,6 +49,9 @@ LOGGER = logging.getLogger(__name__)
 
 class ResourceException(Exception):
     pass
+
+
+T = TypeVar("T", bound="Resource")
 
 
 class resource(object):  # noqa: N801
@@ -58,7 +74,7 @@ class resource(object):  # noqa: N801
         self._cls_name = name
         self._options = {"agent": agent, "name": id_attribute}
 
-    def __call__(self, cls: Type["Resource"]) -> None:
+    def __call__(self, cls: Type["T"]) -> Type["T"]:
         """
         The wrapping
         """
@@ -75,7 +91,7 @@ class resource(object):  # noqa: N801
             resource.validate()
 
     @classmethod
-    def get_entity_resources(cls) -> Iterator[str]:
+    def get_entity_resources(cls) -> Iterable[str]:
         """
         Returns a list of entity types for which a resource has been registered
         """
@@ -119,9 +135,9 @@ class IgnoreResourceException(Exception):
     """
 
 
-def to_id(entity: runtime.Instance) -> Optional[str]:
+def to_id(entity: DynamicProxy) -> Optional[str]:
     """
-        Convert an entity from the model to its resource id
+        Convert an entity instance from the model to its resource id
     """
     entity_name = str(entity._type())
     for cls_name in [entity_name] + entity._type().get_all_parent_names():
@@ -130,8 +146,8 @@ def to_id(entity: runtime.Instance) -> Optional[str]:
         if cls is not None:
             break
 
-    if cls is not None:
-        obj_id = cls.object_to_id(entity, cls_name, options["name"], options["agent"])
+    if cls is not None and options is not None:
+        obj_id = cls.object_to_id(entity._get_instance(), cls_name, options["name"], options["agent"])
         return str(obj_id)
 
     return None
@@ -139,7 +155,7 @@ def to_id(entity: runtime.Instance) -> Optional[str]:
 
 class ResourceMeta(type):
     @classmethod
-    def _get_parent_fields(cls, bases: Type["Resource"]) -> List[str]:
+    def _get_parent_fields(cls, bases: Sequence[Type["Resource"]]) -> List[str]:
         fields: List[str] = []
         for base in bases:
             if "fields" in base.__dict__:
@@ -164,7 +180,7 @@ class ResourceMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
-def serialize_proxy(d):
+def serialize_proxy(d: DynamicProxy):
     if isinstance(d, DictProxy):
         return {key: serialize_proxy(value) for key, value in d.items()}
 
@@ -175,9 +191,6 @@ def serialize_proxy(d):
 
 
 RESERVED_FOR_RESOURCE = set(["id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"])
-
-
-T = TypeVar("T", bound="Resource")
 
 
 class Resource(metaclass=ResourceMeta):
@@ -211,8 +224,8 @@ class Resource(metaclass=ResourceMeta):
             :param ignored_resources: A set of model objects that have been ignored (and not converted to resources)
         """
         for res in resources.values():
-            final_requires = set()
-            initial_requires: List["Id"] = [x for x in res.requires]
+            final_requires: Set["Resource"] = set()
+            initial_requires: List[runtime.Instance] = [x for x in res.requires]
 
             for r in initial_requires:
                 if r in resources:
@@ -347,7 +360,7 @@ class Resource(metaclass=ResourceMeta):
     def __init__(self, _id: "Id") -> None:
         self.id = _id
         self.version = 0
-        self.requires: Set[Id] = set()
+        self.requires: Set[runtime.Instance] = set()
         self.unknowns: Set[str] = set()
 
         if not hasattr(self.__class__, "fields"):

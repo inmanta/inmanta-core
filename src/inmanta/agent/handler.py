@@ -24,7 +24,7 @@ import typing
 import uuid
 from collections import defaultdict
 from concurrent.futures import Future
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar, Union, cast, overload
 
 from tornado import concurrent
 
@@ -378,7 +378,7 @@ class ResourceHandler(object):
         :param io: The io object to use.
     """
 
-    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: IOBase = None) -> None:
+    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: "IOBase" = None) -> None:
         self._agent = agent
 
         if io is None:
