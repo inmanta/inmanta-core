@@ -19,7 +19,7 @@ import base64
 import difflib
 import logging
 import os
-from typing import List, cast, Iterable
+from typing import Iterable, List, cast
 
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError

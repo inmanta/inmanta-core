@@ -23,7 +23,6 @@ from inmanta.server import SLICE_METRICS
 from inmanta.server import config as opt
 from inmanta.server import protocol
 
-
 LOGGER = logging.getLogger(__name__)
 
 

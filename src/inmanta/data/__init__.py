@@ -25,7 +25,7 @@ import uuid
 import warnings
 from collections import defaultdict
 from configparser import RawConfigParser
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, TypeVar, Union, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type, TypeVar, Union
 
 import asyncpg
 
@@ -33,7 +33,7 @@ import inmanta.db.versions
 from inmanta import const, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
 from inmanta.data import schema
-from inmanta.data.model import CompileRun
+from inmanta.data.model import CompileRun, ResourceIdStr
 from inmanta.resources import Id
 from inmanta.types import JsonType, SimpleTypes
 
@@ -945,24 +945,24 @@ class Parameter(BaseDocument):
         :todo Add history
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name = Field(field_type=str, required=True, part_of_primary_key=True)
-    value = Field(field_type=str, default="", required=True)
-    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    source = Field(field_type=str, required=True)
-    resource_id = Field(field_type=str, default="")
-    updated = Field(field_type=datetime.datetime)
-    metadata = Field(field_type=dict)
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    name: str = Field(field_type=str, required=True, part_of_primary_key=True)
+    value: str = Field(field_type=str, default="", required=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    source: str = Field(field_type=str, required=True)
+    resource_id: ResourceIdStr = Field(field_type=str, default="")
+    updated: datetime.datetime = Field(field_type=datetime.datetime)
+    metadata: Dict[str, Any] = Field(field_type=dict)
 
     @classmethod
-    async def get_updated_before(cls, updated_before):
+    async def get_updated_before(cls, updated_before: datetime.datetime) -> List["Parameter"]:
         query = "SELECT * FROM " + cls.table_name() + " WHERE updated < $1"
         values = [cls._get_value(updated_before)]
         result = await cls.select_query(query, values)
         return result
 
     @classmethod
-    async def list_parameters(cls, env_id, **metadata_constraints):
+    async def list_parameters(cls, env_id: uuid.UUID, **metadata_constraints: str) -> List["Parameter"]:
         query = "SELECT * FROM " + cls.table_name() + " WHERE environment=$1"
         values = [cls._get_value(env_id)]
         for key, value in metadata_constraints.items():
@@ -986,14 +986,14 @@ class UnknownParameter(BaseDocument):
         :param version: The version id of the configuration model on which this parameter was reported
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name = Field(field_type=str, required=True)
-    environment = Field(field_type=uuid.UUID, required=True)
-    source = Field(field_type=str, required=True)
-    resource_id = Field(field_type=str, default="")
-    version = Field(field_type=int, required=True)
-    metadata = Field(field_type=dict)
-    resolved = Field(field_type=bool, default=False)
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    name: str = Field(field_type=str, required=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+    source: str = Field(field_type=str, required=True)
+    resource_id: ResourceIdStr = Field(field_type=str, default="")
+    version: int = Field(field_type=int, required=True)
+    metadata: Dict[str, Any] = Field(field_type=dict)
+    resolved: bool = Field(field_type=bool, default=False)
 
 
 class AgentProcess(BaseDocument):

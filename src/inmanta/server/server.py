@@ -33,7 +33,6 @@ from inmanta.data.model import ExtensionStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest
-from inmanta.reporter import InfluxReporter
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -124,15 +123,13 @@ class DatabaseSlice(protocol.ServerSlice):
     async def get_status(self) -> Dict[str, ArgumentTypes]:
         """ Get the status of the database connection
         """
-        status = {
-            "connected": self._pool is not None,
-            "database": opt.db_name.get(),
-            "host": opt.db_host.get(),
-        }
+        status = {"connected": self._pool is not None, "database": opt.db_name.get(), "host": opt.db_host.get()}
 
         if self._pool is not None:
-            status["max_pool"] = self._pool._maxsize,
-            status["open_connections"] = len([x for x in self._pool._holders if x._con is not None and not x._con.is_closed()]),
+            status["max_pool"] = (self._pool._maxsize,)
+            status["open_connections"] = (
+                len([x for x in self._pool._holders if x._con is not None and not x._con.is_closed()]),
+            )
 
         return status
 
@@ -153,8 +150,6 @@ class Server(protocol.ServerSlice):
 
         self.setup_dashboard()
         self.dryrun_lock = locks.Lock()
-        self._fact_expire = opt.server_fact_expire.get()
-        self._fact_renew = opt.server_fact_renew.get()
 
         self._resource_action_loggers: Dict[uuid.UUID, logging.Logger] = {}
         self._resource_action_handlers: Dict[uuid.UUID, logging.Handler] = {}
@@ -176,7 +171,6 @@ class Server(protocol.ServerSlice):
         self.compiler: "CompilerService" = cast("CompilerService", server.get_slice(SLICE_COMPILER))
 
     async def start(self) -> None:
-        self.schedule(self.renew_expired_facts, self._fact_renew)
         self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
         self.schedule(data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get())
 
@@ -340,212 +334,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         dir_map["agents"] = _ensure_directory_exist(server_state_dir, "agents")
         dir_map["logs"] = _ensure_directory_exist(opt.log_dir.get())
         return dir_map
-
-    async def renew_expired_facts(self) -> None:
-        """
-            Send out requests to renew expired facts
-        """
-        LOGGER.info("Renewing expired parameters")
-
-        updated_before = datetime.datetime.now() - datetime.timedelta(0, (self._fact_expire - self._fact_renew))
-        expired_params = await data.Parameter.get_updated_before(updated_before)
-
-        LOGGER.debug("Renewing %d expired parameters" % len(expired_params))
-
-        for param in expired_params:
-            if param.environment is None:
-                LOGGER.warning(
-                    "Found parameter without environment (%s for resource %s). Deleting it.", param.name, param.resource_id
-                )
-                await param.delete()
-            else:
-                LOGGER.debug(
-                    "Requesting new parameter value for %s of resource %s in env %s",
-                    param.name,
-                    param.resource_id,
-                    param.environment,
-                )
-                await self.agentmanager.request_parameter(param.environment, param.resource_id)
-
-        unknown_parameters = await data.UnknownParameter.get_list(resolved=False)
-        for u in unknown_parameters:
-            if u.environment is None:
-                LOGGER.warning(
-                    "Found unknown parameter without environment (%s for resource %s). Deleting it.", u.name, u.resource_id
-                )
-                await u.delete()
-            else:
-                LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.id)
-                await self.agentmanager.request_parameter(u.environment, u.resource_id)
-
-        LOGGER.info("Done renewing expired parameters")
-
-    @protocol.handle(methods.get_param, param_id="id", env="tid")
-    async def get_param(self, env: data.Environment, param_id: str, resource_id: Optional[str] = None) -> Apireturn:
-        if resource_id is None:
-            params = await data.Parameter.get_list(environment=env.id, name=param_id)
-        else:
-            params = await data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
-
-        if len(params) == 0:
-            if resource_id is not None:
-                out = await self.agentmanager.request_parameter(env.id, resource_id)
-                return out
-            return 404
-
-        param = params[0]
-
-        # check if it was expired
-        now = datetime.datetime.now()
-        if resource_id is None or (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
-            return 200, {"parameter": params[0]}
-
-        LOGGER.info("Parameter %s of resource %s expired.", param_id, resource_id)
-        out = await self.agentmanager.request_parameter(env.id, resource_id)
-        return out
-
-    async def _update_param(
-        self,
-        env: data.Environment,
-        name: str,
-        value: str,
-        source: str,
-        resource_id: str,
-        metadata: JsonType,
-        recompile: bool = False,
-    ) -> bool:
-        """
-            Update or set a parameter.
-
-            This method returns true if:
-            - this update resolves an unknown
-            - recompile is true and the parameter updates an existing parameter to a new value
-        """
-        LOGGER.debug("Updating/setting parameter %s in env %s (for resource %s)", name, env.id, resource_id)
-        if not isinstance(value, str):
-            value = str(value)
-
-        if resource_id is None:
-            resource_id = ""
-
-        params = await data.Parameter.get_list(environment=env.id, name=name, resource_id=resource_id)
-
-        value_updated = True
-        if len(params) == 0:
-            param = data.Parameter(
-                environment=env.id,
-                name=name,
-                resource_id=resource_id,
-                value=value,
-                source=source,
-                updated=datetime.datetime.now(),
-                metadata=metadata,
-            )
-            await param.insert()
-        else:
-            param = params[0]
-            value_updated = param.value != value
-            await param.update(source=source, value=value, updated=datetime.datetime.now(), metadata=metadata)
-
-        # check if the parameter is an unknown
-        params = await data.UnknownParameter.get_list(environment=env.id, name=name, resource_id=resource_id, resolved=False)
-        if len(params) > 0:
-            LOGGER.info(
-                "Received values for unknown parameters %s, triggering a recompile", ", ".join([x.name for x in params])
-            )
-            for p in params:
-                await p.update_fields(resolved=True)
-
-            return True
-
-        return recompile and value_updated
-
-    @protocol.handle(methods.set_param, param_id="id", env="tid")
-    async def set_param(
-        self,
-        env: data.Environment,
-        param_id: str,
-        source: str,
-        value: str,
-        resource_id: str,
-        metadata: JsonType,
-        recompile: bool,
-    ) -> Apireturn:
-        result = await self._update_param(env, param_id, value, source, resource_id, metadata, recompile)
-        warnings = None
-        if result:
-            compile_metadata = {
-                "message": "Recompile model because one or more parameters were updated",
-                "type": "param",
-                "params": [(param_id, resource_id)],
-            }
-            warnings = await self._async_recompile(env, False, metadata=compile_metadata)
-
-        if resource_id is None:
-            resource_id = ""
-
-        params = await data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
-
-        return attach_warnings(200, {"parameter": params[0]}, warnings)
-
-    @protocol.handle(methods.set_parameters, env="tid")
-    async def set_parameters(self, env: data.Environment, parameters: JsonType) -> Apireturn:
-        recompile = False
-        compile_metadata = {
-            "message": "Recompile model because one or more parameters were updated",
-            "type": "param",
-            "params": [],
-        }
-        for param in parameters:
-            name = param["id"]
-            source = param["source"]
-            value = param["value"] if "value" in param else None
-            resource_id = param["resource_id"] if "resource_id" in param else None
-            metadata = param["metadata"] if "metadata" in param else None
-
-            result = await self._update_param(env, name, value, source, resource_id, metadata)
-            if result:
-                recompile = True
-                compile_metadata["params"].append((name, resource_id))
-
-        warnings = None
-        if recompile:
-            warnings = await self._async_recompile(env, False, metadata=compile_metadata)
-
-        return attach_warnings(200, None, warnings)
-
-    @protocol.handle(methods.delete_param, env="tid", parameter_name="id")
-    async def delete_param(self, env: data.Environment, parameter_name: str, resource_id: str) -> Apireturn:
-        if resource_id is None:
-            params = await data.Parameter.get_list(environment=env.id, name=parameter_name)
-        else:
-            params = await data.Parameter.get_list(environment=env.id, name=parameter_name, resource_id=resource_id)
-
-        if len(params) == 0:
-            return 404
-
-        param = params[0]
-        await param.delete()
-        metadata = {
-            "message": "Recompile model because one or more parameters were deleted",
-            "type": "param",
-            "params": [(param.name, param.resource_id)],
-        }
-        warnings = await self._async_recompile(env, False, metadata=metadata)
-
-        return attach_warnings(200, None, warnings)
-
-    @protocol.handle(methods.list_params, env="tid")
-    async def list_params(self, env: data.Environment, query: Dict[str, str]) -> Apireturn:
-        params = await data.Parameter.list_parameters(env.id, **query)
-        return (
-            200,
-            {
-                "parameters": params,
-                "expire": self._fact_expire,
-                "now": datetime.datetime.now().isoformat(timespec="microseconds"),
-            },
-        )
 
     @protocol.handle(methods.get_resource, resource_id="id", env="tid")
     async def get_resource(

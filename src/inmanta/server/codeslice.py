@@ -21,8 +21,7 @@ from typing import List, cast
 from inmanta import data
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
-from inmanta.server import SLICE_FILE, SLICE_SERVER, SLICE_CODE
-from inmanta.server import protocol
+from inmanta.server import SLICE_CODE, SLICE_FILE, SLICE_SERVER, protocol
 from inmanta.server.fileslice import FileSlice
 from inmanta.server.server import Server
 from inmanta.types import Apireturn, JsonType
@@ -104,8 +103,7 @@ class CodeSlice(protocol.ServerSlice):
 
         if len(conflict) > 0:
             raise ServerError(
-                "Some of these items already exists, but with different source files",
-                details={"references": conflict}
+                "Some of these items already exists, but with different source files", details={"references": conflict}
             )
 
         newcodes = [
