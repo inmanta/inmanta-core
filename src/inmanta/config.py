@@ -322,10 +322,11 @@ log_dir = Option(
     "log_dir",
     "/var/log/inmanta",
     "The directory where the resource action log is stored and the logs of auto-started agents.",
+    is_str,
 )
 
 
-def get_executable():
+def get_executable() -> Optional[str]:
     """``os.path.abspath(sys.argv[0])``"""
     try:
         return os.path.abspath(sys.argv[0])
@@ -333,7 +334,7 @@ def get_executable():
         return None
 
 
-def get_default_nodename():
+def get_default_nodename() -> str:
     """``socket.gethostname()``"""
     import socket
 

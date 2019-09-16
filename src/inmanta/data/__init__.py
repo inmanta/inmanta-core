@@ -31,9 +31,10 @@ import asyncpg
 
 import inmanta.db.versions
 from inmanta import const, util
+from inmanta.config import Config
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
 from inmanta.data import schema
-from inmanta.data.model import CompileRun, ResourceIdStr
+from inmanta.data.model import CompileRun, ResourceIdStr, ResourceVersionIdStr
 from inmanta.resources import Id
 from inmanta.types import JsonType, SimpleTypes
 
@@ -1708,27 +1709,27 @@ class Resource(BaseDocument):
                                used to determine if a resource describes the same state across versions
     """
 
-    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    model = Field(field_type=int, required=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    model: int = Field(field_type=int, required=True)
 
     # ID related
-    resource_id = Field(field_type=str, required=True)
-    resource_version_id = Field(field_type=str, required=True, part_of_primary_key=True)
+    resource_id: ResourceVersionIdStr = Field(field_type=str, required=True)
+    resource_version_id: ResourceVersionIdStr = Field(field_type=str, required=True, part_of_primary_key=True)
 
-    agent = Field(field_type=str, required=True)
+    agent: str = Field(field_type=str, required=True)
 
     # Field based on content from the resource actions
-    last_deploy = Field(field_type=datetime.datetime)
+    last_deploy: datetime.datetime = Field(field_type=datetime.datetime)
 
     # State related
-    attributes = Field(field_type=dict)
-    attribute_hash = Field(field_type=str)
-    status = Field(field_type=const.ResourceState, default=const.ResourceState.available)
+    attributes: Dict[str, Any] = Field(field_type=dict)
+    attribute_hash: str = Field(field_type=str)
+    status: const.ResourceState = Field(field_type=const.ResourceState, default=const.ResourceState.available)
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
     # the list contains full rv id's
-    provides = Field(field_type=list, default=[])  # List of resource versions
+    provides: List[ResourceVersionIdStr] = Field(field_type=list, default=[])  # List of resource versions
 
     @property
     def resource_type(self):
@@ -1869,7 +1870,9 @@ class Resource(BaseDocument):
         return result
 
     @classmethod
-    async def get_resources_for_version(cls, environment, version, agent=None, no_obj=False):
+    async def get_resources_for_version(
+        cls, environment: uuid.UUID, version: int, agent: str = None, no_obj: bool = False
+    ) -> List["Resource"]:
         if agent:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version, agent=agent)
         else:
@@ -2067,20 +2070,20 @@ class ConfigurationModel(BaseDocument):
         :param total: The total number of resources
     """
 
-    version = Field(field_type=int, required=True, part_of_primary_key=True)
-    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    date = Field(field_type=datetime.datetime)
+    version: int = Field(field_type=int, required=True, part_of_primary_key=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    date: datetime.datetime = Field(field_type=datetime.datetime)
 
-    released = Field(field_type=bool, default=False)
-    deployed = Field(field_type=bool, default=False)
-    result = Field(field_type=const.VersionState, default=const.VersionState.pending)
-    version_info = Field(field_type=dict)
+    released: bool = Field(field_type=bool, default=False)
+    deployed: bool = Field(field_type=bool, default=False)
+    result: const.VersionState = Field(field_type=const.VersionState, default=const.VersionState.pending)
+    version_info: Dict[str, Any] = Field(field_type=dict)
 
-    total = Field(field_type=int, default=0)
+    total: int = Field(field_type=int, default=0)
 
     # cached state for release
-    undeployable = Field(field_type=list, required=False)
-    skipped_for_undeployable = Field(field_type=list, required=False)
+    undeployable: List[ResourceVersionId] = Field(field_type=list, required=False)
+    skipped_for_undeployable: List[ResourceVersionId] = Field(field_type=list, required=False)
 
     def __init__(self, **kwargs):
         super(ConfigurationModel, self).__init__(**kwargs)
@@ -2108,7 +2111,15 @@ class ConfigurationModel(BaseDocument):
         return result
 
     @classmethod
-    async def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
+    async def get_list(
+        cls,
+        order_by_column: str = None,
+        order: str = "ASC",
+        limit: int = None,
+        offset: int = None,
+        no_obj: bool = False,
+        **query: Any,
+    ) -> List["ConfigurationModel"]:
         transient_states = ",".join(["$" + str(i) for i in range(1, len(const.TRANSIENT_STATES) + 1)])
         transient_states_values = [cls._get_value(s) for s in const.TRANSIENT_STATES]
         (filterstr, values) = cls._get_composed_filter(col_name_prefix="c", offset=len(transient_states_values) + 1, **query)
@@ -2213,7 +2224,7 @@ class ConfigurationModel(BaseDocument):
         return result
 
     @classmethod
-    async def get_versions(cls, environment, start=0, limit=DBLIMIT):
+    async def get_versions(cls, environment: uuid.UUID, start:int=0, limit:int=DBLIMIT) -> List["ConfigurationModel"]:
         """
             Get all versions for an environment ordered descending
         """
@@ -2241,7 +2252,7 @@ class ConfigurationModel(BaseDocument):
                     self.environment,
                 )
 
-    async def get_undeployable(self):
+    async def get_undeployable(self) -> List[ResourceVersionId]:
         """
             Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
         """
@@ -2308,7 +2319,9 @@ class ConfigurationModel(BaseDocument):
         await cls._execute_query(query, *values)
 
     @classmethod
-    async def get_increment(cls, environment: uuid.UUID, version: int):
+    async def get_increment(
+        cls, environment: uuid.UUID, version: int
+    ) -> Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 

@@ -16,7 +16,8 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.server import agentmanager, codeslice, compilerservice, fileslice, formslice, metricslice, projectslice, server
+from inmanta.server import agentmanager, codeslice, compilerservice, fileslice, formslice, metricslice, projectslice, server, \
+    paramslice
 from inmanta.server.extensions import ApplicationContext
 
 
@@ -30,3 +31,4 @@ def setup(application: ApplicationContext) -> None:
     application.register_slice(fileslice.FileSlice())
     application.register_slice(codeslice.CodeSlice())
     application.register_slice(metricslice.MetricsSlice())
+    application.register_slice(paramslice.ParameterSlice())

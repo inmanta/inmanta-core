@@ -20,7 +20,7 @@ import logging
 import os
 import uuid
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, cast
 from uuid import UUID
 
 import asyncpg
@@ -29,6 +29,7 @@ from tornado import locks
 
 from inmanta import const, data
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
+from inmanta.data import ResourceVersionIdStr
 from inmanta.data.model import ExtensionStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, methods
 from inmanta.protocol.common import attach_warnings
@@ -154,7 +155,7 @@ class Server(protocol.ServerSlice):
         self._resource_action_loggers: Dict[uuid.UUID, logging.Logger] = {}
         self._resource_action_handlers: Dict[uuid.UUID, logging.Handler] = {}
 
-        self._increment_cache = {}
+        self._increment_cache: Dict[uuid.UUID, Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]] = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks: Dict[uuid.UUID, locks.Lock] = defaultdict(lambda: locks.Lock())
 
@@ -320,7 +321,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             Check if the server storage is configured and ready to use.
         """
 
-        def _ensure_directory_exist(directory, *subdirs):
+        def _ensure_directory_exist(directory: str, *subdirs: str) -> str:
             directory = os.path.join(directory, *subdirs)
             if not os.path.exists(directory):
                 os.mkdir(directory)
@@ -976,7 +977,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     async def resource_action_update(
         self,
         env: data.Environment,
-        resource_ids: List[str],
+        resource_ids: List[ResourceVersionIdStr],
         action_id: uuid.UUID,
         action: const.ResourceAction,
         started: datetime.datetime,
