@@ -658,7 +658,7 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
     return util.custom_json_encoder(o)
 
 
-def attach_warnings(code: int, value: JsonType, warnings: Optional[List[str]]) -> Tuple[int, JsonType]:
+def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[List[str]]) -> Tuple[int, JsonType]:
     if warnings:
         if value is None:
             value = {}

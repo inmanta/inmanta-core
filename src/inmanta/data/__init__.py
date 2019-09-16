@@ -35,7 +35,7 @@ from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
 from inmanta.data import schema
 from inmanta.data.model import CompileRun
 from inmanta.resources import Id
-from inmanta.types import JsonType
+from inmanta.types import JsonType, SimpleTypes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -146,7 +146,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
     """
 
-    _connection_pool = None
+    _connection_pool: asyncpg.pool.Pool = None
 
     @classmethod
     def table_name(cls) -> str:
@@ -341,7 +341,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return await con.fetch(query, *values)
 
     @classmethod
-    async def _execute_query(cls, query, *values, connection=None):
+    async def _execute_query(cls, query, *values, connection: asyncpg.connection.Connection = None) -> str:
         if connection:
             return await connection.execute(query, *values)
         async with cls._connection_pool.acquire() as con:
@@ -431,13 +431,21 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return None
 
     @classmethod
-    async def get_one(cls, **query):
+    async def get_one(cls: Type[T], **query) -> T:
         results = await cls.get_list(**query)
         if results:
             return results[0]
 
     @classmethod
-    async def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
+    async def get_list(
+        cls: Type[T],
+        order_by_column: str = None,
+        order: str = "ASC",
+        limit: int = None,
+        offset: int = None,
+        no_obj: bool = False,
+        **query: Any,
+    ) -> List[T]:
         """
             Get a list of documents matching the filter args
         """
@@ -512,7 +520,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         return value
 
-    async def delete(self, connection=None):
+    async def delete(self, connection: asyncpg.connection.Connection = None) -> None:
         """
             Delete this document
         """
@@ -520,7 +528,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
         await self._execute_query(query, *values, connection=connection)
 
-    async def delete_cascade(self):
+    async def delete_cascade(self) -> None:
         await self.delete()
 
     @classmethod
@@ -1339,15 +1347,15 @@ class Form(BaseDocument):
         A form in the dashboard defined by the configuration model
     """
 
-    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    form_type = Field(field_type=str, required=True, part_of_primary_key=True)
-    options = Field(field_type=dict)
-    fields = Field(field_type=dict)
-    defaults = Field(field_type=dict)
-    field_options = Field(field_type=dict)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    form_type: str = Field(field_type=str, required=True, part_of_primary_key=True)
+    options: Dict[str, str] = Field(field_type=dict)
+    fields: Dict[str, str] = Field(field_type=dict)
+    defaults: Dict[str, SimpleTypes] = Field(field_type=dict)
+    field_options: Dict[str, Dict[str, str]] = Field(field_type=dict)
 
     @classmethod
-    async def get_form(cls, environment, form_type):
+    async def get_form(cls, environment: uuid.UUID, form_type: str) -> "Form":
         """
             Get a form based on its typed and environment
         """
@@ -1368,11 +1376,11 @@ class FormRecord(BaseDocument):
         A form record
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    environment = Field(field_type=uuid.UUID, required=True)
-    form = Field(field_type=str, required=True)
-    fields = Field(field_type=dict)
-    changed = Field(field_type=datetime.datetime)
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+    form: str = Field(field_type=str, required=True)
+    fields: Dict[str, SimpleTypes] = Field(field_type=dict)
+    changed: datetime.datetime = Field(field_type=datetime.datetime)
 
 
 class LogLine(DataDocument):

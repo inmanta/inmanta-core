@@ -33,12 +33,11 @@ import importlib_metadata
 from tornado import locks
 
 from inmanta import const, data
-from inmanta.ast import type
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
 from inmanta.data.model import ExtensionStatus, SliceStatus, StatusResponse
 from inmanta.protocol import encode_token, exceptions, methods
 from inmanta.protocol.common import attach_warnings
-from inmanta.protocol.exceptions import BadRequest, NotFound
+from inmanta.protocol.exceptions import BadRequest
 from inmanta.reporter import InfluxReporter
 from inmanta.resources import Id
 from inmanta.server import (
@@ -571,154 +570,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 "now": datetime.datetime.now().isoformat(timespec="microseconds"),
             },
         )
-
-    @protocol.handle(methods.put_form, form_id="id", env="tid")
-    async def put_form(self, env: data.Environment, form_id: str, form: JsonType) -> Apireturn:
-        form_doc = await data.Form.get_form(environment=env.id, form_type=form_id)
-        fields = {k: v["type"] for k, v in form["attributes"].items()}
-        defaults = {k: v["default"] for k, v in form["attributes"].items() if "default" in v}
-        field_options = {k: v["options"] for k, v in form["attributes"].items() if "options" in v}
-
-        if form_doc is None:
-            form_doc = data.Form(
-                environment=env.id,
-                form_type=form_id,
-                fields=fields,
-                defaults=defaults,
-                options=form["options"],
-                field_options=field_options,
-            )
-            await form_doc.insert()
-
-        else:
-            # update the definition
-            form_doc.fields = fields
-            form_doc.defaults = defaults
-            form_doc.options = form["options"]
-            form_doc.field_options = field_options
-
-            await form_doc.update()
-
-        return 200, {"form": {"id": form_doc.form_type}}
-
-    @protocol.handle(methods.get_form, form_id="id", env="tid")
-    async def get_form(self, env: data.Environment, form_id: str) -> Apireturn:
-        form = await data.Form.get_form(environment=env.id, form_type=form_id)
-
-        if form is None:
-            return 404
-
-        return 200, {"form": form}
-
-    @protocol.handle(methods.list_forms, env="tid")
-    async def list_forms(self, env: data.Environment) -> Apireturn:
-        forms = await data.Form.get_list(environment=env.id)
-        return 200, {"forms": [{"form_id": x.form_type, "form_type": x.form_type} for x in forms]}
-
-    @protocol.handle(methods.list_records, env="tid")
-    async def list_records(self, env: data.Environment, form_type: str, include_record: bool) -> Apireturn:
-        form_type = await data.Form.get_form(environment=env.id, form_type=form_type)
-        if form_type is None:
-            return 404, {"message": "No form is defined with id %s" % form_type}
-
-        records = await data.FormRecord.get_list(form=form_type.form_type)
-
-        if not include_record:
-            return 200, {"records": [{"id": r.id, "changed": r.changed} for r in records]}
-
-        else:
-            return 200, {"records": records}
-
-    @protocol.handle(methods.get_record, record_id="id", env="tid")
-    async def get_record(self, env: data.Environment, record_id: uuid.UUID) -> Apireturn:
-        record = await data.FormRecord.get_by_id(record_id)
-        if record is None:
-            return 404, {"message": "The record with id %s does not exist" % record_id}
-
-        return 200, {"record": record}
-
-    @protocol.handle(methods.update_record, record_id="id", env="tid")
-    async def update_record(self, env: data.Environment, record_id: uuid.UUID, form: JsonType) -> Apireturn:
-        record = await data.FormRecord.get_by_id(record_id)
-        if record is None:
-            return 404, {"message": "The record with id %s does not exist" % record_id}
-        if record.environment != env.id:
-            return 404, {"message": "The record with id %s does not exist" % record_id}
-
-        form_def = await data.Form.get_one(environment=env.id, form_type=record.form)
-
-        record.changed = datetime.datetime.now()
-
-        for k, _v in form_def.fields.items():
-            if k in form_def.fields and k in form:
-                value = form[k]
-                field_type = form_def.fields[k]
-                if field_type in type.TYPES:
-                    type_obj = type.TYPES[field_type]
-                    record.fields[k] = type_obj.cast(value)
-                else:
-                    LOGGER.warning("Field %s in record %s of form %s has an invalid type." % (k, record_id, form))
-
-        await record.update()
-
-        metadata = {
-            "message": "Recompile model because a form record was updated",
-            "type": "form",
-            "records": [str(record_id)],
-            "form": form,
-        }
-
-        warnings = await self._async_recompile(env, False, metadata=metadata)
-        return attach_warnings(200, {"record": record}, warnings)
-
-    @protocol.handle(methods.create_record, env="tid")
-    async def create_record(self, env: data.Environment, form_type: str, form: JsonType) -> Apireturn:
-        form_obj = await data.Form.get_form(environment=env.id, form_type=form_type)
-
-        if form_obj is None:
-            return 404, {"message": "The form %s does not exist in env %s" % (env.id, form_type)}
-
-        record = data.FormRecord(environment=env.id, form=form_obj.form_type, fields={})
-        record.changed = datetime.datetime.now()
-
-        for k, _v in form_obj.fields.items():
-            if k in form:
-                value = form[k]
-                field_type = form_obj.fields[k]
-                if field_type in type.TYPES:
-                    type_obj = type.TYPES[field_type]
-                    record.fields[k] = type_obj.cast(value)
-                else:
-                    LOGGER.warning("Field %s in form %s has an invalid type." % (k, form_type))
-
-        await record.insert()
-        metadata = {
-            "message": "Recompile model because a form record was inserted",
-            "type": "form",
-            "records": [str(record.id)],
-            "form": form,
-        }
-        warnings = await self._async_recompile(env, False, metadata=metadata)
-
-        return attach_warnings(200, {"record": record}, warnings)
-
-    @protocol.handle(methods.delete_record, record_id="id", env="tid")
-    async def delete_record(self, env: data.Environment, record_id: uuid.UUID) -> Apireturn:
-        record = await data.FormRecord.get_by_id(record_id)
-        if record is None:
-            raise NotFound()
-        await record.delete()
-
-        metadata = {
-            "message": "Recompile model because a form record was removed",
-            "type": "form",
-            "records": [str(record.id)],
-            "form": record.form,
-        }
-
-        warnings = await self._async_recompile(env, False, metadata=metadata)
-
-        return attach_warnings(200, None, warnings)
 
     @protocol.handle(methods.upload_file, file_hash="id")
     async def upload_file(self, file_hash: str, content: str) -> Apireturn:

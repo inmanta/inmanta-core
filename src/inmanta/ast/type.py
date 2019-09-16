@@ -17,7 +17,7 @@
 """
 
 import numbers
-from typing import Optional
+from typing import Any, Optional
 
 from inmanta.ast import DuplicateException, Locatable, Location, Named, Namespace, RuntimeException, TypeNotFoundException
 from inmanta.execute.util import AnyType, NoneValue
@@ -285,7 +285,7 @@ class String(Type, str):
         str.__init__(self)
 
     @classmethod
-    def cast(cls, value):
+    def cast(cls, value: Any) -> str:
         """
             Cast the given value to a string
 
