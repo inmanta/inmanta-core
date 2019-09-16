@@ -62,7 +62,7 @@ An Inmanta project bundles modules that contain configuration information. A pro
 than a directory with a project.yml file, which contains parameters such as the location to search for
 modules and where to find the server.
 
-You can retrieve the quickstart module like so:
+You can retrieve the quickstart module like this:
 
 .. code-block:: sh
 
