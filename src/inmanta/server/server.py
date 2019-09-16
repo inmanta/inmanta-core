@@ -20,7 +20,7 @@ import logging
 import os
 import uuid
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, cast
 from uuid import UUID
 
 import asyncpg
@@ -124,13 +124,17 @@ class DatabaseSlice(protocol.ServerSlice):
     async def get_status(self) -> Dict[str, ArgumentTypes]:
         """ Get the status of the database connection
         """
-        return {
+        status = {
             "connected": self._pool is not None,
-            "max_pool": self._pool._maxsize,
-            "open_connections": len([x for x in self._pool._holders if x._con is not None and not x._con.is_closed()]),
             "database": opt.db_name.get(),
             "host": opt.db_host.get(),
         }
+
+        if self._pool is not None:
+            status["max_pool"] = self._pool._maxsize,
+            status["open_connections"] = len([x for x in self._pool._holders if x._con is not None and not x._con.is_closed()]),
+
+        return status
 
 
 class Server(protocol.ServerSlice):
@@ -158,7 +162,6 @@ class Server(protocol.ServerSlice):
         self._increment_cache = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks: Dict[uuid.UUID, locks.Lock] = defaultdict(lambda: locks.Lock())
-        self._influx_db_reporter: Optional[InfluxReporter] = None
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_SESSION_MANAGER, SLICE_DATABASE]
@@ -169,8 +172,8 @@ class Server(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         self._server = server
         self._server_storage: Dict[str, str] = self.check_storage()
-        self.agentmanager: "AgentManager" = server.get_slice(SLICE_AGENT_MANAGER)
-        self.compiler: "CompilerService" = server.get_slice(SLICE_COMPILER)
+        self.agentmanager: "AgentManager" = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
+        self.compiler: "CompilerService" = cast("CompilerService", server.get_slice(SLICE_COMPILER))
 
     async def start(self) -> None:
         self.schedule(self.renew_expired_facts, self._fact_renew)
@@ -178,33 +181,12 @@ class Server(protocol.ServerSlice):
         self.schedule(data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get())
 
         self.add_background_task(self._purge_versions())
-        self.start_metric_reporters()
 
         await super().start()
 
     async def stop(self) -> None:
         await super().stop()
         self._close_resource_action_loggers()
-        self.stop_metric_reporters()
-
-    def stop_metric_reporters(self) -> None:
-        if self._influx_db_reporter:
-            self._influx_db_reporter.stop()
-            self._influx_db_reporter = None
-
-    def start_metric_reporters(self) -> None:
-        if opt.influxdb_host.get():
-            self._influx_db_reporter = InfluxReporter(
-                server=opt.influxdb_host.get(),
-                port=opt.influxdb_port.get(),
-                database=opt.influxdb_name.get(),
-                username=opt.influxdb_username.get(),
-                password=opt.influxdb_password,
-                reporting_interval=opt.influxdb_interval.get(),
-                autocreate_database=True,
-                tags=opt.influxdb_tags.get(),
-            )
-            self._influx_db_reporter.start()
 
     @staticmethod
     def get_resource_action_log_file(environment: uuid.UUID) -> str:

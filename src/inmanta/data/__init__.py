@@ -1763,7 +1763,7 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    async def get_resources(cls, environment, resource_version_ids):
+    async def get_resources(cls, environment: uuid.UUID, resource_version_ids: List[ResourceVersionId]) -> List["Resource"]:
         """
             Get all resources listed in resource_version_ids
         """
