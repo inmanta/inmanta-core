@@ -27,11 +27,12 @@ import asyncpg
 
 from inmanta import const, data
 from inmanta.protocol import encode_token, methods
+from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import NotFound, ServerError
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PROJECT_ENV, SLICE_SERVER, protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.server import Server
-from inmanta.types import Apireturn, JsonType
+from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
 
@@ -206,7 +207,7 @@ class ProjectEnvironmentSlice(protocol.ServerSlice):
         version = int(time.time())
         if metadata is None:
             metadata = {"message": "Decommission of environment", "type": "api"}
-        result = await self.server_slice.put_version(env, version, [], {}, [], {const.EXPORT_META_DATA: metadata})
+        result: int = await self.server_slice.put_version(env, version, [], {}, [], {const.EXPORT_META_DATA: metadata})
         return result, {"version": version}
 
     @protocol.handle(methods.clear_environment, env="id")
@@ -227,3 +228,50 @@ class ProjectEnvironmentSlice(protocol.ServerSlice):
             Create a new auth token for this environment
         """
         return 200, {"token": encode_token(client_types, str(env.id), idempotent)}
+
+    @protocol.handle(methods.list_settings, env="tid")
+    async def list_settings(self, env: data.Environment) -> Apireturn:
+        return 200, {"settings": env.settings, "metadata": data.Environment._settings}
+
+    async def _setting_change(self, env: data.Environment, key: str) -> Warnings:
+        setting = env._settings[key]
+
+        warnings = None
+        if setting.recompile:
+            LOGGER.info("Environment setting %s changed. Recompiling with update = %s", key, setting.update)
+            metadata = {"message": "Recompile for modified setting", "type": "setting", "setting": key}
+            warnings = await self.server_slice._async_recompile(env, setting.update, metadata=metadata)
+
+        if setting.agent_restart:
+            LOGGER.info("Environment setting %s changed. Restarting agents.", key)
+            await self.agentmanager.restart_agents(env)
+
+        return warnings
+
+    @protocol.handle(methods.set_setting, env="tid", key="id")
+    async def set_setting(self, env: data.Environment, key: str, value: data.EnvSettingType) -> Apireturn:
+        try:
+            await env.set(key, value)
+            warnings = await self._setting_change(env, key)
+            return attach_warnings(200, None, warnings)
+        except KeyError:
+            raise NotFound()
+        except ValueError:
+            raise ServerError("Invalid value")
+
+    @protocol.handle(methods.get_setting, env="tid", key="id")
+    async def get_setting(self, env: data.Environment, key: str) -> Apireturn:
+        try:
+            value = await env.get(key)
+            return 200, {"value": value, "metadata": data.Environment._settings}
+        except KeyError:
+            return 404
+
+    @protocol.handle(methods.delete_setting, env="tid", key="id")
+    async def delete_setting(self, env: data.Environment, key: str) -> Apireturn:
+        try:
+            await env.unset(key)
+            warnings = await self._setting_change(env, key)
+            return attach_warnings(200, None, warnings)
+        except KeyError:
+            return 404

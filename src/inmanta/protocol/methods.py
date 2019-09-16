@@ -75,7 +75,7 @@ def modify_project(id: uuid.UUID, name: str):
 
 
 @method(path="/project/<id>", operation="DELETE", client_types=["api"])
-def delete_project(id: uuid.UUID):
+def delete_project(id: uuid.UUID) -> None:
     """
         Delete the given project and all related data
     """
@@ -124,7 +124,7 @@ def modify_environment(id: uuid.UUID, name: str, repository: str = None, branch:
 
 
 @method(path="/environment/<id>", operation="DELETE", client_types=["api"])
-def delete_environment(id: uuid.UUID):
+def delete_environment(id: uuid.UUID) -> None:
     """
         Delete the given environment and all related data
     """
@@ -243,7 +243,7 @@ def decomission_environment(id: uuid.UUID, metadata: dict = None):
     arg_options={"id": ArgOption(getter=convert_environment)},
     client_types=["api"],
 )
-def clear_environment(id: uuid.UUID):
+def clear_environment(id: uuid.UUID) -> None:
     """
         Clear all data from this environment
     """

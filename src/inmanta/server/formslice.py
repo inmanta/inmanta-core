@@ -18,7 +18,7 @@
 import datetime
 import logging
 import uuid
-from typing import Dict, List, cast
+from typing import List, cast
 
 from inmanta import data
 from inmanta.ast import type
@@ -27,7 +27,7 @@ from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_DATABASE, SLICE_FORM, SLICE_SERVER, protocol
 from inmanta.server.server import Server
-from inmanta.types import Apireturn, ArgumentTypes, JsonType
+from inmanta.types import Apireturn, JsonType
 
 LOGGER = logging.getLogger(__name__)
 

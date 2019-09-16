@@ -22,7 +22,7 @@ import logging
 import os
 import uuid
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 from uuid import UUID
 
 import asyncpg
@@ -1606,53 +1606,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                         await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
 
         return 200
-
-    @protocol.handle(methods.list_settings, env="tid")
-    async def list_settings(self, env: data.Environment) -> Apireturn:
-        return 200, {"settings": env.settings, "metadata": data.Environment._settings}
-
-    async def _setting_change(self, env: data.Environment, key: str) -> Warning:
-        setting = env._settings[key]
-
-        warnings = None
-        if setting.recompile:
-            LOGGER.info("Environment setting %s changed. Recompiling with update = %s", key, setting.update)
-            metadata = {"message": "Recompile for modified setting", "type": "setting", "setting": key}
-            warnings = await self._async_recompile(env, setting.update, metadata=metadata)
-
-        if setting.agent_restart:
-            LOGGER.info("Environment setting %s changed. Restarting agents.", key)
-            await self.agentmanager.restart_agents(env)
-
-        return warnings
-
-    @protocol.handle(methods.set_setting, env="tid", key="id")
-    async def set_setting(self, env: data.Environment, key: str, value: Union[PrimitiveTypes, JsonType]) -> Apireturn:
-        try:
-            await env.set(key, value)
-            warnings = await self._setting_change(env, key)
-            return attach_warnings(200, None, warnings)
-        except KeyError:
-            return 404
-        except ValueError:
-            return 500, {"message": "Invalid value"}
-
-    @protocol.handle(methods.get_setting, env="tid", key="id")
-    async def get_setting(self, env: data.Environment, key: str) -> Apireturn:
-        try:
-            value = await env.get(key)
-            return 200, {"value": value, "metadata": data.Environment._settings}
-        except KeyError:
-            return 404
-
-    @protocol.handle(methods.delete_setting, env="tid", key="id")
-    async def delete_setting(self, env: data.Environment, key: str) -> Apireturn:
-        try:
-            await env.unset(key)
-            warnings = await self._setting_change(env, key)
-            return attach_warnings(200, None, warnings)
-        except KeyError:
-            return 404
 
     @protocol.handle(methods.notify_change_get, env="id")
     async def notify_change_get(self, env: data.Environment, update: bool) -> Apireturn:
