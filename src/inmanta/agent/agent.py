@@ -338,7 +338,9 @@ class RemoteResourceAction(ResourceAction):
         super(RemoteResourceAction, self).__init__(scheduler, None, gid, reason)
         self.resource_id = resource_id
 
-    async def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> None:
+    async def execute(
+        self, dummy: "ResourceAction", generation: "Dict[ResourceIdStr, ResourceAction]", cache: AgentCache
+    ) -> None:
         await dummy.future
         try:
             result = await self.scheduler.get_client().get_resource(

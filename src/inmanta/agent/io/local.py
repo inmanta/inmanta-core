@@ -260,7 +260,7 @@ class BashIO(IOBase):
         return status
 
     def remove(self, path):
-        # type: (str) -> bool
+        # type: (str) -> None
         """
             Remove a file
         """
@@ -269,8 +269,6 @@ class BashIO(IOBase):
 
         if result.returncode > 0:
             raise FileNotFoundError()
-
-        return True
 
     def put(self, path, content):
         # type: (str, str) -> bool
@@ -331,7 +329,7 @@ class BashIO(IOBase):
         return result.returncode > 0
 
     def rmdir(self, path):
-        # type: (type) -> bool
+        # type: (str) -> bool
         """
             Remove a directory
         """
@@ -509,13 +507,13 @@ class LocalIO(IOBase):
         return status
 
     def remove(self, path):
-        # type: (str) -> bool
+        # type: (str) -> None
         """
             Remove a file
 
             :param str path: The path of the file to remove.
         """
-        return os.remove(path)
+        os.remove(path)
 
     def put(self, path, content):
         # type: (str, str) -> None

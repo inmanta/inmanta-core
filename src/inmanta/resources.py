@@ -68,7 +68,7 @@ class resource(object):  # noqa: N801
                       ``host.name``
     """
 
-    _resources: Dict[str, Tuple[Type[T], Dict[str, str]]] = {}
+    _resources: Dict[str, Tuple[Type["Resource"], Dict[str, str]]] = {}
 
     def __init__(self, name: str, id_attribute: str, agent: str):
         self._cls_name = name
@@ -98,7 +98,7 @@ class resource(object):  # noqa: N801
         return cls._resources.keys()
 
     @classmethod
-    def get_class(cls, name: str) -> Tuple[Optional[Type[T]], Optional[Dict[str, str]]]:
+    def get_class(cls, name: str) -> Tuple[Optional[Type["Resource"]], Optional[Dict[str, str]]]:
         """
         Get the class definition for the given entity.
         """
@@ -108,7 +108,7 @@ class resource(object):  # noqa: N801
         return (None, None)
 
     @classmethod
-    def get_resources(cls) -> Iterator[Tuple[str, Type[T]]]:
+    def get_resources(cls) -> Iterator[Tuple[str, Type["Resource"]]]:
         """ Return an iterator over resource type, resource definition
         """
         return (
@@ -190,7 +190,7 @@ def serialize_proxy(d: DynamicProxy):
     return d
 
 
-RESERVED_FOR_RESOURCE = set(["id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"])
+RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"}
 
 
 class Resource(metaclass=ResourceMeta):
@@ -203,10 +203,10 @@ class Resource(metaclass=ResourceMeta):
         static methods in the class with the name "get_$fieldname".
     """
 
-    fields: Tuple[str, ...] = ("send_event",)
+    fields: Sequence[str] = ("send_event",)
     send_event: bool
     model: DynamicProxy
-    map: Dict[str, Callable[["export.Exporter", DynamicProxy], Any]]
+    map: Dict[str, Callable[[Optional["export.Exporter"], DynamicProxy], Any]]
 
     @staticmethod
     def get_send_event(_exporter: "export.Exporter", obj: "Resource") -> bool:
@@ -246,7 +246,7 @@ class Resource(metaclass=ResourceMeta):
                     )
 
             res.resource_requires = final_requires
-            res.requires = [x.id for x in final_requires]
+            res.requires = {x.id for x in final_requires}
 
     @classmethod
     def object_to_id(cls, model_object: DynamicProxy, entity_name: str, attribute_name: str, agent_attribute: str) -> "Id":
@@ -283,10 +283,13 @@ class Resource(metaclass=ResourceMeta):
         if isinstance(attribute_value, util.Unknown):
             raise UnknownException(attribute_value)
 
-        return Id(entity_name, agent_value, attribute_name, attribute_value)
+        # agent_value is no longer a DynamicProxy here, force this for mypy validation
+        return Id(entity_name, str(agent_value), attribute_name, attribute_value)
 
     @classmethod
-    def map_field(cls, exporter: "export.Exporter", entity_name: str, field_name: str, model_object: DynamicProxy) -> str:
+    def map_field(
+        cls, exporter: Optional["export.Exporter"], entity_name: str, field_name: str, model_object: DynamicProxy
+    ) -> str:
         try:
             try:
                 if hasattr(cls, "get_" + field_name):
@@ -309,7 +312,7 @@ class Resource(metaclass=ResourceMeta):
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))
 
     @classmethod
-    def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: DynamicProxy) -> T:
+    def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: DynamicProxy) -> "Resource":
         """
         Build a resource from a given configuration model entity
         """
@@ -336,12 +339,12 @@ class Resource(metaclass=ResourceMeta):
         Deserialize the resource from the given dictionary
         """
         obj_id = Id.parse_id(obj_map["id"])
-        cls, _options = resource.get_class(obj_id.entity_type)
+        cls_resource, _options = resource.get_class(obj_id.entity_type)
 
-        if cls is None:
+        if cls_resource is None:
             raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
 
-        obj = cls(obj_id)
+        obj = cls_resource(obj_id)
         obj.populate(obj_map)
 
         return obj
@@ -360,7 +363,7 @@ class Resource(metaclass=ResourceMeta):
         self.id = _id
         self.version = 0
         self.requires: Set[Id] = set()
-        self.resource_requires: List[Resource] = set()
+        self.resource_requires: Set[Resource] = set()
         self.unknowns: Set[str] = set()
 
         if not hasattr(self.__class__, "fields"):
@@ -369,7 +372,7 @@ class Resource(metaclass=ResourceMeta):
         for field in self.__class__.fields:
             setattr(self, field, None)
 
-    def populate(self, fields: Optional[JsonType] = None) -> None:
+    def populate(self, fields: Dict[str, Any]) -> None:
         for field in self.__class__.fields:
             if field in fields:
                 setattr(self, field, fields[field])
@@ -399,7 +402,7 @@ class Resource(metaclass=ResourceMeta):
     def __repr__(self) -> str:
         return str(self)
 
-    def clone(self: T, **kwargs: Any) -> T:
+    def clone(self, **kwargs: Any) -> "Resource":
         """
             Create a clone of this resource. The given kwargs can be used to override attributes.
 
@@ -570,10 +573,9 @@ class Id(object):
 
         version_match: str = result.group("version")
 
+        version = 0
         if version_match is not None:
             version = int(version_match)
-        else:
-            version = 0
 
         parts = {
             "type": result.group("type"),

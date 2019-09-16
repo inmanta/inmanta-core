@@ -34,7 +34,6 @@ from inmanta.agent.cache import AgentCache
 from inmanta.const import ResourceState
 from inmanta.data.model import AttributeStateChange
 from inmanta.protocol import Result
-from inmanta.resources import PurgeableResource, Resource
 from inmanta.types import SimpleTypes
 
 if typing.TYPE_CHECKING:
@@ -147,7 +146,11 @@ class HandlerContext(object):
     """
 
     def __init__(
-        self, resource: Resource, dry_run: bool = False, action_id: Optional[uuid.UUID] = None, logger: logging.Logger = None
+        self,
+        resource: resources.Resource,
+        dry_run: bool = False,
+        action_id: Optional[uuid.UUID] = None,
+        logger: logging.Logger = None,
     ) -> None:
         self._resource = resource
         self._dry_run = dry_run
@@ -399,7 +402,8 @@ class ResourceHandler(object):
         """
         f: Future[T] = Future()
 
-        def run() -> None:
+        # This function is not typed because of generics, the used methods and currying
+        def run():
             try:
                 result = func()
                 if result is not None:
@@ -785,8 +789,10 @@ class CRUDHandler(ResourceHandler):
 
             # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
             # state defines purged=true but the read_resource fails to set it to false if the resource does exist
-            desired = cast(PurgeableResource, resource)
+            desired = resource
+            assert isinstance(desired, resources.PurgeableResource)
             current = desired.clone(purged=False)
+            assert isinstance(current, resources.PurgeableResource)
             changes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
             try:
                 self.read_resource(ctx, current)
@@ -863,7 +869,9 @@ class Commander(object):
         return new_instance
 
     @classmethod
-    def get_provider(cls, cache: AgentCache, agent: "inmanta.agent.agent.AgentInstance", resource: Resource) -> ResourceHandler:
+    def get_provider(
+        cls, cache: AgentCache, agent: "inmanta.agent.agent.AgentInstance", resource: resources.Resource
+    ) -> ResourceHandler:
         """
             Return a provider to handle the given resource
         """
