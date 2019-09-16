@@ -233,13 +233,13 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return uuid.uuid4()
 
     @classmethod
-    def set_connection_pool(cls, pool):
+    def set_connection_pool(cls, pool: asyncpg.pool.Pool) -> None:
         if cls._connection_pool:
             raise Exception(f"Connection already set on {cls} ({cls._connection_pool}!")
         cls._connection_pool = pool
 
     @classmethod
-    async def close_connection_pool(cls):
+    async def close_connection_pool(cls) -> None:
         if not cls._connection_pool:
             return
         await cls._connection_pool.close()
@@ -1509,7 +1509,9 @@ class ResourceAction(BaseDocument):
         return result
 
     @classmethod
-    async def get_log(cls, environment, resource_version_id, action=None, limit=0):
+    async def get_log(
+        cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr, action: Optional[str] = None, limit: int = 0
+    ) -> List["ResourceAction"]:
         query = (
             "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "
             "as resource_version_ids, r.action_id as action_id, action, started, finished, messages, status, changes,"
@@ -1917,7 +1919,7 @@ class Resource(BaseDocument):
             return resources[0]
 
     @classmethod
-    async def get(cls, environment, resource_version_id):
+    async def get(cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr) -> Optional["Resource"]:
         """
             Get a resource with the given resource version id
         """
@@ -1925,7 +1927,7 @@ class Resource(BaseDocument):
         return value
 
     @classmethod
-    def new(cls, environment, resource_version_id, **kwargs):
+    def new(cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr, **kwargs: Any) -> "Resource":
         vid = Id.parse_id(resource_version_id)
 
         attr = dict(
@@ -2157,14 +2159,14 @@ class ConfigurationModel(BaseDocument):
                 result.append(obj)
         return result
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         dct = BaseDocument.to_dict(self)
         dct["status"] = dict(self._status)
         dct["done"] = self._done
         return dct
 
     @classmethod
-    async def version_exists(cls, environment, version):
+    async def version_exists(cls, environment: uuid.UUID, version: int) -> bool:
         query = f"""SELECT 1
                             FROM {ConfigurationModel.table_name()}
                             WHERE environment=$1 AND version=$2"""
@@ -2209,7 +2211,7 @@ class ConfigurationModel(BaseDocument):
         return result["version"]
 
     @classmethod
-    async def get_agents(cls, environment, version):
+    async def get_agents(cls, environment: uuid.UUID, version: int) -> List[str]:
         """
             Returns a list of all agents that have resources defined in this configuration model
         """
@@ -2546,13 +2548,13 @@ _classes = [
 ]
 
 
-def set_connection_pool(pool):
+def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
     LOGGER.debug("Connecting data classes")
     for cls in _classes:
         cls.set_connection_pool(pool)
 
 
-async def disconnect():
+async def disconnect() -> None:
     LOGGER.debug("Disconnecting data classes")
     for cls in _classes:
         await cls.close_connection_pool()

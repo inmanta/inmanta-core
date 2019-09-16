@@ -127,7 +127,7 @@ class DatabaseSlice(protocol.ServerSlice):
         status = {"connected": self._pool is not None, "database": opt.db_name.get(), "host": opt.db_host.get()}
 
         if self._pool is not None:
-            status["max_pool"] = (self._pool._maxsize,)
+            status["max_pool"] = self._pool._maxsize
             status["open_connections"] = (
                 len([x for x in self._pool._holders if x._con is not None and not x._con.is_closed()]),
             )
@@ -437,7 +437,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         # set already done to deployed
         now = datetime.datetime.now()
 
-        def on_agent(res):
+        def on_agent(res: ResourceVersionIdStr) -> bool:
             idr = Id.parse_id(res)
             return idr.get_agent_name() == agent
 
@@ -475,7 +475,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             if rv.resource_version_id not in increment_ids:
                 continue
 
-            def in_requires(req):
+            def in_requires(req: ResourceVersionIdStr) -> bool:
                 if req in increment_ids:
                     return True
                 idr = Id.parse_id(req)
@@ -685,7 +685,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             skippeable.add(current)
             work.extend(provides_tree[current])
 
-        skippeable = sorted(list(skippeable - set(undeployable_ids)))
+        skip_list = sorted(list(skippeable - set(undeployable_ids)))
 
         try:
             cm = data.ConfigurationModel(
@@ -695,7 +695,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 total=len(resources),
                 version_info=version_info,
                 undeployable=undeployable_ids,
-                skipped_for_undeployable=skippeable,
+                skipped_for_undeployable=skip_list,
             )
             await cm.insert()
         except asyncpg.exceptions.UniqueViolationError:
