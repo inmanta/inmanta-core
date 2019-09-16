@@ -46,7 +46,6 @@ from inmanta.server import (
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, PrimitiveTypes, Warnings
-from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1202,104 +1201,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             await data.DryRun.update_resource(dryrun_id, resource, payload)
 
         return 200
-
-    @protocol.handle(methods.upload_code, code_id="id", env="tid")
-    async def upload_code(self, env: data.Environment, code_id: int, resource: str, sources: JsonType) -> Apireturn:
-        code = await data.Code.get_version(environment=env.id, version=code_id, resource=resource)
-        if code is not None:
-            return 500, {"message": "Code for this version has already been uploaded."}
-
-        hasherrors = any((k != hash_file(content[2].encode()) for k, content in sources.items()))
-        if hasherrors:
-            return 400, {"message": "Hashes in source map do not match to source_code"}
-
-        ret, to_upload = await self.stat_files(sources.keys())
-
-        if ret != 200:
-            return ret, to_upload
-
-        for file_hash in to_upload["files"]:
-            ret = self.upload_file_internal(file_hash, sources[file_hash][2].encode())
-            if ret != 200:
-                return ret
-
-        compact = {code_hash: (file_name, module, req) for code_hash, (file_name, module, _, req) in sources.items()}
-
-        code = data.Code(environment=env.id, version=code_id, resource=resource, source_refs=compact)
-        await code.insert()
-
-        return 200
-
-    @protocol.handle(methods.upload_code_batched, code_id="id", env="tid")
-    async def upload_code_batched(self, env: data.Environment, code_id: int, resources: JsonType) -> Apireturn:
-        # validate
-        for rtype, sources in resources.items():
-            if not isinstance(rtype, str):
-                return 400, {"message": "all keys in the resources map must be strings"}
-            if not isinstance(sources, dict):
-                return 400, {"message": "all values in the resources map must be dicts"}
-            for name, refs in sources.items():
-                if not isinstance(name, str):
-                    return 400, {"message": "all keys in the sources map must be strings"}
-                if not isinstance(refs, (list, tuple)):
-                    return 400, {"message": "all values in the sources map must be lists or tuple"}
-                if (
-                    len(refs) != 3
-                    or not isinstance(refs[0], str)
-                    or not isinstance(refs[1], str)
-                    or not isinstance(refs[2], list)
-                ):
-                    return (
-                        400,
-                        {"message": "The values in the source map should be of the" " form (filename, module, [requirements])"},
-                    )
-
-        allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.keys()]
-
-        ret, val = await self.stat_files(allrefs)
-
-        if ret != 200:
-            return ret, val
-
-        if len(val["files"]) != 0:
-            return 400, {"message": "Not all file references provided are valid", "references": val["files"]}
-
-        code = await data.Code.get_versions(environment=env.id, version=code_id)
-        oldmap = {c.resource: c for c in code}
-
-        new = {k: v for k, v in resources.items() if k not in oldmap}
-        conflict = [k for k, v in resources.items() if k in oldmap and oldmap[k].source_refs != v]
-
-        if len(conflict) > 0:
-            return (
-                500,
-                {"message": "Some of these items already exists, but with different source files", "references": conflict},
-            )
-
-        newcodes = [
-            data.Code(environment=env.id, version=code_id, resource=resource, source_refs=hashes)
-            for resource, hashes in new.items()
-        ]
-
-        await data.Code.insert_many(newcodes)
-
-        return 200
-
-    @protocol.handle(methods.get_code, code_id="id", env="tid")
-    async def get_code(self, env: data.Environment, code_id: int, resource: str) -> Apireturn:
-        code = await data.Code.get_version(environment=env.id, version=code_id, resource=resource)
-        if code is None:
-            return 404, {"message": "The version of the code does not exist."}
-
-        sources = {}
-        if code.source_refs is not None:
-            for code_hash, (file_name, module, req) in code.source_refs.items():
-                ret, c = self.get_file_internal(code_hash)
-                if ret != 200:
-                    return ret, c
-                sources[code_hash] = (file_name, module, c.decode(), req)
-
-        return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": sources}
 
     @protocol.handle(methods.resource_action_update, env="tid")
     async def resource_action_update(

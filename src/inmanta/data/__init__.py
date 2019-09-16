@@ -25,7 +25,7 @@ import uuid
 import warnings
 from collections import defaultdict
 from configparser import RawConfigParser
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, TypeVar, Union, Sequence
 
 import asyncpg
 
@@ -348,7 +348,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return await con.execute(query, *values)
 
     @classmethod
-    async def insert_many(cls, documents: List["BaseDocument"]) -> None:
+    async def insert_many(cls, documents: Sequence["BaseDocument"]) -> None:
         """
             Insert multiple objects at once
         """
@@ -2439,13 +2439,13 @@ class Code(BaseDocument):
             {code_hash:(file_name, provider.__module__, [req])}
     """
 
-    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    resource = Field(field_type=str, required=True, part_of_primary_key=True)
-    version = Field(field_type=int, required=True, part_of_primary_key=True)
-    source_refs = Field(field_type=dict)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    resource: str = Field(field_type=str, required=True, part_of_primary_key=True)
+    version: int = Field(field_type=int, required=True, part_of_primary_key=True)
+    source_refs: Dict[str, Tuple[str, str, List[str]]] = Field(field_type=dict)
 
     @classmethod
-    async def get_version(cls, environment, version, resource):
+    async def get_version(cls, environment: uuid.UUID, version: int, resource: str) -> Optional["Code"]:
         codes = await cls.get_list(environment=environment, version=version, resource=resource)
         if len(codes) == 0:
             return None

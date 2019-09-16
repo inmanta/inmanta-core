@@ -19,7 +19,7 @@ import base64
 import difflib
 import logging
 import os
-from typing import List, cast
+from typing import List, cast, Iterable
 
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
@@ -121,13 +121,19 @@ class FileSlice(protocol.ServerSlice):
         """
             Return which files in the list exist on the server
         """
+        return 200, {"files": self.stat_file_internal(files)}
+
+    def stat_file_internal(self, files: Iterable[str]) -> List[str]:
+        """
+            Return which files in the list exist on the server
+        """
         response: List[str] = []
         for f in files:
             f_path = os.path.join(self.server_slice._server_storage["files"], f)
             if not os.path.exists(f_path):
                 response.append(f)
 
-        return 200, {"files": response}
+        return response
 
     @protocol.handle(methods.diff)
     async def file_diff(self, a: str, b: str) -> Apireturn:
