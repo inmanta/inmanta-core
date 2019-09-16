@@ -221,7 +221,7 @@ class AgentCache(object):
             :param forVersion: whether to use the version attribute to attach this value to the resource
 
         """
-        acceptable = set(["resource"])
+        acceptable = {"resource"}
         if for_version:
             acceptable.add("version")
         args = {k: v for k, v in kwargs.items() if k in acceptable and k not in ignore}

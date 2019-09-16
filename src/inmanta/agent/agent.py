@@ -211,7 +211,9 @@ class ResourceAction(object):
             resource.resource_id.resource_str() for resource, result in zip(self.dependencies, results) if not result.success
         ]
 
-    async def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> None:
+    async def execute(
+        self, dummy: "ResourceAction", generation: "Dict[ResourceIdStr, ResourceAction]", cache: AgentCache
+    ) -> None:
         self.logger.log(const.LogLevel.TRACE.value, "Entering %s %s", self.gid, self.resource)
         cache.open_version(self.resource.id.get_version())
 

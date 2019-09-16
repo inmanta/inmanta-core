@@ -29,7 +29,7 @@
     ------------
     @command annotation to register new command
 """
-
+import argparse
 import asyncio
 import json
 import logging
@@ -43,6 +43,7 @@ import traceback
 from argparse import ArgumentParser
 from asyncio import ensure_future
 from threading import Timer
+from typing import Any, Callable, Coroutine
 
 import colorlog
 import yaml
@@ -64,7 +65,7 @@ LOGGER = logging.getLogger("inmanta")
 
 
 @command("server", help_msg="Start the inmanta server")
-def start_server(options) -> None:
+def start_server(options: argparse.Namespace) -> None:
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
@@ -77,7 +78,7 @@ def start_server(options) -> None:
     ioloop = IOLoop.current()
 
     # handle startup exceptions
-    def _handle_startup_done(fut):
+    def _handle_startup_done(fut: asyncio.Future) -> None:
         if fut.cancelled():
             safe_shutdown(ioloop, ibl.stop)
         else:
@@ -98,7 +99,7 @@ def start_server(options) -> None:
 
 
 @command("agent", help_msg="Start the inmanta agent")
-def start_agent(options) -> None:
+def start_agent(options: argparse.Namespace) -> None:
     from inmanta import agent
 
     a = agent.Agent()
@@ -126,13 +127,13 @@ async def dump_ioloop_running() -> None:
     sys.stdout.flush()
 
 
-def context_dump(ioloop) -> None:
+def context_dump(ioloop: IOLoop) -> None:
     dump_threads()
     if hasattr(asyncio, "all_tasks"):
         ioloop.add_callback_from_signal(dump_ioloop_running)
 
 
-def setup_signal_handlers(shutdown_function):
+def setup_signal_handlers(shutdown_function: Callable[[], Coroutine[Any, Any, None]]) -> None:
     """
         Make sure that shutdown_function is called when a SIGTERM or a SIGINT interrupt occurs.
 
@@ -164,7 +165,7 @@ def setup_signal_handlers(shutdown_function):
     signal.signal(signal.SIGUSR1, handle_signal_dump)
 
 
-def safe_shutdown(ioloop, shutdown_function):
+def safe_shutdown(ioloop: IOLoop, shutdown_function: Callable[[], None]) -> None:
     def hard_exit() -> None:
         context_dump(ioloop)
         sys.stdout.flush()
@@ -180,7 +181,7 @@ def safe_shutdown(ioloop, shutdown_function):
     ioloop.add_callback(safe_shutdown_wrapper, shutdown_function)
 
 
-async def safe_shutdown_wrapper(shutdown_function) -> None:
+async def safe_shutdown_wrapper(shutdown_function: Callable[[], Coroutine[Any, Any, None]]) -> None:
     """
         Wait 10 seconds to gracefully shutdown the instance.
         Afterwards stop the IOLoop
@@ -221,7 +222,7 @@ def compiler_config(parser: ArgumentParser) -> None:
 @command(
     "compile", help_msg="Compile the project to a configuration model", parser_config=compiler_config, require_project=True
 )
-def compile_project(options):
+def compile_project(options: argparse.Namespace):
     if options.environment is not None:
         Config.set("config", "environment", options.environment)
 
@@ -260,7 +261,7 @@ def compile_project(options):
 
 
 @command("list-commands", help_msg="Print out an overview of all commands")
-def list_commands(options) -> None:
+def list_commands(options: argparse.Namespace) -> None:
     print("The following commands are available:")
     for cmd, info in Commander.commands().items():
         print(" %s: %s" % (cmd, info["help"]))
@@ -271,7 +272,7 @@ def help_parser_config(parser: ArgumentParser) -> None:
 
 
 @command("help", help_msg="show a help message and exit", parser_config=help_parser_config)
-def help_command(options):
+def help_command(options: argparse.Namespace):
     if options.subcommand is None:
         cmd_parser().print_help()
     else:
@@ -287,13 +288,13 @@ def help_command(options):
     parser_config=moduletool.ModuleTool.modules_parser_config,
     aliases=["module"],
 )
-def modules(options) -> None:
+def modules(options: argparse.Namespace) -> None:
     tool = moduletool.ModuleTool()
     tool.execute(options.cmd, options)
 
 
 @command("project", help_msg="Subcommand to manage the project", parser_config=moduletool.ProjectTool.parser_config)
-def project(options) -> None:
+def project(options: argparse.Namespace) -> None:
     tool = moduletool.ProjectTool()
     tool.execute(options.cmd, options)
 
@@ -312,7 +313,7 @@ def deploy_parser_config(parser: ArgumentParser) -> None:
 
 
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
-def deploy(options) -> None:
+def deploy(options: argparse.Namespace) -> None:
     module.Project.get(options.main_file)
     from inmanta import deploy
 
@@ -385,7 +386,7 @@ def export_parser_config(parser: ArgumentParser) -> None:
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
-def export(options) -> None:
+def export(options: argparse.Namespace) -> None:
     if options.environment is not None:
         Config.set("config", "environment", options.environment)
 

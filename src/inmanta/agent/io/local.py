@@ -42,7 +42,7 @@ except ImportError:
 
 # This code needs to stay Py2 compatible without any external libs
 if False:
-    from typing import Optional, Dict
+    from typing import Optional, Dict, Tuple, Union, List
 
 
 class IOBase(object):
@@ -113,6 +113,7 @@ class BashIO(IOBase):
         return False
 
     def hash_file(self, path):
+        # type: (str) -> str
         cwd = os.curdir
         if not os.path.exists(cwd):
             # When this code is executed with nosetests, curdir does not exist anymore
@@ -127,6 +128,7 @@ class BashIO(IOBase):
         return data[0].decode("utf-8").strip().split(" ")[0]
 
     def read(self, path):
+        # type: (str) -> str
         """
             Read in the file in path and return its content as string (UTF-8)
         """
@@ -144,6 +146,7 @@ class BashIO(IOBase):
         return data[0].decode("utf-8")
 
     def read_binary(self, path):
+        # type: (str) -> bytes
         """
             Return the content of the file
         """
@@ -156,6 +159,7 @@ class BashIO(IOBase):
         return data[0]
 
     def run(self, command, arguments=[], env=None, cwd=None, timeout=None):
+        # type: (str, List[str], Dict[str,str], str, int) -> Tuple[str, str, int]
         """
             Execute a command with the given argument and return the result
         """
@@ -177,6 +181,7 @@ class BashIO(IOBase):
         return (data[0].strip().decode("utf-8"), data[1].strip().decode("utf-8"), result.returncode)
 
     def file_exists(self, path):
+        # type: (str) -> bool
         """
             Check if a given file exists
         """
@@ -189,6 +194,7 @@ class BashIO(IOBase):
         return True
 
     def readlink(self, path):
+        # type: (str) -> str
         """
             Return the target of the path
         """
@@ -201,6 +207,7 @@ class BashIO(IOBase):
         return data[0].decode("utf-8").strip()
 
     def symlink(self, source, target):
+        # type: (str, str) -> bool
         """
             Symlink source to target
         """
@@ -213,6 +220,7 @@ class BashIO(IOBase):
         return True
 
     def is_symlink(self, path):
+        # type: (str) -> bool
         """
             Is the given path a symlink
         """
@@ -228,6 +236,7 @@ class BashIO(IOBase):
         return False
 
     def file_stat(self, path):
+        # type: (str) -> Dict[str, Union[str, int]]
         """
             Do a statcall on a file
         """
@@ -251,6 +260,7 @@ class BashIO(IOBase):
         return status
 
     def remove(self, path):
+        # type: (str) -> bool
         """
             Remove a file
         """
@@ -263,6 +273,7 @@ class BashIO(IOBase):
         return True
 
     def put(self, path, content):
+        # type: (str, str) -> bool
         """
             Put the given content at the given path in UTF-8
         """
@@ -277,6 +288,7 @@ class BashIO(IOBase):
         return True
 
     def chown(self, path, user=None, group=None):
+        # type: (str, Optional[str], Optional[str]) -> None
         """
             Change the ownership information
         """
@@ -299,6 +311,7 @@ class BashIO(IOBase):
                 raise Exception("Failed to set %s:%s to %s (return code %d)" % (user, group, path, result.returncode))
 
     def chmod(self, path, permissions):
+        # type: (str, str) -> bool
         """
             Change the permissions
         """
@@ -308,6 +321,7 @@ class BashIO(IOBase):
         return result.returncode > 0
 
     def mkdir(self, path):
+        # type: (str) -> bool
         """
             Create a directory
         """
@@ -317,6 +331,7 @@ class BashIO(IOBase):
         return result.returncode > 0
 
     def rmdir(self, path):
+        # type: (type) -> bool
         """
             Remove a directory
         """
@@ -332,6 +347,7 @@ class BashIO(IOBase):
         return result.returncode > 0
 
     def __repr__(self):
+        # type: () -> str
         if self.run_as is None:
             return "BashIO"
 
@@ -339,6 +355,7 @@ class BashIO(IOBase):
             return "BashIO_run_as_%s" % self.run_as
 
     def __str__(self):
+        # type: () -> str
         return repr(self)
 
 
@@ -348,6 +365,7 @@ class LocalIO(IOBase):
     """
 
     def is_remote(self):
+        # type: () -> bool
         """
             Are operation executed remote
 
@@ -357,6 +375,7 @@ class LocalIO(IOBase):
         return False
 
     def hash_file(self, path):
+        # type: (str) -> str
         """
             Return the sha1sum of the file at path
 
@@ -371,6 +390,7 @@ class LocalIO(IOBase):
         return sha1sum.hexdigest()
 
     def read(self, path):
+        # type: (str) -> str
         """
             Read in the file in path and return its content as string
 
@@ -382,6 +402,7 @@ class LocalIO(IOBase):
             return fd.read().decode("utf-8")
 
     def read_binary(self, path):
+        # type: (str) -> bytes
         """
             Read in the file in path and return its content as a bytestring
 
@@ -393,6 +414,7 @@ class LocalIO(IOBase):
             return fd.read()
 
     def run(self, command, arguments=[], env=None, cwd=None, timeout=None):
+        # type: (str, List[str], Dict[str,str], str, int) -> Tuple[str, str, int]
         """
             Execute a command with the given argument and return the result
 
@@ -427,6 +449,7 @@ class LocalIO(IOBase):
         return (data[0].strip().decode("utf-8"), data[1].strip().decode("utf-8"), result.returncode)
 
     def file_exists(self, path):
+        # type: (str) -> bool
         """
             Check if a given file exists
 
@@ -437,6 +460,7 @@ class LocalIO(IOBase):
         return os.path.exists(path)
 
     def readlink(self, path):
+        # type: (str) -> str
         """
             Return the target of the path
 
@@ -447,6 +471,7 @@ class LocalIO(IOBase):
         return os.readlink(path)
 
     def symlink(self, source, target):
+        # type: (str, str) -> None
         """
             Symlink source to target
 
@@ -456,6 +481,7 @@ class LocalIO(IOBase):
         return os.symlink(source, target)
 
     def is_symlink(self, path):
+        # type: (str) -> bool
         """
             Is the given path a symlink
 
@@ -466,6 +492,7 @@ class LocalIO(IOBase):
         return os.path.islink(path)
 
     def file_stat(self, path):
+        # type: (str) -> Dict[str, Union[int, str]]
         """
             Do a stat call on a file
 
@@ -482,6 +509,7 @@ class LocalIO(IOBase):
         return status
 
     def remove(self, path):
+        # type: (str) -> bool
         """
             Remove a file
 
@@ -490,6 +518,7 @@ class LocalIO(IOBase):
         return os.remove(path)
 
     def put(self, path, content):
+        # type: (str, str) -> None
         """
             Put the given content at the given path
 
@@ -500,6 +529,7 @@ class LocalIO(IOBase):
             fd.write(content)
 
     def _get_gid(self, name):
+        # type: (str) -> Optional[int]
         """Returns a gid, given a group name."""
         # Stolen from the python3 shutil lib
         if getgrnam is None or name is None:
@@ -513,6 +543,7 @@ class LocalIO(IOBase):
         return None
 
     def _get_uid(self, name):
+        # type: (str) -> Optional[int]
         """Returns an uid, given a user name."""
         # Stolen from the python3 shutil lib
         if getpwnam is None or name is None:
@@ -526,6 +557,7 @@ class LocalIO(IOBase):
         return None
 
     def chown(self, path, user=None, group=None):
+        # type: (str, Optional[str], Optional[str]) -> None
         """
             Change the ownership of a file.
 
@@ -559,6 +591,7 @@ class LocalIO(IOBase):
         os.chown(path, _user, _group)
 
     def chmod(self, path, permissions):
+        # type: (str, str) -> None
         """
             Change the permissions
 
@@ -568,6 +601,7 @@ class LocalIO(IOBase):
         os.chmod(path, int(permissions, 8))
 
     def mkdir(self, path):
+        # type: (str) -> None
         """
             Create a directory
 
@@ -576,6 +610,7 @@ class LocalIO(IOBase):
         os.mkdir(path)
 
     def rmdir(self, path):
+        # type: (str) -> None
         """
             Remove a directory
 

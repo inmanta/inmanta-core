@@ -68,13 +68,13 @@ class resource(object):  # noqa: N801
                       ``host.name``
     """
 
-    _resources: Dict[str, Tuple[Type["Resource"], Dict[str, str]]] = {}
+    _resources: Dict[str, Tuple[Type[T], Dict[str, str]]] = {}
 
     def __init__(self, name: str, id_attribute: str, agent: str):
         self._cls_name = name
         self._options = {"agent": agent, "name": id_attribute}
 
-    def __call__(self, cls: Type["T"]) -> Type["T"]:
+    def __call__(self, cls: Type[T]) -> Type[T]:
         """
         The wrapping
         """
@@ -98,7 +98,7 @@ class resource(object):  # noqa: N801
         return cls._resources.keys()
 
     @classmethod
-    def get_class(cls, name: str) -> Tuple[Optional[Type["Resource"]], Optional[Dict[str, str]]]:
+    def get_class(cls, name: str) -> Tuple[Optional[Type[T]], Optional[Dict[str, str]]]:
         """
         Get the class definition for the given entity.
         """
@@ -108,7 +108,7 @@ class resource(object):  # noqa: N801
         return (None, None)
 
     @classmethod
-    def get_resources(cls) -> Iterator[Tuple[str, Type["Resource"]]]:
+    def get_resources(cls) -> Iterator[Tuple[str, Type[T]]]:
         """ Return an iterator over resource type, resource definition
         """
         return (
@@ -225,7 +225,7 @@ class Resource(metaclass=ResourceMeta):
         """
         for res in resources.values():
             final_requires: Set["Resource"] = set()
-            initial_requires: List[runtime.Instance] = [x for x in res.requires]
+            initial_requires: List[runtime.Instance] = [x for x in res.model.requires]
 
             for r in initial_requires:
                 if r in resources:
@@ -245,10 +245,11 @@ class Resource(metaclass=ResourceMeta):
                         initial_requires,
                     )
 
-            res.requires = final_requires
+            res.resource_requires = final_requires
+            res.requires = [x.id for x in final_requires]
 
     @classmethod
-    def object_to_id(cls, model_object: runtime.Instance, entity_name: str, attribute_name: str, agent_attribute: str) -> "Id":
+    def object_to_id(cls, model_object: DynamicProxy, entity_name: str, attribute_name: str, agent_attribute: str) -> "Id":
         """
         Convert the given object to a textual id
 
@@ -308,25 +309,23 @@ class Resource(metaclass=ResourceMeta):
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))
 
     @classmethod
-    def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: DynamicProxy) -> "Resource":
+    def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: DynamicProxy) -> T:
         """
         Build a resource from a given configuration model entity
         """
-        cls, options = resource.get_class(entity_name)
+        resource_cls, options = resource.get_class(entity_name)
 
-        if cls is None or options is None:
+        if resource_cls is None or options is None:
             raise TypeError("No resource class registered for entity %s" % entity_name)
 
         # build the id of the object
-        obj_id = cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
+        obj_id = resource_cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
 
         # map all fields
-        fields = {field: cls.map_field(exporter, entity_name, field, model_object) for field in cls.fields}
+        fields = {field: resource_cls.map_field(exporter, entity_name, field, model_object) for field in resource_cls.fields}
 
-        obj = cls(obj_id)
+        obj = resource_cls(obj_id)
         obj.populate(fields)
-        obj.requires = getattr(model_object, "requires")
-
         obj.model = model_object
 
         return obj
@@ -360,7 +359,8 @@ class Resource(metaclass=ResourceMeta):
     def __init__(self, _id: "Id") -> None:
         self.id = _id
         self.version = 0
-        self.requires: Set[runtime.Instance] = set()
+        self.requires: Set[Id] = set()
+        self.resource_requires: List[Resource] = set()
         self.unknowns: Set[str] = set()
 
         if not hasattr(self.__class__, "fields"):
@@ -422,7 +422,7 @@ class Resource(metaclass=ResourceMeta):
 
         dictionary["requires"] = [str(x) for x in self.requires]
         dictionary["version"] = self.version
-        dictionary["id"] = str(self.id)
+        dictionary["id"] = self.id.resource_version_str()
 
         return dictionary
 

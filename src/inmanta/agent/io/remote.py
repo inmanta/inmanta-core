@@ -19,7 +19,7 @@
 import logging
 import threading
 import time
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 from execnet import gateway_bootstrap, multi
 
@@ -138,14 +138,14 @@ class SshIO(local.IOBase):
 
         return result
 
-    def read_binary(self, path: str):
+    def read_binary(self, path: str) -> bytes:
         # remoting can turn this into a string
         result = self._execute("read_binary", path)
         if isinstance(result, str):
             return result.encode()
         return result
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Callable:
         """
             Proxy a function call to the local version on the other side of the channel.
         """
