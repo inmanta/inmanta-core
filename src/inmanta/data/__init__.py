@@ -575,8 +575,8 @@ class Project(BaseDocument):
         :param name: The name of the configuration project.
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name = Field(field_type=str, required=True, unique=True)
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    name: str = Field(field_type=str, required=True, unique=True)
 
 
 def convert_boolean(value: Any) -> bool:
@@ -903,7 +903,7 @@ class Environment(BaseDocument):
         else:
             await self.set(key, self._settings[key].default)
 
-    async def delete_cascade(self, only_content=False) -> None:
+    async def delete_cascade(self, only_content: bool = False) -> None:
         if only_content:
             await Agent.delete_all(environment=self.id)
 

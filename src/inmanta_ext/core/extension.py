@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.server import agentmanager, compilerservice, server, formslice
+from inmanta.server import agentmanager, compilerservice, formslice, projectslice, server
 from inmanta.server.extensions import ApplicationContext
 
 
@@ -26,3 +26,4 @@ def setup(application: ApplicationContext) -> None:
     application.register_slice(server.DatabaseSlice())
     application.register_slice(compilerservice.CompilerService())
     application.register_slice(formslice.FormSlice())
+    application.register_slice(projectslice.ProjectEnvironmentSlice())

@@ -25,7 +25,7 @@ from inmanta.ast import type
 from inmanta.protocol import methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import NotFound
-from inmanta.server import SLICE_FORM, SLICE_SERVER, protocol
+from inmanta.server import SLICE_DATABASE, SLICE_FORM, SLICE_SERVER, protocol
 from inmanta.server.server import Server
 from inmanta.types import Apireturn, ArgumentTypes, JsonType
 
@@ -40,19 +40,8 @@ class FormSlice(protocol.ServerSlice):
     def __init__(self) -> None:
         super(FormSlice, self).__init__(SLICE_FORM)
 
-    async def start(self) -> None:
-        pass
-
-    async def stop(self) -> None:
-        pass
-
     def get_dependencies(self) -> List[str]:
-        return []
-
-    async def get_status(self) -> Dict[str, ArgumentTypes]:
-        """ Get the status of the database connection
-        """
-        return {}
+        return [SLICE_SERVER, SLICE_DATABASE]
 
     async def prestart(self, server: protocol.Server) -> None:
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))

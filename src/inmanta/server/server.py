@@ -15,14 +15,11 @@
 
     Contact: code@inmanta.com
 """
-import asyncio
 import base64
 import datetime
 import difflib
 import logging
 import os
-import shutil
-import time
 import uuid
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
@@ -35,7 +32,7 @@ from tornado import locks
 from inmanta import const, data
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
 from inmanta.data.model import ExtensionStatus, SliceStatus, StatusResponse
-from inmanta.protocol import encode_token, exceptions, methods
+from inmanta.protocol import exceptions, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.reporter import InfluxReporter
@@ -249,11 +246,11 @@ class Server(protocol.ServerSlice):
         try:
             while True:
                 env, logger = self._resource_action_loggers.popitem()
-                self._close_resource_action_logger(env, logger)
+                self.close_resource_action_logger(env, logger)
         except KeyError:
             pass
 
-    def _close_resource_action_logger(self, env: uuid.UUID, logger: logging.Logger = None) -> None:
+    def close_resource_action_logger(self, env: uuid.UUID, logger: logging.Logger = None) -> None:
         """Close the given logger for the given env.
         :param env: The environment to close the logger for
         :param logger: The logger to close, if the logger is none it is retrieved
@@ -1610,164 +1607,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200
 
-    # Project handlers
-    @protocol.handle(methods.create_project)
-    async def create_project(self, name: str, project_id: uuid.UUID) -> Apireturn:
-        if project_id is None:
-            project_id = uuid.uuid4()
-        try:
-            project = data.Project(id=project_id, name=name)
-            await project.insert()
-        except asyncpg.exceptions.UniqueViolationError:
-            return 500, {"message": "A project with name %s already exists." % name}
-
-        return 200, {"project": project}
-
-    @protocol.handle(methods.delete_project, project_id="id")
-    async def delete_project(self, project_id: uuid.UUID) -> Apireturn:
-        project = await data.Project.get_by_id(project_id)
-        if project is None:
-            return 404, {"message": "The project with given id does not exist."}
-
-        environments = await data.Environment.get_list(project=project.id)
-        for env in environments:
-            await asyncio.gather(self.agentmanager.stop_agents(env), env.delete_cascade())
-            self._close_resource_action_logger(env)
-
-        await project.delete()
-
-        return 200, {}
-
-    @protocol.handle(methods.modify_project, project_id="id")
-    async def modify_project(self, project_id: uuid.UUID, name: str) -> Apireturn:
-        try:
-            project = await data.Project.get_by_id(project_id)
-            if project is None:
-                return 404, {"message": "The project with given id does not exist."}
-
-            await project.update_fields(name=name)
-
-            return 200, {"project": project}
-
-        except asyncpg.exceptions.UniqueViolationError:
-            return 500, {"message": "A project with name %s already exists." % name}
-
-    @protocol.handle(methods.list_projects)
-    async def list_projects(self) -> Apireturn:
-        projects = await data.Project.get_list()
-        return 200, {"projects": projects}
-
-    @protocol.handle(methods.get_project, project_id="id")
-    async def get_project(self, project_id: uuid.UUID) -> Apireturn:
-        try:
-            project = await data.Project.get_by_id(project_id)
-            environments = await data.Environment.get_list(project=project_id)
-
-            if project is None:
-                return 404, {"message": "The project with given id does not exist."}
-
-            project_dict = project.to_dict()
-            project_dict["environments"] = [e.id for e in environments]
-
-            return 200, {"project": project_dict}
-        except ValueError:
-            return 404, {"message": "The project with given id does not exist."}
-
-        return 500
-
-    # Environment handlers
-    @protocol.handle(methods.create_environment)
-    async def create_environment(
-        self, project_id: uuid.UUID, name: str, repository: str, branch: str, environment_id: uuid.UUID
-    ) -> Apireturn:
-        if environment_id is None:
-            environment_id = uuid.uuid4()
-
-        if (repository is None and branch is not None) or (repository is not None and branch is None):
-            return 500, {"message": "Repository and branch should be set together."}
-
-        # fetch the project first
-        project = await data.Project.get_by_id(project_id)
-        if project is None:
-            return 500, {"message": "The project id for the environment does not exist."}
-
-        # check if an environment with this name is already defined in this project
-        envs = await data.Environment.get_list(project=project_id, name=name)
-        if len(envs) > 0:
-            return (
-                500,
-                {"message": "Project %s (id=%s) already has an environment with name %s" % (project.name, project.id, name)},
-            )
-
-        env = data.Environment(id=environment_id, name=name, project=project_id, repo_url=repository, repo_branch=branch)
-        await env.insert()
-        return 200, {"environment": env}
-
-    @protocol.handle(methods.modify_environment, environment_id="id")
-    async def modify_environment(self, environment_id: uuid.UUID, name: str, repository: str, branch: str) -> Apireturn:
-        env = await data.Environment.get_by_id(environment_id)
-        if env is None:
-            return 404, {"message": "The environment id does not exist."}
-
-        # check if an environment with this name is already defined in this project
-        envs = await data.Environment.get_list(project=env.project, name=name)
-        if len(envs) > 0 and envs[0].id != environment_id:
-            return 500, {"message": "Project with id=%s already has an environment with name %s" % (env.project_id, name)}
-
-        fields = {"name": name}
-        if repository is not None:
-            fields["repo_url"] = repository
-
-        if branch is not None:
-            fields["repo_branch"] = branch
-
-        await env.update_fields(**fields)
-        return 200, {"environment": env}
-
-    @protocol.handle(methods.get_environment, environment_id="id")
-    async def get_environment(
-        self, environment_id: uuid.UUID, versions: Optional[int] = None, resources: Optional[int] = None
-    ) -> Apireturn:
-        versions = 0 if versions is None else int(versions)
-        resources = 0 if resources is None else int(resources)
-
-        env = await data.Environment.get_by_id(environment_id)
-
-        if env is None:
-            return 404, {"message": "The environment id does not exist."}
-
-        env_dict = env.to_dict()
-
-        if versions > 0:
-            env_dict["versions"] = await data.ConfigurationModel.get_versions(environment_id, limit=versions)
-
-        if resources > 0:
-            env_dict["resources"] = await data.Resource.get_resources_report(environment=environment_id)
-
-        return 200, {"environment": env_dict}
-
-    @protocol.handle(methods.list_environments)
-    async def list_environments(self) -> Apireturn:
-        environments = await data.Environment.get_list()
-        dicts = []
-        for env in environments:
-            env_dict = env.to_dict()
-            dicts.append(env_dict)
-
-        return 200, {"environments": dicts}  # @UndefinedVariable
-
-    @protocol.handle(methods.delete_environment, environment_id="id")
-    async def delete_environment(self, environment_id: uuid.UUID) -> Apireturn:
-        env = await data.Environment.get_by_id(environment_id)
-        if env is None:
-            return 404, {"message": "The environment with given id does not exist."}
-
-        await asyncio.gather(self.agentmanager.stop_agents(env), env.delete_cascade())
-
-        self._close_resource_action_logger(environment_id)
-
-        return 200
-
     @protocol.handle(methods.list_settings, env="tid")
     async def list_settings(self, env: data.Environment) -> Apireturn:
         return 200, {"settings": env.settings, "metadata": data.Environment._settings}
@@ -1841,35 +1680,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             env=env, force_update=update_repo, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
         )
         return warnings
-
-    @protocol.handle(methods.decomission_environment, env="id")
-    async def decomission_environment(self, env: data.Environment, metadata: JsonType) -> Apireturn:
-        version = int(time.time())
-        if metadata is None:
-            metadata = {"message": "Decommission of environment", "type": "api"}
-        result = await self.put_version(env, version, [], {}, [], {const.EXPORT_META_DATA: metadata})
-        return result, {"version": version}
-
-    @protocol.handle(methods.clear_environment, env="id")
-    async def clear_environment(self, env: data.Environment) -> Apireturn:
-        """
-            Clear the environment
-        """
-        await self.agentmanager.stop_agents(env)
-        await env.delete_cascade(only_content=True)
-
-        project_dir = os.path.join(self._server_storage["environments"], str(env.id))
-        if os.path.exists(project_dir):
-            shutil.rmtree(project_dir)
-
-        return 200
-
-    @protocol.handle(methods.create_token, env="tid")
-    async def create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> Apireturn:
-        """
-            Create a new auth token for this environment
-        """
-        return 200, {"token": encode_token(client_types, str(env.id), idempotent)}
 
     @protocol.handle(methods.get_server_status)
     async def get_server_status(self) -> StatusResponse:
