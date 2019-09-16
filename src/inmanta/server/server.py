@@ -15,9 +15,7 @@
 
     Contact: code@inmanta.com
 """
-import base64
 import datetime
-import difflib
 import logging
 import os
 import uuid
@@ -47,7 +45,7 @@ from inmanta.server import (
 )
 from inmanta.server import config as opt
 from inmanta.server import protocol
-from inmanta.types import Apireturn, ArgumentTypes, JsonType, PrimitiveTypes, ReturnTupple, Warnings
+from inmanta.types import Apireturn, ArgumentTypes, JsonType, PrimitiveTypes, Warnings
 from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
@@ -567,142 +565,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 "now": datetime.datetime.now().isoformat(timespec="microseconds"),
             },
         )
-
-    @protocol.handle(methods.upload_file, file_hash="id")
-    async def upload_file(self, file_hash: str, content: str) -> Apireturn:
-        content = base64.b64decode(content)
-        return self.upload_file_internal(file_hash, content)
-
-    def upload_file_internal(self, file_hash, content) -> Apireturn:
-        file_name = os.path.join(self._server_storage["files"], file_hash)
-
-        if os.path.exists(file_name):
-            return 500, {"message": "A file with this id already exists."}
-
-        if hash_file(content) != file_hash:
-            return 400, {"message": "The hash does not match the content"}
-
-        with open(file_name, "wb+") as fd:
-            fd.write(content)
-
-        return 200
-
-    @protocol.handle(methods.stat_file, file_hash="id")
-    async def stat_file(self, file_hash: str) -> Apireturn:
-        file_name = os.path.join(self._server_storage["files"], file_hash)
-
-        if os.path.exists(file_name):
-            return 200
-        else:
-            return 404
-
-    @protocol.handle(methods.get_file, file_hash="id")
-    async def get_file(self, file_hash: str) -> ReturnTupple:
-        ret, content = self.get_file_internal(file_hash)
-        if ret == 200:
-            return 200, {"content": base64.b64encode(content).decode("ascii")}
-        else:
-            return ret, content
-
-    def get_file_internal(self, file_hash: str) -> ReturnTupple:
-        """get_file, but on return code 200, content is not encoded """
-
-        file_name = os.path.join(self._server_storage["files"], file_hash)
-
-        if not os.path.exists(file_name):
-            return 404, None
-
-        else:
-            with open(file_name, "rb") as fd:
-                content = fd.read()
-                actualhash = hash_file(content)
-                if actualhash != file_hash:
-                    if opt.server_delete_currupt_files.get():
-                        LOGGER.error(
-                            "File corrupt, expected hash %s but found %s at %s, Deleting file"
-                            % (file_hash, actualhash, file_name)
-                        )
-                        try:
-                            os.remove(file_name)
-                        except OSError:
-                            LOGGER.exception("Failed to delete file %s" % (file_name))
-                            return (
-                                500,
-                                {
-                                    "message": (
-                                        "File corrupt, expected hash %s but found %s,"
-                                        " Failed to delete file, please contact the server administrator"
-                                    )
-                                    % (file_hash, actualhash)
-                                },
-                            )
-                        return (
-                            500,
-                            {
-                                "message": (
-                                    "File corrupt, expected hash %s but found %s, "
-                                    "Deleting file, please re-upload the corrupt file"
-                                )
-                                % (file_hash, actualhash)
-                            },
-                        )
-                    else:
-                        LOGGER.error("File corrupt, expected hash %s but found %s at %s" % (file_hash, actualhash, file_name))
-                        return (
-                            500,
-                            {
-                                "message": (
-                                    "File corrupt, expected hash %s but found %s," " please contact the server administrator"
-                                )
-                                % (file_hash, actualhash)
-                            },
-                        )
-                return 200, content
-
-    @protocol.handle(methods.stat_files)
-    async def stat_files(self, files: List[str]) -> ReturnTupple:
-        """
-            Return which files in the list exist on the server
-        """
-        response: List[str] = []
-        for f in files:
-            f_path = os.path.join(self._server_storage["files"], f)
-            if not os.path.exists(f_path):
-                response.append(f)
-
-        return 200, {"files": response}
-
-    @protocol.handle(methods.diff)
-    async def file_diff(self, a: str, b: str) -> Apireturn:
-        """
-            Diff the two files identified with the two hashes
-        """
-        if a == "" or a == "0":
-            a_lines: List[str] = []
-        else:
-            a_path = os.path.join(self._server_storage["files"], a)
-            if not os.path.exists(a_path):
-                return 404
-
-            with open(a_path, "r") as fd:
-                a_lines = fd.readlines()
-
-        if b == "" or b == "0":
-            b_lines: List[str] = []
-        else:
-            b_path = os.path.join(self._server_storage["files"], b)
-            if not os.path.exists(b_path):
-                return 404
-
-            with open(b_path, "r") as fd:
-                b_lines = fd.readlines()
-
-        try:
-            diff = difflib.unified_diff(a_lines, b_lines, fromfile=a, tofile=b)
-        except FileNotFoundError:
-            return 404
-
-        return 200, {"diff": list(diff)}
 
     @protocol.handle(methods.get_resource, resource_id="id", env="tid")
     async def get_resource(
