@@ -31,7 +31,6 @@ import asyncpg
 
 import inmanta.db.versions
 from inmanta import const, util
-from inmanta.config import Config
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
 from inmanta.data import schema
 from inmanta.data.model import CompileRun, ResourceIdStr, ResourceVersionIdStr
@@ -2224,7 +2223,7 @@ class ConfigurationModel(BaseDocument):
         return result
 
     @classmethod
-    async def get_versions(cls, environment: uuid.UUID, start:int=0, limit:int=DBLIMIT) -> List["ConfigurationModel"]:
+    async def get_versions(cls, environment: uuid.UUID, start: int = 0, limit: int = DBLIMIT) -> List["ConfigurationModel"]:
         """
             Get all versions for an environment ordered descending
         """

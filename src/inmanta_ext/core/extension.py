@@ -16,8 +16,17 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.server import agentmanager, codeslice, compilerservice, fileslice, formslice, metricslice, projectslice, server, \
-    paramslice
+from inmanta.server import (
+    agentmanager,
+    codeslice,
+    compilerservice,
+    fileslice,
+    formslice,
+    metricslice,
+    paramslice,
+    projectslice,
+    server,
+)
 from inmanta.server.extensions import ApplicationContext
 
 

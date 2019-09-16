@@ -33,7 +33,7 @@ from inmanta.data import ResourceVersionIdStr
 from inmanta.data.model import ExtensionStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, methods
 from inmanta.protocol.common import attach_warnings
-from inmanta.protocol.exceptions import BadRequest
+from inmanta.protocol.exceptions import BadRequest, ServerError
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -504,7 +504,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @protocol.handle(methods.list_versions, env="tid")
     async def list_version(self, env: data.Environment, start: Optional[int] = None, limit: Optional[int] = None) -> Apireturn:
         if (start is None and limit is not None) or (limit is None and start is not None):
-            return 500, {"message": "Start and limit should always be set together."}
+            raise ServerError("Start and limit should always be set together.")
 
         if start is None:
             start = 0
