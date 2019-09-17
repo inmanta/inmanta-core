@@ -60,7 +60,7 @@ class InmantaBootloader(object):
     """ The inmanta bootloader is responsible for:
         - discovering extensions
         - loading extensions
-        - loading core and extension services
+        - loading core and extension slices
         - starting the server and its services in the correct order
     """
 
