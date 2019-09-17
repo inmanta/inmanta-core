@@ -273,7 +273,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         return []
 
     def get_depended_by(self) -> List[str]:
-        """List of names of services that must be started after this one."""
+        """List of names of slices that must be started after this one."""
         return []
 
     # internal API towards extension framework
