@@ -536,15 +536,11 @@ class AgentManager(ServerSlice, SessionListener):
 
         privatestatedir: str = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
 
-        agent_deploy_splay: int
-        agent_deploy_splay = await env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
-        agent_deploy_interval: int
-        agent_deploy_interval = await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL)
+        agent_deploy_splay: int = await env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
+        agent_deploy_interval: int = await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL)
 
-        agent_repair_splay: int
-        agent_repair_splay = await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME)
-        agent_repair_interval: int
-        agent_repair_interval = await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL)
+        agent_repair_splay: int = await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME)
+        agent_repair_interval: int = await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL)
 
         # generate config file
         config = """[config]

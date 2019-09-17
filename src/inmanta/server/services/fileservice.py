@@ -33,13 +33,13 @@ from inmanta.util import hash_file
 LOGGER = logging.getLogger(__name__)
 
 
-class FileSlice(protocol.ServerSlice):
+class FileService(protocol.ServerSlice):
     """Slice serving and managing files"""
 
     server_slice: Server
 
     def __init__(self) -> None:
-        super(FileSlice, self).__init__(SLICE_FILE)
+        super(FileService, self).__init__(SLICE_FILE)
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER]

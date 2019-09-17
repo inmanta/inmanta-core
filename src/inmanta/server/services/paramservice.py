@@ -32,14 +32,14 @@ from inmanta.types import Apireturn, JsonType
 LOGGER = logging.getLogger(__name__)
 
 
-class ParameterSlice(protocol.ServerSlice):
+class ParameterService(protocol.ServerSlice):
     """Slice for parameter management"""
 
     server_slice: Server
     agentmanager: AgentManager
 
     def __init__(self) -> None:
-        super(ParameterSlice, self).__init__(SLICE_PARAM)
+        super(ParameterService, self).__init__(SLICE_PARAM)
 
         self._fact_expire = opt.server_fact_expire.get()
         self._fact_renew = opt.server_fact_renew.get()

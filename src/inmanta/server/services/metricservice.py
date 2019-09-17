@@ -26,11 +26,11 @@ from inmanta.server import protocol
 LOGGER = logging.getLogger(__name__)
 
 
-class MetricsSlice(protocol.ServerSlice):
+class MetricsService(protocol.ServerSlice):
     """Slice managing metrics collector"""
 
     def __init__(self) -> None:
-        super(MetricsSlice, self).__init__(SLICE_METRICS)
+        super(MetricsService, self).__init__(SLICE_METRICS)
         self._influx_db_reporter: Optional[InfluxReporter] = None
 
     async def start(self) -> None:

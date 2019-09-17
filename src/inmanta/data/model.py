@@ -48,7 +48,7 @@ class ExtensionStatus(BaseModel):
 
 class SliceStatus(BaseModel):
     """
-        Status response for slices loaded in the the server
+        Status response for services loaded in the the server
     """
 
     name: str

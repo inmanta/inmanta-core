@@ -29,22 +29,34 @@ from inmanta import const, data
 from inmanta.protocol import encode_token, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import NotFound, ServerError
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PROJECT_ENV, SLICE_SERVER, protocol
+from inmanta.server import (
+    SLICE_AGENT_MANAGER,
+    SLICE_DATABASE,
+    SLICE_ENVIRONMENT,
+    SLICE_ORCHESTRATION,
+    SLICE_RESOURCE,
+    SLICE_SERVER,
+    protocol,
+)
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.server import Server
+from inmanta.server.services.orchestrationservice import OrchestrationService
+from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
 
 
-class ProjectEnvironmentSlice(protocol.ServerSlice):
+class EnvironmentService(protocol.ServerSlice):
     """Slice with project and environment management"""
 
     server_slice: Server
     agentmanager: AgentManager
+    orchestration_service: OrchestrationService
+    resource_version: ResourceService
 
     def __init__(self) -> None:
-        super(ProjectEnvironmentSlice, self).__init__(SLICE_PROJECT_ENV)
+        super(EnvironmentService, self).__init__(SLICE_ENVIRONMENT)
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER, SLICE_DATABASE, SLICE_AGENT_MANAGER]
@@ -52,6 +64,8 @@ class ProjectEnvironmentSlice(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
         self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
+        self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
+        self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
     # Project handlers
     @protocol.handle(methods.create_project)
@@ -75,7 +89,7 @@ class ProjectEnvironmentSlice(protocol.ServerSlice):
         environments = await data.Environment.get_list(project=project.id)
         for env in environments:
             await asyncio.gather(self.agentmanager.stop_agents(env), env.delete_cascade())
-            self.server_slice.close_resource_action_logger(env.id)
+            self.resource_service.close_resource_action_logger(env.id)
 
         await project.delete()
 
@@ -200,14 +214,14 @@ class ProjectEnvironmentSlice(protocol.ServerSlice):
 
         await asyncio.gather(self.agentmanager.stop_agents(env), env.delete_cascade())
 
-        self.server_slice.close_resource_action_logger(environment_id)
+        self.resource_service.close_resource_action_logger(environment_id)
 
     @protocol.handle(methods.decomission_environment, env="id")
     async def decomission_environment(self, env: data.Environment, metadata: JsonType) -> Apireturn:
         version = int(time.time())
         if metadata is None:
             metadata = {"message": "Decommission of environment", "type": "api"}
-        result: int = await self.server_slice.put_version(env, version, [], {}, [], {const.EXPORT_META_DATA: metadata})
+        result: int = await self.orchestration_service.put_version(env, version, [], {}, [], {const.EXPORT_META_DATA: metadata})
         return result, {"version": version}
 
     @protocol.handle(methods.clear_environment, env="id")
@@ -265,7 +279,7 @@ class ProjectEnvironmentSlice(protocol.ServerSlice):
             value = await env.get(key)
             return 200, {"value": value, "metadata": data.Environment._settings}
         except KeyError:
-            return 404
+            raise NotFound()
 
     @protocol.handle(methods.delete_setting, env="tid", key="id")
     async def delete_setting(self, env: data.Environment, key: str) -> Apireturn:
@@ -274,4 +288,4 @@ class ProjectEnvironmentSlice(protocol.ServerSlice):
             warnings = await self._setting_change(env, key)
             return attach_warnings(200, None, warnings)
         except KeyError:
-            return 404
+            raise NotFound()

@@ -32,13 +32,13 @@ from inmanta.types import Apireturn, JsonType
 LOGGER = logging.getLogger(__name__)
 
 
-class FormSlice(protocol.ServerSlice):
+class FormService(protocol.ServerSlice):
     """Slice for form functionality"""
 
     server_slice: Server
 
     def __init__(self) -> None:
-        super(FormSlice, self).__init__(SLICE_FORM)
+        super(FormService, self).__init__(SLICE_FORM)
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER, SLICE_DATABASE]

@@ -42,11 +42,11 @@ transport_port = Option("server_rest_transport", "port", 8888, "The port on whic
 #############################
 # Influxdb
 #############################
-influxdb_host = Option("influxdb", "host", "", "Hostname or IP of the influxdb server to send reports to")
+influxdb_host = Option("influxdb", "host", "", "Hostname or IP of the influxdb server to send reports to", is_str)
 influxdb_port = Option("influxdb", "port", 8086, "The port of the influxdb server", is_int)
-influxdb_name = Option("influxdb", "name", "inmanta", "The name of the database on the influxdb server")
-influxdb_username = Option("influxdb", "username", None, "The username to access the database in the influxdb server")
-influxdb_password = Option("influxdb", "password", None, "The password that belong to the influxdb user")
+influxdb_name = Option("influxdb", "name", "inmanta", "The name of the database on the influxdb server", is_str)
+influxdb_username = Option("influxdb", "username", None, "The username to access the database in the influxdb server", is_str)
+influxdb_password = Option("influxdb", "password", None, "The password that belong to the influxdb user", is_str)
 
 influxdb_interval = Option("influxdb", "interval", 30, "Interval with which to report to influxdb", is_int)
 influxdb_tags = Option(
@@ -81,7 +81,7 @@ server_fact_expire = Option(
 )
 
 
-def default_fact_renew():
+def default_fact_renew() -> int:
     """:inmanta.config:option:`server.fact-expire` /3 """
     return int(server_fact_expire.get() / 3)
 

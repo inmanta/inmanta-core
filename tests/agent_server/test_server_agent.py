@@ -31,7 +31,7 @@ from inmanta import agent, config, const, data, execute
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from utils import UNKWN, assert_equal_ish, log_contains, log_index, retry_limited
 
@@ -780,7 +780,7 @@ async def test_unkown_parameters(resource_container, environment, client, server
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
-    await server.get_slice(SLICE_SERVER).renew_expired_facts()
+    await server.get_slice(SLICE_PARAM).renew_expired_facts()
 
     env_id = uuid.UUID(environment)
     params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)

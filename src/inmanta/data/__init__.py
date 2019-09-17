@@ -25,7 +25,7 @@ import uuid
 import warnings
 from collections import defaultdict
 from configparser import RawConfigParser
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type, TypeVar, Union
 
 import asyncpg
 
@@ -655,15 +655,15 @@ class Setting(object):
 
     def __init__(
         self,
-        name,
-        typ,
-        default=None,
-        doc=None,
-        validator=None,
-        recompile=False,
-        update_model=False,
-        agent_restart=False,
-        allowed_values=None,
+        name: str,
+        typ: str,
+        default: SimpleTypes = None,
+        doc: str = None,
+        validator: Callable[[SimpleTypes], SimpleTypes] = None,
+        recompile: bool = False,
+        update_model: bool = False,
+        agent_restart: bool = False,
+        allowed_values: List[SimpleTypes] = None,
     ):
         """
             :param name: The name of the setting.
@@ -678,7 +678,7 @@ class Setting(object):
             :param agent_restart: Restart autostarted agents when this settings is updated.
             :param allowed_values: list of possible values (if type is enum)
         """
-        self.typ = typ
+        self.typ: str = typ
         self.default = default
         self.doc = doc
         self.validator = validator
@@ -687,7 +687,7 @@ class Setting(object):
         self.agent_restart = agent_restart
         self.allowed_values = allowed_values
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         return {
             "type": self.typ,
             "default": self.default,
@@ -721,7 +721,7 @@ class Environment(BaseDocument):
     repo_branch: str = Field(field_type=str, default="")
     settings: Dict[str, EnvSettingType] = Field(field_type=dict, default={})
 
-    _settings = {
+    _settings: Dict[str, Setting] = {
         AUTO_DEPLOY: Setting(
             name=AUTO_DEPLOY,
             typ="bool",
@@ -1365,7 +1365,7 @@ class Form(BaseDocument):
         else:
             return forms[0]
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         me = super(Form, self).to_dict()
         me["id"] = self.form_type
         return me
@@ -1408,9 +1408,9 @@ class LogLine(DataDocument):
 
 
 class ResourceVersionId(BaseDocument):
-    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    resource_version_id = Field(field_type=str, required=True, part_of_primary_key=True)
-    action_id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    resource_version_id: ResourceVersionIdStr = Field(field_type=str, required=True, part_of_primary_key=True)
+    action_id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
 
 
 class ResourceAction(BaseDocument):
@@ -1431,13 +1431,13 @@ class ResourceAction(BaseDocument):
         :param change: The change result of an action
     """
 
-    resource_version_ids = Field(field_type=list, required=True, reference=True, default=[])
+    resource_version_ids: List[ResourceVersionIdStr] = Field(field_type=list, required=True, reference=True, default=[])
 
-    action_id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    action = Field(field_type=const.ResourceAction, required=True)
+    action_id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    action: const.ResourceAction = Field(field_type=const.ResourceAction, required=True)
 
-    started = Field(field_type=datetime.datetime, required=True)
-    finished = Field(field_type=datetime.datetime)
+    started: datetime.datetime = Field(field_type=datetime.datetime, required=True)
+    finished: datetime.datetime = Field(field_type=datetime.datetime)
 
     messages = Field(field_type=list)
     status = Field(field_type=const.ResourceState)
@@ -1765,11 +1765,11 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    async def get_resources(cls, environment: uuid.UUID, resource_version_ids: List[ResourceVersionId]) -> List["Resource"]:
+    async def get_resources(cls, environment: uuid.UUID, resource_version_ids: List[ResourceVersionIdStr]) -> List["Resource"]:
         """
             Get all resources listed in resource_version_ids
         """
-        if resource_version_ids == []:
+        if not resource_version_ids:
             return []
         resource_version_ids_statement = ", ".join(["$" + str(i) for i in range(2, len(resource_version_ids) + 2)])
         (filter_statement, values) = cls._get_composed_filter(environment=environment)
@@ -2176,7 +2176,7 @@ class ConfigurationModel(BaseDocument):
         return True
 
     @classmethod
-    async def get_version(cls, environment, version):
+    async def get_version(cls, environment: uuid.UUID, version: int) -> "ConfigurationModel":
         """
             Get a specific version
         """
@@ -2184,7 +2184,7 @@ class ConfigurationModel(BaseDocument):
         return result
 
     @classmethod
-    async def get_latest_version(cls, environment):
+    async def get_latest_version(cls, environment: uuid.UUID) -> "ConfigurationModel":
         """
             Get the latest released (most recent) version for the given environment
         """
@@ -2485,13 +2485,13 @@ class DryRun(BaseDocument):
         :param resources: Changes for each of the resources in the version
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    environment = Field(field_type=uuid.UUID, required=True)
-    model = Field(field_type=int, required=True)
-    date = Field(field_type=datetime.datetime)
-    total = Field(field_type=int, default=0)
-    todo = Field(field_type=int, default=0)
-    resources = Field(field_type=dict, default={})
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+    model: int = Field(field_type=int, required=True)
+    date: datetime.datetime = Field(field_type=datetime.datetime)
+    total: int = Field(field_type=int, default=0)
+    todo: int = Field(field_type=int, default=0)
+    resources: Dict[str, Any] = Field(field_type=dict, default={})
 
     @classmethod
     async def update_resource(cls, dryrun_id, resource_id, dryrun_data):

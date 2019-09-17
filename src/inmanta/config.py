@@ -285,7 +285,7 @@ class Option(Generic[T]):
     def validate(self, value: str) -> T:
         return self.validator(value)
 
-    def get_default_value(self):
+    def get_default_value(self) -> Union[str, bool, int, None, Callable]:
         defa = self.default
         if callable(defa):
             return defa()

@@ -22,29 +22,29 @@ from inmanta import data
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_CODE, SLICE_FILE, SLICE_SERVER, protocol
-from inmanta.server.fileslice import FileSlice
 from inmanta.server.server import Server
+from inmanta.server.services.fileservice import FileService
 from inmanta.types import Apireturn, JsonType
 from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
 
 
-class CodeSlice(protocol.ServerSlice):
+class CodeService(protocol.ServerSlice):
     """Slice serving and managing code"""
 
     server_slice: Server
-    file_slice: FileSlice
+    file_slice: FileService
 
     def __init__(self) -> None:
-        super(CodeSlice, self).__init__(SLICE_CODE)
+        super(CodeService, self).__init__(SLICE_CODE)
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER, SLICE_FILE]
 
     async def prestart(self, server: protocol.Server) -> None:
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
-        self.file_slice = cast(FileSlice, server.get_slice(SLICE_FILE))
+        self.file_slice = cast(FileService, server.get_slice(SLICE_FILE))
 
     @protocol.handle(methods.upload_code, code_id="id", env="tid")
     async def upload_code(self, env: data.Environment, code_id: int, resource: str, sources: JsonType) -> Apireturn:

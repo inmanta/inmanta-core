@@ -16,28 +16,34 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.server import (
-    agentmanager,
-    codeslice,
-    compilerservice,
-    fileslice,
-    formslice,
-    metricslice,
-    paramslice,
-    projectslice,
-    server,
-)
+from inmanta.server import agentmanager, server
 from inmanta.server.extensions import ApplicationContext
+from inmanta.server.services import (
+    codeservice,
+    compilerservice,
+    databaseservice,
+    environmentservice,
+    fileservice,
+    formservice,
+    metricservice,
+    orchestrationservice,
+    paramservice,
+    projectservice,
+    resourceservice,
+)
 
 
 def setup(application: ApplicationContext) -> None:
     application.register_slice(server.Server())
     application.register_slice(agentmanager.AgentManager())
-    application.register_slice(server.DatabaseSlice())
+    application.register_slice(databaseservice.DatabaseService())
     application.register_slice(compilerservice.CompilerService())
-    application.register_slice(formslice.FormSlice())
-    application.register_slice(projectslice.ProjectEnvironmentSlice())
-    application.register_slice(fileslice.FileSlice())
-    application.register_slice(codeslice.CodeSlice())
-    application.register_slice(metricslice.MetricsSlice())
-    application.register_slice(paramslice.ParameterSlice())
+    application.register_slice(formservice.FormService())
+    application.register_slice(projectservice.ProjectService())
+    application.register_slice(environmentservice.EnvironmentService())
+    application.register_slice(fileservice.FileService())
+    application.register_slice(codeservice.CodeService())
+    application.register_slice(metricservice.MetricsService())
+    application.register_slice(paramservice.ParameterService())
+    application.register_slice(resourceservice.ResourceService())
+    application.register_slice(orchestrationservice.OrchestrationService())
