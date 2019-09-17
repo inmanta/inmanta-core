@@ -188,7 +188,7 @@ class VirtualEnv(object):
 
         return requirements_file
 
-    def _install(self, requirements_list: []) -> None:
+    def _install(self, requirements_list: List[str]) -> None:
         """
             Install requirements in the given requirements file
         """
