@@ -30,11 +30,10 @@ from inmanta.data import ResourceVersionIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_RESOURCE, SLICE_SERVER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
-from inmanta.server.server import Server
 from inmanta.types import Apireturn
 
 LOGGER = logging.getLogger(__name__)
@@ -75,7 +74,6 @@ class ResourceActionLogLine(logging.LogRecord):
 class ResourceService(protocol.ServerSlice):
     """Resource Manager service"""
 
-    server_slice: Server
     agentmanager_service: "AgentManager"
 
     def __init__(self) -> None:
@@ -89,10 +87,9 @@ class ResourceService(protocol.ServerSlice):
         self._increment_cache_locks: Dict[uuid.UUID, locks.Lock] = defaultdict(lambda: locks.Lock())
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_SERVER, SLICE_AGENT_MANAGER]
+        return [SLICE_DATABASE, SLICE_AGENT_MANAGER]
 
     async def prestart(self, server: protocol.Server) -> None:
-        self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
         self.agentmanager_service = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
 
     async def start(self) -> None:

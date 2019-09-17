@@ -26,10 +26,8 @@ from inmanta.data import ResourceVersionIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_DRYRUN, SLICE_RESOURCE, SLICE_SERVER, protocol
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_DRYRUN, protocol
 from inmanta.server.agentmanager import AgentManager
-from inmanta.server.server import Server
-from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType
 
 LOGGER = logging.getLogger(__name__)
@@ -38,21 +36,17 @@ LOGGER = logging.getLogger(__name__)
 class DyrunService(protocol.ServerSlice):
     """Slice for dryun support"""
 
-    server_slice: Server
     agentmanager: AgentManager
-    resource_service: ResourceService
 
     def __init__(self) -> None:
         super(DyrunService, self).__init__(SLICE_DRYRUN)
         self.dryrun_lock = locks.Lock()
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_SERVER, SLICE_DATABASE, SLICE_AGENT_MANAGER]
+        return [SLICE_DATABASE, SLICE_AGENT_MANAGER]
 
     async def prestart(self, server: protocol.Server) -> None:
-        self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
         self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
-        self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
     @protocol.handle(methods.dryrun_request, version_id="id", env="tid")
     async def dryrun_request(self, env: data.Environment, version_id: int) -> Apireturn:

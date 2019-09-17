@@ -53,7 +53,7 @@ class EnvironmentService(protocol.ServerSlice):
     server_slice: Server
     agentmanager: AgentManager
     orchestration_service: OrchestrationService
-    resource_version: ResourceService
+    resource_service: ResourceService
 
     def __init__(self) -> None:
         super(EnvironmentService, self).__init__(SLICE_ENVIRONMENT)
