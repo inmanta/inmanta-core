@@ -25,9 +25,10 @@ import asyncpg
 from inmanta import data
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import NotFound, ServerError
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PROJECT, SLICE_SERVER, protocol
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PROJECT, SLICE_SERVER, protocol, SLICE_RESOURCE
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.server import Server
+from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn
 
 LOGGER = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ class ProjectService(protocol.ServerSlice):
 
     server_slice: Server
     agentmanager: AgentManager
+    resource_service: ResourceService
 
     def __init__(self) -> None:
         super(ProjectService, self).__init__(SLICE_PROJECT)
@@ -48,6 +50,7 @@ class ProjectService(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
         self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
+        self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
     # Project handlers
     @protocol.handle(methods.create_project)
@@ -71,7 +74,7 @@ class ProjectService(protocol.ServerSlice):
         environments = await data.Environment.get_list(project=project.id)
         for env in environments:
             await asyncio.gather(self.agentmanager.stop_agents(env), env.delete_cascade())
-            self.server_slice.close_resource_action_logger(env.id)
+            self.resource_service.close_resource_action_logger(env.id)
 
         await project.delete()
 

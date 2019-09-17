@@ -171,7 +171,7 @@ server_resource_action_log_prefix = Option(
     "resource_action_log_prefix",
     "resource-actions-",
     "File prefix in log-dir, containing the resource-action logs. The after the prefix the environment uuid and .log is added",
-    is_str_opt,
+    is_str,
 )
 
 server_enabled_extensions = Option(

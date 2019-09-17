@@ -2083,8 +2083,8 @@ class ConfigurationModel(BaseDocument):
     total: int = Field(field_type=int, default=0)
 
     # cached state for release
-    undeployable: List[ResourceVersionId] = Field(field_type=list, required=False)
-    skipped_for_undeployable: List[ResourceVersionId] = Field(field_type=list, required=False)
+    undeployable: List[ResourceIdStr] = Field(field_type=list, required=False)
+    skipped_for_undeployable: List[ResourceIdStr] = Field(field_type=list, required=False)
 
     def __init__(self, **kwargs):
         super(ConfigurationModel, self).__init__(**kwargs)
@@ -2253,20 +2253,20 @@ class ConfigurationModel(BaseDocument):
                     self.environment,
                 )
 
-    async def get_undeployable(self) -> List[ResourceVersionId]:
+    async def get_undeployable(self) -> List[ResourceIdStr]:
         """
             Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
         """
         return self.undeployable
 
-    async def get_skipped_for_undeployable(self):
+    async def get_skipped_for_undeployable(self) -> List[ResourceIdStr]:
         """
             Returns a list of resource ids (NOT resource version ids)
             of resources which should get a skipped_for_undeployable state
         """
         return self.skipped_for_undeployable
 
-    async def mark_done(self):
+    async def mark_done(self) -> None:
         """ mark this deploy as done """
         subquery = (
             f"(EXISTS("
