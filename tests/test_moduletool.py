@@ -667,6 +667,34 @@ requires:
     )
 
 
+def test_project_freeze_disk(modules_dir, modules_repo, capsys):
+    coroot = install_project(modules_dir, "modA")
+
+    app(["project", "freeze"])
+
+    out, err = capsys.readouterr()
+
+    assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
+    assert len(err) == 0, err
+
+    with open(os.path.join(coroot, "project.yml"), "r") as fh:
+        assert (fh.read()
+        == """name: modA
+license: Apache 2.0
+version: 0.0.1
+modulepath: libs
+downloadpath: libs
+repo: %s
+requires:
+- modB ~= 3.2
+- modC ~= 3.2
+- modD ~= 3.2
+- std ~= 3.2
+"""
+        % modules_repo
+    )
+
+
 def test_project_freeze_odd_opperator(modules_dir, modules_repo, capsys, caplog):
     coroot = install_project(modules_dir, "modA")
 
