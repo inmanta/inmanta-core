@@ -61,7 +61,7 @@ class InmantaBootloader(object):
         - discovering extensions
         - loading extensions
         - loading core and extension slices
-        - starting the server and its services in the correct order
+        - starting the server and its slices in the correct order
     """
 
     def __init__(self) -> None:
