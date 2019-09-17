@@ -115,7 +115,7 @@ class InmantaBootloader(object):
 
     def _load_extension(self, name: str) -> Callable[[ApplicationContext], None]:
         """ Import the extension defined in the package in name and return the setup function that needs to be called for the
-            extension to register its services in the application context.
+            extension to register its slices in the application context.
         """
         try:
             importlib.import_module(name)
