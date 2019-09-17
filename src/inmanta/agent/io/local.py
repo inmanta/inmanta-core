@@ -476,7 +476,7 @@ class LocalIO(IOBase):
             :param str source: Create a symlink of this path to target
             :param str target: The path of the symlink to create
         """
-        return os.symlink(source, target)
+        os.symlink(source, target)
 
     def is_symlink(self, path):
         # type: (str) -> bool

@@ -518,9 +518,7 @@ class ResourceScheduler(object):
         # Start running
         dummy.future.set_result(ResourceActionResult(True, False, False))
 
-    async def mark_deployment_as_finished(
-        self, resource_actions: Iterable[ResourceAction], reason: str, gid: uuid.UUID
-    ) -> None:
+    async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceAction]) -> None:
         await asyncio.gather(*[resource_action.future for resource_action in resource_actions])
         with (await self.agent.critical_ratelimiter.acquire()):
             if not self.finished():

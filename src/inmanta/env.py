@@ -75,15 +75,12 @@ class VirtualEnv(object):
                 venv.create(path, clear=True, with_pip=True)
             except CalledProcessError as e:
                 LOGGER.exception("Unable to create new virtualenv at %s (%s)", self.env_path, e.stdout.decode())
-                return False
             except Exception:
                 LOGGER.exception("Unable to create new virtualenv at %s", self.env_path)
-                return False
             LOGGER.debug("Created a new virtualenv at %s", self.env_path)
 
         # set the path to the python and the pip executables
         self.virtual_python = python_bin
-        return True
 
     def use_virtual_env(self) -> None:
         """
