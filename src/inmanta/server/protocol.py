@@ -225,7 +225,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
     async def prestart(self, server: Server) -> None:
         """
-        Called by the RestServer host prior to start, can be used to collect references to other server services
+        Called by the RestServer host prior to start, can be used to collect references to other server slices
         Dependencies are not up yet.
         """
         pass
