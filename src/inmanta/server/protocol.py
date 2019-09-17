@@ -269,7 +269,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         await super(ServerSlice, self).stop()
 
     def get_dependencies(self) -> List[str]:
-        """List of names of services that must be started before this one."""
+        """List of names of slices that must be started before this one."""
         return []
 
     def get_depended_by(self) -> List[str]:
