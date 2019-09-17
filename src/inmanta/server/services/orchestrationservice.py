@@ -30,13 +30,13 @@ from inmanta.protocol import methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import ServerError
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_SERVER, protocol
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_SERVER
+from inmanta.server import config as opt
+from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.server import Server
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
-from inmanta.server import config as opt
-
 
 LOGGER = logging.getLogger(__name__)
 

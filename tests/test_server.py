@@ -29,9 +29,8 @@ from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.export import unknown_parameters, upload_code
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_SERVER, SLICE_SESSION_MANAGER
 from inmanta.server import config as opt
-from inmanta.server import server
 from inmanta.util import hash_file
 from utils import retry_limited
 
@@ -180,7 +179,7 @@ async def test_version_removal(client, server):
     for _i in range(20):
         version += 1
 
-        await server.get_slice(SLICE_SERVER)._purge_versions()
+        await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
         res = await client.put_version(tid=env_id, version=version, resources=[], unknowns=[], version_info={})
         assert res.code == 200
         result = await client.get_project(id=project_id)
@@ -1114,7 +1113,7 @@ async def test_resource_action_log(server_multi, client_multi, environment_multi
     )
     assert res.code == 200
 
-    resource_action_log = server.Server.get_resource_action_log_file(environment_multi)
+    resource_action_log = server_multi.get_slice(SLICE_RESOURCE).get_resource_action_log_file(environment_multi)
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
 

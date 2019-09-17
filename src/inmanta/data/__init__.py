@@ -1005,15 +1005,15 @@ class AgentProcess(BaseDocument):
         :param last_seen: When did the server receive data from the node for the last time.
     """
 
-    hostname = Field(field_type=str, required=True)
-    environment = Field(field_type=uuid.UUID, required=True)
-    first_seen = Field(field_type=datetime.datetime, default=None)
-    last_seen = Field(field_type=datetime.datetime, default=None)
-    expired = Field(field_type=datetime.datetime, default=None)
-    sid = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    hostname: str = Field(field_type=str, required=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+    first_seen: datetime.datetime = Field(field_type=datetime.datetime, default=None)
+    last_seen: datetime.datetime = Field(field_type=datetime.datetime, default=None)
+    expired: datetime.datetime = Field(field_type=datetime.datetime, default=None)
+    sid: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
 
     @classmethod
-    async def get_live(cls, environment=None):
+    async def get_live(cls, environment: Optional[uuid.UUID]=None) -> List["AgentProcess"]:
         if environment is not None:
             result = await cls.get_list(
                 limit=DBLIMIT, environment=environment, expired=None, order_by_column="last_seen", order="ASC NULLS LAST"
@@ -1023,17 +1023,17 @@ class AgentProcess(BaseDocument):
         return result
 
     @classmethod
-    async def get_live_by_env(cls, env):
+    async def get_live_by_env(cls, env: uuid.UUID) -> List["AgentProcess"]:
         result = await cls.get_live(env)
         return result
 
     @classmethod
-    async def get_by_env(cls, env):
+    async def get_by_env(cls, env: uuid.UUID) -> List["AgentProcess"]:
         nodes = await cls.get_list(environment=env, order_by_column="last_seen", order="ASC NULLS LAST")
         return nodes
 
     @classmethod
-    async def get_by_sid(cls, sid):
+    async def get_by_sid(cls, sid: uuid.UUID) -> List["AgentProcess"]:
         objects = await cls.get_list(limit=DBLIMIT, expired=None, sid=sid)
         if len(objects) == 0:
             return None
@@ -1043,7 +1043,7 @@ class AgentProcess(BaseDocument):
         else:
             return objects[0]
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         result = super(AgentProcess, self).to_dict()
         # Ensure backward compatibility API
         result["id"] = result["sid"]
@@ -1087,31 +1087,31 @@ class Agent(BaseDocument):
         :param primary: what is the current active instance (if none, state is down)
     """
 
-    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name = Field(field_type=str, required=True, part_of_primary_key=True)
-    last_failover = Field(field_type=datetime.datetime)
-    paused = Field(field_type=bool, default=False)
-    id_primary = Field(field_type=uuid.UUID)  # AgentInstance
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    name: str = Field(field_type=str, required=True, part_of_primary_key=True)
+    last_failover: datetime.datetime = Field(field_type=datetime.datetime)
+    paused: bool = Field(field_type=bool, default=False)
+    id_primary: Optional[uuid.UUID] = Field(field_type=uuid.UUID)  # AgentInstance
 
-    def set_primary(self, primary):
+    def set_primary(self, primary: uuid.UUID) -> None:
         self.id_primary = primary
 
-    def get_primary(self):
+    def get_primary(self) -> Optional[uuid.UUID]:
         return self.id_primary
 
-    def del_primary(self):
+    def del_primary(self) -> None:
         del self.id_primary
 
     primary = property(get_primary, set_primary, del_primary)
 
-    def get_status(self):
+    def get_status(self) -> str:
         if self.paused:
             return "paused"
         if self.primary is not None:
             return "up"
         return "down"
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         base = BaseDocument.to_dict(self)
         if self.last_failover is None:
             base["last_failover"] = ""
@@ -1139,7 +1139,7 @@ class Agent(BaseDocument):
         return cls._create_dict(from_postgres, kwargs)
 
     @classmethod
-    async def get(cls, env, endpoint):
+    async def get(cls, env: uuid.UUID, endpoint: str) -> "Agent":
         obj = await cls.get_one(environment=env, name=endpoint)
         return obj
 
@@ -2467,7 +2467,7 @@ class Code(BaseDocument):
         return codes[0]
 
     @classmethod
-    async def get_versions(cls, environment, version):
+    async def get_versions(cls, environment: uuid.UUID, version: int) -> List["Code"]:
         codes = await cls.get_list(environment=environment, version=version)
         return codes
 

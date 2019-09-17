@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import logging
-from typing import List, cast
+from typing import Dict, List, cast
 
 from inmanta import data
 from inmanta.protocol import methods
@@ -96,7 +96,7 @@ class CodeService(protocol.ServerSlice):
             raise BadRequest("Not all file references provided are valid", details={"references": val})
 
         code = await data.Code.get_versions(environment=env.id, version=code_id)
-        oldmap = {c.resource: c for c in code}
+        oldmap: Dict[str, data.Code] = {c.resource: c for c in code}
 
         new = {k: v for k, v in resources.items() if k not in oldmap}
         conflict = [k for k, v in resources.items() if k in oldmap and oldmap[k].source_refs != v]

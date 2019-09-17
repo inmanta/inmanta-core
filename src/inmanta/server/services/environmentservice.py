@@ -221,7 +221,9 @@ class EnvironmentService(protocol.ServerSlice):
         version = int(time.time())
         if metadata is None:
             metadata = {"message": "Decommission of environment", "type": "api"}
-        result = cast(int, await self.orchestration_service.put_version(env, version, [], {}, [], {const.EXPORT_META_DATA: metadata}))
+        result = cast(
+            int, await self.orchestration_service.put_version(env, version, [], {}, [], {const.EXPORT_META_DATA: metadata})
+        )
         return result, {"version": version}
 
     @protocol.handle(methods.clear_environment, env="id")

@@ -30,7 +30,7 @@ from tornado import locks, process
 from inmanta import data
 from inmanta.config import Config
 from inmanta.protocol import encode_token, methods
-from inmanta.protocol.exceptions import ShutdownInProgress
+from inmanta.protocol.exceptions import NotFound, ShutdownInProgress
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
@@ -198,7 +198,7 @@ class AgentManager(ServerSlice, SessionListener):
         await self._verify_reschedule(env, [nodename])
         return saved
 
-    async def _register_session(self, session: protocol.Session, now: float) -> data.Agent:
+    async def _register_session(self, session: protocol.Session, now: datetime) -> None:
         with (await self.session_lock.acquire()):
             tid = session.tid
             sid = session.get_id()
@@ -226,7 +226,7 @@ class AgentManager(ServerSlice, SessionListener):
             if env is not None:
                 await self._verify_reschedule(env, session.endpoint_names)
 
-    async def _expire_session(self, session: protocol.Session, now: float) -> None:
+    async def _expire_session(self, session: protocol.Session, now: datetime) -> None:
         if not self.is_running() or self.is_stopping():
             return
         with (await self.session_lock.acquire()):
@@ -273,7 +273,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         return session_list
 
-    async def _flush_agent_presence(self, session: protocol.Session, now: float) -> None:
+    async def _flush_agent_presence(self, session: protocol.Session, now: datetime) -> None:
         tid = session.tid
         sid = session.get_id()
 
@@ -289,7 +289,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         await aps.update_fields(last_seen=now)
 
-    async def _verify_reschedule(self, env: data.Environment, enpoints: str) -> None:
+    async def _verify_reschedule(self, env: data.Environment, enpoints: List[str]) -> None:
         """
              only call under session lock
         """
@@ -361,9 +361,9 @@ class AgentManager(ServerSlice, SessionListener):
         """
         inmanta_path = [sys.executable, "-m", "inmanta.app"]
         # handles can be closed, owned by child process,...
+        outhandle = None
+        errhandle = None
         try:
-            outhandle = None
-            errhandle = None
             if outfile is not None:
                 outhandle = open(outfile, "wb+")
             if errfile is not None:
@@ -379,7 +379,7 @@ class AgentManager(ServerSlice, SessionListener):
 
     # External APIS
     @protocol.handle(methods.get_agent_process, agent_sid="id")
-    async def get_agent_process(self, agent_sid: str) -> Apireturn:
+    async def get_agent_process(self, agent_sid: uuid.UUID) -> Apireturn:
         return await self.get_agent_process_report(agent_sid)
 
     @protocol.handle(methods.trigger_agent, agent_id="id", env="tid")
@@ -606,6 +606,9 @@ ssl=True
         """
         if resource_id is not None and resource_id != "":
             env = await data.Environment.get_by_id(env_id)
+
+            if env is None:
+                raise NotFound(f"Environment with {env_id} does not exist.")
 
             # get a resource version
             res = await data.Resource.get_latest_version(env_id, resource_id)

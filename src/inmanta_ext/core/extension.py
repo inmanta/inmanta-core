@@ -22,6 +22,7 @@ from inmanta.server.services import (
     codeservice,
     compilerservice,
     databaseservice,
+    dryrunservice,
     environmentservice,
     fileservice,
     formservice,
@@ -47,3 +48,4 @@ def setup(application: ApplicationContext) -> None:
     application.register_slice(paramservice.ParameterService())
     application.register_slice(resourceservice.ResourceService())
     application.register_slice(orchestrationservice.OrchestrationService())
+    application.register_slice(dryrunservice.DyrunService())

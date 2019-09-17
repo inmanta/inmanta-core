@@ -53,7 +53,7 @@ class MetricsService(protocol.ServerSlice):
                 port=opt.influxdb_port.get(),
                 database=opt.influxdb_name.get(),
                 username=opt.influxdb_username.get(),
-                password=opt.influxdb_password,
+                password=opt.influxdb_password.get(),
                 reporting_interval=opt.influxdb_interval.get(),
                 autocreate_database=True,
                 tags=opt.influxdb_tags.get(),

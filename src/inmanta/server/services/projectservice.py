@@ -25,7 +25,7 @@ import asyncpg
 from inmanta import data
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import NotFound, ServerError
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PROJECT, SLICE_SERVER, protocol, SLICE_RESOURCE
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PROJECT, SLICE_RESOURCE, SLICE_SERVER, protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.server import Server
 from inmanta.server.services.resourceservice import ResourceService
