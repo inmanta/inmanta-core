@@ -1,3 +1,7 @@
+v 2019.3.1 (2019-09-17) Changes in this release:
+- Config file passed via min-c option overrides all other config options (#1384)
+- Environment variables set on the Inmanta server are forwarded to the subprocess that executes the compilation (#1376)
+
 v 2019.3 (2019-09-05) Changes in this release:
 - Various bugfixes (#1148, #1157, #1163, #1167, #1188)
 - Abort server startup if the database can not be reached (#1153)
