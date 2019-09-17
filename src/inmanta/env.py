@@ -49,7 +49,7 @@ class VirtualEnv(object):
 
         self._old = {}
 
-    def init_env(self) -> None:
+    def init_env(self) -> bool:
         """
             Init the virtual environment
         """
@@ -191,7 +191,7 @@ class VirtualEnv(object):
 
         return requirements_file
 
-    def _install(self, requirements_list: []) -> None:
+    def _install(self, requirements_list: List[str]) -> None:
         """
             Install requirements in the given requirements file
         """

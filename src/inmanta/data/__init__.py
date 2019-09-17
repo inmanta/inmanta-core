@@ -1013,7 +1013,7 @@ class AgentProcess(BaseDocument):
     sid: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
 
     @classmethod
-    async def get_live(cls, environment: Optional[uuid.UUID]=None) -> List["AgentProcess"]:
+    async def get_live(cls, environment: Optional[uuid.UUID] = None) -> List["AgentProcess"]:
         if environment is not None:
             result = await cls.get_list(
                 limit=DBLIMIT, environment=environment, expired=None, order_by_column="last_seen", order="ASC NULLS LAST"

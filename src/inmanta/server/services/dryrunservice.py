@@ -26,14 +26,7 @@ from inmanta.data import ResourceVersionIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
-from inmanta.server import (
-    SLICE_AGENT_MANAGER,
-    SLICE_DATABASE,
-    SLICE_DRYRUN,
-    SLICE_RESOURCE,
-    SLICE_SERVER,
-    protocol,
-)
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_DRYRUN, SLICE_RESOURCE, SLICE_SERVER, protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.server import Server
 from inmanta.server.services.resourceservice import ResourceService

@@ -513,14 +513,12 @@ class ResourceScheduler(object):
             add_future(r.execute(dummy, self.generation, self.cache))
 
         # Listen for completion
-        self.agent.process.add_background_task(self.mark_deployment_as_finished(self.generation.values(), reason, gid))
+        self.agent.process.add_background_task(self.mark_deployment_as_finished(self.generation.values()))
 
         # Start running
         dummy.future.set_result(ResourceActionResult(True, False, False))
 
-    async def mark_deployment_as_finished(
-        self, resource_actions: Iterable[ResourceAction], reason: str, gid: uuid.UUID
-    ) -> None:
+    async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceAction]) -> None:
         await asyncio.gather(*[resource_action.future for resource_action in resource_actions])
         with (await self.agent.critical_ratelimiter.acquire()):
             if not self.finished():
