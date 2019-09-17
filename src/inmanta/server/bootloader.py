@@ -142,7 +142,7 @@ class InmantaBootloader(object):
                 LOGGER.warning("Could not load extension %s", name, exc_info=True)
         return plugins
 
-    # Extension loading Phase II: collect services
+    # Extension loading Phase II: collect slices
     def _collect_slices(self, extensions: Dict[str, Callable[[ApplicationContext], None]]) -> ApplicationContext:
         """
             Call the setup function on all extensions and let them register their services in the ApplicationContext.
