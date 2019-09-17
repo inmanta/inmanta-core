@@ -65,7 +65,9 @@ def assert_equal_ish(minimal, actual, sortby=[]):
 
 
 def assert_graph(graph, expected):
-    lines = ["%s: %s" % (f.id.get_attribute_value(), t.id.get_attribute_value()) for f in graph.values() for t in f.requires]
+    lines = [
+        "%s: %s" % (f.id.get_attribute_value(), t.id.get_attribute_value()) for f in graph.values() for t in f.resource_requires
+    ]
     lines = sorted(lines)
 
     elines = [x.strip() for x in expected.split("\n")]
