@@ -122,7 +122,7 @@ class Server(endpoints.Endpoint):
         try:
             order = stable_depth_first(names, {k: list(v) for k, v in edges.items()})
         except CycleException as e:
-            raise ServerStartFailure("Dependency cycle between server services " + ",".join(e.nodes)) from e
+            raise ServerStartFailure("Dependency cycle between server slices " + ",".join(e.nodes)) from e
 
         def resolve(name: str) -> Optional["ServerSlice"]:
             if name in self._slices:
@@ -225,7 +225,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
     async def prestart(self, server: Server) -> None:
         """
-        Called by the RestServer host prior to start, can be used to collect references to other server services
+        Called by the RestServer host prior to start, can be used to collect references to other server slices
         Dependencies are not up yet.
         """
         pass
@@ -269,11 +269,11 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         await super(ServerSlice, self).stop()
 
     def get_dependencies(self) -> List[str]:
-        """List of names of services that must be started before this one."""
+        """List of names of slices that must be started before this one."""
         return []
 
     def get_depended_by(self) -> List[str]:
-        """List of names of services that must be started after this one."""
+        """List of names of slices that must be started after this one."""
         return []
 
     # internal API towards extension framework

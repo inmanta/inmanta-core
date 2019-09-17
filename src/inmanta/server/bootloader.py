@@ -60,8 +60,8 @@ class InmantaBootloader(object):
     """ The inmanta bootloader is responsible for:
         - discovering extensions
         - loading extensions
-        - loading core and extension services
-        - starting the server and its services in the correct order
+        - loading core and extension slices
+        - starting the server and its slices in the correct order
     """
 
     def __init__(self) -> None:
@@ -115,7 +115,7 @@ class InmantaBootloader(object):
 
     def _load_extension(self, name: str) -> Callable[[ApplicationContext], None]:
         """ Import the extension defined in the package in name and return the setup function that needs to be called for the
-            extension to register its services in the application context.
+            extension to register its slices in the application context.
         """
         try:
             importlib.import_module(name)
@@ -142,10 +142,10 @@ class InmantaBootloader(object):
                 LOGGER.warning("Could not load extension %s", name, exc_info=True)
         return plugins
 
-    # Extension loading Phase II: collect services
+    # Extension loading Phase II: collect slices
     def _collect_slices(self, extensions: Dict[str, Callable[[ApplicationContext], None]]) -> ApplicationContext:
         """
-            Call the setup function on all extensions and let them register their services in the ApplicationContext.
+            Call the setup function on all extensions and let them register their slices in the ApplicationContext.
         """
         ctx = ApplicationContext()
         for name, setup in extensions.items():
@@ -155,7 +155,7 @@ class InmantaBootloader(object):
 
     def load_slices(self) -> List[ServerSlice]:
         """
-            Load all services in the server
+            Load all slices in the server
         """
         exts = self._load_extensions()
         ctx = self._collect_slices(exts)
