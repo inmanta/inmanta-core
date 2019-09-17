@@ -155,7 +155,7 @@ class InmantaBootloader(object):
 
     def load_slices(self) -> List[ServerSlice]:
         """
-            Load all services in the server
+            Load all slices in the server
         """
         exts = self._load_extensions()
         ctx = self._collect_slices(exts)
