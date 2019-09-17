@@ -513,7 +513,7 @@ class ResourceScheduler(object):
             add_future(r.execute(dummy, self.generation, self.cache))
 
         # Listen for completion
-        self.agent.process.add_background_task(self.mark_deployment_as_finished(self.generation.values(), reason, gid))
+        self.agent.process.add_background_task(self.mark_deployment_as_finished(self.generation.values()))
 
         # Start running
         dummy.future.set_result(ResourceActionResult(True, False, False))
