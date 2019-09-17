@@ -122,7 +122,7 @@ class Server(endpoints.Endpoint):
         try:
             order = stable_depth_first(names, {k: list(v) for k, v in edges.items()})
         except CycleException as e:
-            raise ServerStartFailure("Dependency cycle between server services " + ",".join(e.nodes)) from e
+            raise ServerStartFailure("Dependency cycle between server slices " + ",".join(e.nodes)) from e
 
         def resolve(name: str) -> Optional["ServerSlice"]:
             if name in self._slices:
