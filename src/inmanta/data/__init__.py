@@ -2568,9 +2568,26 @@ CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
 async def connect(
-    host: str, port: int, database: str, username: str, password: str, create_db_schema: bool = True
+    host: str,
+    port: int,
+    database: str,
+    username: str,
+    password: str,
+    create_db_schema: bool = True,
+    connection_pool_min_size: int = 10,
+    connection_pool_max_size: int = 10,
+    connection_timeout: float = 60,
 ) -> asyncpg.pool.Pool:
-    pool = await asyncpg.create_pool(host=host, port=port, database=database, user=username, password=password)
+    pool = await asyncpg.create_pool(
+        host=host,
+        port=port,
+        database=database,
+        user=username,
+        password=password,
+        min_size=connection_pool_min_size,
+        max_size=connection_pool_max_size,
+        timeout=connection_timeout,
+    )
     set_connection_pool(pool)
     if create_db_schema:
         try:
