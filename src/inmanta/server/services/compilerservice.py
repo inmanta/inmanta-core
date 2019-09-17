@@ -344,7 +344,7 @@ class CompilerService(ServerSlice):
         do_export: bool,
         remote_id: uuid.UUID,
         metadata: JsonType = {},
-        extra_env_vars: Dict[str, str] = {},
+        env_vars: Dict[str, str] = {},
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
             Recompile an environment in a different thread and taking wait time into account.
@@ -357,8 +357,8 @@ class CompilerService(ServerSlice):
             return None, ["Skipping compile because server compile not enabled for this environment."]
 
         env_vars_compile: Dict[str, str] = os.environ.copy()
-        if extra_env_vars:
-            env_vars_compile.update(extra_env_vars)
+        if env_vars:
+            env_vars_compile.update(env_vars)
 
         requested = datetime.datetime.now()
         compile = data.Compile(
