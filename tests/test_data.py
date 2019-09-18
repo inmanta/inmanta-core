@@ -19,12 +19,65 @@ import datetime
 import logging
 import time
 import uuid
+from concurrent.futures._base import TimeoutError
 
 import asyncpg
 import pytest
+from asyncpg import Connection
+from asyncpg.pool import Pool
 
 from inmanta import const, data
 from inmanta.const import LogLevel
+
+
+@pytest.mark.asyncio
+async def test_connect_too_small_connection_pool(postgres_db, database_name: str, create_db_schema: bool = False):
+    pool: Pool = await data.connect(
+        postgres_db.host,
+        postgres_db.port,
+        database_name,
+        postgres_db.user,
+        None,
+        create_db_schema,
+        connection_pool_min_size=1,
+        connection_pool_max_size=1,
+        connection_timeout=120,
+    )
+    assert pool is not None
+    connection: Connection = await pool.acquire()
+    try:
+        with pytest.raises(TimeoutError):
+            await pool.acquire(timeout=1.0)
+    finally:
+        await connection.close()
+        await data.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_connect_default_parameters(postgres_db, database_name: str, create_db_schema: bool = False):
+    pool: Pool = await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None, create_db_schema)
+    assert pool is not None
+    try:
+        async with pool.acquire() as connection:
+            assert connection is not None
+    finally:
+        await data.disconnect()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("min_size, max_size", [(-1, 1), (2, 1), (-2, -2)])
+async def test_connect_invalid_parameters(postgres_db, min_size, max_size, database_name: str, create_db_schema: bool = False):
+    with pytest.raises(ValueError):
+        await data.connect(
+            postgres_db.host,
+            postgres_db.port,
+            database_name,
+            postgres_db.user,
+            None,
+            create_db_schema,
+            connection_pool_min_size=min_size,
+            connection_pool_max_size=max_size,
+        )
 
 
 @pytest.mark.asyncio

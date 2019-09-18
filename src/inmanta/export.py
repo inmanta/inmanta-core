@@ -130,7 +130,6 @@ class Exporter(object):
         self.options = options
 
         self._resources: ResourceDict = {}
-        self._resource_to_host: Dict[Id, str] = {}
         self._resource_state: Dict[str, ResourceState] = {}
         self._unknown_objects: Set[str] = set()
         self._version = 0
@@ -237,7 +236,7 @@ class Exporter(object):
             if current in working:
                 raise DependencyCycleException(current)
             working.add(current)
-            for dep in current.requires:
+            for dep in current.resource_requires:
                 try:
                     find_cycle(dep, working)
                 except DependencyCycleException as e:
@@ -253,10 +252,10 @@ class Exporter(object):
         if self.options and self.options.depgraph:
             dot = "digraph G {\n"
             for res in self._resources.values():
-                res_id = str(res.id)
+                res_id = res.id.resource_version_str()
                 dot += '\t"%s";\n' % res_id
 
-                for req in res.requires:
+                for req in res.resource_requires:
                     dot += '\t"%s" -> "%s";\n' % (res_id, str(req))
 
             dot += "}\n"
@@ -360,7 +359,6 @@ class Exporter(object):
             self._resource_state[resource.id.resource_str()] = const.ResourceState.available
 
         self._resources[resource.id] = resource
-        self._resource_to_host[resource.id] = resource.id.agent_name
 
     def resources_to_list(self) -> List[Dict[str, Any]]:
         """ Convert the resource list to a json representation

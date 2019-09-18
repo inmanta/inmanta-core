@@ -132,10 +132,11 @@ class SessionEndpoint(Endpoint, CallTarget):
         An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
     """
 
+    _client: "SessionClient"
+
     def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
         super().__init__(name)
         self._transport = client.RESTClient
-        self._client: Optional[SessionClient] = None
         self._sched = util.Scheduler("session endpoint")
 
         self._env_id: Optional[uuid.UUID] = None
@@ -149,7 +150,9 @@ class SessionEndpoint(Endpoint, CallTarget):
     def get_environment(self) -> Optional[uuid.UUID]:
         return self._env_id
 
-    environment = property(get_environment)
+    @property
+    def environment(self) -> Optional[uuid.UUID]:
+        return self._env_id
 
     def set_environment(self, environment_id: uuid.UUID) -> None:
         """

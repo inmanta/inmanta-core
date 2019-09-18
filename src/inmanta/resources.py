@@ -18,20 +18,40 @@
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Type
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Type,
+    TypeVar,
+    cast,
+)
 
+from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import runtime, util
 from inmanta.execute.proxy import DictProxy, DynamicProxy, SequenceProxy, UnknownException, UnsetException
 from inmanta.types import JsonType
 
 if TYPE_CHECKING:
     from inmanta import export
+    from inmanta.data import ResourceAction
 
 LOGGER = logging.getLogger(__name__)
 
 
 class ResourceException(Exception):
     pass
+
+
+T = TypeVar("T", bound="Resource")
 
 
 class resource(object):  # noqa: N801
@@ -54,7 +74,7 @@ class resource(object):  # noqa: N801
         self._cls_name = name
         self._options = {"agent": agent, "name": id_attribute}
 
-    def __call__(self, cls: Type["Resource"]) -> None:
+    def __call__(self, cls: Type[T]) -> Type[T]:
         """
         The wrapping
         """
@@ -71,7 +91,7 @@ class resource(object):  # noqa: N801
             resource.validate()
 
     @classmethod
-    def get_entity_resources(cls) -> Iterator[str]:
+    def get_entity_resources(cls) -> Iterable[str]:
         """
         Returns a list of entity types for which a resource has been registered
         """
@@ -115,9 +135,9 @@ class IgnoreResourceException(Exception):
     """
 
 
-def to_id(entity: runtime.Instance) -> Optional[str]:
+def to_id(entity: DynamicProxy) -> Optional[str]:
     """
-        Convert an entity from the model to its resource id
+        Convert an entity instance from the model to its resource id
     """
     entity_name = str(entity._type())
     for cls_name in [entity_name] + entity._type().get_all_parent_names():
@@ -126,8 +146,8 @@ def to_id(entity: runtime.Instance) -> Optional[str]:
         if cls is not None:
             break
 
-    if cls is not None:
-        obj_id = cls.object_to_id(entity, cls_name, options["name"], options["agent"])
+    if cls is not None and options is not None:
+        obj_id = cls.object_to_id(entity._get_instance(), cls_name, options["name"], options["agent"])
         return str(obj_id)
 
     return None
@@ -135,7 +155,7 @@ def to_id(entity: runtime.Instance) -> Optional[str]:
 
 class ResourceMeta(type):
     @classmethod
-    def _get_parent_fields(cls, bases: Type["Resource"]) -> List[str]:
+    def _get_parent_fields(cls, bases: Sequence[Type["Resource"]]) -> List[str]:
         fields: List[str] = []
         for base in bases:
             if "fields" in base.__dict__:
@@ -160,7 +180,7 @@ class ResourceMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
-def serialize_proxy(d):
+def serialize_proxy(d: DynamicProxy):
     if isinstance(d, DictProxy):
         return {key: serialize_proxy(value) for key, value in d.items()}
 
@@ -170,7 +190,7 @@ def serialize_proxy(d):
     return d
 
 
-RESERVED_FOR_RESOURCE = set(["id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"])
+RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"}
 
 
 class Resource(metaclass=ResourceMeta):
@@ -183,9 +203,10 @@ class Resource(metaclass=ResourceMeta):
         static methods in the class with the name "get_$fieldname".
     """
 
-    fields: Tuple[str, ...] = ("send_event",)
+    fields: Sequence[str] = ("send_event",)
+    send_event: bool
     model: DynamicProxy
-    map: Dict[str, Callable[["export.Exporter", DynamicProxy], Any]]
+    map: Dict[str, Callable[[Optional["export.Exporter"], DynamicProxy], Any]]
 
     @staticmethod
     def get_send_event(_exporter: "export.Exporter", obj: "Resource") -> bool:
@@ -203,8 +224,8 @@ class Resource(metaclass=ResourceMeta):
             :param ignored_resources: A set of model objects that have been ignored (and not converted to resources)
         """
         for res in resources.values():
-            final_requires = set()
-            initial_requires: List["Id"] = [x for x in res.requires]
+            final_requires: Set["Resource"] = set()
+            initial_requires: List[runtime.Instance] = [x for x in res.model.requires]
 
             for r in initial_requires:
                 if r in resources:
@@ -224,10 +245,11 @@ class Resource(metaclass=ResourceMeta):
                         initial_requires,
                     )
 
-            res.requires = final_requires
+            res.resource_requires = final_requires
+            res.requires = {x.id for x in final_requires}
 
     @classmethod
-    def object_to_id(cls, model_object: runtime.Instance, entity_name: str, attribute_name: str, agent_attribute: str) -> "Id":
+    def object_to_id(cls, model_object: DynamicProxy, entity_name: str, attribute_name: str, agent_attribute: str) -> "Id":
         """
         Convert the given object to a textual id
 
@@ -237,7 +259,7 @@ class Resource(metaclass=ResourceMeta):
         :param agent_attribute: The "path" to the attribute that defines the agent
         """
         # first get the agent attribute
-        path_elements = agent_attribute.split(".")
+        path_elements: List[str] = agent_attribute.split(".")
         agent_value = model_object
         for el in path_elements:
             try:
@@ -261,10 +283,13 @@ class Resource(metaclass=ResourceMeta):
         if isinstance(attribute_value, util.Unknown):
             raise UnknownException(attribute_value)
 
-        return Id(entity_name, agent_value, attribute_name, attribute_value)
+        # agent_value is no longer a DynamicProxy here, force this for mypy validation
+        return Id(entity_name, str(agent_value), attribute_name, attribute_value)
 
     @classmethod
-    def map_field(cls, exporter: "export.Exporter", entity_name: str, field_name: str, model_object: DynamicProxy) -> str:
+    def map_field(
+        cls, exporter: Optional["export.Exporter"], entity_name: str, field_name: str, model_object: DynamicProxy
+    ) -> str:
         try:
             try:
                 if hasattr(cls, "get_" + field_name):
@@ -291,21 +316,19 @@ class Resource(metaclass=ResourceMeta):
         """
         Build a resource from a given configuration model entity
         """
-        cls, options = resource.get_class(entity_name)
+        resource_cls, options = resource.get_class(entity_name)
 
-        if cls is None or options is None:
+        if resource_cls is None or options is None:
             raise TypeError("No resource class registered for entity %s" % entity_name)
 
         # build the id of the object
-        obj_id = cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
+        obj_id = resource_cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
 
         # map all fields
-        fields = {field: cls.map_field(exporter, entity_name, field, model_object) for field in cls.fields}
+        fields = {field: resource_cls.map_field(exporter, entity_name, field, model_object) for field in resource_cls.fields}
 
-        obj = cls(obj_id)
+        obj = resource_cls(obj_id)
         obj.populate(fields)
-        obj.requires = getattr(model_object, "requires")
-
         obj.model = model_object
 
         return obj
@@ -316,12 +339,12 @@ class Resource(metaclass=ResourceMeta):
         Deserialize the resource from the given dictionary
         """
         obj_id = Id.parse_id(obj_map["id"])
-        cls, _options = resource.get_class(obj_id.entity_type)
+        cls_resource, _options = resource.get_class(obj_id.entity_type)
 
-        if cls is None:
+        if cls_resource is None:
             raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
 
-        obj = cls(obj_id)
+        obj = cls_resource(obj_id)
         obj.populate(obj_map)
 
         return obj
@@ -339,7 +362,8 @@ class Resource(metaclass=ResourceMeta):
     def __init__(self, _id: "Id") -> None:
         self.id = _id
         self.version = 0
-        self.requires: Set[Resource] = set()
+        self.requires: Set[Id] = set()
+        self.resource_requires: Set[Resource] = set()
         self.unknowns: Set[str] = set()
 
         if not hasattr(self.__class__, "fields"):
@@ -348,7 +372,7 @@ class Resource(metaclass=ResourceMeta):
         for field in self.__class__.fields:
             setattr(self, field, None)
 
-    def populate(self, fields: JsonType = None):
+    def populate(self, fields: Dict[str, Any]) -> None:
         for field in self.__class__.fields:
             if field in fields:
                 setattr(self, field, fields[field])
@@ -384,7 +408,7 @@ class Resource(metaclass=ResourceMeta):
 
             :return: The cloned resource
         """
-        res = Resource.deserialize(Resource.serialize(self))
+        res = Resource.deserialize(self.serialize())
         for k, v in kwargs.items():
             setattr(res, k, v)
 
@@ -394,14 +418,14 @@ class Resource(metaclass=ResourceMeta):
         """
             Serialize this resource to its dictionary representation
         """
-        dictionary = {}
+        dictionary: Dict[str, Any] = {}
 
         for field in self.__class__.fields:
             dictionary[field] = getattr(self, field)
 
         dictionary["requires"] = [str(x) for x in self.requires]
         dictionary["version"] = self.version
-        dictionary["id"] = str(self.id)
+        dictionary["id"] = self.id.resource_version_str()
 
         return dictionary
 
@@ -415,6 +439,8 @@ class PurgeableResource(Resource):
     """
 
     fields = ("purged", "purge_on_delete")
+    purged: bool
+    purge_on_delete: bool
 
 
 class ManagedResource(Resource):
@@ -424,8 +450,10 @@ class ManagedResource(Resource):
 
     fields = ("managed",)
 
+    managed: bool
+
     @staticmethod
-    def get_managed(exp, obj: "ManagedResource") -> bool:
+    def get_managed(exporter: "export.Exporter", obj: "ManagedResource") -> bool:
         if not obj.managed:
             raise IgnoreResourceException()
         return obj.managed
@@ -481,14 +509,7 @@ class Id(object):
 
     def __str__(self) -> str:
         if self._version > 0:
-            return "%(type)s[%(agent)s,%(attribute)s=%(value)s],v=%(version)s" % {
-                "type": self._entity_type,
-                "agent": self._agent_name,
-                "attribute": self._attribute,
-                "value": self._attribute_value,
-                "version": self._version,
-            }
-
+            return self.resource_version_str()
         return self.resource_str()
 
     def __hash__(self) -> int:
@@ -497,13 +518,30 @@ class Id(object):
     def __eq__(self, other: object) -> bool:
         return str(self) == str(other) and type(self) == type(other)
 
-    def resource_str(self) -> str:
-        return "%(type)s[%(agent)s,%(attribute)s=%(value)s]" % {
-            "type": self._entity_type,
-            "agent": self._agent_name,
-            "attribute": self._attribute,
-            "value": self._attribute_value,
-        }
+    def resource_str(self) -> ResourceIdStr:
+        return cast(
+            ResourceIdStr,
+            "%(type)s[%(agent)s,%(attribute)s=%(value)s]"
+            % {
+                "type": self._entity_type,
+                "agent": self._agent_name,
+                "attribute": self._attribute,
+                "value": self._attribute_value,
+            },
+        )
+
+    def resource_version_str(self) -> ResourceVersionIdStr:
+        return cast(
+            ResourceVersionIdStr,
+            "%(type)s[%(agent)s,%(attribute)s=%(value)s],v=%(version)s"
+            % {
+                "type": self._entity_type,
+                "agent": self._agent_name,
+                "attribute": self._attribute,
+                "value": self._attribute_value,
+                "version": self._version,
+            },
+        )
 
     def __repr__(self) -> str:
         return str(self)
@@ -535,10 +573,9 @@ class Id(object):
 
         version_match: str = result.group("version")
 
+        version = 0
         if version_match is not None:
             version = int(version_match)
-        else:
-            version = 0
 
         parts = {
             "type": result.group("type"),
@@ -563,12 +600,12 @@ class HostNotFoundException(Exception):
         This exception is raise when the deployment agent cannot access a host to manage a resource (Use mainly with remote io)
     """
 
-    def __init__(self, hostname, user, error):
+    def __init__(self, hostname: str, user: str, error: str) -> None:
         self.hostname = hostname
         self.user = user
         self.error = error
 
-    def to_action(self):
+    def to_action(self) -> "ResourceAction":
         from inmanta.data import ResourceAction
 
         ra = ResourceAction()  # @UndefinedVariable

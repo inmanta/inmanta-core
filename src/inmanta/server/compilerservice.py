@@ -356,6 +356,10 @@ class CompilerService(ServerSlice):
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
             return None, ["Skipping compile because server compile not enabled for this environment."]
 
+        env_vars_compile: Dict[str, str] = os.environ.copy()
+        if env_vars:
+            env_vars_compile.update(env_vars)
+
         requested = datetime.datetime.now()
         compile = data.Compile(
             environment=env.id,
@@ -364,7 +368,7 @@ class CompilerService(ServerSlice):
             do_export=do_export,
             force_update=force_update,
             metadata=metadata,
-            environment_variables=env_vars,
+            environment_variables=env_vars_compile,
         )
         await compile.insert()
         await self._queue(compile)

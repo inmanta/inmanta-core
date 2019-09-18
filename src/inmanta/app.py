@@ -29,7 +29,7 @@
     ------------
     @command annotation to register new command
 """
-
+import argparse
 import asyncio
 import json
 import logging
@@ -43,6 +43,7 @@ import traceback
 from argparse import ArgumentParser
 from asyncio import ensure_future
 from threading import Timer
+from typing import Any, Callable, Coroutine
 
 import colorlog
 import yaml
@@ -64,7 +65,7 @@ LOGGER = logging.getLogger("inmanta")
 
 
 @command("server", help_msg="Start the inmanta server")
-def start_server(options):
+def start_server(options: argparse.Namespace) -> None:
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
@@ -77,7 +78,7 @@ def start_server(options):
     ioloop = IOLoop.current()
 
     # handle startup exceptions
-    def _handle_startup_done(fut):
+    def _handle_startup_done(fut: asyncio.Future) -> None:
         if fut.cancelled():
             safe_shutdown(ioloop, ibl.stop)
         else:
@@ -98,7 +99,7 @@ def start_server(options):
 
 
 @command("agent", help_msg="Start the inmanta agent")
-def start_agent(options):
+def start_agent(options: argparse.Namespace) -> None:
     from inmanta import agent
 
     a = agent.Agent()
@@ -108,7 +109,7 @@ def start_agent(options):
     LOGGER.info("Agent Shutdown complete")
 
 
-def dump_threads():
+def dump_threads() -> None:
     print("----- Thread Dump ----")
     for th in threading.enumerate():
         print("---", th)
@@ -117,7 +118,7 @@ def dump_threads():
     sys.stdout.flush()
 
 
-async def dump_ioloop_running():
+async def dump_ioloop_running() -> None:
     # dump async IO
     print("----- Async IO tasks ----")
     for task in asyncio.all_tasks():
@@ -126,13 +127,13 @@ async def dump_ioloop_running():
     sys.stdout.flush()
 
 
-def context_dump(ioloop):
+def context_dump(ioloop: IOLoop) -> None:
     dump_threads()
     if hasattr(asyncio, "all_tasks"):
         ioloop.add_callback_from_signal(dump_ioloop_running)
 
 
-def setup_signal_handlers(shutdown_function):
+def setup_signal_handlers(shutdown_function: Callable[[], Coroutine[Any, Any, None]]) -> None:
     """
         Make sure that shutdown_function is called when a SIGTERM or a SIGINT interrupt occurs.
 
@@ -141,7 +142,7 @@ def setup_signal_handlers(shutdown_function):
     # ensure correct ioloop
     ioloop = IOLoop.current()
 
-    def hard_exit():
+    def hard_exit() -> None:
         context_dump(ioloop)
         sys.stdout.flush()
         # Hard exit, not sys.exit
@@ -164,8 +165,8 @@ def setup_signal_handlers(shutdown_function):
     signal.signal(signal.SIGUSR1, handle_signal_dump)
 
 
-def safe_shutdown(ioloop, shutdown_function):
-    def hard_exit():
+def safe_shutdown(ioloop: IOLoop, shutdown_function: Callable[[], None]) -> None:
+    def hard_exit() -> None:
         context_dump(ioloop)
         sys.stdout.flush()
         # Hard exit, not sys.exit
@@ -180,7 +181,7 @@ def safe_shutdown(ioloop, shutdown_function):
     ioloop.add_callback(safe_shutdown_wrapper, shutdown_function)
 
 
-async def safe_shutdown_wrapper(shutdown_function):
+async def safe_shutdown_wrapper(shutdown_function: Callable[[], Coroutine[Any, Any, None]]) -> None:
     """
         Wait 10 seconds to gracefully shutdown the instance.
         Afterwards stop the IOLoop
@@ -196,7 +197,7 @@ async def safe_shutdown_wrapper(shutdown_function):
         IOLoop.current().stop()
 
 
-def compiler_config(parser):
+def compiler_config(parser: ArgumentParser) -> None:
     """
         Configure the compiler of the export function
     """
@@ -221,7 +222,7 @@ def compiler_config(parser):
 @command(
     "compile", help_msg="Compile the project to a configuration model", parser_config=compiler_config, require_project=True
 )
-def compile_project(options):
+def compile_project(options: argparse.Namespace):
     if options.environment is not None:
         Config.set("config", "environment", options.environment)
 
@@ -260,18 +261,18 @@ def compile_project(options):
 
 
 @command("list-commands", help_msg="Print out an overview of all commands")
-def list_commands(options):
+def list_commands(options: argparse.Namespace) -> None:
     print("The following commands are available:")
     for cmd, info in Commander.commands().items():
         print(" %s: %s" % (cmd, info["help"]))
 
 
-def help_parser_config(parser: ArgumentParser):
+def help_parser_config(parser: ArgumentParser) -> None:
     parser.add_argument("subcommand", help="Output help for a particular subcommand", nargs="?", default=None)
 
 
 @command("help", help_msg="show a help message and exit", parser_config=help_parser_config)
-def help_command(options):
+def help_command(options: argparse.Namespace):
     if options.subcommand is None:
         cmd_parser().print_help()
     else:
@@ -287,18 +288,18 @@ def help_command(options):
     parser_config=moduletool.ModuleTool.modules_parser_config,
     aliases=["module"],
 )
-def modules(options):
+def modules(options: argparse.Namespace) -> None:
     tool = moduletool.ModuleTool()
     tool.execute(options.cmd, options)
 
 
 @command("project", help_msg="Subcommand to manage the project", parser_config=moduletool.ProjectTool.parser_config)
-def project(options):
+def project(options: argparse.Namespace) -> None:
     tool = moduletool.ProjectTool()
     tool.execute(options.cmd, options)
 
 
-def deploy_parser_config(parser):
+def deploy_parser_config(parser: ArgumentParser) -> None:
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
     parser.add_argument(
@@ -312,7 +313,7 @@ def deploy_parser_config(parser):
 
 
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
-def deploy(options):
+def deploy(options: argparse.Namespace) -> None:
     module.Project.get(options.main_file)
     from inmanta import deploy
 
@@ -326,7 +327,7 @@ def deploy(options):
         run.stop()
 
 
-def export_parser_config(parser):
+def export_parser_config(parser: ArgumentParser) -> None:
     """
         Configure the compiler of the export function
     """
@@ -385,7 +386,7 @@ def export_parser_config(parser):
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
-def export(options):
+def export(options: argparse.Namespace) -> None:
     if options.environment is not None:
         Config.set("config", "environment", options.environment)
 
@@ -461,11 +462,11 @@ def export(options):
 log_levels = {0: logging.ERROR, 1: logging.WARNING, 2: logging.INFO, 3: logging.DEBUG, 4: 2}
 
 
-def cmd_parser():
+def cmd_parser() -> ArgumentParser:
     # create the argument compiler
     parser = ArgumentParser()
     parser.add_argument("-p", action="store_true", dest="profile", help="Profile this run of the program")
-    parser.add_argument("-c", "--config", dest="config_file", help="Use this config file", default="/etc/inmanta/inmanta.cfg")
+    parser.add_argument("-c", "--config", dest="config_file", help="Use this config file", default=None)
     parser.add_argument(
         "--config-dir",
         dest="config_dir",
@@ -515,7 +516,7 @@ def _is_on_tty() -> bool:
     return (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ
 
 
-def _get_default_stream_handler():
+def _get_default_stream_handler() -> logging.StreamHandler:
     stream_handler = logging.StreamHandler(stream=sys.stdout)
     stream_handler.setLevel(logging.INFO)
 
@@ -525,7 +526,7 @@ def _get_default_stream_handler():
     return stream_handler
 
 
-def _get_watched_file_handler(options):
+def _get_watched_file_handler(options) -> logging.handlers.WatchedFileHandler:
     if not options.log_file:
         raise Exception("No logfile was provided.")
     level = _convert_to_log_level(options.log_file_level)
@@ -543,7 +544,7 @@ def _convert_to_log_level(level):
     return log_levels[level]
 
 
-def _get_log_formatter_for_stream_handler(timed):
+def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
     log_format = "%(asctime)s " if timed else ""
     if _is_on_tty():
         log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s %(blue)s%(message)s"
@@ -559,7 +560,7 @@ def _get_log_formatter_for_stream_handler(timed):
     return formatter
 
 
-def app():
+def app() -> None:
     """
         Run the compiler
     """
@@ -592,6 +593,9 @@ def app():
 
     logging.captureWarnings(True)
 
+    if options.config_file and not os.path.exists(options.config_file):
+        LOGGER.warning("Config file %s doesn't exist", options.config_file)
+
     # Load the configuration
     Config.load_config(options.config_file, options.config_dir)
 
@@ -601,7 +605,7 @@ def app():
         parser.print_usage()
         return
 
-    def report(e):
+    def report(e: Exception) -> None:
         minus_x_set_top_level_command = options.errors
         minus_x_set_subcommand = hasattr(options, "errors_subcommand") and options.errors_subcommand
         if not minus_x_set_top_level_command and not minus_x_set_subcommand:
