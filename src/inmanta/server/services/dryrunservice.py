@@ -26,7 +26,7 @@ from inmanta.data import ResourceVersionIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_DRYRUN, protocol
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_DRYRUN, SLICE_TRANSPORT, protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.types import Apireturn, JsonType
 
@@ -45,7 +45,11 @@ class DyrunService(protocol.ServerSlice):
     def get_dependencies(self) -> List[str]:
         return [SLICE_DATABASE, SLICE_AGENT_MANAGER]
 
+    def get_depended_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
+
     async def prestart(self, server: protocol.Server) -> None:
+        await super().prestart(server)
         self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
 
     @protocol.handle(methods.dryrun_request, version_id="id", env="tid")

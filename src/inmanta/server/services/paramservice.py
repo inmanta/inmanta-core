@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, cast
 from inmanta import data
 from inmanta.protocol import methods
 from inmanta.protocol.common import attach_warnings
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PARAM, SLICE_SERVER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PARAM, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
@@ -47,13 +47,16 @@ class ParameterService(protocol.ServerSlice):
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER, SLICE_DATABASE, SLICE_AGENT_MANAGER]
 
+    def get_depended_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
+
     async def prestart(self, server: protocol.Server) -> None:
+        await super().prestart(server)
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
         self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
 
     async def start(self) -> None:
         self.schedule(self.renew_expired_facts, self._fact_renew)
-
         await super().start()
 
     async def renew_expired_facts(self) -> None:

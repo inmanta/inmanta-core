@@ -25,7 +25,7 @@ import asyncpg
 from inmanta import data
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import NotFound, ServerError
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PROJECT, SLICE_RESOURCE, protocol
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PROJECT, SLICE_RESOURCE, SLICE_TRANSPORT, protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn
@@ -45,7 +45,11 @@ class ProjectService(protocol.ServerSlice):
     def get_dependencies(self) -> List[str]:
         return [SLICE_DATABASE, SLICE_RESOURCE]
 
+    def get_depended_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
+
     async def prestart(self, server: protocol.Server) -> None:
+        await super().prestart(server)
         self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
