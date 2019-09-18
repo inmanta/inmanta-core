@@ -125,7 +125,7 @@ class AgentManager(ServerSlice, SessionListener):
         }
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_SERVER, SLICE_DATABASE]
+        return [SLICE_SERVER, SLICE_DATABASE, SLICE_SESSION_MANAGER]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
