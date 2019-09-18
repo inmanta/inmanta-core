@@ -1,7 +1,7 @@
 .. _auth-setup:
 
-Setup authentication
-====================
+Setting up authentication
+=========================
 
 This guide explains how to enable ssl and setup authentication.
 
