@@ -42,7 +42,7 @@ Requires(pre):  shadow-utils
 BuildRequires:  python36-devel
 Requires:       python36
 Requires:       python36-devel
-%define __python3 /usr/bin/python36
+%define __python3 /usr/bin/python3
 %else
 %if 0%{?fedora} >= 29
 BuildRequires:  gcc
