@@ -37,11 +37,13 @@ class DatabaseService(protocol.ServerSlice):
         self._pool: Optional[asyncpg.pool.Pool] = None
 
     async def start(self) -> None:
+        await super().start()
         await self.connect_database()
 
     async def stop(self) -> None:
         await self.disconnect_database()
         self._pool = None
+        await super().stop()
 
     def get_dependencies(self) -> List[str]:
         return []

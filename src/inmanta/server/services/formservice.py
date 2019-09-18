@@ -25,7 +25,7 @@ from inmanta.ast import type
 from inmanta.protocol import methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import NotFound
-from inmanta.server import SLICE_DATABASE, SLICE_FORM, SLICE_SERVER, protocol
+from inmanta.server import SLICE_DATABASE, SLICE_FORM, SLICE_SERVER, SLICE_TRANSPORT, protocol
 from inmanta.server.server import Server
 from inmanta.types import Apireturn, JsonType
 
@@ -43,7 +43,11 @@ class FormService(protocol.ServerSlice):
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER, SLICE_DATABASE]
 
+    def get_depended_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
+
     async def prestart(self, server: protocol.Server) -> None:
+        await super().prestart(server)
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
 
     @protocol.handle(methods.put_form, form_id="id", env="tid")

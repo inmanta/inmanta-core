@@ -21,7 +21,7 @@ from typing import Dict, List, cast
 from inmanta import data
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
-from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, protocol
+from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.services.fileservice import FileService
 from inmanta.types import Apireturn, JsonType
 from inmanta.util import hash_file
@@ -40,7 +40,11 @@ class CodeService(protocol.ServerSlice):
     def get_dependencies(self) -> List[str]:
         return [SLICE_FILE, SLICE_DATABASE]
 
+    def get_depended_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
+
     async def prestart(self, server: protocol.Server) -> None:
+        await super().prestart(server)
         self.file_slice = cast(FileService, server.get_slice(SLICE_FILE))
 
     @protocol.handle(methods.upload_code, code_id="id", env="tid")

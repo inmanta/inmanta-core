@@ -90,6 +90,7 @@ class ResourceService(protocol.ServerSlice):
         return [SLICE_DATABASE, SLICE_AGENT_MANAGER]
 
     async def prestart(self, server: protocol.Server) -> None:
+        await super().prestart(server)
         self.agentmanager_service = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
 
     async def start(self) -> None:

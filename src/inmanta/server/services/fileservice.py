@@ -23,7 +23,7 @@ from typing import Iterable, List, cast
 
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
-from inmanta.server import SLICE_FILE, SLICE_SERVER
+from inmanta.server import SLICE_FILE, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.server import Server
@@ -44,7 +44,11 @@ class FileService(protocol.ServerSlice):
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER]
 
+    def get_depended_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
+
     async def prestart(self, server: protocol.Server) -> None:
+        await super().prestart(server)
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
 
     @protocol.handle(methods.upload_file, file_hash="id")

@@ -36,6 +36,7 @@ from inmanta.server import (
     SLICE_ORCHESTRATION,
     SLICE_RESOURCE,
     SLICE_SERVER,
+    SLICE_TRANSPORT,
     protocol,
 )
 from inmanta.server.agentmanager import AgentManager
@@ -61,7 +62,11 @@ class EnvironmentService(protocol.ServerSlice):
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER, SLICE_DATABASE, SLICE_AGENT_MANAGER]
 
+    def get_depended_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
+
     async def prestart(self, server: protocol.Server) -> None:
+        await super().prestart(server)
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
         self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
         self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
