@@ -156,7 +156,7 @@ Then compile the project and send it to the server:
 The first time you run this command may take a while, as all dependencies are downloaded.
 
 When the model is sent to the server, it will start deploying the configuration.
-To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_, select the `temp` project and then the `quickstart-env` environment.
+To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_, select the `test` project and then the `quickstart-env` environment.
 
 .. note::
 
