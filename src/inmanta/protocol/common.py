@@ -329,9 +329,9 @@ class MethodProperties(object):
                                 to which the options apply.
             :param api_version: The version of the api this method belongs to
             :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
-            :param envelope: Put the response of the call under a "data" key.
+            :param envelope: Put the response of the call under an envelope key.
             :param typed: Is the method definition typed or not
-            :param envelope_key: The evenlope key to use
+            :param envelope_key: The envelope key to use
         """
         if api is None:
             api = not server_agent and not agent_server
