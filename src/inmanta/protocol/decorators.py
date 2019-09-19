@@ -65,7 +65,8 @@ def method(
     client_types: List[str] = ["public"],
     api_version: int = 1,
     api_prefix: str = "api",
-    wrap_data: bool = False,
+    envelope: bool = False,
+    envelope_key: str = "data",
 ) -> Callable[..., Callable]:
     """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -88,7 +89,8 @@ def method(
                         type of the argument. This method can raise an HTTPException to return a 404 for example.
         :param api_version: The version of the api this method belongs to
         :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
-        :param wrap_data: Put the response of the call under a "data" key.
+        :param envelope: Put the response of the call under an envelope with key envelope_key.
+        :param envelope_key: The envelope key to use.
     """
 
     def wrapper(func: MethodT) -> MethodT:
@@ -106,7 +108,8 @@ def method(
             client_types,
             api_version,
             api_prefix,
-            wrap_data,
+            envelope,
+            envelope_key,
         )
         common.MethodProperties.methods[func.__name__] = properties
         func.__method_properties__ = properties
@@ -128,6 +131,7 @@ def typedmethod(
     client_types: List[str] = ["public"],
     api_version: int = 1,
     api_prefix: str = "api",
+    envelope_key: str = "data",
 ) -> Callable[..., Callable]:
     """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -150,6 +154,7 @@ def typedmethod(
                         type of the argument. This method can raise an HTTPException to return a 404 for example.
         :param api_version: The version of the api this method belongs to
         :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
+        :param envelope_key: The envelope key to use.
     """
 
     def wrapper(func: MethodT) -> MethodT:
@@ -169,6 +174,7 @@ def typedmethod(
             api_prefix,
             True,
             True,
+            envelope_key,
         )
         common.MethodProperties.methods[func.__name__] = properties
         func.__method_properties__ = properties
