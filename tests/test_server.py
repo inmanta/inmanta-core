@@ -90,7 +90,7 @@ async def test_autostart_dual_env(client, server):
     """
         Test auto start of agent
     """
-    agentmanager = server.get_slice(SLICE_SERVER).agentmanager
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     sessionendpoint = server.get_slice(SLICE_SESSION_MANAGER)
 
     result = await client.create_project("env-test")

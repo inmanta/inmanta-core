@@ -108,8 +108,8 @@ def test_phase_3():
     order = server._get_slice_sequence()
     print([s.name for s in order])
     assert [s.name for s in order] == [
-        SLICE_SESSION_MANAGER,
         SLICE_SERVER,
+        SLICE_SESSION_MANAGER,
         SLICE_AGENT_MANAGER,
         SLICE_TRANSPORT,
         "testplugin.testslice",
