@@ -588,7 +588,7 @@ async def test_return_model(unused_tcp_port, postgres_db, database_name):
 
 
 @pytest.mark.asyncio
-async def test_data_wrap(unused_tcp_port, postgres_db, database_name):
+async def test_data_envelope(unused_tcp_port, postgres_db, database_name):
     """
         Test the use and validation of methods that use common.ReturnValue
     """
@@ -611,6 +611,18 @@ async def test_data_wrap(unused_tcp_port, postgres_db, database_name):
 
             return ReturnValue(response=new_project)
 
+        @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"], envelope_key="method")
+        def test_method2(project: Project) -> ReturnValue[Project]:  # NOQA
+            """
+                Create a new project
+            """
+
+        @protocol.handle(test_method2)
+        async def test_method2(self, project: Project) -> ReturnValue[Project]:
+            new_project = project.copy()
+
+            return ReturnValue(response=new_project)
+
     rs = Server()
     server = ProjectServer(name="projectserver")
     rs.add_slice(server)
@@ -623,6 +635,13 @@ async def test_data_wrap(unused_tcp_port, postgres_db, database_name):
     assert "data" in result.result
     assert "id" in result.result["data"]
     assert "name" in result.result["data"]
+
+    result = await client.test_method2({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 200
+
+    assert "method" in result.result
+    assert "id" in result.result["method"]
+    assert "name" in result.result["method"]
 
     await server.stop()
     await rs.stop()
