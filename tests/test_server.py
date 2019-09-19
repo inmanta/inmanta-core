@@ -29,7 +29,7 @@ from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.export import unknown_parameters, upload_code
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_SERVER, SLICE_SESSION_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_SESSION_MANAGER
 from inmanta.server import config as opt
 from inmanta.util import hash_file
 from utils import retry_limited
@@ -90,7 +90,7 @@ async def test_autostart_dual_env(client, server):
     """
         Test auto start of agent
     """
-    agentmanager = server.get_slice(SLICE_SERVER).agentmanager
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     sessionendpoint = server.get_slice(SLICE_SESSION_MANAGER)
 
     result = await client.create_project("env-test")

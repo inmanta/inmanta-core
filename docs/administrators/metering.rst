@@ -67,7 +67,7 @@ The API endpoint is attached as a tag called `key`.
 The API endpoint is reported as the server method, to know which url corresponds to which method, please consult
 `methods.py <https://github.com/inmanta/inmanta/blob/master/src/inmanta/protocol/methods.py>`_.
 
-The fields available for each API endpoint are (cfr `metrics timer <https://www.javadoc.io/doc/io.dropwizard.metrics/metrics-core/4.0.4>`_):
+The fields available for each API endpoint are (cfr `metrics timer <https://metrics.dropwizard.io>`_):
 
 +-----------------+-------+--------------------------------------------------------------------------+
 | field           | type  | description                                                              |

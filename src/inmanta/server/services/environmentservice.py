@@ -58,7 +58,7 @@ class EnvironmentService(protocol.ServerSlice):
         super(EnvironmentService, self).__init__(SLICE_ENVIRONMENT)
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_SERVER, SLICE_DATABASE, SLICE_AGENT_MANAGER]
+        return [SLICE_SERVER, SLICE_DATABASE, SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]

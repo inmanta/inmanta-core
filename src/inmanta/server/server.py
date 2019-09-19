@@ -27,11 +27,9 @@ from inmanta.data.model import ExtensionStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.server import (
-    SLICE_AGENT_MANAGER,
     SLICE_COMPILER,
     SLICE_DATABASE,
     SLICE_SERVER,
-    SLICE_SESSION_MANAGER,
     SLICE_TRANSPORT,
 )
 from inmanta.server import config as opt
@@ -41,7 +39,6 @@ from inmanta.types import Apireturn, JsonType, Warnings
 LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from inmanta.server.agentmanager import AgentManager
     from inmanta.server.services.compilerservice import CompilerService
 
 DBLIMIT = 100000
@@ -64,7 +61,7 @@ class Server(protocol.ServerSlice):
         self.setup_dashboard()
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_SESSION_MANAGER, SLICE_DATABASE]
+        return [SLICE_DATABASE, SLICE_COMPILER]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
@@ -72,7 +69,6 @@ class Server(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         self._server = server
         self._server_storage: Dict[str, str] = self.check_storage()
-        self.agentmanager: "AgentManager" = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
         self.compiler: "CompilerService" = cast("CompilerService", server.get_slice(SLICE_COMPILER))
 
     def setup_dashboard(self) -> None:
