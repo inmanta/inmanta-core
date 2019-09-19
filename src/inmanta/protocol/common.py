@@ -173,7 +173,7 @@ class ReturnValue(Generic[T]):
     def headers(self) -> MutableMapping[str, str]:
         return self._headers
 
-    def get_body(self, wrap_data: bool = False) -> Optional[ReturnTypes]:
+    def get_body(self, wrap_data: bool = False) -> ReturnTypes:
         """ Get the response body
 
             :param wrap_data: Should the response be mapped into a data key
@@ -184,9 +184,6 @@ class ReturnValue(Generic[T]):
         if wrap_data:
             response: Dict[str, Any] = {"data": self._response}
             return response
-
-        if isinstance(self._response, BaseModel):
-            return self._response.dict()
 
         return self._response
 
