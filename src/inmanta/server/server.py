@@ -64,7 +64,7 @@ class Server(protocol.ServerSlice):
         self.setup_dashboard()
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_DATABASE]
+        return [SLICE_DATABASE, SLICE_COMPILER]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
