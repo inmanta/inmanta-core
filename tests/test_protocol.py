@@ -1037,7 +1037,7 @@ async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name)
     assert result.code == 400
     assert "error_details" in result.result
 
-    details = result.result["error_details"]
+    details = result.result["error_details"]["validation_errors"]
     assert len(details) == 2
 
     name = [d for d in details if d["loc"] == ["data", "name"]][0]

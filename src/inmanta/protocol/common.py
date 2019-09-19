@@ -58,9 +58,9 @@ from tornado import web
 
 from inmanta import config as inmanta_config
 from inmanta import const, execute, util
-from inmanta.data.model import BaseModel, EnvelopeResponse
+from inmanta.data.model import BaseModel
 from inmanta.protocol.exceptions import BadRequest
-from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType
+from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
 
 from . import exceptions
 
@@ -173,7 +173,7 @@ class ReturnValue(Generic[T]):
     def headers(self) -> MutableMapping[str, str]:
         return self._headers
 
-    def get_body(self, wrap_data: bool = False) -> Optional[Union[EnvelopeResponse, T]]:
+    def get_body(self, wrap_data: bool = False) -> Optional[ReturnTypes]:
         """ Get the response body
 
             :param wrap_data: Should the response be mapped into a data key
@@ -182,7 +182,11 @@ class ReturnValue(Generic[T]):
             return None
 
         if wrap_data:
-            return EnvelopeResponse(data=self._response)
+            response: Dict[str, Any] = {"data": self._response}
+            return response
+
+        if isinstance(self._response, BaseModel):
+            return self._response.dict()
 
         return self._response
 
@@ -207,17 +211,17 @@ class Response(object):
         """
         return cls(status_code=result.status_code, headers=additional_headers, body=result.get_body(wrap_data))
 
-    def __init__(self, status_code: int, headers: Dict[str, str], body: Optional[JsonType] = None) -> None:
+    def __init__(self, status_code: int, headers: MutableMapping[str, str], body: ReturnTypes = None) -> None:
         self._status_code = status_code
         self._headers = headers
         self._body = body
 
     @property
-    def body(self) -> Optional[JsonType]:
+    def body(self) -> ReturnTypes:
         return self._body
 
     @property
-    def headers(self) -> Dict[str, str]:
+    def headers(self) -> MutableMapping[str, str]:
         return self._headers
 
     @property
@@ -370,7 +374,7 @@ class MethodProperties(object):
         except ValidationError as e:
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
-            raise BadRequest(error_msg, e.errors())
+            raise BadRequest(error_msg, {"validation_errors": e.errors()})
 
     def arguments_to_pydantic(self) -> Type[pydantic.BaseModel]:
         """
@@ -454,7 +458,7 @@ class MethodProperties(object):
 
         if typing_inspect.is_union_type(arg_type):
             # Make sure there is only one list and one dict in the union, otherwise we cannot process the arguments
-            cnt = defaultdict(lambda: 0)
+            cnt: Dict[str, int] = defaultdict(lambda: 0)
             for sub_arg in typing_inspect.get_args(arg_type, evaluate=True):
                 self._validate_type_arg(arg, sub_arg, allow_none_type, in_url)
 
@@ -659,16 +663,18 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
 
 
 def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[List[str]]) -> Tuple[int, JsonType]:
+    if value is None:
+        value = {}
     if warnings:
-        if value is None:
-            value = {}
         meta = value.setdefault("metadata", {})
         warns = meta.setdefault("warnings", [])
         warns.extend(warnings)
     return code, value
 
 
-def json_encode(value: JsonType) -> str:
+def json_encode(value: ReturnTypes) -> str:
+    """ Our json encodde is able to also serialize other types than a dict.
+    """
     # see json_encode in tornado.escape
     return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
 
@@ -695,8 +701,10 @@ def shorten(msg: str, max_len: int = 10) -> str:
 
 def encode_token(client_types: List[str], environment: str = None, idempotent: bool = False, expire: float = None) -> str:
     cfg = inmanta_config.AuthJWTConfig.get_sign_config()
+    if cfg is None:
+        raise Exception("No JWT signing configuration available.")
 
-    payload = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}
+    payload: Dict[str, Any] = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}
 
     if not idempotent:
         payload["iat"] = int(time.time())

@@ -36,14 +36,6 @@ class BaseModel(pydantic.BaseModel):
         use_enum_values = True
 
 
-class EnvelopeResponse(pydantic.BaseModel):
-    """
-        Type used for reponses that are in an envelope
-    """
-
-    data: Optional[ArgumentTypes]
-
-
 class ExtensionStatus(BaseModel):
     """
         Status response for extensions loaded in the server
