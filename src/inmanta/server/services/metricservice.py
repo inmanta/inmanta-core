@@ -47,7 +47,7 @@ class MetricsService(protocol.ServerSlice):
             self._influx_db_reporter = None
 
     def start_metric_reporters(self) -> None:
-        if not opt.influxdb_host.get():
+        if opt.influxdb_host.get():
             self._influx_db_reporter = InfluxReporter(
                 server=opt.influxdb_host.get(),
                 port=opt.influxdb_port.get(),

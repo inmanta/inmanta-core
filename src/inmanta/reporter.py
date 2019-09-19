@@ -108,6 +108,9 @@ class InfluxReporter(AsyncReporter):
             self.key = "%s,%s" % (self.key, tagstring)
         self.key = "%s,key=" % self.key
 
+        if not self.server:
+            raise Exception("Unable to start the metrics reporter without a server. Empty string given.")
+
     async def _create_database(self, http_client: AsyncHTTPClient) -> None:
         url = "%s://%s:%s/query" % (self.protocol, self.server, self.port)
         q = quote("CREATE DATABASE %s" % self.database)
