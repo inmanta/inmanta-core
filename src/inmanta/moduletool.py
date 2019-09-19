@@ -193,14 +193,22 @@ class ProjectTool(ModuleLikeTool):
         requires = sorted([k + " " + v for k, v in freeze.items()])
         newconfig["requires"] = requires
 
+        close = False
+
         if outfile is None:
             outfile = open(project.get_config_file_name(), "w", encoding="UTF-8")
+            close = True
         elif outfile == "-":
             outfile = sys.stdout
         else:
             outfile = open(outfile, "w", encoding="UTF-8")
+            close = True
 
-        outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
+        try:
+            outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
+        finally:
+            if close:
+                outfile.close()
 
 
 class ModuleTool(ModuleLikeTool):
