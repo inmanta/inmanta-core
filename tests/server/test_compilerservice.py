@@ -29,8 +29,8 @@ import pytest
 from inmanta import config, data
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server import config as server_config
-from inmanta.server.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.server.protocol import Server
+from inmanta.server.services.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.util import ensure_directory_exist
 from utils import LogSequence, report_db_index_usage, retry_limited, wait_for_version
 

@@ -25,7 +25,7 @@ import uuid
 import warnings
 from collections import defaultdict
 from configparser import RawConfigParser
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type, TypeVar, Union
 
 import asyncpg
 
@@ -33,9 +33,9 @@ import inmanta.db.versions
 from inmanta import const, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
 from inmanta.data import schema
-from inmanta.data.model import CompileRun
+from inmanta.data.model import CompileRun, ResourceIdStr, ResourceVersionIdStr
 from inmanta.resources import Id
-from inmanta.types import JsonType
+from inmanta.types import JsonType, SimpleTypes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -146,7 +146,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
     """
 
-    _connection_pool = None
+    _connection_pool: asyncpg.pool.Pool = None
 
     @classmethod
     def table_name(cls) -> str:
@@ -233,13 +233,13 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return uuid.uuid4()
 
     @classmethod
-    def set_connection_pool(cls, pool):
+    def set_connection_pool(cls, pool: asyncpg.pool.Pool) -> None:
         if cls._connection_pool:
             raise Exception(f"Connection already set on {cls} ({cls._connection_pool}!")
         cls._connection_pool = pool
 
     @classmethod
-    async def close_connection_pool(cls):
+    async def close_connection_pool(cls) -> None:
         if not cls._connection_pool:
             return
         await cls._connection_pool.close()
@@ -341,14 +341,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return await con.fetch(query, *values)
 
     @classmethod
-    async def _execute_query(cls, query, *values, connection=None):
+    async def _execute_query(cls, query, *values, connection: asyncpg.connection.Connection = None) -> str:
         if connection:
             return await connection.execute(query, *values)
         async with cls._connection_pool.acquire() as con:
             return await con.execute(query, *values)
 
     @classmethod
-    async def insert_many(cls, documents: List["BaseDocument"]) -> None:
+    async def insert_many(cls, documents: Sequence["BaseDocument"]) -> None:
         """
             Insert multiple objects at once
         """
@@ -431,13 +431,21 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return None
 
     @classmethod
-    async def get_one(cls, **query):
+    async def get_one(cls: Type[T], **query) -> T:
         results = await cls.get_list(**query)
         if results:
             return results[0]
 
     @classmethod
-    async def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
+    async def get_list(
+        cls: Type[T],
+        order_by_column: str = None,
+        order: str = "ASC",
+        limit: int = None,
+        offset: int = None,
+        no_obj: bool = False,
+        **query: Any,
+    ) -> List[T]:
         """
             Get a list of documents matching the filter args
         """
@@ -512,7 +520,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         return value
 
-    async def delete(self, connection=None):
+    async def delete(self, connection: asyncpg.connection.Connection = None) -> None:
         """
             Delete this document
         """
@@ -520,7 +528,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
         await self._execute_query(query, *values, connection=connection)
 
-    async def delete_cascade(self):
+    async def delete_cascade(self) -> None:
         await self.delete()
 
     @classmethod
@@ -567,8 +575,8 @@ class Project(BaseDocument):
         :param name: The name of the configuration project.
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name = Field(field_type=str, required=True, unique=True)
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    name: str = Field(field_type=str, required=True, unique=True)
 
 
 def convert_boolean(value: Any) -> bool:
@@ -647,15 +655,15 @@ class Setting(object):
 
     def __init__(
         self,
-        name,
-        typ,
-        default=None,
-        doc=None,
-        validator=None,
-        recompile=False,
-        update_model=False,
-        agent_restart=False,
-        allowed_values=None,
+        name: str,
+        typ: str,
+        default: SimpleTypes = None,
+        doc: str = None,
+        validator: Callable[[SimpleTypes], SimpleTypes] = None,
+        recompile: bool = False,
+        update_model: bool = False,
+        agent_restart: bool = False,
+        allowed_values: List[SimpleTypes] = None,
     ):
         """
             :param name: The name of the setting.
@@ -670,7 +678,7 @@ class Setting(object):
             :param agent_restart: Restart autostarted agents when this settings is updated.
             :param allowed_values: list of possible values (if type is enum)
         """
-        self.typ = typ
+        self.typ: str = typ
         self.default = default
         self.doc = doc
         self.validator = validator
@@ -679,7 +687,7 @@ class Setting(object):
         self.agent_restart = agent_restart
         self.allowed_values = allowed_values
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         return {
             "type": self.typ,
             "default": self.default,
@@ -713,7 +721,7 @@ class Environment(BaseDocument):
     repo_branch: str = Field(field_type=str, default="")
     settings: Dict[str, EnvSettingType] = Field(field_type=dict, default={})
 
-    _settings = {
+    _settings: Dict[str, Setting] = {
         AUTO_DEPLOY: Setting(
             name=AUTO_DEPLOY,
             typ="bool",
@@ -895,7 +903,7 @@ class Environment(BaseDocument):
         else:
             await self.set(key, self._settings[key].default)
 
-    async def delete_cascade(self, only_content=False) -> None:
+    async def delete_cascade(self, only_content: bool = False) -> None:
         if only_content:
             await Agent.delete_all(environment=self.id)
 
@@ -937,24 +945,24 @@ class Parameter(BaseDocument):
         :todo Add history
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name = Field(field_type=str, required=True, part_of_primary_key=True)
-    value = Field(field_type=str, default="", required=True)
-    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    source = Field(field_type=str, required=True)
-    resource_id = Field(field_type=str, default="")
-    updated = Field(field_type=datetime.datetime)
-    metadata = Field(field_type=dict)
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    name: str = Field(field_type=str, required=True, part_of_primary_key=True)
+    value: str = Field(field_type=str, default="", required=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    source: str = Field(field_type=str, required=True)
+    resource_id: ResourceIdStr = Field(field_type=str, default="")
+    updated: datetime.datetime = Field(field_type=datetime.datetime)
+    metadata: Dict[str, Any] = Field(field_type=dict)
 
     @classmethod
-    async def get_updated_before(cls, updated_before):
+    async def get_updated_before(cls, updated_before: datetime.datetime) -> List["Parameter"]:
         query = "SELECT * FROM " + cls.table_name() + " WHERE updated < $1"
         values = [cls._get_value(updated_before)]
         result = await cls.select_query(query, values)
         return result
 
     @classmethod
-    async def list_parameters(cls, env_id, **metadata_constraints):
+    async def list_parameters(cls, env_id: uuid.UUID, **metadata_constraints: str) -> List["Parameter"]:
         query = "SELECT * FROM " + cls.table_name() + " WHERE environment=$1"
         values = [cls._get_value(env_id)]
         for key, value in metadata_constraints.items():
@@ -978,14 +986,14 @@ class UnknownParameter(BaseDocument):
         :param version: The version id of the configuration model on which this parameter was reported
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name = Field(field_type=str, required=True)
-    environment = Field(field_type=uuid.UUID, required=True)
-    source = Field(field_type=str, required=True)
-    resource_id = Field(field_type=str, default="")
-    version = Field(field_type=int, required=True)
-    metadata = Field(field_type=dict)
-    resolved = Field(field_type=bool, default=False)
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    name: str = Field(field_type=str, required=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+    source: str = Field(field_type=str, required=True)
+    resource_id: ResourceIdStr = Field(field_type=str, default="")
+    version: int = Field(field_type=int, required=True)
+    metadata: Dict[str, Any] = Field(field_type=dict)
+    resolved: bool = Field(field_type=bool, default=False)
 
 
 class AgentProcess(BaseDocument):
@@ -997,15 +1005,15 @@ class AgentProcess(BaseDocument):
         :param last_seen: When did the server receive data from the node for the last time.
     """
 
-    hostname = Field(field_type=str, required=True)
-    environment = Field(field_type=uuid.UUID, required=True)
-    first_seen = Field(field_type=datetime.datetime, default=None)
-    last_seen = Field(field_type=datetime.datetime, default=None)
-    expired = Field(field_type=datetime.datetime, default=None)
-    sid = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    hostname: str = Field(field_type=str, required=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+    first_seen: datetime.datetime = Field(field_type=datetime.datetime, default=None)
+    last_seen: datetime.datetime = Field(field_type=datetime.datetime, default=None)
+    expired: datetime.datetime = Field(field_type=datetime.datetime, default=None)
+    sid: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
 
     @classmethod
-    async def get_live(cls, environment=None):
+    async def get_live(cls, environment: Optional[uuid.UUID] = None) -> List["AgentProcess"]:
         if environment is not None:
             result = await cls.get_list(
                 limit=DBLIMIT, environment=environment, expired=None, order_by_column="last_seen", order="ASC NULLS LAST"
@@ -1015,17 +1023,17 @@ class AgentProcess(BaseDocument):
         return result
 
     @classmethod
-    async def get_live_by_env(cls, env):
+    async def get_live_by_env(cls, env: uuid.UUID) -> List["AgentProcess"]:
         result = await cls.get_live(env)
         return result
 
     @classmethod
-    async def get_by_env(cls, env):
+    async def get_by_env(cls, env: uuid.UUID) -> List["AgentProcess"]:
         nodes = await cls.get_list(environment=env, order_by_column="last_seen", order="ASC NULLS LAST")
         return nodes
 
     @classmethod
-    async def get_by_sid(cls, sid):
+    async def get_by_sid(cls, sid: uuid.UUID) -> List["AgentProcess"]:
         objects = await cls.get_list(limit=DBLIMIT, expired=None, sid=sid)
         if len(objects) == 0:
             return None
@@ -1035,7 +1043,7 @@ class AgentProcess(BaseDocument):
         else:
             return objects[0]
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         result = super(AgentProcess, self).to_dict()
         # Ensure backward compatibility API
         result["id"] = result["sid"]
@@ -1079,31 +1087,31 @@ class Agent(BaseDocument):
         :param primary: what is the current active instance (if none, state is down)
     """
 
-    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name = Field(field_type=str, required=True, part_of_primary_key=True)
-    last_failover = Field(field_type=datetime.datetime)
-    paused = Field(field_type=bool, default=False)
-    id_primary = Field(field_type=uuid.UUID)  # AgentInstance
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    name: str = Field(field_type=str, required=True, part_of_primary_key=True)
+    last_failover: datetime.datetime = Field(field_type=datetime.datetime)
+    paused: bool = Field(field_type=bool, default=False)
+    id_primary: Optional[uuid.UUID] = Field(field_type=uuid.UUID)  # AgentInstance
 
-    def set_primary(self, primary):
+    def set_primary(self, primary: uuid.UUID) -> None:
         self.id_primary = primary
 
-    def get_primary(self):
+    def get_primary(self) -> Optional[uuid.UUID]:
         return self.id_primary
 
-    def del_primary(self):
+    def del_primary(self) -> None:
         del self.id_primary
 
     primary = property(get_primary, set_primary, del_primary)
 
-    def get_status(self):
+    def get_status(self) -> str:
         if self.paused:
             return "paused"
         if self.primary is not None:
             return "up"
         return "down"
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         base = BaseDocument.to_dict(self)
         if self.last_failover is None:
             base["last_failover"] = ""
@@ -1131,7 +1139,7 @@ class Agent(BaseDocument):
         return cls._create_dict(from_postgres, kwargs)
 
     @classmethod
-    async def get(cls, env, endpoint):
+    async def get(cls, env: uuid.UUID, endpoint: str) -> "Agent":
         obj = await cls.get_one(environment=env, name=endpoint)
         return obj
 
@@ -1339,15 +1347,15 @@ class Form(BaseDocument):
         A form in the dashboard defined by the configuration model
     """
 
-    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    form_type = Field(field_type=str, required=True, part_of_primary_key=True)
-    options = Field(field_type=dict)
-    fields = Field(field_type=dict)
-    defaults = Field(field_type=dict)
-    field_options = Field(field_type=dict)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    form_type: str = Field(field_type=str, required=True, part_of_primary_key=True)
+    options: Dict[str, str] = Field(field_type=dict)
+    fields: Dict[str, str] = Field(field_type=dict)
+    defaults: Dict[str, SimpleTypes] = Field(field_type=dict)
+    field_options: Dict[str, Dict[str, str]] = Field(field_type=dict)
 
     @classmethod
-    async def get_form(cls, environment, form_type):
+    async def get_form(cls, environment: uuid.UUID, form_type: str) -> "Form":
         """
             Get a form based on its typed and environment
         """
@@ -1357,7 +1365,7 @@ class Form(BaseDocument):
         else:
             return forms[0]
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         me = super(Form, self).to_dict()
         me["id"] = self.form_type
         return me
@@ -1368,11 +1376,11 @@ class FormRecord(BaseDocument):
         A form record
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    environment = Field(field_type=uuid.UUID, required=True)
-    form = Field(field_type=str, required=True)
-    fields = Field(field_type=dict)
-    changed = Field(field_type=datetime.datetime)
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+    form: str = Field(field_type=str, required=True)
+    fields: Dict[str, SimpleTypes] = Field(field_type=dict)
+    changed: datetime.datetime = Field(field_type=datetime.datetime)
 
 
 class LogLine(DataDocument):
@@ -1400,9 +1408,9 @@ class LogLine(DataDocument):
 
 
 class ResourceVersionId(BaseDocument):
-    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    resource_version_id = Field(field_type=str, required=True, part_of_primary_key=True)
-    action_id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    resource_version_id: ResourceVersionIdStr = Field(field_type=str, required=True, part_of_primary_key=True)
+    action_id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
 
 
 class ResourceAction(BaseDocument):
@@ -1423,13 +1431,13 @@ class ResourceAction(BaseDocument):
         :param change: The change result of an action
     """
 
-    resource_version_ids = Field(field_type=list, required=True, reference=True, default=[])
+    resource_version_ids: List[ResourceVersionIdStr] = Field(field_type=list, required=True, reference=True, default=[])
 
-    action_id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    action = Field(field_type=const.ResourceAction, required=True)
+    action_id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    action: const.ResourceAction = Field(field_type=const.ResourceAction, required=True)
 
-    started = Field(field_type=datetime.datetime, required=True)
-    finished = Field(field_type=datetime.datetime)
+    started: datetime.datetime = Field(field_type=datetime.datetime, required=True)
+    finished: datetime.datetime = Field(field_type=datetime.datetime)
 
     messages = Field(field_type=list)
     status = Field(field_type=const.ResourceState)
@@ -1501,7 +1509,9 @@ class ResourceAction(BaseDocument):
         return result
 
     @classmethod
-    async def get_log(cls, environment, resource_version_id, action=None, limit=0):
+    async def get_log(
+        cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr, action: Optional[str] = None, limit: int = 0
+    ) -> List["ResourceAction"]:
         query = (
             "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "
             "as resource_version_ids, r.action_id as action_id, action, started, finished, messages, status, changes,"
@@ -1700,27 +1710,27 @@ class Resource(BaseDocument):
                                used to determine if a resource describes the same state across versions
     """
 
-    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    model = Field(field_type=int, required=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    model: int = Field(field_type=int, required=True)
 
     # ID related
-    resource_id = Field(field_type=str, required=True)
-    resource_version_id = Field(field_type=str, required=True, part_of_primary_key=True)
+    resource_id: ResourceVersionIdStr = Field(field_type=str, required=True)
+    resource_version_id: ResourceVersionIdStr = Field(field_type=str, required=True, part_of_primary_key=True)
 
-    agent = Field(field_type=str, required=True)
+    agent: str = Field(field_type=str, required=True)
 
     # Field based on content from the resource actions
-    last_deploy = Field(field_type=datetime.datetime)
+    last_deploy: datetime.datetime = Field(field_type=datetime.datetime)
 
     # State related
-    attributes = Field(field_type=dict)
-    attribute_hash = Field(field_type=str)
-    status = Field(field_type=const.ResourceState, default=const.ResourceState.available)
+    attributes: Dict[str, Any] = Field(field_type=dict)
+    attribute_hash: str = Field(field_type=str)
+    status: const.ResourceState = Field(field_type=const.ResourceState, default=const.ResourceState.available)
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
     # the list contains full rv id's
-    provides = Field(field_type=list, default=[])  # List of resource versions
+    provides: List[ResourceVersionIdStr] = Field(field_type=list, default=[])  # List of resource versions
 
     @property
     def resource_type(self):
@@ -1755,11 +1765,11 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    async def get_resources(cls, environment, resource_version_ids):
+    async def get_resources(cls, environment: uuid.UUID, resource_version_ids: List[ResourceVersionIdStr]) -> List["Resource"]:
         """
             Get all resources listed in resource_version_ids
         """
-        if resource_version_ids == []:
+        if not resource_version_ids:
             return []
         resource_version_ids_statement = ", ".join(["$" + str(i) for i in range(2, len(resource_version_ids) + 2)])
         (filter_statement, values) = cls._get_composed_filter(environment=environment)
@@ -1861,7 +1871,9 @@ class Resource(BaseDocument):
         return result
 
     @classmethod
-    async def get_resources_for_version(cls, environment, version, agent=None, no_obj=False):
+    async def get_resources_for_version(
+        cls, environment: uuid.UUID, version: int, agent: str = None, no_obj: bool = False
+    ) -> List["Resource"]:
         if agent:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version, agent=agent)
         else:
@@ -1907,7 +1919,7 @@ class Resource(BaseDocument):
             return resources[0]
 
     @classmethod
-    async def get(cls, environment, resource_version_id):
+    async def get(cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr) -> Optional["Resource"]:
         """
             Get a resource with the given resource version id
         """
@@ -1915,7 +1927,7 @@ class Resource(BaseDocument):
         return value
 
     @classmethod
-    def new(cls, environment, resource_version_id, **kwargs):
+    def new(cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr, **kwargs: Any) -> "Resource":
         vid = Id.parse_id(resource_version_id)
 
         attr = dict(
@@ -2059,20 +2071,20 @@ class ConfigurationModel(BaseDocument):
         :param total: The total number of resources
     """
 
-    version = Field(field_type=int, required=True, part_of_primary_key=True)
-    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    date = Field(field_type=datetime.datetime)
+    version: int = Field(field_type=int, required=True, part_of_primary_key=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    date: datetime.datetime = Field(field_type=datetime.datetime)
 
-    released = Field(field_type=bool, default=False)
-    deployed = Field(field_type=bool, default=False)
-    result = Field(field_type=const.VersionState, default=const.VersionState.pending)
-    version_info = Field(field_type=dict)
+    released: bool = Field(field_type=bool, default=False)
+    deployed: bool = Field(field_type=bool, default=False)
+    result: const.VersionState = Field(field_type=const.VersionState, default=const.VersionState.pending)
+    version_info: Dict[str, Any] = Field(field_type=dict)
 
-    total = Field(field_type=int, default=0)
+    total: int = Field(field_type=int, default=0)
 
     # cached state for release
-    undeployable = Field(field_type=list, required=False)
-    skipped_for_undeployable = Field(field_type=list, required=False)
+    undeployable: List[ResourceIdStr] = Field(field_type=list, required=False)
+    skipped_for_undeployable: List[ResourceIdStr] = Field(field_type=list, required=False)
 
     def __init__(self, **kwargs):
         super(ConfigurationModel, self).__init__(**kwargs)
@@ -2100,7 +2112,15 @@ class ConfigurationModel(BaseDocument):
         return result
 
     @classmethod
-    async def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
+    async def get_list(
+        cls,
+        order_by_column: str = None,
+        order: str = "ASC",
+        limit: int = None,
+        offset: int = None,
+        no_obj: bool = False,
+        **query: Any,
+    ) -> List["ConfigurationModel"]:
         transient_states = ",".join(["$" + str(i) for i in range(1, len(const.TRANSIENT_STATES) + 1)])
         transient_states_values = [cls._get_value(s) for s in const.TRANSIENT_STATES]
         (filterstr, values) = cls._get_composed_filter(col_name_prefix="c", offset=len(transient_states_values) + 1, **query)
@@ -2139,14 +2159,14 @@ class ConfigurationModel(BaseDocument):
                 result.append(obj)
         return result
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         dct = BaseDocument.to_dict(self)
         dct["status"] = dict(self._status)
         dct["done"] = self._done
         return dct
 
     @classmethod
-    async def version_exists(cls, environment, version):
+    async def version_exists(cls, environment: uuid.UUID, version: int) -> bool:
         query = f"""SELECT 1
                             FROM {ConfigurationModel.table_name()}
                             WHERE environment=$1 AND version=$2"""
@@ -2156,7 +2176,7 @@ class ConfigurationModel(BaseDocument):
         return True
 
     @classmethod
-    async def get_version(cls, environment, version):
+    async def get_version(cls, environment: uuid.UUID, version: int) -> "ConfigurationModel":
         """
             Get a specific version
         """
@@ -2164,7 +2184,7 @@ class ConfigurationModel(BaseDocument):
         return result
 
     @classmethod
-    async def get_latest_version(cls, environment):
+    async def get_latest_version(cls, environment: uuid.UUID) -> "ConfigurationModel":
         """
             Get the latest released (most recent) version for the given environment
         """
@@ -2191,7 +2211,7 @@ class ConfigurationModel(BaseDocument):
         return result["version"]
 
     @classmethod
-    async def get_agents(cls, environment, version):
+    async def get_agents(cls, environment: uuid.UUID, version: int) -> List[str]:
         """
             Returns a list of all agents that have resources defined in this configuration model
         """
@@ -2205,7 +2225,7 @@ class ConfigurationModel(BaseDocument):
         return result
 
     @classmethod
-    async def get_versions(cls, environment, start=0, limit=DBLIMIT):
+    async def get_versions(cls, environment: uuid.UUID, start: int = 0, limit: int = DBLIMIT) -> List["ConfigurationModel"]:
         """
             Get all versions for an environment ordered descending
         """
@@ -2233,20 +2253,20 @@ class ConfigurationModel(BaseDocument):
                     self.environment,
                 )
 
-    async def get_undeployable(self):
+    async def get_undeployable(self) -> List[ResourceIdStr]:
         """
             Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
         """
         return self.undeployable
 
-    async def get_skipped_for_undeployable(self):
+    async def get_skipped_for_undeployable(self) -> List[ResourceIdStr]:
         """
             Returns a list of resource ids (NOT resource version ids)
             of resources which should get a skipped_for_undeployable state
         """
         return self.skipped_for_undeployable
 
-    async def mark_done(self):
+    async def mark_done(self) -> None:
         """ mark this deploy as done """
         subquery = (
             f"(EXISTS("
@@ -2300,7 +2320,9 @@ class ConfigurationModel(BaseDocument):
         await cls._execute_query(query, *values)
 
     @classmethod
-    async def get_increment(cls, environment: uuid.UUID, version: int):
+    async def get_increment(
+        cls, environment: uuid.UUID, version: int
+    ) -> Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -2431,13 +2453,13 @@ class Code(BaseDocument):
             {code_hash:(file_name, provider.__module__, [req])}
     """
 
-    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    resource = Field(field_type=str, required=True, part_of_primary_key=True)
-    version = Field(field_type=int, required=True, part_of_primary_key=True)
-    source_refs = Field(field_type=dict)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    resource: str = Field(field_type=str, required=True, part_of_primary_key=True)
+    version: int = Field(field_type=int, required=True, part_of_primary_key=True)
+    source_refs: Dict[str, Tuple[str, str, List[str]]] = Field(field_type=dict)
 
     @classmethod
-    async def get_version(cls, environment, version, resource):
+    async def get_version(cls, environment: uuid.UUID, version: int, resource: str) -> Optional["Code"]:
         codes = await cls.get_list(environment=environment, version=version, resource=resource)
         if len(codes) == 0:
             return None
@@ -2445,7 +2467,7 @@ class Code(BaseDocument):
         return codes[0]
 
     @classmethod
-    async def get_versions(cls, environment, version):
+    async def get_versions(cls, environment: uuid.UUID, version: int) -> List["Code"]:
         codes = await cls.get_list(environment=environment, version=version)
         return codes
 
@@ -2463,13 +2485,13 @@ class DryRun(BaseDocument):
         :param resources: Changes for each of the resources in the version
     """
 
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    environment = Field(field_type=uuid.UUID, required=True)
-    model = Field(field_type=int, required=True)
-    date = Field(field_type=datetime.datetime)
-    total = Field(field_type=int, default=0)
-    todo = Field(field_type=int, default=0)
-    resources = Field(field_type=dict, default={})
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+    model: int = Field(field_type=int, required=True)
+    date: datetime.datetime = Field(field_type=datetime.datetime)
+    total: int = Field(field_type=int, default=0)
+    todo: int = Field(field_type=int, default=0)
+    resources: Dict[str, Any] = Field(field_type=dict, default={})
 
     @classmethod
     async def update_resource(cls, dryrun_id, resource_id, dryrun_data):
@@ -2526,13 +2548,13 @@ _classes = [
 ]
 
 
-def set_connection_pool(pool):
+def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
     LOGGER.debug("Connecting data classes")
     for cls in _classes:
         cls.set_connection_pool(pool)
 
 
-async def disconnect():
+async def disconnect() -> None:
     LOGGER.debug("Disconnecting data classes")
     for cls in _classes:
         await cls.close_connection_pool()

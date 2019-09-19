@@ -5,6 +5,7 @@ v 2019.4 (?) Changes in this release:
 - Added --version option (#1291)
 - RPM-based installations on Fedora are not supported anymore
 - Added option to configure asyncpg pool (#1304)
+- Split out the main service into many smaller services (#1388)
 - Use python3 from the core OS in Dockerfile
 
 v 2019.3 (2019-09-05) Changes in this release:

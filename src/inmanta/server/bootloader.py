@@ -145,8 +145,7 @@ class InmantaBootloader(object):
     # Extension loading Phase II: collect slices
     def _collect_slices(self, extensions: Dict[str, Callable[[ApplicationContext], None]]) -> ApplicationContext:
         """
-            Call the setup function on all extensions and let them register their slices in the ApplicationContext. Core slices
-            are statically
+            Call the setup function on all extensions and let them register their slices in the ApplicationContext.
         """
         ctx = ApplicationContext()
         for name, setup in extensions.items():

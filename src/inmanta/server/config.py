@@ -18,7 +18,7 @@
 
 import logging
 
-from inmanta.config import Option, is_bool, is_float, is_int, is_list, is_map, is_str_opt, is_time, log_dir, state_dir
+from inmanta.config import Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time, log_dir, state_dir
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,11 +28,11 @@ LOGGER = logging.getLogger(__name__)
 # Database
 #############################
 
-db_host = Option("database", "host", "localhost", "Hostname or IP of the postgresql server")
+db_host = Option("database", "host", "localhost", "Hostname or IP of the postgresql server", is_str)
 db_port = Option("database", "port", 5432, "The port of the postgresql server", is_int)
-db_name = Option("database", "name", "inmanta", "The name of the database on the postgresql server")
-db_username = Option("database", "username", "postgres", "The username to access the database in the PostgreSQL server")
-db_password = Option("database", "password", None, "The password that belong to the database user")
+db_name = Option("database", "name", "inmanta", "The name of the database on the postgresql server", is_str)
+db_username = Option("database", "username", "postgres", "The username to access the database in the PostgreSQL server", is_str)
+db_password = Option("database", "password", None, "The password that belong to the database user", is_str)
 db_connection_pool_min_size = Option(
     "database", "connection_pool_min_size", 10, "Number of connections the pool will be initialized with", is_int
 )
@@ -49,11 +49,11 @@ transport_port = Option("server_rest_transport", "port", 8888, "The port on whic
 #############################
 # Influxdb
 #############################
-influxdb_host = Option("influxdb", "host", "", "Hostname or IP of the influxdb server to send reports to")
+influxdb_host = Option("influxdb", "host", "", "Hostname or IP of the influxdb server to send reports to", is_str)
 influxdb_port = Option("influxdb", "port", 8086, "The port of the influxdb server", is_int)
-influxdb_name = Option("influxdb", "name", "inmanta", "The name of the database on the influxdb server")
-influxdb_username = Option("influxdb", "username", None, "The username to access the database in the influxdb server")
-influxdb_password = Option("influxdb", "password", None, "The password that belong to the influxdb user")
+influxdb_name = Option("influxdb", "name", "inmanta", "The name of the database on the influxdb server", is_str)
+influxdb_username = Option("influxdb", "username", None, "The username to access the database in the influxdb server", is_str)
+influxdb_password = Option("influxdb", "password", None, "The password that belong to the influxdb user", is_str)
 
 influxdb_interval = Option("influxdb", "interval", 30, "Interval with which to report to influxdb", is_int)
 influxdb_tags = Option(
@@ -88,7 +88,7 @@ server_fact_expire = Option(
 )
 
 
-def default_fact_renew():
+def default_fact_renew() -> int:
     """:inmanta.config:option:`server.fact-expire` /3 """
     return int(server_fact_expire.get() / 3)
 
@@ -178,7 +178,7 @@ server_resource_action_log_prefix = Option(
     "resource_action_log_prefix",
     "resource-actions-",
     "File prefix in log-dir, containing the resource-action logs. The after the prefix the environment uuid and .log is added",
-    is_str_opt,
+    is_str,
 )
 
 server_enabled_extensions = Option(
@@ -206,12 +206,16 @@ server_access_control_allow_origin = Option(
 dash_enable = Option("dashboard", "enabled", True, "Determines whether the server should host the dashboard or not", is_bool)
 
 dash_path = Option(
-    "dashboard", "path", "/usr/share/inmanta/dashboard", "The path on the local file system where the dashboard can be found"
+    "dashboard",
+    "path",
+    "/usr/share/inmanta/dashboard",
+    "The path on the local file system where the dashboard can be found",
+    is_str,
 )
 
-dash_realm = Option("dashboard", "realm", "inmanta", "The realm to use for keycloak authentication.")
-dash_auth_url = Option("dashboard", "auth_url", None, "The auth url of the keycloak server to use.")
-dash_client_id = Option("dashboard", "client_id", None, "The client id configured in keycloak for this application.")
+dash_realm = Option("dashboard", "realm", "inmanta", "The realm to use for keycloak authentication.", is_str)
+dash_auth_url = Option("dashboard", "auth_url", None, "The auth url of the keycloak server to use.", is_str)
+dash_client_id = Option("dashboard", "client_id", None, "The client id configured in keycloak for this application.", is_str)
 
 
 def default_hangtime():

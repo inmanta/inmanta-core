@@ -21,7 +21,7 @@ import socket
 import time
 import uuid
 from collections import defaultdict
-from typing import Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Callable, Coroutine, Dict, List, Optional, Set, Tuple, Union
 
 from tornado import gen, queues, routing, web
 from tornado.ioloop import IOLoop
@@ -219,7 +219,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         # is shutdown in progress?
         self._stopping: bool = False
 
-    def is_stopping(self):
+    def is_stopping(self) -> bool:
         """True when prestop has been called."""
         return self._stopping
 
@@ -284,7 +284,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         return self._handlers
 
     # utility methods for extensions developers
-    def schedule(self, call: Callable, interval: int = 60) -> None:
+    def schedule(self, call: Union[Callable, Coroutine], interval: int = 60) -> None:
         self._sched.add_action(call, interval)
 
     def add_static_handler(self, location: str, path: str, default_filename: Optional[str] = None, start: bool = False) -> None:

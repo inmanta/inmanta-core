@@ -4,9 +4,17 @@
 from asyncpg import Connection
 
 from . import connection
-from typing import Any, Optional, AsyncContextManager
+from typing import Any, Optional, AsyncContextManager, List
+
+
+class PoolConnectionHolder:
+    _con: Connection
+
 
 class Pool:
+    _maxsize: int
+    _holders: List[PoolConnectionHolder]
+
     def __init__(self, *connect_args: Any, min_size: Any, max_size: Any, max_queries: Any, max_inactive_connection_lifetime: Any, setup: Any, init: Any, loop: Any, connection_class: Any, **connect_kwargs: Any) -> None: ...
     async def _async__init__(self): ...
     def set_connect_args(self, dsn: Optional[Any] = ..., **connect_kwargs: Any) -> None: ...

@@ -57,7 +57,7 @@ from inmanta.module import Project
 from inmanta.postgresproc import PostgresProc
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.compilerservice import CompilerService, CompileRun
+from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.util import get_free_tcp_port
 
 # Import the utils module differently when conftest is put into the inmanta_tests package
