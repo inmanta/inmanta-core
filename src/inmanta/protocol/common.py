@@ -58,9 +58,9 @@ from tornado import web
 
 from inmanta import config as inmanta_config
 from inmanta import const, execute, util
-from inmanta.data.model import BaseModel
+from inmanta.data.model import BaseModel, EnvelopeResponse
 from inmanta.protocol.exceptions import BadRequest
-from inmanta.types import HandlerType, JsonType, MethodType
+from inmanta.types import HandlerType, JsonType, MethodType, ArgumentTypes
 
 from . import exceptions
 
@@ -152,7 +152,7 @@ class Request(object):
         return req
 
 
-T = TypeVar("T", bound=BaseModel)
+T = TypeVar("T", bound=ArgumentTypes)
 
 
 class ReturnValue(Generic[T]):
@@ -173,7 +173,7 @@ class ReturnValue(Generic[T]):
     def headers(self) -> MutableMapping[str, str]:
         return self._headers
 
-    def get_body(self, wrap_data: bool = False) -> Optional[BaseModel]:
+    def get_body(self, wrap_data: bool = False) -> Optional[Union[EnvelopeResponse, T]]:
         """ Get the response body
 
             :param wrap_data: Should the response be mapped into a data key
@@ -182,7 +182,7 @@ class ReturnValue(Generic[T]):
             return None
 
         if wrap_data:
-            return {"data": self._response}
+            return EnvelopeResponse(data=self._response)
 
         return self._response
 
