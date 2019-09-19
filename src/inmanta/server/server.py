@@ -64,7 +64,7 @@ class Server(protocol.ServerSlice):
         self.setup_dashboard()
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_SESSION_MANAGER, SLICE_DATABASE]
+        return [SLICE_DATABASE]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
@@ -72,7 +72,6 @@ class Server(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         self._server = server
         self._server_storage: Dict[str, str] = self.check_storage()
-        self.agentmanager: "AgentManager" = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
         self.compiler: "CompilerService" = cast("CompilerService", server.get_slice(SLICE_COMPILER))
 
     def setup_dashboard(self) -> None:

@@ -3,12 +3,12 @@ ARG branch
 
 RUN yum install -y epel-release
 RUN curl --silent --location https://dl.yarnpkg.com/rpm/yarn.repo >/etc/yum.repos.d/yarn.repo
-RUN yum install -y git gcc mongodb sudo git tar findutils make procps-ng python36 python36-devel git nodejs-grunt-cli gcc-c++ gcc make yarn postgresql
+RUN yum install -y git gcc mongodb sudo git tar findutils make procps-ng python3 python3-devel git nodejs-grunt-cli gcc-c++ gcc make yarn postgresql
 
 # install the server
 RUN mkdir -p /opt/inmanta
 RUN mkdir -p /var/lib/inmanta
-RUN python36 -m venv /opt/inmanta/env
+RUN python3 -m venv /opt/inmanta/env
 RUN /opt/inmanta/env/bin/pip install -U pip
 
 # install the dashboard
