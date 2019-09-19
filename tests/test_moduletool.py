@@ -679,8 +679,9 @@ def test_project_freeze_disk(modules_dir, modules_repo, capsys):
     assert len(err) == 0, err
 
     with open(os.path.join(coroot, "project.yml"), "r") as fh:
-        assert (fh.read()
-        == """name: projectA
+        assert (
+            fh.read()
+            == """name: projectA
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
@@ -692,8 +693,8 @@ requires:
 - modD ~= 3.2
 - std ~= 3.2
 """
-        % modules_repo
-    )
+            % modules_repo
+        )
 
 
 def test_project_freeze_odd_opperator(modules_dir, modules_repo, capsys, caplog):
