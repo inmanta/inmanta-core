@@ -204,10 +204,11 @@ class ProjectTool(ModuleLikeTool):
             outfile = open(outfile, "w", encoding="UTF-8")
             close = True
 
-        outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
-
-        if close:
-            outfile.close()
+        try:
+            outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
+        finally:
+            if close:
+                outfile.close()
 
 
 class ModuleTool(ModuleLikeTool):

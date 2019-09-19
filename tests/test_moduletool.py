@@ -140,7 +140,8 @@ def make_module_simple(reporoot, name, depends=[], version="3.2", project=False)
 
 
 def make_module_simple_deps(reporoot, name, depends=[], project=False, version="3.2"):
-    return make_module_simple(reporoot, "mod" + name, [("mod" + x, None) for x in depends], project=project, version=version)
+    prefix = "project" if project else "mod"
+    return make_module_simple(reporoot, prefix + name, [("mod" + x, None) for x in depends], project=project, version=version)
 
 
 def install_project(modules_dir, name, config=True):
@@ -584,7 +585,7 @@ compiler_version: 2017.2
 
 
 def test_freeze_basic(modules_dir, modules_repo):
-    install_project(modules_dir, "modA")
+    install_project(modules_dir, "projectA")
     modtool = ModuleTool()
     cmod = modtool.get_module("modC")
     assert cmod.get_freeze("modC", recursive=False, mode="==") == {"std": "== 3.2", "modE": "== 3.2", "modF": "== 3.2"}
@@ -600,7 +601,7 @@ def test_freeze_basic(modules_dir, modules_repo):
 
 
 def test_project_freeze_basic(modules_dir, modules_repo):
-    install_project(modules_dir, "modA")
+    install_project(modules_dir, "projectA")
     modtool = ModuleTool()
     proj = modtool.get_project()
     assert proj.get_freeze(recursive=False, mode="==") == {
@@ -641,7 +642,7 @@ def test_project_freeze_bad(modules_dir, modules_repo, capsys, caplog):
 
 
 def test_project_freeze(modules_dir, modules_repo, capsys):
-    coroot = install_project(modules_dir, "modA")
+    coroot = install_project(modules_dir, "projectA")
 
     app(["project", "freeze", "-o", "-"])
 
@@ -651,7 +652,7 @@ def test_project_freeze(modules_dir, modules_repo, capsys):
     assert len(err) == 0, err
     assert (
         out
-        == """name: modA
+        == """name: projectA
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
@@ -668,7 +669,7 @@ requires:
 
 
 def test_project_freeze_disk(modules_dir, modules_repo, capsys):
-    coroot = install_project(modules_dir, "modA")
+    coroot = install_project(modules_dir, "projectA")
 
     app(["project", "freeze"])
 
@@ -679,7 +680,7 @@ def test_project_freeze_disk(modules_dir, modules_repo, capsys):
 
     with open(os.path.join(coroot, "project.yml"), "r") as fh:
         assert (fh.read()
-        == """name: modA
+        == """name: projectA
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
@@ -696,7 +697,7 @@ requires:
 
 
 def test_project_freeze_odd_opperator(modules_dir, modules_repo, capsys, caplog):
-    coroot = install_project(modules_dir, "modA")
+    coroot = install_project(modules_dir, "projectA")
 
     app(["project", "freeze", "-o", "-", "--operator", "xxx"])
 
@@ -706,7 +707,7 @@ def test_project_freeze_odd_opperator(modules_dir, modules_repo, capsys, caplog)
     assert len(err) == 0, err
     assert (
         out
-        == """name: modA
+        == """name: projectA
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
@@ -725,10 +726,10 @@ requires:
 
 
 def test_project_options_in_config(modules_dir, modules_repo, capsys):
-    coroot = install_project(modules_dir, "modA")
+    coroot = install_project(modules_dir, "projectA")
     with open("project.yml", "w") as fh:
         fh.write(
-            """name: modA
+            """name: projectA
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
@@ -749,7 +750,7 @@ freeze_operator: ==
 
         with open("project.yml", "r") as fh:
             assert fh.read() == (
-                """name: modA
+                """name: projectA
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
@@ -778,7 +779,7 @@ requires:
 
 
 def test_module_freeze(modules_dir, modules_repo, capsys):
-    coroot = install_project(modules_dir, "modA")
+    coroot = install_project(modules_dir, "projectA")
 
     def verify():
         out, err = capsys.readouterr()
@@ -802,7 +803,7 @@ requires:
 
 
 def test_module_freeze_self(modules_dir, modules_repo, capsys):
-    coroot = install_project(modules_dir, "modA")
+    coroot = install_project(modules_dir, "projectA")
 
     def verify():
         out, err = capsys.readouterr()
