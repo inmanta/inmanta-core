@@ -340,6 +340,8 @@ class CallArguments(object):
 
             if body is not None:
                 if config.properties.reply:
+                    if config.properties.envelope:
+                        return common.Response(body={config.properties.envelope_key: body}, headers=headers, status_code=code)
                     return common.Response(body=body, headers=headers, status_code=code)
 
                 else:

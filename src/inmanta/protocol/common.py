@@ -412,8 +412,8 @@ class MethodProperties(object):
             - ReturnValue with a type parameter. The type must be the allowed types for arguments or none
         """
         type_hints = get_type_hints(self.function)
-        if "return" not in type_hints and self._envelope:
-            raise InvalidMethodDefinition(f"Wrap data is only supported on methods that define a return type ({self.function}")
+        # if "return" not in type_hints and self._envelope:
+        #     raise InvalidMethodDefinition(f"Wrap data is only supported on methods that define a return type ({self.function}")
 
         # TODO: only primitive types are allowed in the path
         # TODO: body and get does not work
