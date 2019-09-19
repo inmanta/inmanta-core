@@ -205,7 +205,7 @@ def test_resource_with_private_method(snippetcompiler):
         snippetcompiler.do_export()
 
 
-def test_resource_with_private_method(snippetcompiler):
+def test_object_to_id(snippetcompiler):
     import inmanta.resources
 
     @resource("__config__::MYResource", agent="agent", id_attribute="key")
@@ -221,9 +221,11 @@ def test_resource_with_private_method(snippetcompiler):
             string value
         end
 
-        implement YResource using std::none
+        implement MYResource using std::none
 
-        x = YResource(key="key", agent="agent", value="value")
-        tests::get_id(x)
+        x = MYResource(key="key", agent="agent", value="value")
+        std::print(tests::get_id(x))
         """
     )
+
+    snippetcompiler.do_export()

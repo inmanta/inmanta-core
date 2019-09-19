@@ -39,5 +39,5 @@ def once(string: "string") -> "number":
 
 
 @plugin
-def get_id(instance: "std::Entity") -> "str":
+def get_id(instance: "std::Entity") -> "string":
     return resources.to_id(instance)
