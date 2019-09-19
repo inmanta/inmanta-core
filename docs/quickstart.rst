@@ -50,7 +50,7 @@ To get a shell on the Inmanta server:
 Automatically deploying Drupal
 _______________________________
 
-At this point, you can go through the quickstart guide in two ways: via the dashboard or via the command line interface.
+At this point, you can go through the quickstart guide in one of two ways: via the dashboard or via the command line interface.
 For the CLI, go to the next section. For the Dashboard, go to :ref:`qsdashboard`.
 
 .. _cli:
@@ -62,7 +62,7 @@ An Inmanta project bundles modules that contain configuration information. A pro
 than a directory with a project.yml file, which contains parameters such as the location to search for
 modules and where to find the server.
 
-Here we will get a project from github.
+You can retrieve the quickstart project like this:
 
 .. code-block:: sh
 
@@ -72,12 +72,12 @@ Here we will get a project from github.
 
 The configuration file ``project.yml`` defines that reusable modules are stored in ``libs``.
 
-In the next section we will use existing modules to deploy our LAMP stack.
+In the next section we will use existing modules to deploy a LAMP stack.
 
 Reuse existing modules
 ------------------------------
 
-At GitHub, we host modules to setup and manage many systems. Our modules are available in the https://github.com/inmanta/ repositories.
+We host modules to set up and manage many systems on our Github. They are available under https://github.com/inmanta/.
 
 When you use an import statement in your model, Inmanta downloads these modules and their dependencies automatically.
 
@@ -88,8 +88,7 @@ The configuration model
 
 In this section we will use the configuration concepts defined in the existing modules to set up Drupal on the host named ``vm1``.
 
-First, create a new ``main.cf`` file or use the contents of ``single_machine.cf`` in the project
-directory:
+First, create a new ``main.cf`` file or use the contents of ``single_machine.cf`` in the project directory:
 
 
 .. code-block:: inmanta
@@ -122,12 +121,12 @@ directory:
 * Lines 1-6 import all required packages.
 * Line 9 defines on which machine we want to deploy Drupal.
 
- * The *name* attribute is the host name of the machine, which is later used to determine what configuration needs to be deployed on which machine.
+ * The *name* attribute is the hostname of the machine, which is later used to determine what configuration needs to be deployed on which machine.
  * The *os* attribute defines which operating system this server runs. This is used to select the right tools (yum or dnf or apt).
- * The *ip* attribute is the IP address of this host. At this moment we define this attribute manually, later in the tutorial we let Inmanta discover this automatically.
+ * The *ip* attribute is the IP address of this host. At this moment we define this attribute manually, later in this tutorial we let Inmanta discover this automatically.
 
 * Lines 12 and 13 deploy an Apache server and MySQL server on our host.
-* Line 16 defines the name (host name) of the web application.
+* Line 16 defines the name (hostname) of the web application.
 * Lines 17-18 define a database for our Drupal website.
 * Lines 19-20 define the actual Drupal application.
 
@@ -136,7 +135,7 @@ directory:
 Deploy the configuration model
 -------------------------------
 
-To deploy the project, we must first register it with the management server, by creating a project and an environment. A project is a collection of related environments. (e.g. development, testing, production, qa,...)
+To deploy the project, we must first register it with the management server by creating a project and an environment. A project is a collection of related environments. (e.g. development, testing, production, qa,...)
 An environment is associated with a branch in a git repository. This allows the server to recompile the model when the environment changes.
 
 .. code-block:: sh
@@ -157,7 +156,7 @@ Then compile the project and send it to the server:
 The first time you run this command may take a while, as all dependencies are downloaded.
 
 When the model is sent to the server, it will start deploying the configuration.
-To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_.
+To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_, select the `test` project and then the `quickstart-env` environment.
 
 .. note::
 
