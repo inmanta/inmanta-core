@@ -147,7 +147,7 @@ def to_id(entity: DynamicProxy) -> Optional[str]:
             break
 
     if cls is not None and options is not None:
-        obj_id = cls.object_to_id(entity._get_instance(), cls_name, options["name"], options["agent"])
+        obj_id = cls.object_to_id(entity, cls_name, options["name"], options["agent"])
         return str(obj_id)
 
     return None

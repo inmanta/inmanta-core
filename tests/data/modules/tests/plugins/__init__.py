@@ -1,7 +1,7 @@
 from _collections import defaultdict
 from inmanta.execute.util import Unknown
 from inmanta.plugins import plugin
-
+from inmanta import resources
 
 @plugin
 def unknown() -> "any":
@@ -36,3 +36,8 @@ def once(string: "string") -> "number":
     prev = counter[string]
     counter[string] = prev + 1
     return prev
+
+
+@plugin
+def get_id(instance: "std::Entity") -> "string":
+    return resources.to_id(instance)
