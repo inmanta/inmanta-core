@@ -38,7 +38,7 @@ from inmanta.protocol.common import InvalidMethodDefinition, InvalidPathExceptio
 from inmanta.protocol.rest import CallArguments
 from inmanta.server import config as opt
 from inmanta.server.protocol import Server, ServerSlice
-from inmanta.types import Apireturn, JsonType
+from inmanta.types import Apireturn
 from inmanta.util import hash_file
 from utils import configure
 
