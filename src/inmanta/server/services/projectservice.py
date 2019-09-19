@@ -43,7 +43,7 @@ class ProjectService(protocol.ServerSlice):
         super(ProjectService, self).__init__(SLICE_PROJECT)
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_DATABASE, SLICE_RESOURCE]
+        return [SLICE_DATABASE, SLICE_RESOURCE, SLICE_AGENT_MANAGER]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
