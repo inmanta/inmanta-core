@@ -40,6 +40,7 @@ class EnvelopeResponse(pydantic.BaseModel):
     """
         Type used for reponses that are in an envelope
     """
+
     data: Optional[ArgumentTypes]
 
 

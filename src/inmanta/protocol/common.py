@@ -60,7 +60,7 @@ from inmanta import config as inmanta_config
 from inmanta import const, execute, util
 from inmanta.data.model import BaseModel, EnvelopeResponse
 from inmanta.protocol.exceptions import BadRequest
-from inmanta.types import HandlerType, JsonType, MethodType, ArgumentTypes
+from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType
 
 from . import exceptions
 
