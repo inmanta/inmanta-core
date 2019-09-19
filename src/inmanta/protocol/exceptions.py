@@ -35,7 +35,7 @@ class BaseHttpException(web.HTTPError):
         """
             Return a response body
         """
-        body = {"message": self.log_message}
+        body: JsonType = {"message": self.log_message}
         if self.details is not None:
             body["error_details"] = self.details
 

@@ -3,6 +3,7 @@ from inmanta.execute.util import Unknown
 from inmanta.plugins import plugin
 from inmanta import resources
 
+
 @plugin
 def unknown() -> "any":
     return Unknown(None)

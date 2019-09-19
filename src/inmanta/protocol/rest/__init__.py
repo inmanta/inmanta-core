@@ -19,7 +19,7 @@ import inspect
 import json
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Type, cast  # noqa: F401
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, MutableMapping, Optional, Tuple, Type, cast  # noqa: F401
 
 import pydantic
 import typing_inspect
@@ -47,7 +47,9 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 """
 
 
-def authorize_request(auth_data: Dict[str, str], metadata: Dict[str, str], message: JsonType, config: common.UrlMethod) -> None:
+def authorize_request(
+    auth_data: Optional[MutableMapping[str, str]], metadata: Dict[str, str], message: JsonType, config: common.UrlMethod
+) -> None:
     """
         Authorize a request based on the given data
     """
@@ -352,7 +354,7 @@ class RESTBase(util.TaskHandler):
     def id(self) -> str:
         return self._id
 
-    def _decode(self, body: str) -> Optional[JsonType]:
+    def _decode(self, body: bytes) -> Optional[JsonType]:
         """
             Decode a response body
         """
@@ -372,7 +374,7 @@ class RESTBase(util.TaskHandler):
         config: common.UrlMethod,
         message: Dict[str, Any],
         request_headers: Mapping[str, str],
-        auth=None,
+        auth: Optional[MutableMapping[str, str]] = None,
     ) -> common.Response:
 
         headers: Dict[str, str] = {}

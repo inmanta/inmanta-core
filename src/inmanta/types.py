@@ -59,7 +59,7 @@ ReturnTupple = Tuple[int, Optional[JsonType]]
 
 ArgumentTypes = Union[SimpleTypes, Sequence[SimpleTypes], Mapping[str, SimpleTypes]]
 
-ReturnTypes = Union[None, ArgumentTypes]
+ReturnTypes = Optional[ArgumentTypes]
 MethodReturn = Union[ReturnTypes, "ReturnValue[ReturnTypes]"]
 MethodType = Callable[..., MethodReturn]
 
