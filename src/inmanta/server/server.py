@@ -27,11 +27,9 @@ from inmanta.data.model import ExtensionStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.server import (
-    SLICE_AGENT_MANAGER,
     SLICE_COMPILER,
     SLICE_DATABASE,
     SLICE_SERVER,
-    SLICE_SESSION_MANAGER,
     SLICE_TRANSPORT,
 )
 from inmanta.server import config as opt
@@ -41,7 +39,6 @@ from inmanta.types import Apireturn, JsonType, Warnings
 LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from inmanta.server.agentmanager import AgentManager
     from inmanta.server.services.compilerservice import CompilerService
 
 DBLIMIT = 100000
