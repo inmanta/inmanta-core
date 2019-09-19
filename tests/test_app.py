@@ -412,8 +412,7 @@ def test_warning_config_dir_option_on_server_command(tmpdir):
 
 
 @pytest.mark.timeout(20)
-def test_warning_config_options_on_compile_command(snippetcompiler, tmpdir):
-    non_existing_config_dir = os.path.join(tmpdir, "non_existing_config_dir")
+def test_warning_min_c_option_file_doesnt_exist(snippetcompiler, tmpdir):
     non_existing_config_file = os.path.join(tmpdir, "non_existing_config_file")
     snippetcompiler.setup_for_snippet_external(
         """
@@ -422,7 +421,7 @@ entity Test:
 end
 """
     )
-    config_options = ["--config-dir", non_existing_config_dir, "-c", non_existing_config_file, "-vvv"]
+    config_options = ["-c", non_existing_config_file, "-vvv"]
     args = [sys.executable, "-m", "inmanta.app"] + config_options + ["compile"]
     process = do_run(args, cwd=snippetcompiler.project_dir)
     out, err = process.communicate(timeout=5)
@@ -434,5 +433,4 @@ end
 
     assert "Starting compile" in all_output
     assert "Compile done" in all_output
-    assert f"Config directory {non_existing_config_dir} doesn't exist" not in all_output
-    assert f"Config file {non_existing_config_file} doesn't exist" not in all_output
+    assert f"Config file {non_existing_config_file} doesn't exist" in all_output
