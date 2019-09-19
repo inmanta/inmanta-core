@@ -26,12 +26,7 @@ from inmanta import data
 from inmanta.data.model import ExtensionStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, methods
 from inmanta.protocol.common import attach_warnings
-from inmanta.server import (
-    SLICE_COMPILER,
-    SLICE_DATABASE,
-    SLICE_SERVER,
-    SLICE_TRANSPORT,
-)
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.types import Apireturn, JsonType, Warnings

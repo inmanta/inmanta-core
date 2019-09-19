@@ -299,17 +299,23 @@ class CallArguments(object):
             # TODO: also validate the value inside a ReturnValue
             if typing_inspect.is_union_type(return_type):
                 self._validate_union_return(return_type, result)
-                return common.Response.create(ReturnValue(response=result), headers, config.properties.envelope)
+                return common.Response.create(
+                    ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
+                )
 
             if typing_inspect.is_generic_type(return_type):
                 if isinstance(result, ReturnValue):
-                    return common.Response.create(result, headers, config.properties.envelope)
+                    return common.Response.create(result, headers, config.properties.envelope, config.properties.envelope_key)
                 else:
                     self._validate_generic_return(return_type, result)
-                    return common.Response.create(ReturnValue(response=result), headers, config.properties.envelope)
+                    return common.Response.create(
+                        ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
+                    )
 
             elif isinstance(result, BaseModel):
-                return common.Response.create(ReturnValue(response=result), headers, config.properties.envelope)
+                return common.Response.create(
+                    ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
+                )
 
             else:
                 raise exceptions.ServerError(

@@ -202,7 +202,7 @@ class Response(object):
 
     @classmethod
     def create(
-        cls, result: ReturnValue, additional_headers: MutableMapping[str, str], envelope: bool, envelope_key: str,
+        cls, result: ReturnValue, additional_headers: MutableMapping[str, str], envelope: bool, envelope_key: str
     ) -> "Response":
         """
             Create a response from a return value
