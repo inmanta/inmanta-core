@@ -30,7 +30,7 @@ from inmanta.data import ResourceVersionIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
@@ -88,6 +88,9 @@ class ResourceService(protocol.ServerSlice):
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_DATABASE, SLICE_AGENT_MANAGER]
+
+    def get_depended_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
