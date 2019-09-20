@@ -197,7 +197,7 @@ class CompileRun(object):
             repo_branch: str = env.repo_branch
             if not repo_url:
                 if not os.path.exists(os.path.join(project_dir, "project.yml")):
-                    await self._warning(f"Failed to compile: no project found in {project_dir} and no repository set set")
+                    await self._warning(f"Failed to compile: no project found in {project_dir} and no repository set")
                 await self._end_stage(0)
             else:
                 await self._end_stage(0)

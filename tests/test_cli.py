@@ -257,6 +257,9 @@ async def test_form_and_records(server, client, environment, cli):
 
 @pytest.mark.asyncio
 async def test_import_export(server, client, environment, cli, tmpdir):
+    env = await data.Environment.get_by_id(environment)
+    await env.set(data.SERVER_COMPILE, False)
+
     form_type = "FormType"
     result = await client.put_form(
         tid=environment,
@@ -270,12 +273,14 @@ async def test_import_export(server, client, environment, cli, tmpdir):
             "type": form_type,
         },
     )
+    assert result.code == 200
     form_id = result.result["form"]["id"]
 
     result = await cli.run("record", "create", "-e", environment, "-t", form_type, "-p", "field1=1234", "-p", "field2=test456")
     assert result.exit_code == 0
 
     result = await cli.run("form", "export", "-e", environment, "-t", form_type)
+    assert result.exit_code == 0, f"{result.output}"
     assert form_id in result.output
 
     f = tmpdir.join("export.json")
@@ -291,6 +296,7 @@ async def test_import_export(server, client, environment, cli, tmpdir):
     assert len(records.result["records"]) == 0
 
     result = await cli.run("form", "import", "-e", environment, "-t", form_type, "--file", str(f))
+    assert result.exit_code == 0
 
     records = await client.list_records(tid=environment, form_type=form_type)
     assert records.code == 200
