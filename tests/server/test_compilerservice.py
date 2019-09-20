@@ -419,7 +419,7 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
         # stages
         init = reports["Init"]
         assert not init["errstream"]
-        assert "project found in" in init["outstream"] and "and no repository set set" in init["outstream"]
+        assert "project found in" in init["outstream"] and "and no repository set" in init["outstream"]
 
         # compile
         comp = reports["Recompiling configuration model"]
