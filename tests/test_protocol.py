@@ -38,6 +38,7 @@ from inmanta.protocol.common import InvalidMethodDefinition, InvalidPathExceptio
 from inmanta.protocol.rest import CallArguments
 from inmanta.server import config as opt
 from inmanta.server.protocol import Server, ServerSlice
+from inmanta.types import Apireturn
 from inmanta.util import hash_file
 from utils import configure
 
@@ -588,7 +589,7 @@ async def test_return_model(unused_tcp_port, postgres_db, database_name):
 
 
 @pytest.mark.asyncio
-async def test_data_wrap(unused_tcp_port, postgres_db, database_name):
+async def test_data_envelope(unused_tcp_port, postgres_db, database_name):
     """
         Test the use and validation of methods that use common.ReturnValue
     """
@@ -601,15 +602,37 @@ async def test_data_wrap(unused_tcp_port, postgres_db, database_name):
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
         def test_method(project: Project) -> ReturnValue[Project]:  # NOQA
-            """
-                Create a new project
-            """
+            pass
 
         @protocol.handle(test_method)
         async def test_method(self, project: Project) -> ReturnValue[Project]:
             new_project = project.copy()
-
             return ReturnValue(response=new_project)
+
+        @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"], envelope_key="method")
+        def test_method2(project: Project) -> ReturnValue[Project]:  # NOQA
+            pass
+
+        @protocol.handle(test_method2)
+        async def test_method2(self, project: Project) -> ReturnValue[Project]:
+            new_project = project.copy()
+            return ReturnValue(response=new_project)
+
+        @protocol.method(path="/test3", operation="POST", client_types=["api"], envelope=True)
+        def test_method3(project: Project):  # NOQA
+            pass
+
+        @protocol.handle(test_method3)
+        async def test_method3(self, project: dict) -> Apireturn:
+            return 200, {"id": 1, "name": 2}
+
+        @protocol.method(path="/test4", operation="POST", client_types=["api"], envelope=True, envelope_key="project")
+        def test_method4(project: Project):  # NOQA
+            pass
+
+        @protocol.handle(test_method4)
+        async def test_method4(self, project: dict) -> Apireturn:
+            return 200, {"id": 1, "name": 2}
 
     rs = Server()
     server = ProjectServer(name="projectserver")
@@ -617,12 +640,37 @@ async def test_data_wrap(unused_tcp_port, postgres_db, database_name):
     await rs.start()
 
     client = protocol.Client("client")
+    # 1
     result = await client.test_method({"name": "test", "id": str(uuid.uuid4())})
     assert result.code == 200
 
     assert "data" in result.result
     assert "id" in result.result["data"]
     assert "name" in result.result["data"]
+
+    # 2
+    result = await client.test_method2({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 200
+
+    assert "method" in result.result
+    assert "id" in result.result["method"]
+    assert "name" in result.result["method"]
+
+    # 3
+    result = await client.test_method3({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 200
+
+    assert "data" in result.result
+    assert "id" in result.result["data"]
+    assert "name" in result.result["data"]
+
+    # 4
+    result = await client.test_method4({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 200
+
+    assert "project" in result.result
+    assert "id" in result.result["project"]
+    assert "name" in result.result["project"]
 
     await server.stop()
     await rs.stop()

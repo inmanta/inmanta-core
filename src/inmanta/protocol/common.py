@@ -173,16 +173,17 @@ class ReturnValue(Generic[T]):
     def headers(self) -> MutableMapping[str, str]:
         return self._headers
 
-    def get_body(self, wrap_data: bool = False) -> ReturnTypes:
+    def get_body(self, envelope: bool, envelope_key: str) -> ReturnTypes:
         """ Get the response body
 
-            :param wrap_data: Should the response be mapped into a data key
+            :param envelope: Should the response be mapped into a data key
+            :param envelope_key: The envelope key to use
         """
         if self._response is None:
             return None
 
-        if wrap_data:
-            response: Dict[str, Any] = {"data": self._response}
+        if envelope:
+            response: Dict[str, Any] = {envelope_key: self._response}
             return response
 
         return self._response
@@ -201,12 +202,12 @@ class Response(object):
 
     @classmethod
     def create(
-        cls, result: ReturnValue, additional_headers: MutableMapping[str, str] = {}, wrap_data: bool = False
+        cls, result: ReturnValue, additional_headers: MutableMapping[str, str], envelope: bool, envelope_key: str
     ) -> "Response":
         """
             Create a response from a return value
         """
-        return cls(status_code=result.status_code, headers=additional_headers, body=result.get_body(wrap_data))
+        return cls(status_code=result.status_code, headers=additional_headers, body=result.get_body(envelope, envelope_key))
 
     def __init__(self, status_code: int, headers: MutableMapping[str, str], body: ReturnTypes = None) -> None:
         self._status_code = status_code
@@ -308,8 +309,9 @@ class MethodProperties(object):
         client_types: List[str],
         api_version: int,
         api_prefix: str,
-        wrap_data: bool,
+        envelope: bool,
         typed: bool = False,
+        envelope_key: str = "data",
     ) -> None:
         """
             Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -327,8 +329,9 @@ class MethodProperties(object):
                                 to which the options apply.
             :param api_version: The version of the api this method belongs to
             :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
-            :param wrap_data: Put the response of the call under a "data" key.
+            :param envelope: Put the response of the call under an envelope key.
             :param typed: Is the method definition typed or not
+            :param envelope_key: The envelope key to use
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -348,7 +351,8 @@ class MethodProperties(object):
         self._client_types = client_types
         self._api_version = api_version
         self._api_prefix = api_prefix
-        self._wrap_data = wrap_data
+        self._envelope = envelope
+        self._envelope_key = envelope_key
         self.function = function
 
         # validate client types
@@ -408,8 +412,6 @@ class MethodProperties(object):
             - ReturnValue with a type parameter. The type must be the allowed types for arguments or none
         """
         type_hints = get_type_hints(self.function)
-        if "return" not in type_hints and self._wrap_data:
-            raise InvalidMethodDefinition(f"Wrap data is only supported on methods that define a return type ({self.function}")
 
         # TODO: only primitive types are allowed in the path
         # TODO: body and get does not work
@@ -544,8 +546,12 @@ class MethodProperties(object):
         return self._client_types
 
     @property
-    def wrap_data(self) -> bool:
-        return self._wrap_data
+    def envelope(self) -> bool:
+        return self._envelope
+
+    @property
+    def envelope_key(self) -> "str":
+        return self._envelope_key
 
     def get_call_headers(self) -> Set[str]:
         """
