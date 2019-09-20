@@ -114,6 +114,10 @@ def test_check_file_exists(io, testdir):
 
     assert io.file_exists(filename)
 
+    dst = os.path.join(testdir, "lnx" + str(io))
+    io.symlink("/blablablablablalbla", dst)
+    assert io.file_exists(dst)
+
 
 @pytest.mark.parametrize("io", io_list)
 def test_check_symlink(io, testdir):

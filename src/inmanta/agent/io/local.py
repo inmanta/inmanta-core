@@ -455,7 +455,7 @@ class LocalIO(IOBase):
             :return: Returns true if the file exists
             :rtype: bool
         """
-        return os.path.exists(path)
+        return os.path.lexists(path)
 
     def readlink(self, path):
         # type: (str) -> str
