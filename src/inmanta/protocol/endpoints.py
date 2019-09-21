@@ -29,7 +29,6 @@ from tornado import ioloop
 from inmanta import config as inmanta_config
 from inmanta import util
 from inmanta.protocol.common import UrlMethod
-from inmanta.protocol.decorators import MethodT
 from inmanta.util import TaskHandler
 
 from . import common
@@ -48,7 +47,7 @@ class CallTarget(object):
             method_name: getattr(self, method_name) for method_name in dir(self) if callable(getattr(self, method_name))
         }
 
-        methods: Dict[MethodT, Tuple[str, Callable]] = {}
+        methods: Dict[str, Tuple[str, Callable]] = {}
         for name, attr in total_dict.items():
             if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
                 if attr.__protocol_method__ in methods:
@@ -292,7 +291,9 @@ class Client(Endpoint):
         A client that communicates with end-point based on its configuration
     """
 
-    def __init__(self, name: str, timeout: int = 120, version_match: VersionMatch = VersionMatch.lowest, exact_version: int = 0) -> None:
+    def __init__(
+        self, name: str, timeout: int = 120, version_match: VersionMatch = VersionMatch.lowest, exact_version: int = 0
+    ) -> None:
         super().__init__(name)
         assert isinstance(timeout, int), "Timeout needs to be an integer value."
         LOGGER.debug("Start transport for client %s", self.name)

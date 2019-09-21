@@ -113,7 +113,6 @@ def method(
             envelope_key,
         )
         common.MethodProperties.methods[func.__name__].append(properties)
-        #func.__method_properties__ = properties
         return func
 
     return wrapper
@@ -178,7 +177,6 @@ def typedmethod(
             envelope_key,
         )
         common.MethodProperties.methods[func.__name__].append(properties)
-        #func.__method_properties__ = properties
         return func
 
     return wrapper

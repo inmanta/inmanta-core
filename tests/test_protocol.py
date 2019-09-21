@@ -26,7 +26,6 @@ from enum import Enum
 from typing import Dict, Iterator, List, Optional, Union
 
 import pytest
-import requests
 import tornado
 from pydantic.types import StrictBool
 from tornado import gen, web
@@ -34,7 +33,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import config, protocol
 from inmanta.data.model import BaseModel
-from inmanta.protocol import exceptions, json_encode, VersionMatch
+from inmanta.protocol import VersionMatch, exceptions, json_encode
 from inmanta.protocol.common import InvalidMethodDefinition, InvalidPathException, ReturnValue
 from inmanta.protocol.rest import CallArguments
 from inmanta.server import config as opt
@@ -297,7 +296,7 @@ async def test_method_properties():
             Create a new project
         """
 
-    props: protocol.common.MethodProperties = test_method.__method_properties__
+    props = protocol.common.MethodProperties.methods["test_method"][0]
     assert "Authorization" in props.get_call_headers()
     assert props.get_listen_url() == "/x/v2/test"
     assert props.get_call_url({}) == "/x/v2/test"
@@ -331,7 +330,7 @@ async def test_call_arguments_defaults():
             Create a new project
         """
 
-    call = CallArguments(test_method.__method_properties__, {"name": "test"}, {})
+    call = CallArguments(protocol.common.MethodProperties.methods["test_method"][0], {"name": "test"}, {})
     await call.process()
 
     assert call.call_args["name"] == "test"
@@ -363,7 +362,7 @@ async def test_pydantic():
         """
 
     id = uuid.uuid4()
-    call = CallArguments(test_method.__method_properties__, {"project": {"name": "test", "id": str(id)}}, {})
+    call = CallArguments(protocol.common.MethodProperties.methods["test_method"][0], {"project": {"name": "test", "id": str(id)}}, {})
     await call.process()
 
     project = call.call_args["project"]
@@ -371,7 +370,7 @@ async def test_pydantic():
     assert project.id == id
 
     with pytest.raises(exceptions.BadRequest):
-        call = CallArguments(test_method.__method_properties__, {"project": {"name": "test", "id": "abcd"}}, {})
+        call = CallArguments(protocol.common.MethodProperties.methods["test_method"][0], {"project": {"name": "test", "id": "abcd"}}, {})
         await call.process()
 
 
