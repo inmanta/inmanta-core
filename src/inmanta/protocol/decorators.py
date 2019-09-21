@@ -112,8 +112,8 @@ def method(
             False,
             envelope_key,
         )
-        common.MethodProperties.methods[func.__name__] = properties
-        func.__method_properties__ = properties
+        common.MethodProperties.methods[func.__name__].append(properties)
+        #func.__method_properties__ = properties
         return func
 
     return wrapper
@@ -177,8 +177,8 @@ def typedmethod(
             True,
             envelope_key,
         )
-        common.MethodProperties.methods[func.__name__] = properties
-        func.__method_properties__ = properties
+        common.MethodProperties.methods[func.__name__].append(properties)
+        #func.__method_properties__ = properties
         return func
 
     return wrapper

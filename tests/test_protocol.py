@@ -26,6 +26,7 @@ from enum import Enum
 from typing import Dict, Iterator, List, Optional, Union
 
 import pytest
+import requests
 import tornado
 from pydantic.types import StrictBool
 from tornado import gen, web
@@ -33,7 +34,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import config, protocol
 from inmanta.data.model import BaseModel
-from inmanta.protocol import exceptions, json_encode
+from inmanta.protocol import exceptions, json_encode, VersionMatch
 from inmanta.protocol.common import InvalidMethodDefinition, InvalidPathException, ReturnValue
 from inmanta.protocol.rest import CallArguments
 from inmanta.server import config as opt
@@ -1121,3 +1122,64 @@ async def test_ACOA_header(server):
     response = await client.fetch(request)
     assert response.code == 200
     assert response.headers.get("Access-Control-Allow-Origin") == "*"
+
+
+@pytest.mark.asyncio
+async def test_multi_version_method(unused_tcp_port, postgres_db, database_name):
+    """ Test multi version methods
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        name: str
+        value: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=2, envelope_key="data")
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=1, envelope_key="project")
+        def test_method(project: Project) -> Project:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, project: Project) -> Project:  # NOQA
+            return project
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    # rest call
+    port = config.Config.get("server_rest_transport", "port")
+
+    request = HTTPRequest(
+        url=f"http://localhost:{port}/api/v1/test", method="POST", body=json_encode({"project": {"name": "a", "value": "b"}})
+    )
+    client = AsyncHTTPClient()
+    response = await client.fetch(request)
+    assert response.code == 200
+    body = json.loads(response.body)
+    assert "project" in body
+
+    request = HTTPRequest(
+        url=f"http://localhost:{port}/api/v2/test", method="POST", body=json_encode({"project": {"name": "a", "value": "b"}})
+    )
+    client = AsyncHTTPClient()
+    response = await client.fetch(request)
+    assert response.code == 200
+    body = json.loads(response.body)
+    assert "data" in body
+
+    # client based calls
+    client = protocol.Client("client")
+    response = await client.test_method(project=Project(name="a", value="b"))
+    assert response.code == 200
+    assert "project" in response.result
+
+    client = protocol.Client("client", version_match=VersionMatch.highest)
+    response = await client.test_method(project=Project(name="a", value="b"))
+    assert response.code == 200
+    assert "data" in response.result
+
+    await server.stop()
+    await rs.stop()

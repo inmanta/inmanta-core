@@ -20,6 +20,7 @@ import socket
 import uuid
 from asyncio import CancelledError, sleep
 from collections import defaultdict
+from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Set, Tuple, Union  # noqa: F401
 from urllib import parse
 
@@ -28,6 +29,7 @@ from tornado import ioloop
 from inmanta import config as inmanta_config
 from inmanta import util
 from inmanta.protocol.common import UrlMethod
+from inmanta.protocol.decorators import MethodT
 from inmanta.util import TaskHandler
 
 from . import common
@@ -46,13 +48,13 @@ class CallTarget(object):
             method_name: getattr(self, method_name) for method_name in dir(self) if callable(getattr(self, method_name))
         }
 
-        methods: Dict[str, Tuple[str, Callable]] = {}
+        methods: Dict[MethodT, Tuple[str, Callable]] = {}
         for name, attr in total_dict.items():
             if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
                 if attr.__protocol_method__ in methods:
                     raise Exception("Unable to register multiple handlers for the same method. %s" % attr.__protocol_method__)
 
-                methods[attr.__protocol_method__] = (name, attr)
+                methods[attr.__protocol_method__.__name__] = (name, attr)
 
         return methods
 
@@ -64,10 +66,9 @@ class CallTarget(object):
 
         # TODO: avoid colliding handlers
         for method, method_handlers in self._get_endpoint_metadata().items():
-            properties = method.__method_properties__
-            # self.headers.update(properties.get_call_headers())
-            url = properties.get_listen_url()
-            url_map[url][properties.operation] = UrlMethod(properties, self, method_handlers[1], method_handlers[0])
+            for properties in common.MethodProperties.methods[method]:
+                url = properties.get_listen_url()
+                url_map[url][properties.operation] = UrlMethod(properties, self, method_handlers[1], method_handlers[0])
 
         return url_map
 
@@ -274,16 +275,30 @@ class SessionEndpoint(Endpoint, CallTarget):
         )
 
 
+class VersionMatch(str, Enum):
+    lowest = "lowest"
+    """ Select the lowest available version of the method
+    """
+    highest = "hightest"
+    """ Select the hight available version of the method
+    """
+    exact = "exact"
+    """ Select the exact version of the method
+    """
+
+
 class Client(Endpoint):
     """
         A client that communicates with end-point based on its configuration
     """
 
-    def __init__(self, name: str, timeout: int = 120) -> None:
+    def __init__(self, name: str, timeout: int = 120, version_match: VersionMatch = VersionMatch.lowest, exact_version: int = 0) -> None:
         super().__init__(name)
         assert isinstance(timeout, int), "Timeout needs to be an integer value."
         LOGGER.debug("Start transport for client %s", self.name)
         self._transport_instance = client.RESTClient(self, connection_timout=timeout)
+        self._version_match = version_match
+        self._exact_version = exact_version
 
     async def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
         """
@@ -292,20 +307,37 @@ class Client(Endpoint):
         result = await self._transport_instance.call(method_properties, args, kwargs)
         return result
 
+    def _select_method(self, name) -> Optional[common.MethodProperties]:
+        if name not in common.MethodProperties.methods:
+            return None
+
+        methods = common.MethodProperties.methods[name]
+
+        if self._version_match is VersionMatch.lowest:
+            return min(methods, key=lambda x: x.api_version)
+        elif self._version_match is VersionMatch.highest:
+            return max(methods, key=lambda x: x.api_version)
+        elif self._version_match is VersionMatch.exact:
+            for method in methods:
+                if method.api_version == self._exact_version:
+                    return method
+
+        return None
+
     def __getattr__(self, name: str) -> Callable:
         """
             Return a function that will call self._call with the correct method properties associated
         """
-        if name in common.MethodProperties.methods:
-            method = common.MethodProperties.methods[name]
+        method = self._select_method(name)
 
-            def wrap(*args: List, **kwargs: Dict) -> common.Result:
-                method.function(*args, **kwargs)
-                return self._call(method_properties=method, args=args, kwargs=kwargs)
+        if method is None:
+            raise AttributeError("Method with name %s is not defined for this client" % name)
 
-            return wrap
+        def wrap(*args: List, **kwargs: Dict) -> common.Result:
+            method.function(*args, **kwargs)
+            return self._call(method_properties=method, args=args, kwargs=kwargs)
 
-        raise AttributeError("Method with name %s is not defined for this client" % name)
+        return wrap
 
 
 class SyncClient(object):

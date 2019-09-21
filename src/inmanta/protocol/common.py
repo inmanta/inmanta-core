@@ -292,7 +292,7 @@ class MethodProperties(object):
         This class stores the information from a method definition
     """
 
-    methods: Dict[str, "MethodProperties"] = {}
+    methods: Dict[str, List["MethodProperties"]] = defaultdict(list)
 
     def __init__(
         self,
@@ -550,8 +550,12 @@ class MethodProperties(object):
         return self._envelope
 
     @property
-    def envelope_key(self) -> "str":
+    def envelope_key(self) -> str:
         return self._envelope_key
+
+    @property
+    def api_version(self) -> int:
+        return self._api_version
 
     def get_call_headers(self) -> Set[str]:
         """
