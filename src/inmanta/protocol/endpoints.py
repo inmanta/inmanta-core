@@ -43,20 +43,17 @@ class CallTarget(object):
         A baseclass for all classes that are target for protocol calls / methods
     """
 
-    def _get_endpoint_metadata(self) -> Dict[str, Tuple[str, Callable]]:
+    def _get_endpoint_metadata(self) -> Dict[str, List[Tuple[str, Callable]]]:
         total_dict = {
             method_name: method
             for method_name, method in inspect.getmembers(self)
             if callable(method) and method_name[0] != "_"
         }
 
-        methods: Dict[str, Tuple[str, Callable]] = {}
+        methods: Dict[str, List[Tuple[str, Callable]]] = defaultdict(list)
         for name, attr in total_dict.items():
             if hasattr(attr, "__protocol_method__"):
-                if attr.__protocol_method__ in methods:
-                    raise Exception("Unable to register multiple handlers for the same method. %s" % attr.__protocol_method__)
-
-                methods[attr.__protocol_method__.__name__] = (name, attr)
+                methods[attr.__protocol_method__.__name__].append((name, attr))
 
         return methods
 
@@ -66,12 +63,19 @@ class CallTarget(object):
         """
         url_map: Dict[str, Dict[str, UrlMethod]] = defaultdict(dict)
 
-        # TODO: avoid colliding handlers
-        for method, method_handlers in self._get_endpoint_metadata().items():
-            for properties in common.MethodProperties.methods[method]:
-                url = properties.get_listen_url()
-                url_map[url][properties.operation] = UrlMethod(properties, self, method_handlers[1], method_handlers[0])
+        for method, handler_list in self._get_endpoint_metadata().items():
+            for method_handlers in handler_list:
+                for properties in common.MethodProperties.methods[method]:
+                    url = properties.get_listen_url()
 
+                    if method_handlers[1].__api_version__ is None or (
+                        method_handlers[1].__api_version__ is not None
+                        and properties.api_version == method_handlers[1].__api_version__
+                    ):
+                        if url in url_map and properties.operation in url_map[url]:
+                            raise Exception(f"A handler is already registered for {properties.operation} {url}. ")
+
+                        url_map[url][properties.operation] = UrlMethod(properties, self, method_handlers[1], method_handlers[0])
         return url_map
 
 

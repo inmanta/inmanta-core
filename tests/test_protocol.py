@@ -1184,5 +1184,61 @@ async def test_multi_version_method(unused_tcp_port, postgres_db, database_name)
     assert response.code == 200
     assert "data" in response.result
 
+    client = protocol.Client("client", version_match=VersionMatch.exact, exact_version=1)
+    response = await client.test_method(project=Project(name="a", value="b"))
+    assert response.code == 200
+    assert "project" in response.result
+
+    client = protocol.Client("client", version_match=VersionMatch.exact, exact_version=2)
+    response = await client.test_method(project=Project(name="a", value="b"))
+    assert response.code == 200
+    assert "data" in response.result
+
+    await server.stop()
+    await rs.stop()
+
+
+@pytest.mark.asyncio
+async def test_multi_version_handler(unused_tcp_port, postgres_db, database_name):
+    """ Test multi version methods
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        name: str
+        value: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=2, envelope_key="data")
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=1, envelope_key="project")
+        def test_method(project: Project) -> Project:  # NOQA
+            pass
+
+        @protocol.handle(test_method, api_version=1)
+        async def test_methodX(self, project: Project) -> Project:  # NOQA
+            return Project(name="v1", value="1")
+
+        @protocol.handle(test_method, api_version=2)
+        async def test_methodY(self, project: Project) -> Project:  # NOQA
+            return Project(name="v2", value="2")
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    # client based calls
+    client = protocol.Client("client")
+    response = await client.test_method(project=Project(name="a", value="b"))
+    assert response.code == 200
+    assert "project" in response.result
+    assert response.result["project"]["name"] == "v1"
+
+    client = protocol.Client("client", version_match=VersionMatch.highest)
+    response = await client.test_method(project=Project(name="a", value="b"))
+    assert response.code == 200
+    assert "data" in response.result
+    assert response.result["data"]["name"] == "v2"
+
     await server.stop()
     await rs.stop()
