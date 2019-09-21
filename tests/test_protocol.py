@@ -362,7 +362,9 @@ async def test_pydantic():
         """
 
     id = uuid.uuid4()
-    call = CallArguments(protocol.common.MethodProperties.methods["test_method"][0], {"project": {"name": "test", "id": str(id)}}, {})
+    call = CallArguments(
+        protocol.common.MethodProperties.methods["test_method"][0], {"project": {"name": "test", "id": str(id)}}, {}
+    )
     await call.process()
 
     project = call.call_args["project"]
@@ -370,7 +372,9 @@ async def test_pydantic():
     assert project.id == id
 
     with pytest.raises(exceptions.BadRequest):
-        call = CallArguments(protocol.common.MethodProperties.methods["test_method"][0], {"project": {"name": "test", "id": "abcd"}}, {})
+        call = CallArguments(
+            protocol.common.MethodProperties.methods["test_method"][0], {"project": {"name": "test", "id": "abcd"}}, {}
+        )
         await call.process()
 
 

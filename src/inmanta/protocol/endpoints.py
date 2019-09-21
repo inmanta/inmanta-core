@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import inspect
 import logging
 import socket
 import uuid
@@ -44,12 +45,14 @@ class CallTarget(object):
 
     def _get_endpoint_metadata(self) -> Dict[str, Tuple[str, Callable]]:
         total_dict = {
-            method_name: getattr(self, method_name) for method_name in dir(self) if callable(getattr(self, method_name))
+            method_name: method
+            for method_name, method in inspect.getmembers(self)
+            if callable(method) and method_name[0] != "_"
         }
 
         methods: Dict[str, Tuple[str, Callable]] = {}
         for name, attr in total_dict.items():
-            if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
+            if hasattr(attr, "__protocol_method__"):
                 if attr.__protocol_method__ in methods:
                     raise Exception("Unable to register multiple handlers for the same method. %s" % attr.__protocol_method__)
 
