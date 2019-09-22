@@ -361,7 +361,9 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
     def get_progress_potential(self) -> int:
         """How many are actually waiting for us """
-        return len(self.waiters) - len(self.listeners)
+        # For the BaseListVariable, listeners can be in-accurate, as they can be single valued
+        # Alternative would be to make ResultVariable respond to listeners as well
+        return len(self.waiters)
 
     def receive_result(self, value: ListValue, location: Location) -> None:
         self.set_value(value, location)
@@ -410,6 +412,10 @@ class ListVariable(BaseListVariable):
 
     def can_get(self) -> bool:
         return len(self.value) >= self.attribute.low and self.get_waiting_providers() == 0
+
+    def get_progress_potential(self) -> int:
+        """How many are actually waiting for us """
+        return len(self.waiters) - len(self.listeners)
 
     def __str__(self) -> str:
         return "ListVariable %s %s = %s" % (self.myself, self.attribute, self.value)

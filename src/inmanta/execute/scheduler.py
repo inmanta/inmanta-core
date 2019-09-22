@@ -278,7 +278,7 @@ class Scheduler(object):
                 if next.hasValue:
                     # already froze itself
                     continue
-                if next.get_progress_potential() == 0:
+                if next.get_progress_potential() <= 0:
                     zerowaiters.append(next)
                 elif next.get_waiting_providers() > 0:
                     # definitely not done
@@ -294,9 +294,9 @@ class Scheduler(object):
             # no waiters in waitqueue,...
             # see if any zerowaiters have become gotten waiters
             if not progress:
-                waitqueue = deque(w for w in zerowaiters if w.get_progress_potential() != 0)
+                waitqueue = deque(w for w in zerowaiters if w.get_progress_potential() > 0)
                 queue.waitqueue = waitqueue
-                zerowaiters = deque(w for w in zerowaiters if w.get_progress_potential() == 0)
+                zerowaiters = deque(w for w in zerowaiters if w.get_progress_potential() <= 0)
                 while len(waitqueue) > 0 and not progress:
                     LOGGER.debug("Moved zerowaiters to waiters")
                     next = waitqueue.popleft()
