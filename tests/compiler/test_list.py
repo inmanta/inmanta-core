@@ -431,3 +431,73 @@ def test_653_list_attribute_unset(snippetcompiler):
         "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete:"
         " attribute bla ({dir}/main.cf:3) requires 1 values but only 0 are set",
     )
+
+
+def test_1422_gradual_array(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Cluster:
+end
+
+implement Cluster using agentConfig
+
+implementation agentConfig for Cluster:
+    a = std::AgentConfig(autostart=true, agentname="", uri="local:" )
+    a.provides = [self, self.provides, self.provides]
+end
+
+entity K8sYamlResource extends std::PurgeableResource:
+    string yamldict
+end
+
+K8sYamlResource.cluster [1] -- Cluster
+
+implement K8sYamlResource using k8sYamlResource
+
+implementation k8sYamlResource for K8sYamlResource:
+    self.requires += self.cluster
+end
+
+
+entity K8sResource extends std::PurgeableResource:
+end
+
+K8sResource.clusters [1:] -- Cluster
+
+entity Deployment extends K8sResource:
+end
+
+implement Deployment using deployment when self.security_capabilities is defined
+implement Deployment using deployment when not self.security_capabilities is defined
+
+implementation deployment for Deployment:
+    YamlResource(yaml="", clusters=self.clusters)
+end
+
+entity YamlResource extends std::PurgeableResource:
+    string yaml
+end
+
+implement YamlResource using yamlResource
+
+YamlResource.clusters [1:] -- Cluster
+
+implementation yamlResource for YamlResource:
+    for cluster in self.clusters:
+       K8sYamlResource(yamldict=self.yaml, cluster=cluster)
+    end
+end
+
+Deployment.security_capabilities[0:1] -- SecurityCapabilities
+entity SecurityCapabilities:
+end
+implement SecurityCapabilities using std::none
+
+cluster = Cluster()
+deployment2 = Deployment(
+    clusters=cluster,
+)
+"""
+    )
+
+    (_, scopes) = compiler.do_compile()

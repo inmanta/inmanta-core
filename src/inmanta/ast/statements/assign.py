@@ -32,7 +32,15 @@ from inmanta.ast import (
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import AssignStatement, ExpressionStatement, Resumer, Statement
 from inmanta.ast.type import Dict, List
-from inmanta.execute.runtime import ExecutionUnit, HangUnit, Instance, QueueScheduler, Resolver, ResultVariable
+from inmanta.execute.runtime import (
+    BaseListVariable,
+    ExecutionUnit,
+    HangUnit,
+    Instance,
+    QueueScheduler,
+    Resolver,
+    ResultVariable,
+)
 from inmanta.execute.util import Unknown
 
 from . import ReferenceStatement
@@ -56,15 +64,43 @@ class CreateList(ReferenceStatement):
         ReferenceStatement.__init__(self, items)
         self.items = items
 
+    def requires_emit_gradual(
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector
+    ) -> typing.Dict[object, ResultVariable]:
+        # if we are in gradual mode, transform to a list of assignments instead of assignment of a list
+        # to get more accurate gradual execution
+        # temp variable is required get all heuristics right
+
+        # ListVariable to hold all the stuff
+        temp = BaseListVariable(queue)
+
+        # Assignments, wired for gradual
+        for expr in self.items:
+            ExecutionUnit(queue, resolver, temp, expr.requires_emit_gradual(resolver, queue, temp), expr, self)
+
+        # add listener
+        temp.listener(resultcollector, self.location)
+
+        # pass temp
+        return {self: temp}
+
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
             Create this list
         """
+
+        # gradual case, everything is in placeholder
+        if self in requires:
+            return requires[self]
+
         qlist = List()
 
         for i in range(len(self.items)):
-            value = self.items[i]
-            qlist.append(value.execute(requires, resolver, queue))
+            value = self.items[i].execute(requires, resolver, queue)
+            if isinstance(value, list):
+                qlist.extend(value)
+            else:
+                qlist.append(value)
 
         return qlist
 
