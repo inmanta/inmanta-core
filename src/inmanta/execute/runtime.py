@@ -299,7 +299,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
     def _set_value(self, value: ListValue, location: Location, recur: bool = True) -> bool:
         """
-        First half of set_value, returns if second half should run
+        First half of set_value, returns True if second half should run
         """
         if self.hasValue:
             if isinstance(value, list):

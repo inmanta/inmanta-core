@@ -39,6 +39,7 @@ from inmanta.execute.runtime import (
     QueueScheduler,
     Resolver,
     ResultVariable,
+    ResultCollector,
     TempListVariable,
 )
 from inmanta.execute.util import Unknown
@@ -65,7 +66,7 @@ class CreateList(ReferenceStatement):
         self.items = items
 
     def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
     ) -> typing.Dict[object, ResultVariable]:
         # if we are in gradual mode, transform to a list of assignments instead of assignment of a list
         # to get more accurate gradual execution
