@@ -361,9 +361,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
     def get_progress_potential(self) -> int:
         """How many are actually waiting for us """
-        # For the BaseListVariable, listeners can be in-accurate, as they can be single valued
-        # Alternative would be to make ResultVariable respond to listeners as well
-        return len(self.waiters)
+        return len(self.waiters) - len(self.listeners)
 
     def receive_result(self, value: ListValue, location: Location) -> None:
         self.set_value(value, location)
@@ -380,11 +378,22 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         return "BaseListVariable %s" % (self.value)
 
 
+class TempListVariable(BaseListVariable):
+
+    __slots__ = ()
+
+    def set_promised_value(self, promis: Promise, value: ListValue, location: Location, recur: bool = True) -> None:
+        super().set_promised_value(promis, value, location, recur)
+        # 100% accurate promisse tracking
+        if len(self.promisses) == len(self.done_promisses):
+            self.freeze()
+
+
 class ListVariable(BaseListVariable):
 
     value: "List[Instance]"
 
-    __slots__ = ("attribute", "myself", "promisses", "done_promisses")
+    __slots__ = ("attribute", "myself")
 
     def __init__(self, attribute: "RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
         self.attribute = attribute
@@ -412,10 +421,6 @@ class ListVariable(BaseListVariable):
 
     def can_get(self) -> bool:
         return len(self.value) >= self.attribute.low and self.get_waiting_providers() == 0
-
-    def get_progress_potential(self) -> int:
-        """How many are actually waiting for us """
-        return len(self.waiters) - len(self.listeners)
 
     def __str__(self) -> str:
         return "ListVariable %s %s = %s" % (self.myself, self.attribute, self.value)

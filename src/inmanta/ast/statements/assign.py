@@ -33,13 +33,13 @@ from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import AssignStatement, ExpressionStatement, Resumer, Statement
 from inmanta.ast.type import Dict, List
 from inmanta.execute.runtime import (
-    BaseListVariable,
     ExecutionUnit,
     HangUnit,
     Instance,
     QueueScheduler,
     Resolver,
     ResultVariable,
+    TempListVariable,
 )
 from inmanta.execute.util import Unknown
 
@@ -72,14 +72,18 @@ class CreateList(ReferenceStatement):
         # temp variable is required get all heuristics right
 
         # ListVariable to hold all the stuff
-        temp = BaseListVariable(queue)
+        temp = TempListVariable(queue)
+
+        # add listener
+        temp.listener(resultcollector, self.location)
 
         # Assignments, wired for gradual
         for expr in self.items:
             ExecutionUnit(queue, resolver, temp, expr.requires_emit_gradual(resolver, queue, temp), expr, self)
 
-        # add listener
-        temp.listener(resultcollector, self.location)
+        if not self.items:
+            # empty: just close
+            temp.freeze()
 
         # pass temp
         return {self: temp}
