@@ -68,6 +68,10 @@ class CreateList(ReferenceStatement):
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
     ) -> typing.Dict[object, ResultVariable]:
+
+        if resultcollector is None:
+            return self.requires(resolver, queue)
+
         # if we are in gradual mode, transform to a list of assignments instead of assignment of a list
         # to get more accurate gradual execution
         # temp variable is required get all heuristics right
@@ -169,6 +173,7 @@ class SetAttribute(AssignStatement, Resumer):
         self.value = value
         self.list_only = list_only
 
+
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         reqs = self.instance.requires_emit(resolver, queue)
         HangUnit(queue, resolver, reqs, ResultVariable(), self)
@@ -184,7 +189,13 @@ class SetAttribute(AssignStatement, Resumer):
         var = instance.get_attribute(self.attribute_name)
         if self.list_only and not var.is_multi():
             raise TypingException(self, "Can not use += on relations with multiplicity 1")
-        reqs = self.value.requires_emit_gradual(resolver, queue, var)
+
+        if var.is_multi():
+            # gradual only for multi
+            reqs = self.value.requires_emit_gradual(resolver, queue, var)
+        else:
+            reqs = self.value.requires_emit(resolver, queue)
+
         SetAttributeHelper(queue, resolver, var, reqs, self.value, self, instance, self.attribute_name)
 
     def __str__(self) -> str:
