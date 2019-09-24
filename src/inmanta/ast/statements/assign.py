@@ -192,6 +192,8 @@ class SetAttribute(AssignStatement, Resumer):
 
         if var.is_multi():
             # gradual only for multi
+            # to preserve order on lists used in attributes
+            # while allowing gradual execution on relations
             reqs = self.value.requires_emit_gradual(resolver, queue, var)
         else:
             reqs = self.value.requires_emit(resolver, queue)

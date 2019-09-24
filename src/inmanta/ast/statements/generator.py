@@ -356,6 +356,9 @@ class Constructor(ExpressionStatement):
         for attributename, valueexpression in self._indirect_attributes.items():
             var = object_instance.get_attribute(attributename)
             if var.is_multi():
+                # gradual only for multi
+                # to preserve order on lists used in attributes
+                # while allowing gradual execution on relations
                 reqs = valueexpression.requires_emit_gradual(resolver, queue, var)
             else:
                 reqs = valueexpression.requires_emit(resolver, queue)
