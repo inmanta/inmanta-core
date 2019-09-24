@@ -38,8 +38,8 @@ from inmanta.execute.runtime import (
     Instance,
     QueueScheduler,
     Resolver,
-    ResultVariable,
     ResultCollector,
+    ResultVariable,
     TempListVariable,
 )
 from inmanta.execute.util import Unknown
@@ -172,7 +172,6 @@ class SetAttribute(AssignStatement, Resumer):
         self.attribute_name = attribute_name
         self.value = value
         self.list_only = list_only
-
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         reqs = self.instance.requires_emit(resolver, queue)
