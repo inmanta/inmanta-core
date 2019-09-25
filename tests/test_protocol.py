@@ -1138,6 +1138,7 @@ async def test_multi_version_method(unused_tcp_port, postgres_db, database_name)
         value: str
 
     class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"], api_version=3)
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=2, envelope_key="data")
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=1, envelope_key="project")
         def test_method(project: Project) -> Project:  # NOQA
@@ -1166,6 +1167,15 @@ async def test_multi_version_method(unused_tcp_port, postgres_db, database_name)
 
     request = HTTPRequest(
         url=f"http://localhost:{port}/api/v2/test", method="POST", body=json_encode({"project": {"name": "a", "value": "b"}})
+    )
+    client = AsyncHTTPClient()
+    response = await client.fetch(request)
+    assert response.code == 200
+    body = json.loads(response.body)
+    assert "data" in body
+
+    request = HTTPRequest(
+        url=f"http://localhost:{port}/api/v3/test2", method="POST", body=json_encode({"project": {"name": "a", "value": "b"}})
     )
     client = AsyncHTTPClient()
     response = await client.fetch(request)

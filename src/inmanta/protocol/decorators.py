@@ -114,7 +114,7 @@ def method(
             False,
             envelope_key,
         )
-        common.MethodProperties.methods[func.__name__].append(properties)
+        common.MethodProperties.register_method(properties)
         return func
 
     return wrapper
@@ -178,7 +178,7 @@ def typedmethod(
             True,
             envelope_key,
         )
-        common.MethodProperties.methods[func.__name__].append(properties)
+        common.MethodProperties.register_method(properties)
         return func
 
     return wrapper
