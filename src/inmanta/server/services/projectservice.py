@@ -23,6 +23,7 @@ from typing import List, Optional, cast
 import asyncpg
 
 from inmanta import data
+from inmanta.data import model
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import NotFound, ServerError
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PROJECT, SLICE_RESOURCE, SLICE_TRANSPORT, protocol
@@ -94,9 +95,8 @@ class ProjectService(protocol.ServerSlice):
             raise ServerError(f"A project with name {name} already exists.")
 
     @protocol.handle(methods.list_projects)
-    async def list_projects(self) -> Apireturn:
-        projects = await data.Project.get_list()
-        return 200, {"projects": projects}
+    async def list_projects(self) -> List[model.Project]:
+        return [x.to_dtao() for x in await data.Project.get_list()]
 
     @protocol.handle(methods.get_project, project_id="id")
     async def get_project(self, project_id: uuid.UUID) -> Apireturn:

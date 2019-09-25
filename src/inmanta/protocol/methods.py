@@ -18,10 +18,11 @@
 
 import datetime
 import uuid
-from typing import Any, Union
+from typing import Any, Union, List
 
 from inmanta import const, data
 from inmanta.data import model
+from inmanta.protocol import typedmethod
 from inmanta.types import JsonType, PrimitiveTypes
 
 from . import exceptions
@@ -81,8 +82,9 @@ def delete_project(id: uuid.UUID) -> None:
     """
 
 
-@method(path="/project", operation="GET", client_types=["api"])
-def list_projects():
+@typedmethod(path="/project", operation="GET", client_types=["api"], api_version=2, envelope_key="data")
+@typedmethod(path="/project", operation="GET", client_types=["api"], api_version=1, envelope_key="projects")
+def list_projects() -> List[model.Project]:
     """
         Create a list of projects
     """

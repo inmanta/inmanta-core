@@ -578,6 +578,12 @@ class Project(BaseDocument):
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     name: str = Field(field_type=str, required=True, unique=True)
 
+    def to_dto(self) -> model.Project:
+        return model.Project(
+            id=self.id,
+            name=self.name,
+        )
+
 
 def convert_boolean(value: Any) -> bool:
     if isinstance(value, bool):

@@ -116,3 +116,11 @@ class Event(BaseModel):
     status: ResourceState
     change: Change
     changes: Dict[str, AttributeStateChange]
+
+
+class Project(BaseModel):
+    """
+        An inmanta project
+    """
+    id: uuid.UUID
+    name: str
