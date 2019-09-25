@@ -30,6 +30,8 @@ class handle(object):  # noqa: N801
         Decorator for subclasses of an endpoint to handle protocol methods
 
         :param method: A subclass of method that defines the method
+        :param api_version: When specific this handler is only associated with a method of the specific api verision. If the
+                            version is not defined, the handler is not associated with a rest endpoint.
         :param kwargs: Map arguments in the message from one name to an other
     """
 
