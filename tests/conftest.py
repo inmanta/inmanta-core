@@ -124,7 +124,9 @@ def reset_metrics():
 async def clean_reset(create_db, clean_db):
     reset_all_objects()
     config.Config._reset()
+    methods = inmanta.protocol.common.MethodProperties.methods.copy()
     yield
+    inmanta.protocol.common.MethodProperties.methods = methods
     config.Config._reset()
     reset_all_objects()
 

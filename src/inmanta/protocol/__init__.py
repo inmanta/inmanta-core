@@ -56,4 +56,4 @@ to REST transport with Tornado, together with the code in :module:`~inmanta.serv
 from . import methods
 from .common import Response, Result, decode_token, encode_token, gzipped_json, json_encode
 from .decorators import *
-from .endpoints import Client, SessionClient, SessionEndpoint, SyncClient
+from .endpoints import Client, SessionClient, SessionEndpoint, SyncClient, VersionMatch

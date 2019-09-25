@@ -292,7 +292,20 @@ class MethodProperties(object):
         This class stores the information from a method definition
     """
 
-    methods: Dict[str, "MethodProperties"] = {}
+    methods: Dict[str, List["MethodProperties"]] = defaultdict(list)
+
+    @classmethod
+    def register_method(cls, properties: "MethodProperties") -> None:
+        """ Register new method properties. Multiple properties on a method is supported but versions have to be unique.
+        """
+        current_list = [x.api_version for x in cls.methods[properties.function.__name__]]
+        if properties.api_version in current_list:
+            raise Exception(
+                f"Method {properties.function.__name__} already has a "
+                "method definition for api version {properties.api_version}"
+            )
+
+        cls.methods[properties.function.__name__].append(properties)
 
     def __init__(
         self,
@@ -550,8 +563,12 @@ class MethodProperties(object):
         return self._envelope
 
     @property
-    def envelope_key(self) -> "str":
+    def envelope_key(self) -> str:
         return self._envelope_key
+
+    @property
+    def api_version(self) -> int:
+        return self._api_version
 
     def get_call_headers(self) -> Set[str]:
         """
