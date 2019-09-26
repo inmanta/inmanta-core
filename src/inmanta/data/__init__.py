@@ -32,8 +32,8 @@ import asyncpg
 import inmanta.db.versions
 from inmanta import const, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
+from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import CompileRun, ResourceIdStr, ResourceVersionIdStr
 from inmanta.resources import Id
 from inmanta.types import JsonType, SimpleTypes
 
@@ -578,11 +578,8 @@ class Project(BaseDocument):
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     name: str = Field(field_type=str, required=True, unique=True)
 
-    def to_dto(self) -> model.Project:
-        return model.Project(
-            id=self.id,
-            name=self.name,
-        )
+    def to_dto(self) -> m.Project:
+        return m.Project(id=self.id, name=self.name, environments=[])
 
 
 def convert_boolean(value: Any) -> bool:
@@ -705,9 +702,6 @@ class Setting(object):
         }
 
 
-EnvSettingType = Union[str, int, bool, JsonType]
-
-
 class Environment(BaseDocument):
     """
         A deployment environment of a project
@@ -725,7 +719,17 @@ class Environment(BaseDocument):
     project: uuid.UUID = Field(field_type=uuid.UUID, required=True)
     repo_url: str = Field(field_type=str, default="")
     repo_branch: str = Field(field_type=str, default="")
-    settings: Dict[str, EnvSettingType] = Field(field_type=dict, default={})
+    settings: Dict[str, m.EnvSettingType] = Field(field_type=dict, default={})
+
+    def to_dto(self) -> m.Environment:
+        return m.Environment(
+            id=self.id,
+            name=self.name,
+            project_id=self.project,
+            repo_url=self.repo_url,
+            repo_branch=self.repo_branch,
+            settings=self.settings,
+        )
 
     _settings: Dict[str, Setting] = {
         AUTO_DEPLOY: Setting(
@@ -835,7 +839,7 @@ class Environment(BaseDocument):
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
     }  # name new_option -> name deprecated_option
 
-    async def get(self, key: str) -> EnvSettingType:
+    async def get(self, key: str) -> m.EnvSettingType:
         """
             Get a setting in this environment.
 
@@ -863,7 +867,7 @@ class Environment(BaseDocument):
         await self.set(key, value)
         return value
 
-    async def set(self, key: str, value: EnvSettingType) -> None:
+    async def set(self, key: str, value: m.EnvSettingType) -> None:
         """
             Set a new setting in this environment.
 
@@ -921,8 +925,7 @@ class Environment(BaseDocument):
             for cl in compile_list:
                 await cl.delete_cascade()
 
-            models = await ConfigurationModel.get_list(environment=self.id)
-            for model in models:
+            for model in await ConfigurationModel.get_list(environment=self.id):
                 await model.delete_cascade()
 
             await Parameter.delete_all(environment=self.id)
@@ -956,7 +959,7 @@ class Parameter(BaseDocument):
     value: str = Field(field_type=str, default="", required=True)
     environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     source: str = Field(field_type=str, required=True)
-    resource_id: ResourceIdStr = Field(field_type=str, default="")
+    resource_id: m.ResourceIdStr = Field(field_type=str, default="")
     updated: datetime.datetime = Field(field_type=datetime.datetime)
     metadata: Dict[str, Any] = Field(field_type=dict)
 
@@ -996,7 +999,7 @@ class UnknownParameter(BaseDocument):
     name: str = Field(field_type=str, required=True)
     environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
     source: str = Field(field_type=str, required=True)
-    resource_id: ResourceIdStr = Field(field_type=str, default="")
+    resource_id: m.ResourceIdStr = Field(field_type=str, default="")
     version: int = Field(field_type=int, required=True)
     metadata: Dict[str, Any] = Field(field_type=dict)
     resolved: bool = Field(field_type=bool, default=False)
@@ -1240,13 +1243,8 @@ class Compile(BaseDocument):
         if limit:
             query += " LIMIT $" + str(len(values) + 1)
             values.append(cls._get_value(limit))
-        models = await cls.select_query(query, values)
-        # load the report stages
-        result = []
-        for model in models:
-            dict_model = model.to_dict()
-            result.append(dict_model)
-        return result
+
+        return [m.to_dict() for m in await cls.select_query(query, values)]
 
     @classmethod
     # TODO: Use join
@@ -1334,8 +1332,8 @@ class Compile(BaseDocument):
         )
         return results
 
-    def to_dto(self) -> CompileRun:
-        return CompileRun(
+    def to_dto(self) -> m.CompileRun:
+        return m.CompileRun(
             id=self.id,
             remote_id=self.remote_id,
             environment=self.environment,
@@ -1415,7 +1413,7 @@ class LogLine(DataDocument):
 
 class ResourceVersionId(BaseDocument):
     environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    resource_version_id: ResourceVersionIdStr = Field(field_type=str, required=True, part_of_primary_key=True)
+    resource_version_id: m.ResourceVersionIdStr = Field(field_type=str, required=True, part_of_primary_key=True)
     action_id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
 
 
@@ -1437,7 +1435,7 @@ class ResourceAction(BaseDocument):
         :param change: The change result of an action
     """
 
-    resource_version_ids: List[ResourceVersionIdStr] = Field(field_type=list, required=True, reference=True, default=[])
+    resource_version_ids: List[m.ResourceVersionIdStr] = Field(field_type=list, required=True, reference=True, default=[])
 
     action_id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     action: const.ResourceAction = Field(field_type=const.ResourceAction, required=True)
@@ -1516,7 +1514,7 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     async def get_log(
-        cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr, action: Optional[str] = None, limit: int = 0
+        cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, action: Optional[str] = None, limit: int = 0
     ) -> List["ResourceAction"]:
         query = (
             "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "
@@ -1720,8 +1718,8 @@ class Resource(BaseDocument):
     model: int = Field(field_type=int, required=True)
 
     # ID related
-    resource_id: ResourceVersionIdStr = Field(field_type=str, required=True)
-    resource_version_id: ResourceVersionIdStr = Field(field_type=str, required=True, part_of_primary_key=True)
+    resource_id: m.ResourceVersionIdStr = Field(field_type=str, required=True)
+    resource_version_id: m.ResourceVersionIdStr = Field(field_type=str, required=True, part_of_primary_key=True)
 
     agent: str = Field(field_type=str, required=True)
 
@@ -1736,7 +1734,7 @@ class Resource(BaseDocument):
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
     # the list contains full rv id's
-    provides: List[ResourceVersionIdStr] = Field(field_type=list, default=[])  # List of resource versions
+    provides: List[m.ResourceVersionIdStr] = Field(field_type=list, default=[])  # List of resource versions
 
     @property
     def resource_type(self):
@@ -1771,7 +1769,9 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    async def get_resources(cls, environment: uuid.UUID, resource_version_ids: List[ResourceVersionIdStr]) -> List["Resource"]:
+    async def get_resources(
+        cls, environment: uuid.UUID, resource_version_ids: List[m.ResourceVersionIdStr]
+    ) -> List["Resource"]:
         """
             Get all resources listed in resource_version_ids
         """
@@ -1925,7 +1925,7 @@ class Resource(BaseDocument):
             return resources[0]
 
     @classmethod
-    async def get(cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr) -> Optional["Resource"]:
+    async def get(cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr) -> Optional["Resource"]:
         """
             Get a resource with the given resource version id
         """
@@ -1933,7 +1933,7 @@ class Resource(BaseDocument):
         return value
 
     @classmethod
-    def new(cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr, **kwargs: Any) -> "Resource":
+    def new(cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, **kwargs: Any) -> "Resource":
         vid = Id.parse_id(resource_version_id)
 
         attr = dict(
@@ -2089,8 +2089,8 @@ class ConfigurationModel(BaseDocument):
     total: int = Field(field_type=int, default=0)
 
     # cached state for release
-    undeployable: List[ResourceIdStr] = Field(field_type=list, required=False)
-    skipped_for_undeployable: List[ResourceIdStr] = Field(field_type=list, required=False)
+    undeployable: List[m.ResourceIdStr] = Field(field_type=list, required=False)
+    skipped_for_undeployable: List[m.ResourceIdStr] = Field(field_type=list, required=False)
 
     def __init__(self, **kwargs):
         super(ConfigurationModel, self).__init__(**kwargs)
@@ -2259,13 +2259,13 @@ class ConfigurationModel(BaseDocument):
                     self.environment,
                 )
 
-    async def get_undeployable(self) -> List[ResourceIdStr]:
+    async def get_undeployable(self) -> List[m.ResourceIdStr]:
         """
             Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
         """
         return self.undeployable
 
-    async def get_skipped_for_undeployable(self) -> List[ResourceIdStr]:
+    async def get_skipped_for_undeployable(self) -> List[m.ResourceIdStr]:
         """
             Returns a list of resource ids (NOT resource version ids)
             of resources which should get a skipped_for_undeployable state
@@ -2328,7 +2328,7 @@ class ConfigurationModel(BaseDocument):
     @classmethod
     async def get_increment(
         cls, environment: uuid.UUID, version: int
-    ) -> Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]:
+    ) -> Tuple[Set[m.ResourceVersionIdStr], List[m.ResourceVersionIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 

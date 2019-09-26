@@ -21,7 +21,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_project_api(client):
+async def test_project_api_v1(client):
     result = await client.create_project("project-test")
     assert result.code == 200
     assert "project" in result.result
@@ -64,6 +64,38 @@ async def test_project_api(client):
     assert result.code == 200
     assert "projects" in result.result
     assert len(result.result["projects"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_project_api_v2(client_latest):
+    result = await client_latest.project_create("project-test")
+    assert result.code == 200
+    assert "data" in result.result
+    assert "id" in result.result["data"]
+
+    project_id = result.result["data"]["id"]
+
+    result = await client_latest.environment_create(project_id=project_id, name="dev")
+    assert result.code == 200
+    assert "data" in result.result
+    assert "id" in result.result["data"]
+    assert "project_id" in result.result["data"]
+    assert project_id == result.result["data"]["project_id"]
+    assert "dev" == result.result["data"]["name"]
+
+    result = await client_latest.environment_create(project_id=project_id, name="dev2")
+    assert result.code == 200
+    assert "data" in result.result
+    assert "id" in result.result["data"]
+    assert "project_id" in result.result["data"]
+    assert project_id == result.result["data"]["project_id"]
+    assert "dev2" == result.result["data"]["name"]
+
+    result = await client_latest.project_list()
+    assert result.code == 200
+    assert "data" in result.result
+    assert len(result.result["data"]) == 1
+    assert len(result.result["data"][0]["environments"]) == 2
 
 
 @pytest.mark.asyncio

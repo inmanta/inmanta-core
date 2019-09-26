@@ -18,16 +18,15 @@
 
 import datetime
 import uuid
-from typing import Any, Union, List
+from typing import Any, List, Union
 
 from inmanta import const, data
 from inmanta.data import model
-from inmanta.protocol import typedmethod
 from inmanta.types import JsonType, PrimitiveTypes
 
 from . import exceptions
 from .common import ArgOption
-from .decorators import method
+from .decorators import method, typedmethod
 
 
 async def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
@@ -56,8 +55,6 @@ AGENT_ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=
 
 
 # Method for working with projects
-
-
 @method(path="/project", operation="PUT", client_types=["api"])
 def create_project(name: str, project_id: uuid.UUID = None):
     """
@@ -76,15 +73,14 @@ def modify_project(id: uuid.UUID, name: str):
 
 
 @method(path="/project/<id>", operation="DELETE", client_types=["api"])
-def delete_project(id: uuid.UUID) -> None:
+def delete_project(id: uuid.UUID):
     """
         Delete the given project and all related data
     """
 
 
-@typedmethod(path="/project", operation="GET", client_types=["api"], api_version=2, envelope_key="data")
-@typedmethod(path="/project", operation="GET", client_types=["api"], api_version=1, envelope_key="projects")
-def list_projects() -> List[model.Project]:
+@method(path="/project", operation="GET", client_types=["api"])
+def list_projects():
     """
         Create a list of projects
     """
@@ -126,7 +122,7 @@ def modify_environment(id: uuid.UUID, name: str, repository: str = None, branch:
 
 
 @method(path="/environment/<id>", operation="DELETE", client_types=["api"])
-def delete_environment(id: uuid.UUID) -> None:
+def delete_environment(id: uuid.UUID):
     """
         Delete the given environment and all related data
     """
@@ -954,15 +950,25 @@ def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
     """
 
 
-@method(path="/serverstatus", operation="GET", client_types=["api"])
+@typedmethod(path="/serverstatus", operation="GET", client_types=["api"])
 def get_server_status() -> model.StatusResponse:
     """
         Get the status of the server
     """
 
 
-@method(path="/compilequeue", operation="GET", arg_options=ENV_OPTS, client_types=["api"])
-def get_compile_queue(tid: uuid.UUID) -> model.CompileQueueResponse:
+@typedmethod(
+    path="/compilequeue",
+    operation="GET",
+    arg_options=ENV_OPTS,
+    client_types=["api"],
+    api_version=2,
+    envelope_key=const.ENVELOPE_KEY,
+)
+@typedmethod(
+    path="/compilequeue", operation="GET", arg_options=ENV_OPTS, client_types=["api"], api_version=1, envelope_key="queue"
+)
+def get_compile_queue(tid: uuid.UUID) -> List[model.CompileRun]:
     """
         Get the current compiler queue on the server
     """

@@ -79,14 +79,6 @@ class CompileRun(BaseModel):
     environment_variables: Dict[str, str]
 
 
-class CompileQueueResponse(BaseModel):
-    """
-        Response for the call to inspect the queue in the compiler service
-    """
-
-    queue: List[CompileRun]
-
-
 ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)
 """
     The resource id with the version included.
@@ -118,9 +110,29 @@ class Event(BaseModel):
     changes: Dict[str, AttributeStateChange]
 
 
-class Project(BaseModel):
+EnvSettingType = Union[str, int, bool, JsonType]
+
+
+class Environment(BaseModel):
     """
-        An inmanta project
+        An inmanta environment.
+
+        :note: repo_url and repo_branch will be moved to the settings.
     """
+
     id: uuid.UUID
     name: str
+    project_id: uuid.UUID
+    repo_url: str
+    repo_branch: str
+    settings: Dict[str, EnvSettingType]
+
+
+class Project(BaseModel):
+    """
+        An inmanta environment.
+    """
+
+    id: uuid.UUID
+    name: str
+    environments: List[Environment]

@@ -24,12 +24,12 @@ import asyncpg
 
 from inmanta import data
 from inmanta.data import model
-from inmanta.protocol import methods
+from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.exceptions import NotFound, ServerError
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PROJECT, SLICE_RESOURCE, SLICE_TRANSPORT, protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.services.resourceservice import ResourceService
-from inmanta.types import Apireturn
+from inmanta.types import Apireturn, JsonType
 
 LOGGER = logging.getLogger(__name__)
 
@@ -54,9 +54,36 @@ class ProjectService(protocol.ServerSlice):
         self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
-    # Project handlers
+    # v1 handlers
     @protocol.handle(methods.create_project)
     async def create_project(self, name: str, project_id: Optional[uuid.UUID]) -> Apireturn:
+        return 200, {"project": (await self.project_create(name, project_id)).dict()}
+
+    @protocol.handle(methods.delete_project, project_id="id", api_version=1)
+    async def delete_project(self, project_id: uuid.UUID) -> None:
+        await self.project_delete(project_id)
+        return 200
+
+    @protocol.handle(methods.modify_project, project_id="id")
+    async def modify_project(self, project_id: uuid.UUID, name: str) -> Apireturn:
+        return 200, {"project": (await self.project_modify(project_id, name)).dict()}
+
+    @protocol.handle(methods.list_projects)
+    async def list_projects(self) -> Apireturn:
+        project_list: List[JsonType] = [x.dict() for x in await self.project_list()]
+        for project in project_list:
+            project["environments"] = [x["id"] for x in project["environments"]]
+        return 200, {"projects": project_list}
+
+    @protocol.handle(methods.get_project, project_id="id")
+    async def get_project(self, project_id: uuid.UUID) -> Apireturn:
+        project_model = (await self.project_get(project_id)).dict()
+        project_model["environments"] = [e.id for e in await data.Environment.get_list(project=project_id)]
+        return 200, {"project": project_model}
+
+    # v2 handlers
+    @protocol.handle(methods_v2.project_create)
+    async def project_create(self, name: str, project_id: Optional[uuid.UUID]) -> model.Project:
         if project_id is None:
             project_id = uuid.uuid4()
         try:
@@ -65,10 +92,10 @@ class ProjectService(protocol.ServerSlice):
         except asyncpg.exceptions.UniqueViolationError:
             raise ServerError(f"A project with name {name} already exists.")
 
-        return 200, {"project": project}
+        return project.to_dto()
 
-    @protocol.handle(methods.delete_project, project_id="id")
-    async def delete_project(self, project_id: uuid.UUID) -> None:
+    @protocol.handle(methods_v2.project_delete, project_id="id", api_version=2)
+    async def project_delete(self, project_id: uuid.UUID) -> None:
         project = await data.Project.get_by_id(project_id)
         if project is None:
             raise NotFound("The project with given id does not exist.")
@@ -80,8 +107,8 @@ class ProjectService(protocol.ServerSlice):
 
         await project.delete()
 
-    @protocol.handle(methods.modify_project, project_id="id")
-    async def modify_project(self, project_id: uuid.UUID, name: str) -> Apireturn:
+    @protocol.handle(methods_v2.project_modify, project_id="id")
+    async def project_modify(self, project_id: uuid.UUID, name: str) -> model.Project:
         try:
             project = await data.Project.get_by_id(project_id)
             if project is None:
@@ -89,27 +116,34 @@ class ProjectService(protocol.ServerSlice):
 
             await project.update_fields(name=name)
 
-            return 200, {"project": project}
+            return project.to_dto()
 
         except asyncpg.exceptions.UniqueViolationError:
             raise ServerError(f"A project with name {name} already exists.")
 
-    @protocol.handle(methods.list_projects)
-    async def list_projects(self) -> List[model.Project]:
-        return [x.to_dtao() for x in await data.Project.get_list()]
+    @protocol.handle(methods_v2.project_list)
+    async def project_list(self) -> List[model.Project]:
+        project_list = []
 
-    @protocol.handle(methods.get_project, project_id="id")
-    async def get_project(self, project_id: uuid.UUID) -> Apireturn:
+        for project in await data.Project.get_list():
+            project_model = project.to_dto()
+            project_model.environments = [e.to_dto() for e in await data.Environment.get_list(project=project.id)]
+
+            project_list.append(project_model)
+
+        return project_list
+
+    @protocol.handle(methods_v2.project_get, project_id="id")
+    async def project_get(self, project_id: uuid.UUID) -> model.Project:
         try:
             project = await data.Project.get_by_id(project_id)
-            environments = await data.Environment.get_list(project=project_id)
 
             if project is None:
                 raise NotFound("The project with given id does not exist.")
 
-            project_dict = project.to_dict()
-            project_dict["environments"] = [e.id for e in environments]
+            project_model = project.to_dto()
+            project_model.environments = [e.to_dto() for e in await data.Environment.get_list(project=project_id)]
 
-            return 200, {"project": project_dict}
+            return project_model
         except ValueError:
             raise NotFound("The project with given id does not exist.")

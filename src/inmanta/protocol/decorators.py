@@ -18,6 +18,7 @@
 import inspect
 from typing import Callable, Dict, List, Optional, TypeVar
 
+from inmanta import const
 from inmanta.types import Apireturn, HandlerType, MethodType
 
 from . import common
@@ -68,7 +69,7 @@ def method(
     api_version: int = 1,
     api_prefix: str = "api",
     envelope: bool = False,
-    envelope_key: str = "data",
+    envelope_key: str = const.ENVELOPE_KEY,
 ) -> Callable[..., Callable]:
     """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -133,7 +134,7 @@ def typedmethod(
     client_types: List[str] = ["public"],
     api_version: int = 1,
     api_prefix: str = "api",
-    envelope_key: str = "data",
+    envelope_key: str = const.ENVELOPE_KEY,
 ) -> Callable[..., Callable]:
     """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build

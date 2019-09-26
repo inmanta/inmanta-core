@@ -324,7 +324,7 @@ class MethodProperties(object):
         api_prefix: str,
         envelope: bool,
         typed: bool = False,
-        envelope_key: str = "data",
+        envelope_key: str = const.ENVELOPE_KEY,
     ) -> None:
         """
             Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build

@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Set, cast
 import asyncpg
 
 from inmanta import const, data
-from inmanta.data import ResourceVersionIdStr
+from inmanta.data.model import ResourceVersionIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import ServerError

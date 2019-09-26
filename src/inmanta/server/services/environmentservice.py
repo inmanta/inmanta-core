@@ -24,7 +24,8 @@ import uuid
 from typing import List, Optional, cast
 
 from inmanta import const, data
-from inmanta.protocol import encode_token, methods
+from inmanta.data import model
+from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import NotFound, ServerError
 from inmanta.server import (
@@ -44,6 +45,13 @@ from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
+
+
+def rename_fields(env: model.Environment) -> JsonType:
+    env_dict = env.dict()
+    env_dict["project"] = env_dict["project_id"]
+    del env_dict["project_id"]
+    return env_dict
 
 
 class EnvironmentService(protocol.ServerSlice):
@@ -70,53 +78,21 @@ class EnvironmentService(protocol.ServerSlice):
         self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
-    # Environment handlers
+    # v1 handlers
     @protocol.handle(methods.create_environment)
     async def create_environment(
         self, project_id: uuid.UUID, name: str, repository: str, branch: str, environment_id: Optional[uuid.UUID]
     ) -> Apireturn:
-        if environment_id is None:
-            environment_id = uuid.uuid4()
-
-        if (repository is None and branch is not None) or (repository is not None and branch is None):
-            raise ServerError("Repository and branch should be set together.")
-
-        # fetch the project first
-        project = await data.Project.get_by_id(project_id)
-        if project is None:
-            raise ServerError("The project id for the environment does not exist.")
-
-        # check if an environment with this name is already defined in this project
-        envs = await data.Environment.get_list(project=project_id, name=name)
-        if len(envs) > 0:
-            raise ServerError(f"Project {project.name} (id={project.id}) already has an environment with name {name}")
-
-        env = data.Environment(id=environment_id, name=name, project=project_id, repo_url=repository, repo_branch=branch)
-        await env.insert()
-        return 200, {"environment": env}
+        return (
+            200,
+            {"environment": rename_fields(await self.environment_create(project_id, name, repository, branch, environment_id))},
+        )
 
     @protocol.handle(methods.modify_environment, environment_id="id")
     async def modify_environment(self, environment_id: uuid.UUID, name: str, repository: str, branch: str) -> Apireturn:
-        env = await data.Environment.get_by_id(environment_id)
-        if env is None:
-            raise NotFound("The environment id does not exist.")
+        return 200, {"environment": rename_fields(await self.environment_modify(environment_id, name, repository, branch))}
 
-        # check if an environment with this name is already defined in this project
-        envs = await data.Environment.get_list(project=env.project, name=name)
-        if len(envs) > 0 and envs[0].id != environment_id:
-            raise ServerError(f"Project with id={env.project} already has an environment with name {name}")
-
-        fields = {"name": name}
-        if repository is not None:
-            fields["repo_url"] = repository
-
-        if branch is not None:
-            fields["repo_branch"] = branch
-
-        await env.update_fields(**fields)
-        return 200, {"environment": env}
-
-    @protocol.handle(methods.get_environment, environment_id="id")
+    @protocol.handle(methods.get_environment, environment_id="id", api_version=1)
     async def get_environment(
         self, environment_id: uuid.UUID, versions: Optional[int] = None, resources: Optional[int] = None
     ) -> Apireturn:
@@ -140,16 +116,76 @@ class EnvironmentService(protocol.ServerSlice):
 
     @protocol.handle(methods.list_environments)
     async def list_environments(self) -> Apireturn:
-        environments = await data.Environment.get_list()
-        dicts = []
-        for env in environments:
-            env_dict = env.to_dict()
-            dicts.append(env_dict)
-
-        return 200, {"environments": dicts}
+        return 200, {"environments": [rename_fields(env) for env in await self.environment_list()]}
 
     @protocol.handle(methods.delete_environment, environment_id="id")
     async def delete_environment(self, environment_id: uuid.UUID) -> None:
+        await self.environment_delete(environment_id)
+        return 200
+
+    # v2 handlers
+    @protocol.handle(methods_v2.environment_create)
+    async def environment_create(
+        self, project_id: uuid.UUID, name: str, repository: str, branch: str, environment_id: Optional[uuid.UUID]
+    ) -> model.Environment:
+        if environment_id is None:
+            environment_id = uuid.uuid4()
+
+        if (repository is None and branch is not None) or (repository is not None and branch is None):
+            raise ServerError("Repository and branch should be set together.")
+
+        # fetch the project first
+        project = await data.Project.get_by_id(project_id)
+        if project is None:
+            raise ServerError("The project id for the environment does not exist.")
+
+        # check if an environment with this name is already defined in this project
+        envs = await data.Environment.get_list(project=project_id, name=name)
+        if len(envs) > 0:
+            raise ServerError(f"Project {project.name} (id={project.id}) already has an environment with name {name}")
+
+        env = data.Environment(id=environment_id, name=name, project=project_id, repo_url=repository, repo_branch=branch)
+        await env.insert()
+        return env.to_dto()
+
+    @protocol.handle(methods_v2.environment_modify, environment_id="id")
+    async def environment_modify(
+        self, environment_id: uuid.UUID, name: str, repository: Optional[str], branch: Optional[str]
+    ) -> model.Environment:
+        env = await data.Environment.get_by_id(environment_id)
+        if env is None:
+            raise NotFound("The environment id does not exist.")
+
+        # check if an environment with this name is already defined in this project
+        envs = await data.Environment.get_list(project=env.project, name=name)
+        if len(envs) > 0 and envs[0].id != environment_id:
+            raise ServerError(f"Project with id={env.project} already has an environment with name {name}")
+
+        fields = {"name": name}
+        if repository is not None:
+            fields["repo_url"] = repository
+
+        if branch is not None:
+            fields["repo_branch"] = branch
+
+        await env.update_fields(**fields)
+        return env.to_dto()
+
+    @protocol.handle(methods_v2.environment_get, environment_id="id", api_version=2)
+    async def environment_get(self, environment_id: uuid.UUID) -> model.Environment:
+        env = await data.Environment.get_by_id(environment_id)
+
+        if env is None:
+            raise NotFound("The environment id does not exist.")
+
+        return env.to_dto()
+
+    @protocol.handle(methods_v2.environment_list)
+    async def environment_list(self) -> List[model.Environment]:
+        return [env.to_dto() for env in await data.Environment.get_list()]
+
+    @protocol.handle(methods_v2.environment_delete, environment_id="id")
+    async def environment_delete(self, environment_id: uuid.UUID) -> None:
         env = await data.Environment.get_by_id(environment_id)
         if env is None:
             raise NotFound("The environment with given id does not exist.")
@@ -158,6 +194,7 @@ class EnvironmentService(protocol.ServerSlice):
 
         self.resource_service.close_resource_action_logger(environment_id)
 
+    # not ported
     @protocol.handle(methods.decomission_environment, env="id")
     async def decomission_environment(self, env: data.Environment, metadata: JsonType) -> Apireturn:
         version = int(time.time())
@@ -207,7 +244,7 @@ class EnvironmentService(protocol.ServerSlice):
         return warnings
 
     @protocol.handle(methods.set_setting, env="tid", key="id")
-    async def set_setting(self, env: data.Environment, key: str, value: data.EnvSettingType) -> Apireturn:
+    async def set_setting(self, env: data.Environment, key: str, value: model.EnvSettingType) -> Apireturn:
         try:
             await env.set(key, value)
             warnings = await self._setting_change(env, key)
