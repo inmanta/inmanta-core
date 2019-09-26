@@ -17,6 +17,7 @@
 """
 import asyncio
 import concurrent
+import csv
 import datetime
 import logging
 import os
@@ -36,6 +37,7 @@ from typing import Dict, Optional
 
 import asyncpg
 import pkg_resources
+import psutil
 import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
@@ -324,9 +326,24 @@ def log_file():
 @pytest.fixture(scope="function", autouse=True)
 def log_state_tcp_ports(request, log_file):
     def _write_log_line(title):
-        output = subprocess.check_output(["sudo", "-u", "root", "ss", "-antp"])
-        output = output.decode("utf-8")
-        log_file.write(f"{title}\n{output}\n")
+        connections = psutil.net_connections()
+        writer = csv.writer(log_file, dialect="unix")
+
+        def map_data_line(line):
+            out = [
+                title,
+                line.fd,
+                str(line.family),
+                str(line.type),
+                f"{line.laddr.ip}|{line.laddr.port}" if line.laddr else None,
+                f"{line.raddr.ip}|{line.raddr.port}" if line.raddr else None,
+                line.status,
+                None if "pid" not in line else line.pid,
+            ]
+            return out
+
+        for con in connections:
+            writer.writerow(map_data_line(con))
 
     _write_log_line(f"Before run test case {request.function.__name__}:")
     yield
