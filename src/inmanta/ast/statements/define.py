@@ -576,15 +576,16 @@ class DefineRelation(BiStatement):
         else:
             left_end = None
 
-        if right == left and str(self.left[1]) == str(self.right[1]) and self.right[1] is not None:
-            # relation is its own inverse
-            right_end = left_end
-        elif self.right[1] is not None:
-            right_end = RelationAttribute(left, right, str(self.right[1]))
-            right_end.source_annotations = self.annotations
-            right_end.set_multiplicity(self.right[2])
-            right_end.comment = self.comment
-            right_end.location = self.right[1].get_location()
+        if self.right[1] is not None:
+            if right == left and str(self.left[1]) == str(self.right[1]):
+                # relation is its own inverse
+                right_end = left_end
+            else:
+                right_end = RelationAttribute(left, right, str(self.right[1]))
+                right_end.source_annotations = self.annotations
+                right_end.set_multiplicity(self.right[2])
+                right_end.comment = self.comment
+                right_end.location = self.right[1].get_location()
         else:
             right_end = None
 
