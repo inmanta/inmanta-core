@@ -311,6 +311,28 @@ async def agent(server, environment):
     await a.stop()
 
 
+@pytest.fixture(scope="session")
+def log_file():
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs")
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+    output_file = os.path.join(output_dir, "log.txt")
+    with open(output_file, "w") as f:
+        yield f
+
+
+@pytest.fixture(scope="function", autouse=True)
+def log_state_tcp_ports(request, log_file):
+    def _write_log_line(title):
+        output = subprocess.check_output(["sudo", "-u", "root", "ss", "-antp"])
+        output = output.decode("utf-8")
+        log_file.write(f"{title}\n{output}\n")
+
+    _write_log_line(f"Before run test case {request.function.__name__}:")
+    yield
+    _write_log_line(f"After run test case {request.function.__name__}:")
+
+
 @pytest.fixture(scope="function")
 async def server_config(event_loop, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
     reset_metrics()
