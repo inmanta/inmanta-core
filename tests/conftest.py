@@ -353,7 +353,7 @@ async def server(server_config):
         await ibl.start()
     except SliceStartupException as e:
         port = config.Config.get("server_rest_transport", "port")
-        output = subprocess.check_output(["ss", "-antp"])
+        output = subprocess.check_output(["sudo", "-u", "root", "ss", "-antp"])
         output = output.decode("utf-8")
         print(f"Port: {port}")
         print(f"Port usage: \n {output}")
@@ -435,7 +435,7 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
         await ibl.start()
     except SliceStartupException as e:
         port = config.Config.get("server_rest_transport", "port")
-        output = subprocess.check_output(["ss", "-antp"])
+        output = subprocess.check_output(["sudo", "-u", "root", "ss", "-antp"])
         output = output.decode("utf-8")
         print(f"Port: {port}")
         print(f"Port usage: \n {output}")
