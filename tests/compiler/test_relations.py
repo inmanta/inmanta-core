@@ -551,7 +551,7 @@ def test_670_assign_on_relation(snippetcompiler):
     )
 
 
-def test_refexive(snippetcompiler):
+def test_reflexive(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
