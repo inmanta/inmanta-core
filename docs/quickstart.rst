@@ -6,45 +6,37 @@ Quickstart
 This tutorial gets you started with the Inmanta orchestration tool.
 
 Inmanta is intended to manage complex infrastructures, often in the cloud or other virtualized environments.
-In this guide, we go for a less complex setup: install the Drupal CMS on two VMs.
-First, we use vagrant to setup a basic environment with two empty VMs and an Inmanta server.
-Then, we use Inmanta to install Drupal on these VMs.
+In this guide, we go for a less complex setup: install the Drupal CMS on two VM-like containers.
+First, we use Docker to set up a basic environment with two empty VM-like containers, an Inmanta server and a postgres server.
+Then, we use Inmanta to install Drupal on these VM-like containers.
+
+This is meant to get an example inmanta set up running quickly to experiment with.
+It is not recommended to run this in production.
+It is recommended to use real VMs instead of the provided containers.
 
 Setting up the tutorial
 _________________________
 
-To quickly get started with Inmanta, use Vagrant to set up an environment to host the Inmanta server and some machines to be
-managed. Before starting this tutorial, first `install vagrant on your machine <https://www.vagrantup.com/docs/installation/>`_.
+To quickly get started with Inmanta, use Docker Compose to set up an environment to host the Inmanta server and some machines to be managed.
+Before starting this tutorial, first `install Docker on your machine <https://docs.docker.com/v17.09/engine/installation/>`_.
+Next `install Docker Compose on your machine <https://docs.docker.com/compose/install/>`_.
 
-
-Next, grab the Vagrant box from our Git repo and let Vagrant do the setup of the Inmanta server.
+Then, grab the Docker quickstart from our Git repo and let Docker Compose handle the setup of the Inmanta server.
 
 .. code-block:: sh
 
-    git clone https://github.com/inmanta/quickstart-vagrant.git
-    cd quickstart-vagrant
-    ./make_keys.sh
-    vagrant up
+    git clone https://github.com/inmanta/quickstart-docker.git
+    cd quickstart-docker
+    docker-compose up
 
-Vagrant will set up the Inmanta server and two VMs to experiment on.
-When Vagrant is ready, you should be able to open the dashboard at http://127.0.0.1:8888.
-
-.. warning::
-
-    When using Vagrant in combination with VirtualBox, there is a known issue with SSH keys.
-    If this problem occurs to you, add the following lines to the Vagrantfile:
-
-    .. code-block:: sh
-
-        config.ssh.insert_key = false
-
-    Notice that you are using a default key, this is insecure.
+Docker Compose will set up the Inmanta server, a postgres and two VMs to experiment on.
+When Docker Compose is ready, you should be able to open the dashboard at http://127.0.0.1:8888.
 
 To get a shell on the Inmanta server:
 
 .. code-block:: sh
 
-    vagrant ssh server
+    docker exec -it "inmanta_quickstart_server" bash
 
 
 Automatically deploying Drupal
