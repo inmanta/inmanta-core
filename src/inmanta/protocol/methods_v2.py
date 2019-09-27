@@ -224,7 +224,7 @@ def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSetting
     client_types=["api", "agent"],
     api_version=2,
 )
-def environment_setting_delete(tid: uuid.UUID, id: str) -> None:
+def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
     """
         Delete a value
     """

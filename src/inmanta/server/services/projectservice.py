@@ -135,15 +135,12 @@ class ProjectService(protocol.ServerSlice):
 
     @protocol.handle(methods_v2.project_get, project_id="id")
     async def project_get(self, project_id: uuid.UUID) -> model.Project:
-        try:
-            project = await data.Project.get_by_id(project_id)
+        project = await data.Project.get_by_id(project_id)
 
-            if project is None:
-                raise NotFound("The project with given id does not exist.")
-
-            project_model = project.to_dto()
-            project_model.environments = [e.to_dto() for e in await data.Environment.get_list(project=project_id)]
-
-            return project_model
-        except ValueError:
+        if project is None:
             raise NotFound("The project with given id does not exist.")
+
+        project_model = project.to_dto()
+        project_model.environments = [e.to_dto() for e in await data.Environment.get_list(project=project_id)]
+
+        return project_model

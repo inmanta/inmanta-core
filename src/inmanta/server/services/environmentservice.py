@@ -27,7 +27,7 @@ from inmanta import data
 from inmanta.data import model
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
-from inmanta.protocol.exceptions import NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_DATABASE,
@@ -199,12 +199,12 @@ class EnvironmentService(protocol.ServerSlice):
             environment_id = uuid.uuid4()
 
         if (repository is None and branch is not None) or (repository is not None and branch is None):
-            raise ServerError("Repository and branch should be set together.")
+            raise BadRequest("Repository and branch should be set together.")
 
         # fetch the project first
         project = await data.Project.get_by_id(project_id)
         if project is None:
-            raise ServerError("The project id for the environment does not exist.")
+            raise NotFound("The project id for the environment does not exist.")
 
         # check if an environment with this name is already defined in this project
         envs = await data.Environment.get_list(project=project_id, name=name)

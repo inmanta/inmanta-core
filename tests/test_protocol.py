@@ -1287,3 +1287,33 @@ async def test_multi_version_handler(unused_tcp_port, postgres_db, database_name
 
     await server.stop()
     await rs.stop()
+
+
+@pytest.mark.asyncio
+async def test_simple_return_type(unused_tcp_port, postgres_db, database_name):
+    """ Test methods with simple return types
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(project: str) -> str:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_methodY(self, project: str) -> str:  # NOQA
+            return project
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    # client based calls
+    client = protocol.Client("client")
+    response = await client.test_method(project="x")
+    assert response.code == 200
+    assert response.result["data"] == "x"
+
+    await server.stop()
+    await rs.stop()
