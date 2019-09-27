@@ -102,8 +102,8 @@ async def test_environment_settings_v2(client_latest, server, environment):
     response = await client_latest.environment_settings_list(tid=environment)
     assert response.code == 200
     assert "settings" in response.result["data"]
-    assert "metadata" in response.result["data"]
-    assert "auto_deploy" in response.result["data"]["metadata"]
+    assert "definition" in response.result["data"]
+    assert "auto_deploy" in response.result["data"]["definition"]
     assert len(response.result["data"]["settings"]) == 0
 
     response = await client_latest.environment_settings_set(tid=environment, id="auto_deploy", value=False)
