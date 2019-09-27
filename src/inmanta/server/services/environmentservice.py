@@ -141,8 +141,12 @@ class EnvironmentService(protocol.ServerSlice):
         return 200
 
     @protocol.handle(methods.decomission_environment, env="id")
-    async def decommission_environment(self, env: data.Environment, metadata: JsonType) -> Apireturn:
-        version = await self.environment_decommission(env, metadata)
+    async def decommission_environment(self, env: data.Environment, metadata: Optional[JsonType]) -> Apireturn:
+        data: Optional[model.ModelMetadata] = None
+        if metadata:
+            data = model.ModelMetadata(message=metadata.get("message", ""), type=metadata.get("type", ""))
+
+        version = await self.environment_decommission(env, data)
         return 200, {"version": version}
 
     @protocol.handle(methods.clear_environment, env="id")
@@ -296,8 +300,9 @@ class EnvironmentService(protocol.ServerSlice):
         try:
             await env.set(key, value)
             warnings = await self._setting_change(env, key)
-            result = ReturnValue(response=None)
-            result.add_warnings(warnings)
+            result: ReturnValue[None] = ReturnValue(response=None)
+            if warnings:
+                result.add_warnings(warnings)
             return result
         except KeyError:
             raise NotFound()
@@ -319,8 +324,9 @@ class EnvironmentService(protocol.ServerSlice):
         try:
             await env.unset(key)
             warnings = await self._setting_change(env, key)
-            result = ReturnValue(response=None)
-            result.add_warnings(warnings)
+            result: ReturnValue[None] = ReturnValue(response=None)
+            if warnings:
+                result.add_warnings(warnings)
             return result
         except KeyError:
             raise NotFound()

@@ -295,7 +295,7 @@ class InvalidMethodDefinition(Exception):
 
 
 VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
-VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime, StrictNonIntBool)
+VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNonIntBool, datetime)
 
 
 class MethodProperties(object):
