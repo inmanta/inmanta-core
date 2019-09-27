@@ -180,7 +180,7 @@ class ModelMetadata(BaseModel):
     extra_data: Optional[JsonType]
 
     class Config:
-        fields = {"auth_key": {"alias": "inmanta:compile:state"}}
+        fields = {"inmanta_compile_state": {"alias": "inmanta:compile:state"}}
 
 
 class ModelVersionInfo(BaseModel):
