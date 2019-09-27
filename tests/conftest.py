@@ -55,6 +55,7 @@ from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import Project
 from inmanta.postgresproc import PostgresProc
+from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
@@ -311,6 +312,12 @@ async def agent(server, environment):
     yield a
 
     await a.stop()
+
+
+@pytest.fixture(scope="function")
+def client_latest(server):
+    client = protocol.Client("client", version_match=VersionMatch.highest)
+    yield client
 
 
 @pytest.fixture(scope="function")
