@@ -284,7 +284,7 @@ class OrchestrationService(protocol.ServerSlice):
             )
             await cm.insert()
         except asyncpg.exceptions.UniqueViolationError:
-            return 500, {"message": "The given version is already defined. Versions should be unique."}
+            raise ServerError("The given version is already defined. Versions should be unique.")
 
         await data.Resource.insert_many(resource_objects)
         await cm.update_fields(total=cm.total + len(resources_to_purge))

@@ -660,13 +660,13 @@ class Setting(object):
         self,
         name: str,
         typ: str,
-        default: SimpleTypes = None,
+        default: m.EnvSettingType = None,
         doc: str = None,
         validator: Callable[[SimpleTypes], SimpleTypes] = None,
         recompile: bool = False,
         update_model: bool = False,
         agent_restart: bool = False,
-        allowed_values: List[SimpleTypes] = None,
+        allowed_values: Optional[List[SimpleTypes]] = None,
     ):
         """
             :param name: The name of the setting.
@@ -681,6 +681,7 @@ class Setting(object):
             :param agent_restart: Restart autostarted agents when this settings is updated.
             :param allowed_values: list of possible values (if type is enum)
         """
+        self.name: str = name
         self.typ: str = typ
         self.default = default
         self.doc = doc
@@ -700,6 +701,18 @@ class Setting(object):
             "agent_restart": self.agent_restart,
             "allowed_values": self.allowed_values,
         }
+
+    def to_dto(self) -> m.EnvironmentSetting:
+        return m.EnvironmentSetting(
+            name=self.name,
+            type=self.typ,
+            default=self.default,
+            doc=self.doc,
+            recompile=self.recompile,
+            update_model=self.update,
+            agent_restart=self.agent_restart,
+            allowed_values=self.allowed_values,
+        )
 
 
 class Environment(BaseDocument):

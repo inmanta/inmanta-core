@@ -23,10 +23,10 @@ import time
 import uuid
 from typing import List, Optional, cast
 
-from inmanta import const, data
+from inmanta import data
 from inmanta.data import model
 from inmanta.protocol import encode_token, methods, methods_v2
-from inmanta.protocol.common import attach_warnings
+from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import NotFound, ServerError
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -78,6 +78,23 @@ class EnvironmentService(protocol.ServerSlice):
         self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
+    async def _setting_change(self, env: data.Environment, key: str) -> Warnings:
+        setting = env._settings[key]
+
+        warnings = None
+        if setting.recompile:
+            LOGGER.info("Environment setting %s changed. Recompiling with update = %s", key, setting.update)
+            metadata = model.ModelMetadata(
+                message="Recompile for modified setting", type="setting", extra_data={"setting": key}
+            )
+            warnings = await self.server_slice._async_recompile(env, setting.update, metadata=metadata.dict())
+
+        if setting.agent_restart:
+            LOGGER.info("Environment setting %s changed. Restarting agents.", key)
+            await self.agentmanager.restart_agents(env)
+
+        return warnings
+
     # v1 handlers
     @protocol.handle(methods.create_environment)
     async def create_environment(
@@ -119,9 +136,55 @@ class EnvironmentService(protocol.ServerSlice):
         return 200, {"environments": [rename_fields(env) for env in await self.environment_list()]}
 
     @protocol.handle(methods.delete_environment, environment_id="id")
-    async def delete_environment(self, environment_id: uuid.UUID) -> None:
+    async def delete_environment(self, environment_id: uuid.UUID) -> Apireturn:
         await self.environment_delete(environment_id)
         return 200
+
+    @protocol.handle(methods.decomission_environment, env="id")
+    async def decommission_environment(self, env: data.Environment, metadata: JsonType) -> Apireturn:
+        version = await self.environment_decommission(env, metadata)
+        return 200, {"version": version}
+
+    @protocol.handle(methods.clear_environment, env="id")
+    async def clear_environment(self, env: data.Environment) -> Apireturn:
+        await self.environment_clear(env)
+        return 200
+
+    @protocol.handle(methods.create_token, env="tid")
+    async def create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> Apireturn:
+        """
+            Create a new auth token for this environment
+        """
+        return 200, {"token": await self.environment_create_token(env, client_types, idempotent)}
+
+    @protocol.handle(methods.list_settings, env="tid")
+    async def list_settings(self, env: data.Environment) -> Apireturn:
+        return 200, {"settings": env.settings, "metadata": data.Environment._settings}
+
+    @protocol.handle(methods.set_setting, env="tid", key="id")
+    async def set_setting(self, env: data.Environment, key: str, value: model.EnvSettingType) -> Apireturn:
+        try:
+            await env.set(key, value)
+            warnings = await self._setting_change(env, key)
+            return attach_warnings(200, None, warnings)
+        except KeyError:
+            raise NotFound()
+        except ValueError:
+            raise ServerError("Invalid value")
+
+    @protocol.handle(methods.get_setting, env="tid", key="id")
+    async def get_setting(self, env: data.Environment, key: str) -> Apireturn:
+        setting = await self.environment_setting_get(env, key)
+        return 200, {"value": setting.settings[key], "metadata": data.Environment._settings}
+
+    @protocol.handle(methods.delete_setting, env="tid", key="id")
+    async def delete_setting(self, env: data.Environment, key: str) -> Apireturn:
+        try:
+            await env.unset(key)
+            warnings = await self._setting_change(env, key)
+            return attach_warnings(200, None, warnings)
+        except KeyError:
+            raise NotFound()
 
     # v2 handlers
     @protocol.handle(methods_v2.environment_create)
@@ -194,19 +257,17 @@ class EnvironmentService(protocol.ServerSlice):
 
         self.resource_service.close_resource_action_logger(environment_id)
 
-    # not ported
-    @protocol.handle(methods.decomission_environment, env="id")
-    async def decomission_environment(self, env: data.Environment, metadata: JsonType) -> Apireturn:
+    @protocol.handle(methods_v2.environment_decommission, env="id")
+    async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
         version = int(time.time())
         if metadata is None:
-            metadata = {"message": "Decommission of environment", "type": "api"}
-        result = cast(
-            int, await self.orchestration_service.put_version(env, version, [], {}, [], {const.EXPORT_META_DATA: metadata})
-        )
-        return result, {"version": version}
+            metadata = model.ModelMetadata(message="Decommission of environment", type="api")
+        version_info = model.ModelVersionInfo(export_metadata=metadata)
+        await self.orchestration_service.put_version(env, version, [], {}, [], version_info.dict())
+        return version
 
-    @protocol.handle(methods.clear_environment, env="id")
-    async def clear_environment(self, env: data.Environment) -> None:
+    @protocol.handle(methods_v2.environment_clear, env="id")
+    async def environment_clear(self, env: data.Environment) -> None:
         """
             Clear the environment
         """
@@ -217,56 +278,49 @@ class EnvironmentService(protocol.ServerSlice):
         if os.path.exists(project_dir):
             shutil.rmtree(project_dir)
 
-    @protocol.handle(methods.create_token, env="tid")
-    async def create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> Apireturn:
+    @protocol.handle(methods_v2.environment_create_token, env="tid")
+    async def environment_create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> str:
         """
             Create a new auth token for this environment
         """
-        return 200, {"token": encode_token(client_types, str(env.id), idempotent)}
+        return encode_token(client_types, str(env.id), idempotent)
 
-    @protocol.handle(methods.list_settings, env="tid")
-    async def list_settings(self, env: data.Environment) -> Apireturn:
-        return 200, {"settings": env.settings, "metadata": data.Environment._settings}
+    @protocol.handle(methods_v2.environment_settings_list, env="tid")
+    async def environment_settings_list(self, env: data.Environment) -> model.EnvironmentSettingsReponse:
+        return model.EnvironmentSettingsReponse(
+            settings=env.settings, metadata={k: v.to_dto() for k, v in data.Environment._settings.items()}
+        )
 
-    async def _setting_change(self, env: data.Environment, key: str) -> Warnings:
-        setting = env._settings[key]
-
-        warnings = None
-        if setting.recompile:
-            LOGGER.info("Environment setting %s changed. Recompiling with update = %s", key, setting.update)
-            metadata = {"message": "Recompile for modified setting", "type": "setting", "setting": key}
-            warnings = await self.server_slice._async_recompile(env, setting.update, metadata=metadata)
-
-        if setting.agent_restart:
-            LOGGER.info("Environment setting %s changed. Restarting agents.", key)
-            await self.agentmanager.restart_agents(env)
-
-        return warnings
-
-    @protocol.handle(methods.set_setting, env="tid", key="id")
-    async def set_setting(self, env: data.Environment, key: str, value: model.EnvSettingType) -> Apireturn:
+    @protocol.handle(methods_v2.environment_settings_set, env="tid", key="id")
+    async def environment_settings_set(self, env: data.Environment, key: str, value: model.EnvSettingType) -> ReturnValue[None]:
         try:
             await env.set(key, value)
             warnings = await self._setting_change(env, key)
-            return attach_warnings(200, None, warnings)
+            result = ReturnValue(response=None)
+            result.add_warnings(warnings)
+            return result
         except KeyError:
             raise NotFound()
         except ValueError:
             raise ServerError("Invalid value")
 
-    @protocol.handle(methods.get_setting, env="tid", key="id")
-    async def get_setting(self, env: data.Environment, key: str) -> Apireturn:
+    @protocol.handle(methods_v2.environment_setting_get, env="tid", key="id")
+    async def environment_setting_get(self, env: data.Environment, key: str) -> model.EnvironmentSettingsReponse:
         try:
             value = await env.get(key)
-            return 200, {"value": value, "metadata": data.Environment._settings}
+            return model.EnvironmentSettingsReponse(
+                settings={key: value}, metadata={k: v.to_dto() for k, v in data.Environment._settings.items()}
+            )
         except KeyError:
             raise NotFound()
 
-    @protocol.handle(methods.delete_setting, env="tid", key="id")
-    async def delete_setting(self, env: data.Environment, key: str) -> Apireturn:
+    @protocol.handle(methods_v2.environment_setting_delete, env="tid", key="id")
+    async def environment_setting_delete(self, env: data.Environment, key: str) -> ReturnValue[None]:
         try:
             await env.unset(key)
             warnings = await self._setting_change(env, key)
-            return attach_warnings(200, None, warnings)
+            result = ReturnValue(response=None)
+            result.add_warnings(warnings)
+            return result
         except KeyError:
             raise NotFound()

@@ -226,7 +226,11 @@ def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
 
 
 @method(
-    path="/decommission/<id>", operation="POST", arg_options={"id": ArgOption(getter=convert_environment)}, client_types=["api"]
+    path="/decommission/<id>",
+    operation="POST",
+    arg_options={"id": ArgOption(getter=convert_environment)},
+    client_types=["api"],
+    api_version=1,
 )
 def decomission_environment(id: uuid.UUID, metadata: dict = None):
     """
@@ -241,7 +245,7 @@ def decomission_environment(id: uuid.UUID, metadata: dict = None):
     arg_options={"id": ArgOption(getter=convert_environment)},
     client_types=["api"],
 )
-def clear_environment(id: uuid.UUID) -> None:
+def clear_environment(id: uuid.UUID):
     """
         Clear all data from this environment
     """

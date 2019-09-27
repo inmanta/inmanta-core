@@ -17,12 +17,13 @@
 """
 import datetime
 import uuid
-from typing import Dict, List, NewType, Optional, Union
+from typing import Dict, List, NewType, Optional, Tuple, Union
 
 import pydantic
 
+from inmanta import const
 from inmanta.const import Change, ResourceState
-from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
+from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
 
 class BaseModel(pydantic.BaseModel):
@@ -110,7 +111,7 @@ class Event(BaseModel):
     changes: Dict[str, AttributeStateChange]
 
 
-EnvSettingType = Union[str, int, bool, JsonType]
+EnvSettingType = Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, bool]]]
 
 
 class Environment(BaseModel):
@@ -136,3 +137,58 @@ class Project(BaseModel):
     id: uuid.UUID
     name: str
     environments: List[Environment]
+
+
+class EnvironmentSetting(BaseModel):
+    """ A class to define a new environment setting.
+
+        :param name: The name of the setting.
+        :param type: The type of the value. This type is mainly used for documentation purpose.
+        :param default: An optional default value for this setting. When a default is set and the
+                        is requested from the database, it will return the default value and also store
+                        the default value in the database.
+        :param doc: The documentation/help string for this setting
+        :param recompile: Trigger a recompile of the model when a setting is updated?
+        :param update_model: Update the configuration model (git pull on project and repos)
+        :param agent_restart: Restart autostarted agents when this settings is updated.
+        :param allowed_values: list of possible values (if type is enum)
+    """
+
+    name: str
+    type: str
+    default: SimpleTypes
+    doc: str
+    recompile: bool
+    update_model: bool
+    agent_restart: bool
+    allowed_values: Optional[List[SimpleTypes]]
+
+
+class EnvironmentSettingsReponse(BaseModel):
+
+    settings: Dict[str, EnvSettingType]
+    metadata: Dict[str, EnvironmentSetting]
+
+
+class ModelMetadata(BaseModel):
+    """ Model metadata
+    """
+
+    inmanta_compile_state: const.Compilestate = const.Compilestate.success
+    message: str
+    type: str
+    extra_data: Optional[JsonType]
+
+    class Config:
+        fields = {"auth_key": {"alias": "inmanta:compile:state"}}
+
+
+class ModelVersionInfo(BaseModel):
+    """ Version information that can be associated with a orchestration model
+
+        :param export_metadata: Metadata associated with this version
+        :param model: A serialization of the complete orchestration model
+    """
+
+    export_metadata: ModelMetadata
+    model: Optional[JsonType]

@@ -19,6 +19,7 @@ import uuid
 from typing import List, Optional
 
 from inmanta.data import model
+from inmanta.protocol.common import ReturnValue
 
 from . import methods
 from .decorators import typedmethod
@@ -121,4 +122,109 @@ def environment_get(id: uuid.UUID) -> model.Environment:
         Get an environment and all versions associated
 
         :param id: The id of the environment to return
+    """
+
+
+@typedmethod(
+    path="/decommission/<id>",
+    operation="POST",
+    arg_options={"id": methods.ArgOption(getter=methods.convert_environment)},
+    client_types=["api"],
+    api_version=2,
+)
+def environment_decommission(id: uuid.UUID, metadata: Optional[model.ModelMetadata] = None) -> int:
+    """
+        Decommission an environment. This is done by uploading an empty model to the server and let purge_on_delete handle
+        removal.
+    """
+
+
+@typedmethod(
+    path="/decommission/<id>",
+    operation="DELETE",
+    arg_options={"id": methods.ArgOption(getter=methods.convert_environment)},
+    client_types=["api"],
+    api_version=2,
+)
+def environment_clear(id: uuid.UUID) -> None:
+    """
+        Clear all data from this environment
+    """
+
+
+# Method for listing and creating auth tokens for an environment that can be used by the agent and compilers
+@typedmethod(
+    path="/environment_auth", operation="POST", arg_options=methods.ENV_OPTS, client_types=["api", "compiler"], api_version=2
+)
+def environment_create_token(tid: uuid.UUID, client_types: List[str], idempotent: bool = True) -> str:
+    """
+        Create or get a new token for the given client types. Tokens generated with this call are scoped to the current
+        environment.
+
+        :param tid: The environment id
+        :param client_types: The client types for which this token is valid (api, agent, compiler)
+        :param idempotent: The token should be idempotent, such tokens do not have an expire or issued at set so their
+                           value will not change.
+    """
+
+
+# Method for listing/getting/setting/removing settings of an environment. This API is also used by agents to configure
+# environments.
+@typedmethod(
+    path="/environment_settings",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    api=True,
+    agent_server=True,
+    client_types=["api", "agent", "compiler"],
+    api_version=2,
+)
+def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsReponse:
+    """
+        List the settings in the current environment
+    """
+
+
+@typedmethod(
+    path="/environment_settings/<id>",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    api=True,
+    agent_server=True,
+    client_types=["api", "agent", "compiler"],
+    api_version=2,
+)
+def environment_settings_set(tid: uuid.UUID, id: str, value: model.EnvSettingType) -> ReturnValue[None]:
+    """
+        Set a value
+    """
+
+
+@typedmethod(
+    path="/environment_settings/<id>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    api=True,
+    agent_server=True,
+    client_types=["api", "agent"],
+    api_version=2,
+)
+def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSettingsReponse:
+    """
+        Get a value
+    """
+
+
+@typedmethod(
+    path="/environment_settings/<id>",
+    operation="DELETE",
+    arg_options=methods.ENV_OPTS,
+    api=True,
+    agent_server=True,
+    client_types=["api", "agent"],
+    api_version=2,
+)
+def environment_setting_delete(tid: uuid.UUID, id: str) -> None:
+    """
+        Delete a value
     """

@@ -472,6 +472,41 @@ async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name):
 
 
 @pytest.mark.asyncio
+async def test_return_non_warnings(unused_tcp_port, postgres_db, database_name):
+    """
+         Test return none but pushing warnings
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(name: str) -> ReturnValue[None]:  # NOQA
+            """
+                Create a new project
+            """
+
+        @protocol.handle(test_method)
+        async def test_method_handler(self, name) -> ReturnValue[None]:
+            rv = ReturnValue()
+            rv.add_warnings(["error1", "error2"])
+            return rv
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+
+    response = await client.test_method("x")
+    assert response.code == 200
+    assert "data" not in response.result
+    assert "metadata" in response.result
+    assert "warnings" in response.result["metadata"]
+    assert "error1" in response.result["metadata"]["warnings"]
+
+
+@pytest.mark.asyncio
 async def test_invalid_handler():
     """
         Handlers should be async
