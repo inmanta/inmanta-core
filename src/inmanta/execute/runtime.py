@@ -266,15 +266,16 @@ class Promise(IPromise[ListValue]):
         self.owner.set_promised_value(self, value, location, recur)
 
 
-class ListVariable(DelayedResultVariable[ListValue]):
+class BaseListVariable(DelayedResultVariable[ListValue]):
+    """
+    List variable, but only the part that is independent of an instance
+    """
 
     value: "List[Instance]"
 
-    __slots__ = ("attribute", "myself", "promisses", "done_promisses")
+    __slots__ = ("promisses", "done_promisses")
 
-    def __init__(self, attribute: "RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
-        self.attribute = attribute
-        self.myself = instance
+    def __init__(self, queue: "QueueScheduler") -> None:
         self.promisses: List[Promise] = []
         self.done_promisses: List[Promise] = []
         self.listeners: List[ResultCollector[ListValue]] = []
@@ -296,12 +297,15 @@ class ListVariable(DelayedResultVariable[ListValue]):
             raise Exception("SEVERE: COMPILER STATE CORRUPT: provide count negative")
         return out
 
-    def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
+    def _set_value(self, value: ListValue, location: Location, recur: bool = True) -> bool:
+        """
+        First half of set_value, returns True if second half should run
+        """
         if self.hasValue:
             if isinstance(value, list):
                 if len(value) == 0:
                     # empty list terminates list addition
-                    return
+                    return False
                 for subvalue in value:
                     if subvalue not in self.value:
                         raise ModifiedAfterFreezeException(
@@ -313,7 +317,7 @@ class ListVariable(DelayedResultVariable[ListValue]):
                             reverse=not recur,
                         )
             elif value in self.value:
-                return
+                return False
             else:
                 raise ModifiedAfterFreezeException(
                     self, instance=self.myself, attribute=self.attribute, value=value, location=location, reverse=not recur
@@ -328,7 +332,7 @@ class ListVariable(DelayedResultVariable[ListValue]):
             else:
                 for v in value:
                     self.set_value(v, location, recur)
-            return
+            return False
 
         if self.type is not None:
             self.type.validate(value)
@@ -337,13 +341,68 @@ class ListVariable(DelayedResultVariable[ListValue]):
             # any set_value may fulfill a promise, allowing this object to be queued
             if self.can_get():
                 self.queue()
-            return
+            return False
 
         self.value.append(value)
 
         for l in self.listeners:
             l.receive_result(value, location)
 
+        return True
+
+    def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
+        if not self._set_value(value, location, recur):
+            return
+        if self.can_get():
+            self.queue()
+
+    def can_get(self) -> bool:
+        return self.get_waiting_providers() == 0
+
+    def get_progress_potential(self) -> int:
+        """How many are actually waiting for us """
+        return len(self.waiters) - len(self.listeners)
+
+    def receive_result(self, value: ListValue, location: Location) -> None:
+        self.set_value(value, location)
+
+    def listener(self, resultcollector: ResultCollector, location: Location) -> None:
+        for value in self.value:
+            resultcollector.receive_result(value, location)
+        self.listeners.append(resultcollector)
+
+    def is_multi(self) -> bool:
+        return True
+
+    def __str__(self) -> str:
+        return "BaseListVariable %s" % (self.value)
+
+
+class TempListVariable(BaseListVariable):
+
+    __slots__ = ()
+
+    def set_promised_value(self, promis: Promise, value: ListValue, location: Location, recur: bool = True) -> None:
+        super().set_promised_value(promis, value, location, recur)
+        # 100% accurate promisse tracking
+        if len(self.promisses) == len(self.done_promisses):
+            self.freeze()
+
+
+class ListVariable(BaseListVariable):
+
+    value: "List[Instance]"
+
+    __slots__ = ("attribute", "myself")
+
+    def __init__(self, attribute: "RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
+        self.attribute = attribute
+        self.myself = instance
+        super().__init__(queue)
+
+    def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
+        if not self._set_value(value, location, recur):
+            return
         # set counterpart
         if self.attribute.end is not None and recur:
             value.set_attribute(self.attribute.end.name, self.myself, location, False)
@@ -365,21 +424,6 @@ class ListVariable(DelayedResultVariable[ListValue]):
 
     def __str__(self) -> str:
         return "ListVariable %s %s = %s" % (self.myself, self.attribute, self.value)
-
-    def receive_result(self, value: ListValue, location: Location) -> None:
-        self.set_value(value, location)
-
-    def listener(self, resultcollector: ResultCollector, location: Location) -> None:
-        for value in self.value:
-            resultcollector.receive_result(value, location)
-        self.listeners.append(resultcollector)
-
-    def is_multi(self) -> bool:
-        return True
-
-    def get_progress_potential(self) -> int:
-        """How many are actually waiting for us """
-        return len(self.waiters) - len(self.listeners)
 
 
 class OptionVariable(DelayedResultVariable["Instance"]):

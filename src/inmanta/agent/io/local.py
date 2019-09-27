@@ -123,7 +123,7 @@ class BashIO(IOBase):
         data = result.communicate()
 
         if result.returncode > 0 or len(data[1]) > 0:
-            raise FileNotFoundError()
+            raise IOError()
 
         return data[0].decode("utf-8").strip().split(" ")[0]
 
@@ -141,7 +141,7 @@ class BashIO(IOBase):
         data = result.communicate()
 
         if result.returncode > 0 or len(data[1]) > 0:
-            raise FileNotFoundError()
+            raise IOError()
 
         return data[0].decode("utf-8")
 
@@ -154,7 +154,7 @@ class BashIO(IOBase):
         data = result.communicate()
 
         if result.returncode > 0:
-            raise FileNotFoundError()
+            raise IOError()
 
         return data[0]
 
@@ -202,7 +202,7 @@ class BashIO(IOBase):
         data = result.communicate()
 
         if result.returncode > 0:
-            raise FileNotFoundError()
+            raise IOError()
 
         return data[0].decode("utf-8").strip()
 
@@ -228,7 +228,7 @@ class BashIO(IOBase):
         data = result.communicate()
 
         if result.returncode > 0:
-            raise FileNotFoundError()
+            raise IOError()
 
         if "symbolic link" in data[0].decode("utf-8").strip():
             return True
@@ -246,7 +246,7 @@ class BashIO(IOBase):
         data = result.communicate()
 
         if result.returncode > 0:
-            raise FileNotFoundError()
+            raise IOError()
 
         parts = data[0].decode("utf-8").strip().split(" ")
         if len(parts) != 3:
@@ -268,7 +268,7 @@ class BashIO(IOBase):
         result.communicate()
 
         if result.returncode > 0:
-            raise FileNotFoundError()
+            raise IOError()
 
     def put(self, path, content):
         # type: (str, str) -> bool
@@ -281,7 +281,7 @@ class BashIO(IOBase):
         result.communicate(input=content)
 
         if result.returncode > 0:
-            raise FileNotFoundError()
+            raise IOError()
 
         return True
 

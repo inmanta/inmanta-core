@@ -63,15 +63,22 @@ class CallTarget(object):
         """
         url_map: Dict[str, Dict[str, UrlMethod]] = defaultdict(dict)
 
+        # Loop over all methods in this class that have a handler annotation. The handler annotation refers to a method
+        # definition. This method definition defines how the handler is invoked.
         for method, handler_list in self._get_endpoint_metadata().items():
             for method_handlers in handler_list:
+                # Go over all method annotation on the method associated with the handler
                 for properties in common.MethodProperties.methods[method]:
                     url = properties.get_listen_url()
 
+                    # Associate the method with the handler if:
+                    # - the handler does not specific a method version
+                    # - the handler specifies a method version and the method version matches the method properties
                     if method_handlers[1].__api_version__ is None or (
                         method_handlers[1].__api_version__ is not None
                         and properties.api_version == method_handlers[1].__api_version__
                     ):
+                        # there can only be one
                         if url in url_map and properties.operation in url_map[url]:
                             raise Exception(f"A handler is already registered for {properties.operation} {url}. ")
 

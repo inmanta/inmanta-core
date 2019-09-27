@@ -355,7 +355,13 @@ class Constructor(ExpressionStatement):
         # deferred execution for indirect attributes
         for attributename, valueexpression in self._indirect_attributes.items():
             var = object_instance.get_attribute(attributename)
-            reqs = valueexpression.requires_emit_gradual(resolver, queue, var)
+            if var.is_multi():
+                # gradual only for multi
+                # to preserve order on lists used in attributes
+                # while allowing gradual execution on relations
+                reqs = valueexpression.requires_emit_gradual(resolver, queue, var)
+            else:
+                reqs = valueexpression.requires_emit(resolver, queue)
             SetAttributeHelper(queue, resolver, var, reqs, valueexpression, self, object_instance, attributename)
 
         # generate an implementation

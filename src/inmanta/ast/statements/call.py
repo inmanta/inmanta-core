@@ -136,7 +136,7 @@ class FunctionUnit(Waiter):
             self.function.resume(requires, self.resolver, self.queue_scheduler, self.result)
             self.done = True
         except UnsetException as e:
-            LOGGER.debug("Unset value in python code in plugin %s." % self.function.function)
+            LOGGER.debug("Unset value in python code in plugin %s %s.%s.", self.function.function, e.instance, e.attribute)
             self.waitfor(e.get_result_variable())
         except RuntimeException as e:
             e.set_statement(self.function)

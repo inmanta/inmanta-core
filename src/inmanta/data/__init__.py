@@ -2607,13 +2607,13 @@ async def connect(
         max_size=connection_pool_max_size,
         timeout=connection_timeout,
     )
-    set_connection_pool(pool)
-    if create_db_schema:
-        try:
+    try:
+        set_connection_pool(pool)
+        if create_db_schema:
             async with pool.acquire() as con:
                 await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, con).ensure_db_schema()
-        except Exception as e:
-            await disconnect()
-            await pool.close()
-            raise e
-    return pool
+        return pool
+    except Exception as e:
+        await disconnect()
+        await pool.close()
+        raise e

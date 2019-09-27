@@ -81,9 +81,8 @@ async def test_connect_invalid_parameters(postgres_db, min_size, max_size, datab
 
 
 @pytest.mark.asyncio
-async def test_connection_failuer(free_socket, database_name, clean_reset):
-    _addr, port = free_socket.getsockname()
-    free_socket.close()
+async def test_connection_failure(unused_tcp_port_factory, database_name, clean_reset):
+    port = unused_tcp_port_factory()
     with pytest.raises(OSError):
         await data.connect("localhost", port, database_name, "testuser", None)
 
