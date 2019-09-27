@@ -111,7 +111,7 @@ class Event(BaseModel):
     changes: Dict[str, AttributeStateChange]
 
 
-EnvSettingType = Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, bool]]]
+EnvSettingType = Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]
 
 
 class Environment(BaseModel):
