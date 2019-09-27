@@ -167,7 +167,7 @@ class EnvironmentSetting(BaseModel):
 class EnvironmentSettingsReponse(BaseModel):
 
     settings: Dict[str, EnvSettingType]
-    metadata: Dict[str, EnvironmentSetting]
+    definition: Dict[str, EnvironmentSetting]
 
 
 class ModelMetadata(BaseModel):

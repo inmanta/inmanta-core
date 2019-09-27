@@ -292,7 +292,7 @@ class EnvironmentService(protocol.ServerSlice):
     @protocol.handle(methods_v2.environment_settings_list, env="tid")
     async def environment_settings_list(self, env: data.Environment) -> model.EnvironmentSettingsReponse:
         return model.EnvironmentSettingsReponse(
-            settings=env.settings, metadata={k: v.to_dto() for k, v in data.Environment._settings.items()}
+            settings=env.settings, definition={k: v.to_dto() for k, v in data.Environment._settings.items()}
         )
 
     @protocol.handle(methods_v2.environment_settings_set, env="tid", key="id")
@@ -314,7 +314,7 @@ class EnvironmentService(protocol.ServerSlice):
         try:
             value = await env.get(key)
             return model.EnvironmentSettingsReponse(
-                settings={key: value}, metadata={k: v.to_dto() for k, v in data.Environment._settings.items()}
+                settings={key: value}, definition={k: v.to_dto() for k, v in data.Environment._settings.items()}
             )
         except KeyError:
             raise NotFound()
