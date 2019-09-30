@@ -10,9 +10,10 @@ In this guide, we go for a less complex setup: install the Drupal CMS on two VM-
 First, we use Docker to set up a basic environment with two empty VM-like containers, an Inmanta server and a postgres server.
 Then, we use Inmanta to install Drupal on these VM-like containers.
 
-This is meant to get an example inmanta set up running quickly to experiment with.
-It is not recommended to run this in production.
-It is recommended to use real VMs instead of the provided containers.
+.. note::
+
+    This is meant to get an example Inmanta set up and running quickly to experiment with.
+    It is not recommended to run this setup in production, as it might lead to instabilties in the long term.
 
 Setting up the tutorial
 _________________________
@@ -21,23 +22,53 @@ To quickly get started with Inmanta, use Docker Compose to set up an environment
 Before starting this tutorial, first `install Docker on your machine <https://docs.docker.com/v17.09/engine/installation/>`_.
 Next `install Docker Compose on your machine <https://docs.docker.com/compose/install/>`_.
 
-Then, grab the Docker quickstart from our Git repo and let Docker Compose handle the setup of the Inmanta server.
+Then, grab the Docker quickstart from our Git repository.
 
 .. code-block:: sh
 
     git clone https://github.com/inmanta/quickstart-docker.git
     cd quickstart-docker
+
+Now that we have the needed docker files, we will need to get the `Inmanta quickstart project <https://github.com/inmanta/quickstart/blob/docker/project.yml>`_
+itself and checkout the docker branch of the quickstart project:
+
+.. code-block:: sh
+
+    git clone https://github.com/inmanta/quickstart.git --branch docker quickstart-project
+
+The quickstart project can now be found under the newly created `quickstart-project` directory.
+It will be the basis for this quickstart.
+The ``quickstart-project`` directory will also be shared with the Inmanta server container
+(mounted to ``/home/inmanta/quickstart-project``).
+We will come back to the files in this repository 
+
+Finaly, have Docker Compose deploy the quickstart environment:
+
+.. code-block:: sh
+
     docker-compose up
 
-Docker Compose will set up the Inmanta server, a postgres and two VMs to experiment on.
-When Docker Compose is ready, you should be able to open the dashboard at http://127.0.0.1:8888.
+Docker Compose will set up the Inmanta server, a postgres server and two VM-like containers to experiment on.
+When Docker Compose is done deploying and Inmanta server is running, you will be able to open the dashboard at http://127.0.0.1:8888.
+When you see the following output, the Inmanta server is ready to be used:
 
-To get a shell on the Inmanta server:
+.. code-block:: sh
+
+    inmanta_quickstart_server | inmanta.protocol.rest    DEBUG   Start REST transport
+    inmanta_quickstart_server | inmanta                  INFO    Server startup complete
+
+.. note::
+
+    docker-compose will lock the current terminal and use it for output from all 4 containers.
+    You will need to open a new terminal to continue with this quickstart
+
+To get an interactive shell on the Inmanta server (this will be needed later):
 
 .. code-block:: sh
 
     docker exec -it "inmanta_quickstart_server" bash
 
+The rest of the quickstart guide assumes commands are executed from the root path of the quickstart-docker git repository, unless noted otherwise.
 
 Automatically deploying Drupal
 _______________________________
@@ -50,26 +81,44 @@ For the CLI, go to the next section. For the Dashboard, go to :ref:`qsdashboard`
 Single machine deployment using the CLI
 =======================================
 
-An Inmanta project bundles modules that contain configuration information. A project is nothing more
-than a directory with a project.yml file, which contains parameters such as the location to search for
-modules and where to find the server.
+An Inmanta project bundles modules that contain configuration information.
+A project is nothing more than a directory with a project.yml file,
+which contains parameters such as the location to search for modules and where to find the server.
+In this case we will be using premade quickstart project we cloned in to ``./quickstart-project`` earlier.
 
-You can retrieve the quickstart project like this:
+In that directory is a project.yml, that looks like this:
 
-.. code-block:: sh
+.. code-block:: yaml
 
-    git clone https://github.com/inmanta/quickstart.git
-    cd quickstart
+    name: quickstart
+    modulepath: libs
+    downloadpath: libs
+    repo: https://github.com/inmanta/
+    description: A quickstart project that installs a drupal website.
+    requires:
+        - apache ~= 0.3.1
+        - drupal ~= 0.7.1
+        - exec ~= 1.1.0
+        - ip ~= 1.0.0
+        - logging ~= 0.4.1
+        - mysql ~= 0.5.3
+        - net ~= 0.5.0
+        - php ~= 0.3
+        - redhat ~= 0.8.0
+        - std ~= 0.26.2
+        - web ~= 0.2.2
+        - yum ~= 0.5.1
 
-
-The configuration file ``project.yml`` defines that reusable modules are stored in ``libs``.
+The ``modulepath`` setting defines that reusable modules will be stored in ``libs``.
+The ``repo`` setting points to one or more git project containing Inmanta modules in git repositories.
+The ``requires`` setting is used to pin versions of modules, otherwise the latest version is used. 
 
 In the next section we will use existing modules to deploy a LAMP stack.
 
-Reuse existing modules
+Reusing existing modules
 ------------------------------
 
-We host modules to set up and manage many systems on our Github. They are available under https://github.com/inmanta/.
+We host modules to set up and manage many systems on our Github. These are available under https://github.com/inmanta/.
 
 When you use an import statement in your model, Inmanta downloads these modules and their dependencies automatically.
 
@@ -80,8 +129,8 @@ The configuration model
 
 In this section we will use the configuration concepts defined in the existing modules to set up Drupal on the host named ``vm1``.
 
-First, create a new ``main.cf`` file or use the contents of ``single_machine.cf`` in the project directory:
-
+First delete the contents of ``./quickstart-project/main.cf`.
+Then put in the following:
 
 .. code-block:: inmanta
     :linenos:
@@ -95,34 +144,32 @@ First, create a new ``main.cf`` file or use the contents of ``single_machine.cf`
     import drupal
 
     # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::centos7, ip="192.168.33.101", remote_agent=true,
-                 remote_user="vagrant")
+    vm1=ip::Host(name="vm1", os=redhat::centos7, ip="172.28.0.4", remote_agent=true, remote_user="root")
 
     # add a mysql and apache http server
     web_server=apache::Server(host=vm1)
-    mysql_server=mysql::Server(host=vm1)
+    mysql_server=mysql::Server(host=vm1, remove_anon_users=true)
 
     # deploy drupal in that virtual host
     name=web::Alias(hostname="localhost")
-    db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test",
-                       password="Str0ng-P433w0rd")
+    db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test", password="Str0ng-P433w0rd")
     drupal::Application(name=name, container=web_server, database=db, admin_user="admin",
-                        admin_password="test", admin_email="admin@example.com", site_name="localhost")
+                        admin_password="test", admin_email="admin@example.com",
+                        site_name="localhost")
 
 
-* Lines 1-6 import all required packages.
-* Line 9 defines on which machine we want to deploy Drupal.
+* Lines 1-7 import all the required packages.
+* Line 10 defines on which machine we want to deploy Drupal.
 
- * The *name* attribute is the hostname of the machine, which is later used to determine what configuration needs to be deployed on which machine.
- * The *os* attribute defines which operating system this server runs. This is used to select the right tools (yum or dnf or apt).
- * The *ip* attribute is the IP address of this host. At this moment we define this attribute manually, later in this tutorial we let Inmanta discover this automatically.
+    * The *name* attribute is the hostname of the machine, which is later used to determine what configuration needs to be deployed on which machine.
+    * The *os* attribute defines which operating system this server runs. This is used to select the right tools (yum or dnf or apt).
+    * The *ip* attribute is the IP address of this host. At this moment we define this attribute manually, later in this tutorial we let Inmanta discover this automatically.
 
-* Lines 12 and 13 deploy an Apache server and MySQL server on our host.
-* Line 16 defines the name (hostname) of the web application.
+* Line 13 deploys an Apache server on our host.
+* Line 14 deploys a Mysql server on our host and removes it's anonymous users.
+* Line 17 defines the name (hostname) of the web application.
 * Lines 17-18 define a database for our Drupal website.
-* Lines 19-20 define the actual Drupal application.
-
-
+* Lines 19-21 define the actual Drupal application.
 
 Deploy the configuration model
 -------------------------------
