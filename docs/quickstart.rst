@@ -13,7 +13,7 @@ Then, we use Inmanta to install Drupal on these VM-like containers.
 .. note::
 
     This is meant to get an example Inmanta set up and running quickly to experiment with.
-    It is not recommended to run this setup in production, as it might lead to instabilties in the long term.
+    It is not recommended to run this setup in production, as it might lead to instabilities in the long term.
 
 .. _qsetup:
 
@@ -44,7 +44,7 @@ The ``quickstart-project`` directory will also be shared with the Inmanta server
 (mounted to ``/home/inmanta/quickstart-project``).
 We will come back to the files in this repository 
 
-Finaly, have Docker Compose deploy the quickstart environment:
+Finally, have Docker Compose deploy the quickstart environment:
 
 .. code-block:: sh
 
@@ -210,7 +210,7 @@ Then, create the inmanta project and environment:
 
     The ``--save`` option tells ``inmanta-cli`` to store the environment config in the ``.inmanta`` file. The compiler uses this file to find the server and to export to the right environment.
 
-Finaly compile the project and deploy it:
+Finally compile the project and deploy it:
 
 .. code-block:: sh
 
@@ -235,7 +235,7 @@ When the installation is done, you can access your new Drupal server at `http://
 Multi-machine deployment using the CLI
 =======================================
 
-The real power of Inmanta becomes apperant when managing more than one machine. In this section we will
+The real power of Inmanta becomes apparent when managing more than one machine. In this section we will
 move the MySQL server from ``vm1`` to a second machine called ``vm2``.
 
 
