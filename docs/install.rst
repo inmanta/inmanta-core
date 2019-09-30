@@ -304,7 +304,7 @@ following options are configurable:
 The ``autostarted_agent_map`` requires an entry for each agent that should be autostarted. The key is the name of the agent and
 the value is either ``local:`` if the handlers should be executed on the Inmanta server or an SSH connection string when the
 handlers should be executed on a remote machine. The SSH connection string requires the following format:
-``ssh://<user>@<host>:<port>?<options>``. Options is a ampersand-separated list of ``key=value`` pairs. The following options
+``ssh://<user>@<host>:<port>?<options>``. Options is an ampersand-separated list of ``key=value`` pairs. The following options
 can be provided:
 
 ===========  =============  ==============================================================================================================
