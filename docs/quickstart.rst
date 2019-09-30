@@ -51,7 +51,7 @@ Finally, have Docker Compose deploy the quickstart environment:
     docker-compose up
 
 Docker Compose will set up the Inmanta server, a postgres server and two VM-like containers to experiment on.
-When Docker Compose is done deploying and Inmanta server is running, you will be able to open the dashboard at http://127.0.0.1:8888.
+When Docker Compose is done deploying and the Inmanta server is running, you will be able to open the dashboard at http://127.0.0.1:8888.
 When you see the following output, the Inmanta server is ready to be used:
 
 .. code-block:: sh
