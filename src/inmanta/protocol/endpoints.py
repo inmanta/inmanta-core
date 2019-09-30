@@ -292,8 +292,8 @@ class VersionMatch(str, Enum):
     lowest = "lowest"
     """ Select the lowest available version of the method
     """
-    highest = "hightest"
-    """ Select the hight available version of the method
+    highest = "highest"
+    """ Select the highest available version of the method
     """
     exact = "exact"
     """ Select the exact version of the method
