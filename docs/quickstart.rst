@@ -15,6 +15,8 @@ Then, we use Inmanta to install Drupal on these VM-like containers.
     This is meant to get an example Inmanta set up and running quickly to experiment with.
     It is not recommended to run this setup in production, as it might lead to instabilties in the long term.
 
+.. _qsetup:
+
 Setting up the tutorial
 _________________________
 
@@ -129,8 +131,7 @@ The configuration model
 
 In this section we will use the configuration concepts defined in the existing modules to set up Drupal on the host named ``vm1``.
 
-First delete the contents of ``./quickstart-project/main.cf`.
-Then put in the following:
+First delete the contents of ``./quickstart-project/main.cf``, then put in the following:
 
 .. code-block:: inmanta
     :linenos:
@@ -177,8 +178,11 @@ Deploy the configuration model
 To deploy the project, we must first register it with the management server by creating a project and an environment. A project is a collection of related environments. (e.g. development, testing, production, qa,...)
 An environment is associated with a branch in a git repository. This allows the server to recompile the model when the environment changes.
 
+Connect to the terminal of the server-container (as described at the end of :ref:`qsetup`):
+
 .. code-block:: sh
 
+    cd /home/inmanta/quickstart-project
     inmanta-cli project create -n test
     inmanta-cli environment create -n quickstart-env -p test -r https://github.com/inmanta/quickstart.git -b master --save
 
@@ -186,7 +190,7 @@ An environment is associated with a branch in a git repository. This allows the 
 
     The ``--save`` option tells ``inmanta-cli`` to store the environment config in the ``.inmanta`` file. The compiler uses this file to find the server and to export to the right environment.
 
-Then compile the project and send it to the server:
+Then compile the project and deploy it:
 
 .. code-block:: sh
 
