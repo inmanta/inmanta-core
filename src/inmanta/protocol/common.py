@@ -174,13 +174,10 @@ class ReturnValue(Generic[T]):
     def headers(self) -> MutableMapping[str, str]:
         return self._headers
 
-    def get_body(self, envelope: bool, envelope_key: str) -> ReturnTypes:
-        """ Get the response body
-
-            :param envelope: Should the response be mapped into a data key
-            :param envelope_key: The envelope key to use
+    def _get_without_envelope(self) -> ReturnTypes:
+        """ Get the body without an envelope specified
         """
-        if not envelope and len(self._warnings):
+        if len(self._warnings):
             LOGGER.info("Got warnings for client but cannot transfer because no envelope is used.")
 
         if self._response is None:
@@ -188,13 +185,26 @@ class ReturnValue(Generic[T]):
                 return {"metadata": {"warnings": self._warnings}}
             return None
 
-        if envelope:
-            response: Dict[str, Any] = {envelope_key: self._response}
-            if len(self._warnings):
-                response["metadata"] = {"warnings": self._warnings}
-            return response
-
         return self._response
+
+    def _get_with_envelope(self, envelope: bool, envelope_key: str) -> ReturnTypes:
+        """ Get the body with an envelope specified
+        """
+        response: Dict[str, Any] = {envelope_key: self._response}
+        if len(self._warnings):
+            response["metadata"] = {"warnings": self._warnings}
+        return response
+
+    def get_body(self, envelope: bool, envelope_key: str) -> ReturnTypes:
+        """ Get the response body
+
+            :param envelope: Should the response be mapped into a data key
+            :param envelope_key: The envelope key to use
+        """
+        if not envelope:
+            return self._get_without_envelope()
+
+        return self._get_with_envelope(envelope, envelope_key)
 
     def add_warnings(self, warnings: List[str]) -> None:
         self._warnings.extend(warnings)
