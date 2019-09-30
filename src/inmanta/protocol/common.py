@@ -60,7 +60,7 @@ from inmanta import config as inmanta_config
 from inmanta import const, execute, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol.exceptions import BadRequest
-from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
+from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes, StrictNonIntBool
 
 from . import exceptions
 
@@ -152,7 +152,7 @@ class Request(object):
         return req
 
 
-T = TypeVar("T", bound=ArgumentTypes)
+T = TypeVar("T", bound=Union[None, ArgumentTypes])
 
 
 class ReturnValue(Generic[T]):
@@ -164,6 +164,7 @@ class ReturnValue(Generic[T]):
         self._status_code = status_code
         self._headers = headers
         self._response = response
+        self._warnings: List[str] = []
 
     @property
     def status_code(self) -> int:
@@ -173,20 +174,44 @@ class ReturnValue(Generic[T]):
     def headers(self) -> MutableMapping[str, str]:
         return self._headers
 
+    def _get_without_envelope(self) -> ReturnTypes:
+        """ Get the body without an envelope specified
+        """
+        if len(self._warnings):
+            LOGGER.info("Got warnings for client but cannot transfer because no envelope is used.")
+
+        if self._response is None:
+            if len(self._warnings):
+                return {"metadata": {"warnings": self._warnings}}
+            return None
+
+        return self._response
+
+    def _get_with_envelope(self, envelope: bool, envelope_key: str) -> ReturnTypes:
+        """ Get the body with an envelope specified
+        """
+        response: Dict[str, Any] = {}
+        if self._response is not None:
+            response[envelope_key] = self._response
+
+        if len(self._warnings):
+            response["metadata"] = {"warnings": self._warnings}
+
+        return response
+
     def get_body(self, envelope: bool, envelope_key: str) -> ReturnTypes:
         """ Get the response body
 
             :param envelope: Should the response be mapped into a data key
             :param envelope_key: The envelope key to use
         """
-        if self._response is None:
-            return None
+        if not envelope:
+            return self._get_without_envelope()
 
-        if envelope:
-            response: Dict[str, Any] = {envelope_key: self._response}
-            return response
+        return self._get_with_envelope(envelope, envelope_key)
 
-        return self._response
+    def add_warnings(self, warnings: List[str]) -> None:
+        self._warnings.extend(warnings)
 
     def __repr__(self) -> str:
         return f"ReturnValue<code={self.status_code} headers=<{self.headers}> response=<{self._response}>>"
@@ -284,7 +309,7 @@ class InvalidMethodDefinition(Exception):
 
 
 VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
-VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime)
+VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNonIntBool, datetime)
 
 
 class MethodProperties(object):
@@ -324,7 +349,7 @@ class MethodProperties(object):
         api_prefix: str,
         envelope: bool,
         typed: bool = False,
-        envelope_key: str = "data",
+        envelope_key: str = const.ENVELOPE_KEY,
     ) -> None:
         """
             Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -449,7 +474,7 @@ class MethodProperties(object):
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
         if typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
-            self._validate_type_arg(arg, typing_inspect.get_args(arg_type, evaluate=True)[0])
+            self._validate_type_arg(arg, typing_inspect.get_args(arg_type, evaluate=True)[0], allow_none_type=True)
 
         elif not typing_inspect.is_generic_type(arg_type) and issubclass(arg_type, ReturnValue):
             raise InvalidMethodDefinition("ReturnValue should have a type specified.")

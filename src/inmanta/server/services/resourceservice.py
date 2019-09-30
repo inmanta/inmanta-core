@@ -26,7 +26,7 @@ from tornado import locks
 
 from inmanta import const, data
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
-from inmanta.data import ResourceVersionIdStr
+from inmanta.data.model import ResourceVersionIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.resources import Id

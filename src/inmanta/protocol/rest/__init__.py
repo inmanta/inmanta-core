@@ -317,6 +317,11 @@ class CallArguments(object):
                     ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
                 )
 
+            elif isinstance(result, common.VALID_SIMPLE_ARG_TYPES):
+                return common.Response.create(
+                    ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
+                )
+
             else:
                 raise exceptions.ServerError(
                     f"Method {config.method_name} returned an invalid result {result} instead of a BaseModel or ReturnValue"

@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Set, cast
 import asyncpg
 
 from inmanta import const, data
-from inmanta.data import ResourceVersionIdStr
+from inmanta.data.model import ResourceVersionIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import ServerError
@@ -284,7 +284,7 @@ class OrchestrationService(protocol.ServerSlice):
             )
             await cm.insert()
         except asyncpg.exceptions.UniqueViolationError:
-            return 500, {"message": "The given version is already defined. Versions should be unique."}
+            raise ServerError("The given version is already defined. Versions should be unique.")
 
         await data.Resource.insert_many(resource_objects)
         await cm.update_fields(total=cm.total + len(resources_to_purge))

@@ -549,3 +549,17 @@ def test_670_assign_on_relation(snippetcompiler):
         r"The object at h.files is not an Entity but a <class 'list'> with value \[std::ConfigFile [0-9a-fA-F]+\]"
         r" \(reported in h.files.path = '1' \({dir}/main.cf:5\)\)",
     )
+
+
+def test_reflexive(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test1:
+
+end
+implement Test1 using std::none
+
+Test1.peer [1] -- Test1.peer [1]
+"""
+    )
+    compiler.do_compile()

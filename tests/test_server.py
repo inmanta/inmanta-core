@@ -29,7 +29,7 @@ from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.export import unknown_parameters, upload_code
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_SESSION_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_SERVER, SLICE_SESSION_MANAGER
 from inmanta.server import config as opt
 from inmanta.util import hash_file
 from utils import retry_limited
@@ -441,75 +441,6 @@ async def test_resource_update(postgresql_client, client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_environment_settings(client, server, environment):
-    """
-        Test environment settings
-    """
-    result = await client.list_settings(tid=environment)
-    assert result.code == 200
-    assert "settings" in result.result
-    assert "metadata" in result.result
-    assert "auto_deploy" in result.result["metadata"]
-    assert len(result.result["settings"]) == 0
-
-    result = await client.set_setting(tid=environment, id="auto_deploy", value="test")
-    assert result.code == 500
-
-    result = await client.set_setting(tid=environment, id="auto_deploy", value=False)
-    assert result.code == 200
-
-    result = await client.list_settings(tid=environment)
-    assert result.code == 200
-    assert len(result.result["settings"]) == 1
-
-    result = await client.get_setting(tid=environment, id="auto_deploy")
-    assert result.code == 200
-    assert not result.result["value"]
-
-    result = await client.get_setting(tid=environment, id="test2")
-    assert result.code == 404
-
-    result = await client.set_setting(tid=environment, id="auto_deploy", value=True)
-    assert result.code == 200
-
-    result = await client.get_setting(tid=environment, id="auto_deploy")
-    assert result.code == 200
-    assert result.result["value"]
-
-    result = await client.delete_setting(tid=environment, id="test2")
-    assert result.code == 404
-
-    result = await client.delete_setting(tid=environment, id="auto_deploy")
-    assert result.code == 200
-
-    result = await client.list_settings(tid=environment)
-    assert result.code == 200
-    assert "settings" in result.result
-    assert len(result.result["settings"]) == 1
-
-    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value=20)
-    assert result.code == 200
-
-    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value="30")
-    assert result.code == 200
-
-    result = await client.get_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
-    assert result.code == 200
-    assert result.result["value"] == 30
-
-    result = await client.delete_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
-    assert result.code == 200
-
-    result = await client.set_setting(
-        tid=environment, id=data.AUTOSTART_AGENT_MAP, value={"agent1": "", "agent2": "localhost", "agent3": "user@agent3"}
-    )
-    assert result.code == 200
-
-    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP, value="")
-    assert result.code == 500
-
-
-@pytest.mark.asyncio
 async def test_clear_environment(client, server, environment):
     """
         Test clearing out an environment
@@ -522,8 +453,21 @@ async def test_clear_environment(client, server, environment):
     assert result.code == 200
     assert len(result.result["environment"]["versions"]) == 1
 
+    # trigger a compile
+    result = await client.notify_change_get(id=environment)
+    assert result.code == 200
+
+    # Wait for env directory to appear
+    slice = server.get_slice(SLICE_SERVER)
+    env_dir = os.path.join(slice._server_storage["environments"], environment)
+
+    while not os.path.exists(env_dir):
+        await asyncio.sleep(0.1)
+
     result = await client.clear_environment(id=environment)
     assert result.code == 200
+
+    assert not os.path.exists(env_dir)
 
     result = await client.get_environment(id=environment, versions=10)
     assert result.code == 200
@@ -606,7 +550,7 @@ async def test_purge_on_delete_requires(client, server, environment):
     assert len(file2["provides"]) == 0
     assert file1["id"] in file2["attributes"]["requires"]
 
-    result = await client.decomission_environment(id=environment)
+    result = await client.decomission_environment(id=environment, metadata={"message": "test", "type": "test"})
     assert result.code == 200
 
     version = result.result["version"]

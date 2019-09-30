@@ -187,11 +187,10 @@ def get_free_tcp_port() -> str:
     """
         Semi safe method for getting a random port. This may contain a race condition.
     """
-    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tcp.bind(("", 0))
-    _addr, port = tcp.getsockname()
-    tcp.close()
-    return str(port)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp:
+        tcp.bind(("", 0))
+        _addr, port = tcp.getsockname()
+        return str(port)
 
 
 def custom_json_encoder(o: object) -> Union[Dict, str, List]:
