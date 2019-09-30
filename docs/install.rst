@@ -288,7 +288,7 @@ with respect to the Inmanta server and the agent has to execute I/O operations o
 * The remote machine should have a Python2 interpreter installed.
 
 
-Configure auto-started agents via environment settings
+Configuring auto-started agents via environment settings
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Auto-started agents can be configured via the settings of the environment where the auto-started agent belongs to. The
@@ -302,10 +302,9 @@ following options are configurable:
 * autostart_on_start
 
 The ``autostarted_agent_map`` requires an entry for each agent that should be autostarted. The key is the name of the agent and
-the value is either ``local:`` for agents that map to the Inmanta server or an SSH connection string when the
-agent maps to a remote machine. The SSH connection string requires the following format:
-``ssh://<user>@<host>:<port>?<options>``. Options is a ampersand-separated list of ``key=value`` pairs. The following options
-can be provided:
+the value is either ``local:`` for agents that map to the Inmanta server or an SSH connection string when the agent maps to a
+remote machine. The SSH connection string requires the following format: ``ssh://<user>@<host>:<port>?<options>``. Options
+is a ampersand-separated list of ``key=value`` pairs. The following options can be provided:
 
 ===========  =============  =====================================================================================================================
 Option name  Default value  Description
@@ -320,7 +319,7 @@ Auto-started agents start when they are required by a specific deployment or whe
 ``autostart_on_start`` setting is set to true.
 
 
-Configure the autostart_agent_map via the std::AgentConfig entity
+Configuring the autostart_agent_map via the std::AgentConfig entity
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The :inmanta:entity:`std::AgentConfig` entity provides functionality to add an entry to the ``autostart_agent_map`` of a
@@ -346,7 +345,7 @@ device is remote with respect to the Inmanta agent and the agent has to execute 
 
 
 
-Step 1: Install the required Inmanta packages
+Step 1: Installing the required Inmanta packages
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In order to run a manually started agent, the ``python3-inmanta`` and the ``python3-inmanta-agent`` packages are required on the
@@ -368,7 +367,7 @@ machine that will run the agent.
     sudo yum install -y python3-inmanta python3-inmanta-agent
 
 
-Step 2: Configure the manually-started agent
+Step 2: Configuring the manually-started agent
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The manually-started agent can be configured via a ``/etc/inmanta/inmanta.d/*.cfg`` config file. The following options
@@ -395,7 +394,7 @@ The :inmanta.config:option:`config.agent-map` option can be configured in the sa
 auto-started agents.
 
 
-Step 3: Start the manually-started agent
+Step 3: Starting the manually-started agent
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Finally, enable and start the ``inmanta-agent`` service:
