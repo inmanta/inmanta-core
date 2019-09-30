@@ -345,7 +345,7 @@ met:
 
 
 
-Step 1: Install the required Inmanta packages
+Step 1: Installing the required Inmanta packages
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In order to run a manually started agent, the ``python3-inmanta`` and the ``python3-inmanta-agent`` packages are required on the
