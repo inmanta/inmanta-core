@@ -367,7 +367,7 @@ machine that will run the agent.
     sudo yum install -y python3-inmanta python3-inmanta-agent
 
 
-Step 2: Configure the manually-started agent
+Step 2: Configuring the manually-started agent
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The manually-started agent can be configured via a ``/etc/inmanta/inmanta.d/*.cfg`` config file. The following options
