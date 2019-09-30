@@ -208,7 +208,7 @@ Then, create the inmanta project and environment:
 
     The ``--save`` option tells ``inmanta-cli`` to store the environment config in the ``.inmanta`` file. The compiler uses this file to find the server and to export to the right environment.
 
-Finaly compile the project and deploy it:
+Finally compile the project and deploy it:
 
 .. code-block:: sh
 
