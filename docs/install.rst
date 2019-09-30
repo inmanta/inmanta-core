@@ -288,7 +288,7 @@ If the handler code should be executed on another machine than the Inmanta serve
 * The remote machine should have a Python interpreter installed.
 
 
-Configure auto-started agents via environment settings
+Configuring auto-started agents via environment settings
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Auto-started agents can be configured via the settings of the environment where the auto-started agent belongs to. The
