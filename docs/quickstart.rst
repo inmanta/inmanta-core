@@ -44,7 +44,7 @@ The ``quickstart-project`` directory will also be shared with the Inmanta server
 (mounted to ``/home/inmanta/quickstart-project``).
 We will come back to the files in this repository 
 
-Finaly, have Docker Compose deploy the quickstart environment:
+Finally, have Docker Compose deploy the quickstart environment:
 
 .. code-block:: sh
 
