@@ -268,24 +268,24 @@ Configure agents
 ################
 
 Inmanta agents can be started automatically (auto-started agents) or manually (manually-started agents). This section
-describes how both types of agents can be set up and configured.
+describes how both types of agents can be set up and configured. Inmanta agents only run on Linux.
 
 
 Auto-started agents
 -------------------
 
-Auto-started agents always run on the Inmanta server. When handler code needs to be executed on a remote managed device, this
-is done over SSH.
+Auto-started agents always run on the Inmanta server. The Inmanta server manages the full lifecycle of these agents.
 
 
 Requirements
 ^^^^^^^^^^^^
 
-If the handler code should be executed on another machine than the Inmanta server, the following requirements should be met:
+The following requirements should be met for agents that don't map to the Inmanta server (i.e. The managed device is remote
+with respect to the Inmanta server and the agent has to execute I/O operations on the remote machine using ``self._io``):
 
-* The Inmanta server should have passphraseless SSH access on the remote machine. More information on how to set up SSH
+* The Inmanta server should have passphraseless SSH access on the machine it maps to. More information on how to set up SSH
   connectivity can be found at :ref:`configure_server_step_6`
-* The remote machine should have a Python interpreter installed.
+* The remote machine should have a Python2 interpreter installed.
 
 
 Configure auto-started agents via environment settings
@@ -302,18 +302,18 @@ following options are configurable:
 * autostart_on_start
 
 The ``autostarted_agent_map`` requires an entry for each agent that should be autostarted. The key is the name of the agent and
-the value is either ``local:`` if the handlers should be executed on the Inmanta server or an SSH connection string when the
-handlers should be executed on a remote machine.The SSH connection string requires the following format:
+the value is either ``local:`` for agents that map to the Inmanta server or an SSH connection string when the
+agent maps to a remote machine. The SSH connection string requires the following format:
 ``ssh://<user>@<host>:<port>?<options>``. Options is a ampersand-separated list of ``key=value`` pairs. The following options
 can be provided:
 
-===========  =============  ==============================================================================================================
+===========  =============  =====================================================================================================================
 Option name  Default value  Description
-===========  =============  ==============================================================================================================
+===========  =============  =====================================================================================================================
 retries      10             The amount of times the orchestrator will try to establish the SSH connection when the initial attempt failed.
 retry_wait   30             The amount of second between two attempts to establish the SSH connection.
-python       python         The Python interpreter available on the remote side.
-===========  =============  ==============================================================================================================
+python       python         The Python2 interpreter available on the remote side. This executable has to be discoverable through the system PATH.
+===========  =============  =====================================================================================================================
 
 
 Auto-started agents start when they are required by a specific deployment or when the Inmanta server starts if the
@@ -336,12 +336,13 @@ suggests.
 Requirements
 ^^^^^^^^^^^^
 
-If the handler code should be executed another machine than where the agent is running, the following requirements should be
-met:
+The following requirements should be met for agents that don't map to the host running the agent process (i.e. The managed
+device is remote with respect to the Inmanta agent and the agent has to execute I/O operations on the remote machine using
+``self._io``):
 
-* The Inmanta agent should have passphraseless SSH access on the remote machine. More information on how to set up SSH
+* The Inmanta agent should have passphraseless SSH access on the machine it maps to. More information on how to set up SSH
   connectivity can be found at :ref:`configure_server_step_6`
-* The remote machine should have a Python interpreter installed.
+* The remote machine should have a Python2 interpreter installed.
 
 
 
