@@ -190,9 +190,13 @@ class ReturnValue(Generic[T]):
     def _get_with_envelope(self, envelope: bool, envelope_key: str) -> ReturnTypes:
         """ Get the body with an envelope specified
         """
-        response: Dict[str, Any] = {envelope_key: self._response}
+        response: Dict[str, Any] = {}
+        if self._response is not None:
+            response[envelope_key] = self._response
+
         if len(self._warnings):
             response["metadata"] = {"warnings": self._warnings}
+
         return response
 
     def get_body(self, envelope: bool, envelope_key: str) -> ReturnTypes:
