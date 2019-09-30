@@ -80,6 +80,19 @@ For the CLI, go to the next section. For the Dashboard, go to :ref:`qsdashboard`
 
 .. _cli:
 
+Breaking down/Reseting the quickstart-docker environment
+_________________________________________________________
+
+To fully clean up or reset the environment, run the following commands:
+
+.. code-block:: sh
+
+    docker-compose down
+    docker volume prune
+    docker image rmi inmanta-agent inmanta-server
+
+This will give you a clean environemnet next time you run ``docker-compose up``.
+
 Single machine deployment using the CLI
 =======================================
 
@@ -178,19 +191,24 @@ Deploy the configuration model
 To deploy the project, we must first register it with the management server by creating a project and an environment. A project is a collection of related environments. (e.g. development, testing, production, qa,...)
 An environment is associated with a branch in a git repository. This allows the server to recompile the model when the environment changes.
 
-Connect to the terminal of the server-container (as described at the end of :ref:`qsetup`):
+Connect to the terminal of the server-container:
+.. code-block:: sh
+
+    docker exec -it "inmanta_quickstart_server" bash
+
+Then, create the inmanta project and environment:
 
 .. code-block:: sh
 
     cd /home/inmanta/quickstart-project
     inmanta-cli project create -n test
-    inmanta-cli environment create -n quickstart-env -p test -r https://github.com/inmanta/quickstart.git -b master --save
+    inmanta-cli environment create -n quickstart-env -p test -r https://github.com/inmanta/quickstart.git -b docker --save
 
 .. note::
 
     The ``--save`` option tells ``inmanta-cli`` to store the environment config in the ``.inmanta`` file. The compiler uses this file to find the server and to export to the right environment.
 
-Then compile the project and deploy it:
+Finaly compile the project and deploy it:
 
 .. code-block:: sh
 
@@ -215,17 +233,18 @@ When the installation is done, you can access your new Drupal server at `http://
 Multi-machine deployment using the CLI
 =======================================
 
-The real power of Inmanta appears when you want to manage more than one machine. In this section we will
-move the MySQL server from ``vm1`` to a second virtual machine called ``vm2``.
+The real power of Inmanta becomes apperant when managing more than one machine. In this section we will
+move the MySQL server from ``vm1`` to a second machine called ``vm2``.
 
 
 Update the configuration model
 ------------------------------
 
-A second virtual machine is easily added to the system by adding the definition
-of the virtual machine to the configuration model and assigning the MySQL server
-to the new virtual machine. Update ``main.cf`` to the following (or use the contents of file
-``dual_machine.cf``:
+A second machine is easily added to the system by adding the definition
+of the machine to the configuration model and assigning the MySQL server
+to the new machine.
+
+Update ``main.cf`` to the following:
 
 .. code-block:: inmanta
     :linenos:
@@ -239,10 +258,8 @@ to the new virtual machine. Update ``main.cf`` to the following (or use the cont
     import drupal
 
     # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::centos7, ip="192.168.33.101", remote_agent=true,
-                 remote_user="vagrant")
-    vm2=ip::Host(name="vm2", os=redhat::centos7, ip="192.168.33.102", remote_agent=true,
-                 remote_user="vagrant")
+    vm1=ip::Host(name="vm1", os=redhat::centos7, ip="172.28.0.4", remote_agent=true, remote_user="root")
+    vm2=ip::Host(name="vm2", os=redhat::centos7, ip="172.28.0.5", remote_agent=true, remote_user="root")
 
     # add a mysql and apache http server
     web_server=apache::Server(host=vm1)
@@ -250,18 +267,18 @@ to the new virtual machine. Update ``main.cf`` to the following (or use the cont
 
     # deploy drupal in that virtual host
     name=web::Alias(hostname="localhost")
-    db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test",
-                       password="Str0ng-P433w0rd")
+    db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test", password="Str0ng-P433w0rd")
     drupal::Application(name=name, container=web_server, database=db, admin_user="admin",
                         admin_password="test", admin_email="admin@example.com", site_name="localhost")
 
-On line 3 the definition of the new virtual machine is added. On line 7 the
+On line 11 the definition of the new machine is added. On line 16 the
 MySQL server is assigned to vm2.
 
 Deploy the configuration model
 ------------------------------
 
-To deploy the configuration model, compile the project and send it to the server:
+To deploy the configuration model, compile the project and deploy it.
+In the Inmanta server container terminal:
 
 .. code-block:: sh
 
@@ -272,8 +289,7 @@ If you browse to the Drupal site again, the database should be empty once more.
 
 .. note::
 
-    When moving the database, a new database is created, thus the content of the old database is not migrated automatically.
-
+    When moving the database, a new database is created and the content of the old database is not migrated automatically.
 
 .. _qsdashboard:
 
@@ -290,7 +306,7 @@ Inmanta can deploy from the server using only the dashboard. All changes have to
     * Select the ``test`` project.
     * Give the environment a name, e.g. ``env-quickstart``.
     * Specify the repo: for example ``https://github.com/user/quickstart``.
-    * Specify the branch: ``master``.
+    * Specify the branch: ``docker``.
 
 #. Checkout your clone of the quickstart repository and make changes to the main.cf file, for example add the contents
    of single_machine.cf to the main.cf file. Commit the changes and push them to your repository.
@@ -314,10 +330,10 @@ Inmanta can deploy from the server using only the dashboard. All changes have to
 
 
 Create your own modules
-_______________________
+________________________
 
 Inmanta enables developers of a configuration model to make it modular and
-reusable. In this section we create a configuration module that defines how to
+reusable. In this section we will create a configuration module that defines how to
 deploy a LAMP stack with a Drupal site in a two- or three-tiered deployment.
 
 Module layout
@@ -364,12 +380,17 @@ The following commands create all directories and files to develop a full-featur
 
 .. code-block:: sh
 
-    cd ~/quickstart/libs
-    mkdir {lamp,lamp/model}
-    touch lamp/model/_init.cf
-    touch lamp/module.yml
+    mkdir ./quickstart-project/libs/{lamp,lamp/model}
+    touch ./quickstart-project/libs/lamp/model/_init.cf
+    touch ./quickstart-project/libs/lamp/module.yml
 
-Next, edit the ``lamp/module.yml`` file and add meta-data to it:
+.. note::
+
+    It is normal if you run in to permission errors at this point if you followed the cli version of the quickstart.
+    The best way to resolve these is to ``sudo mkdir ./quickstart-project/libs/lamp`` and then ``sudo chmod -R 777 ./quickstart-project/libs/lamp``.
+    Now run the above commands again.
+
+Next, edit the ``./quickstart-project/libs/lamp/module.yml`` file and add meta-data to it:
 
 .. code-block:: yaml
 
@@ -381,7 +402,7 @@ Next, edit the ``lamp/module.yml`` file and add meta-data to it:
 Configuration model
 ==========================
 
-In ``lamp/model/_init.cf`` we define the configuration model that defines the *lamp*
+In ``./quickstart-project/libs/lamp/model/_init.cf`` we define the configuration model that defines the *lamp*
 configuration module.
 
 .. code-block:: inmanta
@@ -436,9 +457,8 @@ configuration module.
 The composition
 ==========================
 
-With our new LAMP module we can reduce the amount of required configuration code in the ``main.cf`` file
-by using more *reusable* configuration code. Only three lines of site-specific configuration code are
-required.
+With our new LAMP module we can reduce the amount of required configuration code in the ``./quickstart-project/main.cf`` file
+by using more *reusable* configuration code. Only three lines of site-specific configuration code are required.
 
 .. code-block:: inmanta
     :linenos:
@@ -449,10 +469,8 @@ required.
     import lamp
 
     # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::centos7, ip="192.168.33.101", remote_agent=true,
-                 remote_user="vagrant")
-    vm2=ip::Host(name="vm2", os=redhat::centos7, ip="192.168.33.102", remote_agent=true,
-                 remote_user="vagrant")
+    vm1=ip::Host(name="vm1", os=redhat::centos7, ip="172.28.0.4", remote_agent=true, remote_user="root")
+    vm2=ip::Host(name="vm2", os=redhat::centos7, ip="172.28.0.5", remote_agent=true, remote_user="root")
 
     lamp::DrupalStack(webhost=vm1, mysqlhost=vm2, hostname="localhost", admin_user="admin",
                       admin_password="test", admin_email="admin@example.com", site_name="localhost")
@@ -461,8 +479,8 @@ required.
 Deploy the changes
 ==========================
 
-Deploy the changes as before and nothing should change because it generates exactly the same
-configuration.
+Deploy the changes as before, by connection to the servers terminal.
+Nothing will change because the generated configuration should be exactly the same.
 
 .. code-block:: sh
 
