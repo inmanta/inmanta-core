@@ -315,8 +315,8 @@ async def agent(server, environment):
 
 
 @pytest.fixture(scope="function")
-def client_latest(server):
-    client = protocol.Client("client", version_match=VersionMatch.highest)
+def client_v2(server):
+    client = protocol.Client("client", version_match=VersionMatch.exact, exact_version=2)
     yield client
 
 

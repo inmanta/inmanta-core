@@ -71,15 +71,15 @@ async def test_project_api_v1(client):
 
 
 @pytest.mark.asyncio
-async def test_project_api_v2(client_latest):
-    result = await client_latest.project_create("project-test")
+async def test_project_api_v2(client_v2):
+    result = await client_v2.project_create("project-test")
     assert result.code == 200
     assert "data" in result.result
     assert "id" in result.result["data"]
 
     project_id = result.result["data"]["id"]
 
-    result = await client_latest.environment_create(project_id=project_id, name="dev")
+    result = await client_v2.environment_create(project_id=project_id, name="dev")
     assert result.code == 200
     assert "data" in result.result
     assert "id" in result.result["data"]
@@ -88,7 +88,7 @@ async def test_project_api_v2(client_latest):
     assert "dev" == result.result["data"]["name"]
     env1_id = result.result["data"]["id"]
 
-    result = await client_latest.environment_create(project_id=project_id, name="dev2")
+    result = await client_v2.environment_create(project_id=project_id, name="dev2")
     assert result.code == 200
     assert "data" in result.result
     assert "id" in result.result["data"]
@@ -97,13 +97,13 @@ async def test_project_api_v2(client_latest):
     assert "dev2" == result.result["data"]["name"]
 
     # modify branch and repo
-    result = await client_latest.environment_modify(id=env1_id, name="dev", repository="test")
+    result = await client_v2.environment_modify(id=env1_id, name="dev", repository="test")
     assert result.code == 200
 
-    result = await client_latest.environment_modify(id=env1_id, name="dev", branch="test")
+    result = await client_v2.environment_modify(id=env1_id, name="dev", branch="test")
     assert result.code == 200
 
-    result = await client_latest.project_list()
+    result = await client_v2.project_list()
     assert result.code == 200
     assert "data" in result.result
     assert len(result.result["data"]) == 1
@@ -112,58 +112,58 @@ async def test_project_api_v2(client_latest):
     # Failure conditions
 
     # Delete non existing project
-    response = await client_latest.project_delete(uuid.uuid4())
+    response = await client_v2.project_delete(uuid.uuid4())
     assert response.code == 404
 
     # Modify non existing project
-    response = await client_latest.project_modify(uuid.uuid4(), name="test")
+    response = await client_v2.project_modify(uuid.uuid4(), name="test")
     assert response.code == 404
 
     # Modify to duplicate name
-    response = await client_latest.project_create("project2")
+    response = await client_v2.project_create("project2")
     assert response.code == 200
 
-    response = await client_latest.project_modify(project_id, name="project2")
+    response = await client_v2.project_modify(project_id, name="project2")
     assert response.code == 500
 
     # Get non existing project
-    response = await client_latest.project_get(uuid.uuid4())
+    response = await client_v2.project_get(uuid.uuid4())
     assert response.code == 404
 
     # Create env in non existing project
-    result = await client_latest.environment_create(project_id=uuid.uuid4(), name="dev")
+    result = await client_v2.environment_create(project_id=uuid.uuid4(), name="dev")
     assert result.code == 404
 
     # Create a duplicate environment
-    result = await client_latest.environment_create(project_id=project_id, name="dev")
+    result = await client_v2.environment_create(project_id=project_id, name="dev")
     assert result.code == 500
 
     # Modify a non existing environment
-    result = await client_latest.environment_modify(id=uuid.uuid4(), name="dev")
+    result = await client_v2.environment_modify(id=uuid.uuid4(), name="dev")
     assert result.code == 404
 
     # Create a duplicate environment
-    result = await client_latest.environment_create(project_id=project_id, name="dev", repository="")
+    result = await client_v2.environment_create(project_id=project_id, name="dev", repository="")
     assert result.code == 400
 
     # Modify to duplicate environment
-    result = await client_latest.environment_modify(id=env1_id, name="dev2")
+    result = await client_v2.environment_modify(id=env1_id, name="dev2")
     assert result.code == 500
 
     # Get an environment
-    result = await client_latest.environment_get(id=env1_id)
+    result = await client_v2.environment_get(id=env1_id)
     assert result.code == 200
     assert result.result["data"]["name"] == "dev"
 
     # Operation on non existing
-    result = await client_latest.environment_get(id=uuid.uuid4())
+    result = await client_v2.environment_get(id=uuid.uuid4())
     assert result.code == 404
 
-    result = await client_latest.environment_delete(id=uuid.uuid4())
+    result = await client_v2.environment_delete(id=uuid.uuid4())
     assert result.code == 404
 
     # Decommission
-    result = await client_latest.environment_decommission(id=env1_id)
+    result = await client_v2.environment_decommission(id=env1_id)
     assert result.code == 200
 
 

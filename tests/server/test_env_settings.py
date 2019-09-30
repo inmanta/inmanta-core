@@ -95,28 +95,28 @@ async def test_environment_settings(client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_environment_settings_v2(client_latest, server, environment):
+async def test_environment_settings_v2(client_v2, server, environment):
     """
         Test environment settings
     """
-    response = await client_latest.environment_settings_list(tid=environment)
+    response = await client_v2.environment_settings_list(tid=environment)
     assert response.code == 200
     assert "settings" in response.result["data"]
     assert "definition" in response.result["data"]
     assert "auto_deploy" in response.result["data"]["definition"]
     assert len(response.result["data"]["settings"]) == 0
 
-    response = await client_latest.environment_settings_set(tid=environment, id="auto_deploy", value=False)
+    response = await client_v2.environment_settings_set(tid=environment, id="auto_deploy", value=False)
     assert response.code == 200
 
-    response = await client_latest.environment_settings_set(tid=environment, id="auto_deploy2", value=False)
+    response = await client_v2.environment_settings_set(tid=environment, id="auto_deploy2", value=False)
     assert response.code == 404
 
-    response = await client_latest.environment_settings_set(tid=environment, id="auto_deploy", value="error")
+    response = await client_v2.environment_settings_set(tid=environment, id="auto_deploy", value="error")
     assert response.code == 500
 
-    response = await client_latest.environment_setting_delete(tid=environment, id="auto_deploy")
+    response = await client_v2.environment_setting_delete(tid=environment, id="auto_deploy")
     assert response.code == 200
 
-    response = await client_latest.environment_setting_delete(tid=environment, id="auto_deploy2")
+    response = await client_v2.environment_setting_delete(tid=environment, id="auto_deploy2")
     assert response.code == 404
