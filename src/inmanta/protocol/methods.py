@@ -962,14 +962,6 @@ def get_server_status() -> model.StatusResponse:
 
 
 @typedmethod(
-    path="/compilequeue",
-    operation="GET",
-    arg_options=ENV_OPTS,
-    client_types=["api"],
-    api_version=2,
-    envelope_key=const.ENVELOPE_KEY,
-)
-@typedmethod(
     path="/compilequeue", operation="GET", arg_options=ENV_OPTS, client_types=["api"], api_version=1, envelope_key="queue"
 )
 def get_compile_queue(tid: uuid.UUID) -> List[model.CompileRun]:

@@ -662,11 +662,11 @@ class Setting(object):
         typ: str,
         default: m.EnvSettingType = None,
         doc: str = None,
-        validator: Callable[[SimpleTypes], SimpleTypes] = None,
+        validator: Callable[[m.EnvSettingType], m.EnvSettingType] = None,
         recompile: bool = False,
         update_model: bool = False,
         agent_restart: bool = False,
-        allowed_values: Optional[List[SimpleTypes]] = None,
+        allowed_values: Optional[List[m.EnvSettingType]] = None,
     ):
         """
             :param name: The name of the setting.

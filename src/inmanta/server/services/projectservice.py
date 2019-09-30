@@ -60,7 +60,7 @@ class ProjectService(protocol.ServerSlice):
         return 200, {"project": (await self.project_create(name, project_id)).dict()}
 
     @protocol.handle(methods.delete_project, project_id="id", api_version=1)
-    async def delete_project(self, project_id: uuid.UUID) -> None:
+    async def delete_project(self, project_id: uuid.UUID) -> Apireturn:
         await self.project_delete(project_id)
         return 200
 

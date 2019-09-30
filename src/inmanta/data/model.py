@@ -156,12 +156,12 @@ class EnvironmentSetting(BaseModel):
 
     name: str
     type: str
-    default: SimpleTypes
+    default: EnvSettingType
     doc: str
     recompile: bool
     update_model: bool
     agent_restart: bool
-    allowed_values: Optional[List[SimpleTypes]]
+    allowed_values: Optional[List[EnvSettingType]]
 
 
 class EnvironmentSettingsReponse(BaseModel):
@@ -184,7 +184,7 @@ class ModelMetadata(BaseModel):
 
 
 class ModelVersionInfo(BaseModel):
-    """ Version information that can be associated with a orchestration model
+    """ Version information that can be associated with an orchestration model
 
         :param export_metadata: Metadata associated with this version
         :param model: A serialization of the complete orchestration model
