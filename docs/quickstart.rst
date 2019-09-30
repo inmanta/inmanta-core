@@ -103,7 +103,7 @@ A project is nothing more than a directory with a project.yml file,
 which contains parameters such as the location to search for modules and where to find the server.
 In this case we will be using the premade quickstart project we cloned in to ``./quickstart-project`` earlier.
 
-In that directory is a project.yml, that looks like this:
+That directory contains a project.yml, which looks like this:
 
 .. code-block:: yaml
 
