@@ -13,7 +13,7 @@ Then, we use Inmanta to install Drupal on these VM-like containers.
 .. note::
 
     This is meant to get an example Inmanta set up and running quickly to experiment with.
-    It is not recommended to run this setup in production, as it might lead to instabilties in the long term.
+    It is not recommended to run this setup in production, as it might lead to instabilities in the long term.
 
 .. _qsetup:
 
