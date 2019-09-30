@@ -70,7 +70,9 @@ To get an interactive shell on the Inmanta server (this will be needed later):
 
     docker exec -it "inmanta_quickstart_server" bash
 
-The rest of the quickstart guide assumes commands are executed from the root path of the quickstart-docker git repository, unless noted otherwise.
+.. note::
+
+    The rest of the quickstart guide assumes commands are executed from the root path of the quickstart-docker git repository, unless noted otherwise.
 
 Automatically deploying Drupal
 _______________________________
