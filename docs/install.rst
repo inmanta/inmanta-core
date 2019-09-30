@@ -320,7 +320,7 @@ Auto-started agents start when they are required by a specific deployment or whe
 ``autostart_on_start`` setting is set to true.
 
 
-Configure the autostart_agent_map via the std::AgentConfig entity
+Configuring the autostart_agent_map via the std::AgentConfig entity
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The :inmanta:entity:`std::AgentConfig` entity provides functionality to add an entry to the ``autostart_agent_map`` of a
