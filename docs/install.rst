@@ -196,6 +196,8 @@ in the configuration file stored at ``/etc/inmanta/inmanta.d/server.cfg``.
   of the hostname.
 
 
+.. _configure_server_step_6:
+
 Step 6: Configure ssh of the inmanta user
 -----------------------------------------
 
@@ -250,13 +252,157 @@ Step 8: Connect to the dashboard
 
 The server dashboard is now available on port '8888'
 
-Optional Step 8: Setup influxdb for collection of performance metrics
+Optional Step 9: Setup influxdb for collection of performance metrics
 ---------------------------------------------------------------------
 
 Follow the instructions in :ref:`metering-setup` to send performance metrics to influxdb.
 This is only recommended for production deployments.
 
-Optional Step 9: Configure logging
-----------------------------------
+Optional Step 10: Configure logging
+-----------------------------------
 
 Logging can be configured by following the instructions in :ref:`administrators_doc_logging`.
+
+
+Configure agents
+################
+
+Inmanta agents can be started automatically (auto-started agents) or manually (manually-started agents). This section
+describes how both types of agents can be set up and configured.
+
+
+Auto-started agents
+-------------------
+
+Auto-started agents always run on the Inmanta server. When handler code needs to be executed on a remote managed device, this
+is done over SSH.
+
+
+Requirements
+^^^^^^^^^^^^
+
+If the handler code should be executed on another machine than the Inmanta server, the following requirements should be met:
+
+* The Inmanta server should have passphraseless SSH access on the remote machine. More information on how to set up SSH
+  connectivity can be found at :ref:`configure_server_step_6`
+* The remote machine should have a Python interpreter installed.
+
+
+Configure auto-started agents via environment settings
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Auto-started agents can be configured via the settings of the environment where the auto-started agent belongs to. The
+following options are configurable:
+
+* autostart_agent_map
+* autostart_agent_deploy_interval
+* autostart_agent_deploy_splay_time
+* autostart_agent_repair_interval
+* autostart_agent_repair_splay_time
+* autostart_on_start
+
+The ``autostarted_agent_map`` requires an entry for each agent that should be autostarted. The key is the name of the agent and
+the value is either ``local:`` if the handlers should be executed on the Inmanta server or an SSH connection string when the
+handlers should be executed on a remote machine.The SSH connection string requires the following format:
+``ssh://<user>@<host>:<port>?<options>``. Options is a ampersand-separated list of ``key=value`` pairs. The following options
+can be provided:
+
+===========  =============  ==============================================================================================================
+Option name  Default value  Description
+===========  =============  ==============================================================================================================
+retries      10             The amount of times the orchestrator will try to establish the SSH connection when the initial attempt failed.
+retry_wait   30             The amount of second between two attempts to establish the SSH connection.
+python       python         The Python interpreter available on the remote side.
+===========  =============  ==============================================================================================================
+
+
+Auto-started agents start when they are required by a specific deployment or when the Inmanta server starts if the
+``autostart_on_start`` setting is set to true.
+
+
+Configure the autostart_agent_map via the std::AgentConfig entity
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The :inmanta:entity:`std::AgentConfig` entity provides functionality to add an entry to the ``autostart_agent_map`` of a
+specific environment. As such, the auto-started agents can be managed in the configuration model.
+
+
+Manually started agents
+-----------------------
+
+Manually started agents can be run on any Linux device, but they should be started and configured manually as the name
+suggests.
+
+Requirements
+^^^^^^^^^^^^
+
+If the handler code should be executed another machine than where the agent is running, the following requirements should be
+met:
+
+* The Inmanta agent should have passphraseless SSH access on the remote machine. More information on how to set up SSH
+  connectivity can be found at :ref:`configure_server_step_6`
+* The remote machine should have a Python interpreter installed.
+
+
+
+Step 1: Install the required Inmanta packages
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In order to run a manually started agent, the ``python3-inmanta`` and the ``python3-inmanta-agent`` packages are required on the
+machine that will run the agent.
+
+.. code-block:: sh
+
+    sudo tee /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
+    [inmanta-oss-stable]
+    name=Inmanta OSS stable
+    baseurl=https://pkg.inmanta.com/inmanta-oss-stable/el7/
+    gpgcheck=1
+    gpgkey=https://pkg.inmanta.com/inmanta-oss-stable/inmanta-oss-stable-public-key
+    repo_gpgcheck=1
+    enabled=1
+    enabled_metadata=1
+    EOF
+
+    sudo yum install -y python3-inmanta python3-inmanta-agent
+
+
+Step 2: Configure the manually-started agent
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The manually-started agent can be configured via a ``/etc/inmanta/inmanta.d/*.cfg`` config file. The following options
+configure the behavior of the manually started agent:
+
+* :inmanta.config:option:`config.state-dir`
+* :inmanta.config:option:`config.agent-names`
+* :inmanta.config:option:`config.environment`
+* :inmanta.config:option:`config.agent-map`
+* :inmanta.config:option:`config.agent-deploy-splay-time`
+* :inmanta.config:option:`config.agent-deploy-interval`
+* :inmanta.config:option:`config.agent-repair-splay-time`
+* :inmanta.config:option:`config.agent-repair-interval`
+* :inmanta.config:option:`config.agent-reconnect-delay`
+* :inmanta.config:option:`config.server-timeout`
+* :inmanta.config:option:`agent_rest_transport.port`
+* :inmanta.config:option:`agent_rest_transport.host`
+* :inmanta.config:option:`agent_rest_transport.token`
+* :inmanta.config:option:`agent_rest_transport.ssl`
+* :inmanta.config:option:`agent_rest_transport.ssl-ca-cert-file`
+
+
+The :inmanta.config:option:`config.agent-map` option can be configured in the same way as the ``autostart_agent_map`` for
+auto-started agents.
+
+
+Step 3: Start the manually-started agent
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Finally, enable and start the ``inmanta-agent`` service:
+
+.. code-block:: sh
+
+    sudo systemctl enable inmanta-agent
+    sudo systemctl start inmanta-agent
+
+
+The logs of the agent are written to ``/var/log/inmanta/agent.log``.
