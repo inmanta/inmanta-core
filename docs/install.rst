@@ -394,7 +394,7 @@ The :inmanta.config:option:`config.agent-map` option can be configured in the sa
 auto-started agents.
 
 
-Step 3: Start the manually-started agent
+Step 3: Starting the manually-started agent
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Finally, enable and start the ``inmanta-agent`` service:
