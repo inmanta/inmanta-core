@@ -71,3 +71,4 @@ build-result
 .coverage
 .coverage*
 _build
+logs
