@@ -233,7 +233,7 @@ When the installation is done, you can access your new Drupal server at `http://
 Multi-machine deployment using the CLI
 =======================================
 
-The real power of Inmanta becomes apperant when managing more than one machine. In this section we will
+The real power of Inmanta becomes apparent when managing more than one machine. In this section we will
 move the MySQL server from ``vm1`` to a second machine called ``vm2``.
 
 
