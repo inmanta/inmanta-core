@@ -32,6 +32,7 @@ from inmanta import const
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.common import UrlMethod
 from inmanta.protocol.rest import CONTENT_TYPE, JSON_CONTENT, LOGGER, RESTBase
+from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth
 from inmanta.types import ReturnTypes
 
@@ -270,10 +271,6 @@ class RESTServer(RESTBase):
             rules.append(routing.Rule(routing.PathMatches(url), RESTHandler, {"transport": self, "config": handler_config}))
             LOGGER.debug("Registering handler(s) for url %s and methods %s", url, ", ".join(handler_config.keys()))
 
-        port = 8888
-        if self.id in inmanta_config.Config.get() and "port" in inmanta_config.Config.get()[self.id]:
-            port = inmanta_config.Config.get()[self.id]["port"]
-
         application = web.Application(rules, compress_response=True)
 
         crt = inmanta_config.Config.get("server", "ssl_cert_file", None)
@@ -287,7 +284,11 @@ class RESTServer(RESTBase):
             LOGGER.debug("Created REST transport with SSL")
         else:
             self._http_server = httpserver.HTTPServer(application, decompress_request=True)
-        self._http_server.listen(port)
+
+        bind_port = server_config.get_bind_port()
+        bind_address = server_config.server_bind_address.get()
+
+        self._http_server.listen(bind_port, bind_address)
         self.running = True
 
         LOGGER.debug("Start REST transport")

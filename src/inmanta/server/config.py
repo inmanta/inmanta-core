@@ -18,7 +18,20 @@
 
 import logging
 
-from inmanta.config import Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time, log_dir, state_dir
+from inmanta.config import (
+    Config,
+    Option,
+    is_bool,
+    is_float,
+    is_int,
+    is_list,
+    is_map,
+    is_str,
+    is_str_opt,
+    is_time,
+    log_dir,
+    state_dir,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +57,9 @@ db_connection_timeout = Option("database", "connection_timeout", 60, "Connection
 #############################
 # server_rest_transport
 #############################
-transport_port = Option("server_rest_transport", "port", 8888, "The port on which the server listens for connections", is_int)
+transport_port = Option(
+    "server_rest_transport", "port", 8888, "[DEPRECATED] The port on which the server listens for connections", is_int
+)
 
 #############################
 # Influxdb
@@ -63,6 +78,22 @@ influxdb_tags = Option(
 #############################
 # server
 #############################
+server_bind_address = Option(
+    "server", "bind-address", "127.0.0.1", "The address on which the server will listen for connections", is_str
+)
+server_bind_port = Option("server", "bind-port", 8888, "The port on which the server will listen for connections", is_int)
+
+
+def get_bind_port() -> int:
+    if Config.is_set("server", "bind-port") or Config.is_set("server", "bind-address"):
+        # Use new bind-port option
+        return server_bind_port.get()
+    else:
+        # Fallback to old option
+        LOGGER.warning("The server_rest_transport.port option is deprecated in favour of the server.bind-address option.")
+        return Config.get("server_rest_transport", "port", 8888)
+
+
 server_enable_auth = Option("server", "auth", False, "Enable authentication on the server API", is_bool)
 
 server_ssl_key = Option(
