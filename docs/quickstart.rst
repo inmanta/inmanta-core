@@ -80,7 +80,7 @@ To get an interactive shell on the Inmanta server (this will be needed later):
 
 .. note::
 
-    The rest of the quickstart guide assumes commands are executed from the root path of the quickstart-docker git repository, unless noted otherwise.
+    The rest of the quickstart guide assumes commands are executed from the root path of the quickstart-docker Git repository, unless noted otherwise.
 
 Breaking down/Resetting the quickstart-docker environment
 ========================================================
@@ -93,7 +93,7 @@ To fully clean up or reset the environment, run the following commands:
     docker volume prune -f
     docker image rmi inmanta-agent inmanta-server
 
-This will give you a clean environemnet next time you run ``docker-compose up``.
+This will give you a clean environment next time you run ``docker-compose up``.
 
 Automatically deploying Drupal
 _______________________________
@@ -135,7 +135,7 @@ That directory contains a project.yml, which looks like this:
         - yum ~= 0.5.1
 
 The ``modulepath`` setting defines that reusable modules will be stored in ``libs``.
-The ``repo`` setting points to one or more git projects containing Inmanta modules in git repositories.
+The ``repo`` setting points to one or more Git projects containing Inmanta modules in Git repositories.
 The ``requires`` setting is used to pin versions of modules, otherwise the latest version is used. 
 
 In the next section we will use existing modules to deploy a LAMP stack.
