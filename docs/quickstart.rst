@@ -7,7 +7,7 @@ This tutorial gets you started with the Inmanta orchestration tool.
 
 Inmanta is intended to manage complex infrastructures, often in the cloud or other virtualized environments.
 In this guide, we go for a less complex setup: install the Drupal CMS on two VM-like containers.
-First, we use Docker to set up a basic environment with two empty VM-like containers, an Inmanta server and a postgres server.
+First, we use Docker to set up a basic environment with two empty VM-like containers, an Inmanta server and a postgres server used by inmanta as a database.
 Then, we use Inmanta to install Drupal on these VM-like containers.
 
 .. note::
