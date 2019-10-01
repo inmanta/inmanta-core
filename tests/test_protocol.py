@@ -411,7 +411,7 @@ def test_pydantic_json():
 
 
 @pytest.mark.asyncio
-async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name):
+async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
          Round trip test on aliased object
     """
@@ -470,6 +470,47 @@ async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name):
     await roundtrip(projectf)
     await roundtrip(projectt)
 
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+
+@pytest.mark.asyncio
+async def test_return_non_warnings(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    """
+         Test return none but pushing warnings
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(name: str) -> ReturnValue[None]:  # NOQA
+            """
+                Create a new project
+            """
+
+        @protocol.handle(test_method)
+        async def test_method_handler(self, name) -> ReturnValue[None]:
+            rv = ReturnValue()
+            rv.add_warnings(["error1", "error2"])
+            return rv
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+
+    response = await client.test_method("x")
+    assert response.code == 200
+    assert "data" not in response.result
+    assert "metadata" in response.result
+    assert "warnings" in response.result["metadata"]
+    assert "error1" in response.result["metadata"]["warnings"]
+
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
 
 @pytest.mark.asyncio
 async def test_invalid_handler():
@@ -491,7 +532,7 @@ async def test_invalid_handler():
 
 
 @pytest.mark.asyncio
-async def test_return_value(unused_tcp_port, postgres_db, database_name):
+async def test_return_value(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
         Test the use and validation of methods that use common.ReturnValue
     """
@@ -526,12 +567,12 @@ async def test_return_value(unused_tcp_port, postgres_db, database_name):
     assert "id" in result.result
     assert "name" in result.result
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_return_model(unused_tcp_port, postgres_db, database_name):
+async def test_return_model(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
         Test the use and validation of methods that use common.ReturnValue
     """
@@ -588,12 +629,12 @@ async def test_return_model(unused_tcp_port, postgres_db, database_name):
     result = await client.test_method3({"name": "test", "id": str(uuid.uuid4())})
     assert result.code == 500
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_data_envelope(unused_tcp_port, postgres_db, database_name):
+async def test_data_envelope(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
         Test the use and validation of methods that use common.ReturnValue
     """
@@ -676,8 +717,8 @@ async def test_data_envelope(unused_tcp_port, postgres_db, database_name):
     assert "id" in result.result["project"]
     assert "name" in result.result["project"]
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
@@ -703,7 +744,7 @@ async def test_invalid_paths():
 
 
 @pytest.mark.asyncio
-async def test_nested_paths(unused_tcp_port, postgres_db, database_name):
+async def test_nested_paths(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test overlapping path definition
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -743,12 +784,12 @@ async def test_nested_paths(unused_tcp_port, postgres_db, database_name):
     assert result.code == 200
     assert "test_method2" == result.result["data"]["name"]
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_list_basemodel_argument(unused_tcp_port, postgres_db, database_name):
+async def test_list_basemodel_argument(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test list of basemodel arguments and primitive types
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -779,12 +820,12 @@ async def test_list_basemodel_argument(unused_tcp_port, postgres_db, database_na
     assert result.code == 200
     assert "test_method" == result.result["data"]["name"]
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_dict_basemodel_argument(unused_tcp_port, postgres_db, database_name):
+async def test_dict_basemodel_argument(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test dict of basemodel arguments and primitive types
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -815,12 +856,12 @@ async def test_dict_basemodel_argument(unused_tcp_port, postgres_db, database_na
     assert result.code == 200
     assert "test_method" == result.result["data"]["name"]
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_name):
+async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test dict which may have None as a value
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -873,12 +914,12 @@ async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_
     result = await client.test_method2(data=None)
     assert result.code == 200
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_dict_and_list_return(unused_tcp_port, postgres_db, database_name):
+async def test_dict_and_list_return(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test list of basemodel arguments
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -919,8 +960,8 @@ async def test_dict_and_list_return(unused_tcp_port, postgres_db, database_name)
     assert len(result.result["data"]) == 1
     assert "test_method" == result.result["data"][0]
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
@@ -957,7 +998,7 @@ async def test_method_definition():
             """
 
     assert (
-        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, bool, datetime or a "
+        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, StrictNonIntBool, datetime or a "
         "List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
@@ -980,7 +1021,7 @@ async def test_method_definition():
             """
 
     assert (
-        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, bool, datetime or a "
+        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, StrictNonIntBool, datetime or a "
         "List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
@@ -998,7 +1039,7 @@ def test_optional():
 
 
 @pytest.mark.asyncio
-async def test_union_types(unused_tcp_port, postgres_db, database_name):
+async def test_union_types(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test use of union types
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1054,12 +1095,12 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name):
     assert len(result.result["data"]) == 1
     assert 5 == result.result["data"][0]
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name):
+async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test validation of basemodel arguments and return, and how they are reported
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1103,8 +1144,8 @@ async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name)
     assert result.code == 500
     assert "data validation error" in result.result["message"]
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
@@ -1128,7 +1169,7 @@ async def test_ACOA_header(server):
 
 
 @pytest.mark.asyncio
-async def test_multi_version_method(unused_tcp_port, postgres_db, database_name):
+async def test_multi_version_method(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test multi version methods
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1204,12 +1245,12 @@ async def test_multi_version_method(unused_tcp_port, postgres_db, database_name)
     assert response.code == 200
     assert "data" in response.result
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_multi_version_handler(unused_tcp_port, postgres_db, database_name):
+async def test_multi_version_handler(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test multi version methods
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1250,5 +1291,35 @@ async def test_multi_version_handler(unused_tcp_port, postgres_db, database_name
     assert "data" in response.result
     assert response.result["data"]["name"] == "v2"
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+
+@pytest.mark.asyncio
+async def test_simple_return_type(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    """ Test methods with simple return types
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(project: str) -> str:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_methodY(self, project: str) -> str:  # NOQA
+            return project
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    # client based calls
+    client = protocol.Client("client")
+    response = await client.test_method(project="x")
+    assert response.code == 200
+    assert response.result["data"] == "x"
+
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)

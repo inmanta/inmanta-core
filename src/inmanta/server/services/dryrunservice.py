@@ -22,7 +22,7 @@ from typing import List, Optional, cast
 from tornado import locks
 
 from inmanta import data
-from inmanta.data import ResourceVersionIdStr
+from inmanta.data.model import ResourceVersionIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id

@@ -1,5 +1,5 @@
 v 2019.4 (?) Changes in this release:
-- Various bugfixes (#1367,#1398)
+- Various bugfixes (#1367,#1398,#736)
 - Added if statement (#1325)
 - Added CORS Access-Control-Allow-Origin header configuration (#1306)
 - Added --version option (#1291)
@@ -7,6 +7,7 @@ v 2019.4 (?) Changes in this release:
 - Added option to configure asyncpg pool (#1304)
 - Split out the main service into many smaller services (#1388)
 - Use python3 from the core OS in Dockerfile
+- Introduce v2 protocol and implement project and environment api in v2 (#1412)
 
 v 2019.3 (2019-09-05) Changes in this release:
 - Various bugfixes (#1148, #1157, #1163, #1167, #1188)

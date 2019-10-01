@@ -804,7 +804,7 @@ class AgentInstance(object):
                     provider = None
                     try:
                         if const.ResourceState[res["status"]] in const.UNDEPLOYABLE_STATES:
-                            ctx.exception(
+                            ctx.error(
                                 "Skipping %(resource_id)s because in undeployable state %(status)s",
                                 resource_id=res["id"],
                                 status=res["status"],

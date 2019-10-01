@@ -32,6 +32,7 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
+    Union,
     cast,
 )
 
@@ -561,7 +562,7 @@ class Id(object):
         return obj
 
     @classmethod
-    def parse_id(cls, resource_id: str) -> "Id":
+    def parse_id(cls, resource_id: Union[ResourceVersionIdStr, ResourceIdStr]) -> "Id":
         """
             Parse the resource id and return the type, the hostname and the
             resource identifier.
