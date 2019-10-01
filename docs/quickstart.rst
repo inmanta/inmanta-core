@@ -93,7 +93,7 @@ To fully clean up or reset the environment, run the following commands:
     docker volume prune -f
     docker image rmi inmanta-agent inmanta-server
 
-This will give you a clean environemnet next time you run ``docker-compose up``.
+This will give you a clean environment next time you run ``docker-compose up``.
 
 Automatically deploying Drupal
 _______________________________
