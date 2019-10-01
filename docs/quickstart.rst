@@ -74,16 +74,8 @@ To get an interactive shell on the Inmanta server (this will be needed later):
 
     The rest of the quickstart guide assumes commands are executed from the root path of the quickstart-docker git repository, unless noted otherwise.
 
-Automatically deploying Drupal
-_______________________________
-
-At this point, you can go through the quickstart guide in one of two ways: via the dashboard or via the command line interface.
-For the CLI, go to the next section. For the Dashboard, go to :ref:`qsdashboard`.
-
-.. _cli:
-
 Breaking down/Reseting the quickstart-docker environment
-_________________________________________________________
+========================================================
 
 To fully clean up or reset the environment, run the following commands:
 
@@ -94,6 +86,14 @@ To fully clean up or reset the environment, run the following commands:
     docker image rmi inmanta-agent inmanta-server
 
 This will give you a clean environemnet next time you run ``docker-compose up``.
+
+Automatically deploying Drupal
+_______________________________
+
+At this point, you can go through the quickstart guide in one of two ways: via the dashboard or via the command line interface.
+For the CLI, go to the next section. For the Dashboard, go to :ref:`qsdashboard`.
+
+.. _cli:
 
 Single machine deployment using the CLI
 =======================================
