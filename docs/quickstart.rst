@@ -273,7 +273,7 @@ Update ``main.cf`` to the following:
     drupal::Application(name=name, container=web_server, database=db, admin_user="admin",
                         admin_password="test", admin_email="admin@example.com", site_name="localhost")
 
-On line 11 the definition of the new machine is added. On line 16 the
+On line 11 the definition of the new machine is added. On line 15 the
 MySQL server is assigned to vm2.
 
 Deploy the configuration model
