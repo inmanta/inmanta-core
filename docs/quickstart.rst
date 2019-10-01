@@ -397,7 +397,7 @@ The following commands create all directories and files to develop a full-featur
 
 .. note::
 
-    It is normal if you run in to permission errors at this point if you followed the cli version of the quickstart.
+    Running into permission errors at this point is normal if you followed the cli version of the quickstart.
     The best way to resolve these is to ``sudo mkdir ./quickstart-project/libs/lamp`` and then ``sudo chmod -R 777 ./quickstart-project/libs/lamp``.
     Now run the above commands again.
 
