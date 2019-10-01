@@ -786,7 +786,7 @@ class Environment(BaseDocument):
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: Setting(
             name=AUTOSTART_AGENT_DEPLOY_SPLAY_TIME,
             typ="int",
-            default=600,
+            default=10,
             doc="The splay time on the deployment interval of the autostarted agents.",
             validator=convert_int,
             agent_restart=True,
