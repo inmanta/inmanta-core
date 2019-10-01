@@ -446,7 +446,7 @@ configuration module.
     implement DrupalStack using drupalStackImplementation
 
 * Lines 7 to 13 define an entity which is the definition of a *concept* in the configuration model. On lines 8 to 12, typed attributes are defined which we can later on use in the implementation of an entity instance.
-* Line 9 defines that *hostname* is an identifying attribute for instances of the DrupalStack entity. This also means that all instances of DrupalStack need to have a unique *hostname* attribute.
+* Line 15 defines that *hostname* is an identifying attribute for instances of the DrupalStack entity. This also means that all instances of DrupalStack need to have a unique *hostname* attribute.
 * Lines 17 and 18 define a relation between a Host and our DrupalStack entity. The first relation reads as follows:
 
     * Each DrupalStack instance has exactly one ip::Host instance that is available
@@ -493,4 +493,4 @@ Nothing will change because the generated configuration should be exactly the sa
 Next steps
 ___________________
 
-:doc:`module_developers`
+:doc:`model_developers`
