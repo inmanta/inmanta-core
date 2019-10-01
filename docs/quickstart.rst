@@ -82,7 +82,7 @@ To get an interactive shell on the Inmanta server (this will be needed later):
 
     The rest of the quickstart guide assumes commands are executed from the root path of the quickstart-docker git repository, unless noted otherwise.
 
-Breaking down/Reseting the quickstart-docker environment
+Breaking down/Resetting the quickstart-docker environment
 ========================================================
 
 To fully clean up or reset the environment, run the following commands:
