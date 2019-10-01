@@ -12,7 +12,7 @@ Then, we use Inmanta to install Drupal on these VM-like containers.
 
 .. note::
 
-    This is meant to get an example Inmanta set up and running quickly to experiment with.
+    This is meant to get an example Inmanta environment set up and running quickly to experiment with.
     It is not recommended to run this setup in production, as it might lead to instabilities in the long term.
 
 .. _qsetup:
@@ -194,6 +194,7 @@ To deploy the project, we must first register it with the management server by c
 An environment is associated with a branch in a git repository. This allows the server to recompile the model when the environment changes.
 
 Connect to the terminal of the server-container:
+
 .. code-block:: sh
 
     docker exec -it "inmanta_quickstart_server" bash
