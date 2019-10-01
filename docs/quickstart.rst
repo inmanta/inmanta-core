@@ -109,7 +109,7 @@ Single machine deployment using the CLI
 An Inmanta project bundles modules that contain configuration information.
 A project is nothing more than a directory with a project.yml file,
 which contains parameters such as the location to search for modules and where to find the server.
-In this case we will be using the premade quickstart project we cloned in to ``./quickstart-project`` earlier.
+In this case we will be using the premade quickstart project we cloned into ``./quickstart-project`` earlier.
 
 That directory contains a project.yml, which looks like this:
 
