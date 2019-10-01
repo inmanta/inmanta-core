@@ -720,6 +720,7 @@ class Environment(BaseDocument):
     repo_url: str = Field(field_type=str, default="")
     repo_branch: str = Field(field_type=str, default="")
     settings: Dict[str, EnvSettingType] = Field(field_type=dict, default={})
+    next_version: int = Field(field_type=int, default=1)
 
     _settings: Dict[str, Setting] = {
         AUTO_DEPLOY: Setting(
