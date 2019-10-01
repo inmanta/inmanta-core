@@ -196,7 +196,7 @@ class If(ExpressionStatement):
     """
 
     def __init__(self, condition: ExpressionStatement, if_branch: BasicBlock, else_branch: BasicBlock) -> None:
-        ExpressionStatement.__init__(self)
+        super().__init__()
         self.condition: ExpressionStatement = condition
         self.if_branch: BasicBlock = if_branch
         self.else_branch: BasicBlock = else_branch
