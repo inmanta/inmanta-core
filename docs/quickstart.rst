@@ -106,7 +106,6 @@ For the CLI, go to the next section. For the Dashboard, go to :ref:`qsdashboard`
 Single machine deployment using the CLI
 =======================================
 
-An Inmanta project bundles modules that contain configuration information.
 To start a new project, all you need is a directory with a project.yml file,
 defining the parameters like location to search for modules and where to find the server.
 In this case we will be using the premade quickstart project we cloned in to ``./quickstart-project`` earlier.
