@@ -80,7 +80,7 @@ To get an interactive shell on the Inmanta server (this will be needed later):
 
 .. note::
 
-    The rest of the quickstart guide assumes commands are executed from the root path of the quickstart-docker git repository, unless noted otherwise.
+    The rest of the quickstart guide assumes commands are executed from the root path of the quickstart-docker Git repository, unless noted otherwise.
 
 Breaking down/Resetting the quickstart-docker environment
 ========================================================
