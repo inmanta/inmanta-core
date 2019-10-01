@@ -182,9 +182,9 @@ First delete the contents of ``./quickstart-project/main.cf``, then put in the f
     * The *ip* attribute is the IP address of this host. At this moment we define this attribute manually, later in this tutorial we let Inmanta discover this automatically.
 
 * Line 13 deploys an Apache server on our host.
-* Line 14 deploys a Mysql server on our host and removes it's anonymous users.
+* Line 14 deploys a Mysql server on our host and removes its anonymous users.
 * Line 17 defines the name (hostname) of the web application.
-* Lines 17-18 define a database for our Drupal website.
+* Line 18 defines a database for our Drupal website.
 * Lines 19-21 define the actual Drupal application.
 
 Deploy the configuration model
@@ -274,7 +274,7 @@ Update ``main.cf`` to the following:
     drupal::Application(name=name, container=web_server, database=db, admin_user="admin",
                         admin_password="test", admin_email="admin@example.com", site_name="localhost")
 
-On line 11 the definition of the new machine is added. On line 16 the
+On line 11 the definition of the new machine is added. On line 15 the
 MySQL server is assigned to vm2.
 
 Deploy the configuration model
