@@ -83,7 +83,7 @@ To get an interactive shell on the Inmanta server (this will be needed later):
     The rest of the quickstart guide assumes commands are executed from the root path of the quickstart-docker Git repository, unless noted otherwise.
 
 Breaking down/Resetting the quickstart-docker environment
-========================================================
+=========================================================
 
 To fully clean up or reset the environment, run the following commands:
 
@@ -107,8 +107,8 @@ Single machine deployment using the CLI
 =======================================
 
 An Inmanta project bundles modules that contain configuration information.
-A project is nothing more than a directory with a project.yml file,
-which contains parameters such as the location to search for modules and where to find the server.
+To start a new project, all you need is a directory with a project.yml file,
+defining the parameters like location to search for modules and where to find the server.
 In this case we will be using the premade quickstart project we cloned in to ``./quickstart-project`` earlier.
 
 That directory contains a project.yml, which looks like this:
@@ -126,7 +126,7 @@ That directory contains a project.yml, which looks like this:
         - exec ~= 1.1.0
         - ip ~= 1.0.0
         - logging ~= 0.4.1
-        - mysql ~= 0.5.3
+        - mysql ~= 0.6.0
         - net ~= 0.5.0
         - php ~= 0.3
         - redhat ~= 0.8.0
@@ -225,7 +225,7 @@ Finally compile the project and deploy it:
 
     inmanta -vvv  export -d
 
-The first time you run this command may take a while, as all dependencies are downloaded.
+The first time you run this command, it may take a while, as all dependencies are downloaded.
 
 When the model is sent to the server, it will start deploying the configuration.
 To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_, select the `test` project and then the `quickstart-env` environment.
