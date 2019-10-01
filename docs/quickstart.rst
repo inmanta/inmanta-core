@@ -127,7 +127,7 @@ That directory contains a project.yml, which looks like this:
         - yum ~= 0.5.1
 
 The ``modulepath`` setting defines that reusable modules will be stored in ``libs``.
-The ``repo`` setting points to one or more git project containing Inmanta modules in git repositories.
+The ``repo`` setting points to one or more git projects containing Inmanta modules in git repositories.
 The ``requires`` setting is used to pin versions of modules, otherwise the latest version is used. 
 
 In the next section we will use existing modules to deploy a LAMP stack.
