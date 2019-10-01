@@ -42,7 +42,15 @@ The quickstart project can now be found under the newly created `quickstart-proj
 It will be the basis for this quickstart.
 The ``quickstart-project`` directory will also be shared with the Inmanta server container
 (mounted to ``/home/inmanta/quickstart-project``).
-We will come back to the files in this repository 
+We will come back to the files in this repository later.
+
+.. note::
+
+    If you are on `Windows`, be sure you make the drive with the quickstart project shareable with docker containers:
+
+    1. In Powershell: ``$env:COMPOSE_CONVERT_WINDOWS_PATHS = 1``
+    2. Restart Docker for Windows
+    3. Go to Docker for Windows settings > Shared Drives > Reset credentials > select drive with quickstart project > set your credentials > Apply
 
 Finally, have Docker Compose deploy the quickstart environment:
 
