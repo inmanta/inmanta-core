@@ -16,9 +16,17 @@
     Contact: code@inmanta.com
 """
 import os
+import random
+import socket
+
+import netifaces
+import pytest
+from tornado import netutil
 
 import inmanta.agent.config as cfg
+from inmanta import protocol
 from inmanta.config import Config, Option, option_as_default
+from inmanta.server.protocol import Server, ServerSlice
 
 
 def test_environment_deprecated_options(caplog):
@@ -169,3 +177,46 @@ client-id=test456
     assert Config.get("influxdb", "tags")["tag2"] == "value2"
     assert Config.get("dashboard", "path") == "/directory"
     assert Config.get("dashboard", "client-id") == "test456"
+
+
+@pytest.mark.asyncio()
+async def test_bind_localhost(async_finalizer, client):
+    @protocol.method(path="/test", operation="POST", client_types=["api"])
+    async def test_endpoint():
+        pass
+
+    class TestSlice(ServerSlice):
+        @protocol.handle(test_endpoint)
+        async def test_endpoint_handle(self):
+            return 200
+
+    # Select a bind address which is not on the loopback interface
+    non_loopback_interfaces = [i for i in netifaces.interfaces() if i != "lo" and socket.AF_INET in netifaces.ifaddresses(i)]
+    bind_iface = "eth0" if "eth0" in non_loopback_interfaces else random.choice(non_loopback_interfaces)
+    bind_addr = netifaces.ifaddresses(bind_iface)[socket.AF_INET][0]["addr"]
+
+    # Get free port on all interfaces
+    sock = netutil.bind_sockets(0, "0.0.0.0", family=socket.AF_INET)[0]
+    _addr, free_port = sock.getsockname()
+    sock.close()
+
+    # Bind port on non-loopback interface
+    sock = netutil.bind_sockets(free_port, bind_addr, family=socket.AF_INET)[0]
+    try:
+        # Configure server
+        Config.load_config()
+        Config.set("server", "bind-port", str(free_port))
+        Config.set("server", "bind-address", "127.0.0.1")
+        Config.set("client_rest_transport", "port", str(free_port))
+
+        # Start server
+        rs = Server()
+        rs.add_slice(TestSlice("test"))
+        await rs.start()
+        async_finalizer(rs.stop)
+
+        # Check if server is reachable on loopback interface
+        result = await client.test_endpoint()
+        assert result.code == 200
+    finally:
+        sock.close()

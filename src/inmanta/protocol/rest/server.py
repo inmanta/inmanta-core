@@ -286,9 +286,10 @@ class RESTServer(RESTBase):
             self._http_server = httpserver.HTTPServer(application, decompress_request=True)
 
         bind_port = server_config.get_bind_port()
-        bind_address = server_config.server_bind_address.get()
+        bind_addresses = server_config.server_bind_address.get()
 
-        self._http_server.listen(bind_port, bind_address)
+        for bind_addr in bind_addresses:
+            self._http_server.listen(bind_port, bind_addr)
         self.running = True
 
         LOGGER.debug("Start REST transport")

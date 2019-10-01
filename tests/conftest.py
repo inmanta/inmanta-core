@@ -376,7 +376,7 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     config.Config.set("client_rest_transport", "port", port)
     config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("server", "bind-port", port)
-    config.Config.set("server", "bind-address", "localhost")
+    config.Config.set("server", "bind-address", "127.0.0.1")
     config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("server", "auto-recompile-wait", "0")
@@ -437,7 +437,6 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
 
     for x, ct in [
         ("server", None),
-        ("server_rest_transport", None),
         ("agent_rest_transport", ["agent"]),
         ("compiler_rest_transport", ["compiler"]),
         ("client_rest_transport", ["api", "compiler"]),
@@ -471,7 +470,7 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
     config.Config.set("client_rest_transport", "port", port)
     config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("server", "bind-port", port)
-    config.Config.set("server", "bind-address", "localhost")
+    config.Config.set("server", "bind-address", "127.0.0.1")
     config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("agent", "agent-repair-interval", "0")

@@ -79,7 +79,7 @@ influxdb_tags = Option(
 # server
 #############################
 server_bind_address = Option(
-    "server", "bind-address", "127.0.0.1", "The address on which the server will listen for connections", is_str
+    "server", "bind-address", "127.0.0.1", "A list of addresses on which the server will listen for connections", is_list
 )
 server_bind_port = Option("server", "bind-port", 8888, "The port on which the server will listen for connections", is_int)
 
@@ -87,10 +87,11 @@ server_bind_port = Option("server", "bind-port", 8888, "The port on which the se
 def get_bind_port() -> int:
     if Config.is_set("server", "bind-port") or Config.is_set("server", "bind-address"):
         # Use new bind-port option
+        if Config.is_set("server_rest_transport", "port"):
+            LOGGER.warning("Ignoring the server_rest_transport.port option as the new server.bind-address option is used.")
         return server_bind_port.get()
     else:
         # Fallback to old option
-        LOGGER.warning("The server_rest_transport.port option is deprecated in favour of the server.bind-address option.")
         return Config.get("server_rest_transport", "port", 8888)
 
 

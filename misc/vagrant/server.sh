@@ -40,15 +40,13 @@ state-dir=/var/lib/inmanta
 host=localhost
 name=inmanta
 
-[server_rest_transport]
-port = 8888
-
 [server]
 fact-expire = 600
 fact-renew = 200
 auto-recompile-wait = 10
 #agent_autostart = *
 server_address=172.20.20.10
+bind-port = 8888
 
 [dashboard]
 enabled=true
