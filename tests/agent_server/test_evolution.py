@@ -20,7 +20,8 @@ from collections import defaultdict
 
 import pytest
 
-from agent_server.conftest import _wait_until_deployment_finishes, get_agent, stop_agent
+from agent_server.conftest import get_agent, stop_agent
+from utils import _wait_until_deployment_finishes
 from inmanta import const, resources
 from inmanta.agent import handler
 from inmanta.agent.handler import CRUDHandler, HandlerContext, provider

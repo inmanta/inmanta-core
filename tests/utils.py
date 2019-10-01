@@ -240,3 +240,12 @@ async def wait_for_version(client, environment, cnt):
     await asyncio.sleep(nextsecond - time.time())
     versions = await client.list_versions(environment)
     return versions.result
+
+
+async def _wait_until_deployment_finishes(client, environment, version, timeout=10):
+    async def is_deployment_finished():
+        result = await client.get_version(environment, version)
+        print(version, result)
+        return result.result["model"]["total"] - result.result["model"]["done"] <= 0
+
+    await retry_limited(is_deployment_finished, timeout)

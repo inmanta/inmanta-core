@@ -22,11 +22,10 @@ import uuid
 
 import pytest
 
-from agent_server.conftest import _wait_until_deployment_finishes
 from inmanta import const, data, execute
 from inmanta.agent.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER
-from utils import retry_limited
+from utils import retry_limited, _wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.dryrun")
 

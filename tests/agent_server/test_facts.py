@@ -22,11 +22,10 @@ import uuid
 
 import pytest
 
-from agent_server.conftest import _wait_until_deployment_finishes
 from inmanta import const, data
 from inmanta.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
-from utils import LogSequence, no_error_in_logs, retry_limited
+from utils import LogSequence, no_error_in_logs, retry_limited, _wait_until_deployment_finishes
 
 
 @pytest.mark.asyncio
