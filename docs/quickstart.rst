@@ -184,7 +184,7 @@ First delete the contents of ``./quickstart-project/main.cf``, then put in the f
 * Line 13 deploys an Apache server on our host.
 * Line 14 deploys a Mysql server on our host and removes its anonymous users.
 * Line 17 defines the name (hostname) of the web application.
-* Lines 17-18 define a database for our Drupal website.
+* Line 18 defines a database for our Drupal website.
 * Lines 19-21 define the actual Drupal application.
 
 Deploy the configuration model
