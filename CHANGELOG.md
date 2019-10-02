@@ -17,8 +17,8 @@ BREAKING CHANGES:
   configurable with the `bind-address` config option.
   
 DEPRECATIONS:
-* The `port` option in the `server_rest_transport` section is deprecated
-  in favour of the `bind-port` option in the `server` section. 
+* The `server_rest_transport.port` config option is deprecated in favour
+  of the `server.bind-port` option.
 
 v 2019.3 (2019-09-05) Changes in this release:
 - Various bugfixes (#1148, #1157, #1163, #1167, #1188)
