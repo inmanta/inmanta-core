@@ -171,6 +171,7 @@ Conditions can have the following forms
         | 'true'
         | 'false'
         | functioncall
+        | value 'is' 'defined'
         ;
 
 
