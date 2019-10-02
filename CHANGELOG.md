@@ -11,13 +11,13 @@ v 2019.4 (?) Changes in this release:
 - Improve agent documentation (#1389)
 - Introduce the bind-address and bind-port config option (#1442)
 
-BREAKING CHANGES:
-* The Inmanta server now listens on 127.0.0.1:8888 by default, while
+IMPORTANT CHANGES:
+- The Inmanta server now listens on 127.0.0.1:8888 by default, while
   this was 0.0.0.0:8888 in previous versions. This behavior is
   configurable with the `bind-address` config option.
   
 DEPRECATIONS:
-* The `server_rest_transport.port` config option is deprecated in favour
+- The `server_rest_transport.port` config option is deprecated in favor
   of the `server.bind-port` option.
 
 v 2019.3 (2019-09-05) Changes in this release:
