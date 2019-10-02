@@ -88,10 +88,14 @@ def get_bind_port() -> int:
     if Config.is_set("server", "bind-port") or Config.is_set("server", "bind-address"):
         # Use new bind-port option
         if Config.is_set("server_rest_transport", "port"):
-            LOGGER.warning("Ignoring the server_rest_transport.port option as the new server.bind-address option is used.")
+            LOGGER.warning(
+                "Ignoring the server_rest_transport.port config option since the new config options "
+                "server.bind-port/server.bind-address are used."
+            )
         return server_bind_port.get()
     else:
         # Fallback to old option
+        LOGGER.warning("The server_rest_transport.port config option is deprecated in favour of the server.bind-port option.")
         return Config.get("server_rest_transport", "port", 8888)
 
 
