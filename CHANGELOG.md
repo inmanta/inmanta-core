@@ -8,6 +8,7 @@ v 2019.4 (?) Changes in this release:
 - Split out the main service into many smaller services (#1388)
 - Use python3 from the core OS in Dockerfile
 - Introduce v2 protocol and implement project and environment api in v2 (#1412)
+- Improve agent documentation (#1389)
 - Introduce the bind-address and bind-port config option (#1442)
 
 BREAKING CHANGES:
