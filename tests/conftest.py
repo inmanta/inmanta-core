@@ -330,7 +330,7 @@ def log_file():
         yield f
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="function", autouse="DEBUG_TCP_PORTS" in os.environ)
 def log_state_tcp_ports(request, log_file):
     def _write_log_line(title):
         connections = psutil.net_connections()
@@ -402,8 +402,8 @@ async def server(server_config):
         port = config.Config.get("server", "bind-port")
         output = subprocess.check_output(["ss", "-antp"])
         output = output.decode("utf-8")
-        print(f"Port: {port}")
-        print(f"Port usage: \n {output}")
+        logger.debug(f"Port: {port}")
+        logger.debug(f"Port usage: \n {output}")
         raise e
 
     yield ibl.restserver
@@ -484,8 +484,8 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
         port = config.Config.get("server", "bind-port")
         output = subprocess.check_output(["ss", "-antp"])
         output = output.decode("utf-8")
-        print(f"Port: {port}")
-        print(f"Port usage: \n {output}")
+        logger.debug(f"Port: {port}")
+        logger.debug(f"Port usage: \n {output}")
         raise e
 
     yield ibl.restserver
