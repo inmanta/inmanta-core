@@ -19,7 +19,7 @@ with respect to the Inmanta server and the agent has to execute I/O operations o
 
 * The Inmanta server should have passphraseless SSH access on the machine it maps to. More information on how to set up SSH
   connectivity can be found at :ref:`configure_server_step_6`
-* The remote machine should have a Python2 interpreter installed.
+* The remote machine should have a Python 2 or 3 interpreter installed. The binary executed by default is ``python``.
 
 
 Configuring auto-started agents via environment settings
@@ -75,7 +75,7 @@ device is remote with respect to the Inmanta agent and the agent has to execute 
 
 * The Inmanta agent should have passphraseless SSH access on the machine it maps to. More information on how to set up SSH
   connectivity can be found at :ref:`configure_server_step_6`
-* The remote machine should have a Python2 interpreter installed.
+* The remote machine should have a Python 2 or 3 interpreter installed. The binary executed by default is ``python``.
 
 
 
