@@ -181,7 +181,7 @@ async def postgress_get_custom_types(postgresql_client):
 
 async def do_clean_hard(postgresql_client):
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-    table_names = ["public."+x["table_name"] for x in tables_in_db]
+    table_names = ["public." + x["table_name"] for x in tables_in_db]
     if table_names:
         drop_query = "DROP TABLE %s CASCADE" % ", ".join(table_names)
         await postgresql_client.execute(drop_query)

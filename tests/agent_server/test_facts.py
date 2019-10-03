@@ -25,7 +25,7 @@ import pytest
 from inmanta import const, data
 from inmanta.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
-from utils import LogSequence, no_error_in_logs, retry_limited, _wait_until_deployment_finishes
+from utils import LogSequence, _wait_until_deployment_finishes, no_error_in_logs, retry_limited
 
 
 @pytest.mark.asyncio
