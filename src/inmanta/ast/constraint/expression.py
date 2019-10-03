@@ -64,7 +64,7 @@ class OpMetaClass(ABCMeta):
 class IsDefined(ReferenceStatement):
     def __init__(self, attr: Reference, name: LocatableString) -> None:
         super(IsDefined, self).__init__([attr])
-        self.attr = attr.root_in_self()
+        self.attr = attr
         self.name = str(name)
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:

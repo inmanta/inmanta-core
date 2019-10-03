@@ -196,6 +196,8 @@ example sets the monitoring configuration on a certain host when it has a monito
     end
 
 
+Empty lists are considered to be unset.
+
 Function calls / Plugins
 ========================
 

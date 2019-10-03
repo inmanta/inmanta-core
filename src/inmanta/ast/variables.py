@@ -32,6 +32,7 @@ from inmanta.execute.runtime import (
     ResultCollector,
     ResultVariable,
 )
+from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
 
 LOGGER = logging.getLogger(__name__)
@@ -177,8 +178,14 @@ class IsDefinedReferenceHelper(Locatable):
             if attr.is_ready():
                 # go ahead
                 # i.e. back to the AttributeReference itself
-                attr.get_value()
-                self.target.set_value(True, self.location)
+                value = attr.get_value()
+                truthiness = True
+                if isinstance(value, list):
+                    truthiness = len(value) != 0
+                elif isinstance(value, NoneValue):
+                    truthiness = False
+
+                self.target.set_value(truthiness, self.location)
             else:
                 requires["x"] = attr
                 # reschedule on the attribute, XU will assign it to the target variable
