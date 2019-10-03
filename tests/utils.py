@@ -187,7 +187,7 @@ def configure(unused_tcp_port, database_name, database_port):
 
     free_port = str(unused_tcp_port)
     Config.load_config()
-    Config.set("server_rest_transport", "port", free_port)
+    Config.set("server", "bind-port", free_port)
     Config.set("agent_rest_transport", "port", free_port)
     Config.set("compiler_rest_transport", "port", free_port)
     Config.set("client_rest_transport", "port", free_port)

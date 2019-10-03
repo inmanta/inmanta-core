@@ -116,6 +116,12 @@ class Config(object):
         return opt.validate(val)
 
     @classmethod
+    def is_set(cls, section: str, name: str) -> bool:
+        """Check if a certain config option was specified in the config file.
+        """
+        return section in cls._get_instance() and name in cls._get_instance()[section]
+
+    @classmethod
     def getboolean(cls, section: str, name: str, default_value: str = None) -> bool:
         """
             Return a boolean from the configuration

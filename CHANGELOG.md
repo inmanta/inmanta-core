@@ -9,6 +9,16 @@ v 2019.4 (?) Changes in this release:
 - Use python3 from the core OS in Dockerfile
 - Introduce v2 protocol and implement project and environment api in v2 (#1412)
 - Improve agent documentation (#1389)
+- Introduce the bind-address and bind-port config option (#1442)
+
+IMPORTANT CHANGES:
+- The Inmanta server now listens on 127.0.0.1:8888 by default, while
+  this was 0.0.0.0:8888 in previous versions. This behavior is
+  configurable with the `bind-address` config option.
+  
+DEPRECATIONS:
+- The `server_rest_transport.port` config option is deprecated in favor
+  of the `server.bind-port` option.
 
 v 2019.3 (2019-09-05) Changes in this release:
 - Various bugfixes (#1148, #1157, #1163, #1167, #1188)
