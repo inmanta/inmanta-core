@@ -18,7 +18,7 @@
 
 import re
 from abc import ABCMeta, abstractmethod
-from typing import Dict
+from typing import Dict, Optional
 
 from inmanta.ast import LocatableString, TypingException
 from inmanta.ast.statements import Literal, ReferenceStatement
@@ -62,8 +62,12 @@ class OpMetaClass(ABCMeta):
 
 
 class IsDefined(ReferenceStatement):
-    def __init__(self, attr: Reference, name: LocatableString) -> None:
-        super(IsDefined, self).__init__([attr])
+    def __init__(self, attr: Optional[Reference], name: LocatableString) -> None:
+        if attr:
+            children = [attr]
+        else:
+            children = []
+        super(IsDefined, self).__init__(children)
         self.attr = attr
         self.name = str(name)
 
@@ -76,7 +80,10 @@ class IsDefined(ReferenceStatement):
         self.copy_location(resumer)
 
         # wait for the instance
-        RawUnit(queue, resolver, self.attr.requires_emit(resolver, queue), resumer)
+        if self.requires():
+            RawUnit(queue, resolver, self.attr.requires_emit(resolver, queue), resumer)
+        else:
+            resumer.resume({}, resolver, queue)
         return {self: temp}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:

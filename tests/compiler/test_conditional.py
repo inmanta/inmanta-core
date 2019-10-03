@@ -19,7 +19,7 @@
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import Namespace, NotFoundException
+from inmanta.ast import Namespace, NotFoundException, OptionalValueException
 
 
 def test_if_true(snippetcompiler):
@@ -440,3 +440,51 @@ end
     compiler.do_compile()
     out, err = capsys.readouterr()
     assert "false" in out
+
+
+def test_is_defined_global(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+
+entity A:
+end
+
+implement A using std::none
+
+A.a [0:] -- A
+
+x = A()
+
+if x is defined:
+	std::print("true")
+else:
+	std::print("false")
+end
+"""
+    )
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert "true" in out
+
+
+def test_is_defined_global_2(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+end
+
+implement A using std::none
+
+A.a [0:1] -- A
+
+y = A()
+x = y.a
+
+if x is defined:
+	std::print("true")
+else:
+	std::print("false")
+end
+""")
+    with pytest.raises(OptionalValueException):
+        compiler.do_compile()

@@ -164,14 +164,17 @@ class IsDefinedReferenceHelper(Locatable):
             Instance is ready to execute, do it and see if the attribute is already present
         """
         try:
-            # get the Instance
-            obj = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue_scheduler)
+            if self.instance:
+                # get the Instance
+                obj = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue_scheduler)
 
-            if isinstance(obj, list):
-                raise RuntimeException(self, "can not get a attribute %s, %s is a list" % (self.attribute, obj))
+                if isinstance(obj, list):
+                    raise RuntimeException(self, "can not get a attribute %s, %s is a list" % (self.attribute, obj))
 
-            # get the attribute result variable
-            attr = obj.get_attribute(self.attribute)
+                # get the attribute result variable
+                attr = obj.get_attribute(self.attribute)
+            else:
+                attr = resolver.lookup(self.attribute)
             # Cache it
             self.attr = attr
 
