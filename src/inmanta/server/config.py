@@ -59,7 +59,11 @@ db_connection_timeout = Option("database", "connection_timeout", 60, "Connection
 # server_rest_transport
 #############################
 transport_port = Option(
-    "server_rest_transport", "port", 8888, "[DEPRECATED] The port on which the server listens for connections", is_int
+    "server_rest_transport",
+    "port",
+    8888,
+    "[DEPRECATED USE :inmanta.config:option:`server.bind-port`] The port on which the server listens for connections",
+    is_int,
 )
 
 #############################
@@ -80,25 +84,39 @@ influxdb_tags = Option(
 # server
 #############################
 server_bind_address = Option(
-    "server", "bind-address", "127.0.0.1", "A list of addresses on which the server will listen for connections", is_list
+    "server",
+    "bind-address",
+    "127.0.0.1",
+    "A list of addresses on which the server will listen for connections. If this option is set, the "
+    ":inmanta.config:option:`server_rest_transport.port` option is ignored.",
+    is_list,
 )
-server_bind_port = Option("server", "bind-port", 8888, "The port on which the server will listen for connections", is_int)
+server_bind_port = Option(
+    "server",
+    "bind-port",
+    8888,
+    "The port on which the server will listen for connections. If this option is set, the "
+    ":inmanta.config:option:`server_rest_transport.port` option is ignored.",
+    is_int,
+)
 
 
 def get_bind_port() -> int:
     if Config.is_set("server", "bind-port") or Config.is_set("server", "bind-address"):
         # Use new bind-port option
         if Config.is_set("server_rest_transport", "port"):
-            warnings.warn("Ignoring the server_rest_transport.port config option since the new config options "
-                          "server.bind-port/server.bind-address are used.",
-                          category=DeprecationWarning
+            warnings.warn(
+                "Ignoring the server_rest_transport.port config option since the new config options "
+                "server.bind-port/server.bind-address are used.",
+                category=DeprecationWarning,
             )
         return server_bind_port.get()
     else:
         # Fallback to old option
-        warnings.warn("The server_rest_transport.port config option is deprecated in favour of the server.bind-port option.",
-                      category=DeprecationWarning
-                      )
+        warnings.warn(
+            "The server_rest_transport.port config option is deprecated in favour of the server.bind-port option.",
+            category=DeprecationWarning,
+        )
         return Config.get("server_rest_transport", "port", 8888)
 
 
