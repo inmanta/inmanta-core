@@ -174,12 +174,14 @@ async def postgress_get_custom_types(postgresql_client):
     """
 
     types_in_db = await postgresql_client.fetch(get_custom_types)
-    type_names = ["public." + x["Name"] for x in types_in_db]
+    type_names = [x["Name"] for x in types_in_db]
 
     return type_names
 
 
 async def do_clean_hard(postgresql_client):
+    assert not postgresql_client.is_in_transaction()
+    await postgresql_client.reload_schema_state()
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     table_names = ["public." + x["table_name"] for x in tables_in_db]
     if table_names:
