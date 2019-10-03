@@ -1,0 +1,3 @@
+std::AgentConfig(agentname=host.name, autostart=true)
+host = std::Host(name="localhost", os=std::linux)
+file = std::ConfigFile(host=host, path="/tmp/test", content="1234")
