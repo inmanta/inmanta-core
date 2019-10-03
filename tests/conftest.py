@@ -174,7 +174,7 @@ async def postgress_get_custom_types(postgresql_client):
     """
 
     types_in_db = await postgresql_client.fetch(get_custom_types)
-    type_names = [x["Name"] for x in types_in_db]
+    type_names = ["public." + x["Name"] for x in types_in_db]
 
     return type_names
 
@@ -190,6 +190,7 @@ async def do_clean_hard(postgresql_client):
     if type_names:
         drop_query = "DROP TYPE %s" % ", ".join(type_names)
         await postgresql_client.execute(drop_query)
+    logger.info("Performed Hard Clean with tables: %s  types: %s", ",".join(table_names), ",".join(type_names))
 
 
 @pytest.fixture(scope="function")
