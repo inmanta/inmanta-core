@@ -17,6 +17,7 @@
 """
 import asyncio
 import concurrent
+import csv
 import datetime
 import logging
 import os
@@ -26,6 +27,7 @@ import re
 import shutil
 import socket
 import string
+import subprocess
 import sys
 import tempfile
 import time
@@ -35,6 +37,7 @@ from typing import Dict, Optional
 
 import asyncpg
 import pkg_resources
+import psutil
 import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
@@ -55,10 +58,11 @@ from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import Project
 from inmanta.postgresproc import PostgresProc
+from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
-from inmanta.util import get_free_tcp_port
 
 # Import the utils module differently when conftest is put into the inmanta_tests package
 if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
@@ -78,10 +82,8 @@ def postgres_db(postgresql_proc):
 @pytest.fixture(scope="function")
 async def postgresql_client(postgres_db, database_name):
     client = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name)
-    try:
-        yield client
-    finally:
-        await client.close()
+    yield client
+    await client.close()
 
 
 @pytest.fixture(scope="function")
@@ -89,10 +91,8 @@ async def postgresql_pool(postgres_db, database_name):
     client = await asyncpg.create_pool(
         host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name
     )
-    try:
-        yield client
-    finally:
-        await client.close()
+    yield client
+    await client.close()
 
 
 @pytest.fixture(scope="function")
@@ -180,8 +180,10 @@ async def postgress_get_custom_types(postgresql_client):
 
 
 async def do_clean_hard(postgresql_client):
+    assert not postgresql_client.is_in_transaction()
+    await postgresql_client.reload_schema_state()
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-    table_names = ["public."+x["table_name"] for x in tables_in_db]
+    table_names = ["public." + x["table_name"] for x in tables_in_db]
     if table_names:
         drop_query = "DROP TABLE %s CASCADE" % ", ".join(table_names)
         await postgresql_client.execute(drop_query)
@@ -190,6 +192,7 @@ async def do_clean_hard(postgresql_client):
     if type_names:
         drop_query = "DROP TYPE %s" % ", ".join(type_names)
         await postgresql_client.execute(drop_query)
+    logger.info("Performed Hard Clean with tables: %s  types: %s", ",".join(table_names), ",".join(type_names))
 
 
 @pytest.fixture(scope="function")
@@ -250,15 +253,16 @@ def no_agent_backoff():
 
 @pytest.fixture()
 def free_socket():
-    sock = netutil.bind_sockets(0, "127.0.0.1", family=socket.AF_INET)[0]
-    yield sock
-    sock.close()
+    bound_sockets = []
 
+    def _free_socket():
+        sock = netutil.bind_sockets(0, "127.0.0.1", family=socket.AF_INET)[0]
+        bound_sockets.append(sock)
+        return sock
 
-@pytest.fixture()
-def free_port():
-    port = get_free_tcp_port()
-    yield port
+    yield _free_socket
+    for s in bound_sockets:
+        s.close()
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -314,12 +318,56 @@ async def agent(server, environment):
 
 
 @pytest.fixture(scope="function")
-async def server_config(event_loop, inmanta_config, postgres_db, database_name, clean_reset):
+def client_v2(server):
+    client = protocol.Client("client", version_match=VersionMatch.exact, exact_version=2)
+    yield client
+
+
+@pytest.fixture(scope="session")
+def log_file():
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs")
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+    output_file = os.path.join(output_dir, "log.txt")
+    with open(output_file, "w") as f:
+        yield f
+
+
+@pytest.fixture(scope="function", autouse=True)
+def log_state_tcp_ports(request, log_file):
+    def _write_log_line(title):
+        connections = psutil.net_connections()
+        writer = csv.writer(log_file, dialect="unix")
+
+        def map_data_line(line):
+            out = [
+                title,
+                line.fd,
+                str(line.family),
+                str(line.type),
+                f"{line.laddr.ip}|{line.laddr.port}" if line.laddr else None,
+                f"{line.raddr.ip}|{line.raddr.port}" if line.raddr else None,
+                line.status,
+                None if "pid" not in line else line.pid,
+            ]
+            return out
+
+        for con in connections:
+            writer.writerow(map_data_line(con))
+
+    _write_log_line(f"Before run test case {request.function.__name__}:")
+    yield
+    _write_log_line(f"After run test case {request.function.__name__}:")
+
+
+@pytest.fixture(scope="function")
+async def server_config(event_loop, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
     reset_metrics()
 
     state_dir = tempfile.mkdtemp()
 
-    port = get_free_tcp_port()
+    port = str(unused_tcp_port_factory())
+
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
     config.Config.set("database", "port", str(postgres_db.port))
@@ -349,7 +397,16 @@ async def server(server_config):
     # causes handler failure
 
     ibl = InmantaBootloader()
-    await ibl.start()
+
+    try:
+        await ibl.start()
+    except SliceStartupException as e:
+        port = config.Config.get("server_rest_transport", "port")
+        output = subprocess.check_output(["ss", "-antp"])
+        output = output.decode("utf-8")
+        print(f"Port: {port}")
+        print(f"Port usage: \n {output}")
+        raise e
 
     yield ibl.restserver
 
@@ -366,7 +423,7 @@ async def server(server_config):
     params=[(True, True, False), (True, False, False), (False, True, False), (False, False, False), (True, True, True)],
     ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"],
 )
-async def server_multi(event_loop, inmanta_config, postgres_db, database_name, request, clean_reset):
+async def server_multi(event_loop, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory):
     """
     :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
     May not be required
@@ -404,7 +461,7 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
             token = protocol.encode_token(ct)
             config.Config.set(x, "token", token)
 
-    port = get_free_tcp_port()
+    port = str(unused_tcp_port_factory())
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
     config.Config.set("database", "port", str(postgres_db.port))
@@ -422,7 +479,16 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
     config.Config.set("server", "auto-recompile-wait", "0")
 
     ibl = InmantaBootloader()
-    await ibl.start()
+
+    try:
+        await ibl.start()
+    except SliceStartupException as e:
+        port = config.Config.get("server_rest_transport", "port")
+        output = subprocess.check_output(["ss", "-antp"])
+        output = output.decode("utf-8")
+        print(f"Port: {port}")
+        print(f"Port usage: \n {output}")
+        raise e
 
     yield ibl.restserver
     try:
@@ -713,8 +779,8 @@ def cli():
 
 
 @pytest.fixture
-def postgres_proc(free_port):
-    proc = PostgresProc(int(free_port))
+def postgres_proc(unused_tcp_port_factory):
+    proc = PostgresProc(unused_tcp_port_factory())
     yield proc
     proc.stop()
 

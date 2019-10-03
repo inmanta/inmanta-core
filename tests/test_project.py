@@ -21,7 +21,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_project_api(client):
+async def test_project_api_v1(client):
     result = await client.create_project("project-test")
     assert result.code == 200
     assert "project" in result.result
@@ -64,6 +64,107 @@ async def test_project_api(client):
     assert result.code == 200
     assert "projects" in result.result
     assert len(result.result["projects"]) == 0
+
+    # get non existing environment
+    response = await client.get_environment(uuid.uuid4())
+    assert response.code == 404
+
+
+@pytest.mark.asyncio
+async def test_project_api_v2(client_v2):
+    result = await client_v2.project_create("project-test")
+    assert result.code == 200
+    assert "data" in result.result
+    assert "id" in result.result["data"]
+
+    project_id = result.result["data"]["id"]
+
+    result = await client_v2.environment_create(project_id=project_id, name="dev")
+    assert result.code == 200
+    assert "data" in result.result
+    assert "id" in result.result["data"]
+    assert "project_id" in result.result["data"]
+    assert project_id == result.result["data"]["project_id"]
+    assert "dev" == result.result["data"]["name"]
+    env1_id = result.result["data"]["id"]
+
+    result = await client_v2.environment_create(project_id=project_id, name="dev2")
+    assert result.code == 200
+    assert "data" in result.result
+    assert "id" in result.result["data"]
+    assert "project_id" in result.result["data"]
+    assert project_id == result.result["data"]["project_id"]
+    assert "dev2" == result.result["data"]["name"]
+
+    # modify branch and repo
+    result = await client_v2.environment_modify(id=env1_id, name="dev", repository="test")
+    assert result.code == 200
+
+    result = await client_v2.environment_modify(id=env1_id, name="dev", branch="test")
+    assert result.code == 200
+
+    result = await client_v2.project_list()
+    assert result.code == 200
+    assert "data" in result.result
+    assert len(result.result["data"]) == 1
+    assert len(result.result["data"][0]["environments"]) == 2
+
+    # Failure conditions
+
+    # Delete non existing project
+    response = await client_v2.project_delete(uuid.uuid4())
+    assert response.code == 404
+
+    # Modify non existing project
+    response = await client_v2.project_modify(uuid.uuid4(), name="test")
+    assert response.code == 404
+
+    # Modify to duplicate name
+    response = await client_v2.project_create("project2")
+    assert response.code == 200
+
+    response = await client_v2.project_modify(project_id, name="project2")
+    assert response.code == 500
+
+    # Get non existing project
+    response = await client_v2.project_get(uuid.uuid4())
+    assert response.code == 404
+
+    # Create env in non existing project
+    result = await client_v2.environment_create(project_id=uuid.uuid4(), name="dev")
+    assert result.code == 404
+
+    # Create a duplicate environment
+    result = await client_v2.environment_create(project_id=project_id, name="dev")
+    assert result.code == 500
+
+    # Modify a non existing environment
+    result = await client_v2.environment_modify(id=uuid.uuid4(), name="dev")
+    assert result.code == 404
+
+    # Create a duplicate environment
+    result = await client_v2.environment_create(project_id=project_id, name="dev", repository="")
+    assert result.code == 400
+
+    # Modify to duplicate environment
+    result = await client_v2.environment_modify(id=env1_id, name="dev2")
+    assert result.code == 500
+
+    # Get an environment
+    result = await client_v2.environment_get(id=env1_id)
+    assert result.code == 200
+    assert result.result["data"]["name"] == "dev"
+
+    # Operation on non existing
+    result = await client_v2.environment_get(id=uuid.uuid4())
+    assert result.code == 404
+
+    result = await client_v2.environment_delete(id=uuid.uuid4())
+    assert result.code == 404
+
+    # Decommission
+    result = await client_v2.environment_decommission(id=env1_id)
+    assert result.code == 200
 
 
 @pytest.mark.asyncio

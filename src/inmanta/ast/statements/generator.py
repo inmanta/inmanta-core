@@ -196,7 +196,7 @@ class If(ExpressionStatement):
     """
 
     def __init__(self, condition: ExpressionStatement, if_branch: BasicBlock, else_branch: BasicBlock) -> None:
-        ExpressionStatement.__init__(self)
+        super().__init__()
         self.condition: ExpressionStatement = condition
         self.if_branch: BasicBlock = if_branch
         self.else_branch: BasicBlock = else_branch
@@ -211,11 +211,6 @@ class If(ExpressionStatement):
         self.condition.normalize()
         self.if_branch.normalize()
         self.else_branch.normalize()
-
-    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
-        target = ResultVariable()
-        reqs = self.requires_emit(resolver, queue)
-        ExecutionUnit(queue, resolver, target, reqs, self)
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return self.condition.requires_emit(resolver, queue)

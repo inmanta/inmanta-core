@@ -33,7 +33,7 @@ from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
-from utils import UNKWN, assert_equal_ish, log_contains, log_index, retry_limited, _wait_until_deployment_finishes
+from utils import UNKWN, _wait_until_deployment_finishes, assert_equal_ish, log_contains, log_index, retry_limited
 
 logger = logging.getLogger("inmanta.test.server_agent")
 

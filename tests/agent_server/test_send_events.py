@@ -25,7 +25,7 @@ from agent_server.conftest import _wait_for_n_deploying
 from inmanta import config, const
 from inmanta.agent.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER
-from utils import retry_limited, _wait_until_deployment_finishes
+from utils import _wait_until_deployment_finishes, retry_limited
 
 logger = logging.getLogger("inmanta.test.send_events")
 

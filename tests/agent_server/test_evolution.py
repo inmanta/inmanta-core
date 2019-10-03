@@ -29,6 +29,7 @@ from inmanta.export import unknown_parameters
 from inmanta.loader import SourceInfo
 from inmanta.resources import PurgeableResource, resource
 from inmanta.types import JsonType
+from utils import _wait_until_deployment_finishes
 
 
 def reset_all_objects():

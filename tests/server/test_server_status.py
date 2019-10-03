@@ -23,7 +23,7 @@ async def test_server_status(server, client):
     result = await client.get_server_status()
 
     assert result.code == 200
-    status = result.result
+    status = result.result["data"]
     assert "version" in status
 
     assert len([x for x in status["slices"] if x["name"] == "core.server"]) == 1

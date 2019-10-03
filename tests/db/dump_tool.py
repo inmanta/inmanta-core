@@ -32,8 +32,14 @@ from utils import wait_for_version, _wait_until_deployment_finishes
 def check_result(result):
     assert result.code == 200
 
+
 @pytest.mark.asyncio
 async def test_dump_db(server, client, postgres_db, database_name):
+    """
+        Note: remove following line from the dump: SELECT pg_catalog.set_config('search_path', '', false);
+
+    """
+
     if False:
         # trick autocomplete to have autocomplete on client
         client = methods
@@ -48,7 +54,6 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     result = await client.create_environment(project_id=project_id, name="dev-2")
     assert result.code == 200
-    env_id_2 = result.result["environment"]["id"]
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(env_id_1))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "simple_project")
@@ -80,5 +85,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     await _wait_until_deployment_finishes(client, env_id_1, v2, 20)
 
-    proc = await asyncio.create_subprocess_exec("pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outname, "-O", "-U", postgres_db.user, database_name)
+    proc = await asyncio.create_subprocess_exec(
+        "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outname, "-O", "-U", postgres_db.user, database_name
+    )
     await proc.wait()
