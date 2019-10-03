@@ -20,11 +20,14 @@
 """
 
 import os
+from datetime import datetime
 
 import pytest
 from asyncpg import Connection
+from asyncpg.protocol import protocol
 
 from db.common import PGRestore
+from inmanta import protocol, data
 from inmanta.server.bootloader import InmantaBootloader
 
 
@@ -74,5 +77,13 @@ async def test_environment_update(
     assert names == ["dev-1", "dev-2"]
 
     env = await data.Environment.get_by_id(name_to_id["dev-1"])
-    print(env.next_version)
+
+    assert env.next_version == 1569583848
+
+    result = await client.create_environment(project_id=env.project, name="dev-3")
+    assert result.code == 200
+
+    print(result.result)
+    env = await data.Environment.get_by_id(result.result["id"])
+    assert env.next_version == 1
 
