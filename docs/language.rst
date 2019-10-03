@@ -191,7 +191,7 @@ example sets the monitoring configuration on a certain host when it has a monito
 
     implementation Host using monitoringConfig when monitoring_server is defined
 
-    implementation monitoringConfig:
+    implementation monitoringConfig for Host:
         # Set monitoring config
     end
 
