@@ -225,7 +225,7 @@ class CompileRun(object):
                     await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
 
             server_address = opt.server_address.get()
-            server_port = opt.transport_port.get()
+            server_port = opt.get_bind_port()
             cmd = inmanta_path + [
                 "-vvv",
                 "export",
