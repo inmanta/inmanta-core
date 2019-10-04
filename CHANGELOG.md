@@ -9,6 +9,7 @@ v 2019.4 (?) Changes in this release:
 - Use python3 from the core OS in Dockerfile
 - Introduce v2 protocol and implement project and environment api in v2 (#1412)
 - Improve agent documentation (#1389)
+- Change autostart_agent_deploy_splay_time from 600 to 10 (#1447)
 - Introduce the bind-address and bind-port config option (#1442)
 
 IMPORTANT CHANGES:
