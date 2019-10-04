@@ -27,7 +27,8 @@ import pytest
 from inmanta import const
 from inmanta.protocol import methods
 from inmanta.server import SLICE_SERVER
-from utils import wait_for_version, _wait_until_deployment_finishes
+from utils import _wait_until_deployment_finishes, wait_for_version
+
 
 def check_result(result):
     assert result.code == 200

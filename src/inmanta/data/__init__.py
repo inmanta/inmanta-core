@@ -25,9 +25,10 @@ import uuid
 import warnings
 from collections import defaultdict
 from configparser import RawConfigParser
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type, TypeVar, Union, cast
 
 import asyncpg
+from asyncpg.protocol import Record
 
 import inmanta.db.versions
 from inmanta import const, util
@@ -331,7 +332,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return await con.fetchval(query, *values)
 
     @classmethod
-    async def _fetchrow(cls, query, *values):
+    async def _fetchrow(cls, query, *values) -> Record:
         async with cls._connection_pool.acquire() as con:
             return await con.fetchrow(query, *values)
 
@@ -733,7 +734,7 @@ class Environment(BaseDocument):
     repo_url: str = Field(field_type=str, default="")
     repo_branch: str = Field(field_type=str, default="")
     settings: Dict[str, m.EnvSettingType] = Field(field_type=dict, default={})
-    next_version: int = Field(field_type=int, default=1)
+    last_version: int = Field(field_type=int, default=0)
 
     def to_dto(self) -> m.Environment:
         return m.Environment(
@@ -949,6 +950,18 @@ class Environment(BaseDocument):
         else:
             # Cascade is done by PostgreSQL
             await self.delete()
+
+    async def get_next_version(self) -> int:
+        record = await self._fetchrow(
+            f"""
+UPDATE {self.table_name()}
+SET last_version = last_version + 1
+WHERE id = $1
+RETURNING last_version;
+""",
+            self.id,
+        )
+        return cast(int, record[0])
 
 
 SOURCE = ("fact", "plugin", "user", "form", "report")

@@ -20,11 +20,14 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
-    ALTER TABLE public.environment 
-        ADD COLUMN next_version integer DEFAULT 1;
-    
-    UPDATE public.environment AS e SET next_version = (SELECT COALESCE( (SELECT MAX(version)+1 FROM public.configurationmodel AS c WHERE c.environment=e.id),1));
-    
+    ALTER TABLE public.environment
+        ADD COLUMN last_version integer DEFAULT 0;
+
+    UPDATE public.environment AS e SET last_version =
+        (SELECT COALESCE(
+            (SELECT MAX(version) FROM public.configurationmodel AS c WHERE c.environment=e.id),
+            0
+        ));
     """
     async with connection.transaction():
-         await connection.execute(schema)
+        await connection.execute(schema)
