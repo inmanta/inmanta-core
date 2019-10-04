@@ -1226,7 +1226,7 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
 
 
 @pytest.mark.asyncio
-async def test_query_resources(init_dataclasses_and_load_schema):
+async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
