@@ -91,10 +91,10 @@ class IsDefined(ReferenceStatement):
         return requires[self]
 
     def pretty_print(self) -> str:
-        name = "%s.%s is defined" % (self.attr, self.name)
-        if name[: len("self.")] == "self.":
-            name = name[len("self.") :]
-
+        if self.attr is not None:
+            name = "%s.%s" % (self.attr.pretty_print(), self.name)
+        else:
+            name = self.name
         return "%s is defined" % name
 
 
