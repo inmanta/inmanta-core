@@ -82,8 +82,7 @@ def ensure_directory_exist(directory: str, *subdirs: str) -> str:
 
 
 def is_sub_dict(subdct: Dict[PrimitiveTypes, PrimitiveTypes], dct: Dict[PrimitiveTypes, PrimitiveTypes]):
-    matching_key_value_pairs = {k: v for k, v in subdct.items() if k in dct and dct[k] == v}
-    return len(matching_key_value_pairs) == len(subdct)
+    return not any(True for k, v in subdct.items() if k not in dct or dct[k] != v)
 
 
 def hash_file(content: bytes) -> str:

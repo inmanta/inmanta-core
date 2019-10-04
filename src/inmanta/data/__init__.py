@@ -1859,6 +1859,8 @@ class Resource(BaseDocument):
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource = cls(from_postgres=True, **record)
+                    # The constraints on the attributes field are checked in memory.
+                    # This prevents injection attacks.
                     if util.is_sub_dict(attributes, resource.attributes):
                         result.append(resource)
         return result
