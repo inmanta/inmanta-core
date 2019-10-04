@@ -107,8 +107,8 @@ port=%(postgres_port)s
 state-dir=%(state_dir)s
 log-dir=%(log_dir)s
 
-[server_rest_transport]
-port=%(server_port)s
+[server]
+bind-port=%(server_port)s
 
 [agent_rest_transport]
 port=%(server_port)s

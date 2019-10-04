@@ -26,14 +26,14 @@ import psutil
 import pytest
 from psutil import NoSuchProcess, Process
 
-from agent_server.conftest import ResourceContainer, _deploy_resources, _wait_until_deployment_finishes, get_agent
+from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent
 from inmanta import agent, config, const, data, execute
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
-from utils import UNKWN, assert_equal_ish, log_contains, log_index, retry_limited
+from utils import UNKWN, _wait_until_deployment_finishes, assert_equal_ish, log_contains, log_index, retry_limited
 
 logger = logging.getLogger("inmanta.test.server_agent")
 

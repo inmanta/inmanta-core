@@ -15,10 +15,20 @@
 
     Contact: code@inmanta.com
 """
+import logging
 import os
+import random
+import socket
+
+import netifaces
+import pytest
+from tornado import netutil
 
 import inmanta.agent.config as cfg
+from inmanta import protocol
 from inmanta.config import Config, Option, option_as_default
+from inmanta.server.protocol import Server, ServerSlice
+from utils import LogSequence
 
 
 def test_environment_deprecated_options(caplog):
@@ -169,3 +179,150 @@ client-id=test456
     assert Config.get("influxdb", "tags")["tag2"] == "value2"
     assert Config.get("dashboard", "path") == "/directory"
     assert Config.get("dashboard", "client-id") == "test456"
+
+
+@pytest.mark.asyncio
+async def test_bind_address_ipv4(async_finalizer, client):
+    """ This test case check if the Inmanta server doesn't bind on another interface than 127.0.0.1 when bind-address is equal
+        to 127.0.0.1. Procedure:
+            1) Get free port on all interfaces.
+            2) Bind that port on a non-loopback interface, so it's not available for the inmanta server anymore.
+            3) Start the Inmanta server with bind-address 127.0.0.1. and execute an API call
+    """
+
+    @protocol.method(path="/test", operation="POST", client_types=["api"])
+    async def test_endpoint():
+        pass
+
+    class TestSlice(ServerSlice):
+        @protocol.handle(test_endpoint)
+        async def test_endpoint_handle(self):
+            return 200
+
+    # Select a bind address which is not on the loopback interface
+    non_loopback_interfaces = [i for i in netifaces.interfaces() if i != "lo" and socket.AF_INET in netifaces.ifaddresses(i)]
+    bind_iface = "eth0" if "eth0" in non_loopback_interfaces else random.choice(non_loopback_interfaces)
+    bind_addr = netifaces.ifaddresses(bind_iface)[socket.AF_INET][0]["addr"]
+
+    # Get free port on all interfaces
+    sock = netutil.bind_sockets(0, "0.0.0.0", family=socket.AF_INET)[0]
+    _addr, free_port = sock.getsockname()
+    sock.close()
+
+    # Bind port on non-loopback interface
+    sock = netutil.bind_sockets(free_port, bind_addr, family=socket.AF_INET)[0]
+    try:
+        # Configure server
+        Config.load_config()
+        Config.set("server", "bind-port", str(free_port))
+        Config.set("server", "bind-address", "127.0.0.1")
+        Config.set("client_rest_transport", "port", str(free_port))
+
+        # Start server
+        rs = Server()
+        rs.add_slice(TestSlice("test"))
+        await rs.start()
+        async_finalizer(rs.stop)
+
+        # Check if server is reachable on loopback interface
+        result = await client.test_endpoint()
+        assert result.code == 200
+    finally:
+        sock.close()
+
+
+@pytest.mark.asyncio
+async def test_bind_address_ipv6(async_finalizer, client):
+    @protocol.method(path="/test", operation="POST", client_types=["api"])
+    async def test_endpoint():
+        pass
+
+    class TestSlice(ServerSlice):
+        @protocol.handle(test_endpoint)
+        async def test_endpoint_handle(self):
+            return 200
+
+    # Get free port on all interfaces
+    sock = netutil.bind_sockets(0, "::", family=socket.AF_INET6)[0]
+    (_addr, free_port, _flowinfo, _scopeid) = sock.getsockname()
+    sock.close()
+
+    # Configure server
+    Config.load_config()
+    Config.set("server", "bind-port", str(free_port))
+    Config.set("server", "bind-address", "::1")
+    Config.set("client_rest_transport", "port", str(free_port))
+    Config.set("client_rest_transport", "host", "::1")
+
+    # Start server
+    rs = Server()
+    rs.add_slice(TestSlice("test"))
+    await rs.start()
+    async_finalizer(rs.stop)
+
+    # Check if server is reachable on loopback interface
+    result = await client.test_endpoint()
+    assert result.code == 200
+
+
+@pytest.mark.asyncio
+async def test_bind_port(unused_tcp_port, async_finalizer, client, caplog):
+    @protocol.method(path="/test", operation="POST", client_types=["api"])
+    async def test_endpoint():
+        pass
+
+    class TestSlice(ServerSlice):
+        @protocol.handle(test_endpoint)
+        async def test_endpoint_handle(self):
+            return 200
+
+    async def assert_port_bound():
+        # Start server
+        rs = Server()
+        rs.add_slice(TestSlice("test"))
+        await rs.start()
+        async_finalizer(rs.stop)
+
+        # Check if server is reachable on loopback interface
+        result = await client.test_endpoint()
+        assert result.code == 200
+        await rs.stop()
+
+    deprecation_line_log_line = (
+        "The server_rest_transport.port config option is deprecated in favour of the " "server.bind-port option."
+    )
+    ignoring_log_line = (
+        "Ignoring the server_rest_transport.port config option since the new config options "
+        "server.bind-port/server.bind-address are used."
+    )
+
+    # Old config option server_rest_transport.port is set
+    Config.load_config()
+    Config.set("server_rest_transport", "port", str(unused_tcp_port))
+    Config.set("client_rest_transport", "port", str(unused_tcp_port))
+    caplog.clear()
+    await assert_port_bound()
+    log_sequence = LogSequence(caplog, allow_errors=False)
+    log_sequence.contains("py.warnings", logging.WARNING, deprecation_line_log_line)
+    log_sequence.assert_not("py.warnings", logging.WARNING, ignoring_log_line)
+
+    # Old config option server_rest_transport.port and new config option server.bind-port are set together
+    Config.load_config()
+    Config.set("server_rest_transport", "port", str(unused_tcp_port))
+    Config.set("server", "bind-port", str(unused_tcp_port))
+    Config.set("client_rest_transport", "port", str(unused_tcp_port))
+    caplog.clear()
+    await assert_port_bound()
+    log_sequence = LogSequence(caplog, allow_errors=False)
+    log_sequence.assert_not("py.warnings", logging.WARNING, deprecation_line_log_line)
+    log_sequence.contains("py.warnings", logging.WARNING, ignoring_log_line)
+
+    # The new config option server.bind-port is set
+    Config.load_config()
+    Config.set("server", "bind-port", str(unused_tcp_port))
+    Config.set("client_rest_transport", "port", str(unused_tcp_port))
+    caplog.clear()
+    await assert_port_bound()
+    log_sequence = LogSequence(caplog, allow_errors=False)
+    log_sequence.assert_not("py.warnings", logging.WARNING, deprecation_line_log_line)
+    log_sequence.assert_not("py.warnings", logging.WARNING, ignoring_log_line)

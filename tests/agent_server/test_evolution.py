@@ -20,7 +20,7 @@ from collections import defaultdict
 
 import pytest
 
-from agent_server.conftest import _wait_until_deployment_finishes, get_agent, stop_agent
+from agent_server.conftest import get_agent, stop_agent
 from inmanta import const, resources
 from inmanta.agent import handler
 from inmanta.agent.handler import CRUDHandler, HandlerContext, provider
@@ -28,6 +28,7 @@ from inmanta.export import unknown_parameters
 from inmanta.loader import SourceInfo
 from inmanta.resources import PurgeableResource, resource
 from inmanta.types import JsonType
+from utils import _wait_until_deployment_finishes
 
 
 def reset_all_objects():
