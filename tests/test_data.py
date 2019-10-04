@@ -1226,6 +1226,49 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
 
 
 @pytest.mark.asyncio
+async def test_query_resources(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    for version in range(1, 3):
+        status = const.ResourceState.deployed if version == 1 else const.ResourceState.available
+        cm = data.ConfigurationModel(
+            environment=env.id,
+            version=version,
+            date=datetime.datetime.now(),
+            total=2,
+            version_info={},
+            released=True,
+            deployed=True,
+        )
+        await cm.insert()
+        for i in range(1, 3):
+            res = data.Resource.new(
+                environment=env.id,
+                resource_version_id="std::File[agent1,path=/tmp/file%d],v=%d" % (i, version),
+                status=status,
+                attributes={"path": f"/etc/motd{i}", "purge_on_delete": True, "purged": False},
+            )
+            await res.insert()
+
+    resources = await data.Resource.get_resources_in_latest_version(
+        env.id, "std::File", {"path": "/etc/motd1", "purge_on_delete": True}
+    )
+    assert len(resources) == 1
+    resource = resources[0]
+    expected_resource = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/tmp/file1],v=2",
+        status=status,
+        attributes={"path": "/etc/motd1", "purge_on_delete": True, "purged": False},
+    )
+    assert resource.to_dict() == expected_resource.to_dict()
+
+
+@pytest.mark.asyncio
 async def test_model_get_resources_for_version_optional_args(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()

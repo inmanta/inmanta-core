@@ -16,7 +16,9 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import datetime
 import logging
+import uuid
 
 import pytest
 
@@ -215,3 +217,20 @@ def test_stable_dfs():
 
     seq = stable_depth_first(graph, edges)
     assert seq == ["b", "a"]
+
+
+def test_is_sub_dict():
+    identifier = uuid.uuid4()
+    now = datetime.datetime.now()
+    dct = {1: 2, "test": False, "date": now, "id": identifier, "str": "string"}
+
+    assert util.is_sub_dict({}, dct)
+    assert util.is_sub_dict({1: 2}, dct)
+    assert util.is_sub_dict({"test": False}, dct)
+    assert util.is_sub_dict({"date": now}, dct)
+    assert util.is_sub_dict({"id": identifier}, dct)
+    assert util.is_sub_dict({"str": "string"}, dct)
+    assert util.is_sub_dict({"test": False, "date": now}, dct)
+    assert not util.is_sub_dict({"test": True, "date": now}, dct)
+    assert not util.is_sub_dict({"test": False, "date": datetime.datetime.now()}, dct)
+    assert not util.is_sub_dict({1: 2, "test": False, "date": now, "id": identifier, "val": "val"}, dct)
