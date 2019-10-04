@@ -29,6 +29,7 @@ import time
 import uuid
 import warnings
 from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
+from functools import lru_cache
 from logging import Logger
 from typing import Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
 
@@ -59,6 +60,7 @@ def memoize(obj):
     return memoizer
 
 
+@lru_cache(maxsize=1)
 def get_compiler_version() -> Optional[str]:
     try:
         return pkg_resources.get_distribution("inmanta").version

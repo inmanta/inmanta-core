@@ -18,6 +18,7 @@
 import pytest
 
 from inmanta import data
+from inmanta.util import get_compiler_version
 
 
 @pytest.mark.asyncio
@@ -162,7 +163,14 @@ async def test_version(server, client, environment, cli, push_method):
         },
     ]
 
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
     assert result.code == 200
 
     result = await cli.run("version", "list", "-e", environment)

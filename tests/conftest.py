@@ -518,6 +518,11 @@ def sync_client_multi(server_multi):
     yield client
 
 
+@pytest.fixture(scope="function")
+def clienthelper(client, environment):
+    return utils.ClientHelper(client, environment)
+
+
 @pytest.fixture(scope="function", autouse=True)
 def capture_warnings():
     logging.captureWarnings(True)

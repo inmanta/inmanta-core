@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import logging
-import time
 
 import pytest
 
@@ -26,18 +25,15 @@ from utils import log_index, retry_limited
 
 
 @pytest.mark.asyncio
-async def test_agent_disconnect(resource_container, environment, server, client, async_finalizer, caplog):
+async def test_agent_disconnect(resource_container, environment, server, client, clienthelper, async_finalizer, caplog):
     caplog.set_level(logging.INFO)
     config.Config.set("config", "server-timeout", "1")
     config.Config.set("config", "agent-reconnect-delay", "1")
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
 
-    version = int(time.time())
-    result = await client.put_version(
-        tid=environment, version=version, resources=[get_resource(version)], unknowns=[], version_info={}
-    )
-    assert result.code == 200
+    version = await clienthelper.get_version()
+    await clienthelper.put_version_simple([get_resource(version)], version)
 
     result = await client.release_version(environment, version, False)
     assert result.code == 200

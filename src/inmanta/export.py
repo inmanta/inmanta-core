@@ -37,7 +37,7 @@ from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
-from inmanta.util import groupby, hash_file
+from inmanta.util import get_compiler_version, groupby, hash_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -441,6 +441,7 @@ class Exporter(object):
             unknowns=unknown_parameters,
             resource_state=self._resource_state,
             version_info=version_info,
+            compiler_version=get_compiler_version(),
         )
 
         if res.code != 200:

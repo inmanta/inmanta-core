@@ -19,7 +19,6 @@ import asyncio
 import logging
 import os
 import shutil
-import time
 import uuid
 from typing import List, Optional, cast
 
@@ -43,6 +42,7 @@ from inmanta.server.server import Server
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType, Warnings
+from inmanta.util import get_compiler_version
 
 LOGGER = logging.getLogger(__name__)
 
@@ -263,11 +263,11 @@ class EnvironmentService(protocol.ServerSlice):
 
     @protocol.handle(methods_v2.environment_decommission, env="id")
     async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
-        version = int(time.time())
+        version = await env.get_next_version()
         if metadata is None:
             metadata = model.ModelMetadata(message="Decommission of environment", type="api")
         version_info = model.ModelVersionInfo(export_metadata=metadata)
-        await self.orchestration_service.put_version(env, version, [], {}, [], version_info.dict())
+        await self.orchestration_service.put_version(env, version, [], {}, [], version_info.dict(), get_compiler_version())
         return version
 
     @protocol.handle(methods_v2.environment_clear, env="id")

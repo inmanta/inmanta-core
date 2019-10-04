@@ -25,6 +25,7 @@ from agent_server.conftest import _wait_for_n_deploying
 from inmanta import config, const
 from inmanta.agent.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.util import get_compiler_version
 from utils import _wait_until_deployment_finishes, retry_limited
 
 logger = logging.getLogger("inmanta.test.send_events")
@@ -59,7 +60,14 @@ async def test_send_events(resource_container, environment, server, client, agen
         },
     ]
 
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
     assert result.code == 200
 
     # do a deploy
@@ -122,7 +130,14 @@ async def test_send_events_cross_agent(resource_container, environment, server, 
         },
     ]
 
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
     assert result.code == 200
 
     # do a deploy
@@ -190,7 +205,14 @@ async def test_send_events_cross_agent_deploying(
         },
     ]
 
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
     assert result.code == 200
 
     # do a deploy
@@ -214,7 +236,7 @@ async def test_send_events_cross_agent_deploying(
 
 @pytest.mark.asyncio(timeout=15)
 async def test_send_events_cross_agent_restart(
-    resource_container, environment, server, client, no_agent_backoff, async_finalizer
+    resource_container, environment, server, client, clienthelper, no_agent_backoff, async_finalizer
 ):
     """
         Send and receive events over agents with agents starting after deploy
@@ -223,14 +245,16 @@ async def test_send_events_cross_agent_restart(
 
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
+
     resource_container.Provider.reset()
+
     agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
     async_finalizer.add(agent2.stop)
     agent2.add_end_point_name("agent2")
     await agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
-    version = int(time.time())
+    version = await clienthelper.get_version()
 
     res_id_1 = "test::Resource[agent1,key=key1],v=%d" % version
     resources = [
@@ -252,8 +276,7 @@ async def test_send_events_cross_agent_restart(
         },
     ]
 
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert result.code == 200
+    await clienthelper.put_version_simple(resources, version)
 
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)

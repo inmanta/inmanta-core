@@ -33,6 +33,7 @@ from inmanta.const import ResourceAction, ResourceState
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
+from inmanta.util import get_compiler_version
 
 
 class MultiVersionSetup(object):
@@ -140,7 +141,13 @@ class MultiVersionSetup(object):
         for version in range(0, len(self.versions)):
             if self.versions[version]:
                 res = await serverdirect.put_version(
-                    env=env, version=version, resources=self.versions[version], unknowns=[], version_info={}, resource_state={}
+                    env=env,
+                    version=version,
+                    resources=self.versions[version],
+                    unknowns=[],
+                    version_info={},
+                    resource_state={},
+                    compiler_version=get_compiler_version(),
                 )
                 assert res == 200
 
@@ -229,7 +236,13 @@ async def test_deploy(server, agent: Agent, environment, caplog):
 
         resources = make_resources(version)
         res = await orchestration_service.put_version(
-            env=env, version=version, resources=resources, unknowns=[], version_info={}, resource_state={}
+            env=env,
+            version=version,
+            resources=resources,
+            unknowns=[],
+            version_info={},
+            resource_state={},
+            compiler_version=get_compiler_version(),
         )
         assert res == 200
 
@@ -264,7 +277,13 @@ async def test_deploy(server, agent: Agent, environment, caplog):
         v2 = version + 1
         resources = make_resources(v2)
         res = await orchestration_service.put_version(
-            env=env, version=v2, resources=resources, unknowns=[], version_info={}, resource_state={}
+            env=env,
+            version=v2,
+            resources=resources,
+            unknowns=[],
+            version_info={},
+            resource_state={},
+            compiler_version=get_compiler_version(),
         )
         assert res == 200
 
