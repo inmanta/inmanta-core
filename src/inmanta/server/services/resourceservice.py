@@ -210,6 +210,7 @@ class ResourceService(protocol.ServerSlice):
         return 200, {"resource": resv, "logs": actions}
 
     # This endpoint does't have a method associated yet.
+    # Intended for use by other slices
     async def get_resources_in_latest_version(
         self,
         environment: data.Environment,
