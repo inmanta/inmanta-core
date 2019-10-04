@@ -220,7 +220,7 @@ async def test_gzip_encoding(server):
     """
     (hash, content, body) = make_random_file(size=1024)
 
-    port = config.Config.get("server_rest_transport", "port")
+    port = opt.get_bind_port()
     url = "http://localhost:%s/api/v1/file/%s" % (port, hash)
 
     zipped, body = protocol.gzipped_json({"content": body})
@@ -1153,7 +1153,7 @@ async def test_ACOA_header(server):
     """
         Test if the server accepts gzipped encoding and returns gzipped encoding.
     """
-    port = config.Config.get("server_rest_transport", "port")
+    port = opt.get_bind_port()
     url = f"http://localhost:{port}/api/v1/environment"
 
     request = HTTPRequest(url=url, method="GET")
@@ -1195,7 +1195,7 @@ async def test_multi_version_method(unused_tcp_port, postgres_db, database_name,
     await rs.start()
 
     # rest call
-    port = config.Config.get("server_rest_transport", "port")
+    port = opt.get_bind_port()
 
     request = HTTPRequest(
         url=f"http://localhost:{port}/api/v1/test", method="POST", body=json_encode({"project": {"name": "a", "value": "b"}})
