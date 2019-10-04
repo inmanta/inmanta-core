@@ -17,21 +17,12 @@
 """
 
 import logging
-from typing import Dict, List
+from typing import Dict, Generic, List, Optional, TypeVar
 
 from inmanta.ast import Locatable, LocatableString, Location, OptionalValueException, RuntimeException
 from inmanta.ast.statements import AssignStatement, ExpressionStatement
 from inmanta.ast.statements.assign import Assign, SetAttribute
-from inmanta.execute.runtime import (
-    ExecutionUnit,
-    HangUnit,
-    Instance,
-    QueueScheduler,
-    RawUnit,
-    Resolver,
-    ResultCollector,
-    ResultVariable,
-)
+from inmanta.execute.runtime import Instance, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
 
@@ -95,117 +86,123 @@ class Reference(ExpressionStatement):
         return self.name
 
 
-class AttributeReferenceHelper(Locatable):
+T = TypeVar("T")
+
+
+class AbstractAttributeReferenceHelper(Locatable, Generic[T]):
     """
-        Helper class for AttributeReference, reschedules itself
+        Generic helper class for setting a target variable based on a Reference. Reschedules itself
     """
 
-    def __init__(self, target: ResultVariable, instance: Reference, attribute: str, resultcollector: ResultCollector) -> None:
-        Locatable.__init__(self)
-        self.attribute = attribute
-        self.target = target
-        self.instance = instance
-        self.resultcollector = resultcollector
-
-    def resume(
-        self, requires: Dict[object, object], resolver: Resolver, queue_scheduler: QueueScheduler, target: ResultVariable
+    def __init__(
+        self, target: ResultVariable, instance: Optional[Reference], attribute: str, resultcollector: Optional[ResultCollector]
     ) -> None:
+        super().__init__()
+        self.target: ResultVariable = target
+        self.instance: Optional[Reference] = instance
+        self.attribute: str = attribute
+        self.resultcollector: Optional[ResultCollector] = resultcollector
+        # attribute cache
+        self.variable: Optional[ResultVariable] = None
+
+    def fetch_variable(
+        self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler
+    ) -> ResultVariable:
         """
-            Instance is ready to execute, do it and see if the attribute is already present
+            Fetches the referred variable
         """
-        # get the Instance
-        obj = self.instance.execute(requires, resolver, queue_scheduler)
+        if self.instance:
+            # get the Instance
+            obj = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue_scheduler)
 
-        if isinstance(obj, list):
-            raise RuntimeException(self, "can not get a attribute %s, %s is a list" % (self.attribute, obj))
+            if isinstance(obj, list):
+                raise RuntimeException(self, "can not get a attribute %s, %s is a list" % (self.attribute, obj))
+            if not isinstance(obj, Instance):
+                raise RuntimeException(self, "can not get a attribute %s, %s not an entity" % (self.attribute, obj))
 
-        if not isinstance(obj, Instance):
-            raise RuntimeException(self, "can not get a attribute %s, %s not an entity" % (self.attribute, obj))
-
-        # get the attribute result variable
-        attr = obj.get_attribute(self.attribute)
-        # Cache it
-        self.attr = attr
-
-        if attr.is_ready():
-            # go ahead
-            # i.e. back to the AttributeReference itself
-            self.target.set_value(attr.get_value(), self.location)
+            # get the attribute result variable
+            return obj.get_attribute(self.attribute)
         else:
-            # reschedule on the attribute, XU will assign it to the target variable
-            if self.resultcollector is not None:
-                attr.listener(self.resultcollector, self.location)
-            ExecutionUnit(queue_scheduler, resolver, self.target, {"x": attr}, self)
+            return resolver.lookup(self.attribute)
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def is_ready(self) -> bool:
+        """
+            Returns whether this instance is ready to set the target variable
+        """
+        return self.variable is not None and self.variable.is_ready()
+
+    def target_value(self) -> T:
+        """
+            Returns the target value based on self.variable
+        """
+        raise NotImplementedError()
+
+    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
+        """
+            Instance is ready to execute, do it and see if the variable is already present
+        """
+        if not self.variable:
+            # this is a first time we are called, variable is not cached yet
+            self.variable = self.fetch_variable(requires, resolver, queue_scheduler)
+
+        if self.is_ready():
+            self.target.set_value(self.target_value(), self.location)
+        else:
+            if self.resultcollector:
+                self.variable.listener(self.resultcollector, self.location)
+            requires[self] = self.variable
+            # reschedule on the variable, XU will assign it to the target variable
+            RawUnit(queue_scheduler, resolver, requires, self)
+
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> T:
+        assert self.is_ready()
+        assert self.variable
         # Attribute is ready, return it,
-        return self.attr.get_value()
+        return self.variable.get_value()
 
     def __str__(self) -> str:
+        if not self.instance:
+            return self.attribute
         return "%s.%s" % (self.instance, self.attribute)
 
     def get_location(self) -> Location:
         return self.location
 
 
-class IsDefinedReferenceHelper(Locatable):
+class IsDefinedReferenceHelper(AbstractAttributeReferenceHelper[bool]):
+    """
+        Helper class for IsDefined, reschedules itself
+    """
+
+    def __init__(self, target: ResultVariable, instance: Optional[Reference], attribute: str) -> None:
+        super().__init__(target, instance, attribute, None)
+
+    def target_value(self) -> bool:
+        assert self.is_ready()
+        assert self.variable
+        try:
+            value = self.variable.get_value()
+            if isinstance(value, list):
+                return len(value) != 0
+            elif isinstance(value, NoneValue):
+                return False
+            return True
+        except OptionalValueException:
+            return False
+
+
+class AttributeReferenceHelper(AbstractAttributeReferenceHelper[object]):
     """
         Helper class for AttributeReference, reschedules itself
     """
 
-    def __init__(self, target: ResultVariable, instance: Reference, attribute: str) -> None:
-        Locatable.__init__(self)
-        self.attribute = attribute
-        self.target = target
-        self.instance = instance
-        self.attr = None
+    def __init__(self, target: ResultVariable, instance: Reference, attribute: str, resultcollector: ResultCollector) -> None:
+        super().__init__(target, instance, attribute, resultcollector)
 
-    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
-        """
-            Instance is ready to execute, do it and see if the attribute is already present
-        """
-
-        if not self.attr:
-            # this is a firs time we are called, attribute is not cached yet
-            if self.instance:
-                # get the Instance
-                obj = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue_scheduler)
-
-                if isinstance(obj, list):
-                    raise RuntimeException(self, "can not get a attribute %s, %s is a list" % (self.attribute, obj))
-
-                # get the attribute result variable
-                attr = obj.get_attribute(self.attribute)
-            else:
-                attr = resolver.lookup(self.attribute)
-            # Cache it
-            self.attr = attr
-        else:
-            attr = self.attr
-
-        try:
-            if attr.is_ready():
-                # go ahead
-                # i.e. back to the AttributeReference itself
-                value = attr.get_value()
-                truthiness = True
-                if isinstance(value, list):
-                    truthiness = len(value) != 0
-                elif isinstance(value, NoneValue):
-                    truthiness = False
-
-                self.target.set_value(truthiness, self.location)
-            else:
-                requires[self] = attr
-                # reschedule on the attribute, XU will assign it to the target variable
-                RawUnit(queue_scheduler, resolver, requires, self)
-
-        except OptionalValueException:
-            self.target.set_value(False, self.location)
-
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue_scheduler: QueueScheduler) -> object:
-        # Attribute is ready, return it,
-        return self.attr.get_value()
+    def target_value(self) -> object:
+        assert self.is_ready()
+        assert self.variable
+        return self.variable.get_value()
 
 
 class AttributeReference(Reference):
@@ -239,7 +236,7 @@ class AttributeReference(Reference):
         self.copy_location(resumer)
 
         # wait for the instance
-        HangUnit(queue, resolver, self.instance.requires_emit(resolver, queue), None, resumer)
+        RawUnit(queue, resolver, self.instance.requires_emit(resolver, queue), resumer)
         return {self: temp}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:

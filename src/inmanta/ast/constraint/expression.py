@@ -81,7 +81,7 @@ class IsDefined(ReferenceStatement):
 
         # wait for the instance
         if self.requires():
-            RawUnit(queue, resolver, self.attr.requires_emit(resolver, queue), resumer)
+            RawUnit(queue, resolver, super().requires_emit(resolver, queue), resumer)
         else:
             resumer.resume({}, resolver, queue)
         return {self: temp}
