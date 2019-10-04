@@ -30,7 +30,7 @@ SET resource_type=substring(resource_id from '(.*)\\[');
 ALTER TABLE public.resource
     ALTER COLUMN resource_type SET NOT NULL;
 
-CREATE INDEX environment_resource_type_index ON public.resource (environment, resource_type);
+CREATE INDEX resource_environment_resource_type_index ON public.resource (environment, resource_type);
 """
     async with connection.transaction():
         await connection.execute(schema)
