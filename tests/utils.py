@@ -273,4 +273,4 @@ class ClientHelper(object):
             version_info={},
             compiler_version=get_compiler_version(),
         )
-        assert res.code == 200
+        assert res.code == 200, res.result

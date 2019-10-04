@@ -137,8 +137,13 @@ class MultiVersionSetup(object):
 
         return a
 
-    async def setup(self, serverdirect: OrchestrationService, resource_service: ResourceService, env: UUID, sid: UUID):
+    async def setup(
+        self, serverdirect: OrchestrationService, resource_service: ResourceService, env: data.Environment, sid: UUID
+    ):
         for version in range(0, len(self.versions)):
+            # allocate a bunch of versions!
+            v = await env.get_next_version()
+            assert v == version + 1
             if self.versions[version]:
                 res = await serverdirect.put_version(
                     env=env,
@@ -206,7 +211,7 @@ async def test_deploy(server, agent: Agent, environment, caplog):
         # acquire env object
         env = await data.Environment.get_by_id(uuid.UUID(environment))
 
-        version = int(time.time())
+        version = await env.get_next_version()
 
         def make_resources(version):
             return [
@@ -274,7 +279,7 @@ async def test_deploy(server, agent: Agent, environment, caplog):
         assert payload["model"].done == len(resources)
 
         # second, identical check_version
-        v2 = version + 1
+        v2 = await env.get_next_version()
         resources = make_resources(v2)
         res = await orchestration_service.put_version(
             env=env,

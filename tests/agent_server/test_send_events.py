@@ -32,13 +32,13 @@ logger = logging.getLogger("inmanta.test.send_events")
 
 
 @pytest.mark.asyncio
-async def test_send_events(resource_container, environment, server, client, agent):
+async def test_send_events(resource_container, environment, server, client, agent, clienthelper):
     """
         Send and receive events within one agent
     """
     resource_container.Provider.reset()
 
-    version = int(time.time())
+    version = await clienthelper.get_version()
 
     res_id_1 = "test::Resource[agent1,key=key1],v=%d" % version
     resources = [
@@ -89,7 +89,7 @@ async def test_send_events(resource_container, environment, server, client, agen
 
 
 @pytest.mark.asyncio
-async def test_send_events_cross_agent(resource_container, environment, server, client, async_finalizer):
+async def test_send_events_cross_agent(resource_container, environment, server, client, async_finalizer, clienthelper):
     """
         Send and receive events over agents
     """
@@ -108,7 +108,7 @@ async def test_send_events_cross_agent(resource_container, environment, server, 
     await agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
-    version = int(time.time())
+    version = await clienthelper.get_version()
 
     res_id_1 = "test::Resource[agent1,key=key1],v=%d" % version
     resources = [
@@ -163,7 +163,7 @@ async def test_send_events_cross_agent(resource_container, environment, server, 
 
 @pytest.mark.asyncio
 async def test_send_events_cross_agent_deploying(
-    resource_container, environment, server, client, no_agent_backoff, async_finalizer
+    resource_container, environment, server, client, no_agent_backoff, async_finalizer, clienthelper
 ):
     """
         Send and receive events over agents
@@ -183,7 +183,7 @@ async def test_send_events_cross_agent_deploying(
     await agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
-    version = int(time.time())
+    version = await clienthelper.get_version()
 
     res_id_1 = "test::Resource[agent1,key=key1],v=%d" % version
     resources = [

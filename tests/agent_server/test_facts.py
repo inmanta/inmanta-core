@@ -93,7 +93,7 @@ async def test_purged_facts(resource_container, client, clienthelper, agent, env
     assert result.code == 200
 
     # Purge the resource
-    version = 2
+    version = await clienthelper.get_version()
     resources[0]["id"] = "%s,v=%d" % (resource_id_wov, version)
     resources[0]["purged"] = True
     result = await client.put_version(

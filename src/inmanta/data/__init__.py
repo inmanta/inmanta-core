@@ -964,7 +964,9 @@ RETURNING last_version;
 """,
             self.id,
         )
-        return cast(int, record[0])
+        version = cast(int, record[0])
+        self.last_version = version
+        return version
 
 
 SOURCE = ("fact", "plugin", "user", "form", "report")

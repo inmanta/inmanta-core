@@ -862,7 +862,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
 
 
 @pytest.mark.asyncio(timeout=15)
-async def test_wait(resource_container, client, server, no_agent_backoff):
+async def test_wait(resource_container, client, clienthelper, environment, server, no_agent_backoff, async_finalizer):
     """
         If this test fail due to timeout,
         this is probably due to the mechanism in the agent that prevents pulling resources in very rapid succession.
@@ -874,18 +874,13 @@ async def test_wait(resource_container, client, server, no_agent_backoff):
     """
     resource_container.Provider.reset()
 
-    # setup project
-    result = await client.create_project("env-test")
-    project_id = result.result["project"]["id"]
-
-    # setup env
-    result = await client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
+    env_id = environment
 
     # setup agent
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     await agent.start()
+    async_finalizer(agent.stop)
 
     # wait for agent
     await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
@@ -893,8 +888,8 @@ async def test_wait(resource_container, client, server, no_agent_backoff):
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
 
-    def make_version(offset=0):
-        version = int(time.time() + offset)
+    async def make_version():
+        version = await clienthelper.get_version()
 
         resources = [
             {
@@ -951,7 +946,7 @@ async def test_wait(resource_container, client, server, no_agent_backoff):
 
     logger.info("setup done")
 
-    version1, resources = make_version()
+    version1, resources = await make_version()
     result = await client.put_version(
         tid=env_id, version=version1, resources=resources, unknowns=[], version_info={}, compiler_version=get_compiler_version()
     )
@@ -969,17 +964,13 @@ async def test_wait(resource_container, client, server, no_agent_backoff):
 
     logger.info("first version, 2 resources deployed")
 
-    version2, resources = make_version(3)
+    version2, resources = await make_version()
     result = await client.put_version(
         tid=env_id, version=version2, resources=resources, unknowns=[], version_info={}, compiler_version=get_compiler_version()
     )
     assert result.code == 200
 
     logger.info("second version pushed %f", time.time())
-
-    await asyncio.sleep(1)
-
-    logger.info("wait to expire load limiting%f", time.time())
 
     # deploy and wait until done
     result = await client.release_version(env_id, version2, True, const.AgentTriggerMethod.push_full_deploy)
@@ -1006,23 +997,15 @@ async def test_wait(resource_container, client, server, no_agent_backoff):
     assert states["test::Resource[agent1,key=key4],v=%d" % version1] == const.ResourceState.deployed.name
     assert states["test::Resource[agent1,key=key5],v=%d" % version1] == const.ResourceState.available.name
 
-    await agent.stop()
-
 
 @pytest.mark.asyncio(timeout=15)
-async def test_multi_instance(resource_container, client, server, no_agent_backoff):
+async def test_multi_instance(resource_container, client, clienthelper, server, environment, no_agent_backoff, async_finalizer):
     """
        Test for multi threaded deploy
     """
+    env_id = environment
+
     resource_container.Provider.reset()
-
-    # setup project
-    result = await client.create_project("env-test")
-    project_id = result.result["project"]["id"]
-
-    # setup env
-    result = await client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
 
     # setup agent
     agent = Agent(
@@ -1037,6 +1020,7 @@ async def test_multi_instance(resource_container, client, server, no_agent_backo
     agent.add_end_point_name("agent3")
 
     await agent.start()
+    async_finalizer(agent.stop)
 
     # wait for agent
     await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
@@ -1046,8 +1030,8 @@ async def test_multi_instance(resource_container, client, server, no_agent_backo
     resource_container.Provider.set("agent2", "key", "value")
     resource_container.Provider.set("agent3", "key", "value")
 
-    def make_version(offset=0):
-        version = int(time.time() + offset)
+    async def make_version():
+        version = await clienthelper.get_version()
         resources = []
         for agent in ["agent1", "agent2", "agent3"]:
             resources.extend(
@@ -1121,7 +1105,7 @@ async def test_multi_instance(resource_container, client, server, no_agent_backo
 
     logger.info("setup done")
 
-    version1, resources = make_version()
+    version1, resources = await make_version()
     result = await client.put_version(
         tid=env_id, version=version1, resources=resources, unknowns=[], version_info={}, compiler_version=get_compiler_version()
     )
@@ -1295,7 +1279,8 @@ async def test_auto_deploy(
         ]
 
     initial_version = await clienthelper.get_version()
-    for version, value_resource_two in [(initial_version, "value1"), (initial_version + 1, "value2")]:
+    second_version = await clienthelper.get_version()
+    for version, value_resource_two in [(initial_version, "value1"), (second_version, "value2")]:
         resources = get_resources(version, value_resource_two)
 
         # set auto deploy and push
@@ -2171,7 +2156,7 @@ async def test_s_repair_interrupted_by_deploy_request(
     resource_container.Provider.set("agent1", "key1", "BAD!")
 
     # Increment
-    version2 = version1 + 1
+    version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
 
@@ -2358,7 +2343,7 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
     while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
         await asyncio.sleep(0.1)
 
-    version2 = version1 + 1
+    version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
     await myagent_instance.get_latest_version_for_agent(reason="Deploy 2", incremental_deploy=True, is_repair_run=False)
@@ -2439,7 +2424,7 @@ async def test_s_full_deploy_interrupts_incremental_deploy(
     while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
         await asyncio.sleep(0.1)
 
-    version2 = version1 + 1
+    version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
     await myagent_instance.get_latest_version_for_agent(reason="Second Deploy", incremental_deploy=False, is_repair_run=False)
@@ -2520,7 +2505,7 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
     while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
         await asyncio.sleep(0.1)
 
-    version2 = version1 + 1
+    version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
     await myagent_instance.get_latest_version_for_agent(reason="Second Deploy", incremental_deploy=True, is_repair_run=False)
@@ -2781,7 +2766,7 @@ async def test_push_incremental_deploy(
     assert resource_container.Provider.get("agent1", "key2") == "value1"
 
     # Second version deployed with incremental deploy
-    version2 = version + 1
+    version2 = await clienthelper.get_version()
     resources_version2 = get_resources(version2, "value2")
 
     result = await client.put_version(
@@ -2861,7 +2846,7 @@ async def test_push_full_deploy(
     assert resource_container.Provider.get("agent1", "key2") == "value1"
 
     # Second version deployed with incremental deploy
-    version2 = version + 1
+    version2 = await clienthelper.get_version()
     resources_version2 = get_resources(version2, "value2")
 
     result = await client.put_version(
@@ -2943,7 +2928,7 @@ async def test_format_token_in_logline(
 ):
     """Deploy a resource that logs a line that after formatting on the agent contains an invalid formatting character.
     """
-    version = 1
+    version = (await client_multi.reserve_version(environment_multi)).result["data"]
     resource_container.Provider.set("agent1", "key1", "incorrect_value")
 
     resource = {
@@ -2986,7 +2971,9 @@ async def test_format_token_in_logline(
 
 
 @pytest.mark.asyncio
-async def test_1016_cache_invalidation(server, agent, client, environment, resource_container, no_agent_backoff, caplog):
+async def test_1016_cache_invalidation(
+    server, agent, client, clienthelper, environment, resource_container, no_agent_backoff, caplog
+):
     """
         tricky case where the increment cache was not invalidated when a new version was deployed,
         causing subsequent deploys to receive a wrong increment
@@ -3017,7 +3004,7 @@ async def test_1016_cache_invalidation(server, agent, client, environment, resou
 
     ai = agent._instances["agent1"]
 
-    version = 1
+    version = await clienthelper.get_version()
     await make_version(version)
 
     # do a deploy
@@ -3034,7 +3021,7 @@ async def test_1016_cache_invalidation(server, agent, client, environment, resou
 
     await asyncio.gather(*(e.future for e in ai._nq.generation.values()))
 
-    version = 2
+    version = await clienthelper.get_version()
     await make_version(version, "b")
 
     # do a deploy

@@ -134,8 +134,8 @@ async def test_agent(server, client, environment, cli):
 
 @pytest.mark.parametrize("push_method", [([]), (["-p"]), (["-p", "--full"])])
 @pytest.mark.asyncio
-async def test_version(server, client, environment, cli, push_method):
-    version = "12345"
+async def test_version(server, client, clienthelper, environment, cli, push_method):
+    version = str(await clienthelper.get_version())
     resources = [
         {
             "key": "key1",
