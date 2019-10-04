@@ -1835,12 +1835,12 @@ class Resource(BaseDocument):
         attributes: Dict[PrimitiveTypes, PrimitiveTypes] = {},
     ) -> List["Resource"]:
         """
-        Returns the resources in the latest version of the configuration model of the given environment, that satisfy these
-        constraints.
+        Returns the resources in the latest version of the configuration model of the given environment, that satisfy the
+        given constraints.
 
         :param environment: The resources should belong to this environment.
         :param resource_type: The environment should have this resource_type.
-        :param attributes: The resource should contain these attribute-value pairs. Only
+        :param attributes: The resource should contain these key-value pairs in its attributes list.
         """
         values = [cls._get_value(environment)]
         query = f"""
