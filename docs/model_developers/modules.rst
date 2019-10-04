@@ -167,14 +167,14 @@ The format for requires in requirements.txt is the folllowing:
 Plugins
 *******
 Plugins provide :ref:`functions<lang-plugins>` that can be called from the :term:`DSL`. This is the
-primary mechanism to interface Python code with the configuration model at compile time. This
-mechanism is also used std::template or std::file. Inmanta also registers all plugins with the
-template engine (Jinja2) to use as filter.
+primary mechanism to interface Python code with the configuration model at compile time. For Example,
+this mechanism is also used for std::template and std::file. Furthermore, Inmanta also registers all
+plugins with the template engine (Jinja2) to use as filters.
 
 A plugin is a python function, registered with the platform with the :func:`~inmanta.plugins.plugin`
-decorator. This plugin accepts arguments from the DSL and can return a value. Both the arguments and
-the return value must by annotated with the allowed types from the configuration model. Type
-annotations are provided as a string (Python3 style argument annotation). ``any`` is the special
+decorator. This plugin accepts arguments when called from the DSL and can return a value. Both the
+arguments and the return value must by annotated with the allowed types from the configuration model.
+Type annotations are provided as a string (Python3 style argument annotation). ``any`` is a special
 type that effectively disables type validation.
 
 Through the arguments of the function, the Python code in the plugin can navigate the configuration
@@ -198,15 +198,27 @@ If the code above is placed in the plugins directory of the example module
 (``examples/plugins/__init__.py``) the plugin can be invoked from the configuration model as
 follows:
 
-.. code-block:: none
+.. code-block:: inmanta
 
     import example
 
     example::hello()
 
-
 The plugin decorator accepts an argument name. This can be used to change the name of the plugin in
-the DSL. This can be used to create plugins that use python reserved names such as ``print``.
+the DSL. This can be used to create plugins that use python reserved names such as ``print`` for example:
+
+.. code-block:: python
+    :linenos:
+
+    from inmanta.plugins import plugin
+
+    @plugin("print")
+    def printf():
+        """
+            Prints inmanta
+        """
+        print("inmanta")
+
 
 A more complex plugin accepts arguments and returns a value. The following example creates a plugin
 that converts a string to uppercase:
@@ -223,7 +235,7 @@ that converts a string to uppercase:
 
 This plugin can be tested with:
 
-.. code-block:: none
+.. code-block:: inmanta
 
     import example
 
@@ -237,8 +249,8 @@ configuration model to access attributes of other entities.
 If your plugin requires external libraries, include a requirements.txt in the module. The libraries
 listed in this file are automatically installed by the compiler and agents.
 
-..todo:: context
-..todo:: new statements
+.. todo:: context
+.. todo:: new statements
 
 Resources and handlers
 **********************
