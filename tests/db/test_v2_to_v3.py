@@ -25,8 +25,8 @@ import pytest
 from asyncpg import Connection
 
 from db.common import PGRestore
-from inmanta.server.bootloader import InmantaBootloader
 from inmanta.resources import Id
+from inmanta.server.bootloader import InmantaBootloader
 
 
 @pytest.mark.asyncio
@@ -51,9 +51,7 @@ d357482f-11c9-421e-b3c1-36d11ac5b975	internal	2019-09-27 13:30:46.935564	f	5df30
 
 
 @pytest.fixture
-async def migrate_v2_to_v3(
-    hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config
-):
+async def migrate_v2_to_v3(hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config):
     # Get old tables
     with open(os.path.join(os.path.dirname(__file__), "dumps/v2.sql"), "r") as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
@@ -77,4 +75,3 @@ async def test_addition_resource_type_column(migrate_v2_to_v3, postgresql_client
         assert r["resource_type"] is not None
         parsed_id = Id.parse_id(r["resource_version_id"])
         assert r["resource_type"] == parsed_id.entity_type
-
