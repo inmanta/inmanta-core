@@ -263,6 +263,18 @@ class Exporter(object):
             with open("dependencies.dot", "wb+") as fd:
                 fd.write(dot.encode())
 
+    def get_version(self):
+        tid = cfg_env.get()
+        if tid is None:
+            LOGGER.warning("The environment for this model should be set for export to server!")
+            return 0
+        else:
+            conn = protocol.SyncClient("compiler")
+            result = conn.reserve_version(tid)
+            if result.code != 200:
+                raise Exception("Unable to reserve version number from server (msg: %s)" % result.result)
+            return result.result["data"]
+
     def run(
         self,
         types: Optional[Dict[str, Entity]],
@@ -278,7 +290,7 @@ class Exporter(object):
         """
         self.types = types
         self.scopes = scopes
-        self._version = int(time.time())
+        self._version = self.get_version()
 
         if types is not None:
             # then process the configuration model to submit it to the mgmt server

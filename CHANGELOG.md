@@ -14,10 +14,10 @@ v 2019.4 (?) Changes in this release:
 - Switch to sequential version numbers instead of timestamps (#1011)
 
 IMPORTANT CHANGES:
+- Older compiler versions are no longer supported with this server
 - The Inmanta server now listens on 127.0.0.1:8888 by default, while
   this was 0.0.0.0:8888 in previous versions. This behavior is
   configurable with the `bind-address` config option.
-- Older compiler versions are no longer supported with this server
   
 DEPRECATIONS:
 - The `server_rest_transport.port` config option is deprecated in favor

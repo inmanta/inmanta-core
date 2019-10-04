@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import copy
 import datetime
 import enum
@@ -243,8 +244,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
     async def close_connection_pool(cls) -> None:
         if not cls._connection_pool:
             return
-        await cls._connection_pool.close()
-        cls._connection_pool = None
+        try:
+            await cls._connection_pool.close()
+        finally:
+            cls._connection_pool = None
 
     def _get_field(self, name):
         if hasattr(self.__class__, name):
@@ -2589,8 +2592,7 @@ def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
 
 async def disconnect() -> None:
     LOGGER.debug("Disconnecting data classes")
-    for cls in _classes:
-        await cls.close_connection_pool()
+    await asyncio.gather(*[cls.close_connection_pool() for cls in _classes])
 
 
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
@@ -2628,6 +2630,6 @@ async def connect(
                 await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, con).ensure_db_schema()
         return pool
     except Exception as e:
-        await disconnect()
         await pool.close()
+        await disconnect()
         raise e

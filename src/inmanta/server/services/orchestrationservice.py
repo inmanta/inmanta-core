@@ -179,6 +179,14 @@ class OrchestrationService(protocol.ServerSlice):
         if not compiler_version:
             raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
 
+        if version > env.last_version:
+            raise BadRequest(
+                f"The version number used is {version} "
+                f"which is higher than the last outstanding reservation {env.last_version}"
+            )
+        if version <= 0:
+            raise BadRequest(f"The version number used is {version} " "is not positive")
+
         started = datetime.datetime.now()
 
         agents = set()
