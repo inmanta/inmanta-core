@@ -19,7 +19,7 @@
 import logging
 from typing import Dict, List
 
-from inmanta.ast import Locatable, LocatableString, Location, RuntimeException
+from inmanta.ast import Locatable, LocatableString, Location, OptionalValueException, RuntimeException
 from inmanta.ast.statements import AssignStatement, ExpressionStatement
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.runtime import (
@@ -158,12 +158,15 @@ class IsDefinedReferenceHelper(Locatable):
         self.attribute = attribute
         self.target = target
         self.instance = instance
+        self.attr = None
 
     def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
         """
             Instance is ready to execute, do it and see if the attribute is already present
         """
-        try:
+
+        if not self.attr:
+            # this is a firs time we are called, attribute is not cached yet
             if self.instance:
                 # get the Instance
                 obj = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue_scheduler)
@@ -177,7 +180,10 @@ class IsDefinedReferenceHelper(Locatable):
                 attr = resolver.lookup(self.attribute)
             # Cache it
             self.attr = attr
+        else:
+            attr = self.attr
 
+        try:
             if attr.is_ready():
                 # go ahead
                 # i.e. back to the AttributeReference itself
@@ -190,11 +196,11 @@ class IsDefinedReferenceHelper(Locatable):
 
                 self.target.set_value(truthiness, self.location)
             else:
-                requires["x"] = attr
+                requires[self] = attr
                 # reschedule on the attribute, XU will assign it to the target variable
                 RawUnit(queue_scheduler, resolver, requires, self)
 
-        except RuntimeException:
+        except OptionalValueException:
             self.target.set_value(False, self.location)
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue_scheduler: QueueScheduler) -> object:
