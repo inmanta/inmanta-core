@@ -180,8 +180,10 @@ async def postgress_get_custom_types(postgresql_client):
 
 
 async def do_clean_hard(postgresql_client):
+    assert not postgresql_client.is_in_transaction()
+    await postgresql_client.reload_schema_state()
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-    table_names = [x["table_name"] for x in tables_in_db]
+    table_names = ["public." + x["table_name"] for x in tables_in_db]
     if table_names:
         drop_query = "DROP TABLE %s CASCADE" % ", ".join(table_names)
         await postgresql_client.execute(drop_query)
@@ -190,6 +192,7 @@ async def do_clean_hard(postgresql_client):
     if type_names:
         drop_query = "DROP TYPE %s" % ", ".join(type_names)
         await postgresql_client.execute(drop_query)
+    logger.info("Performed Hard Clean with tables: %s  types: %s", ",".join(table_names), ",".join(type_names))
 
 
 @pytest.fixture(scope="function")
@@ -330,7 +333,7 @@ def log_file():
         yield f
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="function", autouse="DEBUG_TCP_PORTS" in os.environ)
 def log_state_tcp_ports(request, log_file):
     def _write_log_line(title):
         connections = psutil.net_connections()
@@ -371,11 +374,12 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     config.Config.set("database", "connection_timeout", str(1))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
-    config.Config.set("server_rest_transport", "port", port)
     config.Config.set("agent_rest_transport", "port", port)
     config.Config.set("compiler_rest_transport", "port", port)
     config.Config.set("client_rest_transport", "port", port)
     config.Config.set("cmdline_rest_transport", "port", port)
+    config.Config.set("server", "bind-port", port)
+    config.Config.set("server", "bind-address", "127.0.0.1")
     config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("server", "auto-recompile-wait", "0")
@@ -398,11 +402,11 @@ async def server(server_config):
     try:
         await ibl.start()
     except SliceStartupException as e:
-        port = config.Config.get("server_rest_transport", "port")
+        port = config.Config.get("server", "bind-port")
         output = subprocess.check_output(["ss", "-antp"])
         output = output.decode("utf-8")
-        print(f"Port: {port}")
-        print(f"Port usage: \n {output}")
+        logger.debug(f"Port: {port}")
+        logger.debug(f"Port usage: \n {output}")
         raise e
 
     yield ibl.restserver
@@ -436,7 +440,6 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
 
     for x, ct in [
         ("server", None),
-        ("server_rest_transport", None),
         ("agent_rest_transport", ["agent"]),
         ("compiler_rest_transport", ["compiler"]),
         ("client_rest_transport", ["api", "compiler"]),
@@ -465,11 +468,12 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
     config.Config.set("database", "connection_timeout", str(1))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
-    config.Config.set("server_rest_transport", "port", port)
     config.Config.set("agent_rest_transport", "port", port)
     config.Config.set("compiler_rest_transport", "port", port)
     config.Config.set("client_rest_transport", "port", port)
     config.Config.set("cmdline_rest_transport", "port", port)
+    config.Config.set("server", "bind-port", port)
+    config.Config.set("server", "bind-address", "127.0.0.1")
     config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("agent", "agent-repair-interval", "0")
@@ -480,11 +484,11 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
     try:
         await ibl.start()
     except SliceStartupException as e:
-        port = config.Config.get("server_rest_transport", "port")
+        port = config.Config.get("server", "bind-port")
         output = subprocess.check_output(["ss", "-antp"])
         output = output.decode("utf-8")
-        print(f"Port: {port}")
-        print(f"Port usage: \n {output}")
+        logger.debug(f"Port: {port}")
+        logger.debug(f"Port usage: \n {output}")
         raise e
 
     yield ibl.restserver
