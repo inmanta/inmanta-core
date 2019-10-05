@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import logging
-import time
 import uuid
 from collections import defaultdict
 from datetime import datetime
