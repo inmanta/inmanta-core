@@ -263,7 +263,9 @@ class Exporter(object):
             with open("dependencies.dot", "wb+") as fd:
                 fd.write(dot.encode())
 
-    def get_version(self):
+    def get_version(self, no_commit=False):
+        if no_commit:
+            return 0
         tid = cfg_env.get()
         if tid is None:
             LOGGER.warning("The environment for this model should be set for export to server!")
@@ -290,7 +292,7 @@ class Exporter(object):
         """
         self.types = types
         self.scopes = scopes
-        self._version = self.get_version()
+        self._version = self.get_version(no_commit)
 
         if types is not None:
             # then process the configuration model to submit it to the mgmt server
