@@ -765,7 +765,7 @@ class CLI(object):
     async def run(self, *args):
         # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
-        runner = testing.CliRunner()
+        runner = testing.CliRunner(mix_stderr=False)
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
         cmd_args.extend(args)
 
