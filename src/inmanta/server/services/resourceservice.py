@@ -20,13 +20,13 @@ import logging
 import os
 import uuid
 from collections import defaultdict
-from typing import Any, Dict, List, Sequence, Set, Tuple, cast
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
 
 from tornado import locks
 
 from inmanta import const, data
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
-from inmanta.data.model import ResourceVersionIdStr
+from inmanta.data.model import Resource, ResourceType, ResourceVersionIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.resources import Id
@@ -34,7 +34,7 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, 
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
-from inmanta.types import Apireturn
+from inmanta.types import Apireturn, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -208,6 +208,17 @@ class ResourceService(protocol.ServerSlice):
             )
 
         return 200, {"resource": resv, "logs": actions}
+
+    # This endpoint does't have a method associated yet.
+    # Intended for use by other slices
+    async def get_resources_in_latest_version(
+        self,
+        environment: data.Environment,
+        resource_type: Optional[ResourceType] = None,
+        attributes: Dict[PrimitiveTypes, PrimitiveTypes] = {},
+    ) -> List[Resource]:
+        result = await data.Resource.get_resources_in_latest_version(environment.id, resource_type, attributes)
+        return [r.to_dto() for r in result]
 
     @protocol.handle(methods.get_resources_for_agent, env="tid")
     async def get_resources_for_agent(

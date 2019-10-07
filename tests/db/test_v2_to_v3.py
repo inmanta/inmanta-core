@@ -22,14 +22,12 @@ import pytest
 from asyncpg import Connection
 
 from db.common import PGRestore
+from inmanta.resources import Id
 from inmanta import data, protocol
 from inmanta.server.bootloader import InmantaBootloader
 
-
-@pytest.mark.asyncio
-async def test_environment_update(
-    hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config
-):
+@pytest.fixture
+async def migrate_v2_to_v3(hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config):
     # Get old tables
     with open(os.path.join(os.path.dirname(__file__), "dumps/v2.sql"), "r") as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
@@ -39,6 +37,11 @@ async def test_environment_update(
     await ibl.start()
     async_finalizer(ibl.stop)
 
+
+@pytest.mark.asyncio
+async def test_environment_update(
+    migrate_v2_to_v3, async_finalizer, server_config
+):
     client = protocol.Client("client")
 
     result = await client.list_environments()
@@ -68,3 +71,12 @@ async def test_environment_update(
 
     e3_next = await env3.get_next_version()
     assert e3_next == 2
+
+
+@pytest.mark.asyncio
+async def test_addition_resource_type_column(migrate_v2_to_v3, postgresql_client: Connection):
+    results = await postgresql_client.fetch("SELECT resource_version_id, resource_type FROM public.Resource")
+    for r in results:
+        assert r["resource_type"] is not None
+        parsed_id = Id.parse_id(r["resource_version_id"])
+        assert r["resource_type"] == parsed_id.entity_type

@@ -92,6 +92,12 @@ ResourceIdStr = NewType("ResourceIdStr", str)
 """
 
 
+ResourceType = NewType("ResourceType", str)
+"""
+    The type of the resource
+"""
+
+
 class AttributeStateChange(BaseModel):
     """
         Changes in the attribute
@@ -192,3 +198,15 @@ class ModelVersionInfo(BaseModel):
 
     export_metadata: ModelMetadata
     model: Optional[JsonType]
+
+
+class Resource(BaseModel):
+    environment: uuid.UUID
+    model: int
+    resource_id: ResourceVersionIdStr
+    resource_type: ResourceType
+    resource_version_id: ResourceVersionIdStr
+    agent: str
+    last_deploy: Optional[datetime.datetime]
+    attributes: JsonType
+    status: const.ResourceState

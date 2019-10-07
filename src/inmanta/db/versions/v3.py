@@ -20,14 +20,26 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
-    ALTER TABLE public.environment
-        ADD COLUMN last_version integer DEFAULT 0;
+ALTER TABLE public.environment
+    ADD COLUMN last_version integer DEFAULT 0;
 
-    UPDATE public.environment AS e SET last_version =
-        (SELECT COALESCE(
-            (SELECT MAX(version) FROM public.configurationmodel AS c WHERE c.environment=e.id),
-            0
-        ));
-    """
+UPDATE public.environment AS e SET last_version =
+    (SELECT COALESCE(
+        (SELECT MAX(version) FROM public.configurationmodel AS c WHERE c.environment=e.id),
+        0
+    ));
+
+ALTER TABLE public.resource
+    ADD COLUMN resource_type varchar;
+
+UPDATE public.resource
+SET resource_type=substring(resource_id from '(.*)\\[');
+
+-- Set NOT NULL constraint after column is populated
+ALTER TABLE public.resource
+    ALTER COLUMN resource_type SET NOT NULL;
+
+CREATE INDEX resource_environment_resource_type_index ON public.resource (environment, resource_type);
+"""
     async with connection.transaction():
         await connection.execute(schema)
