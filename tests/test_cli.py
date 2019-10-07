@@ -293,7 +293,9 @@ async def test_import_export(server, client, environment, cli, tmpdir):
 
     f = tmpdir.join("export.json")
     print(result.output)
-    f.write(result.output)
+    print(str(f))
+    with open(str(f), "w") as fh:
+        fh.write(result.output)
 
     records = await client.list_records(tid=environment, form_type=form_type)
     assert records.code == 200
