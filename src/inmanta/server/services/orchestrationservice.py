@@ -185,7 +185,7 @@ class OrchestrationService(protocol.ServerSlice):
                 f"which is higher than the last outstanding reservation {env.last_version}"
             )
         if version <= 0:
-            raise BadRequest(f"The version number used is {version} " "is not positive")
+            raise BadRequest(f"The version number used ({version}) is not positive")
 
         started = datetime.datetime.now()
 
