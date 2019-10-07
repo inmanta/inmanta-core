@@ -168,7 +168,7 @@ Plugins
 *******
 Plugins provide :ref:`functions<lang-plugins>` that can be called from the :term:`DSL`. This is the
 primary mechanism to interface Python code with the configuration model at compile time. For Example,
-this mechanism is also used for std::template and std::file. Furthermore, Inmanta also registers all
+this mechanism is also used for std::template and std::file. In addition to this, Inmanta also registers all
 plugins with the template engine (Jinja2) to use as filters.
 
 A plugin is a python function, registered with the platform with the :func:`~inmanta.plugins.plugin`
