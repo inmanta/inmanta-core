@@ -171,8 +171,32 @@ Conditions can have the following forms
         | 'true'
         | 'false'
         | functioncall
+        | value 'is' 'defined'
         ;
 
+The ``is defined`` keyword checks if a value was assigned to an attribute or a relation of a certain entity. The following
+example sets the monitoring configuration on a certain host when it has a monitoring server associated:
+
+.. code-block:: inmanta
+
+    entity Host:
+
+    end
+
+    entity MonitoringServer:
+
+    end
+
+    Host.monitoring_server [0:1] -- MonitoringServer
+
+    implement Host using monitoringConfig when monitoring_server is defined
+
+    implementation monitoringConfig for Host:
+        # Set monitoring config
+    end
+
+
+Empty lists are considered to be unset.
 
 Function calls / Plugins
 ========================

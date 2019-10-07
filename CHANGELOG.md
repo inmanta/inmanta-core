@@ -1,5 +1,5 @@
 v 2019.4 (?) Changes in this release:
-- Various bugfixes (#1367,#1398,#736)
+- Various bugfixes (#1367,#1398,#736, #1454)
 - Added if statement (#1325)
 - Added CORS Access-Control-Allow-Origin header configuration (#1306)
 - Added --version option (#1291)
@@ -9,6 +9,7 @@ v 2019.4 (?) Changes in this release:
 - Use python3 from the core OS in Dockerfile
 - Introduce v2 protocol and implement project and environment api in v2 (#1412)
 - Improve agent documentation (#1389)
+- Improve language reference documentation (#1419)
 - Change autostart_agent_deploy_splay_time from 600 to 10 (#1447)
 - Introduce the bind-address and bind-port config option (#1442)
 

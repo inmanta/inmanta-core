@@ -883,7 +883,7 @@ implement Test1 using tt when other is defined
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
     assert isinstance(stmt.select, IsDefined)
-    assert stmt.select.attr.name == "self"
+    assert stmt.select.attr is None
     assert stmt.select.name == "other"
 
 
@@ -898,9 +898,8 @@ implement Test1 using tt when a.other is defined
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
     assert isinstance(stmt.select, IsDefined)
-    assert isinstance(stmt.select.attr, AttributeReference)
-    assert stmt.select.attr.instance.name == "self"
-    assert stmt.select.attr.attribute == "a"
+    assert isinstance(stmt.select.attr, Reference)
+    assert stmt.select.attr.name == "a"
     assert stmt.select.name == "other"
 
 
