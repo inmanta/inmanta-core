@@ -22,9 +22,10 @@ import pytest
 from asyncpg import Connection
 
 from db.common import PGRestore
-from inmanta.resources import Id
 from inmanta import data, protocol
+from inmanta.resources import Id
 from inmanta.server.bootloader import InmantaBootloader
+
 
 @pytest.fixture
 async def migrate_v2_to_v3(hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config):
@@ -39,9 +40,7 @@ async def migrate_v2_to_v3(hard_clean_db, hard_clean_db_post, postgresql_client:
 
 
 @pytest.mark.asyncio
-async def test_environment_update(
-    migrate_v2_to_v3, async_finalizer, server_config
-):
+async def test_environment_update(migrate_v2_to_v3, async_finalizer, server_config):
     client = protocol.Client("client")
 
     result = await client.list_environments()
