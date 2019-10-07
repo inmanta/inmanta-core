@@ -614,11 +614,11 @@ async def test_server_agent_api(resource_container, client, server, environment,
 
     agent = Agent(environment=env_id, hostname="agent1", agent_map={"agent1": "localhost"}, code_loader=False)
     await agent.start()
-    async_finalizer(agent)
+    async_finalizer(agent.stop)
 
     agent2 = Agent(environment=env_id, hostname="agent2", agent_map={"agent2": "localhost"}, code_loader=False)
     await agent2.start()
-    async_finalizer(agent2)
+    async_finalizer(agent2.stop)
 
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
     assert len(agentmanager.sessions) == 2
