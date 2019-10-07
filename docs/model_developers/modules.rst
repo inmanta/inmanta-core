@@ -20,7 +20,7 @@ The template, file and source plugins from the std module expect the following d
 
 * The ``files`` directory contains files that are deployed verbatim to managed machines.
 * The ``templates`` directory contains templates that use parameters from the orchestration model to
-  generate configuration files.
+generate configuration files.
 
 A complete module might contain the following files:
 
@@ -177,7 +177,7 @@ arguments and the return value must by annotated with the allowed types from the
 Type annotations are provided as a string (Python3 style argument annotation). ``any`` is a special
 type that effectively disables type validation.
 
-Through the arguments of the function, the Python code in the plugin can navigate the configuration
+Through the arguments of the function, the Python code in the plugin can navigate the orchestration
 model. The compiler takes care of scheduling the execution at the correct point in the model
 evaluation.
 
@@ -313,7 +313,7 @@ Handlers take care of changing the current state of a resource to the desired st
 orchestration model.
 
 The compiler collects all python modules from Inmanta modules that provide handlers and uploads them
-to the server. When a new configuration module version is deployed, the handler code is pushed to all
+to the server. When a new orchestration module version is deployed, the handler code is pushed to all
 agents and imported there.
 
 Handlers should inherit the class :class:`~inmanta.agent.handler.ResourceHandler`. The
