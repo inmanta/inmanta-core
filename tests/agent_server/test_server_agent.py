@@ -607,7 +607,9 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
 
 
 @pytest.mark.asyncio
-async def test_server_agent_api(resource_container, client, server, environment, clienthelper, no_agent_backoff, async_finalizer):
+async def test_server_agent_api(
+    resource_container, client, server, environment, clienthelper, no_agent_backoff, async_finalizer
+):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     env_id = environment
