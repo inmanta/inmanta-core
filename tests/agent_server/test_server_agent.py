@@ -607,16 +607,18 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
 
 
 @pytest.mark.asyncio
-async def test_server_agent_api(resource_container, client, server, environment, clienthelper, no_agent_backoff):
+async def test_server_agent_api(resource_container, client, server, environment, clienthelper, no_agent_backoff, async_finalizer):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     env_id = environment
 
     agent = Agent(environment=env_id, hostname="agent1", agent_map={"agent1": "localhost"}, code_loader=False)
     await agent.start()
+    async_finalizer(agent)
 
     agent2 = Agent(environment=env_id, hostname="agent2", agent_map={"agent2": "localhost"}, code_loader=False)
     await agent2.start()
+    async_finalizer(agent2)
 
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
     assert len(agentmanager.sessions) == 2

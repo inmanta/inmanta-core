@@ -292,6 +292,7 @@ async def test_import_export(server, client, environment, cli, tmpdir):
     assert form_id in result.output
 
     f = tmpdir.join("export.json")
+    print(result.output)
     f.write(result.output)
 
     records = await client.list_records(tid=environment, form_type=form_type)

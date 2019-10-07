@@ -729,6 +729,7 @@ class Environment(BaseDocument):
         :param repo_url: The repository url that contains the configuration model code for this environment
         :param repo_branch: The repository branch that contains the configuration model code for this environment
         :param settings: Key/value settings for this environment
+        :param last_version: The last version number that was reserved for this environment
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)

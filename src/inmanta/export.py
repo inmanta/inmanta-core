@@ -274,7 +274,7 @@ class Exporter(object):
             conn = protocol.SyncClient("compiler")
             result = conn.reserve_version(tid)
             if result.code != 200:
-                raise Exception("Unable to reserve version number from server (msg: %s)" % result.result)
+                raise Exception(f"Unable to reserve version number from server (msg: {result.result})")
             return result.result["data"]
 
     def run(
