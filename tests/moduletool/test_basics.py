@@ -15,12 +15,15 @@
 
     Contact: code@inmanta.com
 """
+import os
 import re
 
 from pkg_resources import parse_version
 
 from inmanta import module
 from inmanta.moduletool import ModuleTool
+from moduletool.common import install_project
+from test_app_cli import app
 
 
 def test_versioning():
@@ -84,3 +87,19 @@ compiler_version: 2017.2
     mod.rewrite_version("1.3.1")
     assert mod.version == "1.3.1"
     assert mod.compiler_version == "2017.2"
+
+
+def test_module_corruption(modules_dir, modules_repo):
+    # setup project
+    proj = install_project(modules_dir, "proj7")
+    app(["modules", "install"])
+    print(os.listdir(proj))
+    # overwrite main to import unknown sub module
+    # unfreeze deps to allow update
+    main = os.path.join(proj, "main.cf")
+    projectyml = os.path.join(proj, "project.yml")
+    assert os.path.exists(main)
+    assert os.path.exists(projectyml)
+
+    # attempt to update
+    pass

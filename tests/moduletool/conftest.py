@@ -131,6 +131,10 @@ def modules_repo(modules_dir):
     add_file(mod8, "devsignal", "present", "third commit", version="3.3.dev2")
     add_file(mod8, "mastersignal", "present", "last commit")
 
+    mod9 = make_module_simple(reporoot, "mod9", [])
+    add_file(mod9, "signal", "present", "third commit", version="3.3")
+    add_file(mod9, "model/b.cf", "import mod9", "fourth commit", version="4.0")
+
     proj = makemodule(
         reporoot, "testproject", [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6", "mod7"]
     )
@@ -182,5 +186,10 @@ def modules_repo(modules_dir):
     make_module_simple_deps(reporoot, "H")
     make_module_simple_deps(reporoot, "I")
     make_module_simple_deps(reporoot, "J")
+
+    # for bad module test
+
+    p7 = makeproject(reporoot, "proj9", [("mod9", "==4.1")], ["mod7"])
+    commitmodule(p7, "first commit")
 
     return reporoot
