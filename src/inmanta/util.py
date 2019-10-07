@@ -37,7 +37,7 @@ from tornado import gen
 from tornado.ioloop import IOLoop
 
 from inmanta.data.model import BaseModel
-from inmanta.types import JsonType
+from inmanta.types import JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -79,6 +79,10 @@ def ensure_directory_exist(directory: str, *subdirs: str) -> str:
     if not os.path.exists(directory):
         os.mkdir(directory)
     return directory
+
+
+def is_sub_dict(subdct: Dict[PrimitiveTypes, PrimitiveTypes], dct: Dict[PrimitiveTypes, PrimitiveTypes]):
+    return not any(True for k, v in subdct.items() if k not in dct or dct[k] != v)
 
 
 def hash_file(content: bytes) -> str:

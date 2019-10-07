@@ -35,7 +35,7 @@ from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.resources import Id
-from inmanta.types import JsonType, SimpleTypes
+from inmanta.types import JsonType, PrimitiveTypes, SimpleTypes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1732,6 +1732,7 @@ class Resource(BaseDocument):
 
     # ID related
     resource_id: m.ResourceVersionIdStr = Field(field_type=str, required=True)
+    resource_type: m.ResourceType = Field(field_type=str, required=True)
     resource_version_id: m.ResourceVersionIdStr = Field(field_type=str, required=True, part_of_primary_key=True)
 
     agent: str = Field(field_type=str, required=True)
@@ -1748,15 +1749,6 @@ class Resource(BaseDocument):
     # if this resource is updated, it must notify all RV's in this list
     # the list contains full rv id's
     provides: List[m.ResourceVersionIdStr] = Field(field_type=list, default=[])  # List of resource versions
-
-    @property
-    def resource_type(self):
-        return self._resource_type
-
-    def __init__(self, from_postgres=False, **kwargs):
-        super(Resource, self).__init__(from_postgres, **kwargs)
-        parsed_id = Id.parse_id(self.resource_version_id)
-        self._resource_type = parsed_id.entity_type
 
     def make_hash(self):
         character = "|".join(
@@ -1834,6 +1826,44 @@ class Resource(BaseDocument):
         )
         resources = await cls.select_query(query, values)
         return resources
+
+    @classmethod
+    async def get_resources_in_latest_version(
+        cls,
+        environment: uuid.UUID,
+        resource_type: Optional[m.ResourceType] = None,
+        attributes: Dict[PrimitiveTypes, PrimitiveTypes] = {},
+    ) -> List["Resource"]:
+        """
+        Returns the resources in the latest version of the configuration model of the given environment, that satisfy the
+        given constraints.
+
+        :param environment: The resources should belong to this environment.
+        :param resource_type: The environment should have this resource_type.
+        :param attributes: The resource should contain these key-value pairs in its attributes list.
+        """
+        values = [cls._get_value(environment)]
+        query = f"""
+            SELECT *
+            FROM {Resource.table_name()} AS r1
+            WHERE r1.environment=$1 AND r1.model=(SELECT MAX(r2.model)
+                                                  FROM {Resource.table_name()} AS r2
+                                                  WHERE r2.environment=$1)
+        """
+        if resource_type:
+            query += " AND r1.resource_type=$2"
+            values.append(cls._get_value(resource_type))
+
+        result = []
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                async for record in con.cursor(query, *values):
+                    resource = cls(from_postgres=True, **record)
+                    # The constraints on the attributes field are checked in memory.
+                    # This prevents injection attacks.
+                    if util.is_sub_dict(attributes, resource.attributes):
+                        result.append(resource)
+        return result
 
     @classmethod
     async def get_resources_report(cls, environment: uuid.UUID) -> List[JsonType]:
@@ -1953,6 +1983,7 @@ class Resource(BaseDocument):
             environment=environment,
             model=vid.version,
             resource_id=vid.resource_str(),
+            resource_type=vid.entity_type,
             resource_version_id=resource_version_id,
             agent=vid.agent_name,
         )
@@ -2072,8 +2103,20 @@ class Resource(BaseDocument):
         self.make_hash()
         dct = super(Resource, self).to_dict()
         dct["id"] = dct["resource_version_id"]
-        dct["resource_type"] = self._resource_type
         return dct
+
+    def to_dto(self) -> m.Resource:
+        return m.Resource(
+            environment=self.environment,
+            model=self.model,
+            resource_id=self.resource_id,
+            resource_type=self.resource_type,
+            resource_version_id=self.resource_version_id,
+            agent=self.agent,
+            last_deploy=self.last_deploy,
+            attributes=self.attributes,
+            status=self.status,
+        )
 
 
 class ConfigurationModel(BaseDocument):
