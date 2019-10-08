@@ -25,10 +25,10 @@ from typing import Dict, List, Optional, Set, cast
 import asyncpg
 
 from inmanta import const, data
-from inmanta.data.model import ResourceVersionIdStr
-from inmanta.protocol import methods
+from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
+from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import attach_warnings
-from inmanta.protocol.exceptions import ServerError
+from inmanta.protocol.exceptions import BadRequest, ServerError
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_TRANSPORT
 from inmanta.server import config as opt
@@ -148,16 +148,45 @@ class OrchestrationService(protocol.ServerSlice):
         await version.delete_cascade()
         return 200
 
+    @protocol.handle(methods_v2.reserve_version, env="tid")
+    async def reserve_version(self, env: data.Environment) -> int:
+        return await env.get_next_version()
+
     @protocol.handle(methods.put_version, env="tid")
     async def put_version(
         self,
         env: data.Environment,
         version: int,
         resources: List[JsonType],
-        resource_state: Dict[str, const.ResourceState],
+        resource_state: Dict[ResourceIdStr, const.ResourceState],
         unknowns: List[Dict[str, PrimitiveTypes]],
         version_info: JsonType,
+        compiler_version: str = None,
     ) -> Apireturn:
+        """
+        :param resources: a list of serialized resources
+        :param unknowns: dict with the following structure
+        {
+         "resource": ResourceIdStr,
+         "parameter": str,
+         "source": str
+         }
+        :param version_info:
+        :param compiler_version:
+        :return:
+        """
+
+        if not compiler_version:
+            raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
+
+        if version > env.last_version:
+            raise BadRequest(
+                f"The version number used is {version} "
+                f"which is higher than the last outstanding reservation {env.last_version}"
+            )
+        if version <= 0:
+            raise BadRequest(f"The version number used ({version}) is not positive")
+
         started = datetime.datetime.now()
 
         agents = set()

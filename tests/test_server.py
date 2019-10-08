@@ -19,7 +19,6 @@
 import asyncio
 import logging
 import os
-import time
 import uuid
 from datetime import datetime
 
@@ -31,7 +30,7 @@ from inmanta.agent.agent import Agent
 from inmanta.export import unknown_parameters, upload_code
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_SERVER, SLICE_SESSION_MANAGER
 from inmanta.server import config as opt
-from inmanta.util import hash_file
+from inmanta.util import get_compiler_version, hash_file
 from utils import retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -174,13 +173,13 @@ async def test_version_removal(client, server):
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    version = int(time.time())
-
     for _i in range(20):
-        version += 1
+        version = (await client.reserve_version(env_id)).result["data"]
 
         await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
-        res = await client.put_version(tid=env_id, version=version, resources=[], unknowns=[], version_info={})
+        res = await client.put_version(
+            tid=env_id, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+        )
         assert res.code == 200
         result = await client.get_project(id=project_id)
 
@@ -200,7 +199,7 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     await agent.start()
     aclient = agent._client
 
-    version = 1
+    version = (await client_multi.reserve_version(environment_multi)).result["data"]
 
     resources = [
         {
@@ -250,7 +249,12 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     ]
 
     res = await client_multi.put_version(
-        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
+        tid=environment_multi,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
     )
     assert res.code == 200
 
@@ -314,11 +318,9 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
 
 
 @pytest.mark.asyncio(timeout=10)
-async def test_get_environment(client, server, environment):
-    version = int(time.time())
-
+async def test_get_environment(client, clienthelper, server, environment):
     for i in range(10):
-        version += 1
+        version = await clienthelper.get_version()
 
         resources = []
         for j in range(i):
@@ -337,7 +339,14 @@ async def test_get_environment(client, server, environment):
                 }
             )
 
-        res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+        res = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=resources,
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
+        )
         assert res.code == 200
 
     result = await client.get_environment(environment, versions=5, resources=1)
@@ -347,7 +356,7 @@ async def test_get_environment(client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_resource_update(postgresql_client, client, server, environment):
+async def test_resource_update(postgresql_client, client, clienthelper, server, environment):
     """
         Test updating resources and logging
     """
@@ -355,7 +364,7 @@ async def test_resource_update(postgresql_client, client, server, environment):
     await agent.start()
     aclient = agent._client
 
-    version = int(time.time())
+    version = await clienthelper.get_version()
 
     resources = []
     for j in range(10):
@@ -374,7 +383,14 @@ async def test_resource_update(postgresql_client, client, server, environment):
             }
         )
 
-    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
     assert res.code == 200
 
     result = await client.release_version(environment, version, False)
@@ -441,12 +457,14 @@ async def test_resource_update(postgresql_client, client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_clear_environment(client, server, environment):
+async def test_clear_environment(client, server, clienthelper, environment):
     """
         Test clearing out an environment
     """
-    version = int(time.time())
-    result = await client.put_version(tid=environment, version=version, resources=[], unknowns=[], version_info={})
+    version = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+    )
     assert result.code == 200
 
     result = await client.get_environment(id=environment, versions=10)
@@ -475,7 +493,7 @@ async def test_clear_environment(client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_purge_on_delete_requires(client, server, environment):
+async def test_purge_on_delete_requires(client, server, environment, clienthelper):
     """
         Test purge on delete of resources and inversion of requires
     """
@@ -483,7 +501,7 @@ async def test_purge_on_delete_requires(client, server, environment):
     await agent.start()
     aclient = agent._client
 
-    version = 1
+    version = await clienthelper.get_version()
 
     resources = [
         {
@@ -514,8 +532,7 @@ async def test_purge_on_delete_requires(client, server, environment):
         },
     ]
 
-    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert res.code == 200
+    await clienthelper.put_version_simple(resources, version)
 
     # Release the model and set all resources as deployed
     result = await client.release_version(environment, version, False)
@@ -606,7 +623,7 @@ async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, s
 
 
 @pytest.mark.asyncio
-async def test_purge_on_delete_compile_failed(client, server, environment):
+async def test_purge_on_delete_compile_failed(client, server, clienthelper, environment):
     """
         Test purge on delete of resources
     """
@@ -614,7 +631,7 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
     await agent.start()
     aclient = agent._client
 
-    version = 1
+    version = await clienthelper.get_version()
 
     resources = [
         {
@@ -658,8 +675,7 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
         },
     ]
 
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert result.code == 200
+    await clienthelper.put_version_simple(resources, version)
 
     # Release the model and set all resources as deployed
     result = await client.release_version(environment, version, False)
@@ -690,13 +706,14 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
     assert result.result["model"]["result"] == const.VersionState.success.name
 
     # New version with only file3
-    version = 2
+    version = await clienthelper.get_version()
     result = await client.put_version(
         tid=environment,
         version=version,
         resources=[],
         unknowns=[{"parameter": "a", "source": "b"}],
         version_info={const.EXPORT_META_DATA: {const.META_DATA_COMPILE_STATE: const.Compilestate.failed}},
+        compiler_version=get_compiler_version(),
     )
     assert result.code == 200
 
@@ -708,7 +725,7 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_purge_on_delete(client, server, environment):
+async def test_purge_on_delete(client, clienthelper, server, environment):
     """
         Test purge on delete of resources
     """
@@ -716,7 +733,7 @@ async def test_purge_on_delete(client, server, environment):
     await agent.start()
     aclient = agent._client
 
-    version = 1
+    version = await clienthelper.get_version()
 
     resources = [
         {
@@ -760,7 +777,14 @@ async def test_purge_on_delete(client, server, environment):
         },
     ]
 
-    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
     assert res.code == 200
 
     # Release the model and set all resources as deployed
@@ -792,7 +816,7 @@ async def test_purge_on_delete(client, server, environment):
     assert result.result["model"]["result"] == const.VersionState.success.name
 
     # New version with only file3
-    version = 2
+    version = await clienthelper.get_version()
     res3 = {
         "group": "root",
         "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
@@ -806,7 +830,14 @@ async def test_purge_on_delete(client, server, environment):
         "purge_on_delete": True,
         "version": version,
     }
-    result = await client.put_version(tid=environment, version=version, resources=[res3], unknowns=[], version_info={})
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=[res3],
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
     assert result.code == 200
 
     result = await client.get_version(environment, version)
@@ -825,7 +856,7 @@ async def test_purge_on_delete(client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_purge_on_delete_ignore(client, server, environment):
+async def test_purge_on_delete_ignore(client, clienthelper, server, environment):
     """
         Test purge on delete behavior for resources that have not longer purged_on_delete set
     """
@@ -834,7 +865,7 @@ async def test_purge_on_delete_ignore(client, server, environment):
     aclient = agent._client
 
     # Version 1 with purge_on_delete true
-    version = 1
+    version = await clienthelper.get_version()
 
     resources = [
         {
@@ -852,7 +883,14 @@ async def test_purge_on_delete_ignore(client, server, environment):
         }
     ]
 
-    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
     assert res.code == 200
 
     # Release the model and set all resources as deployed
@@ -874,7 +912,7 @@ async def test_purge_on_delete_ignore(client, server, environment):
     assert result.result["model"]["result"] == const.VersionState.success.name
 
     # Version 2 with purge_on_delete false
-    version = 2
+    version = await clienthelper.get_version()
 
     resources = [
         {
@@ -892,7 +930,14 @@ async def test_purge_on_delete_ignore(client, server, environment):
         }
     ]
 
-    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
     assert res.code == 200
 
     # Release the model and set all resources as deployed
@@ -914,9 +959,16 @@ async def test_purge_on_delete_ignore(client, server, environment):
     assert result.result["model"]["result"] == const.VersionState.success.name
 
     # Version 3 with no resources
-    version = 3
+    version = await clienthelper.get_version()
     resources = []
-    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
     assert res.code == 200
 
     result = await client.get_version(environment, version)
@@ -962,7 +1014,7 @@ def make_source(collector, filename, module, source, req):
 async def test_code_upload(server_multi, client_multi, agent_multi, environment_multi):
     """ Test upload of a single code definition
     """
-    version = 1
+    version = (await client_multi.reserve_version(environment_multi)).result["data"]
 
     resources = [
         {
@@ -980,7 +1032,12 @@ async def test_code_upload(server_multi, client_multi, agent_multi, environment_
     ]
 
     res = await client_multi.put_version(
-        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
+        tid=environment_multi,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
     )
     assert res.code == 200
 
@@ -1037,7 +1094,7 @@ async def test_batched_code_upload(
 
 @pytest.mark.asyncio(timeout=30)
 async def test_resource_action_log(server_multi, client_multi, environment_multi):
-    version = 1
+    version = (await client_multi.reserve_version(environment_multi)).result["data"]
     resources = [
         {
             "group": "root",
@@ -1053,7 +1110,12 @@ async def test_resource_action_log(server_multi, client_multi, environment_multi
         }
     ]
     res = await client_multi.put_version(
-        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
+        tid=environment_multi,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
     )
     assert res.code == 200
 

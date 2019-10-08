@@ -12,9 +12,11 @@ v 2019.4 (?) Changes in this release:
 - Improve language reference documentation (#1419)
 - Change autostart_agent_deploy_splay_time from 600 to 10 (#1447)
 - Introduce the bind-address and bind-port config option (#1442)
+- Switch to sequential version numbers instead of timestamps (#1011)
 - Fixed memory leak in TaskHandler
 
 IMPORTANT CHANGES:
+- Older compiler versions are no longer supported with this server
 - The Inmanta server now listens on 127.0.0.1:8888 by default, while
   this was 0.0.0.0:8888 in previous versions. This behavior is
   configurable with the `bind-address` config option.

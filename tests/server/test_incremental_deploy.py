@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import logging
-import time
 import uuid
 from collections import defaultdict
 from datetime import datetime
@@ -33,6 +32,7 @@ from inmanta.const import ResourceAction, ResourceState
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
+from inmanta.util import get_compiler_version
 
 
 class MultiVersionSetup(object):
@@ -136,11 +136,22 @@ class MultiVersionSetup(object):
 
         return a
 
-    async def setup(self, serverdirect: OrchestrationService, resource_service: ResourceService, env: UUID, sid: UUID):
+    async def setup(
+        self, serverdirect: OrchestrationService, resource_service: ResourceService, env: data.Environment, sid: UUID
+    ):
         for version in range(0, len(self.versions)):
+            # allocate a bunch of versions!
+            v = await env.get_next_version()
+            assert v == version + 1
             if self.versions[version]:
                 res = await serverdirect.put_version(
-                    env=env, version=version, resources=self.versions[version], unknowns=[], version_info={}, resource_state={}
+                    env=env,
+                    version=version,
+                    resources=self.versions[version],
+                    unknowns=[],
+                    version_info={},
+                    resource_state={},
+                    compiler_version=get_compiler_version(),
                 )
                 assert res == 200
 
@@ -199,7 +210,7 @@ async def test_deploy(server, agent: Agent, environment, caplog):
         # acquire env object
         env = await data.Environment.get_by_id(uuid.UUID(environment))
 
-        version = int(time.time())
+        version = await env.get_next_version()
 
         def make_resources(version):
             return [
@@ -229,7 +240,13 @@ async def test_deploy(server, agent: Agent, environment, caplog):
 
         resources = make_resources(version)
         res = await orchestration_service.put_version(
-            env=env, version=version, resources=resources, unknowns=[], version_info={}, resource_state={}
+            env=env,
+            version=version,
+            resources=resources,
+            unknowns=[],
+            version_info={},
+            resource_state={},
+            compiler_version=get_compiler_version(),
         )
         assert res == 200
 
@@ -261,10 +278,16 @@ async def test_deploy(server, agent: Agent, environment, caplog):
         assert payload["model"].done == len(resources)
 
         # second, identical check_version
-        v2 = version + 1
+        v2 = await env.get_next_version()
         resources = make_resources(v2)
         res = await orchestration_service.put_version(
-            env=env, version=v2, resources=resources, unknowns=[], version_info={}, resource_state={}
+            env=env,
+            version=v2,
+            resources=resources,
+            unknowns=[],
+            version_info={},
+            resource_state={},
+            compiler_version=get_compiler_version(),
         )
         assert res == 200
 
