@@ -292,8 +292,8 @@ class TaskHandler(object):
             except Exception as e:
                 LOGGER.exception("An exception occurred while handling a future: %s", str(e))
             finally:
-                if task in self._background_tasks:
-                    self._background_tasks.remove(task)
+                self._background_tasks.discard(task)
+                self._await_tasks.discard(task)
 
         task.add_done_callback(handle_result)
         self._background_tasks.add(task)

@@ -600,9 +600,7 @@ def p_condition_is_defined(p: YaccProduction) -> None:
 
 def p_condition_is_defined_short(p: YaccProduction) -> None:
     """condition : ID IS DEFINED"""
-    ref = Reference("self")
-    ref.location = p[1].get_location()
-    p[0] = IsDefined(ref, p[1])
+    p[0] = IsDefined(None, p[1])
     attach_lnr(p)
 
 
