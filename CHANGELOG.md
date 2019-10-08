@@ -1,3 +1,6 @@
+v 2019.3.2 (2019-10-08) Changes in this release:
+- Fixed memory leak in TaskHandler
+
 v 2019.3.1 (2019-09-17) Changes in this release:
 - Config file passed via min-c option overrides all other config options (#1384)
 - Environment variables set on the Inmanta server are forwarded to the subprocess that executes the compilation (#1376)
