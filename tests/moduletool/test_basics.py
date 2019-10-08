@@ -18,11 +18,13 @@
 import os
 import re
 
+import yaml
 from pkg_resources import parse_version
 
 from inmanta import module
+from inmanta.module import Project
 from inmanta.moduletool import ModuleTool
-from moduletool.common import install_project
+from moduletool.common import install_project, make_module_simple, add_file, makeproject, commitmodule
 from test_app_cli import app
 
 
@@ -90,8 +92,15 @@ compiler_version: 2017.2
 
 
 def test_module_corruption(modules_dir, modules_repo):
+    mod9 = make_module_simple(modules_repo, "mod9", [])
+    add_file(mod9, "signal", "present", "third commit", version="3.3")
+    add_file(mod9, "model/b.cf", "import mod9", "fourth commit", version="4.0")
+
+    p9 = makeproject(modules_repo, "proj9", [("mod9", "==3.3")], ["mod9"])
+    commitmodule(p9, "first commit")
+
     # setup project
-    proj = install_project(modules_dir, "proj7")
+    proj = install_project(modules_dir, "proj9")
     app(["modules", "install"])
     print(os.listdir(proj))
     # overwrite main to import unknown sub module
@@ -101,5 +110,21 @@ def test_module_corruption(modules_dir, modules_repo):
     assert os.path.exists(main)
     assert os.path.exists(projectyml)
 
+    with open(main, "w") as fh:
+        fh.write("import mod9::b")
+
+    with open(projectyml, "r") as fh:
+        pyml = yaml.load(fh)
+
+    del pyml["requires"]
+
+    with open(projectyml, "w") as fh:
+        yaml.dump(pyml, fh)
+
+    # clear cache
+    Project._project = None
+
     # attempt to update
-    pass
+    app(["modules", "update"])
+
+    assert False
