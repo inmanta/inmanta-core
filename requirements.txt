@@ -29,7 +29,7 @@ tox==3.14.0
 tox-venv==0.4.0
 typing==3.7.4.1
 asyncpg==0.19.0
-pytest-postgresql==2.1.0
+pytest-postgresql==2.2.0
 pytest-env==0.6.2
 jinja2==2.10.3
 pep8-naming==0.8.2
