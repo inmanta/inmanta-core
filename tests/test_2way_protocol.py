@@ -119,7 +119,7 @@ async def test_2way_protocol(unused_tcp_port, no_tid_check, postgres_db, databas
     agent.set_environment(uuid.uuid4())
     await agent.start()
 
-    await retry_limited(lambda: len(server.get_sessions()) == 1, 0.1)
+    await retry_limited(lambda: len(server.get_sessions()) == 1, 10)
     assert len(server.get_sessions()) == 1
 
     client = protocol.Client("client")
@@ -166,7 +166,7 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
     async_finalizer(agent.stop)
 
     # wait till up
-    await retry_limited(lambda: len(server.get_sessions()) == 1, 0.1)
+    await retry_limited(lambda: len(server.get_sessions()) == 1, 10)
     assert len(server.get_sessions()) == 1
 
     # agent 2
@@ -177,7 +177,7 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
     async_finalizer(agent2.stop)
 
     # wait till up
-    await retry_limited(lambda: len(server.get_sessions()) == 2, 0.1)
+    await retry_limited(lambda: len(server.get_sessions()) == 2, 10)
     assert len(server.get_sessions()) == 2
 
     # see if it stays up
@@ -224,7 +224,7 @@ async def test_server_timeout(unused_tcp_port, no_tid_check, async_finalizer, po
     async_finalizer(agent.stop)
 
     # wait till up
-    await retry_limited(lambda: len(server.get_sessions()) == 1, 0.1)
+    await retry_limited(lambda: len(server.get_sessions()) == 1, 10)
     assert len(server.get_sessions()) == 1
 
     await rs.stop()
