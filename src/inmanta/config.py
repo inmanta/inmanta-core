@@ -17,9 +17,6 @@
 """
 
 import base64
-from urllib import request, error
-from collections import defaultdict
-from configparser import ConfigParser, Interpolation
 import json
 import logging
 import os
@@ -261,7 +258,7 @@ class Option(Generic[T]):
         self,
         section: str,
         name: str,
-        default: Union[T, None, Callable[[],T]],
+        default: Union[T, None, Callable[[], T]],
         documentation: str,
         validator: Callable[[str], T] = is_str,
         predecessor_option: "Option" = None,
@@ -333,7 +330,7 @@ def option_as_default(opt: Option[T]) -> Callable[[], T]:
 # Global config options are defined here
 #############################
 # flake8: noqa: H904
-state_dir: Option[str] = Option("config", "state_dir", "/var/lib/inmanta", "The directory where the server stores its state")
+state_dir = Option("config", "state_dir", "/var/lib/inmanta", "The directory where the server stores its state", is_str)
 
 log_dir = Option(
     "config",
