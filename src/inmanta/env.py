@@ -27,7 +27,7 @@ import sys
 import tempfile
 import venv
 from subprocess import CalledProcessError
-from typing import Dict, List, Optional, Set, Any
+from typing import Dict, List, Optional, Set, Any, Tuple
 
 import pkg_resources
 
@@ -132,7 +132,7 @@ class VirtualEnv(object):
                 sys.path.remove(item)
         sys.path[:0] = new_sys_path
 
-    def _parse_line(self, req_line: str) -> tuple:
+    def _parse_line(self, req_line: str) -> Tuple[Optional[str], str]:
         """
             Parse the requirement line
         """
@@ -148,13 +148,15 @@ class VirtualEnv(object):
 
         return None, req_line
 
-    def _gen_requirements_file(self, requirements_list) -> str:
+    def _gen_requirements_file(self, requirements_list:  List[str]) -> str:
         modules: Dict[str, Any] = {}
         for req in requirements_list:
-            name, req_spec = self._parse_line(req)
+            parsed_name, req_spec = self._parse_line(req)
 
-            if name is None:
+            if parsed_name is None:
                 name = req
+            else:
+                name = parsed_name
 
             url = None
             version = None
@@ -228,7 +230,7 @@ class VirtualEnv(object):
 
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
-    def _read_current_requirements_hash(self):
+    def _read_current_requirements_hash(self) -> str:
         """
             Return the hash of the requirements file used to install the current environment
         """
