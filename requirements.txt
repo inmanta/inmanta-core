@@ -57,4 +57,4 @@ pycparser==2.19
 zipp==0.6.0
 apipkg==1.5
 asn1crypto==1.1.0
-cffi==1.12.3
+cffi==1.13.0
