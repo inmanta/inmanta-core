@@ -14,6 +14,7 @@ v 2019.4 (?) Changes in this release:
 - Introduce the bind-address and bind-port config option (#1442)
 - Switch to sequential version numbers instead of timestamps (#1011)
 - Fixed memory leak in TaskHandler
+- Don't install packages inherited from the parent virtualenv
 
 IMPORTANT CHANGES:
 - Older compiler versions are no longer supported with this server
