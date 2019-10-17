@@ -16,11 +16,13 @@
     Contact: bart@inmanta.com
 """
 
+import logging
 from subprocess import CalledProcessError
 
 import pytest
 
 from inmanta import env
+from utils import LogSequence
 
 
 def test_basic_install(tmpdir):
@@ -63,6 +65,22 @@ def test_basic_install(tmpdir):
         print(ep.stdout)
         raise
     import iplib  # NOQA
+
+
+def test_install_fails(tmpdir, caplog):
+    venv = env.VirtualEnv(tmpdir)
+    venv.use_virtual_env()
+    caplog.clear()
+    package_name = "non-existing-pkg-inmanta"
+    exception_raised = False
+    try:
+        venv.install_from_list([package_name])
+    except Exception:
+        exception_raised = True
+
+    assert exception_raised
+    log_sequence = LogSequence(caplog)
+    log_sequence.contains("inmanta.env", logging.ERROR, f"requirements: {package_name}")
 
 
 def test_install_package_already_installed_in_parent_env(tmpdir):

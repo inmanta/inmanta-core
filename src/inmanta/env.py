@@ -212,12 +212,12 @@ class VirtualEnv(object):
             try:
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             except CalledProcessError as e:
-                LOGGER.debug("%s: %s", cmd, e.output.decode())
-                LOGGER.debug("requirements: %s", requirements_file)
+                LOGGER.exception("%s: %s", cmd, e.output.decode())
+                LOGGER.exception("requirements: %s", requirements_file)
                 raise
             except Exception:
-                LOGGER.debug("%s: %s", cmd, output.decode())
-                LOGGER.debug("requirements: %s", requirements_file)
+                LOGGER.exception("%s: %s", cmd, output.decode())
+                LOGGER.exception("requirements: %s", requirements_file)
                 raise
             else:
                 LOGGER.debug("%s: %s", cmd, output.decode())
@@ -293,10 +293,10 @@ class VirtualEnv(object):
         try:
             output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
         except CalledProcessError as e:
-            LOGGER.debug("%s: %s", cmd, e.output.decode())
+            LOGGER.exception("%s: %s", cmd, e.output.decode())
             raise
         except Exception:
-            LOGGER.debug("%s: %s", cmd, output.decode())
+            LOGGER.exception("%s: %s", cmd, output.decode())
             raise
         else:
             LOGGER.debug("%s: %s", cmd, output.decode())
