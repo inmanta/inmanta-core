@@ -130,7 +130,7 @@ class Config(object):
         """
             Return a boolean from the configuration
         """
-        cls.validate_option_request(section, name, str(default_value))
+        cls.validate_option_request(section, name, default_value)
         return cls._get_instance().getboolean(section, name, fallback=default_value)
 
     @classmethod
