@@ -17,6 +17,7 @@
 """
 
 import hashlib
+import json
 import logging
 import os
 import re
@@ -26,7 +27,7 @@ import sys
 import tempfile
 import venv
 from subprocess import CalledProcessError
-from typing import List
+from typing import Dict, List
 
 import pkg_resources
 
@@ -46,13 +47,16 @@ class VirtualEnv(object):
         self.env_path = env_path
         self.virtual_python = None
         self.__cache_done = set()
-
-        self._old = {}
+        self._parent_python = None
+        self._packages_installed_in_parent_env = set()
 
     def init_env(self) -> bool:
         """
             Init the virtual environment
         """
+        self._parent_python = sys.executable
+        self._packages_installed_in_parent_env = self._get_installed_packages(self._parent_python)
+
         python_name = os.path.basename(sys.executable)
 
         # check if the virtual env exists
@@ -254,6 +258,8 @@ class VirtualEnv(object):
             if len(requirements_list) == 0:
                 return
 
+        requirements_list = self._remove_requirements_present_in_parent_env(requirements_list)
+
         # hash it
         sha1sum = hashlib.sha1()
         sha1sum.update("\n".join(requirements_list).encode())
@@ -268,3 +274,31 @@ class VirtualEnv(object):
         self._set_current_requirements_hash(new_req_hash)
         for x in requirements_list:
             self.__cache_done.add(x)
+
+    def _remove_requirements_present_in_parent_env(self, requirements_list: List[str]):
+        reqs_to_remove = []
+        for r in requirements_list:
+            parsed_req = list(pkg_resources.parse_requirements(r))[0]
+            # Package is installed and its version fits the constraint
+            if (
+                parsed_req.project_name in self._packages_installed_in_parent_env
+                and self._packages_installed_in_parent_env[parsed_req.project_name] in parsed_req
+            ):
+                reqs_to_remove.append(r)
+        return [r for r in requirements_list if r not in reqs_to_remove]
+
+    @classmethod
+    def _get_installed_packages(cls, python_interpreter: str) -> Dict[str, str]:
+        cmd = [python_interpreter, "-m", "pip", "list", "--format", "json"]
+        try:
+            output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
+        except CalledProcessError as e:
+            LOGGER.debug("%s: %s", cmd, e.output.decode())
+            raise
+        except Exception:
+            LOGGER.debug("%s: %s", cmd, output.decode())
+            raise
+        else:
+            LOGGER.debug("%s: %s", cmd, output.decode())
+
+        return {r["name"]: r["version"] for r in json.loads(output.decode())}
