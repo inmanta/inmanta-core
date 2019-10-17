@@ -27,7 +27,7 @@ import sys
 import tempfile
 import venv
 from subprocess import CalledProcessError
-from typing import Dict, List, Optional, Set, Any, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import pkg_resources
 
@@ -148,7 +148,7 @@ class VirtualEnv(object):
 
         return None, req_line
 
-    def _gen_requirements_file(self, requirements_list:  List[str]) -> str:
+    def _gen_requirements_file(self, requirements_list: List[str]) -> str:
         modules: Dict[str, Any] = {}
         for req in requirements_list:
             parsed_name, req_spec = self._parse_line(req)
