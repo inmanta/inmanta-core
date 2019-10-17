@@ -27,7 +27,7 @@ import sys
 import tempfile
 import venv
 from subprocess import CalledProcessError
-from typing import Dict, List
+from typing import Dict, List, Optional, Set, Any
 
 import pkg_resources
 
@@ -44,11 +44,11 @@ class VirtualEnv(object):
 
     def __init__(self, env_path: str) -> None:
         LOGGER.info("Creating new virtual environment in %s", env_path)
-        self.env_path = env_path
-        self.virtual_python = None
-        self.__cache_done = set()
-        self._parent_python = None
-        self._packages_installed_in_parent_env = set()
+        self.env_path: str = env_path
+        self.virtual_python: Optional[str] = None
+        self.__cache_done: Set[str] = set()
+        self._parent_python: Optional[str] = None
+        self._packages_installed_in_parent_env: Dict[str, str] = {}
 
     def init_env(self) -> bool:
         """
@@ -149,7 +149,7 @@ class VirtualEnv(object):
         return None, req_line
 
     def _gen_requirements_file(self, requirements_list) -> str:
-        modules = {}
+        modules: Dict[str, Any] = {}
         for req in requirements_list:
             name, req_spec = self._parse_line(req)
 
@@ -207,17 +207,17 @@ class VirtualEnv(object):
             fd.write(requirements_file)
             fd.close()
 
-            cmd = [self.virtual_python, "-m", "pip", "install", "-r", path]
-            output = b""
+            assert self.virtual_python is not None
+            cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-r", path]
             try:
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             except CalledProcessError as e:
-                LOGGER.exception("%s: %s", cmd, e.output.decode())
-                LOGGER.exception("requirements: %s", requirements_file)
+                LOGGER.error("%s: %s", cmd, e.output.decode())
+                LOGGER.error("requirements: %s", requirements_file)
                 raise
             except Exception:
-                LOGGER.exception("%s: %s", cmd, output.decode())
-                LOGGER.exception("requirements: %s", requirements_file)
+                LOGGER.error("%s: %s", cmd, output.decode())
+                LOGGER.error("requirements: %s", requirements_file)
                 raise
             else:
                 LOGGER.debug("%s: %s", cmd, output.decode())
@@ -275,7 +275,7 @@ class VirtualEnv(object):
         for x in requirements_list:
             self.__cache_done.add(x)
 
-    def _remove_requirements_present_in_parent_env(self, requirements_list: List[str]):
+    def _remove_requirements_present_in_parent_env(self, requirements_list: List[str]) -> List[str]:
         reqs_to_remove = []
         for r in requirements_list:
             parsed_req = list(pkg_resources.parse_requirements(r))[0]
@@ -293,10 +293,10 @@ class VirtualEnv(object):
         try:
             output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
         except CalledProcessError as e:
-            LOGGER.exception("%s: %s", cmd, e.output.decode())
+            LOGGER.error("%s: %s", cmd, e.output.decode())
             raise
         except Exception:
-            LOGGER.exception("%s: %s", cmd, output.decode())
+            LOGGER.error("%s: %s", cmd, output.decode())
             raise
         else:
             LOGGER.debug("%s: %s", cmd, output.decode())
