@@ -777,7 +777,7 @@ class CRUDHandler(ResourceHandler):
         """
 
     def calculate_diff(
-        self, current: resources.Resource, desired: resources.Resource
+        self, ctx: HandlerContext, current: resources.Resource, desired: resources.Resource
     ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
         """
             Calculate the diff between the current and desired resource state.
@@ -813,7 +813,7 @@ class CRUDHandler(ResourceHandler):
             try:
                 ctx.debug("Calling read_resource")
                 self.read_resource(ctx, current)
-                changes = self.calculate_diff(current, desired)
+                changes = self.calculate_diff(ctx, current, desired)
 
             except ResourcePurged:
                 if not desired.purged:
