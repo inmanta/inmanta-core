@@ -3,6 +3,7 @@ v 2019.4 (?) Changes in this release:
 - Added if statement (#1325)
 - Added CORS Access-Control-Allow-Origin header configuration (#1306)
 - Added --version option (#1291)
+- Added retry to moduletool update, to allow updating of corrupt projects (#177)
 - RPM-based installations on Fedora are not supported anymore
 - Added option to configure asyncpg pool (#1304)
 - Split out the main service into many smaller services (#1388)
