@@ -776,7 +776,9 @@ class CRUDHandler(ResourceHandler):
             :param resource: The desired resource state.
         """
 
-    def calculate_diff(self, current: resources.Resource, desired: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+    def calculate_diff(
+        self, current: resources.Resource, desired: resources.Resource
+    ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
         """
             Calculate the diff between the current and desired resource state.
 
