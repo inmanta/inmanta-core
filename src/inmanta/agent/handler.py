@@ -811,6 +811,7 @@ class CRUDHandler(ResourceHandler):
             assert isinstance(current, resources.PurgeableResource)
             changes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
             try:
+                ctx.debug("Calling read_resource")
                 self.read_resource(ctx, current)
                 changes = self.calculate_diff(current, desired)
 
