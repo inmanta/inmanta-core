@@ -24,7 +24,7 @@ from pkg_resources import parse_version
 from inmanta import module
 from inmanta.module import Project
 from inmanta.moduletool import ModuleTool
-from moduletool.common import install_project, make_module_simple, add_file, makeproject, commitmodule
+from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
 from test_app_cli import app
 
 
@@ -92,9 +92,14 @@ compiler_version: 2017.2
 
 
 def test_module_corruption(modules_dir, modules_repo):
-    mod9 = make_module_simple(modules_repo, "mod9", [])
+    mod9 = make_module_simple(modules_repo, "mod9", [("mod10", None)])
     add_file(mod9, "signal", "present", "third commit", version="3.3")
     add_file(mod9, "model/b.cf", "import mod9", "fourth commit", version="4.0")
+
+    mod10 = make_module_simple(modules_repo, "mod10", [])
+    add_file(mod10, "signal", "present", "a commit", version="3.3")
+    add_file(mod10, "secondsignal", "import mod9", "b commit", version="4.0")
+    add_file(mod10, "badsignal", "import mod9", "c commit", version="5.0")
 
     p9 = makeproject(modules_repo, "proj9", [("mod9", "==3.3")], ["mod9"])
     commitmodule(p9, "first commit")
@@ -116,7 +121,7 @@ def test_module_corruption(modules_dir, modules_repo):
     with open(projectyml, "r") as fh:
         pyml = yaml.load(fh)
 
-    del pyml["requires"]
+    pyml["requires"] = ["mod10 == 4.0"]
 
     with open(projectyml, "w") as fh:
         yaml.dump(pyml, fh)
@@ -127,4 +132,14 @@ def test_module_corruption(modules_dir, modules_repo):
     # attempt to update
     app(["modules", "update"])
 
-    assert False
+    # Additional output
+    Project._project = None
+    app(["modules", "list"])
+
+    # Verify
+    m9dir = os.path.join(proj, "libs", "mod9")
+    assert os.path.exists(os.path.join(m9dir, "model", "b.cf"))
+    m10dir = os.path.join(proj, "libs", "mod10")
+    assert os.path.exists(os.path.join(m10dir, "secondsignal"))
+    # should not be lastest version
+    assert not os.path.exists(os.path.join(m10dir, "badsignal"))
