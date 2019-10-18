@@ -29,6 +29,7 @@ import time
 import uuid
 import warnings
 from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
+from functools import lru_cache
 from logging import Logger
 from typing import Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
 
@@ -59,6 +60,7 @@ def memoize(obj):
     return memoizer
 
 
+@lru_cache(maxsize=1)
 def get_compiler_version() -> Optional[str]:
     try:
         return pkg_resources.get_distribution("inmanta").version
@@ -290,8 +292,8 @@ class TaskHandler(object):
             except Exception as e:
                 LOGGER.exception("An exception occurred while handling a future: %s", str(e))
             finally:
-                if task in self._background_tasks:
-                    self._background_tasks.remove(task)
+                self._background_tasks.discard(task)
+                self._await_tasks.discard(task)
 
         task.add_done_callback(handle_result)
         self._background_tasks.add(task)

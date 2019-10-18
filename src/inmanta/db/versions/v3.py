@@ -20,6 +20,15 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
+ALTER TABLE public.environment
+    ADD COLUMN last_version integer DEFAULT 0;
+
+UPDATE public.environment AS e SET last_version =
+    (SELECT COALESCE(
+        (SELECT MAX(version) FROM public.configurationmodel AS c WHERE c.environment=e.id),
+        0
+    ));
+
 ALTER TABLE public.resource
     ADD COLUMN resource_type varchar;
 

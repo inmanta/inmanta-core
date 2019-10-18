@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import copy
 import datetime
 import enum
@@ -25,9 +26,10 @@ import uuid
 import warnings
 from collections import defaultdict
 from configparser import RawConfigParser
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type, TypeVar, Union, cast
 
 import asyncpg
+from asyncpg.protocol import Record
 
 import inmanta.db.versions
 from inmanta import const, util
@@ -242,8 +244,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
     async def close_connection_pool(cls) -> None:
         if not cls._connection_pool:
             return
-        await cls._connection_pool.close()
-        cls._connection_pool = None
+        try:
+            await cls._connection_pool.close()
+        finally:
+            cls._connection_pool = None
 
     def _get_field(self, name):
         if hasattr(self.__class__, name):
@@ -331,7 +335,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return await con.fetchval(query, *values)
 
     @classmethod
-    async def _fetchrow(cls, query, *values):
+    async def _fetchrow(cls, query, *values) -> Record:
         async with cls._connection_pool.acquire() as con:
             return await con.fetchrow(query, *values)
 
@@ -725,6 +729,7 @@ class Environment(BaseDocument):
         :param repo_url: The repository url that contains the configuration model code for this environment
         :param repo_branch: The repository branch that contains the configuration model code for this environment
         :param settings: Key/value settings for this environment
+        :param last_version: The last version number that was reserved for this environment
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -733,6 +738,7 @@ class Environment(BaseDocument):
     repo_url: str = Field(field_type=str, default="")
     repo_branch: str = Field(field_type=str, default="")
     settings: Dict[str, m.EnvSettingType] = Field(field_type=dict, default={})
+    last_version: int = Field(field_type=int, default=0)
 
     def to_dto(self) -> m.Environment:
         return m.Environment(
@@ -948,6 +954,20 @@ class Environment(BaseDocument):
         else:
             # Cascade is done by PostgreSQL
             await self.delete()
+
+    async def get_next_version(self) -> int:
+        record = await self._fetchrow(
+            f"""
+UPDATE {self.table_name()}
+SET last_version = last_version + 1
+WHERE id = $1
+RETURNING last_version;
+""",
+            self.id,
+        )
+        version = cast(int, record[0])
+        self.last_version = version
+        return version
 
 
 SOURCE = ("fact", "plugin", "user", "form", "report")
@@ -2618,8 +2638,7 @@ def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
 
 async def disconnect() -> None:
     LOGGER.debug("Disconnecting data classes")
-    for cls in _classes:
-        await cls.close_connection_pool()
+    await asyncio.gather(*[cls.close_connection_pool() for cls in _classes])
 
 
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
@@ -2657,6 +2676,6 @@ async def connect(
                 await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, con).ensure_db_schema()
         return pool
     except Exception as e:
-        await disconnect()
         await pool.close()
+        await disconnect()
         raise e

@@ -228,3 +228,10 @@ def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
     """
         Delete a value
     """
+
+
+@typedmethod(path="/reserve_version", operation="POST", arg_options=methods.ENV_OPTS, client_types=["compiler"], api_version=2)
+def reserve_version(tid: uuid.UUID) -> int:
+    """
+        Reserve a version number in this environment.
+    """

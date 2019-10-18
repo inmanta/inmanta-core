@@ -17,7 +17,6 @@
 """
 import asyncio
 import logging
-import time
 import uuid
 
 import pytest
@@ -25,7 +24,8 @@ import pytest
 from inmanta import const, data, execute
 from inmanta.agent.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER
-from utils import _wait_until_deployment_finishes, retry_limited
+from inmanta.util import get_compiler_version
+from utils import ClientHelper, _wait_until_deployment_finishes, retry_limited
 
 logger = logging.getLogger("inmanta.test.dryrun")
 
@@ -57,7 +57,9 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
 
-    version = int(time.time())
+    clienthelper = ClientHelper(client_multi, env_id)
+
+    version = await clienthelper.get_version()
 
     resources = [
         {
@@ -112,7 +114,13 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
 
     status = {"test::Resource[agent2,key=key4]": const.ResourceState.undefined}
     result = await client_multi.put_version(
-        tid=env_id, version=version, resources=resources, resource_state=status, unknowns=[], version_info={}
+        tid=env_id,
+        version=version,
+        resources=resources,
+        resource_state=status,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
     )
     assert result.code == 200
 
@@ -184,25 +192,13 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_dryrun_failures(resource_container, server, client):
+async def test_dryrun_failures(resource_container, server, agent, client, environment, clienthelper):
     """
         test dryrun scaling
     """
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    env_id = environment
 
-    resource_container.Provider.reset()
-    result = await client.create_project("env-test")
-    project_id = result.result["project"]["id"]
-
-    result = await client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
-
-    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
-    await agent.start()
-    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
-
-    version = int(time.time())
+    version = await clienthelper.get_version()
 
     resources = [
         {
@@ -231,8 +227,7 @@ async def test_dryrun_failures(resource_container, server, client):
         },
     ]
 
-    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
-    assert result.code == 200
+    await clienthelper.put_version_simple(resources, version)
 
     # request a dryrun
     result = await client.dryrun_request(env_id, version)
@@ -272,25 +267,12 @@ async def test_dryrun_failures(resource_container, server, client):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_dryrun_scale(resource_container, server, client):
+async def test_dryrun_scale(resource_container, server, client, environment, agent, clienthelper):
     """
         test dryrun scaling
     """
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    resource_container.Provider.reset()
-    result = await client.create_project("env-test")
-    project_id = result.result["project"]["id"]
-
-    result = await client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
-
-    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
-    await agent.start()
-    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
-
-    version = int(time.time())
+    version = await clienthelper.get_version()
+    env_id = environment
 
     resources = []
     for i in range(1, 100):
@@ -305,8 +287,7 @@ async def test_dryrun_scale(resource_container, server, client):
             }
         )
 
-    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
-    assert result.code == 200
+    await clienthelper.put_version_simple(resources, version)
 
     # request a dryrun
     result = await client.dryrun_request(env_id, version)
