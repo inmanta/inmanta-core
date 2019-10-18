@@ -776,6 +776,22 @@ class CRUDHandler(ResourceHandler):
             :param resource: The desired resource state.
         """
 
+    def calculate_diff(
+        self, ctx: HandlerContext, current: resources.Resource, desired: resources.Resource
+    ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+        """
+            Calculate the diff between the current and desired resource state.
+
+            :param ctx: Context can be used to get values discovered in the read method. For example, the id used in API
+                        calls. This context should also be used to let the handler know what changes were made to the
+                        resource.
+            :param current: The current state of the resource
+            :param desired: The desired state of the resource
+            :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
+                     fields that require changes.
+        """
+        return super()._diff(current, desired)
+
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = None) -> None:
         """
             Update the given resource. This method is called by the agent. Override the CRUD methods of this class.
@@ -795,8 +811,9 @@ class CRUDHandler(ResourceHandler):
             assert isinstance(current, resources.PurgeableResource)
             changes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
             try:
+                ctx.debug("Calling read_resource")
                 self.read_resource(ctx, current)
-                changes = self._diff(current, desired)
+                changes = self.calculate_diff(ctx, current, desired)
 
             except ResourcePurged:
                 if not desired.purged:
@@ -808,11 +825,14 @@ class CRUDHandler(ResourceHandler):
             if not dry_run:
                 if "purged" in changes:
                     if not changes["purged"]["desired"]:
+                        ctx.debug("Calling create_resource")
                         self.create_resource(ctx, desired)
                     else:
+                        ctx.debug("Calling delete_resource")
                         self.delete_resource(ctx, desired)
 
                 elif len(changes) > 0:
+                    ctx.debug("Calling update_resource", changes=changes)
                     self.update_resource(ctx, changes, desired)
 
                 ctx.set_status(const.ResourceState.deployed)
