@@ -48,6 +48,11 @@ class Provider(CRUDHandler):
         else:
             current.value = None
 
+    def calculate_diff(self, ctx: HandlerContext, current: resources.Resource, desired: resources.Resource):
+        diff = super().calculate_diff(ctx, current, desired)
+        ctx.info("Diff was called")
+        return diff
+
     def create_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
         self.touch(resource.id.get_agent_name(), resource.key)
         self.set(resource.id.get_agent_name(), resource.key, resource.value)
