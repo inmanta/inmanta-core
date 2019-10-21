@@ -207,7 +207,7 @@ async def test_server_restart(
     resource_container, server, agent, environment, clienthelper, postgres_db, client, no_agent_backoff
 ):
     """
-        dryrun and deploy a configuration model
+        Test if agent reconnects correctly after server restart
     """
     resource_container.Provider.reset()
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
@@ -254,7 +254,7 @@ async def test_server_restart(
 
     await clienthelper.put_version_simple(resources, version)
 
-     # do a deploy
+    # do a deploy
     result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
