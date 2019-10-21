@@ -28,7 +28,7 @@ from functools import lru_cache
 from io import BytesIO
 from subprocess import CalledProcessError
 from tarfile import TarFile
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple, Union
 
 import yaml
 from pkg_resources import parse_requirements, parse_version
@@ -49,7 +49,6 @@ except ImportError:
 
 
 if TYPE_CHECKING:
-    from typing import Iterable, Set  # noqa: F401
     from pkg_resources.packaging.version import Version  # noqa: F401
     from pkg_resources import Requirement  # noqa: F401
 
@@ -604,7 +603,7 @@ class Project(ModuleLike):
 
         return mod_list
 
-    def collect_requirements(self) -> "Dict[str, List[Requirement]]":
+    def collect_requirements(self) -> "Mapping[str, Iterable[Requirement]]":
         """
             Collect the list of all requirements of all modules in the project.
         """
@@ -618,7 +617,7 @@ class Project(ModuleLike):
             merge_specs(specs, reqs)
         return specs
 
-    def collect_imported_requirements(self) -> "Dict[str, Iterable[Requirement]]":
+    def collect_imported_requirements(self) -> "Mapping[str, Iterable[Requirement]]":
         imports = set([x.name.split("::")[0] for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
         imports.add("std")
         specs = self.collect_requirements()
@@ -756,10 +755,7 @@ class Module(ModuleLike):
         """
             Returns the name of the module (if the meta data is set)
         """
-        if "name" in self._meta:
-            return self._meta["name"]
-
-        return None
+        return self._meta["name"]
 
     name = property(get_name)
 
@@ -767,15 +763,12 @@ class Module(ModuleLike):
         """
             Return the version of this module
         """
-        if "version" in self._meta:
-            return str(self._meta["version"])
-
-        return None
+        return str(self._meta["version"])
 
     version = property(get_version)
 
     @property
-    def compiler_version(self) -> str:
+    def compiler_version(self) -> Optional[str]:
         """
             Get the minimal compiler version required for this module version. Returns none is the compiler version is not
             constrained.
@@ -789,7 +782,7 @@ class Module(ModuleLike):
         cls,
         project: Project,
         modulename: str,
-        requirements: "List[Requirement]",
+        requirements: "Iterable[Requirement]",
         install: bool = True,
         install_mode: str = INSTALL_RELEASES,
     ) -> "Module":
@@ -804,6 +797,10 @@ class Module(ModuleLike):
             gitprovider.fetch(path)
         else:
             # otherwise install
+            if project.downloadpath is None:
+                raise CompilerException(
+                    f"Can not install module {modulename} because 'downloadpath' is not set in {project.PROJECT_FILE}"
+                )
             path = os.path.join(project.downloadpath, modulename)
             result = project.externalResolver.clone(modulename, project.downloadpath)
             if not result:
@@ -816,7 +813,7 @@ class Module(ModuleLike):
         cls,
         project: Project,
         modulename: str,
-        requirements: "List[Requirement]",
+        requirements: "Iterable[Requirement]",
         path: str = None,
         fetch: bool = True,
         install_mode: str = INSTALL_RELEASES,
@@ -824,31 +821,37 @@ class Module(ModuleLike):
         """
            Update a module, return module object
         """
-
         if path is None:
-            path = project.resolver.path_for(modulename)
+            mypath = project.resolver.path_for(modulename)
+            assert mypath is not None, f"trying to update module {modulename} not found on disk "
+        else:
+            mypath = path
 
         if fetch:
-            gitprovider.fetch(path)
+            LOGGER.info("Performing fetch on %s", mypath)
+            gitprovider.fetch(mypath)
 
         if install_mode == INSTALL_MASTER:
-            gitprovider.checkout_tag(path, "master")
+            LOGGER.info("Checking out master on %s", mypath)
+            gitprovider.checkout_tag(mypath, "master")
             if fetch:
-                gitprovider.pull(path)
+                LOGGER.info("Pulling master on %s", mypath)
+                gitprovider.pull(mypath)
         else:
             release_only = install_mode == INSTALL_RELEASES
-            version = cls.get_suitable_version_for(modulename, requirements, path, release_only=release_only)
+            version = cls.get_suitable_version_for(modulename, requirements, mypath, release_only=release_only)
 
             if version is None:
                 print("no suitable version found for module %s" % modulename)
             else:
-                gitprovider.checkout_tag(path, str(version))
+                LOGGER.info("Checking out %s on %s", str(version), mypath)
+                gitprovider.checkout_tag(mypath, str(version))
 
-        return Module(project, path)
+        return Module(project, mypath)
 
     @classmethod
     def get_suitable_version_for(
-        cls, modulename: str, requirements: "List[Requirement]", path: str, release_only: bool = True
+        cls, modulename: str, requirements: "Iterable[Requirement]", path: str, release_only: bool = True
     ) -> "Optional[Version]":
         versions = gitprovider.get_all_tags(path)
 
@@ -864,9 +867,9 @@ class Module(ModuleLike):
         for r in requirements:
             versions = [x for x in r.specifier.filter(versions, not release_only)]
 
-        comp_version = get_compiler_version()
-        if comp_version is not None:
-            comp_version = parse_version(comp_version)
+        comp_version_raw = get_compiler_version()
+        if comp_version_raw is not None:
+            comp_version = parse_version(comp_version_raw)
             # use base version, to make sure dev versions work as expected
             comp_version = parse_version(comp_version.base_version)
             return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
@@ -879,8 +882,8 @@ class Module(ModuleLike):
         cls, modulename: str, versions: "List[Version]", path: str, comp_version: "Version"
     ) -> "Optional[Version]":
         def get_cv_for(best: "Version") -> "Optional[Version]":
-            cfg = gitprovider.get_file_for_version(path, str(best), "module.yml")
-            cfg = yaml.safe_load(cfg)
+            cfg_raw = gitprovider.get_file_for_version(path, str(best), "module.yml")
+            cfg = yaml.safe_load(cfg_raw)
             if "compiler_version" not in cfg:
                 return None
             v = cfg["compiler_version"]
@@ -997,9 +1000,9 @@ class Module(ModuleLike):
     def get_freeze(self, submodule: str, recursive: bool = False, mode: str = ">=") -> Dict[str, str]:
         imports = [statement.name for statement in self.get_imports(submodule)]
 
-        out = {}
+        out: Dict[str, str] = {}
 
-        todo = imports
+        todo: List[str] = imports
 
         for impor in todo:
             if impor not in out:
@@ -1023,7 +1026,7 @@ class Module(ModuleLike):
         return imports
 
     def _get_model_files(self, curdir: str) -> List[str]:
-        files = []
+        files: List[str] = []
         init_cf = os.path.join(curdir, "_init.cf")
         if not os.path.exists(init_cf):
             return files

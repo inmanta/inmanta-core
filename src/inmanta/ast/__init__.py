@@ -582,15 +582,15 @@ class ExternalException(RuntimeException):
 
 
 class WrappingRuntimeException(RuntimeException):
-    """ Baseclass for RuntimeExceptions wrapping other RuntimeException """
+    """ Baseclass for RuntimeExceptions wrapping other CompilerException """
 
-    def __init__(self, stmt: Locatable, msg: str, cause: RuntimeException) -> None:
+    def __init__(self, stmt: Locatable, msg: str, cause: CompilerException) -> None:
         if stmt is None and isinstance(cause, RuntimeException):
             stmt = cause.stmt
 
         RuntimeException.__init__(self, stmt=stmt, msg=msg)
 
-        self.__cause__ = cause  # type: RuntimeException
+        self.__cause__ = cause  # type: CompilerException
 
     def get_causes(self) -> List[CompilerException]:
         return [self.__cause__]
@@ -676,7 +676,7 @@ class CycleExcpetion(TypingException):
 
 
 class ModuleNotFoundException(WrappingRuntimeException):
-    def __init__(self, name: str, stmt: "Statement", cause: RuntimeException, msg: str = None) -> None:
+    def __init__(self, name: str, stmt: "Statement", cause: CompilerException, msg: str = None) -> None:
         if msg is None:
             msg = "could not find module %s" % name
         WrappingRuntimeException.__init__(self, stmt, msg, cause)
