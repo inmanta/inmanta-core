@@ -613,9 +613,6 @@ async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, s
     # force deploy by having unknown
     unknown_parameters.append({"parameter": "a", "source": "b"})
 
-    # ensure new version, wait for other second
-    await asyncio.sleep(1)
-
     version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
     result = await client.get_version(environment, version)
     assert result.code == 200

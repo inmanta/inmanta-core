@@ -202,9 +202,6 @@ async def test_resource_evolution(server, client, environment, no_agent_backoff,
     assert provider.isset("agent1", "a")
     assert provider.changecount("agent1", "a") == 1
 
-    # get different version from export, wait until next second
-    await asyncio.sleep(1)
-
     provider = resource_container_b()
 
     agent = await get_agent(server, environment, "agent1")
@@ -235,7 +232,6 @@ async def test_resource_evolution(server, client, environment, no_agent_backoff,
     assert provider.changecount("agent1", "a") == 1
 
     # get different version from export, wait until next second
-    await asyncio.sleep(1)
     snippetcompiler.reset()
     version, _ = await snippetcompiler.do_export_and_deploy()
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)

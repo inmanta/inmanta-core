@@ -287,7 +287,7 @@ async def test_send_events_cross_agent_restart(
     # wait for agent 2 to finish
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 1:
         result = await client.get_version(environment, version)
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.1)
 
     assert resource_container.Provider.get("agent2", "key2") == "value2"
 

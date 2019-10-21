@@ -52,7 +52,7 @@ class CacheTests(unittest.TestCase):
         cache.cache_value("test2", value)
 
         assert value == cache.find("test")
-        sleep(1)
+        sleep(0.2)
         try:
             assert value == cache.find("test")
             raise AssertionError("Should get exception")
@@ -178,13 +178,13 @@ class CacheTests(unittest.TestCase):
 
         cache.open_version(version)
         value = "test too"
-        cache.cache_value("test", value, version=version, timeout=0.3)
+        cache.cache_value("test", value, version=version, timeout=0.1)
         cache.cache_value("testx", value)
 
         assert value == cache.find("test", version=version)
         assert value == cache.find("testx")
 
-        sleep(1)
+        sleep(0.2)
         assert value == cache.find("testx")
 
         cache.close_version(version)
@@ -200,7 +200,7 @@ class CacheTests(unittest.TestCase):
 
         cache.open_version(version)
         value = "test too"
-        cache.cache_value("test", value, version=version, timeout=0.3)
+        cache.cache_value("test", value, version=version, timeout=0.1)
         cache.cache_value("testx", value)
 
         assert value == cache.find("test", version=version)
@@ -209,7 +209,7 @@ class CacheTests(unittest.TestCase):
         cache.close_version(version)
         assert value == cache.find("testx")
 
-        sleep(1)
+        sleep(0.2)
         assert value == cache.find("testx")
 
         with pytest.raises(KeyError):
