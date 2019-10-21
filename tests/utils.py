@@ -214,8 +214,6 @@ async def report_db_index_usage(min_precent=100):
 
 
 async def wait_for_version(client, environment, cnt):
-    start = time.time()
-
     # Wait until the server is no longer compiling
     # wait for it to finish
     async def compile_done():
