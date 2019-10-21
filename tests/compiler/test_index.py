@@ -70,11 +70,8 @@ implement Repository using redhatRepo
 
 h1 = std::Host(name="test", os=std::linux)
 
-Repository(host=h1, name="flens-demo",
-                           baseurl="http://people.cs.kuleuven.be/~wouter.deborger/repo/")
-
-Repository(host=h1, name="flens-demo",
-                           baseurl="http://people.cs.kuleuven.be/~wouter.deborger/repo/")
+Repository(host=h1, name="demo", baseurl="http://example.com")
+Repository(host=h1, name="demo", baseurl="http://example.com")
         """
     )
 

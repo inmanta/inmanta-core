@@ -48,14 +48,19 @@ class VirtualEnv(object):
         self.virtual_python: Optional[str] = None
         self.__cache_done: Set[str] = set()
         self._parent_python: Optional[str] = None
-        self._packages_installed_in_parent_env: Dict[str, str] = {}
+        self._packages_installed_in_parent_env: Optional[Dict[str, str]] = None
+
+    def get_package_installed_in_parent_env(self) -> Optional[Dict[str, str]]:
+        if self._packages_installed_in_parent_env is None:
+            self._packages_installed_in_parent_env = self._get_installed_packages(self._parent_python)
+
+        return self._packages_installed_in_parent_env
 
     def init_env(self) -> bool:
         """
             Init the virtual environment
         """
         self._parent_python = sys.executable
-        self._packages_installed_in_parent_env = self._get_installed_packages(self._parent_python)
 
         python_name = os.path.basename(sys.executable)
 
@@ -279,12 +284,13 @@ class VirtualEnv(object):
 
     def _remove_requirements_present_in_parent_env(self, requirements_list: List[str]) -> List[str]:
         reqs_to_remove = []
+        packages_installed_in_parent = self.get_package_installed_in_parent_env()
         for r in requirements_list:
             parsed_req = list(pkg_resources.parse_requirements(r))[0]
             # Package is installed and its version fits the constraint
             if (
-                parsed_req.project_name in self._packages_installed_in_parent_env
-                and self._packages_installed_in_parent_env[parsed_req.project_name] in parsed_req
+                parsed_req.project_name in packages_installed_in_parent
+                and packages_installed_in_parent[parsed_req.project_name] in parsed_req
             ):
                 reqs_to_remove.append(r)
         return [r for r in requirements_list if r not in reqs_to_remove]

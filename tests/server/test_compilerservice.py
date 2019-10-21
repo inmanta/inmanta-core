@@ -437,14 +437,11 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
 
 
 @pytest.mark.asyncio(timeout=90)
-async def test_server_recompile(server_multi, client_multi, environment_multi, monkeypatch):
+async def test_server_recompile(server, client, environment, monkeypatch):
     """
         Test a recompile on the server and verify recompile triggers
     """
     config.Config.set("server", "auto-recompile-wait", "0")
-    client = client_multi
-    server = server_multi
-    environment = environment_multi
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")

@@ -114,10 +114,8 @@ repo: https://github.com/inmanta/
 
     path_main_file.write(
         """
-import ip
-import redhat
-import redhat::epel
-vm1=ip::Host(name="non-existing-machine", os=redhat::centos7, ip="127.0.0.1")
+vm1=std::Host(name="non-existing-machine", os=std::linux)
+std::ConfigFile(host=vm1, path="/test", content="")
 """
     )
 

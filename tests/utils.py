@@ -214,8 +214,6 @@ async def report_db_index_usage(min_precent=100):
 
 
 async def wait_for_version(client, environment, cnt):
-    start = time.time()
-
     # Wait until the server is no longer compiling
     # wait for it to finish
     async def compile_done():
@@ -238,9 +236,6 @@ async def wait_for_version(client, environment, cnt):
 
     await retry_limited(sufficient_versions, 10)
 
-    # Added until #1011 is implemented
-    nextsecond = int(start) + 1
-    await asyncio.sleep(nextsecond - time.time())
     versions = await client.list_versions(environment)
     return versions.result
 

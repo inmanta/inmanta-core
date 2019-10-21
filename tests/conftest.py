@@ -833,7 +833,7 @@ class CompileRunnerMock(object):
             self._runner_queue.put(self)
             self.block = True
             while self.block:
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.1)
 
         return success
 

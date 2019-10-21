@@ -207,7 +207,7 @@ async def test_server_restart(
     resource_container, server, agent, environment, clienthelper, postgres_db, client, no_agent_backoff
 ):
     """
-        dryrun and deploy a configuration model
+        Test if agent reconnects correctly after server restart
     """
     resource_container.Provider.reset()
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
@@ -253,37 +253,6 @@ async def test_server_restart(
     ]
 
     await clienthelper.put_version_simple(resources, version)
-
-    # request a dryrun
-    result = await client.dryrun_request(env_id, version)
-    assert result.code == 200
-    assert result.result["dryrun"]["total"] == len(resources)
-    assert result.result["dryrun"]["todo"] == len(resources)
-
-    # get the dryrun results
-    result = await client.dryrun_list(env_id, version)
-    assert result.code == 200
-    assert len(result.result["dryruns"]) == 1
-
-    while result.result["dryruns"][0]["todo"] > 0:
-        result = await client.dryrun_list(env_id, version)
-        await asyncio.sleep(0.1)
-
-    dry_run_id = result.result["dryruns"][0]["id"]
-    result = await client.dryrun_report(env_id, dry_run_id)
-    assert result.code == 200
-
-    changes = result.result["dryrun"]["resources"]
-    assert changes[resources[0]["id"]]["changes"]["purged"]["current"]
-    assert not changes[resources[0]["id"]]["changes"]["purged"]["desired"]
-    assert changes[resources[0]["id"]]["changes"]["value"]["current"] is None
-    assert changes[resources[0]["id"]]["changes"]["value"]["desired"] == resources[0]["value"]
-
-    assert changes[resources[1]["id"]]["changes"]["value"]["current"] == "incorrect_value"
-    assert changes[resources[1]["id"]]["changes"]["value"]["desired"] == resources[1]["value"]
-
-    assert not changes[resources[2]["id"]]["changes"]["purged"]["current"]
-    assert changes[resources[2]["id"]]["changes"]["purged"]["desired"]
 
     # do a deploy
     result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
