@@ -58,6 +58,7 @@ mypy
 types
 mypy.xml
 coverage
+.mypy-baseline
 
 # Duplicate Files for text_common package, copied by tests_common/copy_files_from_core.py
 tests_common/src/inmanta_tests/conftest.py
