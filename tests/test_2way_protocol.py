@@ -182,7 +182,7 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
 
     # see if it stays up
     await check_sessions(server.get_sessions())
-    await sleep(2)
+    await sleep(1.1)
     assert len(server.get_sessions()) == 2
     await check_sessions(server.get_sessions())
 
@@ -190,7 +190,7 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
     await agent2.stop()
 
     # timout
-    await sleep(2)
+    await sleep(1.1)
     # check if down
     assert len(server.get_sessions()) == 1
     print(server.get_sessions())
