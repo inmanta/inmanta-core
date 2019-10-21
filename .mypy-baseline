@@ -39,18 +39,13 @@ src/inmanta/postgresproc.py:111: error: Argument 1 to "Popen" has incompatible t
 src/inmanta/postgresproc.py:123: error: Argument 1 to "Popen" has incompatible type "List[Optional[str]]"; expected "Union[bytes, str, Sequence[Union[bytes, str, _PathLike[Any]]]]"
 src/inmanta/postgresproc.py:128: error: Value of type variable "_AnyPath" of "rmtree" cannot be "Optional[str]"
 src/inmanta/postgresproc.py:135: error: Argument 1 to "Popen" has incompatible type "List[Optional[str]]"; expected "Union[bytes, str, Sequence[Union[bytes, str, _PathLike[Any]]]]"
-src/inmanta/env.py:27: error: No library stub file for standard library module 'venv'
-src/inmanta/env.py:48: error: Need type annotation for '__cache_done' (hint: "__cache_done: Set[<type>] = ...")
-src/inmanta/env.py:50: error: Need type annotation for '_old' (hint: "_old: Dict[<type>, <type>] = ...")
-src/inmanta/env.py:85: error: Incompatible types in assignment (expression has type "str", variable has type "None")
-src/inmanta/env.py:98: error: "Type[WorkingSet]" has no attribute "_build_master"
-src/inmanta/env.py:121: error: Module has no attribute "real_prefix"
-src/inmanta/env.py:148: error: Need type annotation for 'modules' (hint: "modules: Dict[<type>, <type>] = ...")
-src/inmanta/env.py:163: error: "Requirement" has no attribute "name"
-src/inmanta/env.py:168: error: "Requirement" has no attribute "url"
-src/inmanta/env.py:169: error: Module has no attribute "RequirementParseError"
-src/inmanta/env.py:209: error: Argument 1 to "check_output" has incompatible type "List[Optional[str]]"; expected "Union[bytes, str, Sequence[Union[bytes, str, _PathLike[Any]]]]"
-src/inmanta/env.py:225: error: "Type[WorkingSet]" has no attribute "_build_master"
+src/inmanta/env.py:28: error: No library stub file for standard library module 'venv'
+src/inmanta/env.py:102: error: "Type[WorkingSet]" has no attribute "_build_master"
+src/inmanta/env.py:125: error: Module has no attribute "real_prefix"
+src/inmanta/env.py:169: error: "Requirement" has no attribute "name"
+src/inmanta/env.py:174: error: "Requirement" has no attribute "url"
+src/inmanta/env.py:175: error: Module has no attribute "RequirementParseError"
+src/inmanta/env.py:231: error: "Type[WorkingSet]" has no attribute "_build_master"
 src/inmanta/db/versions/v1.py:22: error: Module "asyncpg.connection" is not valid as a type
 src/inmanta/db/versions/v1.py:338: error: asyncpg.connection? has no attribute "transaction"
 src/inmanta/db/versions/v1.py:339: error: asyncpg.connection? has no attribute "execute"
@@ -59,53 +54,17 @@ src/inmanta/config.py:33: error: No library stub file for module 'cryptography.h
 src/inmanta/config.py:33: note: (Stub files are from https://github.com/python/typeshed)
 src/inmanta/config.py:34: error: No library stub file for module 'cryptography.hazmat.primitives'
 src/inmanta/config.py:35: error: No library stub file for module 'cryptography.hazmat.primitives.asymmetric.rsa'
-src/inmanta/config.py:58: error: Incompatible return value type (got "Dict[str, Dict[str, Option[Any]]]", expected "Dict[str, Dict[str, str]]")
-src/inmanta/config.py:87: error: Incompatible types in assignment (expression has type "LenientConfigParser", variable has type "Optional[Config]")
-src/inmanta/config.py:102: note: "get" of "Config" defined here
-src/inmanta/config.py:108: error: Incompatible return value type (got "Config", expected "str")
-src/inmanta/config.py:109: error: Argument 1 to "_normalize_name" has incompatible type "Optional[str]"; expected "str"
-src/inmanta/config.py:111: error: Argument 3 to "validate_option_request" of "Config" has incompatible type "Optional[str]"; expected "str"
-src/inmanta/config.py:113: error: Unexpected keyword argument "fallback" for "get" of "Config"
-src/inmanta/config.py:122: error: Unsupported right operand type for in ("Config")
-src/inmanta/config.py:122: error: Value of type "Config" is not indexable
-src/inmanta/config.py:125: note: "getboolean" of "Config" defined here
-src/inmanta/config.py:129: error: Argument 3 to "validate_option_request" of "Config" has incompatible type "Optional[str]"; expected "str"
-src/inmanta/config.py:130: error: Unexpected keyword argument "fallback" for "getboolean" of "Config"
-src/inmanta/config.py:139: error: Unsupported right operand type for in ("Config")
-src/inmanta/config.py:140: error: "Config" has no attribute "add_section"
-src/inmanta/config.py:152: error: Return value expected
-src/inmanta/config.py:156: error: Return value expected
-src/inmanta/config.py:186: error: "Config" has no attribute "_convert_to_boolean"
-src/inmanta/config.py:253: error: Incompatible default for argument "validator" (default has type "Callable[[str], str]", argument has type "Callable[[str], T]")
-src/inmanta/config.py:273: error: "Config" has no attribute "has_option"
-src/inmanta/config.py:274: error: "Config" has no attribute "has_option"
-src/inmanta/config.py:281: error: Unexpected keyword argument "fallback" for "get" of "Config"
-src/inmanta/config.py:410: error: "Config" has no attribute "keys"
-src/inmanta/config.py:414: error: Value of type "Config" is not indexable
-src/inmanta/config.py:423: error: Incompatible types in assignment (expression has type "AuthJWTConfig", variable has type "Config")
-src/inmanta/config.py:424: error: "Config" has no attribute "sign"
-src/inmanta/config.py:446: error: Missing return statement
-src/inmanta/config.py:472: error: Unsupported right operand type for in ("Config")
-src/inmanta/config.py:475: error: Value of type "Config" is not indexable
-src/inmanta/config.py:489: error: Unsupported right operand type for in ("Config")
-src/inmanta/config.py:490: error: Value of type "Config" is not indexable
-src/inmanta/config.py:494: error: Unsupported right operand type for in ("Config")
-src/inmanta/config.py:497: error: Value of type "Config" is not indexable
-src/inmanta/config.py:502: error: Unsupported right operand type for in ("Config")
-src/inmanta/config.py:503: error: Value of type "Config" is not indexable
-src/inmanta/config.py:507: error: Unsupported right operand type for in ("Config")
-src/inmanta/config.py:508: error: Value of type "Config" is not indexable
-src/inmanta/config.py:512: error: Unsupported right operand type for in ("Config")
-src/inmanta/config.py:513: error: Value of type "Config" is not indexable
-src/inmanta/config.py:521: error: Unsupported right operand type for in ("Config")
-src/inmanta/config.py:524: error: Value of type "Config" is not indexable
-src/inmanta/config.py:546: error: Unsupported right operand type for in ("Config")
-src/inmanta/config.py:549: error: Value of type "Config" is not indexable
-src/inmanta/config.py:551: error: Unsupported right operand type for in ("Config")
-src/inmanta/config.py:552: error: Too few arguments for "getboolean" of "Config"
-src/inmanta/config.py:569: error: "URLError" has no attribute "response"
-src/inmanta/config.py:575: error: Need type annotation for 'keys' (hint: "keys: Dict[<type>, <type>] = ...")
-src/inmanta/server/config.py:120: error: Incompatible return value type (got "str", expected "int")
+src/inmanta/config.py:119: error: Incompatible return value type (got "Optional[str]", expected "Union[str, ConfigParser]")
+src/inmanta/config.py:120: error: Argument 1 to "validate" of "Option" has incompatible type "Optional[str]"; expected "str"
+src/inmanta/config.py:133: error: Argument 3 to "validate_option_request" of "Config" has incompatible type "Optional[bool]"; expected "Optional[str]"
+src/inmanta/config.py:134: error: Argument "fallback" to "getboolean" of "RawConfigParser" has incompatible type "Optional[bool]"; expected "bool"
+src/inmanta/config.py:190: error: "ConfigParser" has no attribute "_convert_to_boolean"
+src/inmanta/config.py:257: error: Incompatible default for argument "validator" (default has type "Callable[[str], str]", argument has type "Callable[[str], T]")
+src/inmanta/config.py:286: error: Argument 1 to "validate" of "Option" has incompatible type "Union[str, T, None]"; expected "str"
+src/inmanta/config.py:427: error: Incompatible types in assignment (expression has type "AuthJWTConfig", variable has type "ConfigParser")
+src/inmanta/config.py:428: error: "ConfigParser" has no attribute "sign"
+src/inmanta/config.py:574: error: "URLError" has no attribute "response"
+src/inmanta/server/config.py:120: error: Incompatible return value type (got "Union[str, ConfigParser]", expected "int")
 src/inmanta/server/config.py:120: error: Argument 3 to "get" of "Config" has incompatible type "int"; expected "Optional[str]"
 src/inmanta/server/config.py:133: error: Argument 5 to "Option" has incompatible type "Callable[[str], Optional[str]]"; expected "Callable[[str], str]"
 src/inmanta/ast/__init__.py:116: error: Incompatible types in assignment (expression has type "None", variable has type "Location")
@@ -127,15 +86,15 @@ src/inmanta/ast/type.py:457: error: Incompatible return value type (got "None", 
 src/inmanta/ast/type.py:500: error: Missing return statement
 src/inmanta/ast/type.py:500: error: Signature of "cast" incompatible with supertype "Type"
 src/inmanta/ast/type.py:504: error: "ConstraintType" has no attribute "__base_type"; maybe "basetype"?
-src/inmanta/util.py:163: error: Invalid index type "Union[Callable[..., Any], Coroutine[Any, Any, Any]]" for "Dict[Callable[..., Any], object]"; expected type "Callable[..., Any]"
-src/inmanta/util.py:211: error: "object" has no attribute "to_dict"
-src/inmanta/util.py:239: error: Argument 1 to "add_done_callback" of "Future" has incompatible type "Callable[[Task[Any]], None]"; expected "Callable[[Future[Any]], Any]"
-src/inmanta/util.py:240: error: Incompatible return value type (got "Future[Any]", expected "Task[Any]")
-src/inmanta/util.py:296: error: Argument 1 to "add_done_callback" of "Future" has incompatible type "Callable[[Task[Any]], None]"; expected "Callable[[Future[Any]], Any]"
-src/inmanta/util.py:297: error: Argument 1 to "add" of "set" has incompatible type "Future[Any]"; expected "Task[Any]"
-src/inmanta/util.py:300: error: Argument 1 to "add" of "set" has incompatible type "Future[Any]"; expected "Task[Any]"
-src/inmanta/util.py:302: error: Incompatible return value type (got "Future[Any]", expected "Task[Any]")
-src/inmanta/util.py:341: error: Need type annotation for 'out' (hint: "out: List[<type>] = ...")
+src/inmanta/util.py:165: error: Invalid index type "Union[Callable[..., Any], Coroutine[Any, Any, Any]]" for "Dict[Callable[..., Any], object]"; expected type "Callable[..., Any]"
+src/inmanta/util.py:213: error: "object" has no attribute "to_dict"
+src/inmanta/util.py:241: error: Argument 1 to "add_done_callback" of "Future" has incompatible type "Callable[[Task[Any]], None]"; expected "Callable[[Future[Any]], Any]"
+src/inmanta/util.py:242: error: Incompatible return value type (got "Future[Any]", expected "Task[Any]")
+src/inmanta/util.py:298: error: Argument 1 to "add_done_callback" of "Future" has incompatible type "Callable[[Task[Any]], None]"; expected "Callable[[Future[Any]], Any]"
+src/inmanta/util.py:299: error: Argument 1 to "add" of "set" has incompatible type "Future[Any]"; expected "Task[Any]"
+src/inmanta/util.py:302: error: Argument 1 to "add" of "set" has incompatible type "Future[Any]"; expected "Task[Any]"
+src/inmanta/util.py:304: error: Incompatible return value type (got "Future[Any]", expected "Task[Any]")
+src/inmanta/util.py:343: error: Need type annotation for 'out' (hint: "out: List[<type>] = ...")
 src/inmanta/execute/runtime.py:136: error: Incompatible types in assignment (expression has type "None", variable has type "List[Waiter]")
 src/inmanta/execute/runtime.py:142: error: Incompatible return value type (got "Optional[T]", expected "T")
 src/inmanta/execute/runtime.py:194: error: Incompatible types in assignment (expression has type "None", variable has type "List[Waiter]")
@@ -157,170 +116,172 @@ src/inmanta/execute/runtime.py:867: error: Argument 1 to "RuntimeException" has 
 src/inmanta/execute/runtime.py:915: error: Name 'set_location' already defined on line 803
 src/inmanta/execute/runtime.py:916: error: Argument 1 to "set_location" of "Locatable" has incompatible type "Instance"; expected "Locatable"
 src/inmanta/execute/runtime.py:919: error: Name 'get_location' already defined on line 807
-src/inmanta/data/__init__.py:149: error: Incompatible types in assignment (expression has type "None", variable has type "Pool")
-src/inmanta/data/__init__.py:164: error: "Type[BaseDocument]" has no attribute "_fields"
-src/inmanta/data/__init__.py:216: error: "Type[BaseDocument]" has no attribute "_fields"
-src/inmanta/data/__init__.py:246: error: Incompatible types in assignment (expression has type "None", variable has type "Pool")
-src/inmanta/data/__init__.py:358: error: "Type[BaseDocument]" has no attribute "_fields"
-src/inmanta/data/__init__.py:364: error: Incompatible types in assignment (expression has type "Tuple[Any, ...]", variable has type "List[Any]")
-src/inmanta/data/__init__.py:428: error: "Type[T]" has no attribute "get_list"
-src/inmanta/data/__init__.py:434: error: Missing return statement
-src/inmanta/data/__init__.py:435: error: "Type[T]" has no attribute "get_list"
-src/inmanta/data/__init__.py:452: error: "Type[T]" has no attribute "_convert_field_names_to_db_column_names"
-src/inmanta/data/__init__.py:453: error: "Type[T]" has no attribute "_get_composed_filter"
-src/inmanta/data/__init__.py:454: error: "Type[T]" has no attribute "table_name"
-src/inmanta/data/__init__.py:463: error: "Type[T]" has no attribute "select_query"
-src/inmanta/data/__init__.py:578: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:579: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:589: error: "Type[RawConfigParser]" has no attribute "BOOLEAN_STATES"
-src/inmanta/data/__init__.py:591: error: "Type[RawConfigParser]" has no attribute "BOOLEAN_STATES"
-src/inmanta/data/__init__.py:730: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:731: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:732: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:733: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:734: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:735: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]")
-src/inmanta/data/__init__.py:771: error: Argument "validator" to "Setting" has incompatible type "Callable[[Any], Union[int, float]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
-src/inmanta/data/__init__.py:778: error: Argument "validator" to "Setting" has incompatible type "Callable[[Any], Union[int, float]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
-src/inmanta/data/__init__.py:786: error: Argument "validator" to "Setting" has incompatible type "Callable[[Any], Union[int, float]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
-src/inmanta/data/__init__.py:794: error: Argument "validator" to "Setting" has incompatible type "Callable[[Any], Union[int, float]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
-src/inmanta/data/__init__.py:802: error: Argument "validator" to "Setting" has incompatible type "Callable[[Any], Union[int, float]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
-src/inmanta/data/__init__.py:817: error: Argument "validator" to "Setting" has incompatible type "Callable[[Dict[str, str]], Dict[str, str]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
-src/inmanta/data/__init__.py:826: error: Argument "validator" to "Setting" has incompatible type "Callable[[Any], Union[int, float]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
-src/inmanta/data/__init__.py:841: error: Argument "validator" to "Setting" has incompatible type "Callable[[Any], Union[int, float]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
-src/inmanta/data/__init__.py:880: error: Argument 2 to "set" of "Environment" has incompatible type "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]], None]"; expected "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]"
-src/inmanta/data/__init__.py:881: error: Incompatible return value type (got "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]], None]", expected "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]")
-src/inmanta/data/__init__.py:894: error: "None" not callable
-src/inmanta/data/__init__.py:927: error: Argument 2 to "set" of "Environment" has incompatible type "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]], None]"; expected "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]"
-src/inmanta/data/__init__.py:970: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:971: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:972: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:973: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:974: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:975: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceIdStr")
-src/inmanta/data/__init__.py:976: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
-src/inmanta/data/__init__.py:977: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Any]")
-src/inmanta/data/__init__.py:1011: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1012: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:1013: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1014: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:1015: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceIdStr")
-src/inmanta/data/__init__.py:1016: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
-src/inmanta/data/__init__.py:1017: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Any]")
-src/inmanta/data/__init__.py:1018: error: Incompatible types in assignment (expression has type "Field", variable has type "bool")
-src/inmanta/data/__init__.py:1030: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:151: error: Incompatible types in assignment (expression has type "None", variable has type "Pool")
+src/inmanta/data/__init__.py:166: error: "Type[BaseDocument]" has no attribute "_fields"
+src/inmanta/data/__init__.py:218: error: "Type[BaseDocument]" has no attribute "_fields"
+src/inmanta/data/__init__.py:250: error: Incompatible types in assignment (expression has type "None", variable has type "Pool")
+src/inmanta/data/__init__.py:340: error: Incompatible return value type (got "Optional[Record]", expected "Record")
+src/inmanta/data/__init__.py:362: error: "Type[BaseDocument]" has no attribute "_fields"
+src/inmanta/data/__init__.py:368: error: Incompatible types in assignment (expression has type "Tuple[Any, ...]", variable has type "List[Any]")
+src/inmanta/data/__init__.py:432: error: "Type[T]" has no attribute "get_list"
+src/inmanta/data/__init__.py:438: error: Missing return statement
+src/inmanta/data/__init__.py:439: error: "Type[T]" has no attribute "get_list"
+src/inmanta/data/__init__.py:456: error: "Type[T]" has no attribute "_convert_field_names_to_db_column_names"
+src/inmanta/data/__init__.py:457: error: "Type[T]" has no attribute "_get_composed_filter"
+src/inmanta/data/__init__.py:458: error: "Type[T]" has no attribute "table_name"
+src/inmanta/data/__init__.py:467: error: "Type[T]" has no attribute "select_query"
+src/inmanta/data/__init__.py:582: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:583: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:593: error: "Type[RawConfigParser]" has no attribute "BOOLEAN_STATES"
+src/inmanta/data/__init__.py:595: error: "Type[RawConfigParser]" has no attribute "BOOLEAN_STATES"
+src/inmanta/data/__init__.py:735: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:736: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:737: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:738: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:739: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:740: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]")
+src/inmanta/data/__init__.py:741: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
+src/inmanta/data/__init__.py:777: error: Argument "validator" to "Setting" has incompatible type "Callable[[Any], Union[int, float]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
+src/inmanta/data/__init__.py:784: error: Argument "validator" to "Setting" has incompatible type "Callable[[Any], Union[int, float]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
+src/inmanta/data/__init__.py:792: error: Argument "validator" to "Setting" has incompatible type "Callable[[Any], Union[int, float]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
+src/inmanta/data/__init__.py:800: error: Argument "validator" to "Setting" has incompatible type "Callable[[Any], Union[int, float]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
+src/inmanta/data/__init__.py:808: error: Argument "validator" to "Setting" has incompatible type "Callable[[Any], Union[int, float]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
+src/inmanta/data/__init__.py:823: error: Argument "validator" to "Setting" has incompatible type "Callable[[Dict[str, str]], Dict[str, str]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
+src/inmanta/data/__init__.py:832: error: Argument "validator" to "Setting" has incompatible type "Callable[[Any], Union[int, float]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
+src/inmanta/data/__init__.py:847: error: Argument "validator" to "Setting" has incompatible type "Callable[[Any], Union[int, float]]"; expected "Optional[Callable[[Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]], Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]]]"
+src/inmanta/data/__init__.py:886: error: Argument 2 to "set" of "Environment" has incompatible type "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]], None]"; expected "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]"
+src/inmanta/data/__init__.py:887: error: Incompatible return value type (got "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]], None]", expected "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]")
+src/inmanta/data/__init__.py:900: error: "None" not callable
+src/inmanta/data/__init__.py:933: error: Argument 2 to "set" of "Environment" has incompatible type "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]], None]"; expected "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]"
+src/inmanta/data/__init__.py:990: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:991: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:992: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:993: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:994: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:995: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceIdStr")
+src/inmanta/data/__init__.py:996: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
+src/inmanta/data/__init__.py:997: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Any]")
 src/inmanta/data/__init__.py:1031: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1032: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
-src/inmanta/data/__init__.py:1033: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
-src/inmanta/data/__init__.py:1034: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
-src/inmanta/data/__init__.py:1035: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1061: error: Incompatible return value type (got "None", expected "List[AgentProcess]")
-src/inmanta/data/__init__.py:1064: error: Incompatible return value type (got "AgentProcess", expected "List[AgentProcess]")
-src/inmanta/data/__init__.py:1066: error: Incompatible return value type (got "AgentProcess", expected "List[AgentProcess]")
-src/inmanta/data/__init__.py:1112: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1113: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:1114: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
-src/inmanta/data/__init__.py:1115: error: Incompatible types in assignment (expression has type "Field", variable has type "bool")
-src/inmanta/data/__init__.py:1116: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[UUID]")
-src/inmanta/data/__init__.py:1181: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1182: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
-src/inmanta/data/__init__.py:1183: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[datetime]")
-src/inmanta/data/__init__.py:1184: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:1185: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:1186: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:1187: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:1188: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[int]")
-src/inmanta/data/__init__.py:1189: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1220: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1221: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[UUID]")
-src/inmanta/data/__init__.py:1222: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1223: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[datetime]")
-src/inmanta/data/__init__.py:1224: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[datetime]")
-src/inmanta/data/__init__.py:1225: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[datetime]")
-src/inmanta/data/__init__.py:1227: error: Incompatible types in assignment (expression has type "Field", variable has type "bool")
-src/inmanta/data/__init__.py:1228: error: Incompatible types in assignment (expression has type "Field", variable has type "bool")
-src/inmanta/data/__init__.py:1229: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[Any, Any]")
-src/inmanta/data/__init__.py:1230: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[Any, Any]")
-src/inmanta/data/__init__.py:1232: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[bool]")
-src/inmanta/data/__init__.py:1233: error: Incompatible types in assignment (expression has type "Field", variable has type "bool")
-src/inmanta/data/__init__.py:1234: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[int]")
-src/inmanta/data/__init__.py:1270: error: Incompatible return value type (got "None", expected "Compile")
-src/inmanta/data/__init__.py:1276: error: Incompatible return value type (got "Dict[str, Any]", expected "Compile")
-src/inmanta/data/__init__.py:1287: error: Incompatible return value type (got "None", expected "Compile")
-src/inmanta/data/__init__.py:1299: error: Incompatible return value type (got "None", expected "Compile")
-src/inmanta/data/__init__.py:1367: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1368: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:1369: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, str]")
-src/inmanta/data/__init__.py:1370: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, str]")
-src/inmanta/data/__init__.py:1371: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Union[BaseModel, Enum, UUID, StrictNonIntBool, int, float, datetime, str]]")
-src/inmanta/data/__init__.py:1372: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Dict[str, str]]")
-src/inmanta/data/__init__.py:1381: error: Incompatible return value type (got "None", expected "Form")
-src/inmanta/data/__init__.py:1396: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1397: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1398: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:1399: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Union[BaseModel, Enum, UUID, StrictNonIntBool, int, float, datetime, str]]")
-src/inmanta/data/__init__.py:1400: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
-src/inmanta/data/__init__.py:1428: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1429: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceVersionIdStr")
-src/inmanta/data/__init__.py:1430: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1451: error: Incompatible types in assignment (expression has type "Field", variable has type "List[ResourceVersionIdStr]")
-src/inmanta/data/__init__.py:1453: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1454: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceAction")
-src/inmanta/data/__init__.py:1456: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
-src/inmanta/data/__init__.py:1457: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
-src/inmanta/data/__init__.py:1497: error: "ResourceAction" gets multiple values for keyword argument "from_postgres"
-src/inmanta/data/__init__.py:1550: error: "ResourceAction" gets multiple values for keyword argument "from_postgres"
-src/inmanta/data/__init__.py:1730: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:1731: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
-src/inmanta/data/__init__.py:1734: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceVersionIdStr")
-src/inmanta/data/__init__.py:1735: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceType")
-src/inmanta/data/__init__.py:1736: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceVersionIdStr")
-src/inmanta/data/__init__.py:1738: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:1741: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
-src/inmanta/data/__init__.py:1744: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Any]")
-src/inmanta/data/__init__.py:1745: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:1746: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceState")
-src/inmanta/data/__init__.py:1751: error: Incompatible types in assignment (expression has type "Field", variable has type "List[ResourceVersionIdStr]")
-src/inmanta/data/__init__.py:1861: error: Argument after ** must be a mapping, not "Record"
-src/inmanta/data/__init__.py:1864: error: Argument 2 to "is_sub_dict" has incompatible type "Dict[str, Any]"; expected "Dict[Union[UUID, StrictNonIntBool, int, float, datetime, str], Union[UUID, StrictNonIntBool, int, float, datetime, str]]"
-src/inmanta/data/__init__.py:1937: error: Incompatible types in assignment (expression has type "Dict[Any, Any]", variable has type "Record")
-src/inmanta/data/__init__.py:1938: error: Unsupported target for indexed assignment
-src/inmanta/data/__init__.py:1939: error: Unsupported target for indexed assignment
-src/inmanta/data/__init__.py:1941: error: Unsupported target for indexed assignment
-src/inmanta/data/__init__.py:1944: error: Argument 1 to "append" of "list" has incompatible type "Resource"; expected "Record"
-src/inmanta/data/__init__.py:1944: error: Argument after ** must be a mapping, not "Record"
-src/inmanta/data/__init__.py:1945: error: Incompatible return value type (got "List[Record]", expected "List[Resource]")
-src/inmanta/data/__init__.py:2089: error: Argument 1 of "insert_many" is incompatible with supertype "BaseDocument"; supertype defines the argument type as "Sequence[BaseDocument]"
-src/inmanta/data/__init__.py:2092: error: Argument 1 to "insert_many" of "BaseDocument" has incompatible type "Iterable[Resource]"; expected "Sequence[BaseDocument]"
-src/inmanta/data/__init__.py:2136: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
-src/inmanta/data/__init__.py:2137: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:2138: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
-src/inmanta/data/__init__.py:2140: error: Incompatible types in assignment (expression has type "Field", variable has type "bool")
-src/inmanta/data/__init__.py:2141: error: Incompatible types in assignment (expression has type "Field", variable has type "bool")
-src/inmanta/data/__init__.py:2142: error: Incompatible types in assignment (expression has type "Field", variable has type "VersionState")
-src/inmanta/data/__init__.py:2143: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Any]")
-src/inmanta/data/__init__.py:2145: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
-src/inmanta/data/__init__.py:2148: error: Incompatible types in assignment (expression has type "Field", variable has type "List[ResourceIdStr]")
-src/inmanta/data/__init__.py:2149: error: Incompatible types in assignment (expression has type "Field", variable has type "List[ResourceIdStr]")
-src/inmanta/data/__init__.py:2172: error: Invalid index type "str" for "str"; expected type "Union[int, slice]"
-src/inmanta/data/__init__.py:2177: error: Return type "Coroutine[Any, Any, List[ConfigurationModel]]" of "get_list" incompatible with return type "Coroutine[Any, Any, List[<nothing>]]" in supertype "BaseDocument"
-src/inmanta/data/__init__.py:2194: error: Incompatible types in assignment (expression has type "str", variable has type "Dict[str, Any]")
-src/inmanta/data/__init__.py:2255: error: Incompatible return value type (got "None", expected "ConfigurationModel")
-src/inmanta/data/__init__.py:2486: error: Need type annotation for 'done' (hint: "done: Set[<type>] = ...")
-src/inmanta/data/__init__.py:2501: error: Argument 1 to "set" has incompatible type "Set[str]"; expected "Iterable[ResourceVersionIdStr]"
-src/inmanta/data/__init__.py:2518: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:2519: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
-src/inmanta/data/__init__.py:2520: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
-src/inmanta/data/__init__.py:2521: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Tuple[str, str, List[str]]]")
-src/inmanta/data/__init__.py:2550: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:2551: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
-src/inmanta/data/__init__.py:2552: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
-src/inmanta/data/__init__.py:2553: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
-src/inmanta/data/__init__.py:2554: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
-src/inmanta/data/__init__.py:2555: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
-src/inmanta/data/__init__.py:2556: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Any]")
-src/inmanta/data/__init__.py:2616: error: "DocumentMeta" has no attribute "set_connection_pool"
-src/inmanta/data/__init__.py:2622: error: "DocumentMeta" has no attribute "close_connection_pool"
+src/inmanta/data/__init__.py:1032: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:1033: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1034: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:1035: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceIdStr")
+src/inmanta/data/__init__.py:1036: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
+src/inmanta/data/__init__.py:1037: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Any]")
+src/inmanta/data/__init__.py:1038: error: Incompatible types in assignment (expression has type "Field", variable has type "bool")
+src/inmanta/data/__init__.py:1050: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:1051: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1052: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
+src/inmanta/data/__init__.py:1053: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
+src/inmanta/data/__init__.py:1054: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
+src/inmanta/data/__init__.py:1055: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1081: error: Incompatible return value type (got "None", expected "List[AgentProcess]")
+src/inmanta/data/__init__.py:1084: error: Incompatible return value type (got "AgentProcess", expected "List[AgentProcess]")
+src/inmanta/data/__init__.py:1086: error: Incompatible return value type (got "AgentProcess", expected "List[AgentProcess]")
+src/inmanta/data/__init__.py:1132: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1133: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:1134: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
+src/inmanta/data/__init__.py:1135: error: Incompatible types in assignment (expression has type "Field", variable has type "bool")
+src/inmanta/data/__init__.py:1136: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[UUID]")
+src/inmanta/data/__init__.py:1201: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1202: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
+src/inmanta/data/__init__.py:1203: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[datetime]")
+src/inmanta/data/__init__.py:1204: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:1205: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:1206: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:1207: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:1208: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[int]")
+src/inmanta/data/__init__.py:1209: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1240: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1241: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[UUID]")
+src/inmanta/data/__init__.py:1242: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1243: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[datetime]")
+src/inmanta/data/__init__.py:1244: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[datetime]")
+src/inmanta/data/__init__.py:1245: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[datetime]")
+src/inmanta/data/__init__.py:1247: error: Incompatible types in assignment (expression has type "Field", variable has type "bool")
+src/inmanta/data/__init__.py:1248: error: Incompatible types in assignment (expression has type "Field", variable has type "bool")
+src/inmanta/data/__init__.py:1249: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[Any, Any]")
+src/inmanta/data/__init__.py:1250: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[Any, Any]")
+src/inmanta/data/__init__.py:1252: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[bool]")
+src/inmanta/data/__init__.py:1253: error: Incompatible types in assignment (expression has type "Field", variable has type "bool")
+src/inmanta/data/__init__.py:1254: error: Incompatible types in assignment (expression has type "Field", variable has type "Optional[int]")
+src/inmanta/data/__init__.py:1290: error: Incompatible return value type (got "None", expected "Compile")
+src/inmanta/data/__init__.py:1296: error: Incompatible return value type (got "Dict[str, Any]", expected "Compile")
+src/inmanta/data/__init__.py:1307: error: Incompatible return value type (got "None", expected "Compile")
+src/inmanta/data/__init__.py:1319: error: Incompatible return value type (got "None", expected "Compile")
+src/inmanta/data/__init__.py:1387: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1388: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:1389: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, str]")
+src/inmanta/data/__init__.py:1390: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, str]")
+src/inmanta/data/__init__.py:1391: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Union[BaseModel, Enum, UUID, StrictNonIntBool, int, float, datetime, str]]")
+src/inmanta/data/__init__.py:1392: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Dict[str, str]]")
+src/inmanta/data/__init__.py:1401: error: Incompatible return value type (got "None", expected "Form")
+src/inmanta/data/__init__.py:1416: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1417: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1418: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:1419: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Union[BaseModel, Enum, UUID, StrictNonIntBool, int, float, datetime, str]]")
+src/inmanta/data/__init__.py:1420: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
+src/inmanta/data/__init__.py:1448: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1449: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceVersionIdStr")
+src/inmanta/data/__init__.py:1450: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1471: error: Incompatible types in assignment (expression has type "Field", variable has type "List[ResourceVersionIdStr]")
+src/inmanta/data/__init__.py:1473: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1474: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceAction")
+src/inmanta/data/__init__.py:1476: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
+src/inmanta/data/__init__.py:1477: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
+src/inmanta/data/__init__.py:1517: error: "ResourceAction" gets multiple values for keyword argument "from_postgres"
+src/inmanta/data/__init__.py:1570: error: "ResourceAction" gets multiple values for keyword argument "from_postgres"
+src/inmanta/data/__init__.py:1750: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:1751: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
+src/inmanta/data/__init__.py:1754: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceVersionIdStr")
+src/inmanta/data/__init__.py:1755: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceType")
+src/inmanta/data/__init__.py:1756: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceVersionIdStr")
+src/inmanta/data/__init__.py:1758: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:1761: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
+src/inmanta/data/__init__.py:1764: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Any]")
+src/inmanta/data/__init__.py:1765: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:1766: error: Incompatible types in assignment (expression has type "Field", variable has type "ResourceState")
+src/inmanta/data/__init__.py:1771: error: Incompatible types in assignment (expression has type "Field", variable has type "List[ResourceVersionIdStr]")
+src/inmanta/data/__init__.py:1881: error: Argument after ** must be a mapping, not "Record"
+src/inmanta/data/__init__.py:1884: error: Argument 2 to "is_sub_dict" has incompatible type "Dict[str, Any]"; expected "Dict[Union[UUID, StrictNonIntBool, int, float, datetime, str], Union[UUID, StrictNonIntBool, int, float, datetime, str]]"
+src/inmanta/data/__init__.py:1957: error: Incompatible types in assignment (expression has type "Dict[Any, Any]", variable has type "Record")
+src/inmanta/data/__init__.py:1958: error: Unsupported target for indexed assignment
+src/inmanta/data/__init__.py:1959: error: Unsupported target for indexed assignment
+src/inmanta/data/__init__.py:1961: error: Unsupported target for indexed assignment
+src/inmanta/data/__init__.py:1964: error: Argument 1 to "append" of "list" has incompatible type "Resource"; expected "Record"
+src/inmanta/data/__init__.py:1964: error: Argument after ** must be a mapping, not "Record"
+src/inmanta/data/__init__.py:1965: error: Incompatible return value type (got "List[Record]", expected "List[Resource]")
+src/inmanta/data/__init__.py:2109: error: Argument 1 of "insert_many" is incompatible with supertype "BaseDocument"; supertype defines the argument type as "Sequence[BaseDocument]"
+src/inmanta/data/__init__.py:2112: error: Argument 1 to "insert_many" of "BaseDocument" has incompatible type "Iterable[Resource]"; expected "Sequence[BaseDocument]"
+src/inmanta/data/__init__.py:2156: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
+src/inmanta/data/__init__.py:2157: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:2158: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
+src/inmanta/data/__init__.py:2160: error: Incompatible types in assignment (expression has type "Field", variable has type "bool")
+src/inmanta/data/__init__.py:2161: error: Incompatible types in assignment (expression has type "Field", variable has type "bool")
+src/inmanta/data/__init__.py:2162: error: Incompatible types in assignment (expression has type "Field", variable has type "VersionState")
+src/inmanta/data/__init__.py:2163: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Any]")
+src/inmanta/data/__init__.py:2165: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
+src/inmanta/data/__init__.py:2168: error: Incompatible types in assignment (expression has type "Field", variable has type "List[ResourceIdStr]")
+src/inmanta/data/__init__.py:2169: error: Incompatible types in assignment (expression has type "Field", variable has type "List[ResourceIdStr]")
+src/inmanta/data/__init__.py:2192: error: Invalid index type "str" for "str"; expected type "Union[int, slice]"
+src/inmanta/data/__init__.py:2197: error: Return type "Coroutine[Any, Any, List[ConfigurationModel]]" of "get_list" incompatible with return type "Coroutine[Any, Any, List[<nothing>]]" in supertype "BaseDocument"
+src/inmanta/data/__init__.py:2214: error: Incompatible types in assignment (expression has type "str", variable has type "Dict[str, Any]")
+src/inmanta/data/__init__.py:2275: error: Incompatible return value type (got "None", expected "ConfigurationModel")
+src/inmanta/data/__init__.py:2506: error: Need type annotation for 'done' (hint: "done: Set[<type>] = ...")
+src/inmanta/data/__init__.py:2521: error: Argument 1 to "set" has incompatible type "Set[str]"; expected "Iterable[ResourceVersionIdStr]"
+src/inmanta/data/__init__.py:2538: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:2539: error: Incompatible types in assignment (expression has type "Field", variable has type "str")
+src/inmanta/data/__init__.py:2540: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
+src/inmanta/data/__init__.py:2541: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Tuple[str, str, List[str]]]")
+src/inmanta/data/__init__.py:2570: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:2571: error: Incompatible types in assignment (expression has type "Field", variable has type "UUID")
+src/inmanta/data/__init__.py:2572: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
+src/inmanta/data/__init__.py:2573: error: Incompatible types in assignment (expression has type "Field", variable has type "datetime")
+src/inmanta/data/__init__.py:2574: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
+src/inmanta/data/__init__.py:2575: error: Incompatible types in assignment (expression has type "Field", variable has type "int")
+src/inmanta/data/__init__.py:2576: error: Incompatible types in assignment (expression has type "Field", variable has type "Dict[str, Any]")
+src/inmanta/data/__init__.py:2636: error: "DocumentMeta" has no attribute "set_connection_pool"
+src/inmanta/data/__init__.py:2641: error: "DocumentMeta" has no attribute "close_connection_pool"
 src/inmanta/ast/statements/__init__.py:41: error: Incompatible types in assignment (expression has type "None", variable has type "Namespace")
 src/inmanta/ast/statements/__init__.py:92: error: Need type annotation for 'target'
 src/inmanta/ast/statements/__init__.py:212: error: Incompatible types in assignment (expression has type "None", variable has type "NamedType")
@@ -333,19 +294,22 @@ src/inmanta/ast/attribute.py:159: error: Name 'out' already defined on line 157
 src/inmanta/ast/attribute.py:161: error: Name 'out' already defined on line 157
 src/inmanta/protocol/common.py:54: error: Cannot find module named 'typing_inspect'
 src/inmanta/protocol/common.py:185: error: Dict entry 0 has incompatible type "str": "Dict[str, List[str]]"; expected "str": "Union[BaseModel, Enum, UUID, StrictNonIntBool, float, datetime, str]"
+src/inmanta/protocol/common.py:796: error: Incompatible types in assignment (expression has type "str", variable has type "bytes")
 src/inmanta/protocol/rest/__init__.py:25: error: Cannot find module named 'typing_inspect'
 src/inmanta/protocol/rest/__init__.py:415: error: "Callable[..., Coroutine[...]]" has no attribute "__protocol_mapping__"
 src/inmanta/protocol/decorators.py:51: error: "FuncT" has no attribute "__protocol_method__"
 src/inmanta/protocol/decorators.py:52: error: "FuncT" has no attribute "__protocol_mapping__"
 src/inmanta/protocol/decorators.py:53: error: "FuncT" has no attribute "__api_version__"
-src/inmanta/protocol/rest/client.py:46: error: Incompatible types in assignment (expression has type "str", variable has type "int")
+src/inmanta/protocol/rest/client.py:43: error: Incompatible types in assignment (expression has type "Union[str, ConfigParser]", variable has type "Optional[str]")
+src/inmanta/protocol/rest/client.py:46: error: Incompatible types in assignment (expression has type "Union[str, ConfigParser]", variable has type "int")
 src/inmanta/protocol/rest/client.py:46: error: Argument 3 to "get" of "Config" has incompatible type "int"; expected "Optional[str]"
 src/inmanta/protocol/rest/client.py:70: error: Incompatible return value type (got "Tuple[Dict[str, str], UrlMethod]", expected "Tuple[Optional[Dict[str, bytes]], Optional[UrlMethod]]")
-src/inmanta/protocol/rest/client.py:80: error: Incompatible types in assignment (expression has type "str", variable has type "int")
+src/inmanta/protocol/rest/client.py:80: error: Incompatible types in assignment (expression has type "Union[str, ConfigParser]", variable has type "int")
 src/inmanta/protocol/rest/client.py:80: error: Argument 3 to "get" of "Config" has incompatible type "int"; expected "Optional[str]"
-src/inmanta/protocol/rest/client.py:83: error: Argument 3 to "getboolean" of "Config" has incompatible type "bool"; expected "Optional[str]"
+src/inmanta/protocol/rest/client.py:81: error: Incompatible types in assignment (expression has type "Union[str, ConfigParser]", variable has type "str")
 src/inmanta/protocol/rest/client.py:105: error: Incompatible types in assignment (expression has type "Union[bytes, str]", variable has type "Optional[Dict[str, Any]]")
 src/inmanta/protocol/rest/client.py:113: error: Argument "body" to "HTTPRequest" has incompatible type "Optional[Dict[str, Any]]"; expected "Union[bytes, str, None]"
+src/inmanta/protocol/rest/client.py:113: error: Argument "ca_certs" to "HTTPRequest" has incompatible type "Union[str, ConfigParser]"; expected "Optional[str]"
 src/inmanta/protocol/methods.py:34: error: Incompatible types in assignment (expression has type "Optional[Environment]", variable has type "UUID")
 src/inmanta/protocol/methods.py:37: error: Incompatible return value type (got "UUID", expected "Environment")
 src/inmanta/protocol/endpoints.py:77: error: "Callable[..., Any]" has no attribute "__api_version__"
@@ -510,62 +474,64 @@ src/inmanta/export.py:149: error: Incompatible types in assignment (expression h
 src/inmanta/export.py:169: error: Argument 3 to "create_from_model" of "Resource" has incompatible type "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]"; expected "DynamicProxy"
 src/inmanta/export.py:211: error: Unexpected keyword argument "types"
 src/inmanta/export.py:213: error: Too few arguments
-src/inmanta/export.py:315: error: Argument 1 to "json_encode" has incompatible type "List[Dict[str, Any]]"; expected "Union[BaseModel, Enum, UUID, StrictNonIntBool, int, float, datetime, str, Sequence[Union[BaseModel, Enum, UUID, StrictNonIntBool, int, float, datetime, str]], Mapping[str, Union[BaseModel, Enum, UUID, StrictNonIntBool, int, float, datetime, str]], None]"
-src/inmanta/export.py:317: error: Argument 1 to "ModelExporter" has incompatible type "Optional[Dict[str, Entity]]"; expected "Dict[str, Entity]"
-src/inmanta/export.py:325: error: Argument 4 to "commit_resources" of "Exporter" has incompatible type "Optional[Dict[str, Any]]"; expected "Dict[Any, Any]"
-src/inmanta/export.py:329: error: No return value expected
-src/inmanta/export.py:330: error: No return value expected
-src/inmanta/export.py:354: error: Argument 1 to "add" of "set" has incompatible type "Optional[str]"; expected "str"
-src/inmanta/export.py:403: error: Argument 1 to "deploy_code" of "Exporter" has incompatible type "SyncClient"; expected "Client"
-src/inmanta/export.py:499: error: Argument 2 to "add" of "Exporter" has incompatible type "Tuple[str, ...]"; expected "List[str]"
-src/inmanta/export.py:511: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
-src/inmanta/export.py:511: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
-src/inmanta/export.py:511: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
-src/inmanta/export.py:511: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
-src/inmanta/export.py:511: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
-src/inmanta/export.py:511: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "path"
-src/inmanta/export.py:511: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "path"
-src/inmanta/export.py:511: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "path"
-src/inmanta/export.py:511: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "path"
-src/inmanta/export.py:511: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "path"
-src/inmanta/export.py:513: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
-src/inmanta/export.py:513: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
-src/inmanta/export.py:513: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
-src/inmanta/export.py:513: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
-src/inmanta/export.py:513: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
-src/inmanta/export.py:516: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
-src/inmanta/export.py:516: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
-src/inmanta/export.py:516: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
-src/inmanta/export.py:516: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
-src/inmanta/export.py:516: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
-src/inmanta/export.py:521: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
-src/inmanta/export.py:521: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
-src/inmanta/export.py:521: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
-src/inmanta/export.py:521: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
-src/inmanta/export.py:521: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
-src/inmanta/export.py:521: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
-src/inmanta/export.py:521: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
-src/inmanta/export.py:521: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
-src/inmanta/export.py:521: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
-src/inmanta/export.py:521: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
+src/inmanta/export.py:329: error: Argument 1 to "json_encode" has incompatible type "List[Dict[str, Any]]"; expected "Union[BaseModel, Enum, UUID, StrictNonIntBool, int, float, datetime, str, Sequence[Union[BaseModel, Enum, UUID, StrictNonIntBool, int, float, datetime, str]], Mapping[str, Union[BaseModel, Enum, UUID, StrictNonIntBool, int, float, datetime, str]], None]"
+src/inmanta/export.py:331: error: Argument 1 to "ModelExporter" has incompatible type "Optional[Dict[str, Entity]]"; expected "Dict[str, Entity]"
+src/inmanta/export.py:339: error: Argument 4 to "commit_resources" of "Exporter" has incompatible type "Optional[Dict[str, Any]]"; expected "Dict[Any, Any]"
+src/inmanta/export.py:343: error: No return value expected
+src/inmanta/export.py:344: error: No return value expected
+src/inmanta/export.py:368: error: Argument 1 to "add" of "set" has incompatible type "Optional[str]"; expected "str"
+src/inmanta/export.py:417: error: Argument 1 to "deploy_code" of "Exporter" has incompatible type "SyncClient"; expected "Client"
+src/inmanta/export.py:514: error: Argument 2 to "add" of "Exporter" has incompatible type "Tuple[str, ...]"; expected "List[str]"
 src/inmanta/export.py:526: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
 src/inmanta/export.py:526: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
 src/inmanta/export.py:526: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
 src/inmanta/export.py:526: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
 src/inmanta/export.py:526: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
-src/inmanta/export.py:526: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
-src/inmanta/export.py:526: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
-src/inmanta/export.py:526: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
-src/inmanta/export.py:526: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
-src/inmanta/export.py:526: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
-src/inmanta/export.py:572: error: "Type" has no attribute "get_full_name"
-src/inmanta/export.py:574: error: Argument 1 to "relation_name" has incompatible type "Type"; expected "Entity"
-src/inmanta/export.py:574: error: Argument 2 to "relation_name" has incompatible type "Optional[RelationAttribute]"; expected "RelationAttribute"
-src/inmanta/export.py:637: error: Need type annotation for 'unknowns' (hint: "unknowns: List[<type>] = ...")
+src/inmanta/export.py:526: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "path"
+src/inmanta/export.py:526: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "path"
+src/inmanta/export.py:526: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "path"
+src/inmanta/export.py:526: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "path"
+src/inmanta/export.py:526: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "path"
+src/inmanta/export.py:528: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
+src/inmanta/export.py:528: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
+src/inmanta/export.py:528: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
+src/inmanta/export.py:528: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
+src/inmanta/export.py:528: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
+src/inmanta/export.py:531: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
+src/inmanta/export.py:531: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
+src/inmanta/export.py:531: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
+src/inmanta/export.py:531: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
+src/inmanta/export.py:531: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "content"
+src/inmanta/export.py:536: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
+src/inmanta/export.py:536: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
+src/inmanta/export.py:536: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
+src/inmanta/export.py:536: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
+src/inmanta/export.py:536: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
+src/inmanta/export.py:536: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
+src/inmanta/export.py:536: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
+src/inmanta/export.py:536: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
+src/inmanta/export.py:536: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
+src/inmanta/export.py:536: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
+src/inmanta/export.py:541: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
+src/inmanta/export.py:541: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
+src/inmanta/export.py:541: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
+src/inmanta/export.py:541: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
+src/inmanta/export.py:541: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "host"
+src/inmanta/export.py:541: error: Item "str" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
+src/inmanta/export.py:541: error: Item "Tuple[Any, ...]" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
+src/inmanta/export.py:541: error: Item "int" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
+src/inmanta/export.py:541: error: Item "float" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
+src/inmanta/export.py:541: error: Item "bool" of "Union[str, Tuple[Any, ...], int, float, bool, DynamicProxy]" has no attribute "name"
+src/inmanta/export.py:587: error: "Type" has no attribute "get_full_name"
+src/inmanta/export.py:589: error: Argument 1 to "relation_name" has incompatible type "Type"; expected "Entity"
+src/inmanta/export.py:589: error: Argument 2 to "relation_name" has incompatible type "Optional[RelationAttribute]"; expected "RelationAttribute"
+src/inmanta/export.py:652: error: Need type annotation for 'unknowns' (hint: "unknowns: List[<type>] = ...")
 src/inmanta/protocol/rest/server.py:26: error: Module 'pyformance' has no attribute 'timer'
 src/inmanta/protocol/rest/server.py:274: error: Argument 1 to "Application" has incompatible type "List[Rule]"; expected "Optional[List[Union[Rule, List[Any], Tuple[Union[str, Matcher], Any], Tuple[Union[str, Matcher], Any, Dict[str, Any]], Tuple[Union[str, Matcher], Any, Dict[str, Any], str]]]]"
 src/inmanta/protocol/rest/server.py:274: note: "List" is invariant -- see http://mypy.readthedocs.io/en/latest/common_issues.html#variance
 src/inmanta/protocol/rest/server.py:274: note: Consider using "Sequence" instead, which is covariant
+src/inmanta/protocol/rest/server.py:281: error: Argument 1 to "load_cert_chain" of "SSLContext" has incompatible type "Union[str, ConfigParser]"; expected "str"
+src/inmanta/protocol/rest/server.py:281: error: Argument 2 to "load_cert_chain" of "SSLContext" has incompatible type "Union[str, ConfigParser]"; expected "Optional[str]"
 src/inmanta/moduletool.py:29: error: Cannot find module named 'texttable'
 src/inmanta/moduletool.py:310: error: Incompatible types in assignment (expression has type Module, variable has type "Optional[str]")
 src/inmanta/moduletool.py:311: error: Incompatible return value type (got "None", expected Module)
@@ -596,6 +562,7 @@ src/inmanta/compiler/help/explainer.py:125: error: "CompilerException" has no at
 src/inmanta/compiler/help/explainer.py:126: error: "CompilerException" has no attribute "resultvariable"
 src/inmanta/server/protocol.py:68: error: Argument "timeout" to "put_call" of "Session" has incompatible type "Optional[int]"; expected "int"
 src/inmanta/server/protocol.py:81: error: Incompatible types in assignment (expression has type "None", variable has type "List[ServerSlice]")
+src/inmanta/server/protocol.py:83: error: Incompatible types in assignment (expression has type "Union[str, ConfigParser]", variable has type "Optional[str]")
 src/inmanta/server/protocol.py:88: error: Argument 1 to "RESTServer" has incompatible type "SessionManager"; expected "SessionManagerInterface"
 src/inmanta/server/protocol.py:97: error: Incompatible types in assignment (expression has type "None", variable has type "List[ServerSlice]")
 src/inmanta/server/protocol.py:308: error: Argument 1 to "append" of "list" has incompatible type "Tuple[str, Type[RedirectHandler], Dict[str, str]]"; expected "Rule"
@@ -604,6 +571,7 @@ src/inmanta/server/protocol.py:397: error: Need type annotation for 'future'
 src/inmanta/server/protocol.py:483: error: Argument 1 to "start" of "RESTServer" has incompatible type "ValuesView[ServerSlice]"; expected "List[CallTarget]"
 src/inmanta/server/protocol.py:504: error: Item "None" of "Optional[HTTPServer]" has no attribute "_sockets"
 src/inmanta/server/protocol.py:600: error: Dict entry 0 has incompatible type "str": "List[Request]"; expected "str": "str"
+src/inmanta/server/services/metricservice.py:51: error: Argument "tags" to "InfluxReporter" has incompatible type "Collection[str]"; expected "Dict[str, str]"
 src/inmanta/server/services/databaseservice.py:90: error: Incompatible return value type (got "Dict[str, object]", expected "Dict[str, Union[BaseModel, Enum, UUID, StrictNonIntBool, int, float, datetime, str, Sequence[Union[BaseModel, Enum, UUID, StrictNonIntBool, int, float, datetime, str]], Mapping[str, Union[BaseModel, Enum, UUID, StrictNonIntBool, int, float, datetime, str]]]]")
 src/inmanta/server/services/compilerservice.py:248: error: Argument 3 to "get" of "Config" has incompatible type "bool"; expected "Optional[str]"
 src/inmanta/server/services/compilerservice.py:353: error: Incompatible types in assignment (expression has type "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]", variable has type "bool")
@@ -617,6 +585,7 @@ src/inmanta/server/agentmanager.py:250: error: "List[AgentProcess]" has no attri
 src/inmanta/server/agentmanager.py:290: error: "List[AgentProcess]" has no attribute "update_fields"
 src/inmanta/server/agentmanager.py:467: error: Incompatible types in assignment (expression has type "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]", variable has type "Dict[str, str]")
 src/inmanta/server/agentmanager.py:491: error: Incompatible types in assignment (expression has type "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]", variable has type "Dict[str, str]")
+src/inmanta/server/agentmanager.py:537: error: Argument 1 to "join" has incompatible type "Union[str, ConfigParser]"; expected "Union[str, _PathLike[str]]"
 src/inmanta/server/agentmanager.py:539: error: Incompatible types in assignment (expression has type "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]", variable has type "int")
 src/inmanta/server/agentmanager.py:540: error: Incompatible types in assignment (expression has type "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]", variable has type "int")
 src/inmanta/server/agentmanager.py:542: error: Incompatible types in assignment (expression has type "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]", variable has type "int")
@@ -652,13 +621,14 @@ src/inmanta/server/services/orchestrationservice.py:129: error: Incompatible typ
 src/inmanta/server/services/orchestrationservice.py:132: error: Argument 4 to "get_log" of "ResourceAction" has incompatible type "Optional[int]"; expected "int"
 src/inmanta/server/services/orchestrationservice.py:133: error: Value of type "Resource" is not indexable
 src/inmanta/server/services/orchestrationservice.py:138: error: Incompatible types in assignment (expression has type "List[UnknownParameter]", target has type "ConfigurationModel")
-src/inmanta/server/services/orchestrationservice.py:211: error: Invalid index type "ResourceIdStr" for "Dict[ResourceVersionIdStr, Resource]"; expected type "ResourceVersionIdStr"
-src/inmanta/server/services/orchestrationservice.py:257: error: Invalid index type "ResourceIdStr" for "Dict[ResourceVersionIdStr, Resource]"; expected type "ResourceVersionIdStr"
-src/inmanta/server/services/orchestrationservice.py:297: error: Incompatible types in assignment (expression has type "Dict[<nothing>, <nothing>]", target has type "Union[UUID, StrictNonIntBool, int, float, datetime, str]")
-src/inmanta/server/services/orchestrationservice.py:332: error: Incompatible types in assignment (expression has type "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]", variable has type "bool")
-src/inmanta/server/services/orchestrationservice.py:334: error: Invalid index type "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]" for "Type[AgentTriggerMethod]"; expected type "str"
-src/inmanta/server/services/orchestrationservice.py:359: error: List comprehension has incompatible type List[str]; expected List[ResourceIdStr]
-src/inmanta/server/services/orchestrationservice.py:364: error: Argument 2 to "resource_action_update" of "ResourceService" has incompatible type "List[ResourceIdStr]"; expected "List[ResourceVersionIdStr]"
-src/inmanta/server/services/orchestrationservice.py:379: error: List comprehension has incompatible type List[str]; expected List[ResourceIdStr]
-src/inmanta/server/services/orchestrationservice.py:381: error: Argument 2 to "resource_action_update" of "ResourceService" has incompatible type "List[ResourceIdStr]"; expected "List[ResourceVersionIdStr]"
+src/inmanta/server/services/orchestrationservice.py:207: error: Invalid index type "ResourceVersionIdStr" for "Dict[ResourceIdStr, ResourceState]"; expected type "ResourceIdStr"
+src/inmanta/server/services/orchestrationservice.py:240: error: Invalid index type "ResourceIdStr" for "Dict[ResourceVersionIdStr, Resource]"; expected type "ResourceVersionIdStr"
+src/inmanta/server/services/orchestrationservice.py:286: error: Invalid index type "ResourceIdStr" for "Dict[ResourceVersionIdStr, Resource]"; expected type "ResourceVersionIdStr"
+src/inmanta/server/services/orchestrationservice.py:326: error: Incompatible types in assignment (expression has type "Dict[<nothing>, <nothing>]", target has type "Union[UUID, StrictNonIntBool, int, float, datetime, str]")
+src/inmanta/server/services/orchestrationservice.py:361: error: Incompatible types in assignment (expression has type "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]", variable has type "bool")
+src/inmanta/server/services/orchestrationservice.py:363: error: Invalid index type "Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]" for "Type[AgentTriggerMethod]"; expected type "str"
+src/inmanta/server/services/orchestrationservice.py:388: error: List comprehension has incompatible type List[str]; expected List[ResourceIdStr]
+src/inmanta/server/services/orchestrationservice.py:393: error: Argument 2 to "resource_action_update" of "ResourceService" has incompatible type "List[ResourceIdStr]"; expected "List[ResourceVersionIdStr]"
+src/inmanta/server/services/orchestrationservice.py:408: error: List comprehension has incompatible type List[str]; expected List[ResourceIdStr]
+src/inmanta/server/services/orchestrationservice.py:410: error: Argument 2 to "resource_action_update" of "ResourceService" has incompatible type "List[ResourceIdStr]"; expected "List[ResourceVersionIdStr]"
 Generated HTML report (via XSLT): /home/sander/documents/projects/inmanta/inmanta/mypy/index.html
