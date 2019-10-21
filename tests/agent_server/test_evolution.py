@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import asyncio
 from collections import defaultdict
 
 import pytest
