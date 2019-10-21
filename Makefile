@@ -25,9 +25,23 @@ pep8:
 	pip install -c requirements.txt pep8-naming flake8-black flake8-isort
 	flake8 src tests tests_common
 
-.PHONY: mypy
+.PHONY: mypy mypy-diff mypy-commit
+RUN_MYPY=MYPYPATH=stubs:src python -m mypy --html-report mypy -p inmanta
+MYPY_BASELINE_FILE=.mypy-baseline
+
 mypy:
-	MYPYPATH=stubs:src python -m mypy --html-report mypy -p inmanta
+	$(RUN_MYPY)
+
+mypy-diff:
+	@$(RUN_MYPY) | diff $(MYPY_BASELINE_FILE) - \
+		--new-line-format=$$'\e[0;31m+ %L\e[0m' \
+		--old-line-format=$$'\e[0;32m- %L\e[0m' \
+		--unchanged-line-format='' \
+		--unidirectional-new-file \
+		|| true
+
+mypy-commit:
+	$(RUN_MYPY) > $(MYPY_BASELINE_FILE) || true
 
 .PHONY: test
 test:
