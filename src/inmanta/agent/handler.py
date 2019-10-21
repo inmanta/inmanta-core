@@ -275,8 +275,17 @@ class HandlerContext(object):
     def update_changes(self, changes: Dict[str, Dict[str, Optional[SimpleTypes]]]) -> None:
         pass
 
+    @overload  # noqa: F811
+    def update_changes(self, changes: Dict[str, Tuple[SimpleTypes, SimpleTypes]]) -> None:
+        pass
+
     def update_changes(  # noqa: F811
-        self, changes: Union[Dict[str, AttributeStateChange], Dict[str, Dict[str, Optional[SimpleTypes]]]]
+        self,
+        changes: Union[
+            Dict[str, AttributeStateChange],
+            Dict[str, Dict[str, Optional[SimpleTypes]]],
+            Dict[str, Tuple[SimpleTypes, SimpleTypes]],
+        ],
     ) -> None:
         """
             Update the changes list with changes
@@ -285,9 +294,19 @@ class HandlerContext(object):
         """
         for attribute, change in changes.items():
             if isinstance(change, dict):
-                change = AttributeStateChange(current=change.get("current", None), desired=change.get("desired", None))
-
-            self._changes[attribute] = change
+                self._changes[attribute] = AttributeStateChange(
+                    current=change.get("current", None), desired=change.get("desired", None)
+                )
+            elif isinstance(change, tuple):
+                if len(change) != 2:
+                    raise InvalidOperation(
+                        f"Reported changes for {attribute} not valid. Tuple changes should contain 2 element."
+                    )
+                self._changes[attribute] = AttributeStateChange(current=change[0], desired=change[1])
+            elif isinstance(change, AttributeStateChange):
+                self._changes[attribute] = change
+            else:
+                raise InvalidOperation(f"Reported changes for {attribute} not in a type that is recognized.")
 
     @property
     def changes(self) -> Dict[str, AttributeStateChange]:
