@@ -17,45 +17,34 @@
 """
 import asyncio
 import logging
-import time
 import uuid
 
 import pytest
 
 from inmanta import const, data
-from inmanta.agent import Agent
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
-from utils import LogSequence, _wait_until_deployment_finishes, no_error_in_logs, retry_limited
+from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.util import get_compiler_version
+from utils import LogSequence, _wait_until_deployment_finishes, no_error_in_logs
 
 
 @pytest.mark.asyncio
-async def test_get_facts(resource_container, client, server, caplog):
+async def test_get_facts(resource_container, client, clienthelper, environment, agent, caplog):
     """
         Test retrieving facts from the agent
     """
-    resource_container.Provider.reset()
-    result = await client.create_project("env-test")
-    project_id = result.result["project"]["id"]
-
-    result = await client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
-
-    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
-    await agent.start()
-    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
+    env_id = environment
 
     resource_container.Provider.set("agent1", "key", "value")
 
-    version = int(time.time())
+    version = await clienthelper.get_version()
 
     resource_id_wov = "test::Resource[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
 
     resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
 
-    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
-    assert result.code == 200
+    await clienthelper.put_version_simple(resources, version)
+
     result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
@@ -70,31 +59,24 @@ async def test_get_facts(resource_container, client, server, caplog):
 
     result = await client.get_param(env_id, "key1", resource_id_wov)
     assert result.code == 200
-    await agent.stop()
     no_error_in_logs(caplog)
 
 
 @pytest.mark.asyncio
-async def test_purged_facts(resource_container, client, server, environment, no_agent_backoff, caplog):
+async def test_purged_facts(resource_container, client, clienthelper, agent, environment, no_agent_backoff, caplog):
     """
         Test if facts are purged when the resource is purged.
     """
-    resource_container.Provider.reset()
-    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
-    await agent.start()
-    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
-
     resource_container.Provider.set("agent1", "key", "value")
 
-    version = 1
+    version = await clienthelper.get_version()
     resource_id_wov = "test::Resource[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
 
     resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
 
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert result.code == 200
+    await clienthelper.put_version_simple(resources, version)
+
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
@@ -111,10 +93,17 @@ async def test_purged_facts(resource_container, client, server, environment, no_
     assert result.code == 200
 
     # Purge the resource
-    version = 2
+    version = await clienthelper.get_version()
     resources[0]["id"] = "%s,v=%d" % (resource_id_wov, version)
     resources[0]["purged"] = True
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
     assert result.code == 200
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
@@ -131,12 +120,11 @@ async def test_purged_facts(resource_container, client, server, environment, no_
     result = await client.get_param(environment, "length", resource_id_wov)
     assert result.code == 503
 
-    await agent.stop()
     no_error_in_logs(caplog)
 
 
 @pytest.mark.asyncio
-async def test_get_facts_extended(server, client, resource_container, environment, caplog):
+async def test_get_facts_extended(server, client, agent, clienthelper, resource_container, environment, caplog):
     """
         dryrun and deploy a configuration model automatically
     """
@@ -145,12 +133,8 @@ async def test_get_facts_extended(server, client, resource_container, environmen
     agentmanager._fact_resource_block = 0.1
 
     resource_container.Provider.reset()
-    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
-    await agent.start()
-    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
-    version = int(time.time())
+    version = await clienthelper.get_version()
 
     # mark some as existing
     resource_container.Provider.set("agent1", "key1", "value")
@@ -259,7 +243,13 @@ async def test_get_facts_extended(server, client, resource_container, environmen
         return result
 
     result = await client.put_version(
-        tid=environment, version=version, resources=resources, unknowns=[], version_info={}, resource_state=resource_states
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        resource_state=resource_states,
+        compiler_version=get_compiler_version(),
     )
     assert result.code == 200
 
@@ -299,15 +289,11 @@ async def test_get_facts_extended(server, client, resource_container, environmen
 
 
 @pytest.mark.asyncio
-async def test_purged_resources(resource_container, client, server, environment, no_agent_backoff):
+async def test_purged_resources(resource_container, client, clienthelper, server, environment, agent, no_agent_backoff):
     """
         Test if facts are purged when the resource is no longer available in any version
     """
     resource_container.Provider.reset()
-    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
-    await agent.start()
-    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "value")
 
@@ -315,15 +301,16 @@ async def test_purged_resources(resource_container, client, server, environment,
     res2 = "test::Resource[agent1,key=key2]"
 
     # Create version 1 with 1 unknown
-    version = 1
+    version = await clienthelper.get_version()
+    assert version == 1
 
     resources = [
         {"key": "key1", "value": "value", "id": f"{res1},v={version}", "requires": [], "purged": False, "send_event": False},
         {"key": "key2", "value": "value", "id": f"{res2},v={version}", "requires": [], "purged": False, "send_event": False},
     ]
 
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert result.code == 200
+    await clienthelper.put_version_simple(resources, version)
+
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
@@ -347,14 +334,15 @@ async def test_purged_resources(resource_container, client, server, environment,
     assert result.code == 200
 
     # Create version 2
-    version = 2
+    version = await clienthelper.get_version()
+    assert version == 2
 
     resources = [
         {"key": "key1", "value": "value", "id": f"{res1},v={version}", "requires": [], "purged": False, "send_event": False}
     ]
 
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert result.code == 200
+    await clienthelper.put_version_simple(resources, version)
+
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
@@ -385,5 +373,3 @@ async def test_purged_resources(resource_container, client, server, environment,
     result = await client.list_params(environment)
     assert result.code == 200
     assert len(result.result["parameters"]) == 0
-
-    await agent.stop()

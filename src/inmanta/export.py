@@ -37,7 +37,7 @@ from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
-from inmanta.util import groupby, hash_file
+from inmanta.util import get_compiler_version, groupby, hash_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -263,6 +263,20 @@ class Exporter(object):
             with open("dependencies.dot", "wb+") as fd:
                 fd.write(dot.encode())
 
+    def get_version(self, no_commit=False):
+        if no_commit:
+            return 0
+        tid = cfg_env.get()
+        if tid is None:
+            LOGGER.warning("The environment for this model should be set for export to server!")
+            return 0
+        else:
+            conn = protocol.SyncClient("compiler")
+            result = conn.reserve_version(tid)
+            if result.code != 200:
+                raise Exception(f"Unable to reserve version number from server (msg: {result.result})")
+            return result.result["data"]
+
     def run(
         self,
         types: Optional[Dict[str, Entity]],
@@ -278,7 +292,7 @@ class Exporter(object):
         """
         self.types = types
         self.scopes = scopes
-        self._version = int(time.time())
+        self._version = self.get_version(no_commit)
 
         if types is not None:
             # then process the configuration model to submit it to the mgmt server
@@ -441,6 +455,7 @@ class Exporter(object):
             unknowns=unknown_parameters,
             resource_state=self._resource_state,
             version_info=version_info,
+            compiler_version=get_compiler_version(),
         )
 
         if res.code != 200:

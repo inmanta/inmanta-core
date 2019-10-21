@@ -1,7 +1,7 @@
 PyJWT==1.7.1
 click==7.0
 colorlog==4.0.2
-cryptography==2.7
+cryptography==2.8
 execnet==1.7.1
 inmanta-sphinx>=1.0.0.dev0
 netifaces==0.10.9
@@ -28,14 +28,14 @@ tornado==6.0.3
 tox==3.14.0
 tox-venv==0.4.0
 typing==3.7.4.1
-asyncpg==0.18.3
-pytest-postgresql==2.1.0
+asyncpg==0.19.0
+pytest-postgresql==2.2.0
 pytest-env==0.6.2
 jinja2==2.10.3
 pep8-naming==0.8.2
 flake8==3.7.8
 flake8-black==0.1.1
-flake8-copyright
+flake8-copyright==0.2.2
 psutil==5.6.3
 pyformance==0.4
 pymongo==3.9.0
@@ -43,18 +43,18 @@ pydantic==0.32.2
 isort==4.3.21
 flake8-isort==2.7.0
 black==19.3b0
-typing_inspect==0.4.0
+typing_inspect==0.5.0
 importlib_metadata==0.23
-mypy==0.730
+mypy==0.740
 setuptools==41.4.0
-pip==19.2.3
+pip==19.3.1
 
 # Transitive dependencies
 MarkupSafe==1.1.1
-mypy-extensions==0.4.2
+mypy-extensions==0.4.3
 lxml==4.4.1
 pycparser==2.19
 zipp==0.6.0
 apipkg==1.5
-asn1crypto==0.24.0
-cffi==1.12.3
+asn1crypto==1.2.0
+cffi==1.13.0

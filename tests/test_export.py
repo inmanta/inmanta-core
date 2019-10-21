@@ -221,6 +221,12 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
     assert result.result["versions"][0]["total"] == 1
 
 
+@pytest.mark.asyncio
+async def test_old_compiler(server, client, environment):
+    result = await client.put_version(tid=environment, version=123456, resources=[], unknowns=[], version_info={})
+    assert result.code == 400
+
+
 def test_dict_export(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

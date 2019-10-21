@@ -465,10 +465,18 @@ def delete_version(tid: uuid.UUID, id: int):
 
 @method(path="/version", operation="PUT", arg_options=ENV_OPTS, client_types=["compiler"])
 def put_version(
-    tid: uuid.UUID, version: int, resources: list, resource_state: dict = {}, unknowns: list = None, version_info: dict = None
+    tid: uuid.UUID,
+    version: int,
+    resources: list,
+    resource_state: dict = {},
+    unknowns: list = None,
+    version_info: dict = None,
+    compiler_version: str = None,
 ):
     """
         Store a new version of the configuration model
+
+        The version number must be obtained through the reserve_version call
 
         :param tid: The id of the environment
         :param version: The version of the configuration model
@@ -476,6 +484,7 @@ def put_version(
         :param resource_state: A dictionary with the initial const.ResourceState per resource id
         :param unknowns: A list of unknown parameters that caused the model to be incomplete
         :param version_info: Module version information
+        :param compiler_version: version of the compiler, if not provided, this call will return an error
     """
 
 
