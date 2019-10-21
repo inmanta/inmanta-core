@@ -238,9 +238,6 @@ async def wait_for_version(client, environment, cnt):
 
     await retry_limited(sufficient_versions, 10)
 
-    # Added until #1011 is implemented
-    nextsecond = int(start) + 1
-    await asyncio.sleep(nextsecond - time.time())
     versions = await client.list_versions(environment)
     return versions.result
 
