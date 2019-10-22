@@ -89,7 +89,6 @@ def test_help_sub(inmanta_config, capsys):
 def test_module_help(inmanta_config, capsys):
     with pytest.raises(ShowUsageException) as info:
         app(["module"])
-    out, _ = capsys.readouterr()
 
     assert info.value.args[0].startswith("A sub command is required.")
 

@@ -81,7 +81,7 @@ class ModuleLikeTool(object):
             method(**outargs)
         else:
             if cmd is None or cmd == "":
-                msg = "A sub command is required."
+                msg = "A subcommand is required."
             else:
                 msg = f"{cmd} does not exist."
             raise ShowUsageException(msg)
