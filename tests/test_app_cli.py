@@ -25,6 +25,7 @@ from asyncio import subprocess
 import pytest
 
 from inmanta.app import cmd_parser
+from inmanta.command import ShowUsageException
 from inmanta.config import Config
 from inmanta.const import VersionState
 
@@ -83,6 +84,13 @@ def test_help_sub(inmanta_config, capsys):
     assert "export" not in out
     # check subcommands help
     assert "update" in out
+
+
+def test_module_help(inmanta_config, capsys):
+    with pytest.raises(ShowUsageException) as info:
+        app(["module"])
+
+    assert info.value.args[0].startswith("A subcommand is required.")
 
 
 @pytest.mark.parametrize("push_method", [([]), (["-d"]), (["-d", "--full"])])

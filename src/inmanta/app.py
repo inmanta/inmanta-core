@@ -53,7 +53,7 @@ from tornado.util import TimeoutError
 
 from inmanta import const, module, moduletool, protocol
 from inmanta.ast import CompilerException
-from inmanta.command import CLIException, Commander, command
+from inmanta.command import CLIException, Commander, command, ShowUsageException
 from inmanta.compiler import do_compile
 from inmanta.config import Config
 from inmanta.const import EXIT_START_FAILED
@@ -625,6 +625,9 @@ def app() -> None:
 
     try:
         options.func(options)
+    except ShowUsageException as e:
+        print(e.args[0], file=sys.stderr)
+        parser.print_usage()
     except CLIException as e:
         report(e)
         sys.exit(e.exitcode)

@@ -18,9 +18,15 @@
 
 
 class CLIException(Exception):
-    def __init__(self, exitcode, *args, **kwargs):
+    def __init__(self, exitcode: int, *args, **kwargs):
         self.exitcode = exitcode
         super(CLIException, self).__init__(*args, **kwargs)
+
+
+class ShowUsageException(Exception):
+    """
+        Raise this exception to show the usage message of the given level
+    """
 
 
 class Commander(object):
