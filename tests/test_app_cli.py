@@ -90,7 +90,7 @@ def test_module_help(inmanta_config, capsys):
     with pytest.raises(ShowUsageException) as info:
         app(["module"])
 
-    assert info.value.args[0].startswith("A sub command is required.")
+    assert info.value.args[0].startswith("A subcommand is required.")
 
 
 @pytest.mark.parametrize("push_method", [([]), (["-d"]), (["-d", "--full"])])
