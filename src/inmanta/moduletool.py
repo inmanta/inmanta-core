@@ -33,7 +33,7 @@ from pkg_resources import parse_version
 
 import inmanta
 from inmanta.ast import Namespace, RuntimeException
-from inmanta.command import CLIException
+from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
 from inmanta.module import INSTALL_MASTER, INSTALL_RELEASES, Module, Project, gitprovider
 from inmanta.parser.plyInmantaParser import parse
@@ -80,7 +80,11 @@ class ModuleLikeTool(object):
             outargs = {k: getattr(args, k) for k in margs if hasattr(args, k)}
             method(**outargs)
         else:
-            raise Exception("%s not implemented" % cmd)
+            if cmd is None or cmd == "":
+                msg = "A sub command is required."
+            else:
+                msg = f"{cmd} does not exist."
+            raise ShowUsageException(msg)
 
     def get_project(self, load=False) -> Project:
         project = Project.get()
