@@ -27,8 +27,7 @@ from uuid import UUID
 
 from tornado import locks, process
 
-from inmanta import data
-from inmanta import const
+from inmanta import const, data
 from inmanta.config import Config
 from inmanta.protocol import encode_token, methods
 from inmanta.protocol.exceptions import NotFound, ShutdownInProgress
