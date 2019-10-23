@@ -39,6 +39,15 @@ def find_executable(executable: str) -> Optional[str]:
         if os.path.isfile(executable_path):
             return executable_path
 
+    # fall back to pg_config
+    try:
+        bindir = subprocess.check_output(['pg_config', '--bindir'], universal_newlines=True).strip()
+        binpath = os.path.join(bindir, executable)
+        if os.path.isfile(binpath):
+            return binpath
+    except FileNotFoundError:
+        return None
+
     return None
 
 
