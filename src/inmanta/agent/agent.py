@@ -946,7 +946,10 @@ class AgentInstance(object):
                 failed_resources.append(res["id"])
 
         if len(failed_resources) > 0:
-            log = data.LogLine.log(logging.ERROR, "Failed to load handler code or install handler code dependencies.")
+            log = data.LogLine.log(
+                logging.ERROR,
+                "Failed to load handler code or install handler code dependencies. Check the agent log for details.",
+            )
             await self.get_client().resource_action_update(
                 tid=self._env_id,
                 resource_ids=failed_resources,
