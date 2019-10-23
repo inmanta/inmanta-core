@@ -27,20 +27,31 @@ pep8:
 
 .PHONY: mypy mypy-diff mypy-commit
 RUN_MYPY=MYPYPATH=stubs:src python -m mypy --html-report mypy -p inmanta
-MYPY_BASELINE_FILE=.mypy-baseline
 
 mypy:
 	$(RUN_MYPY)
 
+MYPY_TMP_FILE=.mypy-tmp
+MYPY_BASELINE_FILE=.mypy-baseline
+MYPY_BASELINE_FILE_NO_LN_NB=$(MYPY_BASELINE_FILE).nolnnb
+MYPY_DIFF_PREPARE=head -n -2 | sed 's/^\(.\+:\)[0-9]\+\(:\)/\1\2/'
+MYPY_SELECT_FILE=$$(if [[ "{}" == +* ]]; then echo $(MYPY_TMP_FILE); else echo $(MYPY_BASELINE_FILE); fi)
+MYPY_SET_COLOUR=$$(if [[ "{}" == +* ]]; then tput setaf 1; else tput setaf 2; fi)
+MYPY_DIFF_LN_NB_TO_LN=xargs -I{} sh -c 'sed -n -e "s/^/$(MYPY_SET_COLOUR)$$(echo {} | cut -c 1 -) /" -e "$$(echo {} | cut -c 2- -)p" $(MYPY_SELECT_FILE)'
+
 mypy-diff:
-	@$(RUN_MYPY) | diff $(MYPY_BASELINE_FILE) - \
-		--new-line-format=$$'\e[0;31m+ %L\e[0m' \
-		--old-line-format=$$'\e[0;32m- %L\e[0m' \
+	@ $(RUN_MYPY) > $(MYPY_TMP_FILE) || true
+	@ cat $(MYPY_BASELINE_FILE) | $(MYPY_DIFF_PREPARE) > $(MYPY_BASELINE_FILE_NO_LN_NB) || true
+	@ cat $(MYPY_TMP_FILE) | $(MYPY_DIFF_PREPARE) | diff $(MYPY_BASELINE_FILE_NO_LN_NB) - \
+		--new-line-format=$$'+%dn%c\'\\012\'' \
+		--old-line-format=$$'-%dn%c\'\\012\'' \
 		--unchanged-line-format='' \
 		--unidirectional-new-file \
+		| $(MYPY_DIFF_LN_NB_TO_LN) \
 		|| true
+	@ rm -f $(MYPY_TMP_FILE) $(MYPY_BASELINE_FILE_NO_LN_NB)
 
-mypy-commit:
+mypy-save:
 	$(RUN_MYPY) > $(MYPY_BASELINE_FILE) || true
 
 .PHONY: test
