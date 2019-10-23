@@ -53,7 +53,7 @@ from tornado.util import TimeoutError
 
 from inmanta import const, module, moduletool, protocol
 from inmanta.ast import CompilerException
-from inmanta.command import CLIException, Commander, command, ShowUsageException
+from inmanta.command import CLIException, Commander, ShowUsageException, command
 from inmanta.compiler import do_compile
 from inmanta.config import Config
 from inmanta.const import EXIT_START_FAILED

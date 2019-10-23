@@ -42,7 +42,6 @@ TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying, ResourceSt
 NOT_DONE_STATES = TRANSIENT_STATES
 # counts as done
 DONE_STATES = [
-    ResourceState.unavailable,
     ResourceState.skipped,
     ResourceState.deployed,
     ResourceState.failed,
