@@ -35,6 +35,7 @@ from inmanta.const import ResourceState
 from inmanta.data.model import AttributeStateChange
 from inmanta.protocol import Result
 from inmanta.types import SimpleTypes
+from inmanta.util import hash_file
 
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent
@@ -710,7 +711,10 @@ class ResourceHandler(object):
         if result.code == 404:
             return None
         elif result.code == 200:
-            return base64.b64decode(result.result["content"])
+            file_contents = base64.b64decode(result.result["content"])
+            if hash_id != hash_file(file_contents):
+                raise Exception(f"File hash verification failed, expected: {hash_id} but got {hash_file(file_contents)}")
+            return file_contents
         else:
             raise Exception("An error occurred while retrieving file %s" % hash_id)
 
