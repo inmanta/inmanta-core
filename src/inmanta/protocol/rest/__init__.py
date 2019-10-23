@@ -430,7 +430,7 @@ class RESTBase(util.TaskHandler):
             raise exceptions.ServerError("data validation error.")
 
         except exceptions.BaseHttpException:
-            LOGGER.exception("")
+            LOGGER.warning("An HTTP Error occurred", exc_info=True)
             raise
 
         except Exception as e:
