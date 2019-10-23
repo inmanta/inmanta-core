@@ -751,7 +751,7 @@ class AgentInstance(object):
                 self.logger.warning("Got an error while pulling resources for %s. %s", reason, result.result)
 
             else:
-                undeployable, resources = self.load_resources(
+                undeployable, resources = await self.load_resources(
                     result.result["version"], const.ResourceAction.deploy, result.result["resources"]
                 )
                 self.logger.debug("Pulled %d resources because %s", len(resources), reason)
@@ -775,7 +775,7 @@ class AgentInstance(object):
                     self.logger.warning("Got an error while pulling resources and version %s", version)
                     return
 
-                undeployable, resources = self.load_resources(
+                undeployable, resources = await self.load_resources(
                     version, const.ResourceAction.dryrun, response.result["resources"]
                 )
 
@@ -865,7 +865,7 @@ class AgentInstance(object):
 
     async def get_facts(self, resource: JsonType) -> Apireturn:
         with (await self.ratelimiter.acquire()):
-            undeployable, resources = self.load_resources(resource["model"], const.ResourceAction.getfact, [resource])
+            undeployable, resources = await self.load_resources(resource["model"], const.ResourceAction.getfact, [resource])
 
             if undeployable or not resources:
                 self.logger.warning(
