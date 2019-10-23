@@ -39,6 +39,15 @@ def find_executable(executable: str) -> Optional[str]:
         if os.path.isfile(executable_path):
             return executable_path
 
+    # fall back to pg_config
+    try:
+        bindir = subprocess.check_output(["pg_config", "--bindir"], universal_newlines=True).strip()
+        binpath = os.path.join(bindir, executable)
+        if os.path.isfile(binpath):
+            return binpath
+    except FileNotFoundError:
+        return None
+
     return None
 
 
@@ -53,10 +62,14 @@ class PostgresProc(object):
                 raise AssertionError("DB path should be a directory, but it is a file.")
 
         self.pg_ctl_bin = pg_ctl_bin or find_executable(PG_CTL_BIN)
-        assert self.pg_ctl_bin, f"Could not find '{PG_CTL_BIN}' in system PATH. Make sure you have PostgreSQL installed."
+        assert (
+            self.pg_ctl_bin
+        ), f"Could not find '{PG_CTL_BIN}' or pg_config in system PATH. Make sure you have PostgreSQL installed."
 
         self.initdb_bin = initdb_bin or find_executable(INITDB_BIN)
-        assert self.initdb_bin, f"Could not find '{INITDB_BIN}' in system PATH. Make sure you have PostgreSQL installed."
+        assert (
+            self.initdb_bin
+        ), f"Could not find '{INITDB_BIN}' or pg_config in system PATH. Make sure you have PostgreSQL installed."
 
     def start(self) -> bool:
         """
