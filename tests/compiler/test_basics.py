@@ -21,7 +21,7 @@ from inmanta.util import get_compiler_version
 
 def test_compiler_installed():
     """
-    If this test fails, pleade install the compiler.
+    If this test fails, please install the compiler.
     """
     assert get_compiler_version() is not None
 
