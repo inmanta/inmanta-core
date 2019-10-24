@@ -1561,7 +1561,8 @@ async def test_autostart_clear_environment(server, client, resource_container, e
 async def setup_environment_with_agent(client, project_name):
     """
         1) Create a project with name project_name and create an environment.
-        2) Deploy a model which requires one autostarted agent.
+        2) Deploy a model which requires one autostarted agent. The agent does not have code so it will mark the version as
+           failed.
         3) Wait until the autostarted agent is up.
     """
     create_project_result = await client.create_project(project_name)
@@ -1599,11 +1600,12 @@ async def setup_environment_with_agent(client, project_name):
     assert result.code == 200
 
     # check deploy
+    await _wait_until_deployment_finishes(client, env_id, version)
     result = await client.get_version(env_id, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
-    assert result.result["model"]["result"] == "deploying"
+    assert result.result["model"]["result"] == "failed"
 
     result = await client.list_agents(tid=env_id)
     assert result.code == 200
