@@ -1373,6 +1373,9 @@ def ps_diff(original, current_process, diff=0):
 async def test_autostart_mapping(server, client, clienthelper, resource_container, environment, no_agent_backoff):
     """
         Test autostart mapping and restart agents when the map is modified
+
+        The handler code in the resource_container is not available to the autostarted agent. When the agent loads these
+        resources it will mark them as unavailable. There is only one agent started when deploying is checked.
     """
     current_process = psutil.Process()
     children_pre = current_process.children(recursive=True)
@@ -1447,6 +1450,9 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
 async def test_autostart_clear_environment(server, client, resource_container, environment, no_agent_backoff):
     """
         Test clearing an environment with autostarted agents. After clearing, autostart should still work
+
+        The handler code in the resource_container is not available to the autostarted agent. When the agent loads these
+        resources it will mark them as unavailable. This will make the deploy fail.
     """
     resource_container.Provider.reset()
     current_process = psutil.Process()
@@ -1460,34 +1466,27 @@ async def test_autostart_clear_environment(server, client, resource_container, e
 
     clienthelper = ClientHelper(client, environment)
     version = await clienthelper.get_version()
-
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version,
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        }
-    ]
-
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
+    await clienthelper.put_version_simple(
+        [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": "test::Resource[agent1,key=key1],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            }
+        ],
+        version,
     )
-    assert result.code == 200
 
     # check deploy
+    await _wait_until_deployment_finishes(client, environment, version)
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
-    assert result.result["model"]["result"] == "deploying"
+    assert result.result["model"]["result"] == "failed"
 
     result = await client.list_agents(tid=environment)
     assert result.code == 200
@@ -1523,34 +1522,27 @@ async def test_autostart_clear_environment(server, client, resource_container, e
 
     # Do a deploy again
     version = await clienthelper.get_version()
-
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version,
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        }
-    ]
-
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
+    await clienthelper.put_version_simple(
+        [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": "test::Resource[agent1,key=key1],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            }
+        ],
+        version,
     )
-    assert result.code == 200
 
     # check deploy
+    await _wait_until_deployment_finishes(client, environment, version)
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
-    assert result.result["model"]["result"] == "deploying"
+    assert result.result["model"]["result"] == "failed"
 
     result = await client.list_agents(tid=environment)
     assert result.code == 200
