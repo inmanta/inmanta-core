@@ -712,8 +712,9 @@ class ResourceHandler(object):
             return None
         elif result.code == 200:
             file_contents = base64.b64decode(result.result["content"])
-            if hash_id != hash_file(file_contents):
-                raise Exception(f"File hash verification failed, expected: {hash_id} but got {hash_file(file_contents)}")
+            actual_hash_of_file = hash_file(file_contents)
+            if hash_id != actual_hash_of_file:
+                raise Exception(f"File hash verification failed, expected: {hash_id} but got {actual_hash_of_file}")
             return file_contents
         else:
             raise Exception("An error occurred while retrieving file %s" % hash_id)
