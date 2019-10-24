@@ -1323,11 +1323,12 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
     await clienthelper.put_version_simple(resources, version)
 
     # check deploy
+    await _wait_until_deployment_finishes(client, environment, version)
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
-    assert result.result["model"]["result"] == "deploying"
+    assert result.result["model"]["result"] == "failed"
 
     # check if agent 1 is started by the server
     # deploy will fail because handler code is not uploaded to the server
@@ -1411,11 +1412,12 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     await clienthelper.put_version_simple(resources, version)
 
     # check deploy
+    await _wait_until_deployment_finishes(client, environment, version)
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 2
-    assert result.result["model"]["result"] == "deploying"
+    assert result.result["model"]["result"] == "failed"
 
     result = await client.list_agents(tid=environment)
     assert result.code == 200
