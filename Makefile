@@ -31,7 +31,7 @@ mypy:
 
 .PHONY: test
 test:
-	pytest -vvv tests
+	pytest -vvv --log-level DEBUG tests
 
 .PHONY: testcov
 testcov:
