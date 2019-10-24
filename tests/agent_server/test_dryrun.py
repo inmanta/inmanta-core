@@ -261,7 +261,18 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
 
     assert_handler_failed("test::Noprov[agent1,key=key1],v=%d" % version, "Unable to find a handler")
     assert_handler_failed("test::FailFast[agent1,key=key2],v=%d" % version, "Handler failed")
-    assert_handler_failed("test::DoesNotExist[agent1,key=key2],v=%d" % version, "Resource Deserialization Failed")
+
+    # check if this resource was marked as unavailable
+    response = await client.get_resource(environment, "test::DoesNotExist[agent1,key=key2],v=%d" % version, logs=True)
+    assert response.code == 200
+
+    # resource stays available but an unavailable state is logged because of the failed dryrun
+    result = response.result
+    assert result["resource"]["status"] == "available"
+    log_entry = result["logs"][0]
+    assert log_entry["action"] == "dryrun"
+    assert log_entry["status"] == "unavailable"
+    assert "Failed to load" in log_entry["messages"][0]["msg"]
 
     await agent.stop()
 

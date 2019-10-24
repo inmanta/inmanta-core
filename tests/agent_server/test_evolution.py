@@ -132,7 +132,7 @@ def resource_container_b():
     class MyResource(PurgeableResource):
         fields = ("uid", "key", "value", "purged", "purge_on_delete")
 
-        def populate(self, fields: JsonType = None, force_fields: bool=False):
+        def populate(self, fields: JsonType = None, force_fields: bool = False):
             if "uid" not in fields:
                 # capture old format, cause by purge on delete
                 fields["uid"] = None

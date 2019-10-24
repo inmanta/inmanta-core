@@ -782,35 +782,37 @@ class AgentInstance(object):
                     version, const.ResourceAction.dryrun, response.result["resources"]
                 )
 
-                for resource_id, state in undeployable.items():
-                    ctx = handler.HandlerContext(resource_id, True)
-                    ctx.error(
-                        "Skipping %(resource_id)s because in undeployable state %(status)s",
-                        resource_id=resource_id,
-                        status=state,
-                    )
-                    await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_id, changes={})
-
                 self._cache.open_version(version)
                 for resource in resources:
                     ctx = handler.HandlerContext(resource, True)
                     started = datetime.datetime.now()
                     provider = None
+
+                    resource_id = resource.id.resource_version_str()
+                    if resource_id in undeployable:
+                        ctx.error(
+                            "Skipping dryrun %(resource_id)s because in undeployable state %(status)s",
+                            resource_id=resource_id,
+                            status=undeployable[resource_id],
+                        )
+                        await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_id, changes={})
+                        continue
+
                     try:
-                        self.logger.debug("Running dryrun for %s", resource.id.resource_version_str())
+                        self.logger.debug("Running dryrun for %s", resource_id)
 
                         try:
                             provider = await self.get_provider(resource)
                         except Exception as e:
                             ctx.exception(
                                 "Unable to find a handler for %(resource_id)s (exception: %(exception)s",
-                                resource_id=resource.id.resource_version_str(),
+                                resource_id=resource_id,
                                 exception=str(e),
                             )
                             await self.get_client().dryrun_update(
                                 tid=self._env_id,
                                 id=dry_run_id,
-                                resource=resource.id.resource_version_str(),
+                                resource=resource_id,
                                 changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
                             )
                         else:
@@ -825,7 +827,7 @@ class AgentInstance(object):
                                 if ctx.status == const.ResourceState.failed:
                                     changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
                                 await self.get_client().dryrun_update(
-                                    tid=self._env_id, id=dry_run_id, resource=resource.id.resource_version_str(), changes=changes
+                                    tid=self._env_id, id=dry_run_id, resource=resource_id, changes=changes
                                 )
                             except Exception as e:
                                 ctx.exception(
@@ -838,7 +840,7 @@ class AgentInstance(object):
                                     changes = {}
                                 changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
                                 await self.get_client().dryrun_update(
-                                    tid=self._env_id, id=dry_run_id, resource=resource.id.resource_version_str(), changes=changes
+                                    tid=self._env_id, id=dry_run_id, resource=resource_id, changes=changes
                                 )
 
                     except Exception:
@@ -846,7 +848,7 @@ class AgentInstance(object):
                         changes = {}
                         changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
                         await self.get_client().dryrun_update(
-                            tid=self._env_id, id=dry_run_id, resource=resource.id.resource_version_str(), changes=changes
+                            tid=self._env_id, id=dry_run_id, resource=resource_id, changes=changes
                         )
                     finally:
                         if provider is not None:
@@ -855,7 +857,7 @@ class AgentInstance(object):
                         finished = datetime.datetime.now()
                         await self.get_client().resource_action_update(
                             tid=self._env_id,
-                            resource_ids=[resource.id.resource_version_str()],
+                            resource_ids=[resource_id],
                             action_id=ctx.action_id,
                             action=const.ResourceAction.dryrun,
                             started=started,

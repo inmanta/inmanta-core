@@ -335,7 +335,7 @@ class Resource(metaclass=ResourceMeta):
         return obj
 
     @classmethod
-    def deserialize(cls, obj_map: JsonType, use_generic:bool=False) -> "Resource":
+    def deserialize(cls, obj_map: JsonType, use_generic: bool = False) -> "Resource":
         """
         Deserialize the resource from the given dictionary
         """
@@ -378,7 +378,7 @@ class Resource(metaclass=ResourceMeta):
         for field in self.__class__.fields:
             setattr(self, field, None)
 
-    def populate(self, fields: Dict[str, Any], force_fields: bool=False) -> None:
+    def populate(self, fields: Dict[str, Any], force_fields: bool = False) -> None:
         for field in self.__class__.fields:
             if field in fields or force_fields:
                 setattr(self, field, fields[field])
