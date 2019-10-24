@@ -451,6 +451,9 @@ class ResourceScheduler(object):
         """
         Schedule a new set of resources for execution.
 
+        :param resources: The set of resource should be complete, the scheduler assumes there are no resources missing on this
+                          agent.
+
         **This method should only be called under critical_ratelimiter lock!**
         """
 
@@ -779,35 +782,35 @@ class AgentInstance(object):
                     version, const.ResourceAction.dryrun, response.result["resources"]
                 )
 
-                for res in undeployable:
-                    ctx = handler.HandlerContext(res, True)
+                for resource_id, state in undeployable.items():
+                    ctx = handler.HandlerContext(resource_id, True)
                     ctx.error(
                         "Skipping %(resource_id)s because in undeployable state %(status)s",
-                        resource_id=res["id"],
-                        status=res["status"],
+                        resource_id=resource_id,
+                        status=state,
                     )
-                    await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"], changes={})
+                    await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_id, changes={})
 
                 self._cache.open_version(version)
                 for resource in resources:
-                    ctx = handler.HandlerContext(res, True)
+                    ctx = handler.HandlerContext(resource, True)
                     started = datetime.datetime.now()
                     provider = None
                     try:
-                        self.logger.debug("Running dryrun for %s", resource.id)
+                        self.logger.debug("Running dryrun for %s", resource.id.resource_version_str())
 
                         try:
                             provider = await self.get_provider(resource)
                         except Exception as e:
                             ctx.exception(
                                 "Unable to find a handler for %(resource_id)s (exception: %(exception)s",
-                                resource_id=str(resource.id),
+                                resource_id=resource.id.resource_version_str(),
                                 exception=str(e),
                             )
                             await self.get_client().dryrun_update(
                                 tid=self._env_id,
                                 id=dry_run_id,
-                                resource=res["id"],
+                                resource=resource.id.resource_version_str(),
                                 changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
                             )
                         else:
@@ -822,7 +825,7 @@ class AgentInstance(object):
                                 if ctx.status == const.ResourceState.failed:
                                     changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
                                 await self.get_client().dryrun_update(
-                                    tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
+                                    tid=self._env_id, id=dry_run_id, resource=resource.id.resource_version_str(), changes=changes
                                 )
                             except Exception as e:
                                 ctx.exception(
@@ -835,7 +838,7 @@ class AgentInstance(object):
                                     changes = {}
                                 changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
                                 await self.get_client().dryrun_update(
-                                    tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
+                                    tid=self._env_id, id=dry_run_id, resource=resource.id.resource_version_str(), changes=changes
                                 )
 
                     except Exception:
@@ -843,7 +846,7 @@ class AgentInstance(object):
                         changes = {}
                         changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
                         await self.get_client().dryrun_update(
-                            tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
+                            tid=self._env_id, id=dry_run_id, resource=resource.id.resource_version_str(), changes=changes
                         )
                     finally:
                         if provider is not None:
@@ -852,7 +855,7 @@ class AgentInstance(object):
                         finished = datetime.datetime.now()
                         await self.get_client().resource_action_update(
                             tid=self._env_id,
-                            resource_ids=[res["id"]],
+                            resource_ids=[resource.id.resource_version_str()],
                             action_id=ctx.action_id,
                             action=const.ResourceAction.dryrun,
                             started=started,
@@ -922,7 +925,7 @@ class AgentInstance(object):
         """ Deserialize all resources and load all handler code. When the code for this type fails to load, the resource
             is marked as failed
         """
-        started = time.time()
+        started = datetime.datetime.now()
         failed_resource_types = await self.process.ensure_code(
             self._env_id, version, [res["resource_type"] for res in resources]
         )
@@ -932,18 +935,25 @@ class AgentInstance(object):
 
         for res in resources:
             try:
-                state = const.ResourceState[res["status"]]
-                if state in const.UNDEPLOYABLE_STATES:
-                    undeployable[res["id"]] = state
-
+                res["attributes"]["id"] = res["id"]
                 if res["resource_type"] not in failed_resource_types:
-                    res["attributes"]["id"] = res["id"]
                     resource = Resource.deserialize(res["attributes"])
                     loaded_resources.append(resource)
+
+                    state = const.ResourceState[res["status"]]
+                    if state in const.UNDEPLOYABLE_STATES:
+                        undeployable[res["id"]] = state
                 else:
                     failed_resources.append(res["id"])
+                    undeployable[res["id"]] = const.ResourceState.unavailable
+                    resource = Resource.deserialize(res["attributes"], use_generic=True)
+                    loaded_resources.append(resource)
+
             except TypeError:
                 failed_resources.append(res["id"])
+                undeployable[res["id"]] = const.ResourceState.unavailable
+                resource = Resource.deserialize(res["attributes"], use_generic=True)
+                loaded_resources.append(resource)
 
         if len(failed_resources) > 0:
             log = data.LogLine.log(
@@ -956,9 +966,9 @@ class AgentInstance(object):
                 action_id=uuid.uuid4(),
                 action=action,
                 started=started,
-                finished=time.time(),
+                finished=datetime.datetime.now(),
                 messages=[log],
-                status=const.ResourceState.failed,
+                status=const.ResourceState.unavailable,
             )
         return undeployable, loaded_resources
 

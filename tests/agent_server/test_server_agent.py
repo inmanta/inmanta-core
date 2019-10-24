@@ -1444,21 +1444,21 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
 
 
 @pytest.mark.asyncio(timeout=15)
-async def test_autostart_clear_environment(server_multi, client_multi, resource_container, environment_multi, no_agent_backoff):
+async def test_autostart_clear_environment(server, client, resource_container, environment, no_agent_backoff):
     """
         Test clearing an environment with autostarted agents. After clearing, autostart should still work
     """
     resource_container.Provider.reset()
     current_process = psutil.Process()
     children = current_process.children(recursive=True)
-    env = await data.Environment.get_by_id(uuid.UUID(environment_multi))
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
     await env.set(data.AUTO_DEPLOY, True)
     await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
     await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
     await env.set(data.AUTOSTART_ON_START, True)
 
-    clienthelper = ClientHelper(client_multi, environment_multi)
+    clienthelper = ClientHelper(client, environment)
     version = await clienthelper.get_version()
 
     resources = [
@@ -1472,9 +1472,8 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
         }
     ]
 
-    client = client_multi
     result = await client.put_version(
-        tid=environment_multi,
+        tid=environment,
         version=version,
         resources=resources,
         unknowns=[],
@@ -1484,17 +1483,17 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
     assert result.code == 200
 
     # check deploy
-    result = await client.get_version(environment_multi, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
     assert result.result["model"]["result"] == "deploying"
 
-    result = await client.list_agents(tid=environment_multi)
+    result = await client.list_agents(tid=environment)
     assert result.code == 200
 
     while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
-        result = await client.list_agents(tid=environment_multi)
+        result = await client.list_agents(tid=environment)
         await asyncio.sleep(0.1)
 
     assert len(result.result["agents"]) == 1
@@ -1503,7 +1502,7 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
     ps_diff(children, current_process, 1)
 
     # clear environment
-    await client.clear_environment(environment_multi)
+    await client.clear_environment(environment)
 
     # Autostarted agent should be terminated after clearing the environment
     ps_diff(children, current_process, 0)
@@ -1537,7 +1536,7 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
     ]
 
     result = await client.put_version(
-        tid=environment_multi,
+        tid=environment,
         version=version,
         resources=resources,
         unknowns=[],
@@ -1547,17 +1546,17 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
     assert result.code == 200
 
     # check deploy
-    result = await client.get_version(environment_multi, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
     assert result.result["model"]["result"] == "deploying"
 
-    result = await client.list_agents(tid=environment_multi)
+    result = await client.list_agents(tid=environment)
     assert result.code == 200
 
     while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
-        result = await client.list_agents(tid=environment_multi)
+        result = await client.list_agents(tid=environment)
         await asyncio.sleep(0.1)
 
     assert len(result.result["agents"]) == 1

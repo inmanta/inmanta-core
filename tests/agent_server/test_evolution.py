@@ -132,11 +132,11 @@ def resource_container_b():
     class MyResource(PurgeableResource):
         fields = ("uid", "key", "value", "purged", "purge_on_delete")
 
-        def populate(self, fields: JsonType = None):
+        def populate(self, fields: JsonType = None, force_fields: bool=False):
             if "uid" not in fields:
                 # capture old format, cause by purge on delete
                 fields["uid"] = None
-            super().populate(fields)
+            super().populate(fields, force_fields)
 
     @provider("__config__::Resource", name="test_resource")
     class BProvider(Provider):

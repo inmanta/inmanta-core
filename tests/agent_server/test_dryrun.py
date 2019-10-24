@@ -31,7 +31,7 @@ logger = logging.getLogger("inmanta.test.dryrun")
 
 
 @pytest.mark.asyncio(timeout=150)
-async def test_dryrun_and_deploy(server_multi, client_multi, resource_container):
+async def test_dryrun_and_deploy(server, client, resource_container):
     """
         dryrun and deploy a configuration model
 
@@ -39,13 +39,13 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
         without an agent being present.
     """
 
-    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    result = await client_multi.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = await client_multi.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
@@ -57,7 +57,7 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
 
-    clienthelper = ClientHelper(client_multi, env_id)
+    clienthelper = ClientHelper(client, env_id)
 
     version = await clienthelper.get_version()
 
@@ -113,7 +113,7 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     ]
 
     status = {"test::Resource[agent2,key=key4]": const.ResourceState.undefined}
-    result = await client_multi.put_version(
+    result = await client.put_version(
         tid=env_id,
         version=version,
         resources=resources,
@@ -132,22 +132,22 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     assert undep == ["test::Resource[agent2,key=key5]", "test::Resource[agent2,key=key6]"]
 
     # request a dryrun
-    result = await client_multi.dryrun_request(env_id, version)
+    result = await client.dryrun_request(env_id, version)
     assert result.code == 200
     assert result.result["dryrun"]["total"] == len(resources)
     assert result.result["dryrun"]["todo"] == len(resources)
 
     # get the dryrun results
-    result = await client_multi.dryrun_list(env_id, version)
+    result = await client.dryrun_list(env_id, version)
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
     while result.result["dryruns"][0]["todo"] > 0:
-        result = await client_multi.dryrun_list(env_id, version)
+        result = await client.dryrun_list(env_id, version)
         await asyncio.sleep(0.1)
 
     dry_run_id = result.result["dryruns"][0]["id"]
-    result = await client_multi.dryrun_report(env_id, dry_run_id)
+    result = await client.dryrun_report(env_id, dry_run_id)
     assert result.code == 200
 
     changes = result.result["dryrun"]["resources"]
@@ -164,19 +164,19 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     assert changes[resources[2]["id"]]["changes"]["purged"]["desired"]
 
     # do a deploy
-    result = await client_multi.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
+    result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 6
     assert result.result["model"]["result"] == "deploying"
 
-    result = await client_multi.get_version(env_id, version)
+    result = await client.get_version(env_id, version)
     assert result.code == 200
 
-    await _wait_until_deployment_finishes(client_multi, env_id, version)
+    await _wait_until_deployment_finishes(client, env_id, version)
 
-    result = await client_multi.get_version(env_id, version)
+    result = await client.get_version(env_id, version)
     assert result.result["model"]["done"] == len(resources)
 
     assert resource_container.Provider.isset("agent1", "key1")
