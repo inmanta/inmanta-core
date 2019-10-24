@@ -22,28 +22,38 @@ from typing import TypeVar
 import pytest
 
 from inmanta.agent.handler import ResourceHandler
-from inmanta.protocol import common
+from inmanta.protocol import SessionClient, VersionMatch, common
 from test_protocol import make_random_file
 
 T = TypeVar("T")
 
 
-class MockGetFileResourceHandler(ResourceHandler):
+class MockSessionClient(SessionClient):
     def __init__(self, return_code, content):
+        self._version_match = VersionMatch.highest
         self.return_code = return_code
         self.content = content
         pass
 
-    def run_sync(self, func: typing.Callable[[], T]) -> T:
+    def get_file(self, hash_id):
         content = b""
         if self.return_code != 404:
             content = base64.b64encode(self.content)
         return common.Result(self.return_code, result={"content": content})
 
 
+class MockGetFileResourceHandler(ResourceHandler):
+    def __init__(self, client):
+        self._client = client
+
+    def run_sync(self, func: typing.Callable[[], T]) -> T:
+        return func()
+
+
 def test_get_file_corrupted():
     (hash, content, body) = make_random_file()
-    resource_handler = MockGetFileResourceHandler(200, b"corrupted_file")
+    client = MockSessionClient(200, b"corrupted_file")
+    resource_handler = MockGetFileResourceHandler(client)
 
     with pytest.raises(Exception):
         resource_handler.get_file(hash)
@@ -51,13 +61,15 @@ def test_get_file_corrupted():
 
 def test_get_file_success():
     (hash, content, body) = make_random_file()
-    resource_handler = MockGetFileResourceHandler(200, content)
+    client = MockSessionClient(200, content)
+    resource_handler = MockGetFileResourceHandler(client)
 
     result = resource_handler.get_file(hash)
     assert content == result
 
 
 def test_get_file_not_found():
-    resource_handler = MockGetFileResourceHandler(404, None)
+    client = MockSessionClient(404, None)
+    resource_handler = MockGetFileResourceHandler(client)
     result = resource_handler.get_file("hash")
     assert result is None
