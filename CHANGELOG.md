@@ -17,6 +17,7 @@ v 2019.4 (?) Changes in this release:
 - Fixed memory leak in TaskHandler
 - Don't install packages inherited from the parent virtualenv
 - Added logging to CRUD methods of handler and a diff method with context
+- HTTP errors are logged at DEBUG level only (#1282)
 
 IMPORTANT CHANGES:
 - Older compiler versions are no longer supported with this server
