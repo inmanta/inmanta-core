@@ -23,14 +23,16 @@ from contextlib import contextmanager
 from typing import Any, Generator
 
 import pytest
+import yaml
 
 import inmanta.server
 import inmanta_ext
+from inmanta.config import feature_file_config
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT, config
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
-from inmanta.server.extensions import InvalidSliceNameException
-from inmanta.server.protocol import Server
+from inmanta.server.extensions import BoolFeature, FeatureManager, InvalidFeature, InvalidSliceNameException, NumericalFeature
+from inmanta.server.protocol import Server, ServerSlice
 from inmanta_ext.testplugin.extension import XTestSlice
 from utils import log_contains
 
@@ -172,3 +174,40 @@ def test_load_and_filter(caplog):
         with pytest.raises(PluginLoadFailed):
             config.server_enabled_extensions.set("unknown")
             plugin_pkgs = ibl._discover_plugin_packages()
+
+
+def test_load_feature_file(tmp_path):
+    feature_file = tmp_path / "features.yml"
+    feature_file.write_text(yaml.dump({"slices": {"test": {"feature1": False, "feature2": 10, "feature5": 0, "feature6": -1}}}))
+    feature_file_config.set(str(feature_file))
+
+    fm = FeatureManager()
+    f1 = BoolFeature(slice="test", name="feature1")
+    f2 = NumericalFeature(slice="test", name="feature2")
+    f3 = BoolFeature(slice="test", name="feature3")
+    f4 = NumericalFeature(slice="test", name="feature4")
+    f5 = NumericalFeature(slice="test", name="feature5")
+    f6 = NumericalFeature(slice="test", name="feature6")
+    fx = NumericalFeature(slice="test", name="featurex")
+
+    class MockSlice(ServerSlice):
+        def __init__(self):
+            super().__init__("test")
+
+        def define_features(self):
+            return [f1, f2, f3, f4, f5, f6]
+
+    slice = MockSlice()
+    fm.add_slice(slice)
+
+    assert not fm.enabled(f1)
+    assert fm.enabled(f3)
+    assert fm.check_limit(f2, 9)
+    assert not fm.check_limit(f2, 11)
+    assert fm.check_limit(f4, 1000)
+    assert not fm.check_limit(f5, 10)
+    assert not fm.enabled(f5)
+    assert fm.check_limit(f6, 100000)
+
+    with pytest.raises(InvalidFeature):
+        fm.enabled(fx)
