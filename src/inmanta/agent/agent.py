@@ -451,8 +451,8 @@ class ResourceScheduler(object):
         """
         Schedule a new set of resources for execution.
 
-        :param resources: The set of resource should be closed, the scheduler assumes that all resource referenced are in the set or on another
-                          agent.
+        :param resources: The set of resource should be closed, the scheduler assumes that all resource referenced are in the
+                          set or on another agent.
 
         **This method should only be called under critical_ratelimiter lock!**
         """
