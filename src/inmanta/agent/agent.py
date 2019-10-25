@@ -1117,6 +1117,7 @@ class Agent(SessionEndpoint):
                         LOGGER.debug("Installed handler %s for %s", rt, name)
                     except Exception:
                         LOGGER.exception("Failed to install handler %s for %s", rt, name)
+                        failed_to_load.add(rt)
 
         return failed_to_load
 
