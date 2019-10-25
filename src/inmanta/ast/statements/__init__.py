@@ -179,6 +179,11 @@ class Literal(ExpressionStatement):
     def __repr__(self) -> str:
         return repr(self.value)
 
+    def __str__(self) -> str:
+        if isinstance(self.value, bool):
+            return str(self.value).lower()
+        return str(self.value)
+
     def requires(self) -> List[str]:
         return []
 

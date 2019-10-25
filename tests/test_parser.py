@@ -1306,3 +1306,21 @@ end
     assert len(stmt.if_branch.get_stmts()) == 1
     assert isinstance(stmt.else_branch, BasicBlock)
     assert len(stmt.else_branch.get_stmts()) == 1
+
+
+def test_bool_str():
+    """Test to string of bool literal renders inmanta true/false and not python
+    """
+    statements = parse_code(
+        """
+val1 = true
+val2 = false
+"""
+    )
+    assert len(statements) == 2
+    assert isinstance(statements[0], Assign)
+    assert isinstance(statements[1], Assign)
+    assert str(statements[0].rhs) == "true"
+    assert repr(statements[0].rhs) == "True"
+    assert str(statements[1].rhs) == "false"
+    assert repr(statements[1].rhs) == "False"
