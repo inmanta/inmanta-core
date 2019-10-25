@@ -1154,8 +1154,7 @@ async def test_get_param(server, client, environment):
     assert len(parameters) == 2
 
 
-@pytest.mark.asyncio
-async def test_server_logs_address(server, caplog):
+def test_server_logs_address(server, caplog):
     port = config.Config.get("server", "bind-port")
     address = "127.0.0.1"
     log_contains(caplog, "inmanta.protocol.rest", logging.INFO, f"Server listening on {address}:{port}", "setup")
