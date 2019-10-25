@@ -409,7 +409,7 @@ class MethodProperties(object):
         """
         try:
             out = self.argument_validator(**values)
-            return {f: getattr(out, f) for f in out.fields.keys()}
+            return {f: getattr(out, f) for f in out.__fields__.keys()}
         except ValidationError as e:
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
