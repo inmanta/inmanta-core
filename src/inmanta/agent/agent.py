@@ -451,7 +451,7 @@ class ResourceScheduler(object):
         """
         Schedule a new set of resources for execution.
 
-        :param resources: The set of resource should be complete, the scheduler assumes there are no resources missing on this
+        :param resources: The set of resource should be closed, the scheduler assumes that all resource referenced are in the set or on another
                           agent.
 
         **This method should only be called under critical_ratelimiter lock!**
