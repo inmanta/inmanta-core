@@ -1321,6 +1321,4 @@ val2 = false
     assert isinstance(statements[0], Assign)
     assert isinstance(statements[1], Assign)
     assert str(statements[0].rhs) == "true"
-    assert repr(statements[0].rhs) == "True"
     assert str(statements[1].rhs) == "false"
-    assert repr(statements[1].rhs) == "False"
