@@ -19,7 +19,6 @@ v 2019.4 (?) Changes in this release:
 - Added logging to CRUD methods of handler and a diff method with context
 - HTTP errors are logged at DEBUG level only (#1282)
 - Verify hashes when serving a file (#532)
-- Mark resource as failed when code loading fails (#1520)
 - Print extra env variables in init log and only store those in database (#1482)
 
 IMPORTANT CHANGES:
