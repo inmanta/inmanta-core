@@ -48,7 +48,7 @@ class BaseHttpException(web.HTTPError):
         return self.status_code
 
 
-class AccessDeniedException(BaseHttpException):
+class Forbidden(BaseHttpException):
     """
         An exception raised when access is denied (403)
     """

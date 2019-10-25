@@ -25,13 +25,19 @@ import asyncpg
 from inmanta import data
 from inmanta.data import model
 from inmanta.protocol import methods, methods_v2
-from inmanta.protocol.exceptions import NotFound, ServerError
+from inmanta.protocol.exceptions import Forbidden, NotFound, ServerError
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PROJECT, SLICE_RESOURCE, SLICE_TRANSPORT, protocol
 from inmanta.server.agentmanager import AgentManager
+from inmanta.server.extensions import Feature, NumericalFeature
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType
 
 LOGGER = logging.getLogger(__name__)
+
+
+project_limit = NumericalFeature(
+    slice=SLICE_PROJECT, name="projects", description="How many project are supported by the orchestrator", default_limit=-1
+)
 
 
 class ProjectService(protocol.ServerSlice):
@@ -53,6 +59,9 @@ class ProjectService(protocol.ServerSlice):
         await super().prestart(server)
         self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
+
+    def define_features(self) -> List[Feature]:
+        return [project_limit]
 
     # v1 handlers
     @protocol.handle(methods.create_project)
@@ -86,6 +95,11 @@ class ProjectService(protocol.ServerSlice):
     async def project_create(self, name: str, project_id: Optional[uuid.UUID]) -> model.Project:
         if project_id is None:
             project_id = uuid.uuid4()
+
+        projects = await data.Project.get_list()
+        if not self.feature_manager.check_limit(project_limit, len(projects) + 1):
+            raise Forbidden(f"The maximum number of projects has been exceeded.")
+
         try:
             project = data.Project(id=project_id, name=name)
             await project.insert()

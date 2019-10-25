@@ -357,7 +357,7 @@ def get_default_nodename() -> str:
 
 
 nodename = Option("config", "node-name", get_default_nodename, "Force the hostname of this machine to a specific value", is_str)
-
+feature_file_config = Option("config", "feature-file", None, "The loacation of the inmanta feature file.", is_str)
 
 ###############################
 # Transport Config

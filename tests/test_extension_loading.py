@@ -121,8 +121,8 @@ def test_end_to_end():
 
     config.server_enabled_extensions.set("testplugin")
 
-    slices = ibl.load_slices()
-    byname = {sl.name: sl for sl in slices}
+    ctx = ibl.load_slices()
+    byname = {sl.name: sl for sl in ctx.get_slices()}
     assert "testplugin.testslice" in byname
 
 

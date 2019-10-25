@@ -69,8 +69,10 @@ class InmantaBootloader(object):
         self.started = False
 
     async def start(self) -> None:
-        for mypart in self.load_slices():
+        ctx = self.load_slices()
+        for mypart in ctx.get_slices():
             self.restserver.add_slice(mypart)
+            ctx.get_feature_manager().add_slice(mypart)
         await self.restserver.start()
         self.started = True
 
@@ -153,10 +155,9 @@ class InmantaBootloader(object):
             setup(myctx)
         return ctx
 
-    def load_slices(self) -> List[ServerSlice]:
+    def load_slices(self) -> ApplicationContext:
         """
             Load all slices in the server
         """
         exts = self._load_extensions()
-        ctx = self._collect_slices(exts)
-        return ctx.get_slices()
+        return self._collect_slices(exts)
