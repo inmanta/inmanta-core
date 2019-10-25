@@ -1154,7 +1154,7 @@ async def test_get_param(server, client, environment):
     assert len(parameters) == 2
 
 
-def test_server_logs_address(server, caplog):
-    port = config.Config.get("server", "bind-port")
+def test_server_logs_address(server, server_config, caplog):
+    port = server_config.Config.get("server", "bind-port")
     address = "127.0.0.1"
-    log_contains(caplog, "inmanta.protocol.rest", logging.INFO, f"Server listening on {address}:{port}", "setup")
+    log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:{port}", "setup")
