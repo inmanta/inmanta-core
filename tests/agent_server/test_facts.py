@@ -372,7 +372,7 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     # The resource facts should be purged
     result = await client.list_params(environment)
     assert result.code == 200
-    assert len(result.result["parameters" ]) == 0
+    assert len(result.result["parameters"]) == 0
 
 
 @pytest.mark.asyncio
@@ -388,7 +388,9 @@ async def test_get_fact_no_code(resource_container, client, clienthelper, enviro
     resource_id_wov = "test::Resource[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
 
-    await clienthelper.put_version_simple([{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}], version)
+    await clienthelper.put_version_simple(
+        [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}], version
+    )
 
     response = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert response.code == 200
