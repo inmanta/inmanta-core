@@ -290,6 +290,7 @@ class RESTServer(RESTBase):
 
         for bind_addr in bind_addresses:
             self._http_server.listen(bind_port, bind_addr)
+            LOGGER.info(f"Server listening on {bind_addr}:{bind_port}")
         self.running = True
 
         LOGGER.debug("Start REST transport")
