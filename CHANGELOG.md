@@ -19,6 +19,7 @@ v 2019.4 (?) Changes in this release:
 - Added logging to CRUD methods of handler and a diff method with context
 - HTTP errors are logged at DEBUG level only (#1282)
 - Verify hashes when serving a file (#532)
+- Log server bind address and bind port on startup
 
 IMPORTANT CHANGES:
 - Older compiler versions are no longer supported with this server
