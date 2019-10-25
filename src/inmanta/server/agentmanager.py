@@ -27,7 +27,7 @@ from uuid import UUID
 
 from tornado import locks, process
 
-from inmanta import data
+from inmanta import const, data
 from inmanta.config import Config
 from inmanta.protocol import encode_token, methods
 from inmanta.protocol.exceptions import NotFound, ShutdownInProgress
@@ -82,7 +82,7 @@ set_parameters
 """
 
 
-async def wait_for_proc_bounded(procs: Iterable[process.Subprocess], timeout: float = 1.0) -> None:
+async def wait_for_proc_bounded(procs: Iterable[process.Subprocess], timeout: float = const.SHUTDOWN_GRACE_HARD) -> None:
     try:
         await asyncio.wait_for(
             asyncio.gather(*[asyncio.shield(proc.wait_for_exit(raise_error=False)) for proc in procs]), timeout
