@@ -335,18 +335,23 @@ class Resource(metaclass=ResourceMeta):
         return obj
 
     @classmethod
-    def deserialize(cls, obj_map: JsonType) -> "Resource":
+    def deserialize(cls, obj_map: JsonType, use_generic: bool = False) -> "Resource":
         """
         Deserialize the resource from the given dictionary
         """
         obj_id = Id.parse_id(obj_map["id"])
         cls_resource, _options = resource.get_class(obj_id.entity_type)
 
+        force_fields = False
         if cls_resource is None:
-            raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
+            if not use_generic:
+                raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
+            else:
+                cls_resource = cls
+                force_fields = True
 
         obj = cls_resource(obj_id)
-        obj.populate(obj_map)
+        obj.populate(obj_map, force_fields)
 
         return obj
 
@@ -373,9 +378,9 @@ class Resource(metaclass=ResourceMeta):
         for field in self.__class__.fields:
             setattr(self, field, None)
 
-    def populate(self, fields: Dict[str, Any]) -> None:
+    def populate(self, fields: Dict[str, Any], force_fields: bool = False) -> None:
         for field in self.__class__.fields:
-            if field in fields:
+            if field in fields or force_fields:
                 setattr(self, field, fields[field])
             else:
                 raise Exception("Resource with id %s does not have field %s" % (fields["id"], field))
