@@ -32,6 +32,7 @@ import sys
 import tempfile
 import time
 import traceback
+import uuid
 from tempfile import mktemp
 from typing import Dict, Optional
 
@@ -315,6 +316,18 @@ async def agent(server, environment):
     yield a
 
     await a.stop()
+
+
+@pytest.fixture(scope="function")
+async def autostarted_agent(server, environment):
+    """ Configure agent1 as an autostarted agent.
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
+    await env.set(data.AUTO_DEPLOY, True)
+    await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
+    await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
+    await env.set(data.AUTOSTART_ON_START, True)
 
 
 @pytest.fixture(scope="function")

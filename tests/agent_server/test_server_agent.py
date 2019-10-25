@@ -3054,3 +3054,37 @@ async def test_agent_lockout(resource_container, environment, server, client, cl
 
     result = await agent2._instances["agent1"].get_client().get_resources_for_agent(tid=environment, agent="agent1")
     assert result.code == 409
+
+
+@pytest.mark.asyncio
+async def test_deploy_no_code(resource_container, client, clienthelper, environment, autostarted_agent):
+    """
+        Test retrieving facts from the agent when there is no handler code available. We use an autostarted agent, these
+        do not have access to the handler code for the resource_container
+    """
+    resource_container.Provider.reset()
+    resource_container.Provider.set("agent1", "key", "value")
+
+    version = await clienthelper.get_version()
+
+    resource_id_wov = "test::Resource[agent1,key=key]"
+    resource_id = "%s,v=%d" % (resource_id_wov, version)
+
+    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
+
+    await clienthelper.put_version_simple(resources, version)
+
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    response = await client.get_resource(environment, resource_id, logs=True)
+    assert response.code == 200
+    result = response.result
+    assert result["resource"]["status"] == "unavailable"
+
+    assert result["logs"][0]["action"] == "deploy"
+    assert result["logs"][0]["status"] == "unavailable"
+    assert "Start run for " in result["logs"][0]["messages"][0]["msg"]
+
+    assert result["logs"][1]["action"] == "deploy"
+    assert result["logs"][1]["status"] == "unavailable"
+    assert "Failed to load handler code " in result["logs"][1]["messages"][0]["msg"]
