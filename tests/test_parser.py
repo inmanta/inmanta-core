@@ -387,7 +387,7 @@ implement Test using test
     assert isinstance(stmt, DefineImplement)
     assert str(stmt.entity) == "Test"
     assert stmt.implementations == ["test"]
-    assert str(stmt.select) == "True"
+    assert str(stmt.select) == "true"
 
 
 def test_implements_2():
