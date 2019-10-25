@@ -181,6 +181,9 @@ class CompileRun(object):
 
             env = await data.Environment.get_by_id(environment_id)
 
+            env_string = ", ".join([f"{k}='{v}'" for k, v in self.request.environment_variables.items()])
+            await self.stage.update_streams(out=f"Using extra environment variables during compile {env_string}\n")
+
             if env is None:
                 await self._error("Environment %s does not exist." % environment_id)
                 await self._end_stage(-1)
@@ -258,9 +261,11 @@ class CompileRun(object):
                 cmd.append(opt.server_ssl_ca_cert.get())
 
             self.tail_stdout = ""
-            result = await self._run_compile_stage(
-                "Recompiling configuration model", cmd, project_dir, env=self.request.environment_variables
-            )
+
+            env_vars_compile: Dict[str, str] = os.environ.copy()
+            env_vars_compile.update(self.request.environment_variables)
+
+            result = await self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=env_vars_compile)
             success = result.returncode == 0
             if not success:
                 LOGGER.debug("Compile %s failed", self.request.id)
@@ -355,10 +360,6 @@ class CompilerService(ServerSlice):
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
             return None, ["Skipping compile because server compile not enabled for this environment."]
 
-        env_vars_compile: Dict[str, str] = os.environ.copy()
-        if env_vars:
-            env_vars_compile.update(env_vars)
-
         requested = datetime.datetime.now()
         compile = data.Compile(
             environment=env.id,
@@ -367,7 +368,7 @@ class CompilerService(ServerSlice):
             do_export=do_export,
             force_update=force_update,
             metadata=metadata,
-            environment_variables=env_vars_compile,
+            environment_variables=env_vars,
         )
         await compile.insert()
         await self._queue(compile)
