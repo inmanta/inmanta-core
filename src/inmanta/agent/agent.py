@@ -1106,7 +1106,7 @@ class Agent(SessionEndpoint):
         if self._loader is None:
             return failed_to_load
 
-        for rt in resource_types:
+        for rt in set(resource_types):
             result: protocol.Result = await self._client.get_code(environment, version, rt)
 
             if result.code == 200:
