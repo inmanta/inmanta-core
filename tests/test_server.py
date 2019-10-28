@@ -31,14 +31,14 @@ from inmanta.export import unknown_parameters, upload_code
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_SERVER, SLICE_SESSION_MANAGER
 from inmanta.server import config as opt
 from inmanta.util import get_compiler_version, hash_file
-from utils import log_contains, retry_limited
+from utils import log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
 
 @pytest.mark.asyncio(timeout=60)
 @pytest.mark.slowtest
-async def test_autostart(server, client, environment):
+async def test_autostart(server, client, environment, caplog):
     """
         Test auto start of agent
     """
@@ -81,6 +81,8 @@ async def test_autostart(server, client, environment):
     await agentmanager.stop_agents(env)
     assert len(sessionendpoint._sessions) == 0
     assert len(agentmanager._agent_procs) == 0
+
+    log_doesnt_contain(caplog, "inmanta.config", logging.WARNING, "rest_transport not defined")
 
 
 @pytest.mark.asyncio(timeout=60)

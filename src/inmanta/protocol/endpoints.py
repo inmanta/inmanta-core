@@ -306,12 +306,18 @@ class Client(Endpoint):
     """
 
     def __init__(
-        self, name: str, timeout: int = 120, version_match: VersionMatch = VersionMatch.lowest, exact_version: int = 0
+        self,
+        name: str,
+        timeout: int = 120,
+        version_match: VersionMatch = VersionMatch.lowest,
+        exact_version: int = 0,
+        with_rest_client: bool = True,
     ) -> None:
         super().__init__(name)
         assert isinstance(timeout, int), "Timeout needs to be an integer value."
         LOGGER.debug("Start transport for client %s", self.name)
-        self._transport_instance = client.RESTClient(self, connection_timout=timeout)
+        if with_rest_client:
+            self._transport_instance = client.RESTClient(self, connection_timout=timeout)
         self._version_match = version_match
         self._exact_version = exact_version
 
