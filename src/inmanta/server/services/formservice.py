@@ -22,14 +22,22 @@ from typing import List, cast
 
 from inmanta import data
 from inmanta.ast import type
-from inmanta.protocol import methods
+from inmanta.protocol import methods, exceptions
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_DATABASE, SLICE_FORM, SLICE_SERVER, SLICE_TRANSPORT, protocol
+from inmanta.server.extensions import Feature
 from inmanta.server.server import Server
 from inmanta.types import Apireturn, JsonType
 
 LOGGER = logging.getLogger(__name__)
+
+
+forms_feature = Feature(
+    slice=SLICE_FORM,
+    name="forms",
+    description="Custom forms and records for external parameters."
+)
 
 
 class FormService(protocol.ServerSlice):
@@ -50,8 +58,14 @@ class FormService(protocol.ServerSlice):
         await super().prestart(server)
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
 
+    def define_features(self) -> List[Feature]:
+        return [forms_feature]
+
     @protocol.handle(methods.put_form, form_id="id", env="tid")
     async def put_form(self, env: data.Environment, form_id: str, form: JsonType) -> Apireturn:
+        if self.feature_manager.enabled(forms_feature):
+            raise exceptions.Forbidden()
+
         form_doc = await data.Form.get_form(environment=env.id, form_type=form_id)
         fields = {k: v["type"] for k, v in form["attributes"].items()}
         defaults = {k: v["default"] for k, v in form["attributes"].items() if "default" in v}
@@ -81,6 +95,9 @@ class FormService(protocol.ServerSlice):
 
     @protocol.handle(methods.get_form, form_id="id", env="tid")
     async def get_form(self, env: data.Environment, form_id: str) -> Apireturn:
+        if self.feature_manager.enabled(forms_feature):
+            raise exceptions.Forbidden()
+
         form = await data.Form.get_form(environment=env.id, form_type=form_id)
 
         if form is None:
@@ -90,11 +107,17 @@ class FormService(protocol.ServerSlice):
 
     @protocol.handle(methods.list_forms, env="tid")
     async def list_forms(self, env: data.Environment) -> Apireturn:
+        if self.feature_manager.enabled(forms_feature):
+            raise exceptions.Forbidden()
+
         forms = await data.Form.get_list(environment=env.id)
         return 200, {"forms": [{"form_id": x.form_type, "form_type": x.form_type} for x in forms]}
 
     @protocol.handle(methods.list_records, env="tid")
     async def list_records(self, env: data.Environment, form_type: str, include_record: bool) -> Apireturn:
+        if self.feature_manager.enabled(forms_feature):
+            raise exceptions.Forbidden()
+
         form_type_obj = await data.Form.get_form(environment=env.id, form_type=form_type)
         if form_type_obj is None:
             raise NotFound("No form is defined with id %s" % form_type)
@@ -109,6 +132,9 @@ class FormService(protocol.ServerSlice):
 
     @protocol.handle(methods.get_record, record_id="id", env="tid")
     async def get_record(self, env: data.Environment, record_id: uuid.UUID) -> Apireturn:
+        if self.feature_manager.enabled(forms_feature):
+            raise exceptions.Forbidden()
+
         record = await data.FormRecord.get_by_id(record_id)
         if record is None:
             return 404, {"message": "The record with id %s does not exist" % record_id}
@@ -117,6 +143,9 @@ class FormService(protocol.ServerSlice):
 
     @protocol.handle(methods.update_record, record_id="id", env="tid")
     async def update_record(self, env: data.Environment, record_id: uuid.UUID, form: JsonType) -> Apireturn:
+        if self.feature_manager.enabled(forms_feature):
+            raise exceptions.Forbidden()
+
         record = await data.FormRecord.get_by_id(record_id)
         if record is None or record.environment != env.id:
             raise NotFound("The record with id %s does not exist" % record_id)
@@ -149,6 +178,9 @@ class FormService(protocol.ServerSlice):
 
     @protocol.handle(methods.create_record, env="tid")
     async def create_record(self, env: data.Environment, form_type: str, form: JsonType) -> Apireturn:
+        if self.feature_manager.enabled(forms_feature):
+            raise exceptions.Forbidden()
+
         form_obj = await data.Form.get_form(environment=env.id, form_type=form_type)
 
         if form_obj is None:
@@ -180,6 +212,9 @@ class FormService(protocol.ServerSlice):
 
     @protocol.handle(methods.delete_record, record_id="id", env="tid")
     async def delete_record(self, env: data.Environment, record_id: uuid.UUID) -> Apireturn:
+        if self.feature_manager.enabled(forms_feature):
+            raise exceptions.Forbidden()
+
         record = await data.FormRecord.get_by_id(record_id)
         if record is None:
             raise NotFound()

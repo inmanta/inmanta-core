@@ -29,6 +29,7 @@ from inmanta.protocol.common import attach_warnings
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
+from inmanta.server.extensions import Feature
 from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
@@ -37,6 +38,13 @@ if TYPE_CHECKING:
     from inmanta.server.services.compilerservice import CompilerService
 
 DBLIMIT = 100000
+
+
+dashboard_feature = Feature(
+    slice=SLICE_SERVER,
+    name="dashboard",
+    description="Server the dashboard under the /dashboard endpoint."
+)
 
 
 class Server(protocol.ServerSlice):
@@ -53,24 +61,27 @@ class Server(protocol.ServerSlice):
         super().__init__(name=SLICE_SERVER)
         LOGGER.info("Starting server endpoint")
 
-        self.setup_dashboard()
-
     def get_dependencies(self) -> List[str]:
         return [SLICE_DATABASE, SLICE_COMPILER]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
 
+    def define_features(self) -> List[Feature]:
+        return [dashboard_feature]
+
     async def prestart(self, server: protocol.Server) -> None:
         self._server = server
         self._server_storage: Dict[str, str] = self.check_storage()
         self.compiler: "CompilerService" = cast("CompilerService", server.get_slice(SLICE_COMPILER))
 
+        self.setup_dashboard()
+
     def setup_dashboard(self) -> None:
         """
             If configured, set up tornado to serve the dashboard
         """
-        if not opt.dash_enable.get():
+        if not opt.dash_enable.get() or not self.feature_manager.enabled(dashboard_feature):
             return
 
         dashboard_path = opt.dash_path.get()

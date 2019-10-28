@@ -73,11 +73,12 @@ class FeatureManager:
     """ This class allows to verify whether a feature should be enabled or not. This is determined based on a configuration
         file that is set with config.feature-file in the config. This feature file is a yaml with the following structure:
 
-        slices:
-            slice_name:
-                feature_name: bool
+        .. code-block:: yaml
 
-        When the feature specifies an int this implies a limit. 0 means that the feature is disabled. -1 means no limit.
+            slices:
+                slice_name:
+                    feature_name: bool
+
     """
 
     def __init__(self) -> None:

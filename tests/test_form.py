@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import logging
+import uuid
 
 import pytest
 
@@ -137,3 +138,42 @@ async def test_records(client, environment):
     result = await client.list_records(tid=environment, form_type=form_id)
     assert result.code == 200
     assert len(result.result["records"]) == 1
+
+
+@pytest.mark.asyncio(timeout=60)
+async def test_form_features(client, environment):
+    """
+        Test creating and updating forms
+    """
+    form_id = "cwdemo::forms::ClearwaterSize"
+    form_data = {
+        "attributes": {
+            "bono": {"default": 1, "options": {"min": 1, "max": 100, "widget": "slider", "help": "help"}, "type": "number"},
+            "ralf": {"default": 1, "options": {"min": 1, "max": 100, "widget": "slider", "help": "help"}, "type": "number"},
+        },
+        "options": {"title": "VNF replication", "help": "help", "record_count": 1},
+        "type": "cwdemo::forms::ClearwaterSize",
+    }
+    result = await client.put_form(tid=environment, id=form_id, form=form_data)
+    assert result.code == 403
+
+    result = await client.get_form(environment, form_id)
+    assert result.code == 403
+
+    result = await client.list_forms(environment)
+    assert result.code == 403
+
+    result = await client.list_records(environment, "cwdemo::forms::ClearwaterSize")
+    assert result.code == 403
+
+    result = await client.get_record(environment, uuid.uuid4())
+    assert result.code == 403
+
+    result = await client.update_record(environment, uuid.uuid4(), {})
+    assert result.code == 403
+
+    result = await client.create_record(environment, uuid.uuid4(), {})
+    assert result.code == 403
+
+    result = await client.delete_record(environment, uuid.uuid4())
+    assert result.code == 403
