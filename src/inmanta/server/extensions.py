@@ -84,7 +84,7 @@ class FeatureManager:
         self._features: Dict[str, Dict[str, Feature]] = defaultdict(lambda: {})
         self._feature_config: Optional[Dict[str, Dict[str, bool]]] = self._load_feature_config()
 
-    def set_feature(self, feature: Feature, value: bool) -> None:
+    def set_feature_config(self, feature: Feature, value: bool) -> None:
         if feature.slice in self._features and feature.name in self._features[feature.slice]:
             self._feature_config[feature.slice][feature.name] = value
 
