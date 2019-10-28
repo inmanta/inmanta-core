@@ -23,6 +23,7 @@ v 2019.4 (?) Changes in this release:
 - Print extra env variables in init log and only store those in database (#1482)
 - Add get_environment_id to plugin context (#1331)
 - Log server bind address and bind port on startup
+- Fix warning about transport config
 
 IMPORTANT CHANGES:
 - Older compiler versions are no longer supported with this server
