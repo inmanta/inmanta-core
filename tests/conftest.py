@@ -280,6 +280,12 @@ def inmanta_config():
     yield config.Config._get_instance()
 
 
+@pytest.fixture
+def server_pre_start():
+    """ This fixture is called by the server. Override this fixture to influence server config
+    """
+
+
 @pytest.fixture(scope="session")
 def database_name():
     ten_random_digits = "".join(random.choice(string.digits) for _ in range(10))
@@ -402,7 +408,7 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
 
 
 @pytest.fixture(scope="function")
-async def server(server_config):
+async def server(server_pre_start, server_config):
     """
     :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
     May not be required
@@ -437,7 +443,7 @@ async def server(server_config):
     params=[(True, True, False), (True, False, False), (False, True, False), (False, False, False), (True, True, True)],
     ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"],
 )
-async def server_multi(event_loop, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory):
+async def server_multi(server_pre_start, event_loop, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory):
     """
     :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
     May not be required

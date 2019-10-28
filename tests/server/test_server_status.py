@@ -25,6 +25,8 @@ async def test_server_status(server, client):
     assert result.code == 200
     status = result.result["data"]
     assert "version" in status
+    assert "product" in status
+    assert "edition" in status
 
     assert len([x for x in status["slices"] if x["name"] == "core.server"]) == 1
 

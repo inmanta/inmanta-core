@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import pytest
 import yaml
 
 from inmanta.config import feature_file_config
+
 
 LOGGER = logging.getLogger(__name__)
 
