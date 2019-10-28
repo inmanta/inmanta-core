@@ -28,7 +28,14 @@ from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.export import unknown_parameters, upload_code
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_SERVER, SLICE_SESSION_MANAGER
+from inmanta.server import (
+    SLICE_AGENT_MANAGER,
+    SLICE_ORCHESTRATION,
+    SLICE_RESOURCE,
+    SLICE_SERVER,
+    SLICE_SESSION_MANAGER,
+    SLICE_TRANSPORT,
+)
 from inmanta.server import config as opt
 from inmanta.util import get_compiler_version, hash_file
 from utils import log_contains, retry_limited
@@ -1158,7 +1165,6 @@ async def test_get_param(server, client, environment):
 async def test_server_logs_address(server, client, caplog):
     result = await client.create_project("env-test")
     assert result.code == 200
-    project_id = result.result["project"]["id"]
-    await client.get_project(id=project_id)
+    await server.get_slice(SLICE_TRANSPORT).get_status()
     address = "127.0.0.1"
     log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:", "setup")
