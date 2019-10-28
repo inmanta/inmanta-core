@@ -98,9 +98,10 @@ def no_error_in_logs(caplog, levels=[logging.ERROR], ignore_namespaces=["tornado
         assert log_level not in levels, f"{logger_name} {log_level} {message}"
 
 
-def log_contains(caplog, loggerpart, level, msg):
+def log_contains(caplog, loggerpart, level, msg, test_phase="call"):
     close = []
-    for logger_name, log_level, message in caplog.record_tuples:
+    for record in caplog.get_records(test_phase):
+        logger_name, log_level, message = record.name, record.levelno, record.message
         if msg in message:
             if loggerpart in logger_name and level == log_level:
                 return

@@ -31,7 +31,7 @@ from inmanta.export import unknown_parameters, upload_code
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_SERVER, SLICE_SESSION_MANAGER
 from inmanta.server import config as opt
 from inmanta.util import get_compiler_version, hash_file
-from utils import retry_limited
+from utils import log_contains, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1152,3 +1152,8 @@ async def test_get_param(server, client, environment):
     assert res.code == 200
     parameters = res.result["parameters"]
     assert len(parameters) == 2
+
+
+def test_server_logs_address(server, caplog):
+    address = "127.0.0.1"
+    log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:", "setup")
