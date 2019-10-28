@@ -103,7 +103,7 @@ class FeatureManager:
             return result["slices"]
         return defaultdict(lambda: {})
 
-    def get_product(self) -> Dict[str, str]:
+    def get_product_metadata(self) -> Dict[str, str]:
         return {
             "product": "Inmanta Service Orchestator",
             "edition": "Open Source Edition",

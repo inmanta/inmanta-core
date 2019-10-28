@@ -151,23 +151,22 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     @protocol.handle(methods.get_server_status)
     async def get_server_status(self) -> StatusResponse:
-        try:
-            distr = importlib_metadata.distribution("inmanta")
-        except importlib_metadata.PackageNotFoundError:
+        product_metadata = self.feature_manager.get_product_metadata()
+        if product_metadata["version"] is None:
             raise exceptions.ServerError(
                 "Could not find version number for the inmanta compiler."
                 "Is inmanta installed? Use stuptools install or setuptools dev to install."
             )
+
         slices = []
         extension_names = set()
         for slice_name, slice in self._server.get_slices().items():
             slices.append(SliceStatus(name=slice_name, status=await slice.get_status()))
+            ext_name = slice_name.split(".")[0]
+            package_name = slice.__class__.__module__.split(".")[0]
 
             try:
-                ext_name = slice_name.split(".")[0]
-                package_name = slice.__class__.__module__.split(".")[0]
                 distribution = importlib_metadata.distribution(package_name)
-
                 extension_names.add((ext_name, package_name, distribution.version))
             except importlib_metadata.PackageNotFoundError:
                 LOGGER.info(
@@ -177,8 +176,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 )
 
         response = StatusResponse(
-            version=distr.version,
-            license=distr.metadata["License"] if "License" in distr.metadata else "unknown",
+            product=product_metadata["product"],
+            edition=product_metadata["edition"],
+            version=product_metadata["version"],
+            license=product_metadata["license"],
             extensions=[
                 ExtensionStatus(name=name, package=package, version=version) for name, package, version in extension_names
             ],

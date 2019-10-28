@@ -33,7 +33,6 @@ from inmanta.server.agentmanager import AgentManager
 from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
 from inmanta.server.extensions import BoolFeature, FeatureManager, InvalidFeature, InvalidSliceNameException
 from inmanta.server.protocol import Server, ServerSlice
-from inmanta_ext.testplugin.extension import XTestSlice
 from utils import log_contains
 
 
@@ -102,30 +101,34 @@ def test_phase_2():
 
 
 def test_phase_3():
-    server = Server()
-    server.add_slice(XTestSlice())
-    server.add_slice(inmanta.server.server.Server())
-    server.add_slice(AgentManager())
+    with splice_extension_in("test_module_path"):
+        from inmanta_ext.testplugin.extension import XTestSlice
 
-    order = server._get_slice_sequence()
-    print([s.name for s in order])
-    assert [s.name for s in order] == [
-        SLICE_SERVER,
-        SLICE_SESSION_MANAGER,
-        SLICE_AGENT_MANAGER,
-        SLICE_TRANSPORT,
-        "testplugin.testslice",
-    ]
+        server = Server()
+        server.add_slice(XTestSlice())
+        server.add_slice(inmanta.server.server.Server())
+        server.add_slice(AgentManager())
+
+        order = server._get_slice_sequence()
+        print([s.name for s in order])
+        assert [s.name for s in order] == [
+            SLICE_SERVER,
+            SLICE_SESSION_MANAGER,
+            SLICE_AGENT_MANAGER,
+            SLICE_TRANSPORT,
+            "testplugin.testslice",
+        ]
 
 
 def test_end_to_end():
-    ibl = InmantaBootloader()
+    with splice_extension_in("test_module_path"):
+        ibl = InmantaBootloader()
 
-    config.server_enabled_extensions.set("testplugin")
+        config.server_enabled_extensions.set("testplugin")
 
-    ctx = ibl.load_slices()
-    byname = {sl.name: sl for sl in ctx.get_slices()}
-    assert "testplugin.testslice" in byname
+        ctx = ibl.load_slices()
+        byname = {sl.name: sl for sl in ctx.get_slices()}
+        assert "testplugin.testslice" in byname
 
 
 def test_end_to_end_2():
@@ -178,12 +181,12 @@ def test_load_and_filter(caplog):
 
 def test_load_feature_file(tmp_path):
     feature_file = tmp_path / "features.yml"
-    feature_file.write_text(yaml.dump({"slices": {"test": {"feature1": False, "feature2": 10, "feature5": 0, "feature6": -1}}}))
+    feature_file.write_text(yaml.dump({"slices": {"test": {"feature1": False}}}))
     feature_file_config.set(str(feature_file))
 
     fm = FeatureManager()
     f1 = BoolFeature(slice="test", name="feature1")
-    f2 = BoolFeature(slice="test", name="feature3")
+    f2 = BoolFeature(slice="test", name="feature2")
     fx = BoolFeature(slice="test", name="featurex")
 
     class MockSlice(ServerSlice):
@@ -196,8 +199,38 @@ def test_load_feature_file(tmp_path):
     slice = MockSlice()
     fm.add_slice(slice)
 
+    assert slice.feature_manager is fm
+
     assert not fm.enabled(f1)
     assert fm.enabled(f2)
 
     with pytest.raises(InvalidFeature):
         fm.enabled(fx)
+
+@pytest.mark.asyncio
+async def test_custom_feature_manager(tmp_path, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
+    with splice_extension_in("test_module_path"):
+        state_dir = str(tmp_path)
+        port = str(unused_tcp_port_factory())
+        config.Config.set("database", "name", database_name)
+        config.Config.set("database", "host", "localhost")
+        config.Config.set("database", "port", str(postgres_db.port))
+        config.Config.set("database", "connection_timeout", str(1))
+        config.Config.set("config", "state-dir", state_dir)
+        config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
+        config.Config.set("agent_rest_transport", "port", port)
+        config.Config.set("compiler_rest_transport", "port", port)
+        config.Config.set("client_rest_transport", "port", port)
+        config.Config.set("cmdline_rest_transport", "port", port)
+        config.Config.set("server", "bind-port", port)
+        config.Config.set("server", "bind-address", "127.0.0.1")
+        config.server_enabled_extensions.set("testfm")
+
+        ibl = InmantaBootloader()
+        await ibl.start()
+        server = ibl.restserver
+
+        fm = server.get_slice(SLICE_SERVER).feature_manager
+
+        assert not fm.enabled(None)
+        assert not fm.enabled("a")

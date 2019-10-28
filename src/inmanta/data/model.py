@@ -61,6 +61,8 @@ class StatusResponse(BaseModel):
         Response for the status method call
     """
 
+    product: str
+    edition: str
     version: str
     license: Union[str, Dict[str, SimpleTypes]]
     extensions: List[ExtensionStatus]
