@@ -22,7 +22,7 @@ from typing import List, cast
 
 from inmanta import data
 from inmanta.ast import type
-from inmanta.protocol import methods, exceptions
+from inmanta.protocol import exceptions, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_DATABASE, SLICE_FORM, SLICE_SERVER, SLICE_TRANSPORT, protocol
@@ -33,11 +33,7 @@ from inmanta.types import Apireturn, JsonType
 LOGGER = logging.getLogger(__name__)
 
 
-forms_feature = Feature(
-    slice=SLICE_FORM,
-    name="forms",
-    description="Custom forms and records for external parameters."
-)
+forms_feature = Feature(slice=SLICE_FORM, name="forms", description="Custom forms and records for external parameters.")
 
 
 class FormService(protocol.ServerSlice):

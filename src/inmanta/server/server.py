@@ -41,9 +41,7 @@ DBLIMIT = 100000
 
 
 dashboard_feature = Feature(
-    slice=SLICE_SERVER,
-    name="dashboard",
-    description="Server the dashboard under the /dashboard endpoint."
+    slice=SLICE_SERVER, name="dashboard", description="Server the dashboard under the /dashboard endpoint."
 )
 
 

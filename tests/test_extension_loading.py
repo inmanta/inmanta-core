@@ -207,8 +207,11 @@ def test_load_feature_file(tmp_path):
     with pytest.raises(InvalidFeature):
         fm.enabled(fx)
 
+
 @pytest.mark.asyncio
-async def test_custom_feature_manager(tmp_path, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
+async def test_custom_feature_manager(
+    tmp_path, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory
+):
     with splice_extension_in("test_module_path"):
         state_dir = str(tmp_path)
         port = str(unused_tcp_port_factory())

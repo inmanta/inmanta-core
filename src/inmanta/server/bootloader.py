@@ -24,7 +24,7 @@ from typing import Callable, Dict, Generator, List
 
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.server import config
-from inmanta.server.extensions import ApplicationContext, InvalidSliceNameException, FeatureManager
+from inmanta.server.extensions import ApplicationContext, FeatureManager, InvalidSliceNameException
 from inmanta.server.protocol import Server, ServerSlice
 
 LOGGER = logging.getLogger(__name__)
@@ -58,6 +58,7 @@ class ConstrainedApplicationContext(ApplicationContext):
 
     def set_feature_manager(self, feature_manager: FeatureManager):
         self.parent.set_feature_manager(feature_manager)
+
 
 class InmantaBootloader(object):
     """ The inmanta bootloader is responsible for:
