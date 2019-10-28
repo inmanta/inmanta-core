@@ -1154,6 +1154,9 @@ async def test_get_param(server, client, environment):
     assert len(parameters) == 2
 
 
-def test_server_logs_address(server, caplog):
+@pytest.mark.asyncio(timeout=30)
+async def test_server_logs_address(server, client, caplog):
+    result = await client.create_project("env-test")
+    assert result.code == 200
     address = "127.0.0.1"
     log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:", "setup")
