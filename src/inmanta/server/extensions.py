@@ -68,43 +68,26 @@ class BoolFeature(Feature):
     """ A feature that is on or off.
     """
 
-
-class NumericalFeature(Feature):
-    """ A numerical feature can be enable or disabled or have a limit on a metric. For example the maximum number of projects.
-    """
-
-    def __init__(self, slice: str, name: str, description: str = "", default_limit: int = -1) -> None:
-        """
-            :param default_limit: The default limit of this feature. 0 means the feature is disabled. -1 means no limit.
-        """
-        super().__init__(slice, name)
-        self._default_limit: int = default_limit
-
-    @property
-    def default_limit(self) -> int:
-        return self._default_limit
-
-
 class FeatureManager:
     """ This class allows to verify whether a feature should be enabled or not. This is determined based on a configuration
         file that is set with config.feature-file in the config. This feature file is a yaml with the following structure:
 
         slices:
             slice_name:
-                feature_name: bool|int
+                feature_name: bool
 
         When the feature specifies an int this implies a limit. 0 means that the feature is disabled. -1 means no limit.
     """
 
     def __init__(self) -> None:
         self._features: Dict[str, Dict[str, Feature]] = defaultdict(lambda: {})
-        self._feature_config: Optional[Dict[str, Dict[str, Union[bool, int]]]] = self._load_feature_config()
+        self._feature_config: Optional[Dict[str, Dict[str, bool]]] = self._load_feature_config()
 
-    def set_feature(self, feature: Feature, value: Union[bool, int]) -> None:
+    def set_feature(self, feature: Feature, value: bool) -> None:
         if feature.slice in self._features and feature.name in self._features[feature.slice]:
             self._feature_config[feature.slice][feature.name] = value
 
-    def _load_feature_config(self) -> Optional[Dict[str, Dict[str, Union[bool, int]]]]:
+    def _load_feature_config(self) -> Optional[Dict[str, Dict[str, bool]]]:
         feature_file = feature_file_config.get()
         if feature_file is None:
             return defaultdict(lambda: {})
@@ -136,7 +119,7 @@ class FeatureManager:
             self._features[feature.slice][feature.name] = feature
         slice.feature_manager = self
 
-    def _get_config(self, feature: Feature) -> Optional[Union[int, bool]]:
+    def _get_config(self, feature: Feature) -> Optional[bool]:
         if feature.slice not in self._features or feature.name not in self._features[feature.slice]:
             raise InvalidFeature(f"Feature {feature.name} in slice {feature.slice} is not defined.")
 
@@ -147,7 +130,7 @@ class FeatureManager:
         ):
             config = self._feature_config[feature.slice][feature.name]
 
-            if isinstance(config, (int, bool)):
+            if isinstance(config, bool):
                 return config
 
         return None
@@ -157,32 +140,7 @@ class FeatureManager:
         if config is None:
             return True
 
-        if isinstance(config, int):
-            return config != 0
-
         return config
-
-    def check_limit(self, feature: Feature, new_value: int) -> bool:
-        """ Verify if the new value is within the bounds of the given feature.
-        """
-        config = self._get_config(feature)
-        if config is None:
-            f = self._features[feature.slice]
-            if isinstance(f, NumericalFeature):
-                config = f.default_limit
-            else:
-                return True
-
-        if isinstance(config, bool):
-            return config
-
-        if config == 0:
-            return False
-
-        if config == -1:
-            return True
-
-        return new_value <= config
 
 
 class ApplicationContext:
