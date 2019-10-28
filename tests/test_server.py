@@ -28,8 +28,10 @@ from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.export import unknown_parameters, upload_code
+from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_SERVER, SLICE_SESSION_MANAGER
 from inmanta.server import config as opt
+from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version, hash_file
 from utils import log_contains, retry_limited
 
@@ -1155,8 +1157,14 @@ async def test_get_param(server, client, environment):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_server_logs_address(server, client, caplog):
+async def test_server_logs_address(server_config, async_finalizer, caplog):
+    caplog.set_level(logging.INFO)
+    ibl = InmantaBootloader()
+    await ibl.start()
+    async_finalizer.add(ibl.stop)
+
+    client = Client("client")
     result = await client.create_project("env-test")
     assert result.code == 200
     address = "127.0.0.1"
-    log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:", "setup")
+    log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:")

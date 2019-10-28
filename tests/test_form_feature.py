@@ -23,7 +23,6 @@ import yaml
 
 from inmanta.config import feature_file_config
 
-
 LOGGER = logging.getLogger(__name__)
 
 
