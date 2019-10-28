@@ -21,7 +21,7 @@ import uuid
 
 import pytest
 
-from inmanta import const, data
+from inmanta import const, data, resources
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version
 from utils import LogSequence, _wait_until_deployment_finishes, no_error_in_logs
@@ -373,3 +373,49 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     result = await client.list_params(environment)
     assert result.code == 200
     assert len(result.result["parameters"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_fact_no_code(resource_container, client, clienthelper, environment, agent):
+    """
+        Test retrieving facts from the agent when resource cannot be loaded
+    """
+    env_id = environment
+    resource_container.Provider.set("agent1", "key", "value")
+
+    version = await clienthelper.get_version()
+
+    resource_id_wov = "test::Resource[agent1,key=key]"
+    resource_id = "%s,v=%d" % (resource_id_wov, version)
+
+    await clienthelper.put_version_simple(
+        [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}], version
+    )
+
+    response = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert response.code == 200
+
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    # make sure the code to load the resource is no longer available
+    resources.resource.reset()
+
+    response = await client.get_param(env_id, "length", resource_id_wov)
+    assert response.code == 503
+
+    count = 0
+    while count < 10:
+        count += 1
+        response = await client.get_resource(environment, resource_id, logs=True)
+        assert response.code == 200
+        result = response.result
+        assert result["resource"]["status"] == "deployed"
+        if len(result["logs"]) == 4:
+            log_entry = result["logs"][0]
+            continue
+
+        await asyncio.sleep(0.1)
+
+    assert log_entry["action"] == "getfact"
+    assert log_entry["status"] == "unavailable"
+    assert "Failed to load" in log_entry["messages"][0]["msg"]

@@ -183,7 +183,7 @@ class HandlerContext(object):
         return self._status
 
     @property
-    def logs(self) -> list:
+    def logs(self) -> List[data.LogLine]:
         return self._logs
 
     def set_status(self, status: const.ResourceState) -> None:

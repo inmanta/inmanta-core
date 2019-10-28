@@ -25,12 +25,12 @@ import time
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional, Set, Tuple, cast
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
 
 from tornado import ioloop, locks
 from tornado.concurrent import Future
 
-from inmanta import const, env, protocol
+from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
@@ -111,7 +111,7 @@ class ResourceAction(object):
     ) -> None:
         await self.scheduler.get_client().resource_action_update(
             tid=self.scheduler._env_id,
-            resource_ids=[str(self.resource.id)],
+            resource_ids=[self.resource.id.resource_version_str()],
             action_id=action_id,
             action=const.ResourceAction.deploy,
             started=start,
@@ -297,7 +297,7 @@ class ResourceAction(object):
             }
             response = await self.scheduler.get_client().resource_action_update(
                 tid=self.scheduler._env_id,
-                resource_ids=[str(self.resource.id)],
+                resource_ids=[self.resource.id.resource_version_str()],
                 action_id=ctx.action_id,
                 action=const.ResourceAction.deploy,
                 started=start,
@@ -450,6 +450,9 @@ class ResourceScheduler(object):
     ) -> None:
         """
         Schedule a new set of resources for execution.
+
+        :param resources: The set of resource should be closed, the scheduler assumes that all resource referenced are in the
+                          set or on another agent.
 
         **This method should only be called under critical_ratelimiter lock!**
         """
@@ -751,24 +754,9 @@ class AgentInstance(object):
                 self.logger.warning("Got an error while pulling resources for %s. %s", reason, result.result)
 
             else:
-                restypes: Set[str] = set([res["resource_type"] for res in result.result["resources"]])
-                resources = []
-                await self.process._ensure_code(self._env_id, result.result["version"], restypes)
-                try:
-                    undeployable: Dict[ResourceVersionIdStr, const.ResourceState] = {}
-                    for res in result.result["resources"]:
-                        state = const.ResourceState[res["status"]]
-                        if state in const.UNDEPLOYABLE_STATES:
-                            undeployable[res["id"]] = state
-
-                        data = res["attributes"]
-                        data["id"] = res["id"]
-                        resource = Resource.deserialize(data)
-                        resources.append(resource)
-                        self.logger.debug("Received update for %s", resource.id)
-                except TypeError:
-                    self.logger.exception("Failed to receive update for %s", reason)
-
+                undeployable, resources = await self.load_resources(
+                    result.result["version"], const.ResourceAction.deploy, result.result["resources"]
+                )
                 self.logger.debug("Pulled %d resources because %s", len(resources), reason)
 
                 if len(resources) > 0:
@@ -781,56 +769,50 @@ class AgentInstance(object):
     async def do_run_dryrun(self, version: int, dry_run_id: uuid.UUID) -> None:
         with (await self.dryrunlock.acquire()):
             with (await self.ratelimiter.acquire()):
-                result = await self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
-                if result.code == 404:
+                response = await self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
+                if response.code == 404:
                     self.logger.warning("Version %s does not exist, can not run dryrun", version)
                     return
 
-                elif result.code != 200:
+                elif response.code != 200:
                     self.logger.warning("Got an error while pulling resources and version %s", version)
                     return
 
-                resources = result.result["resources"]
-                restypes = set([res["resource_type"] for res in resources])
-
-                # TODO: handle different versions for dryrun and deploy!
-                await self.process._ensure_code(self._env_id, version, restypes)
+                undeployable, resources = await self.load_resources(
+                    version, const.ResourceAction.dryrun, response.result["resources"]
+                )
 
                 self._cache.open_version(version)
-
-                for res in resources:
-                    ctx = handler.HandlerContext(res, True)
+                for resource in resources:
+                    ctx = handler.HandlerContext(resource, True)
                     started = datetime.datetime.now()
                     provider = None
-                    try:
-                        if const.ResourceState[res["status"]] in const.UNDEPLOYABLE_STATES:
-                            ctx.error(
-                                "Skipping %(resource_id)s because in undeployable state %(status)s",
-                                resource_id=res["id"],
-                                status=res["status"],
-                            )
-                            await self.get_client().dryrun_update(
-                                tid=self._env_id, id=dry_run_id, resource=res["id"], changes={}
-                            )
-                            continue
 
-                        data = res["attributes"]
-                        data["id"] = res["id"]
-                        resource = Resource.deserialize(data)
-                        self.logger.debug("Running dryrun for %s", resource.id)
+                    resource_id = resource.id.resource_version_str()
+                    if resource_id in undeployable:
+                        ctx.error(
+                            "Skipping dryrun %(resource_id)s because in undeployable state %(status)s",
+                            resource_id=resource_id,
+                            status=undeployable[resource_id],
+                        )
+                        await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_id, changes={})
+                        continue
+
+                    try:
+                        self.logger.debug("Running dryrun for %s", resource_id)
 
                         try:
                             provider = await self.get_provider(resource)
                         except Exception as e:
                             ctx.exception(
                                 "Unable to find a handler for %(resource_id)s (exception: %(exception)s",
-                                resource_id=str(resource.id),
+                                resource_id=resource_id,
                                 exception=str(e),
                             )
                             await self.get_client().dryrun_update(
                                 tid=self._env_id,
                                 id=dry_run_id,
-                                resource=res["id"],
+                                resource=resource_id,
                                 changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
                             )
                         else:
@@ -845,7 +827,7 @@ class AgentInstance(object):
                                 if ctx.status == const.ResourceState.failed:
                                     changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
                                 await self.get_client().dryrun_update(
-                                    tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
+                                    tid=self._env_id, id=dry_run_id, resource=resource_id, changes=changes
                                 )
                             except Exception as e:
                                 ctx.exception(
@@ -858,7 +840,7 @@ class AgentInstance(object):
                                     changes = {}
                                 changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
                                 await self.get_client().dryrun_update(
-                                    tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
+                                    tid=self._env_id, id=dry_run_id, resource=resource_id, changes=changes
                                 )
 
                     except Exception:
@@ -866,7 +848,7 @@ class AgentInstance(object):
                         changes = {}
                         changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
                         await self.get_client().dryrun_update(
-                            tid=self._env_id, id=dry_run_id, resource=res["id"], changes=changes
+                            tid=self._env_id, id=dry_run_id, resource=resource_id, changes=changes
                         )
                     finally:
                         if provider is not None:
@@ -875,7 +857,7 @@ class AgentInstance(object):
                         finished = datetime.datetime.now()
                         await self.get_client().resource_action_update(
                             tid=self._env_id,
-                            resource_ids=[res["id"]],
+                            resource_ids=[resource_id],
                             action_id=ctx.action_id,
                             action=const.ResourceAction.dryrun,
                             started=started,
@@ -888,14 +870,18 @@ class AgentInstance(object):
 
     async def get_facts(self, resource: JsonType) -> Apireturn:
         with (await self.ratelimiter.acquire()):
-            resource_type = str(resource["resource_type"])
-            await self.process._ensure_code(self._env_id, resource["model"], {resource_type})
+            undeployable, resources = await self.load_resources(resource["model"], const.ResourceAction.getfact, [resource])
+
+            if undeployable or not resources:
+                self.logger.warning(
+                    "Cannot retrieve fact for %s because resource is undeployable or code could not be loaded", resource["id"]
+                )
+                return 500
+
             started = datetime.datetime.now()
             provider = None
             try:
-                data = resource["attributes"]
-                data["id"] = resource["id"]
-                resource_obj = Resource.deserialize(data)
+                resource_obj = resources[0]
                 ctx = handler.HandlerContext(resource_obj)
 
                 version = resource_obj.id.get_version()
@@ -914,7 +900,7 @@ class AgentInstance(object):
                     finished = datetime.datetime.now()
                     await self.get_client().resource_action_update(
                         tid=self._env_id,
-                        resource_ids=[resource_obj.id.resource_str()],
+                        resource_ids=[resource_obj.id.resource_version_str()],
                         action_id=ctx.action_id,
                         action=const.ResourceAction.getfact,
                         started=started,
@@ -934,6 +920,59 @@ class AgentInstance(object):
                 if provider is not None:
                     provider.close()
             return 200
+
+    async def load_resources(
+        self, version: int, action: const.ResourceAction, resources: List[JsonType]
+    ) -> Tuple[Dict[ResourceVersionIdStr, const.ResourceState], List[Resource]]:
+        """ Deserialize all resources and load all handler code. When the code for this type fails to load, the resource
+            is marked as failed
+        """
+        started = datetime.datetime.now()
+        failed_resource_types = await self.process.ensure_code(
+            self._env_id, version, [res["resource_type"] for res in resources]
+        )
+        loaded_resources: List[Resource] = []
+        failed_resources: List[ResourceVersionIdStr] = []
+        undeployable: Dict[ResourceVersionIdStr, const.ResourceState] = {}
+
+        for res in resources:
+            try:
+                res["attributes"]["id"] = res["id"]
+                if res["resource_type"] not in failed_resource_types:
+                    resource = Resource.deserialize(res["attributes"])
+                    loaded_resources.append(resource)
+
+                    state = const.ResourceState[res["status"]]
+                    if state in const.UNDEPLOYABLE_STATES:
+                        undeployable[res["id"]] = state
+                else:
+                    failed_resources.append(res["id"])
+                    undeployable[res["id"]] = const.ResourceState.unavailable
+                    resource = Resource.deserialize(res["attributes"], use_generic=True)
+                    loaded_resources.append(resource)
+
+            except TypeError:
+                failed_resources.append(res["id"])
+                undeployable[res["id"]] = const.ResourceState.unavailable
+                resource = Resource.deserialize(res["attributes"], use_generic=True)
+                loaded_resources.append(resource)
+
+        if len(failed_resources) > 0:
+            log = data.LogLine.log(
+                logging.ERROR,
+                "Failed to load handler code or install handler code dependencies. Check the agent log for details.",
+            )
+            await self.get_client().resource_action_update(
+                tid=self._env_id,
+                resource_ids=failed_resources,
+                action_id=uuid.uuid4(),
+                action=action,
+                started=started,
+                finished=datetime.datetime.now(),
+                messages=[log],
+                status=const.ResourceState.unavailable,
+            )
+        return undeployable, loaded_resources
 
 
 class Agent(SessionEndpoint):
@@ -1060,22 +1099,27 @@ class Agent(SessionEndpoint):
         for agent in self._instances.values():
             await agent.get_latest_version_for_agent(reason="call to get_latest_version on agent")
 
-    async def _ensure_code(self, environment: uuid.UUID, version: int, resourcetypes: Set[str]) -> None:
+    async def ensure_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> Set[str]:
+        """ Ensure that the code for the given environment and version is loaded
         """
-            Ensure that the code for the given environment and version is loaded
-        """
-        if self._loader is not None:
-            for rt in resourcetypes:
-                result: protocol.Result = await self._client.get_code(environment, version, rt)
+        failed_to_load: Set[str] = set()
+        if self._loader is None:
+            return failed_to_load
 
-                if result.code == 200:
-                    for hash_value, (path, name, content, requires) in result.result["sources"].items():
-                        try:
-                            LOGGER.debug("Installing handler %s for %s", rt, name)
-                            await self._install(hash_value, name, content, requires)
-                            LOGGER.debug("Installed handler %s for %s", rt, name)
-                        except Exception:
-                            LOGGER.exception("Failed to install handler %s for %s", rt, name)
+        for rt in set(resource_types):
+            result: protocol.Result = await self._client.get_code(environment, version, rt)
+
+            if result.code == 200:
+                for hash_value, (path, name, content, requires) in result.result["sources"].items():
+                    try:
+                        LOGGER.debug("Installing handler %s for %s", rt, name)
+                        await self._install(hash_value, name, content, requires)
+                        LOGGER.debug("Installed handler %s for %s", rt, name)
+                    except Exception:
+                        LOGGER.exception("Failed to install handler %s for %s", rt, name)
+                        failed_to_load.add(rt)
+
+        return failed_to_load
 
     async def _install(self, hash_value: str, module_name: str, module_source: str, module_requires: List[str]):
         if self._env is None or self._loader is None:
