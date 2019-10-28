@@ -18,7 +18,7 @@
 import logging
 import os
 from collections import defaultdict
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 import yaml
 
@@ -67,6 +67,7 @@ class Feature:
 class BoolFeature(Feature):
     """ A feature that is on or off.
     """
+
 
 class FeatureManager:
     """ This class allows to verify whether a feature should be enabled or not. This is determined based on a configuration
