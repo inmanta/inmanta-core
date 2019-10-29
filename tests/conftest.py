@@ -443,7 +443,9 @@ async def server(server_pre_start, server_config):
     params=[(True, True, False), (True, False, False), (False, True, False), (False, False, False), (True, True, True)],
     ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"],
 )
-async def server_multi(server_pre_start, event_loop, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory):
+async def server_multi(
+    server_pre_start, event_loop, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory
+):
     """
     :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
     May not be required

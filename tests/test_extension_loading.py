@@ -87,6 +87,7 @@ def test_phase_1(caplog):
 def test_phase_2():
     with splice_extension_in("test_module_path"):
         import inmanta_ext.testplugin.extension
+
         ibl = InmantaBootloader()
         all = {"testplugin": inmanta_ext.testplugin.extension.setup}
 
