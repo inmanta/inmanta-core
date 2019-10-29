@@ -319,7 +319,7 @@ class Client(Endpoint):
         if with_rest_client:
             self._transport_instance = client.RESTClient(self, connection_timout=timeout)
         else:
-             self._transport_instance = None
+            self._transport_instance = None
         self._version_match = version_match
         self._exact_version = exact_version
 
