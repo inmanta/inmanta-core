@@ -76,6 +76,7 @@ class DBSchema(object):
         self.name = name
         self.package = package
         self.connection = connection
+        self.logger = LOGGER.getChild(f"schema:{self.name}")
 
     async def ensure_db_schema(self) -> None:
         current_version_db_schema = await self.ensure_self_update()
@@ -94,7 +95,7 @@ class DBSchema(object):
         try:
             return await self.get_current_version()
         except TableNotFound:
-            LOGGER.info("Creating schema version table")
+            self.logger.info("Creating schema version table")
             # create table
             await self.connection.execute(create_schemamanager)
             return 0
@@ -107,20 +108,20 @@ class DBSchema(object):
         3- migrates the existing version to the new table, for the core slice
         4- drops legacy table
         """
-        LOGGER.info("Migrating from old schema management to new schema management")
+        self.logger.info("Migrating from old schema management to new schema management")
         # tx begin
         async with self.connection.transaction():
             # lock legacy table => if gone -> continue
             try:
                 await self.connection.execute(f"LOCK TABLE {LEGACY_SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
             except UndefinedTableError:
-                LOGGER.info("Second process is preforming a database update as well.")
+                self.logger.info("Second process is preforming a database update as well.")
                 return
             # get_legacy_version, under lock
             legacy_version_db_schema = await self.get_legacy_version()
 
             if legacy_version_db_schema > 0:
-                LOGGER.info("Creating schema version table and setting core version to %d", legacy_version_db_schema)
+                self.logger.info("Creating schema version table and setting core version to %d", legacy_version_db_schema)
                 # create table
                 await self.connection.execute(create_schemamanager)
                 await self.connection.execute(
@@ -129,7 +130,7 @@ class DBSchema(object):
                     legacy_version_db_schema,
                 )
             else:
-                LOGGER.info("Creating schema version table")
+                self.logger.info("Creating schema version table")
                 # create table
                 await self.connection.execute(create_schemamanager)
 
@@ -160,7 +161,7 @@ class DBSchema(object):
             try:
                 sure_db_schema = await self.get_current_version()
             except TableNotFound:
-                LOGGER.exception("Schemamanager table disappeared, should not occur.")
+                self.logger.exception("Schemamanager table disappeared, should not occur.")
                 raise
             # get relevant updates
             updates = [v for v in update_functions if v.version > sure_db_schema]
@@ -169,7 +170,7 @@ class DBSchema(object):
                     # wrap in subtransaction
                     async with self.connection.transaction():
                         # actual update sequence
-                        LOGGER.info("Updating database schema to version %d", version.version)
+                        self.logger.info("Updating database schema to version %d", version.version)
                         update_function = version.function
                         await update_function(self.connection)
                         # also set version, outer tx will always contain consistent version
@@ -177,7 +178,7 @@ class DBSchema(object):
                     # commit subtx
                 except Exception:
                     # update failed, subtransaction already rolled back
-                    LOGGER.exception("Database schema update to version %d failed", version.version)
+                    self.logger.exception("Database schema update to version %d failed", version.version)
                     # commit outer
                     await outer.commit()
                     # unset it, to prevent double commit

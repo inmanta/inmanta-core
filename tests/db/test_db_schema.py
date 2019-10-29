@@ -17,6 +17,7 @@
 """
 import asyncio
 import inspect
+import logging
 import pkgutil
 import types
 import uuid
@@ -31,6 +32,7 @@ import inmanta.db.versions
 from inmanta import data
 from inmanta.data import CORE_SCHEMA_NAME, schema
 from inmanta.data.schema import TableNotFound, Version
+from utils import log_contains
 
 
 async def run_updates_and_verify(
@@ -74,13 +76,15 @@ async def assert_core_untouched(postgresql_client, corev=0):
 
 
 @pytest.mark.asyncio
-async def test_dbschema_clean(postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db):
+async def test_dbschema_clean(postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db, caplog):
     dbm = schema.DBSchema("test_dbschema_clean", inmanta.db.versions, postgresql_client)
     with pytest.raises(TableNotFound):
         await dbm.get_current_version()
     await dbm.ensure_self_update()
     await run_updates_and_verify(get_columns_in_db_table, dbm, 0)
     await assert_core_untouched(postgresql_client)
+
+    log_contains(caplog, "inmanta.data.schema.schema:test_dbschema_clean", logging.INFO, "Creating schema version table")
 
 
 @pytest.mark.asyncio
