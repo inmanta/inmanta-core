@@ -15,21 +15,3 @@
 
     Contact: code@inmanta.com
 """
-import pytest
-
-
-@pytest.mark.asyncio
-async def test_server_status(server, client):
-    result = await client.get_server_status()
-
-    assert result.code == 200
-    status = result.result["data"]
-    assert "version" in status
-    assert "product" in status
-    assert "edition" in status
-
-    assert len([x for x in status["slices"] if x["name"] == "core.server"]) == 1
-
-    db_status = [x for x in status["slices"] if x["name"] == "core.database"]
-    assert len([x for x in status["slices"] if x["name"] == "core.database"]) == 1
-    assert db_status[0]["status"]["connected"] is True

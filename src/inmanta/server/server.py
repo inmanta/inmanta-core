@@ -29,6 +29,7 @@ from inmanta.protocol.common import attach_warnings
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
+from inmanta.server.extensions import Feature
 from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
@@ -37,6 +38,11 @@ if TYPE_CHECKING:
     from inmanta.server.services.compilerservice import CompilerService
 
 DBLIMIT = 100000
+
+
+dashboard_feature = Feature(
+    slice=SLICE_SERVER, name="dashboard", description="Server the dashboard under the /dashboard endpoint."
+)
 
 
 class Server(protocol.ServerSlice):
@@ -53,24 +59,27 @@ class Server(protocol.ServerSlice):
         super().__init__(name=SLICE_SERVER)
         LOGGER.info("Starting server endpoint")
 
-        self.setup_dashboard()
-
     def get_dependencies(self) -> List[str]:
         return [SLICE_DATABASE, SLICE_COMPILER]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
 
+    def define_features(self) -> List[Feature]:
+        return [dashboard_feature]
+
     async def prestart(self, server: protocol.Server) -> None:
         self._server = server
         self._server_storage: Dict[str, str] = self.check_storage()
         self.compiler: "CompilerService" = cast("CompilerService", server.get_slice(SLICE_COMPILER))
 
+        self.setup_dashboard()
+
     def setup_dashboard(self) -> None:
         """
             If configured, set up tornado to serve the dashboard
         """
-        if not opt.dash_enable.get():
+        if not opt.dash_enable.get() or not self.feature_manager.enabled(dashboard_feature):
             return
 
         dashboard_path = opt.dash_path.get()
@@ -151,23 +160,22 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     @protocol.handle(methods.get_server_status)
     async def get_server_status(self) -> StatusResponse:
-        try:
-            distr = importlib_metadata.distribution("inmanta")
-        except importlib_metadata.PackageNotFoundError:
+        product_metadata = self.feature_manager.get_product_metadata()
+        if product_metadata["version"] is None:
             raise exceptions.ServerError(
                 "Could not find version number for the inmanta compiler."
                 "Is inmanta installed? Use stuptools install or setuptools dev to install."
             )
+
         slices = []
         extension_names = set()
         for slice_name, slice in self._server.get_slices().items():
             slices.append(SliceStatus(name=slice_name, status=await slice.get_status()))
+            ext_name = slice_name.split(".")[0]
+            package_name = slice.__class__.__module__.split(".")[0]
 
             try:
-                ext_name = slice_name.split(".")[0]
-                package_name = slice.__class__.__module__.split(".")[0]
                 distribution = importlib_metadata.distribution(package_name)
-
                 extension_names.add((ext_name, package_name, distribution.version))
             except importlib_metadata.PackageNotFoundError:
                 LOGGER.info(
@@ -177,8 +185,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 )
 
         response = StatusResponse(
-            version=distr.version,
-            license=distr.metadata["License"] if "License" in distr.metadata else "unknown",
+            product=product_metadata["product"],
+            edition=product_metadata["edition"],
+            version=product_metadata["version"],
+            license=product_metadata["license"],
             extensions=[
                 ExtensionStatus(name=name, package=package, version=version) for name, package, version in extension_names
             ],

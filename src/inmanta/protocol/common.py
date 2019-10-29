@@ -771,38 +771,38 @@ def decode_token(token: str) -> Dict[str, str]:
         header = jwt.get_unverified_header(token)
         payload = jwt.decode(token, verify=False)
     except Exception:
-        raise exceptions.AccessDeniedException("Unable to decode provided JWT bearer token.")
+        raise exceptions.Forbidden("Unable to decode provided JWT bearer token.")
 
     if "iss" not in payload:
-        raise exceptions.AccessDeniedException("Issuer is required in token to validate.")
+        raise exceptions.Forbidden("Issuer is required in token to validate.")
 
     cfg = inmanta_config.AuthJWTConfig.get_issuer(payload["iss"])
     if cfg is None:
-        raise exceptions.AccessDeniedException("Unknown issuer for token")
+        raise exceptions.Forbidden("Unknown issuer for token")
 
     alg = header["alg"].lower()
     if alg == "hs256":
         key = cfg.key
     elif alg == "rs256":
         if "kid" not in header:
-            raise exceptions.AccessDeniedException("A kid is required for RS256")
+            raise exceptions.Forbidden("A kid is required for RS256")
         kid = header["kid"]
         if kid not in cfg.keys:
-            raise exceptions.AccessDeniedException(
+            raise exceptions.Forbidden(
                 "The kid provided in the token does not match a known key. Check the jwks_uri or try "
                 "restarting the server to load any new keys."
             )
 
         key = cfg.keys[kid]
     else:
-        raise exceptions.AccessDeniedException("Algorithm %s is not supported." % alg)
+        raise exceptions.Forbidden("Algorithm %s is not supported." % alg)
 
     try:
         payload = dict(jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo]))
         ct_key = const.INMANTA_URN + "ct"
         payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
     except Exception as e:
-        raise exceptions.AccessDeniedException(*e.args)
+        raise exceptions.Forbidden(*e.args)
 
     return payload
 

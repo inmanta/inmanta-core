@@ -21,6 +21,7 @@ v 2019.4 (?) Changes in this release:
 - Verify hashes when serving a file (#532)
 - Mark resource as failed when code loading fails (#1520)
 - Print extra env variables in init log and only store those in database (#1482)
+- Add feature manager for enabling and disabling orchestrator features (#1530)
 - Add get_environment_id to plugin context (#1331)
 - Log server bind address and bind port on startup
 

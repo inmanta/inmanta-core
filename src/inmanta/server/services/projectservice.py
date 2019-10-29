@@ -86,6 +86,7 @@ class ProjectService(protocol.ServerSlice):
     async def project_create(self, name: str, project_id: Optional[uuid.UUID]) -> model.Project:
         if project_id is None:
             project_id = uuid.uuid4()
+
         try:
             project = data.Project(id=project_id, name=name)
             await project.insert()

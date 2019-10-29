@@ -15,21 +15,17 @@
 
     Contact: code@inmanta.com
 """
-import pytest
+from typing import List
+
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER
+from inmanta.server.extensions import ApplicationContext, FeatureManager
+from inmanta.server.protocol import ServerSlice
 
 
-@pytest.mark.asyncio
-async def test_server_status(server, client):
-    result = await client.get_server_status()
+class CustomManager(FeatureManager):
+    def enabled(self, feature):
+        return False
 
-    assert result.code == 200
-    status = result.result["data"]
-    assert "version" in status
-    assert "product" in status
-    assert "edition" in status
 
-    assert len([x for x in status["slices"] if x["name"] == "core.server"]) == 1
-
-    db_status = [x for x in status["slices"] if x["name"] == "core.database"]
-    assert len([x for x in status["slices"] if x["name"] == "core.database"]) == 1
-    assert db_status[0]["status"]["connected"] is True
+def setup(application: ApplicationContext) -> None:
+    application.set_feature_manager(CustomManager())

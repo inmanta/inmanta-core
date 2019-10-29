@@ -32,6 +32,7 @@ from inmanta.protocol import Client, common, endpoints, handle, methods
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
+from inmanta.server.extensions import Feature, FeatureManager
 from inmanta.types import ArgumentTypes, JsonType
 from inmanta.util import CycleException, Scheduler, TaskHandler, stable_depth_first
 
@@ -76,7 +77,6 @@ class ReturnClient(Client):
 class Server(endpoints.Endpoint):
     def __init__(self, connection_timout: int = 120) -> None:
         super().__init__("server")
-
         self._slices: Dict[str, ServerSlice] = {}
         self._slice_sequence: List[ServerSlice] = None
         self._handlers: List[routing.Rule] = []
@@ -210,6 +210,8 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         To schedule background tasks, use :func:`add_background_task`
     """
 
+    feature_manager: FeatureManager
+
     def __init__(self, name: str) -> None:
         super().__init__()
 
@@ -228,7 +230,6 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         Called by the RestServer host prior to start, can be used to collect references to other server slices
         Dependencies are not up yet.
         """
-        pass
 
     async def start(self) -> None:
         """
@@ -321,6 +322,11 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
             Get the status of this slice.
         """
         return {}
+
+    def define_features(self) -> List[Feature]:
+        """ Return a list of feature that this slice offers
+        """
+        return []
 
 
 class Session(object):
