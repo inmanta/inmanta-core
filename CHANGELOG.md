@@ -24,6 +24,7 @@ v 2019.4 (?) Changes in this release:
 - Add feature manager for enabling and disabling orchestrator features (#1530)
 - Add get_environment_id to plugin context (#1331)
 - Log server bind address and bind port on startup
+- Fix warning about transport config
 
 IMPORTANT CHANGES:
 - Older compiler versions are no longer supported with this server

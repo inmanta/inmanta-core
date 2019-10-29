@@ -60,7 +60,7 @@ class ReturnClient(Client):
     """
 
     def __init__(self, name: str, session: "Session") -> None:
-        super().__init__(name)
+        super().__init__(name, with_rest_client=False)
         self.session = session
 
     async def _call(self, method_properties: common.MethodProperties, args, kwargs) -> common.Result:
