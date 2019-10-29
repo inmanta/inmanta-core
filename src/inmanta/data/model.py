@@ -56,6 +56,16 @@ class SliceStatus(BaseModel):
     status: Dict[str, ArgumentTypes]
 
 
+class FeatureStatus(BaseModel):
+    """
+        Status of the feature
+    """
+
+    slice: str
+    name: str
+    value: bool
+
+
 class StatusResponse(BaseModel):
     """
         Response for the status method call
@@ -67,6 +77,7 @@ class StatusResponse(BaseModel):
     license: Union[str, Dict[str, SimpleTypes]]
     extensions: List[ExtensionStatus]
     slices: List[SliceStatus]
+    features: List[FeatureStatus]
 
 
 class CompileRun(BaseModel):
