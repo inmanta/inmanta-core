@@ -577,12 +577,7 @@ async def test_disable_purge_on_delete(client, clienthelper, server, environment
     # Empty version
     version = await clienthelper.get_version()
     result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=[],
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
+        tid=environment, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version(),
     )
     assert result.code == 200
 

@@ -858,7 +858,7 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="Enable purge on delete. When set to true, the server will detect the absence of resource with purge_on_delete"
-                " set to true and automatically purges them.",
+            " set to true and automatically purges them.",
         ),
     }
 
