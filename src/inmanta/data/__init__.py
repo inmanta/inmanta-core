@@ -653,6 +653,7 @@ AUTOSTART_AGENT_INTERVAL = "autostart_agent_interval"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
 RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
+PURGE_ON_DELETE = "purge_on_delete"
 
 
 class Setting(object):
@@ -850,6 +851,14 @@ class Environment(BaseDocument):
             typ="int",
             validator=convert_int,
             doc="The number of days to retain resource-action logs",
+        ),
+        PURGE_ON_DELETE: Setting(
+            name=PURGE_ON_DELETE,
+            default=True,
+            typ="bool",
+            validator=convert_boolean,
+            doc="Enable purge on delete. When set to true, the server will detect the absence of resources with purge_on_delete"
+            " set to true and automatically purges them.",
         ),
     }
 

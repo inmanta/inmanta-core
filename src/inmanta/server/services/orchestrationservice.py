@@ -25,6 +25,7 @@ from typing import Dict, List, Optional, Set, cast
 import asyncpg
 
 from inmanta import const, data
+from inmanta.data import PURGE_ON_DELETE
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import attach_warnings
@@ -253,8 +254,8 @@ class OrchestrationService(protocol.ServerSlice):
         failed = compile_state == const.Compilestate.failed.name
 
         resources_to_purge: List[data.Resource] = []
-        if not failed:
-            # search for deleted resources
+        if not failed and (await env.get(PURGE_ON_DELETE)):
+            # search for deleted resources (purge_on_delete)
             resources_to_purge = await data.Resource.get_deleted_resources(env.id, version, set(rv_dict.keys()))
 
             previous_requires = {}

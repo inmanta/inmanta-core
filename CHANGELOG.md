@@ -23,8 +23,9 @@ v 2019.4 (?) Changes in this release:
 - Print extra env variables in init log and only store those in database (#1482)
 - Add feature manager for enabling and disabling orchestrator features (#1530)
 - Add get_environment_id to plugin context (#1331)
-- Log server bind address and bind port on startup
-- Fix warning about transport config
+- Log server bind address and bind port on startup (#1475)
+- Fix warning about transport config (#1203)
+- Add setting to environment to disable purge on delete (#1546)
 
 IMPORTANT CHANGES:
 - Older compiler versions are no longer supported with this server
