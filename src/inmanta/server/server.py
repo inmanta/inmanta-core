@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Dict, List, cast
 import importlib_metadata
 
 from inmanta import data
-from inmanta.data.model import ExtensionStatus, SliceStatus, StatusResponse
+from inmanta.data.model import ExtensionStatus, FeatureStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
@@ -193,6 +193,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 ExtensionStatus(name=name, package=package, version=version) for name, package, version in extension_names
             ],
             slices=slices,
+            features=[
+                FeatureStatus(slice=feature.slice, name=feature.name, value=self.feature_manager.enabled(feature))
+                for slice in self.feature_manager.get_features().values()
+                for feature in slice.values()
+            ],
         )
 
         return response
