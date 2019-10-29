@@ -814,7 +814,7 @@ class CRUDHandler(ResourceHandler):
             :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
                      fields that require changes.
         """
-        return super()._diff(current, desired)
+        return self._diff(current, desired)
 
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = None) -> None:
         """
