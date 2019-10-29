@@ -85,19 +85,22 @@ def test_phase_1(caplog):
 
 
 def test_phase_2():
-    ibl = InmantaBootloader()
-    all = {"testplugin": inmanta_ext.testplugin.extension.setup}
+    with splice_extension_in("test_module_path"):
+        import inmanta_ext.testplugin.extension
 
-    ctx = ibl._collect_slices(all)
+        ibl = InmantaBootloader()
+        all = {"testplugin": inmanta_ext.testplugin.extension.setup}
 
-    byname = {sl.name: sl for sl in ctx._slices}
-
-    assert "testplugin.testslice" in byname
-
-    # load slice in wrong namespace
-    with pytest.raises(InvalidSliceNameException):
-        all = {"test": inmanta_ext.testplugin.extension.setup}
         ctx = ibl._collect_slices(all)
+
+        byname = {sl.name: sl for sl in ctx._slices}
+
+        assert "testplugin.testslice" in byname
+
+        # load slice in wrong namespace
+        with pytest.raises(InvalidSliceNameException):
+            all = {"test": inmanta_ext.testplugin.extension.setup}
+            ctx = ibl._collect_slices(all)
 
 
 def test_phase_3():
@@ -154,6 +157,8 @@ async def test_startup_failure(async_finalizer, server_config):
         async_finalizer.add(ibl.stop)
         with pytest.raises(Exception) as e:
             await ibl.start()
+
+        print(e.value)
         assert str(e.value) == "Slice badplugin.badslice failed to start because: Too bad, this plugin is broken"
 
     config.server_enabled_extensions.set("")
@@ -237,3 +242,5 @@ async def test_custom_feature_manager(
 
         assert not fm.enabled(None)
         assert not fm.enabled("a")
+
+        await ibl.stop()
