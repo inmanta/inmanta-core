@@ -1157,14 +1157,15 @@ async def test_get_param(server, client, environment):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_server_logs_address(server_config, async_finalizer, caplog):
-    caplog.set_level(logging.INFO)
-    ibl = InmantaBootloader()
-    await ibl.start()
-    async_finalizer.add(ibl.stop)
+async def test_server_logs_address(server_config, caplog):
+    with caplog.at_level(logging.INFO):
+        ibl = InmantaBootloader()
+        await ibl.start()
 
-    client = Client("client")
-    result = await client.create_project("env-test")
-    assert result.code == 200
-    address = "127.0.0.1"
-    log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:")
+        client = Client("client")
+        result = await client.create_project("env-test")
+        assert result.code == 200
+        address = "127.0.0.1"
+
+        await ibl.stop()
+        log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:")
