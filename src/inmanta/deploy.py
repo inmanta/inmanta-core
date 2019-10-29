@@ -476,6 +476,12 @@ port=%(server_port)s
                 time.sleep(1)
 
     def stop(self) -> None:
+        loud_logger = logging.getLogger("inmanta.protocol")
+        loud_logger.propagate = True
+
+        loud_logger = logging.getLogger("tornado")
+        loud_logger.propagate = True
+
         if hasattr(self, "_server_proc"):
             self._server_proc.terminate()
 
