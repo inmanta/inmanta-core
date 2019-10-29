@@ -519,3 +519,75 @@ async def test_purge_on_delete_ignore(client, clienthelper, server, environment)
     assert result.result["model"]["version"] == version
     assert result.result["model"]["total"] == len(resources)
     await agent.stop()
+
+
+@pytest.mark.asyncio
+async def test_disable_purge_on_delete(client, clienthelper, server, environment):
+    """
+        Test disable purge on delete of resources
+    """
+    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
+    await agent.start()
+    aclient = agent._client
+    env = await data.Environment.get_by_id(environment)
+    await env.set(data.PURGE_ON_DELETE, False)
+
+    version = await clienthelper.get_version()
+
+    resources = [
+        {
+            "group": "root",
+            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
+            "owner": "root",
+            "path": "/tmp/file1",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "purge_on_delete": True,
+            "version": version,
+        },
+    ]
+
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert res.code == 200
+
+    # Release the model and set all resources as deployed
+    result = await client.release_version(environment, version, False)
+    assert result.code == 200
+
+    now = datetime.now()
+    result = await aclient.resource_action_update(
+        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+    )
+    assert result.code == 200
+
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["result"] == const.VersionState.success.name
+
+    # Empty version
+    version = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=[],
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["total"] == 0
+
+    await agent.stop()
