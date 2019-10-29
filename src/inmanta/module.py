@@ -608,7 +608,7 @@ class Project(ModuleLike):
             Collect the list of all requirements of all modules in the project.
         """
         if not self.loaded:
-            LOGGER.warning("collecting reqs on project that has not been loaded completely")
+            LOGGER.warning("collecting requirements on project that has not been loaded completely")
 
         specs = {}  # type: Dict[str, List[Requirement]]
         merge_specs(specs, self.requires())
