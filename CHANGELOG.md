@@ -1,4 +1,4 @@
-v 2019.4 (?) Changes in this release:
+v 2019.4 (2019-10-30) Changes in this release:
 - Various bugfixes (#1367,#1398,#736, #1454)
 - Added if statement (#1325)
 - Added CORS Access-Control-Allow-Origin header configuration (#1306)
