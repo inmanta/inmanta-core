@@ -28,12 +28,12 @@ Configuring auto-started agents via environment settings
 Auto-started agents can be configured via the settings of the environment where the auto-started agent belongs to. The
 following options are configurable:
 
-* autostart_agent_map
-* autostart_agent_deploy_interval
-* autostart_agent_deploy_splay_time
-* autostart_agent_repair_interval
-* autostart_agent_repair_splay_time
-* autostart_on_start
+* :inmanta.environment-settings:setting:`autostart_agent_map`
+* :inmanta.environment-settings:setting:`autostart_agent_deploy_interval`
+* :inmanta.environment-settings:setting:`autostart_agent_deploy_splay_time`
+* :inmanta.environment-settings:setting:`autostart_agent_repair_interval`
+* :inmanta.environment-settings:setting:`autostart_agent_repair_splay_time`
+* :inmanta.environment-settings:setting:`autostart_on_start`
 
 The :inmanta.environment-settings:setting:`autostart_agent_map` requires an entry for each agent that should be autostarted.
 The key is the name of the agent and the value is either ``local:`` for agents that map to the Inmanta server or an SSH
