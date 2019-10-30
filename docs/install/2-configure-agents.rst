@@ -28,17 +28,18 @@ Configuring auto-started agents via environment settings
 Auto-started agents can be configured via the settings of the environment where the auto-started agent belongs to. The
 following options are configurable:
 
-* autostart_agent_map
-* autostart_agent_deploy_interval
-* autostart_agent_deploy_splay_time
-* autostart_agent_repair_interval
-* autostart_agent_repair_splay_time
-* autostart_on_start
+* :inmanta.environment-settings:setting:`autostart_agent_map`
+* :inmanta.environment-settings:setting:`autostart_agent_deploy_interval`
+* :inmanta.environment-settings:setting:`autostart_agent_deploy_splay_time`
+* :inmanta.environment-settings:setting:`autostart_agent_repair_interval`
+* :inmanta.environment-settings:setting:`autostart_agent_repair_splay_time`
+* :inmanta.environment-settings:setting:`autostart_on_start`
 
-The ``autostarted_agent_map`` requires an entry for each agent that should be autostarted. The key is the name of the agent and
-the value is either ``local:`` for agents that map to the Inmanta server or an SSH connection string when the agent maps to a
-remote machine. The SSH connection string requires the following format: ``ssh://<user>@<host>:<port>?<options>``. Options
-is a ampersand-separated list of ``key=value`` pairs. The following options can be provided:
+The :inmanta.environment-settings:setting:`autostart_agent_map` requires an entry for each agent that should be autostarted.
+The key is the name of the agent and the value is either ``local:`` for agents that map to the Inmanta server or an SSH
+connection string when the agent maps to a remote machine. The SSH connection string requires the following format:
+``ssh://<user>@<host>:<port>?<options>``. Options is a ampersand-separated list of ``key=value`` pairs. The following options
+can be provided:
 
 ===========  =============  =====================================================================================================================
 Option name  Default value  Description
@@ -50,14 +51,15 @@ python       python         The Python2 interpreter available on the remote side
 
 
 Auto-started agents start when they are required by a specific deployment or when the Inmanta server starts if the
-``autostart_on_start`` setting is set to true.
+:inmanta.environment-settings:setting:`autostart_on_start` setting is set to true.
 
 
 Configuring the autostart_agent_map via the std::AgentConfig entity
 ===================================================================
 
-The :inmanta:entity:`std::AgentConfig` entity provides functionality to add an entry to the ``autostart_agent_map`` of a
-specific environment. As such, the auto-started agents can be managed in the configuration model.
+The :inmanta:entity:`std::AgentConfig` entity provides functionality to add an entry to the
+:inmanta.environment-settings:setting:`autostart_agent_map` of a specific environment. As such, the auto-started agents can be
+managed in the configuration model.
 
 
 Manually-started agents
