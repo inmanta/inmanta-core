@@ -203,3 +203,29 @@ def test_resource_with_private_method(snippetcompiler):
 
     with pytest.raises(ResourceException):
         snippetcompiler.do_export()
+
+
+def test_object_to_id(snippetcompiler):
+    import inmanta.resources
+
+    @resource("__config__::MYResource", agent="agent", id_attribute="key")
+    class MyResource(inmanta.resources.Resource):
+        fields = ("key", "value", "agent")
+
+    snippetcompiler.setup_for_snippet(
+        """
+        import tests
+        entity MYResource:
+            string key
+            string agent
+            string value
+        end
+
+        implement MYResource using std::none
+
+        x = MYResource(key="key", agent="agent", value="value")
+        std::print(tests::get_id(x))
+        """
+    )
+
+    snippetcompiler.do_export()

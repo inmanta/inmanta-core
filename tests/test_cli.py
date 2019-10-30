@@ -18,6 +18,7 @@
 import pytest
 
 from inmanta import data
+from inmanta.util import get_compiler_version
 
 
 @pytest.mark.asyncio
@@ -133,8 +134,8 @@ async def test_agent(server, client, environment, cli):
 
 @pytest.mark.parametrize("push_method", [([]), (["-p"]), (["-p", "--full"])])
 @pytest.mark.asyncio
-async def test_version(server, client, environment, cli, push_method):
-    version = "12345"
+async def test_version(server, client, clienthelper, environment, cli, push_method):
+    version = str(await clienthelper.get_version())
     resources = [
         {
             "key": "key1",
@@ -162,7 +163,14 @@ async def test_version(server, client, environment, cli, push_method):
         },
     ]
 
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
     assert result.code == 200
 
     result = await cli.run("version", "list", "-e", environment)
@@ -257,6 +265,9 @@ async def test_form_and_records(server, client, environment, cli):
 
 @pytest.mark.asyncio
 async def test_import_export(server, client, environment, cli, tmpdir):
+    env = await data.Environment.get_by_id(environment)
+    await env.set(data.SERVER_COMPILE, False)
+
     form_type = "FormType"
     result = await client.put_form(
         tid=environment,
@@ -270,16 +281,21 @@ async def test_import_export(server, client, environment, cli, tmpdir):
             "type": form_type,
         },
     )
+    assert result.code == 200
     form_id = result.result["form"]["id"]
 
     result = await cli.run("record", "create", "-e", environment, "-t", form_type, "-p", "field1=1234", "-p", "field2=test456")
     assert result.exit_code == 0
 
     result = await cli.run("form", "export", "-e", environment, "-t", form_type)
+    assert result.exit_code == 0, f"{result.output}"
     assert form_id in result.output
 
     f = tmpdir.join("export.json")
-    f.write(result.output)
+    print(result.output)
+    print(str(f))
+    with open(str(f), "w") as fh:
+        fh.write(result.output)
 
     records = await client.list_records(tid=environment, form_type=form_type)
     assert records.code == 200
@@ -291,6 +307,7 @@ async def test_import_export(server, client, environment, cli, tmpdir):
     assert len(records.result["records"]) == 0
 
     result = await cli.run("form", "import", "-e", environment, "-t", form_type, "--file", str(f))
+    assert result.exit_code == 0
 
     records = await client.list_records(tid=environment, form_type=form_type)
     assert records.code == 200

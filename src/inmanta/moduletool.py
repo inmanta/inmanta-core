@@ -25,16 +25,21 @@ import tempfile
 import time
 from argparse import ArgumentParser
 from collections import OrderedDict
+from typing import TYPE_CHECKING, Iterable, List, Mapping
 
 import texttable
 import yaml
 from pkg_resources import parse_version
 
 import inmanta
-from inmanta.ast import Namespace
-from inmanta.command import CLIException
+from inmanta.ast import Namespace, RuntimeException
+from inmanta.command import CLIException, ShowUsageException
+from inmanta.const import MAX_UPDATE_ATTEMPT
 from inmanta.module import INSTALL_MASTER, INSTALL_RELEASES, Module, Project, gitprovider
 from inmanta.parser.plyInmantaParser import parse
+
+if TYPE_CHECKING:
+    from pkg_resources import Requirement  # noqa: F401
 
 LOGGER = logging.getLogger(__name__)
 
@@ -75,7 +80,11 @@ class ModuleLikeTool(object):
             outargs = {k: getattr(args, k) for k in margs if hasattr(args, k)}
             method(**outargs)
         else:
-            raise Exception("%s not implemented" % cmd)
+            if cmd is None or cmd == "":
+                msg = "A subcommand is required."
+            else:
+                msg = f"{cmd} does not exist."
+            raise ShowUsageException(msg)
 
     def get_project(self, load=False) -> Project:
         project = Project.get()
@@ -193,14 +202,22 @@ class ProjectTool(ModuleLikeTool):
         requires = sorted([k + " " + v for k, v in freeze.items()])
         newconfig["requires"] = requires
 
+        close = False
+
         if outfile is None:
             outfile = open(project.get_config_file_name(), "w", encoding="UTF-8")
+            close = True
         elif outfile == "-":
             outfile = sys.stdout
         else:
             outfile = open(outfile, "w", encoding="UTF-8")
+            close = True
 
-        outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
+        try:
+            outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
+        finally:
+            if close:
+                outfile.close()
 
 
 class ModuleTool(ModuleLikeTool):
@@ -299,8 +316,7 @@ class ModuleTool(ModuleLikeTool):
     def get_module(self, module: str = None, project=None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
-            module = Module(self.get_project_for_module(module), os.path.realpath(os.curdir))
-            return module
+            return Module(self.get_project_for_module(module), os.path.realpath(os.curdir))
         else:
             project = self.get_project(load=True)
             return project.get_module(module)
@@ -407,33 +423,62 @@ version: 0.0.1dev0"""
                 t.add_row(row)
             print(t.draw())
 
-    def update(self, module=None, project=None):
+    def update(self, module: str = None, project: Project = None):
         """
             Update all modules from their source
         """
 
         if project is None:
-            project = self.get_project(False)
-
-        project.get_complete_ast()
-        specs = project.collect_imported_requirements()
-
-        if module is None:
-            for name, spec in specs.items():
-                print("updating module: %s" % name)
-                try:
-                    Module.update(project, name, spec, install_mode=project._install_mode)
-                except Exception:
-                    LOGGER.exception("Failed to update module")
+            # rename var to make mypy happy
+            my_project = self.get_project(False)
         else:
-            if module not in specs:
-                print("Could not find module: %s" % module)
-            else:
-                spec = specs[module]
+            my_project = project
+
+        def do_update(specs: "Mapping[str, Iterable[Requirement]]", modules: List[str]) -> None:
+            for module in modules:
+                spec = specs.get(module, [])
                 try:
-                    Module.update(project, module, spec, install_mode=project._install_mode)
+                    Module.update(my_project, module, spec, install_mode=my_project._install_mode)
                 except Exception:
-                    LOGGER.exception("Failed to update module")
+                    LOGGER.exception("Failed to update module %s", module)
+
+        attempt = 0
+        done = False
+        last_failure = None
+
+        while not done and attempt < MAX_UPDATE_ATTEMPT:
+            LOGGER.info("Performing update attempt %d of %d", attempt + 1, MAX_UPDATE_ATTEMPT)
+            try:
+                # get AST
+                my_project.get_complete_ast()
+                # get current full set of requirements
+                specs = my_project.collect_imported_requirements()
+                if module is None:
+                    modules = list(specs.keys())
+                else:
+                    modules = [module]
+                do_update(specs, modules)
+                done = True
+            except RuntimeException as e:
+                last_failure = e
+                # model is corrupt
+                LOGGER.info(
+                    "The model is not currently in an executable state, performing intermediate updates", stack_info=True
+                )
+                # get all specs from all already loaded modules
+                specs = my_project.collect_requirements()
+
+                if module is None:
+                    # get all loaded/partly loaded modules
+                    modules = list(my_project.modules.keys())
+                else:
+                    modules = [module]
+                do_update(specs, modules)
+                # this should resolve the exception, get_complete_ast should find additional modules/constraints
+                attempt += 1
+
+        if last_failure is not None and not done:
+            raise last_failure
 
     def install(self, module=None, project=None):
         """

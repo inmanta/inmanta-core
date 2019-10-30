@@ -29,6 +29,7 @@ import time
 import uuid
 import warnings
 from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
+from functools import lru_cache
 from logging import Logger
 from typing import Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
 
@@ -37,7 +38,7 @@ from tornado import gen
 from tornado.ioloop import IOLoop
 
 from inmanta.data.model import BaseModel
-from inmanta.types import JsonType
+from inmanta.types import JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -59,6 +60,7 @@ def memoize(obj):
     return memoizer
 
 
+@lru_cache(maxsize=1)
 def get_compiler_version() -> Optional[str]:
     try:
         return pkg_resources.get_distribution("inmanta").version
@@ -79,6 +81,10 @@ def ensure_directory_exist(directory: str, *subdirs: str) -> str:
     if not os.path.exists(directory):
         os.mkdir(directory)
     return directory
+
+
+def is_sub_dict(subdct: Dict[PrimitiveTypes, PrimitiveTypes], dct: Dict[PrimitiveTypes, PrimitiveTypes]):
+    return not any(True for k, v in subdct.items() if k not in dct or dct[k] != v)
 
 
 def hash_file(content: bytes) -> str:
@@ -187,11 +193,10 @@ def get_free_tcp_port() -> str:
     """
         Semi safe method for getting a random port. This may contain a race condition.
     """
-    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tcp.bind(("", 0))
-    _addr, port = tcp.getsockname()
-    tcp.close()
-    return str(port)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp:
+        tcp.bind(("", 0))
+        _addr, port = tcp.getsockname()
+        return str(port)
 
 
 def custom_json_encoder(o: object) -> Union[Dict, str, List]:

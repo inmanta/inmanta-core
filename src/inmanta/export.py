@@ -37,7 +37,7 @@ from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
-from inmanta.util import groupby, hash_file
+from inmanta.util import get_compiler_version, groupby, hash_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -130,7 +130,6 @@ class Exporter(object):
         self.options = options
 
         self._resources: ResourceDict = {}
-        self._resource_to_host: Dict[Id, str] = {}
         self._resource_state: Dict[str, ResourceState] = {}
         self._unknown_objects: Set[str] = set()
         self._version = 0
@@ -237,7 +236,7 @@ class Exporter(object):
             if current in working:
                 raise DependencyCycleException(current)
             working.add(current)
-            for dep in current.requires:
+            for dep in current.resource_requires:
                 try:
                     find_cycle(dep, working)
                 except DependencyCycleException as e:
@@ -253,16 +252,30 @@ class Exporter(object):
         if self.options and self.options.depgraph:
             dot = "digraph G {\n"
             for res in self._resources.values():
-                res_id = str(res.id)
+                res_id = res.id.resource_version_str()
                 dot += '\t"%s";\n' % res_id
 
-                for req in res.requires:
+                for req in res.resource_requires:
                     dot += '\t"%s" -> "%s";\n' % (res_id, str(req))
 
             dot += "}\n"
 
             with open("dependencies.dot", "wb+") as fd:
                 fd.write(dot.encode())
+
+    def get_version(self, no_commit=False):
+        if no_commit:
+            return 0
+        tid = cfg_env.get()
+        if tid is None:
+            LOGGER.warning("The environment for this model should be set for export to server!")
+            return 0
+        else:
+            conn = protocol.SyncClient("compiler")
+            result = conn.reserve_version(tid)
+            if result.code != 200:
+                raise Exception(f"Unable to reserve version number from server (msg: {result.result})")
+            return result.result["data"]
 
     def run(
         self,
@@ -279,7 +292,7 @@ class Exporter(object):
         """
         self.types = types
         self.scopes = scopes
-        self._version = int(time.time())
+        self._version = self.get_version(no_commit)
 
         if types is not None:
             # then process the configuration model to submit it to the mgmt server
@@ -360,7 +373,6 @@ class Exporter(object):
             self._resource_state[resource.id.resource_str()] = const.ResourceState.available
 
         self._resources[resource.id] = resource
-        self._resource_to_host[resource.id] = resource.id.agent_name
 
     def resources_to_list(self) -> List[Dict[str, Any]]:
         """ Convert the resource list to a json representation
@@ -443,6 +455,7 @@ class Exporter(object):
             unknowns=unknown_parameters,
             resource_state=self._resource_state,
             version_info=version_info,
+            compiler_version=get_compiler_version(),
         )
 
         if res.code != 200:

@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -24,15 +24,28 @@ import typing
 import uuid
 from collections import defaultdict
 from concurrent.futures import Future
-from typing import Dict, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar, Union, cast, overload
 
 from tornado import concurrent
 
 from inmanta import const, data, protocol, resources
+from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
-from inmanta.agent.io import get_io
+from inmanta.const import ResourceState
+from inmanta.data.model import AttributeStateChange
+from inmanta.protocol import Result
+from inmanta.types import SimpleTypes
+from inmanta.util import hash_file
+
+if typing.TYPE_CHECKING:
+    import inmanta.agent.agent
+    from inmanta.agent.io.local import IOBase
+
 
 LOGGER = logging.getLogger(__name__)
+
+T = TypeVar("T")
+T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
 
 class provider(object):  # noqa: N801
@@ -77,13 +90,13 @@ class InvalidOperation(Exception):
 
 
 def cache(
-    f=None,
+    func: T_FUNC = None,
     ignore: typing.List[str] = [],
     timeout: int = 5000,
     for_version: bool = True,
     cache_none: bool = True,
     cacheNone: bool = True,  # noqa: N803
-):
+) -> Union[T_FUNC, Callable[[T_FUNC], T_FUNC]]:
     """
         decorator for methods in resource handlers to provide caching
 
@@ -104,7 +117,7 @@ def cache(
         :param cache_none: cache returned none values
     """
 
-    def actual(f):
+    def actual(f) -> T_FUNC:
         myignore = set(ignore)
         sig = inspect.signature(f)
         myargs = list(sig.parameters.keys())[1:]
@@ -119,12 +132,13 @@ def cache(
             cache_none = cacheNone
             return self.cache.get_or_else(f.__name__, bound, for_version, timeout, myignore, cache_none, **kwds)
 
-        return wrapper
+        # Too much magic to type statically
+        return cast(T_FUNC, wrapper)
 
-    if f is None:
+    if func is None:
         return actual
     else:
-        return actual(f)
+        return actual(func)
 
 
 class HandlerContext(object):
@@ -132,23 +146,29 @@ class HandlerContext(object):
         Context passed to handler methods for state related "things"
     """
 
-    def __init__(self, resource, dry_run=False, action_id=None, logger=None):
+    def __init__(
+        self,
+        resource: resources.Resource,
+        dry_run: bool = False,
+        action_id: Optional[uuid.UUID] = None,
+        logger: logging.Logger = None,
+    ) -> None:
         self._resource = resource
         self._dry_run = dry_run
-        self._cache = {}
+        self._cache: Dict[str, Any] = {}
 
         self._purged = False
         self._updated = False
         self._created = False
         self._change = const.Change.nochange
 
-        self._changes: Dict[str, Dict[str, str]] = {}
+        self._changes: Dict[str, AttributeStateChange] = {}
 
         if action_id is None:
             action_id = uuid.uuid4()
         self._action_id = action_id
-        self._status = None
-        self._logs = []
+        self._status: Optional[ResourceState] = None
+        self._logs: List[data.LogLine] = []
         if logger is None:
             self.logger = LOGGER
         else:
@@ -159,11 +179,11 @@ class HandlerContext(object):
         return self._action_id
 
     @property
-    def status(self) -> const.ResourceState:
+    def status(self) -> Optional[const.ResourceState]:
         return self._status
 
     @property
-    def logs(self) -> list:
+    def logs(self) -> List[data.LogLine]:
         return self._logs
 
     def set_status(self, status: const.ResourceState) -> None:
@@ -172,29 +192,29 @@ class HandlerContext(object):
         """
         self._status = status
 
-    def is_dry_run(self):
+    def is_dry_run(self) -> bool:
         """
             Is this a dryrun?
         """
         return self._dry_run
 
-    def get(self, name):
+    def get(self, name: str) -> Any:
         return self._cache[name]
 
-    def contains(self, key):
+    def contains(self, key: str) -> bool:
         return key in self._cache
 
-    def set(self, name, value):
+    def set(self, name: str, value: Any) -> None:
         self._cache[name] = value
 
-    def set_created(self):
+    def set_created(self) -> None:
         self._created = True
         if self._change is not const.Change.nochange:
             raise InvalidOperation(f"Unable to set {const.Change.created} operation, {self._change} already set.")
 
         self._change = const.Change.created
 
-    def set_purged(self):
+    def set_purged(self) -> None:
         self._purged = True
 
         if self._change is not const.Change.nochange:
@@ -202,7 +222,7 @@ class HandlerContext(object):
 
         self._change = const.Change.purged
 
-    def set_updated(self):
+    def set_updated(self) -> None:
         self._updated = True
 
         if self._change is not const.Change.nochange:
@@ -211,7 +231,7 @@ class HandlerContext(object):
         self._change = const.Change.updated
 
     @property
-    def changed(self):
+    def changed(self) -> bool:
         return self._created or self._updated or self._purged
 
     @property
@@ -226,9 +246,9 @@ class HandlerContext(object):
             :param desired: The desired value to which the field was updated (or should be updated)
             :param current: The value of the field before it was updated
         """
-        self._changes[name] = {"current": current, "desired": desired}
+        self._changes[name] = AttributeStateChange(current=current, desired=desired)
 
-    def add_changes(self, **kwargs):
+    def add_changes(self, **kwargs: SimpleTypes) -> None:
         """
             Report a list of changes at once as kwargs
 
@@ -238,29 +258,62 @@ class HandlerContext(object):
             To report the previous value of the field, use the add_change method
         """
         for field, value in kwargs.items():
-            self._changes[field] = {"desired": value}
+            self._changes[field] = AttributeStateChange(desired=value)
 
-    def fields_updated(self, fields):
+    def fields_updated(self, fields: str) -> None:
         """
             Report that fields have been updated
         """
         for field in fields:
             if field not in self._changes:
-                self._changes[fields] = {}
+                self._changes[fields] = AttributeStateChange()
 
-    def update_changes(self, changes: dict):
+    @overload  # noqa: F811
+    def update_changes(self, changes: Dict[str, AttributeStateChange]) -> None:
+        pass
+
+    @overload  # noqa: F811
+    def update_changes(self, changes: Dict[str, Dict[str, Optional[SimpleTypes]]]) -> None:
+        pass
+
+    @overload  # noqa: F811
+    def update_changes(self, changes: Dict[str, Tuple[SimpleTypes, SimpleTypes]]) -> None:
+        pass
+
+    def update_changes(  # noqa: F811
+        self,
+        changes: Union[
+            Dict[str, AttributeStateChange],
+            Dict[str, Dict[str, Optional[SimpleTypes]]],
+            Dict[str, Tuple[SimpleTypes, SimpleTypes]],
+        ],
+    ) -> None:
         """
             Update the changes list with changes
 
             :param changes: This should be a dict with a value a dict containing "current" and "desired" keys
         """
-        self._changes.update(changes)
+        for attribute, change in changes.items():
+            if isinstance(change, dict):
+                self._changes[attribute] = AttributeStateChange(
+                    current=change.get("current", None), desired=change.get("desired", None)
+                )
+            elif isinstance(change, tuple):
+                if len(change) != 2:
+                    raise InvalidOperation(
+                        f"Reported changes for {attribute} not valid. Tuple changes should contain 2 element."
+                    )
+                self._changes[attribute] = AttributeStateChange(current=change[0], desired=change[1])
+            elif isinstance(change, AttributeStateChange):
+                self._changes[attribute] = change
+            else:
+                raise InvalidOperation(f"Reported changes for {attribute} not in a type that is recognized.")
 
     @property
-    def changes(self) -> Dict[str, Dict[str, str]]:
+    def changes(self) -> Dict[str, AttributeStateChange]:
         return self._changes
 
-    def log_msg(self, level: int, msg: str, args: list, kwargs: dict) -> dict:
+    def log_msg(self, level: int, msg: str, args: Sequence, kwargs: dict) -> None:
         if len(args) > 0:
             raise Exception("Args not supported")
         if "exc_info" in kwargs:
@@ -347,7 +400,7 @@ class ResourceHandler(object):
         :param io: The io object to use.
     """
 
-    def __init__(self, agent, io=None) -> None:
+    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: "IOBase" = None) -> None:
         self._agent = agent
 
         if io is None:
@@ -355,11 +408,11 @@ class ResourceHandler(object):
         else:
             self._io = io
 
-        self._client = None
+        self._client: Optional[protocol.SessionClient] = None
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
 
-    def run_sync(self, func: typing.Callable) -> typing.Any:
+    def run_sync(self, func: typing.Callable[[], T]) -> T:
         """
             Run a the given async function on the ioloop of the agent. It will block the current thread until the future
             resolves.
@@ -367,8 +420,9 @@ class ResourceHandler(object):
             :param func: A function that returns a yieldable future.
             :return: The result of the async function.
         """
-        f = Future()
+        f: Future[T] = Future()
 
+        # This function is not typed because of generics, the used methods and currying
         def run():
             try:
                 result = func()
@@ -430,7 +484,7 @@ class ResourceHandler(object):
             :param resource: The resource to process the events for.
             :param dict: A dict with events of the resource the given resource requires. The keys of the dict are the resources.
                          Each value is a dict with the items status (const.ResourceState), changes (dict) and
-                         change (const.Change).
+                         change (const.Change). The value is also defined by inmanta.data.model.Event
         """
 
         # ctx.status == const.ResourceState.deployed is only true if
@@ -641,7 +695,7 @@ class ResourceHandler(object):
         """
         return True
 
-    def get_file(self, hash_id) -> bytes:
+    def get_file(self, hash_id: str) -> Optional[bytes]:
         """
             Retrieve a file from the fileserver identified with the given id. The convention is to use the sha1sum of the
             content to identify it.
@@ -650,14 +704,18 @@ class ResourceHandler(object):
             :return: The content in the form of a bytestring or none is the content does not exist.
         """
 
-        def call():
+        def call() -> Result:
             return self.get_client().get_file(hash_id)
 
         result = self.run_sync(call)
         if result.code == 404:
             return None
         elif result.code == 200:
-            return base64.b64decode(result.result["content"])
+            file_contents = base64.b64decode(result.result["content"])
+            actual_hash_of_file = hash_file(file_contents)
+            if hash_id != actual_hash_of_file:
+                raise Exception(f"File hash verification failed, expected: {hash_id} but got {actual_hash_of_file}")
+            return file_contents
         else:
             raise Exception("An error occurred while retrieving file %s" % hash_id)
 
@@ -669,7 +727,7 @@ class ResourceHandler(object):
             :return: True if the file is available on the server.
         """
 
-        def call():
+        def call() -> Result:
             return self.get_client().stat_file(hash_id)
 
         result = self.run_sync(call)
@@ -683,7 +741,7 @@ class ResourceHandler(object):
             :param content: A byte string with the content
         """
 
-        def call():
+        def call() -> Result:
             return self.get_client().upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
         try:
@@ -742,7 +800,23 @@ class CRUDHandler(ResourceHandler):
             :param resource: The desired resource state.
         """
 
-    def execute(self, ctx: HandlerContext, resource: resources.PurgeableResource, dry_run: bool = None) -> None:
+    def calculate_diff(
+        self, ctx: HandlerContext, current: resources.Resource, desired: resources.Resource
+    ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+        """
+            Calculate the diff between the current and desired resource state.
+
+            :param ctx: Context can be used to get values discovered in the read method. For example, the id used in API
+                        calls. This context should also be used to let the handler know what changes were made to the
+                        resource.
+            :param current: The current state of the resource
+            :param desired: The desired state of the resource
+            :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
+                     fields that require changes.
+        """
+        return self._diff(current, desired)
+
+    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = None) -> None:
         """
             Update the given resource. This method is called by the agent. Override the CRUD methods of this class.
 
@@ -755,15 +829,19 @@ class CRUDHandler(ResourceHandler):
 
             # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
             # state defines purged=true but the read_resource fails to set it to false if the resource does exist
-            current = resource.clone(purged=False)
-            changes = {}
+            desired = resource
+            assert isinstance(desired, resources.PurgeableResource)
+            current = desired.clone(purged=False)
+            assert isinstance(current, resources.PurgeableResource)
+            changes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
             try:
+                ctx.debug("Calling read_resource")
                 self.read_resource(ctx, current)
-                changes = self._diff(current, resource)
+                changes = self.calculate_diff(ctx, current, desired)
 
             except ResourcePurged:
-                if not resource.purged:
-                    changes["purged"] = dict(desired=resource.purged, current=True)
+                if not desired.purged:
+                    changes["purged"] = dict(desired=desired.purged, current=True)
 
             for field, values in changes.items():
                 ctx.add_change(field, desired=values["desired"], current=values["current"])
@@ -771,12 +849,15 @@ class CRUDHandler(ResourceHandler):
             if not dry_run:
                 if "purged" in changes:
                     if not changes["purged"]["desired"]:
-                        self.create_resource(ctx, resource)
+                        ctx.debug("Calling create_resource")
+                        self.create_resource(ctx, desired)
                     else:
-                        self.delete_resource(ctx, resource)
+                        ctx.debug("Calling delete_resource")
+                        self.delete_resource(ctx, desired)
 
                 elif len(changes) > 0:
-                    self.update_resource(ctx, changes, resource)
+                    ctx.debug("Calling update_resource", changes=changes)
+                    self.update_resource(ctx, changes, desired)
 
                 ctx.set_status(const.ResourceState.deployed)
             else:
@@ -810,50 +891,50 @@ class Commander(object):
         This class handles commands
     """
 
-    __command_functions = defaultdict(dict)
-    __handlers = []
-    __handler_cache = {}
+    __command_functions: Dict[str, Dict[str, Type[ResourceHandler]]] = defaultdict(dict)
 
     @classmethod
-    def get_handlers(cls):
+    def get_handlers(cls) -> Dict[str, Dict[str, Type[ResourceHandler]]]:
         return cls.__command_functions
 
     @classmethod
-    def reset(cls):
+    def reset(cls) -> None:
         cls.__command_functions = defaultdict(dict)
-        cls.__handlers = []
-        cls.__handler_cache = {}
 
     @classmethod
-    def close(cls):
+    def close(cls) -> None:
         pass
 
     @classmethod
-    def _get_instance(cls, handler_class: type, agent, io) -> ResourceHandler:
+    def _get_instance(
+        cls, handler_class: Type[ResourceHandler], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
+    ) -> ResourceHandler:
         new_instance = handler_class(agent, io)
         return new_instance
 
     @classmethod
-    def get_provider(cls, cache, agent, resource) -> ResourceHandler:
+    def get_provider(
+        cls, cache: AgentCache, agent: "inmanta.agent.agent.AgentInstance", resource: resources.Resource
+    ) -> ResourceHandler:
         """
             Return a provider to handle the given resource
         """
         resource_id = resource.id
-        resource_type = resource_id.entity_type
+        resource_type = resource_id.get_entity_type()
         try:
-            io = get_io(cache, agent.uri, resource_id.version)
+            agent_io = io.get_io(cache, agent.uri, resource_id.get_version())
         except Exception:
             LOGGER.exception("Exception raised during creation of IO for uri %s", agent.uri)
             raise Exception("No handler available for %s (no io available)" % resource_id)
 
-        if io is None:
+        if agent_io is None:
             # Skip this resource
             raise Exception("No handler available for %s (no io available)" % resource_id)
 
         available = []
         if resource_type in cls.__command_functions:
             for handlr in cls.__command_functions[resource_type].values():
-                h = cls._get_instance(handlr, agent, io)
+                h = cls._get_instance(handlr, agent, agent_io)
                 if h.available(resource):
                     available.append(h)
                 else:
@@ -863,7 +944,7 @@ class Commander(object):
             for h in available:
                 h.close()
 
-            io.close()
+            agent_io.close()
             raise Exception("More than one handler selected for resource %s" % resource.id)
 
         elif len(available) == 1:
@@ -872,7 +953,7 @@ class Commander(object):
         raise Exception("No resource handler registered for resource of type %s" % resource_type)
 
     @classmethod
-    def add_provider(cls, resource: str, name: str, provider):
+    def add_provider(cls, resource: str, name: str, provider: Type["ResourceHandler"]) -> None:
         """
             Register a new provider
 
@@ -894,7 +975,7 @@ class Commander(object):
                 yield (resource_type, handler_class)
 
     @classmethod
-    def get_provider_class(cls, resource_type, name):
+    def get_provider_class(cls, resource_type: str, name: str) -> Optional[typing.Type["ResourceHandler"]]:
         """
             Return the class of the handler for the given type and with the given name
         """

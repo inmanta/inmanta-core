@@ -20,8 +20,11 @@ import inspect
 import json
 import logging
 import time
+import uuid
 
 from inmanta import data
+from inmanta.protocol import Client
+from inmanta.util import get_compiler_version
 
 
 async def retry_limited(fun, timeout):
@@ -65,7 +68,9 @@ def assert_equal_ish(minimal, actual, sortby=[]):
 
 
 def assert_graph(graph, expected):
-    lines = ["%s: %s" % (f.id.get_attribute_value(), t.id.get_attribute_value()) for f in graph.values() for t in f.requires]
+    lines = [
+        "%s: %s" % (f.id.get_attribute_value(), t.id.get_attribute_value()) for f in graph.values() for t in f.resource_requires
+    ]
     lines = sorted(lines)
 
     elines = [x.strip() for x in expected.split("\n")]
@@ -93,9 +98,10 @@ def no_error_in_logs(caplog, levels=[logging.ERROR], ignore_namespaces=["tornado
         assert log_level not in levels, f"{logger_name} {log_level} {message}"
 
 
-def log_contains(caplog, loggerpart, level, msg):
+def log_contains(caplog, loggerpart, level, msg, test_phase="call"):
     close = []
-    for logger_name, log_level, message in caplog.record_tuples:
+    for record in caplog.get_records(test_phase):
+        logger_name, log_level, message = record.name, record.levelno, record.message
         if msg in message:
             if loggerpart in logger_name and level == log_level:
                 return
@@ -185,7 +191,7 @@ def configure(unused_tcp_port, database_name, database_port):
 
     free_port = str(unused_tcp_port)
     Config.load_config()
-    Config.set("server_rest_transport", "port", free_port)
+    Config.set("server", "bind-port", free_port)
     Config.set("agent_rest_transport", "port", free_port)
     Config.set("compiler_rest_transport", "port", free_port)
     Config.set("client_rest_transport", "port", free_port)
@@ -209,8 +215,6 @@ async def report_db_index_usage(min_precent=100):
 
 
 async def wait_for_version(client, environment, cnt):
-    start = time.time()
-
     # Wait until the server is no longer compiling
     # wait for it to finish
     async def compile_done():
@@ -233,8 +237,36 @@ async def wait_for_version(client, environment, cnt):
 
     await retry_limited(sufficient_versions, 10)
 
-    # Added until #1011 is implemented
-    nextsecond = int(start) + 1
-    await asyncio.sleep(nextsecond - time.time())
     versions = await client.list_versions(environment)
     return versions.result
+
+
+async def _wait_until_deployment_finishes(client, environment, version, timeout=10):
+    async def is_deployment_finished():
+        result = await client.get_version(environment, version)
+        print(version, result.result)
+        return result.result["model"]["total"] - result.result["model"]["done"] <= 0
+
+    await retry_limited(is_deployment_finished, timeout)
+
+
+class ClientHelper(object):
+    def __init__(self, client: Client, environment: uuid.UUID) -> None:
+        self.client = client
+        self.environment = environment
+
+    async def get_version(self):
+        res = await self.client.reserve_version(self.environment)
+        assert res.code == 200
+        return res.result["data"]
+
+    async def put_version_simple(self, resources, version):
+        res = await self.client.put_version(
+            tid=self.environment,
+            version=version,
+            resources=resources,
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
+        )
+        assert res.code == 200, res.result

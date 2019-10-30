@@ -32,7 +32,9 @@ from inmanta import const
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.common import UrlMethod
 from inmanta.protocol.rest import CONTENT_TYPE, JSON_CONTENT, LOGGER, RESTBase
-from inmanta.types import JsonType
+from inmanta.server import config as server_config
+from inmanta.server.config import server_access_control_allow_origin, server_enable_auth
+from inmanta.types import ReturnTypes
 
 
 class RESTHandler(tornado.web.RequestHandler):
@@ -70,7 +72,15 @@ class RESTHandler(tornado.web.RequestHandler):
 
         return common.decode_token(parts[1])
 
-    def respond(self, body: Optional[JsonType], headers: Dict[str, str], status: int) -> None:
+    def prepare(self) -> None:
+        # Setting "Access-Control-Allow-Origin": null can be exploited.
+        # better not set it all instead.
+        # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin
+        server_origin = server_access_control_allow_origin.get()
+        if server_origin is not None:
+            self.set_header("Access-Control-Allow-Origin", server_origin)
+
+    def respond(self, body: ReturnTypes, headers: MutableMapping[str, str], status: int) -> None:
         if CONTENT_TYPE not in headers:
             headers[CONTENT_TYPE] = JSON_CONTENT
         elif headers[CONTENT_TYPE] != JSON_CONTENT:
@@ -96,7 +106,6 @@ class RESTHandler(tornado.web.RequestHandler):
 
         with timer("rpc." + call_config.method_name).time():
             self._transport.start_request()
-            self.set_header("Access-Control-Allow-Origin", "*")
             try:
                 message = self._transport._decode(self.request.body)
                 if message is None:
@@ -111,7 +120,7 @@ class RESTHandler(tornado.web.RequestHandler):
                 request_headers = self.request.headers
                 auth_token = self.get_auth_token(request_headers)
 
-                auth_enabled: bool = inmanta_config.Config.get("server", "auth", False)
+                auth_enabled = server_enable_auth.get()
                 if not auth_enabled or auth_token is not None:
                     result = await self._transport._execute_call(
                         kwargs, http_method, call_config, message, request_headers, auth_token
@@ -190,7 +199,6 @@ class RESTHandler(tornado.web.RequestHandler):
         if len(self._transport.headers):
             allow_headers += ", " + ", ".join(self._transport.headers)
 
-        self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
         self.set_header("Access-Control-Allow-Headers", allow_headers)
 
@@ -263,10 +271,6 @@ class RESTServer(RESTBase):
             rules.append(routing.Rule(routing.PathMatches(url), RESTHandler, {"transport": self, "config": handler_config}))
             LOGGER.debug("Registering handler(s) for url %s and methods %s", url, ", ".join(handler_config.keys()))
 
-        port = 8888
-        if self.id in inmanta_config.Config.get() and "port" in inmanta_config.Config.get()[self.id]:
-            port = inmanta_config.Config.get()[self.id]["port"]
-
         application = web.Application(rules, compress_response=True)
 
         crt = inmanta_config.Config.get("server", "ssl_cert_file", None)
@@ -280,7 +284,13 @@ class RESTServer(RESTBase):
             LOGGER.debug("Created REST transport with SSL")
         else:
             self._http_server = httpserver.HTTPServer(application, decompress_request=True)
-        self._http_server.listen(port)
+
+        bind_port = server_config.get_bind_port()
+        bind_addresses = server_config.server_bind_address.get()
+
+        for bind_addr in bind_addresses:
+            self._http_server.listen(bind_port, bind_addr)
+            LOGGER.info(f"Server listening on {bind_addr}:{bind_port}")
         self.running = True
 
         LOGGER.debug("Start REST transport")

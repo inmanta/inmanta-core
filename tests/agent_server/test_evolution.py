@@ -15,12 +15,11 @@
 
     Contact: code@inmanta.com
 """
-import asyncio
 from collections import defaultdict
 
 import pytest
 
-from agent_server.conftest import _wait_until_deployment_finishes, get_agent, stop_agent
+from agent_server.conftest import get_agent, stop_agent
 from inmanta import const, resources
 from inmanta.agent import handler
 from inmanta.agent.handler import CRUDHandler, HandlerContext, provider
@@ -28,6 +27,7 @@ from inmanta.export import unknown_parameters
 from inmanta.loader import SourceInfo
 from inmanta.resources import PurgeableResource, resource
 from inmanta.types import JsonType
+from utils import _wait_until_deployment_finishes
 
 
 def reset_all_objects():
@@ -46,6 +46,11 @@ class Provider(CRUDHandler):
             current.value = self.get(current.id.get_agent_name(), current.key)
         else:
             current.value = None
+
+    def calculate_diff(self, ctx: HandlerContext, current: resources.Resource, desired: resources.Resource):
+        diff = super().calculate_diff(ctx, current, desired)
+        ctx.info("Diff was called")
+        return diff
 
     def create_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
         self.touch(resource.id.get_agent_name(), resource.key)
@@ -127,11 +132,11 @@ def resource_container_b():
     class MyResource(PurgeableResource):
         fields = ("uid", "key", "value", "purged", "purge_on_delete")
 
-        def populate(self, fields: JsonType = None):
+        def populate(self, fields: JsonType = None, force_fields: bool = False):
             if "uid" not in fields:
                 # capture old format, cause by purge on delete
                 fields["uid"] = None
-            super().populate(fields)
+            super().populate(fields, force_fields)
 
     @provider("__config__::Resource", name="test_resource")
     class BProvider(Provider):
@@ -196,9 +201,6 @@ async def test_resource_evolution(server, client, environment, no_agent_backoff,
     assert provider.isset("agent1", "a")
     assert provider.changecount("agent1", "a") == 1
 
-    # get different version from export, wait until next second
-    await asyncio.sleep(1)
-
     provider = resource_container_b()
 
     agent = await get_agent(server, environment, "agent1")
@@ -228,8 +230,6 @@ async def test_resource_evolution(server, client, environment, no_agent_backoff,
     assert provider.isset("agent1", "a")
     assert provider.changecount("agent1", "a") == 1
 
-    # get different version from export, wait until next second
-    await asyncio.sleep(1)
     snippetcompiler.reset()
     version, _ = await snippetcompiler.do_export_and_deploy()
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)

@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@
 import asyncio
 import logging
 import os
-import time
 import uuid
 from datetime import datetime
 
@@ -28,19 +27,20 @@ import pytest
 from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
-from inmanta.export import unknown_parameters, upload_code
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER
+from inmanta.export import upload_code
+from inmanta.protocol import Client
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_SERVER, SLICE_SESSION_MANAGER
 from inmanta.server import config as opt
-from inmanta.server import server
-from inmanta.util import hash_file
-from utils import retry_limited
+from inmanta.server.bootloader import InmantaBootloader
+from inmanta.util import get_compiler_version, hash_file
+from utils import log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
 
 @pytest.mark.asyncio(timeout=60)
 @pytest.mark.slowtest
-async def test_autostart(server, client, environment):
+async def test_autostart(server, client, environment, caplog):
     """
         Test auto start of agent
     """
@@ -84,6 +84,8 @@ async def test_autostart(server, client, environment):
     assert len(sessionendpoint._sessions) == 0
     assert len(agentmanager._agent_procs) == 0
 
+    log_doesnt_contain(caplog, "inmanta.config", logging.WARNING, "rest_transport not defined")
+
 
 @pytest.mark.asyncio(timeout=60)
 @pytest.mark.slowtest
@@ -91,7 +93,7 @@ async def test_autostart_dual_env(client, server):
     """
         Test auto start of agent
     """
-    agentmanager = server.get_slice(SLICE_SERVER).agentmanager
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     sessionendpoint = server.get_slice(SLICE_SESSION_MANAGER)
 
     result = await client.create_project("env-test")
@@ -175,13 +177,13 @@ async def test_version_removal(client, server):
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    version = int(time.time())
-
     for _i in range(20):
-        version += 1
+        version = (await client.reserve_version(env_id)).result["data"]
 
-        await server.get_slice(SLICE_SERVER)._purge_versions()
-        res = await client.put_version(tid=env_id, version=version, resources=[], unknowns=[], version_info={})
+        await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+        res = await client.put_version(
+            tid=env_id, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+        )
         assert res.code == 200
         result = await client.get_project(id=project_id)
 
@@ -201,7 +203,7 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     await agent.start()
     aclient = agent._client
 
-    version = 1
+    version = (await client_multi.reserve_version(environment_multi)).result["data"]
 
     resources = [
         {
@@ -251,7 +253,12 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     ]
 
     res = await client_multi.put_version(
-        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
+        tid=environment_multi,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
     )
     assert res.code == 200
 
@@ -315,11 +322,9 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
 
 
 @pytest.mark.asyncio(timeout=10)
-async def test_get_environment(client, server, environment):
-    version = int(time.time())
-
+async def test_get_environment(client, clienthelper, server, environment):
     for i in range(10):
-        version += 1
+        version = await clienthelper.get_version()
 
         resources = []
         for j in range(i):
@@ -338,7 +343,14 @@ async def test_get_environment(client, server, environment):
                 }
             )
 
-        res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+        res = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=resources,
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
+        )
         assert res.code == 200
 
     result = await client.get_environment(environment, versions=5, resources=1)
@@ -348,7 +360,7 @@ async def test_get_environment(client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_resource_update(postgresql_client, client, server, environment):
+async def test_resource_update(postgresql_client, client, clienthelper, server, environment):
     """
         Test updating resources and logging
     """
@@ -356,7 +368,7 @@ async def test_resource_update(postgresql_client, client, server, environment):
     await agent.start()
     aclient = agent._client
 
-    version = int(time.time())
+    version = await clienthelper.get_version()
 
     resources = []
     for j in range(10):
@@ -375,7 +387,14 @@ async def test_resource_update(postgresql_client, client, server, environment):
             }
         )
 
-    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
     assert res.code == 200
 
     result = await client.release_version(environment, version, False)
@@ -442,545 +461,39 @@ async def test_resource_update(postgresql_client, client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_environment_settings(client, server, environment):
-    """
-        Test environment settings
-    """
-    result = await client.list_settings(tid=environment)
-    assert result.code == 200
-    assert "settings" in result.result
-    assert "metadata" in result.result
-    assert "auto_deploy" in result.result["metadata"]
-    assert len(result.result["settings"]) == 0
-
-    result = await client.set_setting(tid=environment, id="auto_deploy", value="test")
-    assert result.code == 500
-
-    result = await client.set_setting(tid=environment, id="auto_deploy", value=False)
-    assert result.code == 200
-
-    result = await client.list_settings(tid=environment)
-    assert result.code == 200
-    assert len(result.result["settings"]) == 1
-
-    result = await client.get_setting(tid=environment, id="auto_deploy")
-    assert result.code == 200
-    assert not result.result["value"]
-
-    result = await client.get_setting(tid=environment, id="test2")
-    assert result.code == 404
-
-    result = await client.set_setting(tid=environment, id="auto_deploy", value=True)
-    assert result.code == 200
-
-    result = await client.get_setting(tid=environment, id="auto_deploy")
-    assert result.code == 200
-    assert result.result["value"]
-
-    result = await client.delete_setting(tid=environment, id="test2")
-    assert result.code == 404
-
-    result = await client.delete_setting(tid=environment, id="auto_deploy")
-    assert result.code == 200
-
-    result = await client.list_settings(tid=environment)
-    assert result.code == 200
-    assert "settings" in result.result
-    assert len(result.result["settings"]) == 1
-
-    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value=20)
-    assert result.code == 200
-
-    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value="30")
-    assert result.code == 200
-
-    result = await client.get_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
-    assert result.code == 200
-    assert result.result["value"] == 30
-
-    result = await client.delete_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
-    assert result.code == 200
-
-    result = await client.set_setting(
-        tid=environment, id=data.AUTOSTART_AGENT_MAP, value={"agent1": "", "agent2": "localhost", "agent3": "user@agent3"}
-    )
-    assert result.code == 200
-
-    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP, value="")
-    assert result.code == 500
-
-
-@pytest.mark.asyncio
-async def test_clear_environment(client, server, environment):
+async def test_clear_environment(client, server, clienthelper, environment):
     """
         Test clearing out an environment
     """
-    version = int(time.time())
-    result = await client.put_version(tid=environment, version=version, resources=[], unknowns=[], version_info={})
+    version = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+    )
     assert result.code == 200
 
     result = await client.get_environment(id=environment, versions=10)
     assert result.code == 200
     assert len(result.result["environment"]["versions"]) == 1
 
+    # trigger a compile
+    result = await client.notify_change_get(id=environment)
+    assert result.code == 200
+
+    # Wait for env directory to appear
+    slice = server.get_slice(SLICE_SERVER)
+    env_dir = os.path.join(slice._server_storage["environments"], environment)
+
+    while not os.path.exists(env_dir):
+        await asyncio.sleep(0.1)
+
     result = await client.clear_environment(id=environment)
     assert result.code == 200
+
+    assert not os.path.exists(env_dir)
 
     result = await client.get_environment(id=environment, versions=10)
     assert result.code == 200
     assert len(result.result["environment"]["versions"]) == 0
-
-
-@pytest.mark.asyncio
-async def test_purge_on_delete_requires(client, server, environment):
-    """
-        Test purge on delete of resources and inversion of requires
-    """
-    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    await agent.start()
-    aclient = agent._client
-
-    version = 1
-
-    resources = [
-        {
-            "group": "root",
-            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
-            "owner": "root",
-            "path": "/tmp/file1",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "purge_on_delete": True,
-            "version": version,
-        },
-        {
-            "group": "root",
-            "hash": "b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba",
-            "id": "std::File[vm2,path=/tmp/file2],v=%d" % version,
-            "owner": "root",
-            "path": "/tmp/file2",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "purge_on_delete": True,
-            "requires": ["std::File[vm1,path=/tmp/file1],v=%d" % version],
-            "version": version,
-        },
-    ]
-
-    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert res.code == 200
-
-    # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, False)
-    assert result.code == 200
-
-    now = datetime.now()
-    result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
-    )
-    assert result.code == 200
-
-    result = await aclient.resource_action_update(
-        environment, ["std::File[vm2,path=/tmp/file2],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
-    )
-    assert result.code == 200
-
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    assert result.result["model"]["version"] == version
-    assert result.result["model"]["total"] == len(resources)
-    assert result.result["model"]["done"] == len(resources)
-    assert result.result["model"]["released"]
-    assert result.result["model"]["result"] == const.VersionState.success.name
-
-    # validate requires and provides
-    file1 = [x for x in result.result["resources"] if "file1" in x["id"]][0]
-    file2 = [x for x in result.result["resources"] if "file2" in x["id"]][0]
-
-    assert file2["id"] in file1["provides"]
-    assert len(file1["attributes"]["requires"]) == 0
-
-    assert len(file2["provides"]) == 0
-    assert file1["id"] in file2["attributes"]["requires"]
-
-    result = await client.decomission_environment(id=environment)
-    assert result.code == 200
-
-    version = result.result["version"]
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    assert result.result["model"]["total"] == len(resources)
-
-    # validate requires and provides
-    file1 = [x for x in result.result["resources"] if "file1" in x["id"]][0]
-    file2 = [x for x in result.result["resources"] if "file2" in x["id"]][0]
-
-    assert file2["id"] in file1["attributes"]["requires"]
-    assert type(file1["attributes"]["requires"]) == list
-    assert len(file1["provides"]) == 0
-
-    assert len(file2["attributes"]["requires"]) == 0
-    assert file1["id"] in file2["provides"]
-    await agent.stop()
-
-
-@pytest.mark.asyncio(timeout=20)
-async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, server, environment, snippetcompiler):
-    config.Config.set("compiler_rest_transport", "request_timeout", "1")
-
-    snippetcompiler.setup_for_snippet(
-        """
-    h = std::Host(name="test", os=std::linux)
-    f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
-    """
-    )
-    version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
-
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    assert result.result["model"]["total"] == 1
-
-    snippetcompiler.setup_for_snippet(
-        """
-    h = std::Host(name="test")
-    """
-    )
-
-    # force deploy by having unknown
-    unknown_parameters.append({"parameter": "a", "source": "b"})
-
-    # ensure new version, wait for other second
-    await asyncio.sleep(1)
-
-    version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    assert result.result["model"]["total"] == 0
-
-
-@pytest.mark.asyncio
-async def test_purge_on_delete_compile_failed(client, server, environment):
-    """
-        Test purge on delete of resources
-    """
-    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    await agent.start()
-    aclient = agent._client
-
-    version = 1
-
-    resources = [
-        {
-            "group": "root",
-            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
-            "owner": "root",
-            "path": "/tmp/file1",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "purge_on_delete": True,
-            "version": version,
-        },
-        {
-            "group": "root",
-            "hash": "b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba",
-            "id": "std::File[vm1,path=/tmp/file2],v=%d" % version,
-            "owner": "root",
-            "path": "/tmp/file2",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "purge_on_delete": True,
-            "requires": ["std::File[vm1,path=/tmp/file1],v=%d" % version],
-            "version": version,
-        },
-        {
-            "group": "root",
-            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file3],v=%d" % version,
-            "owner": "root",
-            "path": "/tmp/file3",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "purge_on_delete": True,
-            "version": version,
-        },
-    ]
-
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert result.code == 200
-
-    # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, False)
-    assert result.code == 200
-
-    now = datetime.now()
-    result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
-    )
-    assert result.code == 200
-
-    result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file2],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
-    )
-    assert result.code == 200
-
-    result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file3],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
-    )
-    assert result.code == 200
-
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    assert result.result["model"]["version"] == version
-    assert result.result["model"]["total"] == len(resources)
-    assert result.result["model"]["done"] == len(resources)
-    assert result.result["model"]["released"]
-    assert result.result["model"]["result"] == const.VersionState.success.name
-
-    # New version with only file3
-    version = 2
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=[],
-        unknowns=[{"parameter": "a", "source": "b"}],
-        version_info={const.EXPORT_META_DATA: {const.META_DATA_COMPILE_STATE: const.Compilestate.failed}},
-    )
-    assert result.code == 200
-
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    assert result.result["model"]["total"] == 0
-    await agent.stop()
-    assert len(result.result["unknowns"]) == 1
-
-
-@pytest.mark.asyncio
-async def test_purge_on_delete(client, server, environment):
-    """
-        Test purge on delete of resources
-    """
-    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    await agent.start()
-    aclient = agent._client
-
-    version = 1
-
-    resources = [
-        {
-            "group": "root",
-            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
-            "owner": "root",
-            "path": "/tmp/file1",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "purge_on_delete": True,
-            "version": version,
-        },
-        {
-            "group": "root",
-            "hash": "b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba",
-            "id": "std::File[vm1,path=/tmp/file2],v=%d" % version,
-            "owner": "root",
-            "path": "/tmp/file2",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "purge_on_delete": True,
-            "requires": ["std::File[vm1,path=/tmp/file1],v=%d" % version],
-            "version": version,
-        },
-        {
-            "group": "root",
-            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file3],v=%d" % version,
-            "owner": "root",
-            "path": "/tmp/file3",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "purge_on_delete": True,
-            "version": version,
-        },
-    ]
-
-    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert res.code == 200
-
-    # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, False)
-    assert result.code == 200
-
-    now = datetime.now()
-    result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
-    )
-    assert result.code == 200
-
-    result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file2],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
-    )
-    assert result.code == 200
-
-    result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file3],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
-    )
-    assert result.code == 200
-
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    assert result.result["model"]["version"] == version
-    assert result.result["model"]["total"] == len(resources)
-    assert result.result["model"]["done"] == len(resources)
-    assert result.result["model"]["released"]
-    assert result.result["model"]["result"] == const.VersionState.success.name
-
-    # New version with only file3
-    version = 2
-    res3 = {
-        "group": "root",
-        "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-        "id": "std::File[vm1,path=/tmp/file3],v=%d" % version,
-        "owner": "root",
-        "path": "/tmp/file3",
-        "permissions": 644,
-        "purged": False,
-        "reload": False,
-        "requires": [],
-        "purge_on_delete": True,
-        "version": version,
-    }
-    result = await client.put_version(tid=environment, version=version, resources=[res3], unknowns=[], version_info={})
-    assert result.code == 200
-
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    assert result.result["model"]["total"] == 3
-
-    # validate requires and provides
-    file1 = [x for x in result.result["resources"] if "file1" in x["id"]][0]
-    file2 = [x for x in result.result["resources"] if "file2" in x["id"]][0]
-    file3 = [x for x in result.result["resources"] if "file3" in x["id"]][0]
-
-    assert file1["attributes"]["purged"]
-    assert file2["attributes"]["purged"]
-    assert not file3["attributes"]["purged"]
-    await agent.stop()
-
-
-@pytest.mark.asyncio
-async def test_purge_on_delete_ignore(client, server, environment):
-    """
-        Test purge on delete behavior for resources that have not longer purged_on_delete set
-    """
-    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    await agent.start()
-    aclient = agent._client
-
-    # Version 1 with purge_on_delete true
-    version = 1
-
-    resources = [
-        {
-            "group": "root",
-            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
-            "owner": "root",
-            "path": "/tmp/file1",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "purge_on_delete": True,
-            "version": version,
-        }
-    ]
-
-    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert res.code == 200
-
-    # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, False)
-    assert result.code == 200
-
-    now = datetime.now()
-    result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
-    )
-    assert result.code == 200
-
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    assert result.result["model"]["version"] == version
-    assert result.result["model"]["total"] == len(resources)
-    assert result.result["model"]["done"] == len(resources)
-    assert result.result["model"]["released"]
-    assert result.result["model"]["result"] == const.VersionState.success.name
-
-    # Version 2 with purge_on_delete false
-    version = 2
-
-    resources = [
-        {
-            "group": "root",
-            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
-            "owner": "root",
-            "path": "/tmp/file1",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "purge_on_delete": False,
-            "version": version,
-        }
-    ]
-
-    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert res.code == 200
-
-    # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, False)
-    assert result.code == 200
-
-    now = datetime.now()
-    result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
-    )
-    assert result.code == 200
-
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    assert result.result["model"]["version"] == version
-    assert result.result["model"]["total"] == len(resources)
-    assert result.result["model"]["done"] == len(resources)
-    assert result.result["model"]["released"]
-    assert result.result["model"]["result"] == const.VersionState.success.name
-
-    # Version 3 with no resources
-    version = 3
-    resources = []
-    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert res.code == 200
-
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    assert result.result["model"]["version"] == version
-    assert result.result["model"]["total"] == len(resources)
-    await agent.stop()
 
 
 @pytest.mark.asyncio
@@ -1019,7 +532,7 @@ def make_source(collector, filename, module, source, req):
 async def test_code_upload(server_multi, client_multi, agent_multi, environment_multi):
     """ Test upload of a single code definition
     """
-    version = 1
+    version = (await client_multi.reserve_version(environment_multi)).result["data"]
 
     resources = [
         {
@@ -1037,7 +550,12 @@ async def test_code_upload(server_multi, client_multi, agent_multi, environment_
     ]
 
     res = await client_multi.put_version(
-        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
+        tid=environment_multi,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
     )
     assert res.code == 200
 
@@ -1094,7 +612,7 @@ async def test_batched_code_upload(
 
 @pytest.mark.asyncio(timeout=30)
 async def test_resource_action_log(server_multi, client_multi, environment_multi):
-    version = 1
+    version = (await client_multi.reserve_version(environment_multi)).result["data"]
     resources = [
         {
             "group": "root",
@@ -1110,11 +628,16 @@ async def test_resource_action_log(server_multi, client_multi, environment_multi
         }
     ]
     res = await client_multi.put_version(
-        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
+        tid=environment_multi,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
     )
     assert res.code == 200
 
-    resource_action_log = server.Server.get_resource_action_log_file(environment_multi)
+    resource_action_log = server_multi.get_slice(SLICE_RESOURCE).get_resource_action_log_file(environment_multi)
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
 
@@ -1150,3 +673,18 @@ async def test_get_param(server, client, environment):
     assert res.code == 200
     parameters = res.result["parameters"]
     assert len(parameters) == 2
+
+
+@pytest.mark.asyncio(timeout=30)
+async def test_server_logs_address(server_config, caplog):
+    with caplog.at_level(logging.INFO):
+        ibl = InmantaBootloader()
+        await ibl.start()
+
+        client = Client("client")
+        result = await client.create_project("env-test")
+        assert result.code == 200
+        address = "127.0.0.1"
+
+        await ibl.stop()
+        log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:")

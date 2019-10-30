@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, Callable, List, Optional, Type, TypeVar
 from inmanta import const, protocol
 from inmanta.ast import CompilerException, Namespace, RuntimeException, TypeNotFoundException
 from inmanta.ast.type import TypedList
+from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import Unknown
@@ -80,6 +81,14 @@ class Context(object):
 
     def get_queue_scheduler(self) -> QueueScheduler:
         return self.queue
+
+    def get_environment_id(self) -> str:
+        env = str(Config.get("config", "environment", None))
+
+        if env is None:
+            raise Exception("The environment of the model should be configured in config>environment")
+
+        return env
 
     def get_compiler(self) -> "Compiler":
         return self.queue.get_compiler()

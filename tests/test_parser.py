@@ -21,8 +21,9 @@ import re
 import pytest
 
 from inmanta.ast import LocatableString, Namespace
+from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, GreaterThan, In, IsDefined, Not, Regex
-from inmanta.ast.statements import Literal, define
+from inmanta.ast.statements import ExpressionStatement, Literal, define
 from inmanta.ast.statements.assign import (
     Assign,
     CreateDict,
@@ -42,7 +43,7 @@ from inmanta.ast.statements.define import (
     DefineTypeConstraint,
     DefineTypeDefault,
 )
-from inmanta.ast.statements.generator import Constructor
+from inmanta.ast.statements.generator import Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
@@ -386,7 +387,7 @@ implement Test using test
     assert isinstance(stmt, DefineImplement)
     assert str(stmt.entity) == "Test"
     assert stmt.implementations == ["test"]
-    assert str(stmt.select) == "True"
+    assert str(stmt.select) == "true"
 
 
 def test_implements_2():
@@ -882,7 +883,7 @@ implement Test1 using tt when other is defined
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
     assert isinstance(stmt.select, IsDefined)
-    assert stmt.select.attr.name == "self"
+    assert stmt.select.attr is None
     assert stmt.select.name == "other"
 
 
@@ -897,9 +898,8 @@ implement Test1 using tt when a.other is defined
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
     assert isinstance(stmt.select, IsDefined)
-    assert isinstance(stmt.select.attr, AttributeReference)
-    assert stmt.select.attr.instance.name == "self"
-    assert stmt.select.attr.attribute == "a"
+    assert isinstance(stmt.select.attr, Reference)
+    assert stmt.select.attr.name == "a"
     assert stmt.select.name == "other"
 
 
@@ -1264,3 +1264,61 @@ a = c["test"]["xx"]
     assert stmt.value.key.value == "xx"
     assert isinstance(stmt.value.themap.key, Literal)
     assert stmt.value.themap.key.value == "test"
+
+
+def test_if_statement():
+    """Test for the if statement
+    """
+    statements = parse_code(
+        """
+if test.field == "value":
+    test.other = "otherValue"
+end
+"""
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, ExpressionStatement)
+    assert isinstance(stmt.if_branch, BasicBlock)
+    assert len(stmt.if_branch.get_stmts()) == 1
+    assert isinstance(stmt.else_branch, BasicBlock)
+    assert len(stmt.else_branch.get_stmts()) == 0
+
+
+def test_if_else():
+    """Test for the if statement with an else clause
+    """
+    statements = parse_code(
+        """
+if test.field == "value":
+    test.other = "otherValue"
+else:
+    test.other = "altValue"
+end
+"""
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, ExpressionStatement)
+    assert isinstance(stmt.if_branch, BasicBlock)
+    assert len(stmt.if_branch.get_stmts()) == 1
+    assert isinstance(stmt.else_branch, BasicBlock)
+    assert len(stmt.else_branch.get_stmts()) == 1
+
+
+def test_bool_str():
+    """Test to string of bool literal renders inmanta true/false and not python
+    """
+    statements = parse_code(
+        """
+val1 = true
+val2 = false
+"""
+    )
+    assert len(statements) == 2
+    assert isinstance(statements[0], Assign)
+    assert isinstance(statements[1], Assign)
+    assert str(statements[0].rhs) == "true"
+    assert str(statements[1].rhs) == "false"

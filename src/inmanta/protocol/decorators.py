@@ -18,6 +18,7 @@
 import inspect
 from typing import Callable, Dict, List, Optional, TypeVar
 
+from inmanta import const
 from inmanta.types import Apireturn, HandlerType, MethodType
 
 from . import common
@@ -30,12 +31,15 @@ class handle(object):  # noqa: N801
         Decorator for subclasses of an endpoint to handle protocol methods
 
         :param method: A subclass of method that defines the method
+        :param api_version: When specific this handler is only associated with a method of the specific api verision. If the
+                            version is not defined, the handler is not associated with a rest endpoint.
         :param kwargs: Map arguments in the message from one name to an other
     """
 
-    def __init__(self, method: Callable[..., Apireturn], **kwargs: str) -> None:
+    def __init__(self, method: Callable[..., Apireturn], api_version: Optional[int] = None, **kwargs: str) -> None:
         self.method = method
         self.mapping: Dict[str, str] = kwargs
+        self._api_version = api_version
 
     def __call__(self, function: FuncT) -> FuncT:
         """
@@ -46,6 +50,7 @@ class handle(object):  # noqa: N801
 
         function.__protocol_method__ = self.method
         function.__protocol_mapping__ = self.mapping
+        function.__api_version__ = self._api_version
         return function
 
 
@@ -65,7 +70,8 @@ def method(
     client_types: List[str] = ["public"],
     api_version: int = 1,
     api_prefix: str = "api",
-    wrap_data: bool = False,
+    envelope: bool = False,
+    envelope_key: str = const.ENVELOPE_KEY,
 ) -> Callable[..., Callable]:
     """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -88,7 +94,8 @@ def method(
                         type of the argument. This method can raise an HTTPException to return a 404 for example.
         :param api_version: The version of the api this method belongs to
         :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
-        :param wrap_data: Put the response of the call under a "data" key.
+        :param envelope: Put the response of the call under an envelope with key envelope_key.
+        :param envelope_key: The envelope key to use.
     """
 
     def wrapper(func: MethodT) -> MethodT:
@@ -106,10 +113,11 @@ def method(
             client_types,
             api_version,
             api_prefix,
-            wrap_data,
+            envelope,
+            False,
+            envelope_key,
         )
-        common.MethodProperties.methods[func.__name__] = properties
-        func.__method_properties__ = properties
+        common.MethodProperties.register_method(properties)
         return func
 
     return wrapper
@@ -128,6 +136,7 @@ def typedmethod(
     client_types: List[str] = ["public"],
     api_version: int = 1,
     api_prefix: str = "api",
+    envelope_key: str = const.ENVELOPE_KEY,
 ) -> Callable[..., Callable]:
     """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -150,6 +159,7 @@ def typedmethod(
                         type of the argument. This method can raise an HTTPException to return a 404 for example.
         :param api_version: The version of the api this method belongs to
         :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
+        :param envelope_key: The envelope key to use.
     """
 
     def wrapper(func: MethodT) -> MethodT:
@@ -169,9 +179,9 @@ def typedmethod(
             api_prefix,
             True,
             True,
+            envelope_key,
         )
-        common.MethodProperties.methods[func.__name__] = properties
-        func.__method_properties__ = properties
+        common.MethodProperties.register_method(properties)
         return func
 
     return wrapper

@@ -19,7 +19,7 @@ import inspect
 import json
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Type, cast  # noqa: F401
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, MutableMapping, Optional, Tuple, Type, cast  # noqa: F401
 
 import pydantic
 import typing_inspect
@@ -47,7 +47,9 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 """
 
 
-def authorize_request(auth_data: Dict[str, str], metadata: Dict[str, str], message: JsonType, config: common.UrlMethod) -> None:
+def authorize_request(
+    auth_data: Optional[MutableMapping[str, str]], metadata: Dict[str, str], message: JsonType, config: common.UrlMethod
+) -> None:
     """
         Authorize a request based on the given data
     """
@@ -297,17 +299,28 @@ class CallArguments(object):
             # TODO: also validate the value inside a ReturnValue
             if typing_inspect.is_union_type(return_type):
                 self._validate_union_return(return_type, result)
-                return common.Response.create(ReturnValue(response=result), headers, config.properties.wrap_data)
+                return common.Response.create(
+                    ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
+                )
 
             if typing_inspect.is_generic_type(return_type):
                 if isinstance(result, ReturnValue):
-                    return common.Response.create(result, headers, config.properties.wrap_data)
+                    return common.Response.create(result, headers, config.properties.envelope, config.properties.envelope_key)
                 else:
                     self._validate_generic_return(return_type, result)
-                    return common.Response.create(ReturnValue(response=result), headers, config.properties.wrap_data)
+                    return common.Response.create(
+                        ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
+                    )
 
             elif isinstance(result, BaseModel):
-                return common.Response.create(ReturnValue(response=result), headers, config.properties.wrap_data)
+                return common.Response.create(
+                    ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
+                )
+
+            elif isinstance(result, common.VALID_SIMPLE_ARG_TYPES):
+                return common.Response.create(
+                    ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
+                )
 
             else:
                 raise exceptions.ServerError(
@@ -332,6 +345,8 @@ class CallArguments(object):
 
             if body is not None:
                 if config.properties.reply:
+                    if config.properties.envelope:
+                        return common.Response(body={config.properties.envelope_key: body}, headers=headers, status_code=code)
                     return common.Response(body=body, headers=headers, status_code=code)
 
                 else:
@@ -352,7 +367,7 @@ class RESTBase(util.TaskHandler):
     def id(self) -> str:
         return self._id
 
-    def _decode(self, body: str) -> Optional[JsonType]:
+    def _decode(self, body: bytes) -> Optional[JsonType]:
         """
             Decode a response body
         """
@@ -372,7 +387,7 @@ class RESTBase(util.TaskHandler):
         config: common.UrlMethod,
         message: Dict[str, Any],
         request_headers: Mapping[str, str],
-        auth=None,
+        auth: Optional[MutableMapping[str, str]] = None,
     ) -> common.Response:
 
         headers: Dict[str, str] = {}
@@ -415,7 +430,7 @@ class RESTBase(util.TaskHandler):
             raise exceptions.ServerError("data validation error.")
 
         except exceptions.BaseHttpException:
-            LOGGER.exception("")
+            LOGGER.debug("An HTTP Error occurred", exc_info=True)
             raise
 
         except Exception as e:

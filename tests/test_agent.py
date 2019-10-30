@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -18,6 +18,9 @@
 import pytest
 
 from inmanta.agent import reporting
+from inmanta.agent.handler import HandlerContext, InvalidOperation
+from inmanta.data.model import AttributeStateChange
+from inmanta.resources import Id, PurgeableResource
 from inmanta.server import SLICE_SESSION_MANAGER
 
 
@@ -32,3 +35,34 @@ async def test_agent_get_status(server, environment, agent):
     status = status.get_result()
     for name in reporting.reports.keys():
         assert name in status and status[name] != "ERROR"
+
+
+def test_context_changes():
+    """ Test registering changes in the handler context
+    """
+    resource = PurgeableResource(Id.parse_id("std::File[agent,path=/test],v=1"))
+    ctx = HandlerContext(resource)
+
+    # use attribute change attributes
+    ctx.update_changes({"value": AttributeStateChange(current="a", desired="b")})
+    assert len(ctx.changes) == 1
+
+    # use dict
+    ctx.update_changes({"value": dict(current="a", desired="b")})
+    assert len(ctx.changes) == 1
+    assert isinstance(ctx.changes["value"], AttributeStateChange)
+
+    # use tuple
+    ctx.update_changes({"value": ("a", "b")})
+    assert len(ctx.changes) == 1
+    assert isinstance(ctx.changes["value"], AttributeStateChange)
+
+    # use wrong arguments
+    with pytest.raises(InvalidOperation):
+        ctx.update_changes({"value": ("a", "b", 3)})
+
+    with pytest.raises(InvalidOperation):
+        ctx.update_changes({"value": ["a", "b"]})
+
+    with pytest.raises(InvalidOperation):
+        ctx.update_changes({"value": "test"})

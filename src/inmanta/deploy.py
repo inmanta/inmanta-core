@@ -107,8 +107,8 @@ port=%(postgres_port)s
 state-dir=%(state_dir)s
 log-dir=%(log_dir)s
 
-[server_rest_transport]
-port=%(server_port)s
+[server]
+bind-port=%(server_port)s
 
 [agent_rest_transport]
 port=%(server_port)s
@@ -476,6 +476,12 @@ port=%(server_port)s
                 time.sleep(1)
 
     def stop(self) -> None:
+        loud_logger = logging.getLogger("inmanta.protocol")
+        loud_logger.propagate = True
+
+        loud_logger = logging.getLogger("tornado")
+        loud_logger.propagate = True
+
         if hasattr(self, "_server_proc"):
             self._server_proc.terminate()
 

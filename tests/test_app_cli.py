@@ -25,6 +25,7 @@ from asyncio import subprocess
 import pytest
 
 from inmanta.app import cmd_parser
+from inmanta.command import ShowUsageException
 from inmanta.config import Config
 from inmanta.const import VersionState
 
@@ -85,6 +86,13 @@ def test_help_sub(inmanta_config, capsys):
     assert "update" in out
 
 
+def test_module_help(inmanta_config, capsys):
+    with pytest.raises(ShowUsageException) as info:
+        app(["module"])
+
+    assert info.value.args[0].startswith("A subcommand is required.")
+
+
 @pytest.mark.parametrize("push_method", [([]), (["-d"]), (["-d", "--full"])])
 @pytest.mark.asyncio
 async def test_export(tmpdir, server, client, push_method):
@@ -114,10 +122,8 @@ repo: https://github.com/inmanta/
 
     path_main_file.write(
         """
-import ip
-import redhat
-import redhat::epel
-vm1=ip::Host(name="non-existing-machine", os=redhat::centos7, ip="127.0.0.1")
+vm1=std::Host(name="non-existing-machine", os=std::linux)
+std::ConfigFile(host=vm1, path="/test", content="")
 """
     )
 

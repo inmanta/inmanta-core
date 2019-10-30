@@ -1,9 +1,41 @@
-v 2019.3.2 (2019-10-08) Changes in this release:
+v 2019.4 (2019-10-30) Changes in this release:
+- Various bugfixes (#1367,#1398,#736, #1454)
+- Added if statement (#1325)
+- Added CORS Access-Control-Allow-Origin header configuration (#1306)
+- Added --version option (#1291)
+- Added retry to moduletool update, to allow updating of corrupt projects (#177)
+- RPM-based installations on Fedora are not supported anymore
+- Added option to configure asyncpg pool (#1304)
+- Split out the main service into many smaller services (#1388)
+- Use python3 from the core OS in Dockerfile
+- Introduce v2 protocol and implement project and environment api in v2 (#1412)
+- Improve agent documentation (#1389)
+- Improve language reference documentation (#1419)
+- Change autostart_agent_deploy_splay_time from 600 to 10 (#1447)
+- Introduce the bind-address and bind-port config option (#1442)
+- Switch to sequential version numbers instead of timestamps (#1011)
 - Fixed memory leak in TaskHandler
+- Don't install packages inherited from the parent virtualenv
+- Added logging to CRUD methods of handler and a diff method with context
+- HTTP errors are logged at DEBUG level only (#1282)
+- Verify hashes when serving a file (#532)
+- Mark resource as failed when code loading fails (#1520)
+- Print extra env variables in init log and only store those in database (#1482)
+- Add feature manager for enabling and disabling orchestrator features (#1530)
+- Add get_environment_id to plugin context (#1331)
+- Log server bind address and bind port on startup (#1475)
+- Fix warning about transport config (#1203)
+- Add setting to environment to disable purge on delete (#1546)
 
-v 2019.3.1 (2019-09-17) Changes in this release:
-- Config file passed via min-c option overrides all other config options (#1384)
-- Environment variables set on the Inmanta server are forwarded to the subprocess that executes the compilation (#1376)
+IMPORTANT CHANGES:
+- Older compiler versions are no longer supported with this server
+- The Inmanta server now listens on 127.0.0.1:8888 by default, while
+  this was 0.0.0.0:8888 in previous versions. This behavior is
+  configurable with the `bind-address` config option.
+ 
+DEPRECATIONS:
+- The `server_rest_transport.port` config option is deprecated in favor
+  of the `server.bind-port` option.
 
 v 2019.3 (2019-09-05) Changes in this release:
 - Various bugfixes (#1148, #1157, #1163, #1167, #1188)

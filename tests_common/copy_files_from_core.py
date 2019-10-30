@@ -1,3 +1,4 @@
+#!/bin/env python3
 """
     Copyright 2019 Inmanta
 

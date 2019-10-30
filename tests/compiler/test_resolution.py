@@ -216,6 +216,20 @@ end
         compiler.do_compile()
 
 
+def test_duplicate_attribute(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Node:
+    string viz_type
+    string viz_type
+end
+""",
+        autostd=False,
+    )
+    with pytest.raises(DuplicateException):
+        compiler.do_compile()
+
+
 def test_bad_deref(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
