@@ -17,7 +17,7 @@
 """
 
 import numbers
-from typing import Optional
+from typing import Any, Optional
 
 from inmanta.ast import DuplicateException, Locatable, Location, Named, Namespace, RuntimeException, TypeNotFoundException
 from inmanta.execute.util import AnyType, NoneValue
@@ -100,7 +100,7 @@ class Type(Locatable):
         raise NotImplementedError()
 
     @classmethod
-    def cast(cls, value):
+    def cast(cls, value: Any) -> Any:
         """
             Cast the given value to this type. If this fails a CastException
             is thrown.
@@ -157,6 +157,9 @@ class NullableType(Type):
     def __str__(self):
         return "%s" % (self.basetype)
 
+    def normalize(self):
+        self.basetype.normalize()
+
 
 class Number(Type):
     """
@@ -184,7 +187,7 @@ class Number(Type):
         return True  # allow this function to be called from a lambda function
 
     @classmethod
-    def cast(cls, value):
+    def cast(cls, value: Any) -> int:
         """
             Cast the value to a number.
 
@@ -246,7 +249,7 @@ class Bool(Type):
             raise RuntimeException(None, "Invalid value '%s', expected Bool" % value)
 
     @classmethod
-    def cast(cls, value):
+    def cast(cls, value: Any) -> bool:
         """
             Convert the given value to value that can be used by the operators
             defined on this type.
@@ -282,7 +285,7 @@ class String(Type, str):
         str.__init__(self)
 
     @classmethod
-    def cast(cls, value):
+    def cast(cls, value: Any) -> str:
         """
             Cast the given value to a string
 
@@ -320,6 +323,9 @@ class TypedList(Type):
     def __init__(self, basetype):
         Type.__init__(self)
         self.basetype = basetype
+
+    def normalize(self):
+        self.basetype.normalize()
 
     def cast(self, value):
         """
@@ -469,6 +475,10 @@ class ConstraintType(NamedType):
         self.name = name
         self.namespace = namespace
         self.comment = None
+        self.expression = None
+
+    def normalize(self):
+        self.expression.normalize()
 
     def set_constraint(self, expression):
         """
@@ -487,7 +497,7 @@ class ConstraintType(NamedType):
 
     constraint = property(get_constaint, set_constraint)
 
-    def cast(self, value):
+    def cast(self, value: Any) -> str:
         """
             Cast the value to the basetype of this constraint
         """

@@ -124,8 +124,9 @@ Primitive types
 The basic primitive types are ``string``, ``number`` or ``bool``.
 
 Constrained primitive types can be derived from the basic primitive type with a typedef statement.
-Constrained primitive types add additional constraints to the basic primitive type with either a Python regex or a logical condition.
-The name of the constrained primitive type must not collide with the name of a variable or type in the same lexical scope.
+Constrained primitive types add additional constraints to the basic primitive type with either a Python regex or a logical
+:ref:`condition<lang-conditions>`. The name of the constrained primitive type must not collide with the name of a variable or
+type in the same lexical scope.
 
 .. code-block:: antlr
 
@@ -144,7 +145,7 @@ Lists of primitive types are also primitive types: ``string[]``, ``number[]``, `
 ``dict`` is the primitive type that represents a dictionary, with string keys. Dict values can be accessed using the ``[]`` operator. All members of a dict have to be set when the dict is constructed. e.g.
 
 .. code-block:: inmanta
-    
+
     #correct
     a = {"key":"value", "number":7}
     value = a["key"]
@@ -153,10 +154,12 @@ Lists of primitive types are also primitive types: ``string[]``, ``number[]``, `
     # a["otherkey"] = "othervalue"
 
 
+.. _lang-conditions:
+
 Conditions
 ==========================
 
-Conditions can have the following forms
+Conditions can be used in typedef, implements and if statements. Conditions can have the following forms
 
 .. code-block:: antlr
 
@@ -169,8 +172,32 @@ Conditions can have the following forms
         | 'true'
         | 'false'
         | functioncall
+        | value 'is' 'defined'
         ;
 
+The ``is defined`` keyword checks if a value was assigned to an attribute or a relation of a certain entity. The following
+example sets the monitoring configuration on a certain host when it has a monitoring server associated:
+
+.. code-block:: inmanta
+
+    entity Host:
+
+    end
+
+    entity MonitoringServer:
+
+    end
+
+    Host.monitoring_server [0:1] -- MonitoringServer
+
+    implement Host using monitoringConfig when monitoring_server is defined
+
+    implementation monitoringConfig for Host:
+        # Set monitoring config
+    end
+
+
+Empty lists are considered to be unset.
 
 Function calls / Plugins
 ========================
@@ -353,7 +380,7 @@ For each entity one or more refinements can be defined with the ``implementation
 Implementation are connected to entities using the ``implement`` statement.
 
 When an instance of an entity is constructed, the runtime searches for refinements. One or more refinements are selected based
-on the associated conditions. When no implementation is found, an exception is raised. Entities for which no implementation is
+on the associated :ref:`conditions<lang-conditions>`. When no implementation is found, an exception is raised. Entities for which no implementation is
 required are implemented using :inmanta:entity:`std::none`.
 
 In the implementation block, the entity instance itself can be accessed through the variable self.
@@ -432,6 +459,27 @@ The syntax is:
     for: 'for' ID 'in' value ':' statement* 'end';
 
 
+If statement
+============
+
+An if statement allows to branch on a condition.
+
+.. code-block:: inmanta
+
+    if nodecount > 1:
+        self.cluster_mode = true
+    else:
+        self.cluster_mode = false
+    end
+
+The syntax is:
+
+.. code-block:: antlr
+
+    if : 'if' condition ':' statement* ('else' ':' statement*)? 'end';
+
+The :ref:`lang-conditions` section describes allowed forms for the condition.
+
 
 Transformations
 ==============================================================
@@ -490,4 +538,4 @@ Plug-ins
 
 For more complex operations, python plugins can be used. Plugins are exposed in the Inmanta language as function calls, such as the template function call. A template
 accepts parameters and returns a value that it computed out of the variables. Each module that is included can also provide plug-ins. These plug-ins are accessible within the namespace of the
-module. The :ref:`module-plugins` section of the module guid provides more details about how to write a plugin.
+module. The :ref:`module-plugins` section of the module guide provides more details about how to write a plugin.

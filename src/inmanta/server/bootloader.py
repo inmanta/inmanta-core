@@ -24,7 +24,7 @@ from typing import Callable, Dict, Generator, List
 
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.server import config
-from inmanta.server.extensions import ApplicationContext, InvalidSliceNameException
+from inmanta.server.extensions import ApplicationContext, FeatureManager, InvalidSliceNameException
 from inmanta.server.protocol import Server, ServerSlice
 
 LOGGER = logging.getLogger(__name__)
@@ -46,6 +46,7 @@ class PluginLoadFailed(Exception):
 
 class ConstrainedApplicationContext(ApplicationContext):
     def __init__(self, parent: ApplicationContext, namespace: str) -> None:
+        super().__init__()
         self.parent = parent
         self.namespace = namespace
 
@@ -54,6 +55,9 @@ class ConstrainedApplicationContext(ApplicationContext):
         if not name.startswith(self.namespace + "."):
             raise InvalidSliceNameException(f"{name} should be in namespace {self.namespace}")
         self.parent.register_slice(slice)
+
+    def set_feature_manager(self, feature_manager: FeatureManager):
+        self.parent.set_feature_manager(feature_manager)
 
 
 class InmantaBootloader(object):
@@ -69,8 +73,10 @@ class InmantaBootloader(object):
         self.started = False
 
     async def start(self) -> None:
-        for mypart in self.load_slices():
+        ctx = self.load_slices()
+        for mypart in ctx.get_slices():
             self.restserver.add_slice(mypart)
+            ctx.get_feature_manager().add_slice(mypart)
         await self.restserver.start()
         self.started = True
 
@@ -145,8 +151,7 @@ class InmantaBootloader(object):
     # Extension loading Phase II: collect slices
     def _collect_slices(self, extensions: Dict[str, Callable[[ApplicationContext], None]]) -> ApplicationContext:
         """
-            Call the setup function on all extensions and let them register their slices in the ApplicationContext. Core slices
-            are statically
+            Call the setup function on all extensions and let them register their slices in the ApplicationContext.
         """
         ctx = ApplicationContext()
         for name, setup in extensions.items():
@@ -154,10 +159,9 @@ class InmantaBootloader(object):
             setup(myctx)
         return ctx
 
-    def load_slices(self) -> List[ServerSlice]:
+    def load_slices(self) -> ApplicationContext:
         """
             Load all slices in the server
         """
         exts = self._load_extensions()
-        ctx = self._collect_slices(exts)
-        return ctx.get_slices()
+        return self._collect_slices(exts)

@@ -18,9 +18,9 @@
 
 import re
 from abc import ABCMeta, abstractmethod
-from typing import Dict
+from typing import Dict, Optional
 
-from inmanta.ast import LocatableString
+from inmanta.ast import LocatableString, TypingException
 from inmanta.ast.statements import Literal, ReferenceStatement
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedReferenceHelper, Reference
@@ -62,9 +62,13 @@ class OpMetaClass(ABCMeta):
 
 
 class IsDefined(ReferenceStatement):
-    def __init__(self, attr: Reference, name: LocatableString) -> None:
-        super(IsDefined, self).__init__([attr])
-        self.attr = attr.root_in_self()
+    def __init__(self, attr: Optional[Reference], name: LocatableString) -> None:
+        if attr:
+            children = [attr]
+        else:
+            children = []
+        super(IsDefined, self).__init__(children)
+        self.attr = attr
         self.name = str(name)
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
@@ -76,7 +80,10 @@ class IsDefined(ReferenceStatement):
         self.copy_location(resumer)
 
         # wait for the instance
-        RawUnit(queue, resolver, self.attr.requires_emit(resolver, queue), resumer)
+        if self.requires():
+            RawUnit(queue, resolver, super().requires_emit(resolver, queue), resumer)
+        else:
+            resumer.resume({}, resolver, queue)
         return {self: temp}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
@@ -84,10 +91,10 @@ class IsDefined(ReferenceStatement):
         return requires[self]
 
     def pretty_print(self) -> str:
-        name = "%s.%s is defined" % (self.attr, self.name)
-        if name[: len("self.")] == "self.":
-            name = name[len("self.") :]
-
+        if self.attr is not None:
+            name = "%s.%s" % (self.attr.pretty_print(), self.name)
+        else:
+            name = self.name
         return "%s is defined" % name
 
 
@@ -294,7 +301,7 @@ class Regex(BinaryOperator):
             @see Operator#_op
         """
         if not isinstance(arg1, str):
-            raise Exception("Regex can only be match with strings. %s is of type %s" % arg1)
+            raise TypingException(self, "Regex can only be match with strings. %s is of type %s" % arg1)
 
         return arg2.match(arg1) is not None
 
@@ -337,7 +344,7 @@ class LessThan(BinaryOperator):
             @see Operator#_op
         """
         if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
-            raise Exception("Can only compare numbers.")
+            raise TypingException(self, "Can only compare numbers.")
         return arg1 < arg2
 
 
@@ -356,7 +363,7 @@ class GreaterThan(BinaryOperator):
             @see Operator#_op
         """
         if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
-            raise Exception("Can only compare numbers.")
+            raise TypingException(self, "Can only compare numbers.")
         return arg1 > arg2
 
 
@@ -375,7 +382,7 @@ class LessThanOrEqual(BinaryOperator):
             @see Operator#_op
         """
         if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
-            raise Exception("Can only compare numbers.")
+            raise TypingException(self, "Can only compare numbers.")
         return arg1 <= arg2
 
 
@@ -394,7 +401,7 @@ class GreaterThanOrEqual(BinaryOperator):
             @see Operator#_op
         """
         if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
-            raise Exception("Can only compare numbers.")
+            raise TypingException(self, "Can only compare numbers.")
         return arg1 >= arg2
 
 
@@ -464,6 +471,6 @@ class In(BinaryOperator):
                 if arg == arg1:
                     return True
         else:
-            raise Exception("Operand two of 'in' can only be a list or dict (%s)" % arg2[0])
+            raise TypingException(self, "Operand two of 'in' can only be a list or dict (%s)" % arg2[0])
 
         return False

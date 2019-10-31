@@ -21,7 +21,7 @@ import socket
 import time
 import uuid
 from collections import defaultdict
-from typing import Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Callable, Coroutine, Dict, List, Optional, Set, Tuple, Union
 
 from tornado import gen, queues, routing, web
 from tornado.ioloop import IOLoop
@@ -32,6 +32,7 @@ from inmanta.protocol import Client, common, endpoints, handle, methods
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
+from inmanta.server.extensions import Feature, FeatureManager
 from inmanta.types import ArgumentTypes, JsonType
 from inmanta.util import CycleException, Scheduler, TaskHandler, stable_depth_first
 
@@ -59,7 +60,7 @@ class ReturnClient(Client):
     """
 
     def __init__(self, name: str, session: "Session") -> None:
-        super().__init__(name)
+        super().__init__(name, with_rest_client=False)
         self.session = session
 
     async def _call(self, method_properties: common.MethodProperties, args, kwargs) -> common.Result:
@@ -76,7 +77,6 @@ class ReturnClient(Client):
 class Server(endpoints.Endpoint):
     def __init__(self, connection_timout: int = 120) -> None:
         super().__init__("server")
-
         self._slices: Dict[str, ServerSlice] = {}
         self._slice_sequence: List[ServerSlice] = None
         self._handlers: List[routing.Rule] = []
@@ -210,6 +210,8 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         To schedule background tasks, use :func:`add_background_task`
     """
 
+    feature_manager: FeatureManager
+
     def __init__(self, name: str) -> None:
         super().__init__()
 
@@ -219,7 +221,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         # is shutdown in progress?
         self._stopping: bool = False
 
-    def is_stopping(self):
+    def is_stopping(self) -> bool:
         """True when prestop has been called."""
         return self._stopping
 
@@ -228,7 +230,6 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         Called by the RestServer host prior to start, can be used to collect references to other server slices
         Dependencies are not up yet.
         """
-        pass
 
     async def start(self) -> None:
         """
@@ -284,7 +285,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         return self._handlers
 
     # utility methods for extensions developers
-    def schedule(self, call: Callable, interval: int = 60) -> None:
+    def schedule(self, call: Union[Callable, Coroutine], interval: int = 60) -> None:
         self._sched.add_action(call, interval)
 
     def add_static_handler(self, location: str, path: str, default_filename: Optional[str] = None, start: bool = False) -> None:
@@ -321,6 +322,11 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
             Get the status of this slice.
         """
         return {}
+
+    def define_features(self) -> List[Feature]:
+        """ Return a list of feature that this slice offers
+        """
+        return []
 
 
 class Session(object):

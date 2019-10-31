@@ -35,7 +35,7 @@ class BaseHttpException(web.HTTPError):
         """
             Return a response body
         """
-        body = {"message": self.log_message}
+        body: JsonType = {"message": self.log_message}
         if self.details is not None:
             body["error_details"] = self.details
 
@@ -48,7 +48,7 @@ class BaseHttpException(web.HTTPError):
         return self.status_code
 
 
-class AccessDeniedException(BaseHttpException):
+class Forbidden(BaseHttpException):
     """
         An exception raised when access is denied (403)
     """

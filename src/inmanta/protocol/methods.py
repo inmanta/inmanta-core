@@ -18,7 +18,7 @@
 
 import datetime
 import uuid
-from typing import Any, Union
+from typing import Any, List, Union
 
 from inmanta import const, data
 from inmanta.data import model
@@ -26,7 +26,7 @@ from inmanta.types import JsonType, PrimitiveTypes
 
 from . import exceptions
 from .common import ArgOption
-from .decorators import method
+from .decorators import method, typedmethod
 
 
 async def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
@@ -55,8 +55,6 @@ AGENT_ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=
 
 
 # Method for working with projects
-
-
 @method(path="/project", operation="PUT", client_types=["api"])
 def create_project(name: str, project_id: uuid.UUID = None):
     """
@@ -228,7 +226,11 @@ def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
 
 
 @method(
-    path="/decommission/<id>", operation="POST", arg_options={"id": ArgOption(getter=convert_environment)}, client_types=["api"]
+    path="/decommission/<id>",
+    operation="POST",
+    arg_options={"id": ArgOption(getter=convert_environment)},
+    client_types=["api"],
+    api_version=1,
 )
 def decomission_environment(id: uuid.UUID, metadata: dict = None):
     """
@@ -463,10 +465,18 @@ def delete_version(tid: uuid.UUID, id: int):
 
 @method(path="/version", operation="PUT", arg_options=ENV_OPTS, client_types=["compiler"])
 def put_version(
-    tid: uuid.UUID, version: int, resources: list, resource_state: dict = {}, unknowns: list = None, version_info: dict = None
+    tid: uuid.UUID,
+    version: int,
+    resources: list,
+    resource_state: dict = {},
+    unknowns: list = None,
+    version_info: dict = None,
+    compiler_version: str = None,
 ):
     """
         Store a new version of the configuration model
+
+        The version number must be obtained through the reserve_version call
 
         :param tid: The id of the environment
         :param version: The version of the configuration model
@@ -474,6 +484,7 @@ def put_version(
         :param resource_state: A dictionary with the initial const.ResourceState per resource id
         :param unknowns: A list of unknown parameters that caused the model to be incomplete
         :param version_info: Module version information
+        :param compiler_version: version of the compiler, if not provided, this call will return an error
     """
 
 
@@ -952,15 +963,17 @@ def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
     """
 
 
-@method(path="/serverstatus", operation="GET", client_types=["api"])
+@typedmethod(path="/serverstatus", operation="GET", client_types=["api"])
 def get_server_status() -> model.StatusResponse:
     """
         Get the status of the server
     """
 
 
-@method(path="/compilequeue", operation="GET", arg_options=ENV_OPTS, client_types=["api"])
-def get_compile_queue(tid: uuid.UUID) -> model.CompileQueueResponse:
+@typedmethod(
+    path="/compilequeue", operation="GET", arg_options=ENV_OPTS, client_types=["api"], api_version=1, envelope_key="queue"
+)
+def get_compile_queue(tid: uuid.UUID) -> List[model.CompileRun]:
     """
         Get the current compiler queue on the server
     """

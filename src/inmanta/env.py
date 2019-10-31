@@ -17,6 +17,7 @@
 """
 
 import hashlib
+import json
 import logging
 import os
 import re
@@ -26,6 +27,7 @@ import sys
 import tempfile
 import venv
 from subprocess import CalledProcessError
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import pkg_resources
 
@@ -40,18 +42,26 @@ class VirtualEnv(object):
     _egg_fragment_re = re.compile(r"#egg=(?P<name>[^&]*)")
     _at_fragment_re = re.compile(r"^(?P<name>[^@]+)@(?P<req>.+)")
 
-    def __init__(self, env_path):
+    def __init__(self, env_path: str) -> None:
         LOGGER.info("Creating new virtual environment in %s", env_path)
-        self.env_path = env_path
-        self.virtual_python = None
-        self.__cache_done = set()
+        self.env_path: str = env_path
+        self.virtual_python: Optional[str] = None
+        self.__cache_done: Set[str] = set()
+        self._parent_python: Optional[str] = None
+        self._packages_installed_in_parent_env: Optional[Dict[str, str]] = None
 
-        self._old = {}
+    def get_package_installed_in_parent_env(self) -> Optional[Dict[str, str]]:
+        if self._packages_installed_in_parent_env is None:
+            self._packages_installed_in_parent_env = self._get_installed_packages(self._parent_python)
 
-    def init_env(self):
+        return self._packages_installed_in_parent_env
+
+    def init_env(self) -> bool:
         """
             Init the virtual environment
         """
+        self._parent_python = sys.executable
+
         python_name = os.path.basename(sys.executable)
 
         # check if the virtual env exists
@@ -84,7 +94,7 @@ class VirtualEnv(object):
         self.virtual_python = python_bin
         return True
 
-    def use_virtual_env(self):
+    def use_virtual_env(self) -> None:
         """
             Use the virtual environment
         """
@@ -96,7 +106,7 @@ class VirtualEnv(object):
         # patch up pkg
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
-    def activate_that(self):
+    def activate_that(self) -> None:
         # adapted from https://github.com/pypa/virtualenv/blob/master/virtualenv_embedded/activate_this.py
         # MIT license
         # Copyright (c) 2007 Ian Bicking and Contributors
@@ -127,7 +137,7 @@ class VirtualEnv(object):
                 sys.path.remove(item)
         sys.path[:0] = new_sys_path
 
-    def _parse_line(self, req_line: str) -> tuple:
+    def _parse_line(self, req_line: str) -> Tuple[Optional[str], str]:
         """
             Parse the requirement line
         """
@@ -143,13 +153,15 @@ class VirtualEnv(object):
 
         return None, req_line
 
-    def _gen_requirements_file(self, requirements_list) -> str:
-        modules = {}
+    def _gen_requirements_file(self, requirements_list: List[str]) -> str:
+        modules: Dict[str, Any] = {}
         for req in requirements_list:
-            name, req_spec = self._parse_line(req)
+            parsed_name, req_spec = self._parse_line(req)
 
-            if name is None:
+            if parsed_name is None:
                 name = req
+            else:
+                name = parsed_name
 
             url = None
             version = None
@@ -190,7 +202,7 @@ class VirtualEnv(object):
 
         return requirements_file
 
-    def _install(self, requirements_list: []) -> None:
+    def _install(self, requirements_list: List[str]) -> None:
         """
             Install requirements in the given requirements file
         """
@@ -202,17 +214,17 @@ class VirtualEnv(object):
             fd.write(requirements_file)
             fd.close()
 
-            cmd = [self.virtual_python, "-m", "pip", "install", "-r", path]
-            output = b""
+            assert self.virtual_python is not None
+            cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-r", path]
             try:
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             except CalledProcessError as e:
-                LOGGER.debug("%s: %s", cmd, e.output.decode())
-                LOGGER.debug("requirements: %s", requirements_file)
+                LOGGER.error("%s: %s", cmd, e.output.decode())
+                LOGGER.error("requirements: %s", requirements_file)
                 raise
             except Exception:
-                LOGGER.debug("%s: %s", cmd, output.decode())
-                LOGGER.debug("requirements: %s", requirements_file)
+                LOGGER.error("%s: %s", cmd, output.decode())
+                LOGGER.error("requirements: %s", requirements_file)
                 raise
             else:
                 LOGGER.debug("%s: %s", cmd, output.decode())
@@ -223,7 +235,7 @@ class VirtualEnv(object):
 
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
-    def _read_current_requirements_hash(self):
+    def _read_current_requirements_hash(self) -> str:
         """
             Return the hash of the requirements file used to install the current environment
         """
@@ -242,7 +254,7 @@ class VirtualEnv(object):
         with open(path, "w+") as fd:
             fd.write(new_hash)
 
-    def install_from_list(self, requirements_list: list, detailed_cache=False, cache=True) -> None:
+    def install_from_list(self, requirements_list: List[str], detailed_cache: bool = False, cache: bool = True) -> None:
         """
             Install requirements from a list of requirement strings
         """
@@ -252,6 +264,8 @@ class VirtualEnv(object):
             requirements_list = sorted(list(set(requirements_list) - self.__cache_done))
             if len(requirements_list) == 0:
                 return
+
+        requirements_list = self._remove_requirements_present_in_parent_env(requirements_list)
 
         # hash it
         sha1sum = hashlib.sha1()
@@ -267,3 +281,32 @@ class VirtualEnv(object):
         self._set_current_requirements_hash(new_req_hash)
         for x in requirements_list:
             self.__cache_done.add(x)
+
+    def _remove_requirements_present_in_parent_env(self, requirements_list: List[str]) -> List[str]:
+        reqs_to_remove = []
+        packages_installed_in_parent = self.get_package_installed_in_parent_env()
+        for r in requirements_list:
+            parsed_req = list(pkg_resources.parse_requirements(r))[0]
+            # Package is installed and its version fits the constraint
+            if (
+                parsed_req.project_name in packages_installed_in_parent
+                and packages_installed_in_parent[parsed_req.project_name] in parsed_req
+            ):
+                reqs_to_remove.append(r)
+        return [r for r in requirements_list if r not in reqs_to_remove]
+
+    @classmethod
+    def _get_installed_packages(cls, python_interpreter: str) -> Dict[str, str]:
+        cmd = [python_interpreter, "-m", "pip", "list", "--format", "json"]
+        try:
+            output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
+        except CalledProcessError as e:
+            LOGGER.error("%s: %s", cmd, e.output.decode())
+            raise
+        except Exception:
+            LOGGER.error("%s: %s", cmd, output.decode())
+            raise
+        else:
+            LOGGER.debug("%s: %s", cmd, output.decode())
+
+        return {r["name"]: r["version"] for r in json.loads(output.decode())}

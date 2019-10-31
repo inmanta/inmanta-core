@@ -16,14 +16,25 @@
     Contact: code@inmanta.com
 """
 import logging
+import uuid
 
 import pytest
+import yaml
+
+from inmanta.config import feature_file_config
 
 LOGGER = logging.getLogger(__name__)
 
 
+@pytest.fixture
+def server_pre_start(tmp_path):
+    feature_file = tmp_path / "features.yml"
+    feature_file.write_text(yaml.dump({"slices": {"core.forms": {"forms": False}}}))
+    feature_file_config.set(str(feature_file))
+
+
 @pytest.mark.asyncio(timeout=60)
-async def test_form(client, environment):
+async def test_form_features(server_pre_start, client, environment):
     """
         Test creating and updating forms
     """
@@ -37,103 +48,25 @@ async def test_form(client, environment):
         "type": "cwdemo::forms::ClearwaterSize",
     }
     result = await client.put_form(tid=environment, id=form_id, form=form_data)
-    assert result.code == 200
+    assert result.code == 403
 
     result = await client.get_form(environment, form_id)
-    assert result.code == 200
+    assert result.code == 403
 
     result = await client.list_forms(environment)
-    assert result.code == 200
-    assert len(result.result["forms"]) == 1
-    assert result.result["forms"][0]["form_type"] == form_id
+    assert result.code == 403
 
+    result = await client.list_records(environment, "cwdemo::forms::ClearwaterSize")
+    assert result.code == 403
 
-@pytest.mark.asyncio(timeout=60)
-async def test_update_form(client, environment):
-    """
-        Test creating and updating forms
-    """
-    form_id = "cwdemo::forms::ClearwaterSize"
-    form_data = {
-        "attributes": {
-            "bono": {"default": 1, "options": {"min": 1, "max": 100, "widget": "slider", "help": "help"}, "type": "number"},
-            "ralf": {"default": 1, "options": {"min": 1, "max": 100, "widget": "slider", "help": "help"}, "type": "number"},
-        },
-        "options": {"title": "VNF replication", "help": "help", "record_count": 1},
-        "type": "cwdemo::forms::ClearwaterSize",
-    }
-    result = await client.put_form(tid=environment, id=form_id, form=form_data)
-    assert result.code == 200
+    result = await client.get_record(environment, uuid.uuid4())
+    assert result.code == 403
 
-    result = await client.get_form(environment, form_id)
-    assert result.code == 200
-    assert len(result.result["form"]["field_options"]) == 2
+    result = await client.update_record(environment, uuid.uuid4(), {})
+    assert result.code == 403
 
-    form_data["attributes"]["sprout"] = {
-        "default": 1,
-        "options": {"min": 1, "max": 100, "widget": "slider", "help": "help"},
-        "type": "number",
-    }
-    result = await client.put_form(tid=environment, id=form_id, form=form_data)
-    assert result.code == 200
+    result = await client.create_record(environment, uuid.uuid4(), {})
+    assert result.code == 403
 
-    result = await client.get_form(environment, form_id)
-    assert result.code == 200
-    assert len(result.result["form"]["field_options"]) == 3
-
-
-@pytest.mark.asyncio(timeout=60)
-async def test_records(client, environment):
-    """
-        Test creating and updating forms
-    """
-    form_id = "FormType"
-    result = await client.put_form(
-        tid=environment,
-        id=form_id,
-        form={
-            "attributes": {
-                "field1": {"default": 1, "options": {"min": 1, "max": 100}, "type": "number"},
-                "field2": {"default": "", "options": {}, "type": "string"},
-            },
-            "options": {},
-            "type": form_id,
-        },
-    )
-    assert result.code == 200
-
-    result = await client.create_record(tid=environment, form_type=form_id, form={"field1": 10, "field2": "value"})
-    assert result.code == 200
-    record_id = result.result["record"]["id"]
-
-    result = await client.get_record(tid=environment, id=record_id)
-    assert result.code == 200
-    assert len(result.result["record"]["fields"]) == 2
-    assert result.result["record"]["fields"]["field1"] == 10
-    assert result.result["record"]["fields"]["field2"] == "value"
-
-    result = await client.update_record(tid=environment, id=record_id, form={"field1": 20, "field2": "value2"})
-    assert result.code == 200
-
-    result = await client.get_record(tid=environment, id=record_id)
-    assert result.code == 200
-    assert len(result.result["record"]["fields"]) == 2
-    assert result.result["record"]["fields"]["field1"] == 20
-    assert result.result["record"]["fields"]["field2"] == "value2"
-
-    result = await client.list_records(tid=environment, form_type=form_id)
-    assert result.code == 200
-    assert len(result.result["records"]) == 1
-
-    await client.create_record(tid=environment, form_type=form_id, form={"field1": 10, "field2": "value"})
-    result = await client.list_records(tid=environment, form_type=form_id, include_record=True)
-    assert result.code == 200
-    assert len(result.result["records"]) == 2
-    assert "field1" in result.result["records"][0]["fields"]
-
-    result = await client.delete_record(tid=environment, id=record_id)
-    assert result.code == 200
-
-    result = await client.list_records(tid=environment, form_type=form_id)
-    assert result.code == 200
-    assert len(result.result["records"]) == 1
+    result = await client.delete_record(environment, uuid.uuid4())
+    assert result.code == 403

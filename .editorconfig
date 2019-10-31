@@ -13,3 +13,5 @@ charset = utf-8
 [*.py]
 max_line_length = 128
 
+[Makefile]
+indent_style = tab

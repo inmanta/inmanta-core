@@ -29,6 +29,7 @@ from inmanta.agent.agent import Agent
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
 from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.util import get_compiler_version
 from utils import retry_limited
 
 logger = logging.getLogger("inmanta.test.server_agent")
@@ -66,7 +67,14 @@ def get_resource(version, key="key1", agent="agent1", value="value1"):
 
 
 async def _deploy_resources(client, environment, resources, version, push, agent_trigger_method=None):
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
     assert result.code == 200
 
     # do a deploy
@@ -81,14 +89,6 @@ async def _deploy_resources(client, environment, resources, version, push, agent
     assert result.code == 200
 
     return result
-
-
-async def _wait_until_deployment_finishes(client, environment, version, timeout=10):
-    async def is_deployment_finished():
-        result = await client.get_version(environment, version)
-        return result.result["model"]["total"] - result.result["model"]["done"] <= 0
-
-    await retry_limited(is_deployment_finished, timeout)
 
 
 async def _wait_for_n(client, environment, version, n, timeout=10):

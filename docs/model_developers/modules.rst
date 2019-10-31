@@ -1,6 +1,6 @@
 Module Developers Guide
 ========================
-In inmanta all configuration model code and related files, templates, plugins and resource handlers
+In inmanta all orchestration model code and related files, templates, plugins and resource handlers
 are packaged in a module.
 
 
@@ -19,8 +19,8 @@ Inmanta expects that each module is a git repository with a specific layout:
 The template, file and source plugins from the std module expect the following directories as well:
 
 * The ``files`` directory contains files that are deployed verbatim to managed machines.
-* The ``templates`` directory contains templates that use parameters from the configuration model to
-  generate configuration files.
+* The ``templates`` directory contains templates that use parameters from the orchestration model to
+generate configuration files.
 
 A complete module might contain the following files:
 
@@ -167,17 +167,17 @@ The format for requires in requirements.txt is the folllowing:
 Plugins
 *******
 Plugins provide :ref:`functions<lang-plugins>` that can be called from the :term:`DSL`. This is the
-primary mechanism to interface Python code with the configuration model at compile time. This
-mechanism is also used std::template or std::file. Inmanta also registers all plugins with the
-template engine (Jinja2) to use as filter.
+primary mechanism to interface Python code with the orchestration model at compile time. For Example,
+this mechanism is also used for std::template and std::file. In addition to this, Inmanta also registers all
+plugins with the template engine (Jinja2) to use as filters.
 
 A plugin is a python function, registered with the platform with the :func:`~inmanta.plugins.plugin`
-decorator. This plugin accepts arguments from the DSL and can return a value. Both the arguments and
-the return value must by annotated with the allowed types from the configuration model. Type
-annotations are provided as a string (Python3 style argument annotation). ``any`` is the special
+decorator. This plugin accepts arguments when called from the DSL and can return a value. Both the
+arguments and the return value must by annotated with the allowed types from the orchestration model.
+Type annotations are provided as a string (Python3 style argument annotation). ``any`` is a special
 type that effectively disables type validation.
 
-Through the arguments of the function, the Python code in the plugin can navigate the configuration
+Through the arguments of the function, the Python code in the plugin can navigate the orchestration
 model. The compiler takes care of scheduling the execution at the correct point in the model
 evaluation.
 
@@ -195,18 +195,30 @@ the following code:
 
 
 If the code above is placed in the plugins directory of the example module
-(``examples/plugins/__init__.py``) the plugin can be invoked from the configuration model as
+(``examples/plugins/__init__.py``) the plugin can be invoked from the orchestration model as
 follows:
 
-.. code-block:: none
+.. code-block:: inmanta
 
     import example
 
     example::hello()
 
-
 The plugin decorator accepts an argument name. This can be used to change the name of the plugin in
-the DSL. This can be used to create plugins that use python reserved names such as ``print``.
+the DSL. This can be used to create plugins that use python reserved names such as ``print`` for example:
+
+.. code-block:: python
+    :linenos:
+
+    from inmanta.plugins import plugin
+
+    @plugin("print")
+    def printf():
+        """
+            Prints inmanta
+        """
+        print("inmanta")
+
 
 A more complex plugin accepts arguments and returns a value. The following example creates a plugin
 that converts a string to uppercase:
@@ -223,7 +235,7 @@ that converts a string to uppercase:
 
 This plugin can be tested with:
 
-.. code-block:: none
+.. code-block:: inmanta
 
     import example
 
@@ -232,13 +244,13 @@ This plugin can be tested with:
 
 Argument type annotations are strings that refer to Inmanta primitive types or to entities. If an
 entity is passed to a plugin, the python code of the plugin can navigate relations throughout the
-configuration model to access attributes of other entities.
+orchestration model to access attributes of other entities.
 
 If your plugin requires external libraries, include a requirements.txt in the module. The libraries
 listed in this file are automatically installed by the compiler and agents.
 
-..todo:: context
-..todo:: new statements
+.. todo:: context
+.. todo:: new statements
 
 Resources and handlers
 **********************
@@ -257,7 +269,7 @@ The fields of the resource are indicated with a ``fields`` field in the class. T
 or list of strings with the name of the desired fields of the resource. The orchestrator uses these
 fields to determine which attributes of the matching entity need to be included in the resource.
 
-Fields of a resource cannot refer to instance in the configuration model or fields of other
+Fields of a resource cannot refer to instance in the orchestration model or fields of other
 resources. The resource serializers allows to map field values. Instead of referring directly to an
 attribute of the entity is serializes (path in std::File and path in the resource map one on one).
 This mapping is done by adding a static method to the resource class with ``get_$(field_name)`` as
@@ -298,10 +310,10 @@ Handler
 ^^^^^^^
 Handlers interface the orchestrator with resources in the :term:`infrastructure` in the agents.
 Handlers take care of changing the current state of a resource to the desired state expressed in the
-configuration model.
+orchestration model.
 
 The compiler collects all python modules from Inmanta modules that provide handlers and uploads them
-to the server. When a new configuration module version is deployed, the handler code is pushed to all
+to the server. When a new orchestration module version is deployed, the handler code is pushed to all
 agents and imported there.
 
 Handlers should inherit the class :class:`~inmanta.agent.handler.ResourceHandler`. The
@@ -319,7 +331,7 @@ match managed APIs very well. The CRUDHandler is recommended for new handlers un
 has special resource states that do not match CRUD operations.
 
 Each handler basically needs to support two things: reading the current state and changing the state
-of the resource to the desired state in the configuration model. Reading the state is used for dry
+of the resource to the desired state in the orchestration model. Reading the state is used for dry
 runs and reporting. The CRUDHandler handler also uses the result to determine whether create, delete
 or update needs to be invoked.
 

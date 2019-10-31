@@ -60,7 +60,7 @@ from inmanta import config as inmanta_config
 from inmanta import const, execute, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol.exceptions import BadRequest
-from inmanta.types import HandlerType, JsonType, MethodType
+from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes, StrictNonIntBool
 
 from . import exceptions
 
@@ -152,7 +152,7 @@ class Request(object):
         return req
 
 
-T = TypeVar("T", bound=BaseModel)
+T = TypeVar("T", bound=Union[None, ArgumentTypes])
 
 
 class ReturnValue(Generic[T]):
@@ -164,6 +164,7 @@ class ReturnValue(Generic[T]):
         self._status_code = status_code
         self._headers = headers
         self._response = response
+        self._warnings: List[str] = []
 
     @property
     def status_code(self) -> int:
@@ -173,18 +174,44 @@ class ReturnValue(Generic[T]):
     def headers(self) -> MutableMapping[str, str]:
         return self._headers
 
-    def get_body(self, wrap_data: bool = False) -> Optional[BaseModel]:
-        """ Get the response body
-
-            :param wrap_data: Should the response be mapped into a data key
+    def _get_without_envelope(self) -> ReturnTypes:
+        """ Get the body without an envelope specified
         """
+        if len(self._warnings):
+            LOGGER.info("Got warnings for client but cannot transfer because no envelope is used.")
+
         if self._response is None:
+            if len(self._warnings):
+                return {"metadata": {"warnings": self._warnings}}
             return None
 
-        if wrap_data:
-            return {"data": self._response}
-
         return self._response
+
+    def _get_with_envelope(self, envelope: bool, envelope_key: str) -> ReturnTypes:
+        """ Get the body with an envelope specified
+        """
+        response: Dict[str, Any] = {}
+        if self._response is not None:
+            response[envelope_key] = self._response
+
+        if len(self._warnings):
+            response["metadata"] = {"warnings": self._warnings}
+
+        return response
+
+    def get_body(self, envelope: bool, envelope_key: str) -> ReturnTypes:
+        """ Get the response body
+
+            :param envelope: Should the response be mapped into a data key
+            :param envelope_key: The envelope key to use
+        """
+        if not envelope:
+            return self._get_without_envelope()
+
+        return self._get_with_envelope(envelope, envelope_key)
+
+    def add_warnings(self, warnings: List[str]) -> None:
+        self._warnings.extend(warnings)
 
     def __repr__(self) -> str:
         return f"ReturnValue<code={self.status_code} headers=<{self.headers}> response=<{self._response}>>"
@@ -200,24 +227,24 @@ class Response(object):
 
     @classmethod
     def create(
-        cls, result: ReturnValue, additional_headers: MutableMapping[str, str] = {}, wrap_data: bool = False
+        cls, result: ReturnValue, additional_headers: MutableMapping[str, str], envelope: bool, envelope_key: str
     ) -> "Response":
         """
             Create a response from a return value
         """
-        return cls(status_code=result.status_code, headers=additional_headers, body=result.get_body(wrap_data))
+        return cls(status_code=result.status_code, headers=additional_headers, body=result.get_body(envelope, envelope_key))
 
-    def __init__(self, status_code: int, headers: Dict[str, str], body: Optional[JsonType] = None) -> None:
+    def __init__(self, status_code: int, headers: MutableMapping[str, str], body: ReturnTypes = None) -> None:
         self._status_code = status_code
         self._headers = headers
         self._body = body
 
     @property
-    def body(self) -> Optional[JsonType]:
+    def body(self) -> ReturnTypes:
         return self._body
 
     @property
-    def headers(self) -> Dict[str, str]:
+    def headers(self) -> MutableMapping[str, str]:
         return self._headers
 
     @property
@@ -282,7 +309,7 @@ class InvalidMethodDefinition(Exception):
 
 
 VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
-VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime)
+VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNonIntBool, datetime)
 
 
 class MethodProperties(object):
@@ -290,7 +317,20 @@ class MethodProperties(object):
         This class stores the information from a method definition
     """
 
-    methods: Dict[str, "MethodProperties"] = {}
+    methods: Dict[str, List["MethodProperties"]] = defaultdict(list)
+
+    @classmethod
+    def register_method(cls, properties: "MethodProperties") -> None:
+        """ Register new method properties. Multiple properties on a method is supported but versions have to be unique.
+        """
+        current_list = [x.api_version for x in cls.methods[properties.function.__name__]]
+        if properties.api_version in current_list:
+            raise Exception(
+                f"Method {properties.function.__name__} already has a "
+                "method definition for api version {properties.api_version}"
+            )
+
+        cls.methods[properties.function.__name__].append(properties)
 
     def __init__(
         self,
@@ -307,8 +347,9 @@ class MethodProperties(object):
         client_types: List[str],
         api_version: int,
         api_prefix: str,
-        wrap_data: bool,
+        envelope: bool,
         typed: bool = False,
+        envelope_key: str = const.ENVELOPE_KEY,
     ) -> None:
         """
             Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -326,8 +367,9 @@ class MethodProperties(object):
                                 to which the options apply.
             :param api_version: The version of the api this method belongs to
             :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
-            :param wrap_data: Put the response of the call under a "data" key.
+            :param envelope: Put the response of the call under an envelope key.
             :param typed: Is the method definition typed or not
+            :param envelope_key: The envelope key to use
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -347,7 +389,8 @@ class MethodProperties(object):
         self._client_types = client_types
         self._api_version = api_version
         self._api_prefix = api_prefix
-        self._wrap_data = wrap_data
+        self._envelope = envelope
+        self._envelope_key = envelope_key
         self.function = function
 
         # validate client types
@@ -366,11 +409,11 @@ class MethodProperties(object):
         """
         try:
             out = self.argument_validator(**values)
-            return {f: getattr(out, f) for f in out.fields.keys()}
+            return {f: getattr(out, f) for f in out.__fields__.keys()}
         except ValidationError as e:
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
-            raise BadRequest(error_msg, e.errors())
+            raise BadRequest(error_msg, {"validation_errors": e.errors()})
 
     def arguments_to_pydantic(self) -> Type[pydantic.BaseModel]:
         """
@@ -407,8 +450,6 @@ class MethodProperties(object):
             - ReturnValue with a type parameter. The type must be the allowed types for arguments or none
         """
         type_hints = get_type_hints(self.function)
-        if "return" not in type_hints and self._wrap_data:
-            raise InvalidMethodDefinition(f"Wrap data is only supported on methods that define a return type ({self.function}")
 
         # TODO: only primitive types are allowed in the path
         # TODO: body and get does not work
@@ -433,7 +474,7 @@ class MethodProperties(object):
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
         if typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
-            self._validate_type_arg(arg, typing_inspect.get_args(arg_type, evaluate=True)[0])
+            self._validate_type_arg(arg, typing_inspect.get_args(arg_type, evaluate=True)[0], allow_none_type=True)
 
         elif not typing_inspect.is_generic_type(arg_type) and issubclass(arg_type, ReturnValue):
             raise InvalidMethodDefinition("ReturnValue should have a type specified.")
@@ -454,7 +495,7 @@ class MethodProperties(object):
 
         if typing_inspect.is_union_type(arg_type):
             # Make sure there is only one list and one dict in the union, otherwise we cannot process the arguments
-            cnt = defaultdict(lambda: 0)
+            cnt: Dict[str, int] = defaultdict(lambda: 0)
             for sub_arg in typing_inspect.get_args(arg_type, evaluate=True):
                 self._validate_type_arg(arg, sub_arg, allow_none_type, in_url)
 
@@ -543,8 +584,16 @@ class MethodProperties(object):
         return self._client_types
 
     @property
-    def wrap_data(self) -> bool:
-        return self._wrap_data
+    def envelope(self) -> bool:
+        return self._envelope
+
+    @property
+    def envelope_key(self) -> str:
+        return self._envelope_key
+
+    @property
+    def api_version(self) -> int:
+        return self._api_version
 
     def get_call_headers(self) -> Set[str]:
         """
@@ -658,17 +707,19 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
     return util.custom_json_encoder(o)
 
 
-def attach_warnings(code: int, value: JsonType, warnings: Optional[List[str]]) -> Tuple[int, JsonType]:
+def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[List[str]]) -> Tuple[int, JsonType]:
+    if value is None:
+        value = {}
     if warnings:
-        if value is None:
-            value = {}
         meta = value.setdefault("metadata", {})
         warns = meta.setdefault("warnings", [])
         warns.extend(warnings)
     return code, value
 
 
-def json_encode(value: JsonType) -> str:
+def json_encode(value: ReturnTypes) -> str:
+    """ Our json encodde is able to also serialize other types than a dict.
+    """
     # see json_encode in tornado.escape
     return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
 
@@ -695,8 +746,10 @@ def shorten(msg: str, max_len: int = 10) -> str:
 
 def encode_token(client_types: List[str], environment: str = None, idempotent: bool = False, expire: float = None) -> str:
     cfg = inmanta_config.AuthJWTConfig.get_sign_config()
+    if cfg is None:
+        raise Exception("No JWT signing configuration available.")
 
-    payload = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}
+    payload: Dict[str, Any] = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}
 
     if not idempotent:
         payload["iat"] = int(time.time())
@@ -718,38 +771,38 @@ def decode_token(token: str) -> Dict[str, str]:
         header = jwt.get_unverified_header(token)
         payload = jwt.decode(token, verify=False)
     except Exception:
-        raise exceptions.AccessDeniedException("Unable to decode provided JWT bearer token.")
+        raise exceptions.Forbidden("Unable to decode provided JWT bearer token.")
 
     if "iss" not in payload:
-        raise exceptions.AccessDeniedException("Issuer is required in token to validate.")
+        raise exceptions.Forbidden("Issuer is required in token to validate.")
 
     cfg = inmanta_config.AuthJWTConfig.get_issuer(payload["iss"])
     if cfg is None:
-        raise exceptions.AccessDeniedException("Unknown issuer for token")
+        raise exceptions.Forbidden("Unknown issuer for token")
 
     alg = header["alg"].lower()
     if alg == "hs256":
         key = cfg.key
     elif alg == "rs256":
         if "kid" not in header:
-            raise exceptions.AccessDeniedException("A kid is required for RS256")
+            raise exceptions.Forbidden("A kid is required for RS256")
         kid = header["kid"]
         if kid not in cfg.keys:
-            raise exceptions.AccessDeniedException(
+            raise exceptions.Forbidden(
                 "The kid provided in the token does not match a known key. Check the jwks_uri or try "
                 "restarting the server to load any new keys."
             )
 
         key = cfg.keys[kid]
     else:
-        raise exceptions.AccessDeniedException("Algorithm %s is not supported." % alg)
+        raise exceptions.Forbidden("Algorithm %s is not supported." % alg)
 
     try:
         payload = dict(jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo]))
         ct_key = const.INMANTA_URN + "ct"
         payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
     except Exception as e:
-        raise exceptions.AccessDeniedException(*e.args)
+        raise exceptions.Forbidden(*e.args)
 
     return payload
 

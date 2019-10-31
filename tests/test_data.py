@@ -19,18 +19,70 @@ import datetime
 import logging
 import time
 import uuid
+from concurrent.futures._base import TimeoutError
 
 import asyncpg
 import pytest
+from asyncpg import Connection
+from asyncpg.pool import Pool
 
 from inmanta import const, data
 from inmanta.const import LogLevel
 
 
 @pytest.mark.asyncio
-async def test_connection_failuer(free_socket, database_name, clean_reset):
-    _addr, port = free_socket.getsockname()
-    free_socket.close()
+async def test_connect_too_small_connection_pool(postgres_db, database_name: str, create_db_schema: bool = False):
+    pool: Pool = await data.connect(
+        postgres_db.host,
+        postgres_db.port,
+        database_name,
+        postgres_db.user,
+        None,
+        create_db_schema,
+        connection_pool_min_size=1,
+        connection_pool_max_size=1,
+        connection_timeout=120,
+    )
+    assert pool is not None
+    connection: Connection = await pool.acquire()
+    try:
+        with pytest.raises(TimeoutError):
+            await pool.acquire(timeout=1.0)
+    finally:
+        await connection.close()
+        await data.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_connect_default_parameters(postgres_db, database_name: str, create_db_schema: bool = False):
+    pool: Pool = await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None, create_db_schema)
+    assert pool is not None
+    try:
+        async with pool.acquire() as connection:
+            assert connection is not None
+    finally:
+        await data.disconnect()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("min_size, max_size", [(-1, 1), (2, 1), (-2, -2)])
+async def test_connect_invalid_parameters(postgres_db, min_size, max_size, database_name: str, create_db_schema: bool = False):
+    with pytest.raises(ValueError):
+        await data.connect(
+            postgres_db.host,
+            postgres_db.port,
+            database_name,
+            postgres_db.user,
+            None,
+            create_db_schema,
+            connection_pool_min_size=min_size,
+            connection_pool_max_size=max_size,
+        )
+
+
+@pytest.mark.asyncio
+async def test_connection_failure(unused_tcp_port_factory, database_name, clean_reset):
+    port = unused_tcp_port_factory()
     with pytest.raises(OSError):
         await data.connect("localhost", port, database_name, "testuser", None)
 
@@ -1171,6 +1223,49 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
     resources = await data.Resource.get_resources_for_version(env.id, 3)
     assert len(resources) == 4
     assert sorted([x.resource_version_id for x in resources]) == sorted([d, s, u, su])
+
+
+@pytest.mark.asyncio
+async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    for version in range(1, 3):
+        status = const.ResourceState.deployed if version == 1 else const.ResourceState.available
+        cm = data.ConfigurationModel(
+            environment=env.id,
+            version=version,
+            date=datetime.datetime.now(),
+            total=2,
+            version_info={},
+            released=True,
+            deployed=True,
+        )
+        await cm.insert()
+        for i in range(1, 3):
+            res = data.Resource.new(
+                environment=env.id,
+                resource_version_id="std::File[agent1,path=/tmp/file%d],v=%d" % (i, version),
+                status=status,
+                attributes={"path": f"/etc/motd{i}", "purge_on_delete": True, "purged": False},
+            )
+            await res.insert()
+
+    resources = await data.Resource.get_resources_in_latest_version(
+        env.id, "std::File", {"path": "/etc/motd1", "purge_on_delete": True}
+    )
+    assert len(resources) == 1
+    resource = resources[0]
+    expected_resource = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/tmp/file1],v=2",
+        status=status,
+        attributes={"path": "/etc/motd1", "purge_on_delete": True, "purged": False},
+    )
+    assert resource.to_dict() == expected_resource.to_dict()
 
 
 @pytest.mark.asyncio

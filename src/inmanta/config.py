@@ -26,7 +26,7 @@ import sys
 import uuid
 import warnings
 from collections import defaultdict
-from configparser import ConfigParser, Interpolation
+from configparser import ConfigParser, Interpolation, SectionProxy
 from typing import Callable, Dict, Generic, List, Optional, TypeVar, Union, cast
 from urllib import error, request
 
@@ -50,11 +50,11 @@ class LenientConfigParser(ConfigParser):
 
 
 class Config(object):
-    __instance: Optional["Config"] = None
+    __instance: Optional[ConfigParser] = None
     __config_definition: Dict[str, Dict[str, "Option"]] = defaultdict(lambda: {})
 
     @classmethod
-    def get_config_options(cls) -> Dict[str, Dict[str, str]]:
+    def get_config_options(cls) -> Dict[str, Dict[str, "Option"]]:
         return cls.__config_definition
 
     @classmethod
@@ -87,7 +87,7 @@ class Config(object):
         cls.__instance = config
 
     @classmethod
-    def _get_instance(cls) -> "Config":
+    def _get_instance(cls) -> ConfigParser:
         if cls.__instance is None:
             raise Exception("Load the configuration first")
 
@@ -99,13 +99,17 @@ class Config(object):
 
     # noinspection PyNoneFunctionAssignment
     @classmethod
-    def get(cls, section: Optional[str] = None, name: Optional[str] = None, default_value: Optional[str] = None) -> str:
+    def get(
+        cls, section: Optional[str] = None, name: Optional[str] = None, default_value: Optional[str] = None
+    ) -> Union[str, ConfigParser]:
         """
-            Get the entire compiler or get a value directly
+            Get the entire config or get a value directly
         """
         cfg = cls._get_instance()
         if section is None:
             return cfg
+
+        assert name is not None
         name = _normalize_name(name)
 
         opt = cls.validate_option_request(section, name, default_value)
@@ -116,7 +120,13 @@ class Config(object):
         return opt.validate(val)
 
     @classmethod
-    def getboolean(cls, section: str, name: str, default_value: str = None) -> bool:
+    def is_set(cls, section: str, name: str) -> bool:
+        """Check if a certain config option was specified in the config file.
+        """
+        return section in cls._get_instance() and name in cls._get_instance()[section]
+
+    @classmethod
+    def getboolean(cls, section: str, name: str, default_value: Optional[bool] = None) -> bool:
         """
             Return a boolean from the configuration
         """
@@ -139,15 +149,15 @@ class Config(object):
         cls.__config_definition[option.section][option.name] = option
 
     @classmethod
-    def validate_option_request(cls, section: str, name: str, default_value: str) -> Optional["Option"]:
+    def validate_option_request(cls, section: str, name: str, default_value: Optional[str]) -> Optional["Option"]:
         if section not in cls.__config_definition:
             LOGGER.warning("Config section %s not defined" % (section))
             # raise Exception("Config section %s not defined" % (section))
-            return
+            return None
         if name not in cls.__config_definition[section]:
             LOGGER.warning("Config name %s not defined in section %s" % (name, section))
             # raise Exception("Config name %s not defined in section %s" % (name, section))
-            return
+            return None
         opt = cls.__config_definition[section][name]
         if default_value is not None and opt.get_default_value() != default_value:
             LOGGER.warning(
@@ -161,6 +171,11 @@ class Config(object):
 def is_int(value: str) -> int:
     """int"""
     return int(value)
+
+
+def is_float(value: str) -> float:
+    """float"""
+    return float(value)
 
 
 def is_time(value: str) -> int:
@@ -243,7 +258,7 @@ class Option(Generic[T]):
         self,
         section: str,
         name: str,
-        default: Union[str, bool, int, None, Callable],
+        default: Union[T, None, Callable[[], T]],
         documentation: str,
         validator: Callable[[str], T] = is_str,
         predecessor_option: "Option" = None,
@@ -285,7 +300,7 @@ class Option(Generic[T]):
     def validate(self, value: str) -> T:
         return self.validator(value)
 
-    def get_default_value(self):
+    def get_default_value(self) -> Optional[T]:
         defa = self.default
         if callable(defa):
             return defa()
@@ -315,17 +330,18 @@ def option_as_default(opt: Option[T]) -> Callable[[], T]:
 # Global config options are defined here
 #############################
 # flake8: noqa: H904
-state_dir: Option[str] = Option("config", "state_dir", "/var/lib/inmanta", "The directory where the server stores its state")
+state_dir = Option("config", "state_dir", "/var/lib/inmanta", "The directory where the server stores its state", is_str)
 
 log_dir = Option(
     "config",
     "log_dir",
     "/var/log/inmanta",
     "The directory where the resource action log is stored and the logs of auto-started agents.",
+    is_str,
 )
 
 
-def get_executable():
+def get_executable() -> Optional[str]:
     """``os.path.abspath(sys.argv[0])``"""
     try:
         return os.path.abspath(sys.argv[0])
@@ -333,7 +349,7 @@ def get_executable():
         return None
 
 
-def get_default_nodename():
+def get_default_nodename() -> str:
     """``socket.gethostname()``"""
     import socket
 
@@ -341,7 +357,7 @@ def get_default_nodename():
 
 
 nodename = Option("config", "node-name", get_default_nodename, "Force the hostname of this machine to a specific value", is_str)
-
+feature_file_config = Option("config", "feature-file", None, "The loacation of the inmanta feature file.", is_str_opt)
 
 ###############################
 # Transport Config
@@ -439,6 +455,7 @@ class AuthJWTConfig(object):
         for cfg in cls.sections.values():
             if cfg.sign:
                 return cfg
+        return None
 
     @classmethod
     def get_issuer(cls, issuer: str) -> Optional["AuthJWTConfig"]:
@@ -453,7 +470,7 @@ class AuthJWTConfig(object):
             return cls.issuers[issuer]
         return None
 
-    def __init__(self, name: str, section: str, config: Config):
+    def __init__(self, name: str, section: str, config: SectionProxy):
         self.name = name
         self.section = section
         self._config = config
@@ -560,6 +577,6 @@ class AuthJWTConfig(object):
             # Other errors are possible, such as IOError.
             raise ValueError("Unable to load key data for %s using the provided jwks_uri." % (self.section))
 
-        self.keys = {}
+        self.keys: Dict[str, str] = {}
         for key in key_data["keys"]:
             self.keys[key["kid"]] = self._load_public_key(key["e"], key["n"])

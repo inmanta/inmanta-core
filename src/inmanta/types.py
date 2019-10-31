@@ -59,10 +59,10 @@ ReturnTupple = Tuple[int, Optional[JsonType]]
 
 ArgumentTypes = Union[SimpleTypes, Sequence[SimpleTypes], Mapping[str, SimpleTypes]]
 
-ReturnTypes = Union[None, ArgumentTypes]
+ReturnTypes = Optional[ArgumentTypes]
 MethodReturn = Union[ReturnTypes, "ReturnValue[ReturnTypes]"]
 MethodType = Callable[..., MethodReturn]
 
-Apireturn = Union[int, ReturnTupple, "ReturnValue[ReturnTypes]", ReturnTypes]
+Apireturn = Union[int, ReturnTupple, "ReturnValue[ReturnTypes]", "ReturnValue[None]", ReturnTypes]
 Warnings = Optional[List[str]]
 HandlerType = Callable[..., Coroutine[Any, Any, Apireturn]]

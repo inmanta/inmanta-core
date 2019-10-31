@@ -12,6 +12,7 @@ Inmanta, please check out the :doc:`../quickstart` guide.
 
     commands
     config
+    environmentsettings
     projectyml
     api
     modules

@@ -29,8 +29,8 @@ import pytest
 from inmanta import config, data
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server import config as server_config
-from inmanta.server.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.server.protocol import Server
+from inmanta.server.services.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.util import ensure_directory_exist
 from utils import LogSequence, report_db_index_usage, retry_limited, wait_for_version
 
@@ -341,7 +341,9 @@ async def test_compile_runner(server, tmpdir, client):
     # env vars
     marker = str(uuid.uuid4())
     compile, stages = await compile_and_assert(env, False, env_vars={testmarker_env: marker})
+    assert len(compile.request.environment_variables) == 1
     assert stages["Init"]["returncode"] == 0
+    assert f"Using extra environment variables during compile TESTMARKER='{marker}'" in stages["Init"]["outstream"]
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print} {marker}" in out
@@ -419,7 +421,7 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
         # stages
         init = reports["Init"]
         assert not init["errstream"]
-        assert "project found in" in init["outstream"] and "and no repository set set" in init["outstream"]
+        assert "project found in" in init["outstream"] and "and no repository set" in init["outstream"]
 
         # compile
         comp = reports["Recompiling configuration model"]
@@ -437,14 +439,11 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
 
 
 @pytest.mark.asyncio(timeout=90)
-async def test_server_recompile(server_multi, client_multi, environment_multi, monkeypatch):
+async def test_server_recompile(server, client, environment, monkeypatch):
     """
         Test a recompile on the server and verify recompile triggers
     """
     config.Config.set("server", "auto-recompile-wait", "0")
-    client = client_multi
-    server = server_multi
-    environment = environment_multi
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
@@ -481,13 +480,12 @@ async def test_server_recompile(server_multi, client_multi, environment_multi, m
     assert versions["versions"][0]["total"] == 1
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
 
-    # get compile reports
+    # get compile reports and make sure the environment variables are not logged
     reports = await client.get_reports(environment)
     assert reports.code == 200
     assert len(reports.result["reports"]) == 1
     env_vars_compile = reports.result["reports"][0]["environment_variables"]
-    assert key_env_var in env_vars_compile
-    assert env_vars_compile[key_env_var] == value_env_var
+    assert key_env_var not in env_vars_compile
 
     # get report
     compile_report = await client.get_report(reports.result["reports"][0]["id"])

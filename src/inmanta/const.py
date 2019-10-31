@@ -205,3 +205,9 @@ PLUGINS_PACKAGE = "inmanta_plugins"
 EXTENSION_NAMESPACE = "inmanta_ext"
 # module inside the extension package that contains the setup function
 EXTENSION_MODULE = "extension"
+
+# Default envelope key
+ENVELOPE_KEY = "data"
+
+# Max number of attempts when updating modules
+MAX_UPDATE_ATTEMPT = 5

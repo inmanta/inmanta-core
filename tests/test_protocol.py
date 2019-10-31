@@ -33,11 +33,12 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import config, protocol
 from inmanta.data.model import BaseModel
-from inmanta.protocol import exceptions, json_encode
+from inmanta.protocol import VersionMatch, exceptions, json_encode
 from inmanta.protocol.common import InvalidMethodDefinition, InvalidPathException, ReturnValue
 from inmanta.protocol.rest import CallArguments
 from inmanta.server import config as opt
 from inmanta.server.protocol import Server, ServerSlice
+from inmanta.types import Apireturn
 from inmanta.util import hash_file
 from utils import configure
 
@@ -219,7 +220,7 @@ async def test_gzip_encoding(server):
     """
     (hash, content, body) = make_random_file(size=1024)
 
-    port = config.Config.get("server_rest_transport", "port")
+    port = opt.get_bind_port()
     url = "http://localhost:%s/api/v1/file/%s" % (port, hash)
 
     zipped, body = protocol.gzipped_json({"content": body})
@@ -295,7 +296,7 @@ async def test_method_properties():
             Create a new project
         """
 
-    props: protocol.common.MethodProperties = test_method.__method_properties__
+    props = protocol.common.MethodProperties.methods["test_method"][0]
     assert "Authorization" in props.get_call_headers()
     assert props.get_listen_url() == "/x/v2/test"
     assert props.get_call_url({}) == "/x/v2/test"
@@ -329,7 +330,7 @@ async def test_call_arguments_defaults():
             Create a new project
         """
 
-    call = CallArguments(test_method.__method_properties__, {"name": "test"}, {})
+    call = CallArguments(protocol.common.MethodProperties.methods["test_method"][0], {"name": "test"}, {})
     await call.process()
 
     assert call.call_args["name"] == "test"
@@ -361,7 +362,9 @@ async def test_pydantic():
         """
 
     id = uuid.uuid4()
-    call = CallArguments(test_method.__method_properties__, {"project": {"name": "test", "id": str(id)}}, {})
+    call = CallArguments(
+        protocol.common.MethodProperties.methods["test_method"][0], {"project": {"name": "test", "id": str(id)}}, {}
+    )
     await call.process()
 
     project = call.call_args["project"]
@@ -369,7 +372,9 @@ async def test_pydantic():
     assert project.id == id
 
     with pytest.raises(exceptions.BadRequest):
-        call = CallArguments(test_method.__method_properties__, {"project": {"name": "test", "id": "abcd"}}, {})
+        call = CallArguments(
+            protocol.common.MethodProperties.methods["test_method"][0], {"project": {"name": "test", "id": "abcd"}}, {}
+        )
         await call.process()
 
 
@@ -406,7 +411,7 @@ def test_pydantic_json():
 
 
 @pytest.mark.asyncio
-async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name):
+async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
          Round trip test on aliased object
     """
@@ -465,6 +470,47 @@ async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name):
     await roundtrip(projectf)
     await roundtrip(projectt)
 
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+
+@pytest.mark.asyncio
+async def test_return_non_warnings(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    """
+         Test return none but pushing warnings
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(name: str) -> ReturnValue[None]:  # NOQA
+            """
+                Create a new project
+            """
+
+        @protocol.handle(test_method)
+        async def test_method_handler(self, name) -> ReturnValue[None]:
+            rv = ReturnValue()
+            rv.add_warnings(["error1", "error2"])
+            return rv
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    client = protocol.Client("client")
+
+    response = await client.test_method("x")
+    assert response.code == 200
+    assert "data" not in response.result
+    assert "metadata" in response.result
+    assert "warnings" in response.result["metadata"]
+    assert "error1" in response.result["metadata"]["warnings"]
+
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
 
 @pytest.mark.asyncio
 async def test_invalid_handler():
@@ -486,7 +532,7 @@ async def test_invalid_handler():
 
 
 @pytest.mark.asyncio
-async def test_return_value(unused_tcp_port, postgres_db, database_name):
+async def test_return_value(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
         Test the use and validation of methods that use common.ReturnValue
     """
@@ -521,12 +567,12 @@ async def test_return_value(unused_tcp_port, postgres_db, database_name):
     assert "id" in result.result
     assert "name" in result.result
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_return_model(unused_tcp_port, postgres_db, database_name):
+async def test_return_model(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
         Test the use and validation of methods that use common.ReturnValue
     """
@@ -583,12 +629,12 @@ async def test_return_model(unused_tcp_port, postgres_db, database_name):
     result = await client.test_method3({"name": "test", "id": str(uuid.uuid4())})
     assert result.code == 500
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_data_wrap(unused_tcp_port, postgres_db, database_name):
+async def test_data_envelope(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
         Test the use and validation of methods that use common.ReturnValue
     """
@@ -601,15 +647,37 @@ async def test_data_wrap(unused_tcp_port, postgres_db, database_name):
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
         def test_method(project: Project) -> ReturnValue[Project]:  # NOQA
-            """
-                Create a new project
-            """
+            pass
 
         @protocol.handle(test_method)
         async def test_method(self, project: Project) -> ReturnValue[Project]:
             new_project = project.copy()
-
             return ReturnValue(response=new_project)
+
+        @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"], envelope_key="method")
+        def test_method2(project: Project) -> ReturnValue[Project]:  # NOQA
+            pass
+
+        @protocol.handle(test_method2)
+        async def test_method2(self, project: Project) -> ReturnValue[Project]:
+            new_project = project.copy()
+            return ReturnValue(response=new_project)
+
+        @protocol.method(path="/test3", operation="POST", client_types=["api"], envelope=True)
+        def test_method3(project: Project):  # NOQA
+            pass
+
+        @protocol.handle(test_method3)
+        async def test_method3(self, project: dict) -> Apireturn:
+            return 200, {"id": 1, "name": 2}
+
+        @protocol.method(path="/test4", operation="POST", client_types=["api"], envelope=True, envelope_key="project")
+        def test_method4(project: Project):  # NOQA
+            pass
+
+        @protocol.handle(test_method4)
+        async def test_method4(self, project: dict) -> Apireturn:
+            return 200, {"id": 1, "name": 2}
 
     rs = Server()
     server = ProjectServer(name="projectserver")
@@ -617,6 +685,7 @@ async def test_data_wrap(unused_tcp_port, postgres_db, database_name):
     await rs.start()
 
     client = protocol.Client("client")
+    # 1
     result = await client.test_method({"name": "test", "id": str(uuid.uuid4())})
     assert result.code == 200
 
@@ -624,8 +693,32 @@ async def test_data_wrap(unused_tcp_port, postgres_db, database_name):
     assert "id" in result.result["data"]
     assert "name" in result.result["data"]
 
-    await server.stop()
-    await rs.stop()
+    # 2
+    result = await client.test_method2({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 200
+
+    assert "method" in result.result
+    assert "id" in result.result["method"]
+    assert "name" in result.result["method"]
+
+    # 3
+    result = await client.test_method3({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 200
+
+    assert "data" in result.result
+    assert "id" in result.result["data"]
+    assert "name" in result.result["data"]
+
+    # 4
+    result = await client.test_method4({"name": "test", "id": str(uuid.uuid4())})
+    assert result.code == 200
+
+    assert "project" in result.result
+    assert "id" in result.result["project"]
+    assert "name" in result.result["project"]
+
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
@@ -651,7 +744,7 @@ async def test_invalid_paths():
 
 
 @pytest.mark.asyncio
-async def test_nested_paths(unused_tcp_port, postgres_db, database_name):
+async def test_nested_paths(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test overlapping path definition
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -691,12 +784,12 @@ async def test_nested_paths(unused_tcp_port, postgres_db, database_name):
     assert result.code == 200
     assert "test_method2" == result.result["data"]["name"]
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_list_basemodel_argument(unused_tcp_port, postgres_db, database_name):
+async def test_list_basemodel_argument(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test list of basemodel arguments and primitive types
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -727,12 +820,12 @@ async def test_list_basemodel_argument(unused_tcp_port, postgres_db, database_na
     assert result.code == 200
     assert "test_method" == result.result["data"]["name"]
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_dict_basemodel_argument(unused_tcp_port, postgres_db, database_name):
+async def test_dict_basemodel_argument(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test dict of basemodel arguments and primitive types
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -763,12 +856,12 @@ async def test_dict_basemodel_argument(unused_tcp_port, postgres_db, database_na
     assert result.code == 200
     assert "test_method" == result.result["data"]["name"]
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_name):
+async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test dict which may have None as a value
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -821,12 +914,12 @@ async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_
     result = await client.test_method2(data=None)
     assert result.code == 200
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_dict_and_list_return(unused_tcp_port, postgres_db, database_name):
+async def test_dict_and_list_return(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test list of basemodel arguments
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -867,8 +960,8 @@ async def test_dict_and_list_return(unused_tcp_port, postgres_db, database_name)
     assert len(result.result["data"]) == 1
     assert "test_method" == result.result["data"][0]
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
@@ -905,7 +998,7 @@ async def test_method_definition():
             """
 
     assert (
-        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, bool, datetime or a "
+        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, StrictNonIntBool, datetime or a "
         "List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
@@ -928,7 +1021,7 @@ async def test_method_definition():
             """
 
     assert (
-        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, bool, datetime or a "
+        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, StrictNonIntBool, datetime or a "
         "List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
@@ -946,7 +1039,7 @@ def test_optional():
 
 
 @pytest.mark.asyncio
-async def test_union_types(unused_tcp_port, postgres_db, database_name):
+async def test_union_types(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test use of union types
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1002,12 +1095,12 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name):
     assert len(result.result["data"]) == 1
     assert 5 == result.result["data"][0]
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
 
 
 @pytest.mark.asyncio
-async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name):
+async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """ Test validation of basemodel arguments and return, and how they are reported
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1037,7 +1130,7 @@ async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name)
     assert result.code == 400
     assert "error_details" in result.result
 
-    details = result.result["error_details"]
+    details = result.result["error_details"]["validation_errors"]
     assert len(details) == 2
 
     name = [d for d in details if d["loc"] == ["data", "name"]][0]
@@ -1051,5 +1144,182 @@ async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name)
     assert result.code == 500
     assert "data validation error" in result.result["message"]
 
-    await server.stop()
-    await rs.stop()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+
+@pytest.mark.asyncio
+async def test_ACOA_header(server):
+    """
+        Test if the server accepts gzipped encoding and returns gzipped encoding.
+    """
+    port = opt.get_bind_port()
+    url = f"http://localhost:{port}/api/v1/environment"
+
+    request = HTTPRequest(url=url, method="GET")
+    client = AsyncHTTPClient()
+    response = await client.fetch(request)
+    assert response.code == 200
+    assert response.headers.get("Access-Control-Allow-Origin") is None
+
+    config.Config.set("server", "access-control-allow-origin", "*")
+    response = await client.fetch(request)
+    assert response.code == 200
+    assert response.headers.get("Access-Control-Allow-Origin") == "*"
+
+
+@pytest.mark.asyncio
+async def test_multi_version_method(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    """ Test multi version methods
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        name: str
+        value: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"], api_version=3)
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=2, envelope_key="data")
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=1, envelope_key="project")
+        def test_method(project: Project) -> Project:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, project: Project) -> Project:  # NOQA
+            return project
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    # rest call
+    port = opt.get_bind_port()
+
+    request = HTTPRequest(
+        url=f"http://localhost:{port}/api/v1/test", method="POST", body=json_encode({"project": {"name": "a", "value": "b"}})
+    )
+    client = AsyncHTTPClient()
+    response = await client.fetch(request)
+    assert response.code == 200
+    body = json.loads(response.body)
+    assert "project" in body
+
+    request = HTTPRequest(
+        url=f"http://localhost:{port}/api/v2/test", method="POST", body=json_encode({"project": {"name": "a", "value": "b"}})
+    )
+    client = AsyncHTTPClient()
+    response = await client.fetch(request)
+    assert response.code == 200
+    body = json.loads(response.body)
+    assert "data" in body
+
+    request = HTTPRequest(
+        url=f"http://localhost:{port}/api/v3/test2", method="POST", body=json_encode({"project": {"name": "a", "value": "b"}})
+    )
+    client = AsyncHTTPClient()
+    response = await client.fetch(request)
+    assert response.code == 200
+    body = json.loads(response.body)
+    assert "data" in body
+
+    # client based calls
+    client = protocol.Client("client")
+    response = await client.test_method(project=Project(name="a", value="b"))
+    assert response.code == 200
+    assert "project" in response.result
+
+    client = protocol.Client("client", version_match=VersionMatch.highest)
+    response = await client.test_method(project=Project(name="a", value="b"))
+    assert response.code == 200
+    assert "data" in response.result
+
+    client = protocol.Client("client", version_match=VersionMatch.exact, exact_version=1)
+    response = await client.test_method(project=Project(name="a", value="b"))
+    assert response.code == 200
+    assert "project" in response.result
+
+    client = protocol.Client("client", version_match=VersionMatch.exact, exact_version=2)
+    response = await client.test_method(project=Project(name="a", value="b"))
+    assert response.code == 200
+    assert "data" in response.result
+
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+
+@pytest.mark.asyncio
+async def test_multi_version_handler(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    """ Test multi version methods
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        name: str
+        value: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=2, envelope_key="data")
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=1, envelope_key="project")
+        def test_method(project: Project) -> Project:  # NOQA
+            pass
+
+        @protocol.handle(test_method, api_version=1)
+        async def test_methodX(self, project: Project) -> Project:  # NOQA
+            return Project(name="v1", value="1")
+
+        @protocol.handle(test_method, api_version=2)
+        async def test_methodY(self, project: Project) -> Project:  # NOQA
+            return Project(name="v2", value="2")
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    # client based calls
+    client = protocol.Client("client")
+    response = await client.test_method(project=Project(name="a", value="b"))
+    assert response.code == 200
+    assert "project" in response.result
+    assert response.result["project"]["name"] == "v1"
+
+    client = protocol.Client("client", version_match=VersionMatch.highest)
+    response = await client.test_method(project=Project(name="a", value="b"))
+    assert response.code == 200
+    assert "data" in response.result
+    assert response.result["data"]["name"] == "v2"
+
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+
+@pytest.mark.asyncio
+async def test_simple_return_type(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    """ Test methods with simple return types
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
+        def test_method(project: str) -> str:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_methodY(self, project: str) -> str:  # NOQA
+            return project
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+
+    # client based calls
+    client = protocol.Client("client")
+    response = await client.test_method(project="x")
+    assert response.code == 200
+    assert response.result["data"] == "x"
+
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)

@@ -18,9 +18,15 @@
 
 
 class CLIException(Exception):
-    def __init__(self, exitcode, *args, **kwargs):
+    def __init__(self, exitcode: int, *args, **kwargs):
         self.exitcode = exitcode
         super(CLIException, self).__init__(*args, **kwargs)
+
+
+class ShowUsageException(Exception):
+    """
+        Raise this exception to show the usage message of the given level
+    """
 
 
 class Commander(object):
@@ -31,7 +37,7 @@ class Commander(object):
     __command_functions = {}
 
     @classmethod
-    def add(cls, name, function, help_msg, parser_config, require_project=False, aliases=[]):
+    def add(cls, name: str, function, help_msg: str, parser_config, require_project=False, aliases=[]) -> None:
         """
             Add a new export function
         """

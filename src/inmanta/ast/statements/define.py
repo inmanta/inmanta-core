@@ -352,9 +352,10 @@ class DefineImplement(DefinitionStatement):
                 if impl_obj.entity is not None and not (
                     entity_type is impl_obj.entity or entity_type.is_parent(impl_obj.entity)
                 ):
-                    raise Exception(
+                    raise TypingException(
+                        self,
                         "Type mismatch: cannot use %s as implementation for "
-                        " %s because its implementing type is %s" % (impl_obj.name, entity_type, impl_obj.entity)
+                        " %s because its implementing type is %s" % (impl_obj.name, entity_type, impl_obj.entity),
                     )
 
                 # add it
@@ -576,11 +577,15 @@ class DefineRelation(BiStatement):
             left_end = None
 
         if self.right[1] is not None:
-            right_end = RelationAttribute(left, right, str(self.right[1]))
-            right_end.source_annotations = self.annotations
-            right_end.set_multiplicity(self.right[2])
-            right_end.comment = self.comment
-            right_end.location = self.right[1].get_location()
+            if right == left and str(self.left[1]) == str(self.right[1]):
+                # relation is its own inverse
+                right_end = left_end
+            else:
+                right_end = RelationAttribute(left, right, str(self.right[1]))
+                right_end.source_annotations = self.annotations
+                right_end.set_multiplicity(self.right[2])
+                right_end.comment = self.comment
+                right_end.location = self.right[1].get_location()
         else:
             right_end = None
 
