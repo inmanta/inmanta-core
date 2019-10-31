@@ -220,6 +220,8 @@ class DefineImplementation(TypeDefinitionStatement):
         if comment is not None:
             self.comment = str(comment)
 
+        self.location = name.get_location()
+
         self.type = Implementation(str(self.name), self.block, self.namespace, str(target_type), self.comment)
         self.type.location = name.get_location()
         self.anchors = [TypeReferenceAnchor(target_type.get_location(), namespace, str(target_type))]
