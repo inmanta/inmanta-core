@@ -136,7 +136,7 @@ rm -rf %{buildroot}
 %attr(-, inmanta, inmanta) %{_localstatedir}/lib/inmanta
 %attr(-, inmanta, inmanta) /var/log/inmanta
 %config %attr(-, root, root)/etc/inmanta
-%config %attr(-, root, root)/etc/inmanta/inmanta.cfg
+%config(noreplace) %attr(-, root, root)/etc/inmanta/inmanta.cfg
 %config %attr(-, root, root)/etc/inmanta/inmanta.d
 %config(noreplace) %attr(-, root, root)/etc/logrotate.d/inmanta
 %config(noreplace) %attr(-, root, root)/etc/sysconfig/inmanta-server
