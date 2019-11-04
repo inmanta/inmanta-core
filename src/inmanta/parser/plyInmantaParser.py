@@ -413,7 +413,6 @@ def p_implementation_def(p: YaccProduction) -> None:
     "implementation_def : IMPLEMENTATION ID FOR class_ref implementation"
     docstr, stmts = p[5]
     p[0] = DefineImplementation(namespace, p[2], p[4], BasicBlock(namespace, stmts), docstr)
-    attach_lnr(p)
 
 
 # def p_implementation_def_2(p):
