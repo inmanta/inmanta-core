@@ -31,12 +31,11 @@ Then, grab the Docker quickstart from our Git repository.
     git clone https://github.com/inmanta/quickstart-docker.git
     cd quickstart-docker
 
-Now that we have the needed docker files, we will need to get the `Inmanta quickstart project <https://github.com/inmanta/quickstart/blob/docker/project.yml>`_
-itself and checkout the docker branch of the quickstart project:
+Now that we have the needed docker files, we will need to get the `Inmanta quickstart project <https://github.com/inmanta/quickstart>`_ itself:
 
 .. code-block:: sh
 
-    git clone https://github.com/inmanta/quickstart.git --branch docker quickstart-project
+    git clone https://github.com/inmanta/quickstart.git quickstart-project
 
 The quickstart project can now be found under the newly created `quickstart-project` directory.
 It will be the basis for this quickstart.
@@ -135,7 +134,7 @@ That directory contains a project.yml, which looks like this:
 
 The ``modulepath`` setting defines that reusable modules will be stored in ``libs``.
 The ``repo`` setting points to one or more Git projects containing Inmanta modules in Git repositories.
-The ``requires`` setting is used to pin versions of modules, otherwise the latest version is used. 
+The ``requires`` setting is used to pin versions of modules, otherwise the latest version is used.
 
 In the next section we will use existing modules to deploy a LAMP stack.
 
@@ -212,7 +211,7 @@ Then, create the inmanta project and environment:
 
     cd /home/inmanta/quickstart-project
     inmanta-cli project create -n test
-    inmanta-cli environment create -n quickstart-env -p test -r https://github.com/inmanta/quickstart.git -b docker --save
+    inmanta-cli environment create -n quickstart-env -p test -r https://github.com/inmanta/quickstart.git -b master --save
 
 .. note::
 
@@ -316,7 +315,7 @@ Inmanta can deploy from the server using only the dashboard. All changes have to
     * Select the ``test`` project.
     * Give the environment a name, e.g. ``env-quickstart``.
     * Specify the repo: for example ``https://github.com/user/quickstart``.
-    * Specify the branch: ``docker``.
+    * Specify the branch: ``master``.
 
 #. Checkout your clone of the quickstart repository and make changes to the main.cf file, for example add the contents
    of single_machine.cf to the main.cf file. Commit the changes and push them to your repository.
