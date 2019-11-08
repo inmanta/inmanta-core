@@ -1,4 +1,4 @@
-mkdir ca/root
+mkdir -p ca/root
 cd ca/root
 # Generate a 8192-bit long SHA-256 RSA key for our root CA:
 openssl genrsa -aes256 -out rootca.key -passout pass:test 8192
@@ -85,7 +85,7 @@ mkdir ../intermediate/
 cd ../intermediate/
  
 cp ../root/intermediate1.key .
-cp ../root/q.crt .
+cp ../root/intermediate1.crt .
  
 # Create a few files where the CA will store it's serials:
 touch certindex
