@@ -1,3 +1,6 @@
+v 2019.4.1 (?) Changes in this release:
+- Compiler bugfix, ensure done nodes are correctly removed from zerowaiters
+
 v 2019.4 (2019-10-30) Changes in this release:
 - Various bugfixes (#1367,#1398,#736, #1454)
 - Added if statement (#1325)
