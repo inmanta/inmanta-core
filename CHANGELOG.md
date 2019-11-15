@@ -1,8 +1,7 @@
 # v 2019.5 (?) Changes in this release:
 
 ## Fixed
-  - Compiler bugfix, ensure done nodes are correctly removed from
-    zerowaiters 
+-   Compiler bugfix, ensure done nodes are correctly removed from zerowaiters
   - Fixed memory leak in database layer
 
 v 2019.4 (2019-10-30) Changes in this release:
