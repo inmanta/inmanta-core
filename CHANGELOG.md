@@ -1,5 +1,5 @@
 v 2019.5 (?) Changes in this release:
-
+- Fixed memory leak in database layer
 
 v 2019.4 (2019-10-30) Changes in this release:
 - Various bugfixes (#1367,#1398,#736, #1454)
