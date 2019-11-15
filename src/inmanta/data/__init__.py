@@ -1630,56 +1630,6 @@ class ResourceAction(BaseDocument):
                     self._updates["changes"][resource] = {}
                 self._updates["changes"][resource][field] = change
 
-    def _get_set_statement_for_messages(self, messages, offset):
-        set_statement = ""
-        values = []
-        for message in messages:
-            if set_statement == "":
-                jsonb_to_update = "messages"
-            else:
-                jsonb_to_update = set_statement
-            set_statement = "array_append(" + jsonb_to_update + ", $" + str(offset) + ")"
-            values.append(self._get_value(message))
-            offset += 1
-        set_statement = "messages=" + set_statement
-        return (set_statement, values)
-
-    def _get_set_statement_for_changes(self, changes, offset):
-        set_statement = ""
-        values = []
-        for resource, field_to_change_dict in changes.items():
-            for field, change in field_to_change_dict.items():
-                if set_statement == "":
-                    jsonb_to_update = "changes"
-                else:
-                    jsonb_to_update = set_statement
-                dollarmark_resource = "$" + str(offset)
-                dollarmark_resource_and_field = "$" + str(offset + 1)
-                dollarmark_change = "$" + str(offset + 2)
-                set_statement = (
-                    "jsonb_set("
-                    + "CASE"
-                    + " WHEN "
-                    + jsonb_to_update
-                    + " ? "
-                    + dollarmark_resource
-                    + "::text"
-                    + " THEN "
-                    + jsonb_to_update
-                    + " ELSE jsonb_build_object("
-                    + dollarmark_resource
-                    + ", jsonb_build_object())"
-                    + " END,"
-                    + dollarmark_resource_and_field
-                    + ", "
-                    + dollarmark_change
-                    + ", TRUE)"
-                )
-                values = values + [self._get_value(resource), self._get_value([resource, field]), self._get_as_jsonb(change)]
-                offset += 3
-        set_statement = "changes=" + set_statement
-        return (set_statement, values)
-
     def _get_as_jsonb(self, obj):
         """
              A PostgreSQL jsonb type should be passed to AsyncPG as a string type.
@@ -1692,34 +1642,12 @@ class ResourceAction(BaseDocument):
 
     async def save(self):
         """
-            Save the accumulated changes
+            Save the changes
         """
         if len(self._updates) == 0:
             return
-
-        (set_statement, values_set_statement) = self._get_set_statement_for_updates()
-        (filter_statement, values_of_filter) = self._get_filter_on_primary_key_fields(offset=len(values_set_statement) + 1)
-        values = values_set_statement + values_of_filter
-        query = "UPDATE " + self.table_name() + " SET " + set_statement + " WHERE " + filter_statement
-        await self._execute_query(query, *values)
+        await self.update_fields(**self._updates)
         self._updates = {}
-
-    def _get_set_statement_for_updates(self):
-        parts_set_statement = []
-        values = []
-        for key, update in self._updates.items():
-            offset = len(values) + 1
-            if key == "messages":
-                (new_statement, new_values) = self._get_set_statement_for_messages(update, offset=offset)
-            elif key == "changes":
-                (new_statement, new_values) = self._get_set_statement_for_changes(update, offset=offset)
-            else:
-                new_statement = key + "=$" + str(offset)
-                new_values = [self._get_value(update)]
-            values += new_values
-            parts_set_statement.append(new_statement)
-        set_statement = ",".join(parts_set_statement)
-        return (set_statement, values)
 
     @classmethod
     async def purge_logs(cls):

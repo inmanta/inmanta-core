@@ -1659,18 +1659,8 @@ async def test_resource_action(init_dataclasses_and_load_schema):
     )
     await resource_action.insert()
 
-    resource_action.add_changes({"rid": {"field1": {"old": "a", "new": "b"}, "field2": {}}})
-    await resource_action.save()
-
-    resource_action.add_changes({"rid": {"field2": {"old": "c", "new": "d"}, "field3": ["removed", "installed"]}})
-    await resource_action.save()
-
+    resource_action.add_changes({"rid": {"field1": {"old": "a", "new": "b"}, "field2": {}, "field3": ["removed", "installed"]}})
     resource_action.add_logs([{}, {}])
-    await resource_action.save()
-
-    resource_action.add_logs([{}, {}])
-    await resource_action.save()
-
     resource_action.set_field("status", const.ResourceState.failed)
     await resource_action.save()
 
@@ -1691,12 +1681,11 @@ async def test_resource_action(init_dataclasses_and_load_schema):
         assert len(ra.changes["rid"]) == 3
         assert ra.changes["rid"]["field1"]["old"] == "a"
         assert ra.changes["rid"]["field1"]["new"] == "b"
-        assert ra.changes["rid"]["field2"]["old"] == "c"
-        assert ra.changes["rid"]["field2"]["new"] == "d"
+        assert ra.changes["rid"]["field2"] == {}
         assert ra.changes["rid"]["field3"] == ["removed", "installed"]
         assert ra.status == const.ResourceState.failed
 
-        assert len(ra.messages) == 4
+        assert len(ra.messages) == 2
         for message in ra.messages:
             assert message == {}
 
