@@ -173,7 +173,7 @@ def t_STRING_EMPTY(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 
 
 def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r"(\".*?[^\\]\")|(\'.*?[^\\]\')"
+    r"(\"((\\\\)+|.*?[^\\](\\\\)*)\")|(\'((\\\\)+|.*?[^\\](\\\\)*)\')"
     t.value = bytes(t.value[1:-1], "utf-8").decode("unicode_escape")
     lexer = t.lexer
 
