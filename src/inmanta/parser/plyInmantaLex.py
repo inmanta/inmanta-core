@@ -189,7 +189,7 @@ def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 
 
 def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r"/([^/]|\\/)*?[^\\]/"
+    r"/([^/\\]|\\.)+/"
     value = Reference("self")  # anonymous value
     expr = Regex(value, t.value[1:-1])
     t.value = expr

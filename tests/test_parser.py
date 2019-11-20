@@ -455,7 +455,20 @@ a = /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}
     assert stmt.children[1].value == re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")
 
 
-def test_regex_escape():
+def test_regex_backslash():
+    statements = parse_code(
+        r"""
+a = /\\\\/
+"""
+    )
+
+    assert len(statements) == 1
+    stmt = statements[0].value
+    assert isinstance(stmt, Regex)
+    assert stmt.children[1].value == re.compile(r"\\")
+
+
+def test_regex_backslash():
     statements = parse_code(
         r"""
 a = /\/1/
