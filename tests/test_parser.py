@@ -468,7 +468,7 @@ a = /\\\\/
     assert stmt.children[1].value == re.compile(r"\\")
 
 
-def test_regex_backslash():
+def test_regex_escape():
     statements = parse_code(
         r"""
 a = /\/1/
