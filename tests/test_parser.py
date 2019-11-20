@@ -782,6 +782,32 @@ a='jos'
     assert stmt.value.value == "jos"
 
 
+def test_string_backslash():
+    statements = parse_code(
+        """
+a="\\\\"
+"""
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "\\"
+
+
+def test_string_backslash_2():
+    statements = parse_code(
+        """
+a='\\\\'
+"""
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "\\"
+
+
 def test_empty():
     statements = parse_code(
         """
