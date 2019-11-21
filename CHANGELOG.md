@@ -5,6 +5,7 @@
  - Fixed memory leak in database layer
  - Fixed lexing of strings ending in an escaped backslash (#1601)
  - Fixed bug where `module freeze` results in empty module.yml (#1598)  
+ - Fixed inconsistent behavior of `export` and and `export -j` (#1595) 
 
 v 2019.4 (2019-10-30) Changes in this release:
 - Various bugfixes (#1367,#1398,#736, #1454)
