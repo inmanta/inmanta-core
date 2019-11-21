@@ -93,6 +93,51 @@ def test_module_help(inmanta_config, capsys):
     assert info.value.args[0].startswith("A subcommand is required.")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("add_types", [True, False])
+async def test_export_to_json(tmpdir, add_types):
+    workspace = tmpdir.mkdir("tmp")
+    path_main_file = workspace.join("main.cf")
+    path_project_yml_file = workspace.join("project.yml")
+    libs_dir = workspace.join("libs")
+
+    path_project_yml_file.write(
+        f"""
+    name: testproject
+    modulepath: {libs_dir}
+    downloadpath: {libs_dir}
+    repo: https://github.com/inmanta/
+    """
+    )
+
+    path_main_file.write(
+        """
+vm1=std::Host(name="non-existing-machine", os=std::linux)
+std::ConfigFile(host=vm1, path="/test", content="")
+"""
+    )
+
+    os.chdir(workspace)
+
+    args = [sys.executable, "-m", "inmanta.app", "export", "-j", "dump.json"]
+    if add_types:
+        args.append("--model-export")
+
+    process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        await asyncio.wait_for(process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+
+    # Make sure exitcode is zero
+    assert process.returncode == 0
+
+    assert os.path.exists("dump.json")
+    assert add_types == os.path.exists("dump.json.types")
+
+
 @pytest.mark.parametrize("push_method", [([]), (["-d"]), (["-d", "--full"])])
 @pytest.mark.asyncio
 async def test_export(tmpdir, server, client, push_method):

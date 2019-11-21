@@ -327,10 +327,11 @@ class Exporter(object):
         if self.options and self.options.json:
             with open(self.options.json, "wb+") as fd:
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
-            if len(self._resources) > 0 or len(unknown_parameters) > 0:
-                model = ModelExporter(types).export_all()
-                with open(self.options.json + ".types", "wb+") as fd:
-                    fd.write(protocol.json_encode(model).encode("utf-8"))
+            if types is not None and model_export:
+                if len(self._resources) > 0 or len(unknown_parameters) > 0:
+                    model = ModelExporter(types).export_all()
+                    with open(self.options.json + ".types", "wb+") as fd:
+                        fd.write(protocol.json_encode(model).encode("utf-8"))
         elif (not self.failed or len(self._resources) > 0 or len(unknown_parameters) > 0) and not no_commit:
             model = None
             if types is not None and model_export:
