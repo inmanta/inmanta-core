@@ -187,6 +187,9 @@ client-id=test456
     assert Config.get("server", "auth")
     assert Config.get("server", "agent-timeout") == 60
 
+    os.unsetenv("INMANTA_SERVER_AUTH")
+    os.unsetenv("INMANTA_SERVER_AGENT_TIMEOUT")
+
 
 @pytest.mark.asyncio
 async def test_bind_address_ipv4(async_finalizer, client):
