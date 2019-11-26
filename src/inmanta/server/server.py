@@ -29,7 +29,7 @@ from inmanta.protocol.common import attach_warnings
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
-from inmanta.server.extensions import Feature
+from inmanta.server.extensions import BoolFeature, Feature
 from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
@@ -40,8 +40,8 @@ if TYPE_CHECKING:
 DBLIMIT = 100000
 
 
-dashboard_feature = Feature(
-    slice=SLICE_SERVER, name="dashboard", description="Server the dashboard under the /dashboard endpoint."
+dashboard_feature = BoolFeature(
+    slice=SLICE_SERVER, name="dashboard", description="Serve the dashboard under the /dashboard endpoint."
 )
 
 
@@ -79,7 +79,7 @@ class Server(protocol.ServerSlice):
         """
             If configured, set up tornado to serve the dashboard
         """
-        if not opt.dash_enable.get() or not self.feature_manager.enabled(dashboard_feature):
+        if not opt.dash_enable.get() or not dashboard_feature.enabled():
             return
 
         dashboard_path = opt.dash_path.get()
