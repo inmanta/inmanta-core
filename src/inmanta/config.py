@@ -43,6 +43,10 @@ def _normalize_name(name: str) -> str:
     return name.replace("_", "-")
 
 
+def _to_env_name(name: str) -> str:
+    return name.replace("-", "_").upper()
+
+
 class LenientConfigParser(ConfigParser):
     def optionxform(self, name: str) -> str:
         name = _normalize_name(name)
@@ -114,7 +118,12 @@ class Config(object):
 
         opt = cls.validate_option_request(section, name, default_value)
 
-        val = cfg.get(section, name, fallback=default_value)
+        val = os.environ.get(f"INMANTA_{section.upper()}_{_to_env_name(name)}", default=None)
+        if val:
+            LOGGER.debug(f"Setting {section}:{name} was set using an environment variable")
+        else:
+            val = cfg.get(section, name, fallback=default_value)
+
         if not opt:
             return val
         return opt.validate(val)

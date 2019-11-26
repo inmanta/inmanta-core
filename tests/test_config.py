@@ -89,9 +89,14 @@ def test_configfile_hierarchy(tmpdir):
 
     min_c_file = os.path.join(tmpdir, "custom.cfg")
 
+    os.environ["INMANTA_SERVER_AUTH"] = "true"
+    os.environ["INMANTA_SERVER_AGENT_TIMEOUT"] = "60"
+
     with open(main_inmanta_cfg_file, "w") as f:
         f.write(
             """
+[server]
+auth=false
 [config]
 log-dir=/log
 [database]
@@ -179,6 +184,8 @@ client-id=test456
     assert Config.get("influxdb", "tags")["tag2"] == "value2"
     assert Config.get("dashboard", "path") == "/directory"
     assert Config.get("dashboard", "client-id") == "test456"
+    assert Config.get("server", "auth")
+    assert Config.get("server", "agent-timeout") == 60
 
 
 @pytest.mark.asyncio
