@@ -189,28 +189,24 @@ def test_load_feature_file(tmp_path):
     feature_file.write_text(yaml.dump({"slices": {"test": {"feature1": False}}}))
     feature_file_config.set(str(feature_file))
 
-    try:
-        fm = FeatureManager()
-        f1 = BoolFeature(slice="test", name="feature1")
-        f2 = BoolFeature(slice="test", name="feature2")
+    fm = FeatureManager()
+    f1 = BoolFeature(slice="test", name="feature1")
+    f2 = BoolFeature(slice="test", name="feature2")
 
-        class MockSlice(ServerSlice):
-            def __init__(self):
-                super().__init__("test")
+    class MockSlice(ServerSlice):
+        def __init__(self):
+            super().__init__("test")
 
-            def define_features(self):
-                return [f1, f2]
+        def define_features(self):
+            return [f1, f2]
 
-        slice = MockSlice()
-        fm.add_slice(slice)
+    slice = MockSlice()
+    fm.add_slice(slice)
 
-        assert slice.feature_manager is fm
+    assert slice.feature_manager is fm
 
-        assert not f1.enabled()
-        assert f2.enabled()
-    finally:
-        pass
-        #feature_file_config.set(None)
+    assert not f1.enabled()
+    assert f2.enabled()
 
 
 @pytest.mark.asyncio
