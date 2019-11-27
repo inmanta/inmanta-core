@@ -124,9 +124,6 @@ class FeatureManager:
     def get_features(self) -> List[Feature]:
         return self._features
 
-    def set_feature_config(self, feature: Feature, value: Any) -> None:
-        feature.set_value(value)
-
     def _load_feature_config(self) -> Dict[str, Dict[str, Any]]:
         feature_file = feature_file_config.get()
         if feature_file is None:
