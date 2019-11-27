@@ -160,6 +160,9 @@ class FeatureManager:
 
             if feature.slice in self._feature_config and feature.name in self._feature_config[feature.slice]:
                 feature.set_value(self._feature_config[feature.slice][feature.name])
+            else:
+                # make sure it is none
+                feature.set_value(None)
 
             self._features.append(feature)
         slice.feature_manager = self
