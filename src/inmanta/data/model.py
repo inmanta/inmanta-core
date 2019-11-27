@@ -17,7 +17,7 @@
 """
 import datetime
 import uuid
-from typing import Dict, List, NewType, Optional, Union
+from typing import Dict, List, NewType, Optional, Union, Any
 
 import pydantic
 
@@ -63,7 +63,7 @@ class FeatureStatus(BaseModel):
 
     slice: str
     name: str
-    value: bool
+    value: Optional[Any]
 
 
 class StatusResponse(BaseModel):

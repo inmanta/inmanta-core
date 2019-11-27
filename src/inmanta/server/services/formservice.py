@@ -26,14 +26,14 @@ from inmanta.protocol import exceptions, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_DATABASE, SLICE_FORM, SLICE_SERVER, SLICE_TRANSPORT, protocol
-from inmanta.server.extensions import Feature
+from inmanta.server.extensions import Feature, BoolFeature
 from inmanta.server.server import Server
 from inmanta.types import Apireturn, JsonType
 
 LOGGER = logging.getLogger(__name__)
 
 
-forms_feature = Feature(slice=SLICE_FORM, name="forms", description="Custom forms and records for external parameters.")
+forms_feature = BoolFeature(slice=SLICE_FORM, name="forms", description="Custom forms and records for external parameters.")
 
 
 class FormService(protocol.ServerSlice):
@@ -59,7 +59,7 @@ class FormService(protocol.ServerSlice):
 
     @protocol.handle(methods.put_form, form_id="id", env="tid")
     async def put_form(self, env: data.Environment, form_id: str, form: JsonType) -> Apireturn:
-        if not self.feature_manager.enabled(forms_feature):
+        if not forms_feature.enabled():
             raise exceptions.Forbidden()
 
         form_doc = await data.Form.get_form(environment=env.id, form_type=form_id)
@@ -91,7 +91,7 @@ class FormService(protocol.ServerSlice):
 
     @protocol.handle(methods.get_form, form_id="id", env="tid")
     async def get_form(self, env: data.Environment, form_id: str) -> Apireturn:
-        if not self.feature_manager.enabled(forms_feature):
+        if not forms_feature.enabled():
             raise exceptions.Forbidden()
 
         form = await data.Form.get_form(environment=env.id, form_type=form_id)
@@ -103,7 +103,7 @@ class FormService(protocol.ServerSlice):
 
     @protocol.handle(methods.list_forms, env="tid")
     async def list_forms(self, env: data.Environment) -> Apireturn:
-        if not self.feature_manager.enabled(forms_feature):
+        if not forms_feature.enabled():
             raise exceptions.Forbidden()
 
         forms = await data.Form.get_list(environment=env.id)
@@ -111,7 +111,7 @@ class FormService(protocol.ServerSlice):
 
     @protocol.handle(methods.list_records, env="tid")
     async def list_records(self, env: data.Environment, form_type: str, include_record: bool) -> Apireturn:
-        if not self.feature_manager.enabled(forms_feature):
+        if not forms_feature.enabled():
             raise exceptions.Forbidden()
 
         form_type_obj = await data.Form.get_form(environment=env.id, form_type=form_type)
@@ -128,7 +128,7 @@ class FormService(protocol.ServerSlice):
 
     @protocol.handle(methods.get_record, record_id="id", env="tid")
     async def get_record(self, env: data.Environment, record_id: uuid.UUID) -> Apireturn:
-        if not self.feature_manager.enabled(forms_feature):
+        if not forms_feature.enabled():
             raise exceptions.Forbidden()
 
         record = await data.FormRecord.get_by_id(record_id)
@@ -139,7 +139,7 @@ class FormService(protocol.ServerSlice):
 
     @protocol.handle(methods.update_record, record_id="id", env="tid")
     async def update_record(self, env: data.Environment, record_id: uuid.UUID, form: JsonType) -> Apireturn:
-        if not self.feature_manager.enabled(forms_feature):
+        if not forms_feature.enabled():
             raise exceptions.Forbidden()
 
         record = await data.FormRecord.get_by_id(record_id)
@@ -174,7 +174,7 @@ class FormService(protocol.ServerSlice):
 
     @protocol.handle(methods.create_record, env="tid")
     async def create_record(self, env: data.Environment, form_type: str, form: JsonType) -> Apireturn:
-        if not self.feature_manager.enabled(forms_feature):
+        if not forms_feature.enabled():
             raise exceptions.Forbidden()
 
         form_obj = await data.Form.get_form(environment=env.id, form_type=form_type)
@@ -208,7 +208,7 @@ class FormService(protocol.ServerSlice):
 
     @protocol.handle(methods.delete_record, record_id="id", env="tid")
     async def delete_record(self, env: data.Environment, record_id: uuid.UUID) -> Apireturn:
-        if not self.feature_manager.enabled(forms_feature):
+        if not forms_feature.enabled():
             raise exceptions.Forbidden()
 
         record = await data.FormRecord.get_by_id(record_id)

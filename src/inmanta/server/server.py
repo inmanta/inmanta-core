@@ -194,9 +194,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             ],
             slices=slices,
             features=[
-                FeatureStatus(slice=feature.slice, name=feature.name, value=self.feature_manager.enabled(feature))
-                for slice in self.feature_manager.get_features().values()
-                for feature in slice.values()
+                FeatureStatus(slice=feature.slice, name=feature.name, value=feature.get_value())
+                for feature in self.feature_manager.get_features()
             ],
         )
 
