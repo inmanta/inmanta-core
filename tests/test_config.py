@@ -71,7 +71,7 @@ def test_options():
     assert configb.get() == "MB2"
 
 
-def test_configfile_hierarchy(tmpdir):
+def test_configfile_hierarchy(monkeypatch, tmpdir):
     etc_inmanta_dir = os.path.join(tmpdir, "etc", "inmanta")
     os.makedirs(etc_inmanta_dir, exist_ok=False)
 
@@ -89,8 +89,8 @@ def test_configfile_hierarchy(tmpdir):
 
     min_c_file = os.path.join(tmpdir, "custom.cfg")
 
-    os.environ["INMANTA_SERVER_AUTH"] = "true"
-    os.environ["INMANTA_SERVER_AGENT_TIMEOUT"] = "60"
+    monkeypatch.setenv("INMANTA_SERVER_AUTH", "true")
+    monkeypatch.setenv("INMANTA_SERVER_AGENT_TIMEOUT", "60")
 
     with open(main_inmanta_cfg_file, "w") as f:
         f.write(
@@ -187,8 +187,8 @@ client-id=test456
     assert Config.get("server", "auth")
     assert Config.get("server", "agent-timeout") == 60
 
-    os.unsetenv("INMANTA_SERVER_AUTH")
-    os.unsetenv("INMANTA_SERVER_AGENT_TIMEOUT")
+    monkeypatch.delenv("INMANTA_SERVER_AUTH")
+    monkeypatch.delenv("INMANTA_SERVER_AGENT_TIMEOUT")
 
 
 @pytest.mark.asyncio
