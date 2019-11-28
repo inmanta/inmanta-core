@@ -1,7 +1,9 @@
 FROM centos:7
 ARG branch
 
-RUN yum install -y epel-release
+# 'yum clean all' is required to work around an issue with the epel-release package
+# where the repomd.xml file contains incorrect data.
+RUN yum install -y epel-release && yum clean all
 RUN curl --silent --location https://dl.yarnpkg.com/rpm/yarn.repo >/etc/yum.repos.d/yarn.repo
 RUN yum install -y git gcc mongodb sudo git tar findutils make procps-ng python3 python3-devel git nodejs-grunt-cli gcc-c++ gcc make yarn postgresql
 
