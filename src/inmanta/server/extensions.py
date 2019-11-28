@@ -17,6 +17,7 @@
 """
 import logging
 import os
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Dict, Generic, List, Optional, TypeVar
 
 import yaml
@@ -53,7 +54,6 @@ class Feature(Generic[T]):
         self._name: str = name
         self._slice: str = slice
         self._description = description
-        self._value: Optional[T] = None
         self._default_value: Optional[T] = default_value
 
     @property
@@ -64,45 +64,26 @@ class Feature(Generic[T]):
     def slice(self) -> str:
         return self._slice
 
+    @property
+    def default_value(self) -> T:
+        return self._default_value
+
     def __str__(self) -> str:
         return f"{self._slice}:{self._name}"
 
-    def set_value(self, value: T) -> None:
-        self._value = value
-
-    def get_value(self) -> Optional[T]:
-        if self._value is None:
-            return self._default_value
-        return self._value
-
 
 class BoolFeature(Feature[bool]):
-    """ A feature that is on or off.
+    """ A feature that is on or off. When no value is given it is enabled.
     """
-
-    def enabled(self) -> bool:
-        value = self.get_value()
-        if value is None:
-            return True
-        return value
+    def __init__(self, slice: str, name: str, description: str = "") -> None:
+        super().__init__(slice, name, description, True)
 
 
 class StringListFeature(Feature[List[str]]):
-    """ A feature that holds a list of allowed values
+    """ A feature that holds a list of allowed values. When the list contains "*" it matches everything.
     """
-
-    def contains(self, item: str, on_empty: bool = True, on_none: bool = True) -> bool:
-        """ Check if the value is contained in the list.
-
-            :param on_empty: What to return if the list is empty
-            :param on_none: What to return if the list is not specified
-        """
-        value = self.get_value()
-        if value is None:
-            return on_none
-        if len(value) == 0:
-            return on_empty
-        return item in value
+    def __init__(self, slice: str, name: str, description: str = "") -> None:
+        super().__init__(slice, name, description, default_value=["*"])
 
 
 class FeatureManager:
@@ -118,11 +99,13 @@ class FeatureManager:
     """
 
     def __init__(self) -> None:
-        self._features: List[Feature] = []
+        self._features: Dict[str, Dict[str, Feature]] = defaultdict(lambda: {})
+        self._feature_config: Dict[str, Dict[str, Any]] = self._load_feature_config()
+
         self._feature_config = self._load_feature_config()
 
     def get_features(self) -> List[Feature]:
-        return self._features
+        return [feature for slice in self._features.values() for feature in slice.values()]
 
     def _load_feature_config(self) -> Dict[str, Dict[str, Any]]:
         feature_file = feature_file_config.get()
@@ -155,14 +138,30 @@ class FeatureManager:
                     f"Feature {feature.name} defines slice {feature.slice} but is defined by slice {slice.name}"
                 )
 
-            if feature.slice in self._feature_config and feature.name in self._feature_config[feature.slice]:
-                feature.set_value(self._feature_config[feature.slice][feature.name])
-            else:
-                # make sure it is none
-                feature.set_value(None)
-
-            self._features.append(feature)
+            self._features[feature.slice][feature.name] = feature
         slice.feature_manager = self
+
+    def get_value(self, feature: Feature[T]) -> T:
+        """ Get the value of a feature
+        """
+        if feature.slice not in self._features or feature.name not in self._features[feature.slice]:
+            raise InvalidFeature("Feature should be defined be slices at boot time.")
+
+        if feature.slice not in self._feature_config or feature.name not in self._feature_config[feature.slice]:
+            return feature.default_value
+        return self._feature_config[feature.slice][feature.name]
+
+    def enabled(self, feature: BoolFeature) -> bool:
+        value = self.get_value(feature)
+        return value
+
+    def contains(self, feature: StringListFeature, item: str) -> bool:
+        """ Check if the value is contained in the list.
+        """
+        value = self.get_value(feature)
+        if "*" in value:
+            return True
+        return item in value
 
 
 class ApplicationContext:

@@ -31,7 +31,7 @@ from inmanta.config import feature_file_config
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT, config
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
-from inmanta.server.extensions import BoolFeature, FeatureManager, InvalidSliceNameException
+from inmanta.server.extensions import BoolFeature, FeatureManager, InvalidSliceNameException, InvalidFeature
 from inmanta.server.protocol import Server, ServerSlice
 from utils import log_contains
 
@@ -192,6 +192,7 @@ def test_load_feature_file(tmp_path):
     fm = FeatureManager()
     f1 = BoolFeature(slice="test", name="feature1")
     f2 = BoolFeature(slice="test", name="feature2")
+    fx = BoolFeature(slice="test", name="featurex")
 
     class MockSlice(ServerSlice):
         def __init__(self):
@@ -205,8 +206,11 @@ def test_load_feature_file(tmp_path):
 
     assert slice.feature_manager is fm
 
-    assert not f1.enabled()
-    assert f2.enabled()
+    assert not fm.enabled(f1)
+    assert fm.enabled(f2)
+
+    with pytest.raises(InvalidFeature):
+        fm.enabled(fx)
 
 
 @pytest.mark.asyncio

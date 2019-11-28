@@ -79,7 +79,7 @@ class Server(protocol.ServerSlice):
         """
             If configured, set up tornado to serve the dashboard
         """
-        if not opt.dash_enable.get() or not dashboard_feature.enabled():
+        if not opt.dash_enable.get() or not self.feature_manager.enabled(dashboard_feature):
             return
 
         dashboard_path = opt.dash_path.get()
@@ -194,7 +194,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             ],
             slices=slices,
             features=[
-                FeatureStatus(slice=feature.slice, name=feature.name, value=feature.get_value())
+                FeatureStatus(slice=feature.slice, name=feature.name, value=self.feature_manager.get_value(feature))
                 for feature in self.feature_manager.get_features()
             ],
         )
