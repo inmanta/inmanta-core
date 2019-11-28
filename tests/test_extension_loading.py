@@ -31,7 +31,7 @@ from inmanta.config import feature_file_config
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT, config
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
-from inmanta.server.extensions import BoolFeature, FeatureManager, InvalidSliceNameException, InvalidFeature
+from inmanta.server.extensions import BoolFeature, FeatureManager, InvalidSliceNameException, InvalidFeature, StringListFeature
 from inmanta.server.protocol import Server, ServerSlice
 from utils import log_contains
 
@@ -186,20 +186,22 @@ def test_load_and_filter(caplog):
 
 def test_load_feature_file(tmp_path):
     feature_file = tmp_path / "features.yml"
-    feature_file.write_text(yaml.dump({"slices": {"test": {"feature1": False}}}))
+    feature_file.write_text(yaml.dump({"slices": {"test": {"feature1": False, "list_feature1": ["one"]}}}))
     feature_file_config.set(str(feature_file))
 
     fm = FeatureManager()
     f1 = BoolFeature(slice="test", name="feature1")
     f2 = BoolFeature(slice="test", name="feature2")
     fx = BoolFeature(slice="test", name="featurex")
+    s1 = StringListFeature(slice="test", name="list_feature1")
+    s2 = StringListFeature(slice="test", name="list_feature2")
 
     class MockSlice(ServerSlice):
         def __init__(self):
             super().__init__("test")
 
         def define_features(self):
-            return [f1, f2]
+            return [f1, f2, s1, s2]
 
     slice = MockSlice()
     fm.add_slice(slice)
@@ -211,6 +213,10 @@ def test_load_feature_file(tmp_path):
 
     with pytest.raises(InvalidFeature):
         fm.enabled(fx)
+
+    assert fm.contains(s1, "one")
+    assert not fm.contains(s1, "two")
+    assert fm.contains(s2, "random")
 
 
 @pytest.mark.asyncio
