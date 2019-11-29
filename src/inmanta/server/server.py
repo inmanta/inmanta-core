@@ -29,7 +29,7 @@ from inmanta.protocol.common import attach_warnings
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
-from inmanta.server.extensions import Feature
+from inmanta.server.extensions import BoolFeature, Feature
 from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
@@ -40,8 +40,8 @@ if TYPE_CHECKING:
 DBLIMIT = 100000
 
 
-dashboard_feature = Feature(
-    slice=SLICE_SERVER, name="dashboard", description="Server the dashboard under the /dashboard endpoint."
+dashboard_feature = BoolFeature(
+    slice=SLICE_SERVER, name="dashboard", description="Serve the dashboard under the /dashboard endpoint."
 )
 
 
@@ -194,9 +194,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             ],
             slices=slices,
             features=[
-                FeatureStatus(slice=feature.slice, name=feature.name, value=self.feature_manager.enabled(feature))
-                for slice in self.feature_manager.get_features().values()
-                for feature in slice.values()
+                FeatureStatus(slice=feature.slice, name=feature.name, value=self.feature_manager.get_value(feature))
+                for feature in self.feature_manager.get_features()
             ],
         )
 

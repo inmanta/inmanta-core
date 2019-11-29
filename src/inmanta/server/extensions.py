@@ -18,7 +18,7 @@
 import logging
 import os
 from collections import defaultdict
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Generic, List, Optional, TypeVar
 
 import yaml
 
@@ -44,13 +44,17 @@ class InvalidFeature(Exception):
     """
 
 
-class Feature:
+T = TypeVar("T")
+
+
+class Feature(Generic[T]):
     """ A feature offered by a slice """
 
-    def __init__(self, slice: str, name: str, description: str = "") -> None:
+    def __init__(self, slice: str, name: str, description: str = "", default_value: Optional[T] = None) -> None:
         self._name: str = name
         self._slice: str = slice
         self._description = description
+        self._default_value: Optional[T] = default_value
 
     @property
     def name(self) -> str:
@@ -60,13 +64,26 @@ class Feature:
     def slice(self) -> str:
         return self._slice
 
+    @property
+    def default_value(self) -> T:
+        return self._default_value
+
     def __str__(self) -> str:
         return f"{self._slice}:{self._name}"
 
 
-class BoolFeature(Feature):
-    """ A feature that is on or off.
+class BoolFeature(Feature[bool]):
+    """ A feature that is on or off. When no value is given it is enabled.
     """
+    def __init__(self, slice: str, name: str, description: str = "") -> None:
+        super().__init__(slice, name, description, True)
+
+
+class StringListFeature(Feature[List[str]]):
+    """ A feature that holds a list of allowed values. When the list contains "*" it matches everything.
+    """
+    def __init__(self, slice: str, name: str, description: str = "") -> None:
+        super().__init__(slice, name, description, default_value=["*"])
 
 
 class FeatureManager:
@@ -83,29 +100,26 @@ class FeatureManager:
 
     def __init__(self) -> None:
         self._features: Dict[str, Dict[str, Feature]] = defaultdict(lambda: {})
-        self._feature_config: Optional[Dict[str, Dict[str, bool]]] = self._load_feature_config()
+        self._feature_config: Dict[str, Dict[str, Any]] = self._load_feature_config()
 
-    def get_features(self) -> Dict[str, Dict[str, Feature]]:
-        return self._features
+    def get_features(self) -> List[Feature]:
+        return [feature for slice in self._features.values() for feature in slice.values()]
 
-    def set_feature_config(self, feature: Feature, value: bool) -> None:
-        if feature.slice in self._features and feature.name in self._features[feature.slice]:
-            self._feature_config[feature.slice][feature.name] = value
-
-    def _load_feature_config(self) -> Optional[Dict[str, Dict[str, bool]]]:
+    def _load_feature_config(self) -> Dict[str, Dict[str, Any]]:
         feature_file = feature_file_config.get()
         if feature_file is None:
-            return defaultdict(lambda: {})
+            return {}
 
         if not os.path.exists(feature_file):
             LOGGER.warning("Feature file %s configured but file does not exist.", feature_file)
-            return defaultdict(lambda: {})
+            return {}
 
         with open(feature_file) as fd:
             result = yaml.safe_load(fd)
+
         if "slices" in result:
             return result["slices"]
-        return defaultdict(lambda: {})
+        return {}
 
     def get_product_metadata(self) -> Dict[str, str]:
         return {
@@ -121,31 +135,31 @@ class FeatureManager:
                 raise InvalidFeature(
                     f"Feature {feature.name} defines slice {feature.slice} but is defined by slice {slice.name}"
                 )
+
             self._features[feature.slice][feature.name] = feature
         slice.feature_manager = self
 
-    def _get_config(self, feature: Feature) -> Optional[bool]:
+    def get_value(self, feature: Feature[T]) -> T:
+        """ Get the value of a feature
+        """
         if feature.slice not in self._features or feature.name not in self._features[feature.slice]:
-            raise InvalidFeature(f"Feature {feature.name} in slice {feature.slice} is not defined.")
+            raise InvalidFeature("Feature should be defined be slices at boot time.")
 
-        if (
-            self._feature_config is not None
-            and feature.slice in self._feature_config
-            and feature.name in self._feature_config[feature.slice]
-        ):
-            config = self._feature_config[feature.slice][feature.name]
+        if feature.slice not in self._feature_config or feature.name not in self._feature_config[feature.slice]:
+            return feature.default_value
+        return self._feature_config[feature.slice][feature.name]
 
-            if isinstance(config, bool):
-                return config
+    def enabled(self, feature: BoolFeature) -> bool:
+        value = self.get_value(feature)
+        return value
 
-        return None
-
-    def enabled(self, feature: Feature) -> bool:
-        config = self._get_config(feature)
-        if config is None:
+    def contains(self, feature: StringListFeature, item: str) -> bool:
+        """ Check if the value is contained in the list.
+        """
+        value = self.get_value(feature)
+        if "*" in value:
             return True
-
-        return config
+        return item in value
 
 
 class ApplicationContext:

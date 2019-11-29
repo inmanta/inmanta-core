@@ -26,14 +26,14 @@ from inmanta.protocol import exceptions, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_DATABASE, SLICE_FORM, SLICE_SERVER, SLICE_TRANSPORT, protocol
-from inmanta.server.extensions import Feature
+from inmanta.server.extensions import Feature, BoolFeature
 from inmanta.server.server import Server
 from inmanta.types import Apireturn, JsonType
 
 LOGGER = logging.getLogger(__name__)
 
 
-forms_feature = Feature(slice=SLICE_FORM, name="forms", description="Custom forms and records for external parameters.")
+forms_feature = BoolFeature(slice=SLICE_FORM, name="forms", description="Custom forms and records for external parameters.")
 
 
 class FormService(protocol.ServerSlice):
