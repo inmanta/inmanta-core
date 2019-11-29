@@ -161,6 +161,10 @@ class FeatureManager:
             return True
         return item in value
 
+    def stop(self):
+        """ Called when the server is stopped
+        """
+
 
 class ApplicationContext:
     def __init__(self) -> None:
