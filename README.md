@@ -29,9 +29,8 @@ Currently, the Inmanta project is mainly developed and maintained by Inmanta NV.
 ## Links
 
 * [Documentation](https://docs.inmanta.com/community/latest/)
-* [Quickstart](https://github.com/inmanta/quickstart-vagrant)
+* [Quickstart](https://github.com/inmanta/quickstart-docker)
 
 ## Install
 
 * [Install Guide](https://docs.inmanta.com/community/latest/install.html)
-
