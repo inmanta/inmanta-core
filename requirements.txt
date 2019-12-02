@@ -46,7 +46,7 @@ black==19.10b0
 typing_inspect==0.5.0
 importlib_metadata==0.23
 mypy==0.750
-setuptools==42.0.1
+setuptools==42.0.2
 pip==19.3.1
 
 # Transitive dependencies
