@@ -164,7 +164,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if product_metadata["version"] is None:
             raise exceptions.ServerError(
                 "Could not find version number for the inmanta compiler."
-                "Is inmanta installed? Use stuptools install or setuptools dev to install."
+                "Is inmanta installed? Use setuptools install or setuptools dev to install."
             )
 
         slices = []

@@ -67,7 +67,7 @@ def get_compiler_version() -> Optional[str]:
     except pkg_resources.DistributionNotFound:
         LOGGER.error(
             "Could not find version number for the inmanta compiler."
-            "Is inmanta installed? Use stuptools install or setuptools dev to install."
+            "Is inmanta installed? Use setuptools install or setuptools dev to install."
         )
         return None
 
