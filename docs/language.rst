@@ -500,7 +500,7 @@ Interpolating strings
 .. code-block:: inmanta
 
     hostname = "serv1.example.org"
-    motd = """Welcome to {{hostname}}\n"""
+    motd = "Welcome to {{hostname}}\n"
 
 
 Templates
