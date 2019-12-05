@@ -41,7 +41,7 @@ pyformance==0.4
 pymongo==3.9.0
 pydantic==1.2
 isort==4.3.21
-flake8-isort==2.7.0
+flake8-isort==2.8.0
 black==19.10b0
 typing_inspect==0.5.0
 importlib_metadata==1.2.0
