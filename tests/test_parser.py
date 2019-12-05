@@ -22,7 +22,7 @@ import pytest
 
 from inmanta.ast import LocatableString, Namespace
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.constraint.expression import And, GreaterThan, In, IsDefined, Not, Regex
+from inmanta.ast.constraint.expression import And, Equals, GreaterThan, In, IsDefined, Not, Regex
 from inmanta.ast.statements import ExpressionStatement, Literal, define
 from inmanta.ast.statements.assign import (
     Assign,
@@ -455,6 +455,19 @@ a = /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}
     assert stmt.children[1].value == re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")
 
 
+def test_regex_backslash():
+    statements = parse_code(
+        r"""
+a = /\\/
+"""
+    )
+
+    assert len(statements) == 1
+    stmt = statements[0].value
+    assert isinstance(stmt, Regex)
+    assert stmt.children[1].value == re.compile(r"\\")
+
+
 def test_regex_escape():
     statements = parse_code(
         r"""
@@ -515,6 +528,30 @@ typedef abc as string matching self in ["a","b","c"]
     assert stmt.basetype == "string"
     assert isinstance(stmt.get_expression(), In)
     assert [x.value for x in stmt.get_expression().children[1].items] == ["a", "b", "c"]
+
+
+def test_typedef_plugin_call():
+    """
+    If this test fails, the collection of validation types and
+    validation_parameters will fail in the LSM module.
+    plugin_call() must expand to (plugin_call() == true)
+    """
+    statements = parse_code(
+        """
+typedef abc as string matching std::is_base64_encoded(self)
+"""
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, DefineTypeConstraint)
+    assert str(stmt.name) == "abc"
+    assert stmt.basetype == "string"
+    assert isinstance(stmt.get_expression(), Equals)
+    left_side_equals = stmt.get_expression()._arguments[0]
+    right_side_equals = stmt.get_expression()._arguments[1]
+    assert isinstance(left_side_equals, FunctionCall)
+    assert isinstance(right_side_equals, Literal)
+    assert isinstance(right_side_equals.value, bool) and right_side_equals.value
 
 
 def test_typedef2():
@@ -780,6 +817,32 @@ a='jos'
     assert isinstance(stmt, Assign)
     assert isinstance(stmt.value, Literal)
     assert stmt.value.value == "jos"
+
+
+def test_string_backslash():
+    statements = parse_code(
+        """
+a="\\\\"
+"""
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "\\"
+
+
+def test_string_backslash_2():
+    statements = parse_code(
+        """
+a='\\\\'
+"""
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "\\"
 
 
 def test_empty():

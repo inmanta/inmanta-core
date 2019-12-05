@@ -19,4 +19,4 @@ exclude = '''
 
 
 [tool.irt]
-dashboard = 'v2019.4'
+dashboard = 'v2019.5'

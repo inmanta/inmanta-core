@@ -7,7 +7,7 @@ you installed it on, Inmanta requires at least the latest Python 3.6 or 3.7 and 
 
     .. tab:: CentOS 7
 
-        For CentOS use yum and install epel-release:
+        For CentOS use yum:
 
         .. code-block:: sh
 
@@ -22,7 +22,6 @@ you installed it on, Inmanta requires at least the latest Python 3.6 or 3.7 and 
           enabled_metadata=1
           EOF
 
-          sudo yum install -y epel-release
           sudo yum install -y python3-inmanta python3-inmanta-server python3-inmanta-agent
 
         The first package (python3-inmanta) contains all the code and the commands. The server and the agent packages install config

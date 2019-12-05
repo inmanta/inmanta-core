@@ -1,3 +1,15 @@
+# v 2019.5 (2019-12-05) Changes in this release:
+
+## Fixed
+ - Compiler bugfix, ensure done nodes are correctly removed from zerowaiters
+ - Fixed memory leak in database layer
+ - Fixed lexing of strings ending in an escaped backslash (#1601)
+ - Fixed bug where `module freeze` results in empty module.yml (#1598)  
+ - Fixed inconsistent behavior of `export` and `export -j` (#1595)
+
+IMPORTANT CHANGES:
+ - Added environment variables for config, env variables overwrite all other forms of config (#1507)
+
 v 2019.4 (2019-10-30) Changes in this release:
 - Various bugfixes (#1367,#1398,#736, #1454)
 - Added if statement (#1325)
@@ -32,7 +44,7 @@ IMPORTANT CHANGES:
 - The Inmanta server now listens on 127.0.0.1:8888 by default, while
   this was 0.0.0.0:8888 in previous versions. This behavior is
   configurable with the `bind-address` config option.
- 
+
 DEPRECATIONS:
 - The `server_rest_transport.port` config option is deprecated in favor
   of the `server.bind-port` option.

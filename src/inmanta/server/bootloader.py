@@ -20,7 +20,7 @@ import logging
 import pkgutil
 from pkgutil import ModuleInfo
 from types import ModuleType
-from typing import Callable, Dict, Generator, List
+from typing import Callable, Dict, Generator, List, Optional
 
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.server import config
@@ -71,9 +71,11 @@ class InmantaBootloader(object):
     def __init__(self) -> None:
         self.restserver = Server()
         self.started = False
+        self.feature_manager: Optional[FeatureManager] = None
 
     async def start(self) -> None:
         ctx = self.load_slices()
+        self.feature_manager = ctx.get_feature_manager()
         for mypart in ctx.get_slices():
             self.restserver.add_slice(mypart)
             ctx.get_feature_manager().add_slice(mypart)
@@ -82,6 +84,8 @@ class InmantaBootloader(object):
 
     async def stop(self) -> None:
         await self.restserver.stop()
+        if self.feature_manager is not None:
+            self.feature_manager.stop()
 
     # Extension loading Phase I: from start to setup functions collected
     def _discover_plugin_packages(self) -> List[str]:

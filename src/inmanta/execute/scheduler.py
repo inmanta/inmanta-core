@@ -294,6 +294,7 @@ class Scheduler(object):
             # no waiters in waitqueue,...
             # see if any zerowaiters have become gotten waiters
             if not progress:
+                zerowaiters = [w for w in zerowaiters if not w.hasValue]
                 waitqueue = deque(w for w in zerowaiters if w.get_progress_potential() > 0)
                 queue.waitqueue = waitqueue
                 zerowaiters = deque(w for w in zerowaiters if w.get_progress_potential() <= 0)

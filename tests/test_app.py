@@ -121,10 +121,10 @@ def run_without_tty(args, env={}, killtime=3, termtime=2):
     return do_kill(process, killtime, termtime)
 
 
-def run_with_tty(args):
+def run_with_tty(args, killtime=3, termtime=2):
     """Could not get code for actual tty to run stable in docker, so we are faking it """
     env = {const.ENVIRON_FORCE_TTY: "true"}
-    return run_without_tty(args, env=env)
+    return run_without_tty(args, env=env, killtime=killtime, termtime=termtime)
 
 
 def get_timestamp_regex():
@@ -341,7 +341,7 @@ def test_startup_failure(tmpdir, postgres_db, database_name):
     pp = ":".join(sys.path)
     # Add a bad module
     extrapath = os.path.join(os.path.dirname(__file__), "data", "bad_module_path")
-    (stdout, stderr, code) = run_without_tty(args, env={"PYTHONPATH": pp + ":" + extrapath})
+    (stdout, stderr, code) = run_without_tty(args, env={"PYTHONPATH": pp + ":" + extrapath}, killtime=15, termtime=10)
     assert "inmanta                  ERROR   Server setup failed" in stdout
     assert (
         "inmanta.server.protocol.SliceStartupException: "
@@ -452,8 +452,8 @@ end
 def test_version_argument_is_set(tmpdir, with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines):
     (args, log_dir) = get_command(tmpdir, version=version_should_be_shown)
     if with_tty:
-        (stdout, _, _) = run_with_tty(args)
+        (stdout, _, _) = run_with_tty(args, killtime=15, termtime=10)
     else:
-        (stdout, _, _) = run_without_tty(args)
+        (stdout, _, _) = run_without_tty(args, killtime=15, termtime=10)
     assert len(stdout) != 0
     check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, False)
