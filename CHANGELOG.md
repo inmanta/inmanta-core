@@ -1,3 +1,5 @@
+# v 2019.6 (?) Changes in this release:
+
 # v 2019.5 (2019-12-05) Changes in this release:
 
 ## Fixed
