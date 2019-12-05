@@ -1,4 +1,4 @@
-# v 2019.5 (?) Changes in this release:
+# v 2019.5 (2019-12-05) Changes in this release:
 
 ## Fixed
  - Compiler bugfix, ensure done nodes are correctly removed from zerowaiters
