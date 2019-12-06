@@ -560,7 +560,7 @@ class DefineRelation(BiStatement):
                 % (right.name, right.get_entity().get_full_name()),
             )
 
-        assert isinstance(right, Entity), "%s is not an entity" % left
+        assert isinstance(right, Entity), "%s is not an entity" % right
 
         if right.get_attribute_from_related(str(self.left[1])) is not None:
             raise DuplicateException(
