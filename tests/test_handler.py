@@ -36,7 +36,10 @@ from utils import no_error_in_logs
         (False, False, False, False, False),
     ],
 )
-def test_CRUD_handler_purged_response(purged_desired, purged_actual, excn, create, delete, caplog):
+@pytest.mark.parametrize(
+    "updated", [True, False],
+)
+def test_CRUD_handler_purged_response(purged_desired, purged_actual, excn, create, delete, updated, caplog):
     class DummyCrud(CRUDHandler):
         def __init__(self):
             self.updated = False
@@ -45,6 +48,8 @@ def test_CRUD_handler_purged_response(purged_desired, purged_actual, excn, creat
 
         def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
             resource.purged = purged_actual
+            if updated:
+                resource.value = "b"
             if excn:
                 raise ResourcePurged()
 
@@ -59,17 +64,18 @@ def test_CRUD_handler_purged_response(purged_desired, purged_actual, excn, creat
 
     @resource("aa::Aa", "aa", "aa")
     class TestResource(PurgeableResource):
-        pass
+        fields = ("value",)
 
     res = TestResource(Id("aa::Aa", "aa", "aa", "aa", 1))
     res.purged = purged_desired
+    res.value = "a"
 
     ctx = HandlerContext(res, False)
 
     handler = DummyCrud()
     handler.execute(ctx, res, False)
 
-    assert not handler.updated
+    assert handler.updated == ((not (create or delete)) and updated and not purged_desired)
     assert handler.created == create
     assert handler.deleted == delete
     no_error_in_logs(caplog)

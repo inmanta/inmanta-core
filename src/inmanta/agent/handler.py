@@ -855,7 +855,7 @@ class CRUDHandler(ResourceHandler):
                         ctx.debug("Calling delete_resource")
                         self.delete_resource(ctx, desired)
 
-                elif len(changes) > 0:
+                elif not desired.purged and len(changes) > 0:
                     ctx.debug("Calling update_resource", changes=changes)
                     self.update_resource(ctx, changes, desired)
 
