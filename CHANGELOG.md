@@ -1,5 +1,8 @@
 # v 2019.6 (?) Changes in this release:
 
+## Fixed
+ - CRUDHandler bugfix, ensure update is not called on purged resources
+
 # v 2019.5 (2019-12-05) Changes in this release:
 
 ## Fixed
