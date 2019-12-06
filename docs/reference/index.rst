@@ -16,4 +16,3 @@ Inmanta, please check out the :doc:`../quickstart` guide.
     projectyml
     api
     modules
-    apidoc
