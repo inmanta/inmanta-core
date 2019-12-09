@@ -1,6 +1,7 @@
 FROM centos:7
 ARG branch
 
+# Pin the base-url of the epel repo to ensure stability
 ADD misc/epel.repo /etc/yum.repos.d/epel.repo
 RUN curl --silent --location https://dl.yarnpkg.com/rpm/yarn.repo >/etc/yum.repos.d/yarn.repo
 RUN yum install -y git gcc mongodb sudo git tar findutils make procps-ng python3 python3-devel git nodejs-grunt-cli gcc-c++ gcc make yarn postgresql
