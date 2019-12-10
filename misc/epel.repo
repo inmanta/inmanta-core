@@ -1,0 +1,6 @@
+[epel]
+name = epel
+enabled=1
+gpgcheck=1
+baseurl = https://fedora.cu.be/epel/7/$basearch
+gpgkey = https://fedora.cu.be/epel/RPM-GPG-KEY-EPEL-7Server
