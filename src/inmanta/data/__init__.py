@@ -755,7 +755,7 @@ class Environment(BaseDocument):
         AUTO_DEPLOY: Setting(
             name=AUTO_DEPLOY,
             typ="bool",
-            default=False,
+            default=True,
             doc="When this boolean is set to true, the orchestrator will automatically release a new version "
             "that was compiled by the orchestrator itself.",
             validator=convert_boolean,
@@ -763,14 +763,14 @@ class Environment(BaseDocument):
         PUSH_ON_AUTO_DEPLOY: Setting(
             name=PUSH_ON_AUTO_DEPLOY,
             typ="bool",
-            default=False,
+            default=True,
             doc="Push a new version when it has been autodeployed.",
             validator=convert_boolean,
         ),
         AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY: Setting(
             name=AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY,
             typ="enum",
-            default=const.AgentTriggerMethod.push_full_deploy.name,
+            default=const.AgentTriggerMethod.push_incremental_deploy.name,
             validator=convert_agent_trigger_method,
             doc="The agent trigger method to use when " + PUSH_ON_AUTO_DEPLOY + " is enabled",
             allowed_values=[opt.name for opt in const.AgentTriggerMethod],
