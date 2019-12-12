@@ -328,11 +328,11 @@ async def test_environment_set_setting_parameter(init_dataclasses_and_load_schem
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    assert (await env.get(data.AUTO_DEPLOY)) is False
-    await env.set(data.AUTO_DEPLOY, True)
     assert (await env.get(data.AUTO_DEPLOY)) is True
-    await env.unset(data.AUTO_DEPLOY)
+    await env.set(data.AUTO_DEPLOY, False)
     assert (await env.get(data.AUTO_DEPLOY)) is False
+    await env.unset(data.AUTO_DEPLOY)
+    assert (await env.get(data.AUTO_DEPLOY)) is True
 
     with pytest.raises(KeyError):
         await env.set("set_non_existing_parameter", 1)

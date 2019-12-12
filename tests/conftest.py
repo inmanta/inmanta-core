@@ -51,7 +51,7 @@ import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.main
-from inmanta import config, data, protocol, resources
+from inmanta import config, const, data, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
@@ -552,7 +552,21 @@ def capture_warnings():
 
 
 @pytest.fixture(scope="function")
-async def environment(client, server):
+async def environment(client, server, environment_default):
+    """
+        Create a project and environment, with auto_deploy turned off. This fixture returns the uuid of the environment
+    """
+
+    env = await data.Environment.get_by_id(uuid.UUID(environment_default))
+    await env.set(data.AUTO_DEPLOY, False)
+    await env.set(data.PUSH_ON_AUTO_DEPLOY, False)
+    await env.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
+
+    yield environment_default
+
+
+@pytest.fixture(scope="function")
+async def environment_default(client, server):
     """
         Create a project and environment. This fixture returns the uuid of the environment
     """

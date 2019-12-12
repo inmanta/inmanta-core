@@ -36,13 +36,12 @@ from utils import no_error_in_logs
         (False, False, False, False, False),
     ],
 )
-@pytest.mark.parametrize(
-    "updated", [True, False],
-)
+@pytest.mark.parametrize("updated", [True, False])
 def test_CRUD_handler_purged_response(purged_desired, purged_actual, excn, create, delete, updated, caplog):
     """
     purged_actual and excn are conceptually equivalent, this test case serves to prove that they are in fact, equivalent
     """
+
     class DummyCrud(CRUDHandler):
         def __init__(self):
             self.updated = False

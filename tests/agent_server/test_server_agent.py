@@ -86,6 +86,10 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
 
     result = await client_multi.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
+    env = await data.Environment.get_by_id(uuid.UUID(env_id))
+    await env.set(data.AUTO_DEPLOY, False)
+    await env.set(data.PUSH_ON_AUTO_DEPLOY, False)
+    await env.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
 
     resource_container.Provider.set_skip("agent2", "key1", 1)
 
