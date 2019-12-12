@@ -562,8 +562,6 @@ async def environment(client, server, environment_default):
     await env.set(data.PUSH_ON_AUTO_DEPLOY, False)
     await env.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
 
-    cfg_env.set(environment_default)
-
     yield environment_default
 
 
