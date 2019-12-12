@@ -107,10 +107,6 @@ Step 2: Install PostgreSQL 10
 PostgreSQL 10 can be installed by following the `installation guide <https://www.postgresql.org/download/>`_ for your
 platform.
 
-
-If you are in the process of migrating an existing Inmanta server from MongoDB to PosgreSQL, you can use the following
-database migration procedure: :ref:`Migrate from MongoDB to PostgreSQL<migrate-to-postgresql>`.
-
 .. _install-step-3:
 
 Step 3: Setup a PostgreSQL database for the Inmanta server

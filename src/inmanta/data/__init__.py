@@ -144,7 +144,7 @@ T = TypeVar("T")
 
 class BaseDocument(object, metaclass=DocumentMeta):
     """
-        A base document in the mongodb. Subclasses of this document determine collections names. This type is mainly used to
+        A base document in the database. Subclasses of this document determine collections names. This type is mainly used to
         bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
     """
 
@@ -381,7 +381,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     async def update(self, **kwargs: Any) -> None:
         """
-            Update this document in the database. It will update the fields in this object and send a full update to mongodb.
+            Update this document in the database. It will update the fields in this object and send a full update to database.
             Use update_fields to only update specific fields.
         """
         kwargs = self._convert_field_names_to_db_column_names(kwargs)
@@ -409,7 +409,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     async def update_fields(self, **kwargs: Any) -> None:
         """
             Update the given fields of this document in the database. It will update the fields in this object and do a specific
-            $set in the mongodb on this document.
+            $set in the database on this document.
         """
         if len(kwargs) == 0:
             return
