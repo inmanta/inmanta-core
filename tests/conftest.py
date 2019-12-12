@@ -552,24 +552,19 @@ def capture_warnings():
 
 
 @pytest.fixture(scope="function")
-async def environment(client, server):
+async def environment(client, server, environment_default):
     """
         Create a project and environment, with auto_deploy turned off. This fixture returns the uuid of the environment
     """
-    result = await client.create_project("env-test")
-    assert result.code == 200
-    project_id = result.result["project"]["id"]
 
-    result = await client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
-    env = await data.Environment.get_by_id(uuid.UUID(env_id))
+    env = await data.Environment.get_by_id(uuid.UUID(environment_default))
     await env.set(data.AUTO_DEPLOY, False)
     await env.set(data.PUSH_ON_AUTO_DEPLOY, False)
     await env.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
 
-    cfg_env.set(env_id)
+    cfg_env.set(environment_default)
 
-    yield env_id
+    yield environment_default
 
 
 @pytest.fixture(scope="function")
