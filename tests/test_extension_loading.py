@@ -31,7 +31,7 @@ from inmanta.config import feature_file_config
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT, config
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
-from inmanta.server.extensions import BoolFeature, FeatureManager, InvalidSliceNameException, InvalidFeature, StringListFeature
+from inmanta.server.extensions import BoolFeature, FeatureManager, InvalidFeature, InvalidSliceNameException, StringListFeature
 from inmanta.server.protocol import Server, ServerSlice
 from utils import log_contains
 

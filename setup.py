@@ -17,7 +17,6 @@ requires = [
     "cryptography",
     "jinja2",
     "pyformance",
-    "pymongo",
     "pydantic",
     "typing_inspect",
     "importlib_metadata",
