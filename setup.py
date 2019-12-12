@@ -17,7 +17,6 @@ requires = [
     "cryptography",
     "jinja2",
     "pyformance",
-    "pymongo",
     "pydantic",
     "typing_inspect",
     "importlib_metadata",
@@ -71,7 +70,6 @@ setup(
         "console_scripts": [
             "inmanta-cli = inmanta.main:main",
             "inmanta = inmanta.app:app",
-            "inmanta-migrate-db = inmanta.db.migrate_to_postgresql:main",
         ],
     },
 )
