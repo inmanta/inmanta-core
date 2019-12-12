@@ -26,7 +26,7 @@ from inmanta.protocol import exceptions, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_DATABASE, SLICE_FORM, SLICE_SERVER, SLICE_TRANSPORT, protocol
-from inmanta.server.extensions import Feature, BoolFeature
+from inmanta.server.extensions import BoolFeature, Feature
 from inmanta.server.server import Server
 from inmanta.types import Apireturn, JsonType
 

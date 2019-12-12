@@ -75,6 +75,7 @@ class Feature(Generic[T]):
 class BoolFeature(Feature[bool]):
     """ A feature that is on or off. When no value is given it is enabled.
     """
+
     def __init__(self, slice: str, name: str, description: str = "") -> None:
         super().__init__(slice, name, description, True)
 
@@ -82,6 +83,7 @@ class BoolFeature(Feature[bool]):
 class StringListFeature(Feature[List[str]]):
     """ A feature that holds a list of allowed values. When the list contains "*" it matches everything.
     """
+
     def __init__(self, slice: str, name: str, description: str = "") -> None:
         super().__init__(slice, name, description, default_value=["*"])
 
