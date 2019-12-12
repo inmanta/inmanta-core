@@ -19,7 +19,17 @@ from os import path
 
 from setuptools import find_packages, setup
 
-requires = ["asyncpg", "pyformance", "tornado", "click", "typing", "pytest-postgresql", "pytest-asyncio", "pytest-env"]
+requires = [
+    "asyncpg",
+    "click",
+    "inmanta",
+    "pyformance",
+    "pytest-asyncio",
+    "pytest-env",
+    "pytest-postgresql",
+    "tornado",
+    "typing",
+]
 
 this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
