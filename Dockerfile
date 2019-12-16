@@ -2,9 +2,22 @@ FROM centos:7
 ARG branch
 
 # Pin the base-url of the epel repo to ensure stability
-ADD misc/epel.repo /etc/yum.repos.d/epel.repo
+COPY misc/epel.repo /etc/yum.repos.d/epel.repo
 RUN curl --silent --location https://dl.yarnpkg.com/rpm/yarn.repo >/etc/yum.repos.d/yarn.repo
-RUN yum install -y git sudo git tar findutils make procps-ng python3 python3-devel git nodejs-grunt-cli gcc-c++ gcc make yarn postgresql
+RUN yum install -y \
+		git \
+		sudo \
+		tar \
+		findutils \
+		make \
+		procps-ng \
+		python3-devel \
+		nodejs-grunt-cli \
+		gcc-c++ \
+		gcc \
+		make \
+		yarn \
+		postgresql
 
 # install the server
 RUN mkdir -p /opt/inmanta
@@ -18,8 +31,8 @@ RUN (cd inmanta-dashboard; yarn install; grunt dist; mkdir -p /usr/share/inmanta
 
 RUN mkdir -p /etc/inmanta/inmanta.d
 
-ADD . /code
-ADD misc/docker-server.cfg /etc/inmanta/server.cfg
+COPY . /code
+COPY misc/docker-server.cfg /etc/inmanta/server.cfg
 
 RUN /opt/inmanta/env/bin/pip install -U -r/code/requirements.txt
 RUN /opt/inmanta/env/bin/pip install /code
