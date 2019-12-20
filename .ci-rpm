@@ -1,0 +1,1 @@
+pipeline_template: ci/Jenkinsfile-core-rpm
