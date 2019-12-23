@@ -1,1 +1,1 @@
-pipeline_template: ci/Jenkinsfile-core-rpm
+pipeline_template: ci/inmanta-core/Jenkinsfile-rpm
