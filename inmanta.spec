@@ -119,7 +119,7 @@ touch %{buildroot}/etc/sysconfig/inmanta-server
 touch %{buildroot}/etc/sysconfig/inmanta-agent
 
 # Install the dashboard
-cp -a dist %{venv}/dashboard
+cp -a package/dist %{venv}/dashboard
 
 %clean
 rm -rf %{buildroot}
