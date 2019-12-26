@@ -1,6 +1,7 @@
 # Use release 0 for prerelease version.
 %define release 1
 %define version 2017.2
+%define buildid %{nil}
 %define venv %{buildroot}/opt/inmanta
 %define _p3 %{venv}/bin/python3
 %define _unique_build_ids 0
@@ -22,8 +23,8 @@ Group:          Development/Languages
 License:        ASL 2
 URL:            http://inmanta.com
 Source0:        inmanta-%{sourceversion}.tar.gz
-Source1:        deps-%{sourceversion}.tar.gz
-Source2:        inmanta-dashboard.tar.gz
+Source1:        dependencies.tar.gz
+Source2:        inmanta-inmanta-dashboard-%{dashboard_version}.tgz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires:  systemd
@@ -83,8 +84,8 @@ Requires:       python3-inmanta
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/opt/inmanta
 %{__python3} -m venv --symlinks %{venv}
-%{_p3} -m pip install -U --no-index --find-links deps-%{sourceversion} wheel setuptools pip
-%{_p3} -m pip install --no-index --find-links deps-%{sourceversion} inmanta
+%{_p3} -m pip install -U --no-index --find-links dependencies wheel setuptools pip
+%{_p3} -m pip install --no-index --find-links dependencies .
 %{_p3} -m inmanta.app
 
 # Use the correct python for bycompiling
@@ -118,7 +119,7 @@ touch %{buildroot}/etc/sysconfig/inmanta-server
 touch %{buildroot}/etc/sysconfig/inmanta-agent
 
 # Install the dashboard
-cp -a dist %{venv}/dashboard
+cp -a package/dist %{venv}/dashboard
 
 %clean
 rm -rf %{buildroot}
