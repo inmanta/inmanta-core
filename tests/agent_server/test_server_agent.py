@@ -3092,3 +3092,51 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     assert result["logs"][1]["action"] == "deploy"
     assert result["logs"][1]["status"] == "unavailable"
     assert "Failed to load handler code " in result["logs"][1]["messages"][0]["msg"]
+
+
+@pytest.mark.asyncio
+async def test_issue_1662(resource_container, server, client, clienthelper, environment, monkeypatch, request):
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+
+    a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    a.add_end_point_name("agent1")
+    await a.start()
+    await retry_limited(lambda: len(agent_manager.sessions) == 1, 10)
+
+    async def restart_agents_patch(env):
+        def stop_agents_thread_pools():
+            # This will hang the test case when the deadlock is present
+            a.thread_pool.shutdown(wait=True)
+            for i in a._instances.values():
+                i.thread_pool.shutdown(wait=True)
+                i.provider_thread_pool.shutdown(wait=True)
+
+        # Run off main thread
+        await asyncio.get_event_loop().run_in_executor(None, stop_agents_thread_pools)
+
+    monkeypatch.setattr(agent_manager, "restart_agents", restart_agents_patch)
+
+    version = await clienthelper.get_version()
+    resource_id = f"test::AgentConfig[agent1,agentname=agent2],v={version}"
+
+    resources = [
+        {
+            "agentname": "agent2",
+            "uri": "local:",
+            "autostart": "true",
+            "id": resource_id,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+            "purge_on_delete": False,
+        },
+    ]
+
+    await clienthelper.put_version_simple(resources, version)
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+
+    await _wait_until_deployment_finishes(client, environment, version, timeout=10)
