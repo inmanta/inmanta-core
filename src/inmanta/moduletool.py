@@ -18,10 +18,8 @@
 import inspect
 import logging
 import os
-import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from argparse import ArgumentParser
 from collections import OrderedDict
@@ -31,12 +29,10 @@ import texttable
 import yaml
 from pkg_resources import parse_version
 
-import inmanta
-from inmanta.ast import Namespace, RuntimeException
+from inmanta.ast import RuntimeException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
 from inmanta.module import INSTALL_MASTER, INSTALL_RELEASES, Module, Project, gitprovider
-from inmanta.parser.plyInmantaParser import parse
 
 if TYPE_CHECKING:
     from pkg_resources import Requirement  # noqa: F401
