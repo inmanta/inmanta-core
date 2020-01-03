@@ -18,10 +18,8 @@
 import inspect
 import logging
 import os
-import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from argparse import ArgumentParser
 from collections import OrderedDict
@@ -31,12 +29,10 @@ import texttable
 import yaml
 from pkg_resources import parse_version
 
-import inmanta
-from inmanta.ast import Namespace, RuntimeException
+from inmanta.ast import RuntimeException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
 from inmanta.module import INSTALL_MASTER, INSTALL_RELEASES, Module, Project, gitprovider
-from inmanta.parser.plyInmantaParser import parse
 
 if TYPE_CHECKING:
     from pkg_resources import Requirement  # noqa: F401
@@ -252,25 +248,6 @@ class ModuleTool(ModuleLikeTool):
 
         # not currently working
         subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
-
-        validate = subparser.add_parser(
-            "validate", help="Validate the module we are currently in. i.e. try to compile it against an empty main model"
-        )
-        validate.add_argument("-r", "--repo", help="Additional repo to load modules from", action="append")
-        validate.add_argument(
-            "-n", "--no-clean", help="Do not remove the validation project when finished", action="store_true"
-        )
-        validate.add_argument("-s", "--parse-only", help="Only parse the module", action="store_true")
-        validate.add_argument(
-            "-i",
-            "--isolate",
-            help="Move the module to another directory before cloning."
-            " I.e. remove all other modules in the current directory from the search path",
-            action="store_true",
-        )
-        validate.add_argument(
-            "-w", "--workingcopy", help="Use the actual state of the module instead of the latest tag", action="store_true"
-        )
 
         commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
         commit.add_argument("-m", "--message", help="Commit message", required=True)
@@ -536,127 +513,6 @@ version: 0.0.1dev0"""
         gitprovider.commit(module._path, message, commit_all, [module.get_config_file_name()])
         # tag
         gitprovider.tag(module._path, str(outversion))
-
-    def validate(self, repo=[], no_clean=False, parse_only=False, isolate=False, workingcopy=False):
-        """
-            Validate the module we are currently in
-        """
-        if repo is None:
-            repo = []
-        valid = True
-        module = self._find_module()
-        if not module.is_versioned():
-            LOGGER.error("Module is not versioned correctly, validation will fail")
-            valid = False
-
-        # compile the source files in the module
-        ns_root = Namespace("__root__")
-        ns_mod = Namespace(module.name, ns_root)
-        for model_file in module.get_module_files():
-            try:
-                ns = ns_mod
-                if not model_file.endswith("_init.cf"):
-                    part_name = model_file.split("/")[-1][:-3]
-                    ns = Namespace(part_name, ns_mod)
-
-                parse(ns, model_file)
-                LOGGER.info("Successfully parsed %s" % model_file)
-            except Exception:
-                valid = False
-                LOGGER.exception("Unable to parse %s, validation will fail" % model_file)
-
-        if parse_only:
-            if not valid:
-                sys.exit(1)
-            sys.exit(0)
-        # create a test project
-        LOGGER.info("Creating a new project to test the module")
-        project_dir = tempfile.mkdtemp()
-
-        if isolate:
-            search_root = tempfile.mkdtemp()
-            os.symlink(module._path, os.path.join(search_root, module.name))
-        else:
-            search_root = os.path.split(module._path)[0]
-
-        try:
-            lib_dir = os.path.join(project_dir, "libs")
-            os.mkdir(lib_dir)
-
-            repo.insert(0, search_root)
-            allrepos = ["'%s'" % x for x in repo]
-            allrepos = ",".join(allrepos)
-
-            if len(module.versions()) > 0:
-                version_constraint = "%(name)s: %(name)s == %(version)s" % {
-                    "name": module.name,
-                    "version": str(module.versions()[0]),
-                }
-            else:
-                version_constraint = module.name
-
-            LOGGER.info("Setting up project")
-            with open(os.path.join(project_dir, "project.yml"), "w+") as fd:
-                fd.write(
-                    """name: test
-description: Project to validate module %(name)s
-repo: [%(repo)s]
-modulepath: libs
-downloadpath: libs
-requires:
-    %(version)s
-"""
-                    % {"name": module.name, "version": version_constraint, "repo": allrepos}
-                )
-
-            LOGGER.info("Installing dependencies")
-            test_project = Project(project_dir)
-            test_project.use_virtual_env()
-            Project.set(test_project)
-
-            LOGGER.info("Compiling empty initial model")
-            main_cf = os.path.join(project_dir, "main.cf")
-            with open(main_cf, "w+") as fd:
-                fd.write("import %s" % (module.name))
-
-            if workingcopy:
-                # overwrite with actual
-                modpath = os.path.join(project_dir, "libs", module.name)
-                if os.path.exists(modpath):
-                    shutil.rmtree(modpath)
-                shutil.copytree(module._path, modpath)
-
-            project = Project(project_dir)
-            project.use_virtual_env()
-            Project.set(project)
-            LOGGER.info("Verifying modules")
-            project.verify()
-            LOGGER.info("Loading all plugins")
-            project.load()
-
-            values = inmanta.compiler.do_compile()
-
-            if values is not None:
-                LOGGER.info("Successfully compiled module and its dependencies.")
-            else:
-                LOGGER.error("Unable to compile module and its dependencies, validation will fail")
-                valid = False
-
-        except Exception:
-            LOGGER.exception("An exception occurred during validation")
-            valid = False
-
-        finally:
-            if no_clean:
-                LOGGER.info("Project not cleaned, root at %s", project_dir)
-
-            else:
-                shutil.rmtree(project_dir)
-
-        if not valid:
-            sys.exit(1)
-
-        sys.exit(0)
 
     def freeze(self, outfile, recursive, operator, module=None):
         """
