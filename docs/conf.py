@@ -69,6 +69,7 @@ release = '2019.6dev'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
+# The documentation build tool overrides this when extensions are included in the documentation build.
 exclude_patterns = ['extensions.rst']
 
 # The reST default role (used for this markup: `text`) to use for all documents.
