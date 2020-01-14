@@ -596,6 +596,53 @@ File(host = 5, path = "Jos")
     assert {k: v.value for k, v in stmt.attributes.items()} == {"host": 5, "path": "Jos"}
 
 
+def test_ctr_dict():
+    statements = parse_code(
+        """
+dct = { "host": 5, "path": "Jos" }
+File(**dct)
+"""
+    )
+
+    assert len(statements) == 2
+    stmt = statements[1]
+    assert isinstance(stmt, Constructor)
+    assert str(stmt.class_type) == "File"
+    assert len(stmt.wrapped_kwargs) == 1
+
+
+def test_ctr_dict_multi_param():
+    statements = parse_code(
+        """
+dct = { "host": 5 }
+File(**dct, path = "Jos")
+"""
+    )
+
+    assert len(statements) == 2
+    stmt = statements[1]
+    assert isinstance(stmt, Constructor)
+    assert str(stmt.class_type) == "File"
+    assert {k: v.value for k, v in stmt.attributes.items()} == {"path": "Jos"}
+    assert len(stmt.wrapped_kwargs) == 1
+
+
+def test_ctr_dict_multi_param3():
+    statements = parse_code(
+        """
+dct = { "host": 5 }
+File(path = "Jos", **dct)
+"""
+    )
+
+    assert len(statements) == 2
+    stmt = statements[1]
+    assert isinstance(stmt, Constructor)
+    assert str(stmt.class_type) == "File"
+    assert {k: v.value for k, v in stmt.attributes.items()} == {"path": "Jos"}
+    assert len(stmt.wrapped_kwargs) == 1
+
+
 def test_indexlookup():
     statements = parse_code(
         """

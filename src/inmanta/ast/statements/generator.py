@@ -401,7 +401,14 @@ class Constructor(ExpressionStatement):
         """
         return self.__attributes
 
+    def get_wrapped_kwargs(self) -> List["WrappedKwargs"]:
+        """
+            Get the wrapped kwargs that are set for this constructor call
+        """
+        return self.__wrapped_kwarg_attributes
+
     attributes = property(get_attributes)
+    wrapped_kwargs = property(get_wrapped_kwargs)
 
     def __repr__(self) -> str:
         """

@@ -19,6 +19,7 @@ import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import DuplicateException, RuntimeException, TypingException
+from inmanta.execute.runtime import Instance
 
 
 def test_dict(snippetcompiler):
@@ -214,3 +215,28 @@ implement X using std::none
 caused by:
   Could not resolve the value z in this static context (reported in z ({dir}/main.cf:1:55))""",  # noqa: E501,
     )
+
+
+def test_constructor_kwargs(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    number n
+    number m
+    string str
+end
+
+implement Test using std::none
+
+dct = { "n": 42, "m": 0 }
+
+x = Test(**dct, str = "Hello World!")
+"""
+    )
+    (_, root) = compiler.do_compile()
+    scope = root.get_child("__config__").scope
+
+    instance: Instance = scope.lookup("x").get_value()
+    assert instance.get_attribute("n").get_value() == 42
+    assert instance.get_attribute("m").get_value() == 0
+    assert instance.get_attribute("str").get_value() == "Hello World!"
