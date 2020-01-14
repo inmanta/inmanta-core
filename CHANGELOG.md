@@ -2,12 +2,13 @@
 
 ## Fixed
  - CRUDHandler bugfix, ensure update is not called on purged resources
- - Changes in default values: AUTO_DEPLOY, PUSH_ON_AUTO_DEPLOY are enabled by default, 
+ - Changes in default values: AUTO_DEPLOY, PUSH_ON_AUTO_DEPLOY are enabled by default,
  AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY is set to incremental deployment
  - Fixed deadlock triggered by std::AgenConfigHandler (#1662)
 
 ## Removed
  - Removed the inmanta module validate command. Use pytest-inmanta fixtures to test your modules instead.
+ - Removed Forms functionality (#1667)
 
 # v 2019.5 (2019-12-05) Changes in this release:
 
@@ -15,7 +16,7 @@
  - Compiler bugfix, ensure done nodes are correctly removed from zerowaiters
  - Fixed memory leak in database layer
  - Fixed lexing of strings ending in an escaped backslash (#1601)
- - Fixed bug where `module freeze` results in empty module.yml (#1598)  
+ - Fixed bug where `module freeze` results in empty module.yml (#1598)
  - Fixed inconsistent behavior of `export` and `export -j` (#1595)
 
 IMPORTANT CHANGES:
