@@ -481,7 +481,7 @@ class Exporter(object):
         return hash_id
 
     def get_environment_id(self) -> str:
-        env = str(Config.get("config", "environment", None))
+        env = str(cfg_env.get())
 
         if env is None:
             raise Exception("The environment of the model should be configured in config>environment")
