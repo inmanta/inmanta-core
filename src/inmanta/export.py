@@ -31,7 +31,7 @@ from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Locatable, Namespace, OptionalValueException
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity
-from inmanta.config import Option, is_list, is_str, is_uuid_opt
+from inmanta.config import Option, is_list, is_str, is_uuid_opt, Config
 from inmanta.const import ResourceState
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance, ResultVariable
@@ -479,6 +479,14 @@ class Exporter(object):
         self._file_store[hash_id] = bcontent
 
         return hash_id
+
+    def get_environment_id(self) -> str:
+        env = str(Config.get("config", "environment", None))
+
+        if env is None:
+            raise Exception("The environment of the model should be configured in config>environment")
+
+        return env
 
 
 class dependency_manager(object):  # noqa: N801
