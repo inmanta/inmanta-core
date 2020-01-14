@@ -242,12 +242,14 @@ class Constructor(ExpressionStatement):
         self,
         class_type: LocatableString,
         attributes: List[Tuple[LocatableString, ExpressionStatement]],
+        wrapped_kwargs: List["WrappedKwargs"],
         location: Location,
         namespace: Namespace,
     ) -> None:
         super().__init__()
         self.class_type = str(class_type)
         self.__attributes = {}  # type: Dict[str,ExpressionStatement]
+        self.__wrapped_kwarg_attributes: List[WrappedKwargs] = wrapped_kwargs
         self.location = location
         self.namespace = namespace
         self.anchors.append(TypeReferenceAnchor(class_type.get_location(), namespace, str(class_type)))
@@ -268,11 +270,15 @@ class Constructor(ExpressionStatement):
         for (k, v) in self.__attributes.items():
             v.normalize()
 
+        for wrapped_kwargs in self.__wrapped_kwarg_attributes:
+            wrapped_kwargs.normalize()
+
         inindex = set()
 
         all_attributes = dict(self.type.get_default_values())
         all_attributes.update(self.__attributes)
 
+        # TODO: support kwarg indices
         # now check that all variables that have indexes on them, are already
         # defined and add the instance to the index
         for index in self.type.get_entity().get_indices():
@@ -281,6 +287,7 @@ class Constructor(ExpressionStatement):
                     raise TypingException(self, "%s is part of an index and should be set in the constructor." % attr)
                 inindex.add(attr)
 
+        # TODO: this check for kwargs
         for (k, v) in all_attributes.items():
             attribute = self.type.get_entity().get_attribute(k)
             if attribute is None:
@@ -292,6 +299,7 @@ class Constructor(ExpressionStatement):
 
     def requires(self) -> List[str]:
         out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
+        out.extend([req for kwargs in self.__wrapped_kwarg_attributes for req in kwargs.requires()])
         out.extend([req for (k, v) in self.get_default_values().items() for req in v.requires()])
         return out
 
@@ -300,6 +308,7 @@ class Constructor(ExpressionStatement):
         direct = [x for x in self._direct_attributes.items()]
 
         direct_requires = {rk: rv for (k, v) in direct for (rk, rv) in v.requires_emit(resolver, queue).items()}
+        direct_requires.update({rk: rv for kwargs in self.__wrapped_kwarg_attributes for (rk, rv) in kwargs.requires_emit(resolver, queue).items()})
         LOGGER.log(
             LOG_LEVEL_TRACE, "emitting constructor for %s at %s with %s", self.class_type, self.location, direct_requires
         )
@@ -317,6 +326,7 @@ class Constructor(ExpressionStatement):
 
         # the attributes
         attributes = {k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()}
+        attributes.update({k: v for kwargs in self.__wrapped_kwarg_attributes for (k, v) in kwargs.execute(requires, resolver, queue)})
 
         # check if the instance already exists in the index (if there is one)
         instances = []
@@ -394,3 +404,31 @@ class Constructor(ExpressionStatement):
             The representation of the this statement
         """
         return "Construct(%s)" % (self.class_type)
+
+
+class WrappedKwargs(ExpressionStatement):
+    """
+    Keyword arguments wrapped in a dictionary
+    """
+
+    def __init__(self, dictionary: ExpressionStatement) -> None:
+        super().__init__()
+        self.dictionary = dictionary
+
+    def __repr__(self) -> str:
+        return "**%s" % repr(self.dictionary)
+
+    def normalize(self) -> None:
+        self.dictionary.normalize()
+
+    def requires(self) -> List[str]:
+        return self.dictionary.requires()
+
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        return self.dictionary.requires_emit(resolver, queue)
+
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> List[Tuple[str, ExpressionStatement]]:
+        dct: object = self.dictionary.execute(requires, resolver, queue)
+        if not isinstance(dct, Dict):
+            raise TypingException(self, "The ** operator can only be applied to dictionaries")
+        return list(dct.items())

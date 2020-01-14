@@ -53,7 +53,7 @@ keyworldlist = [
     "if",
     "else",
 ]
-literals = [":", "[", "]", "(", ")", "=", ",", ".", "{", "}", "?"]
+literals = [":", "[", "]", "(", ")", "=", ",", ".", "{", "}", "?", "*"]
 reserved = {k: k.upper() for k in keyworldlist}
 
 # List of token names.   This is always required
