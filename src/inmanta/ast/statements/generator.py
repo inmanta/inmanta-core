@@ -308,7 +308,9 @@ class Constructor(ExpressionStatement):
         direct = [x for x in self._direct_attributes.items()]
 
         direct_requires = {rk: rv for (k, v) in direct for (rk, rv) in v.requires_emit(resolver, queue).items()}
-        direct_requires.update({rk: rv for kwargs in self.__wrapped_kwarg_attributes for (rk, rv) in kwargs.requires_emit(resolver, queue).items()})
+        direct_requires.update(
+            {rk: rv for kwargs in self.__wrapped_kwarg_attributes for (rk, rv) in kwargs.requires_emit(resolver, queue).items()}
+        )
         LOGGER.log(
             LOG_LEVEL_TRACE, "emitting constructor for %s at %s with %s", self.class_type, self.location, direct_requires
         )
@@ -326,7 +328,9 @@ class Constructor(ExpressionStatement):
 
         # the attributes
         attributes = {k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()}
-        attributes.update({k: v for kwargs in self.__wrapped_kwarg_attributes for (k, v) in kwargs.execute(requires, resolver, queue)})
+        attributes.update(
+            {k: v for kwargs in self.__wrapped_kwarg_attributes for (k, v) in kwargs.execute(requires, resolver, queue)}
+        )
 
         # check if the instance already exists in the index (if there is one)
         instances = []
@@ -427,7 +431,9 @@ class WrappedKwargs(ExpressionStatement):
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return self.dictionary.requires_emit(resolver, queue)
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> List[Tuple[str, ExpressionStatement]]:
+    def execute(
+        self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler
+    ) -> List[Tuple[str, ExpressionStatement]]:
         dct: object = self.dictionary.execute(requires, resolver, queue)
         if not isinstance(dct, Dict):
             raise TypingException(self, "The ** operator can only be applied to dictionaries")

@@ -124,7 +124,7 @@ def p_top_stmt(p: YaccProduction) -> None:
     p[0] = p[1]
 
 
-def p_empty(p:YaccProduction) -> None:
+def p_empty(p: YaccProduction) -> None:
     "empty : "
     pass
 
@@ -647,7 +647,7 @@ def p_map_lookup(p: YaccProduction) -> None:
 
 def p_constructor(p: YaccProduction) -> None:
     " constructor : class_ref '(' param_list ')' "
-    #TODO: kwarg support
+    # TODO: kwarg support
     p[0] = Constructor(p[1], p[3][0], p[3][1], Location(file, p.lineno(2)), namespace)
 
 
@@ -693,14 +693,14 @@ def p_map_def_empty(p: YaccProduction) -> None:
 
 def p_index_lookup(p: YaccProduction) -> None:
     " index_lookup : class_ref '[' param_list ']'"
-    #TODO: kwarg support
+    # TODO: kwarg support
     p[0] = IndexLookup(p[1], p[3][0])
     attach_lnr(p, 2)
 
 
 def p_short_index_lookup(p: YaccProduction) -> None:
     " index_lookup : attr_ref '[' param_list ']'"
-    #TODO: kwarg support
+    # TODO: kwarg support
     attref = p[1]
     p[0] = ShortIndexLookup(attref.instance, attref.attribute, p[3][0])
     attach_lnr(p, 2)
@@ -828,13 +828,13 @@ def p_param_list_element_kwargs(p: YaccProduction) -> None:
     p[0] = (None, p[1])
 
 
-def p_param_list_empty(p:YaccProduction) -> None:
+def p_param_list_empty(p: YaccProduction) -> None:
     """param_list : param_list_empty
         param_list_empty : empty"""
     p[0] = ([], [])
 
 
-def p_param_list_nonempty(p:YaccProduction) -> None:
+def p_param_list_nonempty(p: YaccProduction) -> None:
     """param_list : param_list_element empty param_list_empty
             | param_list_element ',' param_list"""
     (pair, kwargs) = p[1]
