@@ -228,9 +228,9 @@ end
 
 implement Test using std::none
 
-dct = { "n": 42, "m": 0 }
+dct = { "config": {"n": 42, "m": 0 } }
 
-x = Test(**dct, str = "Hello World!")
+x = Test(**dct["config"], str = "Hello World!")
 """
     )
     (_, root) = compiler.do_compile()
