@@ -31,7 +31,7 @@ from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Locatable, Namespace, OptionalValueException
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity
-from inmanta.config import Option, is_list, is_str, is_uuid_opt, Config
+from inmanta.config import Option, is_list, is_str, is_uuid_opt
 from inmanta.const import ResourceState
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance, ResultVariable
