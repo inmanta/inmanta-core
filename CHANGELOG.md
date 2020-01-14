@@ -7,7 +7,7 @@
  - Fixed deadlock triggered by std::AgenConfigHandler (#1662)
 
 ## Added
-- Add get_environment_id to exporter context (1683)
+- Add get_environment_id to exporter (#1683)
 
 ## Removed
  - Removed the inmanta module validate command. Use pytest-inmanta fixtures to test your modules instead.
