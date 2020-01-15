@@ -240,3 +240,92 @@ x = Test(**dct["config"], str = "Hello World!")
     assert instance.get_attribute("n").get_value() == 42
     assert instance.get_attribute("m").get_value() == 0
     assert instance.get_attribute("str").get_value() == "Hello World!"
+
+
+def test_constructor_kwargs_index_match(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    number n
+    number m
+    string str
+end
+
+index Test(n, m)
+
+implement Test using std::none
+
+dct = { "config": {"n": 42, "m": 0 } }
+
+x = Test(n = 42, m = 0, str = "Hello World!")
+y = Test(**dct["config"], str = "Hello World!")
+"""
+    )
+    (_, root) = compiler.do_compile()
+    scope = root.get_child("__config__").scope
+
+    x: Instance = scope.lookup("x").get_value()
+    y: Instance = scope.lookup("y").get_value()
+    assert x is y
+
+def test_indexlookup_kwargs(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    number n
+    number m
+    string str
+end
+
+index Test(n, m)
+
+implement Test using std::none
+
+dct = {"m": 1}
+x = Test(n = 42, m = 0, str = "Hello World!")
+
+y = Test[n = 42, **dct]
+    """
+    )
+    (_, root) = compiler.do_compile()
+    scope = root.get_child("__config__").scope
+
+    x: Instance = scope.lookup("x").get_value()
+    y: Instance = scope.lookup("y").get_value()
+    assert x is y
+
+
+def test_short_indexlookup_kwargs(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Collection:
+end
+
+implement Collection using std::none
+
+entity Test:
+    number n
+    number m
+    string str
+end
+
+Collection.tests [0:] -- Test.collection [1]
+index Test(collection, n, m)
+
+implement Test using std::none
+
+dct = {"m": 0}
+c = Collection()
+
+x = Test(collection = c, n = 42, m = 0, str = "Hello World!")
+y = Test(collection = c, n = 0, m = 0, str = "Hello World!")
+
+z = c.tests[n = 42, **dct]
+    """
+    )
+    (_, root) = compiler.do_compile()
+    scope = root.get_child("__config__").scope
+
+    x: Instance = scope.lookup("x").get_value()
+    z: Instance = scope.lookup("z").get_value()
+    assert x is z

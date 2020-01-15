@@ -647,7 +647,6 @@ def p_map_lookup(p: YaccProduction) -> None:
 
 def p_constructor(p: YaccProduction) -> None:
     " constructor : class_ref '(' param_list ')' "
-    # TODO: kwarg support
     p[0] = Constructor(p[1], p[3][0], p[3][1], Location(file, p.lineno(2)), namespace)
 
 
