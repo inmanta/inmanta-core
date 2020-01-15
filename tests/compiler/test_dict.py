@@ -268,6 +268,7 @@ y = Test(**dct["config"], str = "Hello World!")
     y: Instance = scope.lookup("y").get_value()
     assert x is y
 
+
 def test_indexlookup_kwargs(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

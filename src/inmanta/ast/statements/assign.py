@@ -326,10 +326,12 @@ class IndexLookup(ReferenceStatement, Resumer):
         self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
     ) -> None:
         self.type.lookup_index(
-            list(chain(
-                [(k, v.execute(requires, resolver, queue)) for (k, v) in self.query],
-                [(k, v) for kwargs in self.wrapped_query for (k, v) in kwargs.execute(requires, resolver, queue)],
-            )),
+            list(
+                chain(
+                    [(k, v.execute(requires, resolver, queue)) for (k, v) in self.query],
+                    [(k, v) for kwargs in self.wrapped_query for (k, v) in kwargs.execute(requires, resolver, queue)],
+                )
+            ),
             self,
             target,
         )
@@ -394,11 +396,13 @@ vm.files[path="/etc/motd"]
         self.type = relation.get_type()
 
         self.type.lookup_index(
-            list(chain(
-                [(relation.end.name, root_object)],
-                [(k, v.execute(requires, resolver, queue)) for (k, v) in self.querypart],
-                [(k, v) for kwargs in self.wrapped_querypart for (k, v) in kwargs.execute(requires, resolver, queue)],
-            )),
+            list(
+                chain(
+                    [(relation.end.name, root_object)],
+                    [(k, v.execute(requires, resolver, queue)) for (k, v) in self.querypart],
+                    [(k, v) for kwargs in self.wrapped_querypart for (k, v) in kwargs.execute(requires, resolver, queue)],
+                )
+            ),
             self,
             target,
         )
