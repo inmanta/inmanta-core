@@ -262,6 +262,7 @@ class Constructor(ExpressionStatement):
         self._indirect_attributes = {}  # type: Dict[str,ExpressionStatement]
 
     def pretty_print(self) -> str:
+        # TODO: test case for this pretty_print
         return "%s(%s)" % (
             self.class_type,
             ",".join(
