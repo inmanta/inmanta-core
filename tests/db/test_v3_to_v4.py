@@ -58,7 +58,7 @@ async def migrate_v3_to_v4(hard_clean_db, hard_clean_db_post, postgresql_client:
 
 
 @pytest.mark.asyncio
-async def test_forms_tables_deleted(migrate_v3_to_v4, async_finalizer, server_config, postgresql_client: Connection):
+async def test_forms_tables_deleted(migrate_v3_to_v4, postgresql_client: Connection):
     result = await postgresql_client.fetch(
         """
                 SELECT EXISTS
