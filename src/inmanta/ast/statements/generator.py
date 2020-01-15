@@ -35,6 +35,7 @@ from inmanta.ast import (
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DynamicStatement, ExpressionStatement
 from inmanta.ast.statements.assign import SetAttributeHelper
+from inmanta.ast.type import Type as InmantaType
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver, ResultCollector, ResultVariable
 from inmanta.execute.tracking import ImplementsTracker
@@ -424,7 +425,7 @@ class WrappedKwargs(ExpressionStatement):
 
     def __init__(self, dictionary: ExpressionStatement) -> None:
         super().__init__()
-        self.dictionary = dictionary
+        self.dictionary: ExpressionStatement = dictionary
 
     def __repr__(self) -> str:
         return "**%s" % repr(self.dictionary)
@@ -440,7 +441,7 @@ class WrappedKwargs(ExpressionStatement):
 
     def execute(
         self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler
-    ) -> List[Tuple[str, ExpressionStatement]]:
+    ) -> List[Tuple[str, InmantaType]]:
         dct: object = self.dictionary.execute(requires, resolver, queue)
         if not isinstance(dct, Dict):
             raise TypingException(self, "The ** operator can only be applied to dictionaries")
