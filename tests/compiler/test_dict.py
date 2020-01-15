@@ -282,7 +282,7 @@ index Test(n, m)
 
 implement Test using std::none
 
-dct = {"m": 1}
+dct = {"m": 0}
 x = Test(n = 42, m = 0, str = "Hello World!")
 
 y = Test[n = 42, **dct]

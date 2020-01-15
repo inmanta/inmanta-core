@@ -20,7 +20,7 @@
 
 import logging
 from itertools import chain
-from typing import Dict, List, Set, Tuple  # noqa: F401
+from typing import Dict, Iterator, List, Optional, Set, Tuple  # noqa: F401
 
 from inmanta.ast import (
     AttributeReferenceAnchor,
@@ -34,7 +34,7 @@ from inmanta.ast import (
     TypingException,
 )
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import DynamicStatement, ExpressionStatement
+from inmanta.ast.statements import DynamicStatement, ExpressionStatement, Literal
 from inmanta.ast.statements.assign import SetAttributeHelper
 from inmanta.ast.type import Type as InmantaType
 from inmanta.const import LOG_LEVEL_TRACE
@@ -257,6 +257,8 @@ class Constructor(ExpressionStatement):
         self.anchors.append(TypeReferenceAnchor(class_type.get_location(), namespace, str(class_type)))
         for a in attributes:
             self.add_attribute(a[0], a[1])
+        self.type: Optional["EntityLike"] = None
+        self.required_kwargs: List[str] = []
 
         self._direct_attributes = {}  # type: Dict[str,ExpressionStatement]
         self._indirect_attributes = {}  # type: Dict[str,ExpressionStatement]
@@ -274,14 +276,13 @@ class Constructor(ExpressionStatement):
         )
 
     def normalize(self) -> None:
-        mytype = self.namespace.get_type(self.class_type)
-
-        self.type = mytype  # type: EntityLike
+        mytype: "EntityLike" = self.namespace.get_type(self.class_type)
+        self.type = mytype
 
         for (k, v) in self.__attributes.items():
             v.normalize()
 
-        for wrapped_kwargs in self.__wrapped_kwarg_attributes:
+        for wrapped_kwargs in self.wrapped_kwargs:
             wrapped_kwargs.normalize()
 
         inindex = set()
@@ -289,16 +290,20 @@ class Constructor(ExpressionStatement):
         all_attributes = dict(self.type.get_default_values())
         all_attributes.update(self.__attributes)
 
-        # TODO: support kwarg indices
         # now check that all variables that have indexes on them, are already
         # defined and add the instance to the index
         for index in self.type.get_entity().get_indices():
             for attr in index:
                 if attr not in all_attributes:
-                    raise TypingException(self, "%s is part of an index and should be set in the constructor." % attr)
+                    self.required_kwargs.append(attr)
+                    continue
                 inindex.add(attr)
+        if self.required_kwargs and not self.wrapped_kwargs:
+            raise TypingException(
+                self,
+                "attributes %s are part of an index and should be set in the constructor." % ",".join(self.required_kwargs),
+            )
 
-        # TODO: this check for kwargs
         for (k, v) in all_attributes.items():
             attribute = self.type.get_entity().get_attribute(k)
             if attribute is None:
@@ -337,11 +342,33 @@ class Constructor(ExpressionStatement):
         # the type to construct
         type_class = self.type.get_entity()
 
+        # kwargs
+        direct_kwarg_attrs: Dict[str, InmantaType] = {}
+        indirect_kwarg_attrs: Dict[str, ExpressionStatement] = {}
+        for kwargs in self.wrapped_kwargs:
+            for (k, v) in kwargs.execute(requires, resolver, queue):
+                if k in self.attributes or k in direct_kwarg_attrs or k in indirect_kwarg_attrs:
+                    raise RuntimeException(
+                        self, "The attribute %s in the constructor call of %s is already set." % (k, self.class_type)
+                    )
+                if k in self.required_kwargs:
+                    direct_kwarg_attrs[k] = v
+                else:
+                    attribute = self.type.get_entity().get_attribute(k)
+                    if attribute is None:
+                        raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
+                    expr: ExpressionStatement = Literal(v)
+                    kwargs.dictionary.copy_location(expr)
+                    indirect_kwarg_attrs[k] = expr
+        missing_attrs: List[str] = [attr for attr in self.required_kwargs if attr not in direct_kwarg_attrs]
+        if missing_attrs:
+            raise TypingException(
+                self, "attributes %s are part of an index and should be set in the constructor." % ",".join(missing_attrs)
+            )
+
         # the attributes
         attributes = {k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()}
-        attributes.update(
-            {k: v for kwargs in self.__wrapped_kwarg_attributes for (k, v) in kwargs.execute(requires, resolver, queue)}
-        )
+        attributes.update(direct_kwarg_attrs)
 
         # check if the instance already exists in the index (if there is one)
         instances = []
@@ -373,7 +400,7 @@ class Constructor(ExpressionStatement):
             object_instance = type_class.get_instance(attributes, resolver, queue, self.location)
 
         # deferred execution for indirect attributes
-        for attributename, valueexpression in self._indirect_attributes.items():
+        for attributename, valueexpression in chain(self._indirect_attributes.items(), indirect_kwarg_attrs.items()):
             var = object_instance.get_attribute(attributename)
             if var.is_multi():
                 # gradual only for multi
