@@ -19,6 +19,7 @@
 # pylint: disable-msg=W0613,R0201
 
 import logging
+from itertools import chain
 from typing import Dict, List, Set, Tuple  # noqa: F401
 
 from inmanta.ast import (
@@ -261,7 +262,15 @@ class Constructor(ExpressionStatement):
         self._indirect_attributes = {}  # type: Dict[str,ExpressionStatement]
 
     def pretty_print(self) -> str:
-        return "%s(%s)" % (self.class_type, ",".join(("%s=%s" % (k, v.pretty_print()) for k, v in self.attributes.items())))
+        return "%s(%s)" % (
+            self.class_type,
+            ",".join(
+                chain(
+                    ("%s=%s" % (k, v.pretty_print()) for k, v in self.attributes.items()),
+                    ("**%s" % kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
+                )
+            ),
+        )
 
     def normalize(self) -> None:
         mytype = self.namespace.get_type(self.class_type)
