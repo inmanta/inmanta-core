@@ -129,12 +129,6 @@ def p_empty(p: YaccProduction) -> None:
     pass
 
 
-def p_opt_comma(p: YaccProduction) -> None:
-    """opt_comma : ','
-        | empty"""
-    pass
-
-
 #######################
 # IMPORT
 #######################
