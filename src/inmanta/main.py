@@ -295,7 +295,16 @@ def environment_create(client: Client, name: str, project: str, repo_url: str, b
     project_data = client.get_dict("get_project", "project", {"id": project_id})
 
     if save:
-        cfg = """
+        save_config(client, env)
+
+    print_table(
+        ["Environment ID", "Environment name", "Project ID", "Project name"],
+        [[env["id"], env["name"], project_data["id"], project_data["name"]]],
+    )
+
+
+def save_config(client: Client, env: Dict[str, str]):
+    cfg = """
 [config]
 fact-expire = 1800
 environment=%(env)s
@@ -308,20 +317,15 @@ port=%(port)s
 host=%(host)s
 port=%(port)s
 """ % {
-            "env": env["id"],
-            "host": client.host,
-            "port": client.port,
-        }
-        if os.path.exists(".inmanta"):
-            click.echo(".inmanta exits, not writing config", err=True)
-        else:
-            with open(".inmanta", "w") as f:
-                f.write(cfg)
-
-    print_table(
-        ["Environment ID", "Environment name", "Project ID", "Project name"],
-        [[env["id"], env["name"], project_data["id"], project_data["name"]]],
-    )
+        "env": env["id"],
+        "host": client.host,
+        "port": client.port,
+    }
+    if os.path.exists(".inmanta"):
+        click.echo(".inmanta exits, not writing config", err=True)
+    else:
+        with open(".inmanta", "w") as f:
+            f.write(cfg)
 
 
 @environment.command(name="list")
@@ -349,6 +353,14 @@ def environment_show(client: Client, environment: str) -> None:
     print_table(
         ["ID", "Name", "Repository URL", "Branch Name"], [[env["id"], env["name"], env["repo_url"], env["repo_branch"]]]
     )
+
+
+@environment.command(name="save", help="Save the ID of the environment and the server to the .inmanta config file")
+@click.argument("environment")
+@click.pass_obj
+def environment_write_config(client: Client, environment: str) -> None:
+    env = client.get_dict("get_environment", "environment", dict(id=client.to_environment_id(environment)))
+    save_config(client, env)
 
 
 @environment.command(name="modify")

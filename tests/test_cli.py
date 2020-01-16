@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+import os
+
 import pytest
 
 from inmanta import data
@@ -101,6 +103,14 @@ async def test_environment(server, client, cli):
     assert result.exit_code == 0
     assert env_name in result.output
     assert env_id in result.output
+
+    filename = ".inmanta"
+    try:
+        result = await cli.run("environment", "save", env_name)
+        assert result.exit_code == 0
+    finally:
+        if os.path.isfile(filename):
+            os.remove(filename)
 
 
 @pytest.mark.asyncio
