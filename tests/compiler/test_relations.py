@@ -581,10 +581,11 @@ AContainer.aa [0:2] -- A
 container = AContainer(aa = [A(), A()])
 container.aa = A()
         """,
-        ""
         "Could not set attribute `aa` on instance `__config__::AContainer (instantiated at {dir}/main.cf:12)`"
         " (reported in container.aa = Construct(A) ({dir}/main.cf:13))"
-        "\ncaused by:"
-        "\n  Exceeded relation arity on attribute 'aa' of instance '__config__::AContainer (instantiated at {dir}/main.cf:12)'"
+        "\n"
+        "caused by:"
+        "\n"
+        "  Exceeded relation arity on attribute 'aa' of instance '__config__::AContainer (instantiated at {dir}/main.cf:12)'"
         " (reported in container.aa = Construct(A) ({dir}/main.cf:13))",
     )
