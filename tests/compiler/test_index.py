@@ -496,7 +496,7 @@ ar = Test[a="a"]
     root = scopes.get_child("__config__")
     a = root.lookup("a").get_value()
     ar = root.lookup("ar").get_value()
-    assert a == ar
+    assert a is ar
 
 
 def test_index_lookup_double_argument(snippetcompiler):
