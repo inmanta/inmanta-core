@@ -328,7 +328,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         self.type.lookup_index(
             list(
                 chain(
-                    [(k, v.execute(requires, resolver, queue)) for (k, v) in self.query],
+                    ((k, v.execute(requires, resolver, queue)) for (k, v) in self.query),
                     [(k, v) for kwargs in self.wrapped_query for (k, v) in kwargs.execute(requires, resolver, queue)],
                 )
             ),
