@@ -830,6 +830,10 @@ def p_param_list_empty(p: YaccProduction) -> None:
 def p_param_list_nonempty(p: YaccProduction) -> None:
     """param_list : param_list_element empty param_list_empty
             | param_list_element ',' param_list"""
+    # param_list is a sequence of named arguments.
+    # It's elements are separated by commas and take one of two forms:
+    #   "key = value" -> p_param_list_element_explicit
+    #   "**dict_of_name_value_pairs" -> p_param_list_element_kwargs
     (pair, kwargs) = p[1]
     if pair is not None:
         p[3][0].insert(0, pair)

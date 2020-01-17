@@ -310,8 +310,6 @@ class IndexLookup(ReferenceStatement, Resumer):
 
     def normalize(self) -> None:
         ReferenceStatement.normalize(self)
-        for kwarg in self.wrapped_query:
-            kwarg.normalize()
         self.type = self.namespace.get_type(self.index_type)
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> typing.Dict[object, ResultVariable]:
@@ -369,8 +367,6 @@ vm.files[path="/etc/motd"]
 
     def normalize(self) -> None:
         ReferenceStatement.normalize(self)
-        for kwarg in self.wrapped_querypart:
-            kwarg.normalize()
         # currently there is no way to get the type of an expression prior to evaluation
         self.type = None
 
@@ -414,7 +410,7 @@ vm.files[path="/etc/motd"]
         return "%s.%s[%s]" % (
             self.rootobject,
             self.relation,
-            ",".join(map(repr, chain([self.querypart], self.wrapped_querypart))),
+            ",".join(repr(part) for part in chain([self.querypart], self.wrapped_querypart)),
         )
 
 

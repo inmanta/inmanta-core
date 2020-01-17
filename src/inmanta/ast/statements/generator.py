@@ -349,7 +349,7 @@ class Constructor(ExpressionStatement):
             for (k, v) in kwargs.execute(requires, resolver, queue):
                 if k in self.attributes or k in direct_kwarg_attrs or k in indirect_kwarg_attrs:
                     raise RuntimeException(
-                        self, "The attribute %s in the constructor call of %s is already set." % (k, self.class_type)
+                        self, "The attribute %s is set twice in the constructor call of %s." % (k, self.class_type)
                     )
                 if k in self.required_kwargs:
                     direct_kwarg_attrs[k] = v
