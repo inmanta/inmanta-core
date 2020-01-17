@@ -302,7 +302,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         query: typing.List[typing.Tuple[LocatableString, ExpressionStatement]],
         wrapped_query: typing.List["WrappedKwargs"],
     ) -> None:
-        ReferenceStatement.__init__(self, list(chain([v for (_, v) in query], wrapped_query)))
+        ReferenceStatement.__init__(self, list(chain((v for (_, v) in query), wrapped_query)))
         self.index_type = str(index_type)
         self.anchors.append(TypeReferenceAnchor(index_type.get_location(), index_type.namespace, str(index_type)))
         self.query = [(str(n), e) for n, e in query]
