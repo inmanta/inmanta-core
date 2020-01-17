@@ -1403,7 +1403,7 @@ var=é,
     assert exc.location.lnr == 2
     assert exc.location.start_char == 5
     assert exc.location.end_lnr == 2
-    assert exc.location.end_char == 5
+    assert exc.location.end_char == 6
     assert exc.value == "é"
     assert exc.msg == "Syntax error: Illegal character 'é'"
 
@@ -1427,7 +1427,7 @@ deployment2 = k8s::Deployment(
     assert exc.location.lnr == 4
     assert exc.location.start_char == 9
     assert exc.location.end_lnr == 4
-    assert exc.location.end_char == 9
+    assert exc.location.end_char == 10
     assert exc.value == "🤔"
     assert exc.msg == "Syntax error: Illegal character '🤔'"
 
@@ -1447,7 +1447,7 @@ def test_1341_syntax_error_output_3():
     assert exc.location.lnr == 2
     assert exc.location.start_char == 1
     assert exc.location.end_lnr == 2
-    assert exc.location.end_char == 1
+    assert exc.location.end_char == 2
     assert exc.value == "é"
     assert exc.msg == "Syntax error: Illegal character 'é'"
 
@@ -1467,7 +1467,7 @@ aé=66
     assert exc.location.lnr == 2
     assert exc.location.start_char == 2
     assert exc.location.end_lnr == 2
-    assert exc.location.end_char == 2
+    assert exc.location.end_char == 3
     assert exc.value == "é"
     assert exc.msg == "Syntax error: Illegal character 'é'"
 
@@ -1487,7 +1487,7 @@ K8éééYamlResource.cluster [1] -- Cluster
     assert exc.location.lnr == 2
     assert exc.location.start_char == 3
     assert exc.location.end_lnr == 2
-    assert exc.location.end_char == 3
+    assert exc.location.end_char == 4
     assert exc.value == "é"
     assert exc.msg == "Syntax error: Illegal character 'é'"
 
@@ -1507,6 +1507,6 @@ typedef positive as number matching self >= 1-
     assert exc.location.lnr == 2
     assert exc.location.start_char == 46
     assert exc.location.end_lnr == 2
-    assert exc.location.end_char == 46
+    assert exc.location.end_char == 47
     assert exc.value == "-"
     assert exc.msg == "Syntax error: Illegal character '-'"

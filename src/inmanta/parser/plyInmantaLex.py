@@ -223,7 +223,7 @@ def t_ANY_error(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 
     end = lexer.lexpos - lexer.linestart + 1
     char: str = t.value[0]
-    r: Range = Range(lexer.inmfile, lexer.lineno, end, lexer.lineno, end)
+    r: Range = Range(lexer.inmfile, lexer.lineno, end, lexer.lineno, end + 1)
     raise ParserException(r, char, "Illegal character '%s'" % char)
 
 
