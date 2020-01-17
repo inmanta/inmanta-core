@@ -361,7 +361,7 @@ vm.files[path="/etc/motd"]
         query: typing.List[typing.Tuple[LocatableString, ExpressionStatement]],
         wrapped_query: typing.List["WrappedKwargs"],
     ):
-        ReferenceStatement.__init__(self, list(chain([v for (_, v) in query], [rootobject], wrapped_query)))
+        ReferenceStatement.__init__(self, list(chain((v for (_, v) in query), [rootobject], wrapped_query)))
         self.rootobject = rootobject
         self.relation = str(relation)
         self.querypart: typing.List[typing.Tuple[str, ExpressionStatement]] = [(str(n), e) for n, e in query]
