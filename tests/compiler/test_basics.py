@@ -117,7 +117,7 @@ def test_keyword_excn(snippetcompiler):
         """
        index = ""
 """,
-        "Syntax error invalid identifier, index is a reserved keyword ({dir}/main.cf:2:8)",
+        "Syntax error: invalid identifier, index is a reserved keyword ({dir}/main.cf:2:8)",
     )
 
 
@@ -127,7 +127,7 @@ def test_keyword_excn2(snippetcompiler):
        implementation index for std::Entity:
        end
 """,
-        "Syntax error invalid identifier, index is a reserved keyword ({dir}/main.cf:2:23)",
+        "Syntax error: invalid identifier, index is a reserved keyword ({dir}/main.cf:2:23)",
     )
 
 
@@ -137,7 +137,7 @@ def test_keyword_excn3(snippetcompiler):
        implementation aaa for index::Entity:
        end
 """,
-        "Syntax error invalid identifier, index is a reserved keyword ({dir}/main.cf:2:31)",
+        "Syntax error: invalid identifier, index is a reserved keyword ({dir}/main.cf:2:31)",
     )
 
 
@@ -147,7 +147,7 @@ def test_cid_excn(snippetcompiler):
        entity test:
        end
 """,
-        "Syntax error Invalid identifier: Entity names must start with a capital ({dir}/main.cf:2:15)",
+        "Syntax error: Invalid identifier: Entity names must start with a capital ({dir}/main.cf:2:15)",
     )
 
 
@@ -157,7 +157,7 @@ def test_cid_excn2(snippetcompiler):
        entity Test extends test:
        end
 """,
-        "Syntax error Invalid identifier: Entity names must start with a capital ({dir}/main.cf:2:28)",
+        "Syntax error: Invalid identifier: Entity names must start with a capital ({dir}/main.cf:2:28)",
     )
 
 

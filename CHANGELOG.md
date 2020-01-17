@@ -1,7 +1,7 @@
 # v 2019.6 (?) Changes in this release:
 
 ## Fixed
- - Various compiler error reporting improvements: #1584
+ - Various compiler error reporting improvements (#1584, #1341)
  - CRUDHandler bugfix, ensure update is not called on purged resources
  - Changes in default values: AUTO_DEPLOY, PUSH_ON_AUTO_DEPLOY are enabled by default,
  AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY is set to incremental deployment
@@ -9,6 +9,7 @@
 
 ## Added
 - Add get_environment_id to exporter (#1683)
+- Added inmanta-cli environment save command (#1666)
 
 ## Removed
  - Removed the inmanta module validate command. Use pytest-inmanta fixtures to test your modules instead.

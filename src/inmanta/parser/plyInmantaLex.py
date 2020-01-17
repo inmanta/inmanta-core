@@ -229,19 +229,12 @@ t_mls_ignore = ""
 
 
 def t_ANY_error(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    value = t.value
-    if len(value) > 10:
-        value = value[:10]
-
     lexer = t.lexer
 
     end = lexer.lexpos - lexer.linestart + 1
-    (s, e) = lexer.lexmatch.span()
-    start = end - (e - s)
-
-    r = Range(lexer.inmfile, lexer.lineno, start, lexer.lineno, end)
-
-    raise ParserException("", r, value)
+    char: str = t.value[0]
+    r: Range = Range(lexer.inmfile, lexer.lineno, end, lexer.lineno, end + 1)
+    raise ParserException(r, char, "Illegal character '%s'" % char)
 
 
 # Build the lexer
