@@ -511,7 +511,7 @@ a = /)/
     assert exception.location.end_lnr == 2
     assert exception.location.end_char == 8
     assert exception.value == "/)/"
-    assert exception.msg == "Syntax error Regex error in /)/: 'unbalanced parenthesis at position 0'"
+    assert exception.msg == "Syntax error: Regex error in /)/: 'unbalanced parenthesis at position 0'"
 
 
 def test_typedef():
