@@ -599,7 +599,7 @@ File(host = 5, path = "Jos")
 def test_ctr_dict():
     statements = parse_code(
         """
-dct = { "host": 5, "path": "Jos" }
+dct = { "host": "myhost", "path": "/dir/file" }
 File(**dct)
 """
     )
@@ -615,8 +615,8 @@ File(**dct)
 def test_ctr_dict_multi_param():
     statements = parse_code(
         """
-dct = { "host": 5 }
-File(**dct, path = "Jos")
+dct = { "host": "myhost" }
+File(**dct, path = "/dir/file")
 """
     )
 
@@ -624,15 +624,15 @@ File(**dct, path = "Jos")
     stmt = statements[1]
     assert isinstance(stmt, Constructor)
     assert str(stmt.class_type) == "File"
-    assert {k: v.value for k, v in stmt.attributes.items()} == {"path": "Jos"}
+    assert {k: v.value for k, v in stmt.attributes.items()} == {"path": "/dir/file"}
     assert len(stmt.wrapped_kwargs) == 1
 
 
 def test_ctr_dict_multi_param3():
     statements = parse_code(
         """
-dct = { "host": 5 }
-File(path = "Jos", **dct)
+dct = { "host": "myhost" }
+File(path = "/dir/file", **dct)
 """
     )
 
@@ -640,7 +640,7 @@ File(path = "Jos", **dct)
     stmt = statements[1]
     assert isinstance(stmt, Constructor)
     assert str(stmt.class_type) == "File"
-    assert {k: v.value for k, v in stmt.attributes.items()} == {"path": "Jos"}
+    assert {k: v.value for k, v in stmt.attributes.items()} == {"path": "/dir/file"}
     assert len(stmt.wrapped_kwargs) == 1
 
 
@@ -661,8 +661,8 @@ a=File[host = 5, path = "Jos"]
 def test_indexlookup_kwargs():
     statements = parse_code(
         """
-dct = {"path": "Jos"}
-a=File[host = 5, **dct]
+dct = {"path": "/dir/file"}
+a=File[host = "myhost", **dct]
 """
     )
 
@@ -670,7 +670,7 @@ a=File[host = 5, **dct]
     stmt = statements[1].value
     assert isinstance(stmt, IndexLookup)
     assert stmt.index_type == "File"
-    assert {k: v.value for k, v in stmt.query} == {"host": 5}
+    assert {k: v.value for k, v in stmt.query} == {"host": "myhost"}
     assert len(stmt.wrapped_query) == 1
 
 
