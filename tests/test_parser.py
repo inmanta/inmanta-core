@@ -496,6 +496,24 @@ c = /\/1/
     assert stmt.children[1].value == re.compile(r"\/1")
 
 
+def test_1584_regex_error():
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+a = /)/
+            """
+        )
+
+    exception: ParserException = pytest_e.value
+    assert exception.location.file == "test"
+    assert exception.location.lnr == 2
+    assert exception.location.start_char == 5
+    assert exception.location.end_lnr == 2
+    assert exception.location.end_char == 8
+    assert exception.value == "/)/"
+    assert exception.msg == "Syntax error: Regex error in /)/: 'unbalanced parenthesis at position 0'"
+
+
 def test_typedef():
     statements = parse_code(
         """
