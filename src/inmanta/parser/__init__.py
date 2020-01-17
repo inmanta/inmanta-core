@@ -26,7 +26,7 @@ class ParserException(CompilerException):
         if msg is None:
             msg = "Syntax error at token %s" % value
         else:
-            msg = "Syntax error %s" % msg
+            msg = "Syntax error: %s" % msg
         CompilerException.__init__(self, msg)
         self.set_location(location)
         self.value = value

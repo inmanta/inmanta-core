@@ -950,7 +950,7 @@ def p_error(p: YaccProduction) -> None:
 
     if p is None:
         # at end of file
-        raise ParserException(r, "Unexpected end of file")
+        raise ParserException(r, None, "Unexpected end of file")
 
     # keyword instead of ID
     if p.type in reserved.values():
