@@ -812,28 +812,32 @@ def p_wrapped_kwargs(p: YaccProduction) -> None:
 
 
 def p_param_list_element_explicit(p: YaccProduction) -> None:
+    # param_list_element: Tuple[Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
     "param_list_element : ID '=' operand"
     p[0] = ((p[1], p[3]), None)
 
 
 def p_param_list_element_kwargs(p: YaccProduction) -> None:
     "param_list_element : wrapped_kwargs"
+    # param_list_element: Tuple[Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
     p[0] = (None, p[1])
 
 
 def p_param_list_empty(p: YaccProduction) -> None:
     """param_list : param_list_empty
         param_list_empty : empty"""
+    # param_list: Tuple[List[Tuple[ID, operand]], List[wrapped_kwargs]]
     p[0] = ([], [])
 
 
 def p_param_list_nonempty(p: YaccProduction) -> None:
     """param_list : param_list_element empty param_list_empty
             | param_list_element ',' param_list"""
-    # param_list is a sequence of named arguments.
-    # It's elements are separated by commas and take one of two forms:
+    # param_list parses a sequence of named arguments.
+    # The arguments are separated by commas and take one of two forms:
     #   "key = value" -> p_param_list_element_explicit
     #   "**dict_of_name_value_pairs" -> p_param_list_element_kwargs
+    # param_list: Tuple[List[Tuple[ID, operand]], List[wrapped_kwargs]]
     (pair, kwargs) = p[1]
     if pair is not None:
         p[3][0].insert(0, pair)
