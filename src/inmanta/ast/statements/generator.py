@@ -451,7 +451,8 @@ class Constructor(ExpressionStatement):
 
 class WrappedKwargs(ExpressionStatement):
     """
-    Keyword arguments wrapped in a dictionary
+    Keyword arguments wrapped in a dictionary.
+    Separate AST node for the type check it provides in the execute method.
     """
 
     def __init__(self, dictionary: ExpressionStatement) -> None:
