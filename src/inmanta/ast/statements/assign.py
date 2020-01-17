@@ -343,7 +343,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         """
             The representation of this statement
         """
-        return "%s[%s]" % (self.index_type, ",".join(map(repr, chain([self.query], self.wrapped_query))))
+        return "%s[%s]" % (self.index_type, ",".join([repr(x) for x in chain([self.query], self.wrapped_query)]))
 
 
 class ShortIndexLookup(IndexLookup):
