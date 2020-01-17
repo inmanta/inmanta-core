@@ -400,7 +400,7 @@ vm.files[path="/etc/motd"]
                 chain(
                     [(relation.end.name, root_object)],
                     ((k, v.execute(requires, resolver, queue)) for (k, v) in self.querypart),
-                    [(k, v) for kwargs in self.wrapped_querypart for (k, v) in kwargs.execute(requires, resolver, queue)],
+                    ((k, v) for kwargs in self.wrapped_querypart for (k, v) in kwargs.execute(requires, resolver, queue)),
                 )
             ),
             self,
