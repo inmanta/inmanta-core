@@ -302,7 +302,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         query: typing.List[typing.Tuple[LocatableString, ExpressionStatement]],
         wrapped_query: typing.List["WrappedKwargs"],
     ) -> None:
-        ReferenceStatement.__init__(self, list(chain([v for (_, v) in query], wrapped_query)))
+        ReferenceStatement.__init__(self, list(chain((v for (_, v) in query), wrapped_query)))
         self.index_type = str(index_type)
         self.anchors.append(TypeReferenceAnchor(index_type.get_location(), index_type.namespace, str(index_type)))
         self.query = [(str(n), e) for n, e in query]
@@ -326,8 +326,8 @@ class IndexLookup(ReferenceStatement, Resumer):
         self.type.lookup_index(
             list(
                 chain(
-                    [(k, v.execute(requires, resolver, queue)) for (k, v) in self.query],
-                    [(k, v) for kwargs in self.wrapped_query for (k, v) in kwargs.execute(requires, resolver, queue)],
+                    ((k, v.execute(requires, resolver, queue)) for (k, v) in self.query),
+                    ((k, v) for kwargs in self.wrapped_query for (k, v) in kwargs.execute(requires, resolver, queue)),
                 )
             ),
             self,
@@ -341,7 +341,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         """
             The representation of this statement
         """
-        return "%s[%s]" % (self.index_type, ",".join(map(repr, chain([self.query], self.wrapped_query))))
+        return "%s[%s]" % (self.index_type, ",".join([repr(x) for x in chain([self.query], self.wrapped_query)]))
 
 
 class ShortIndexLookup(IndexLookup):
@@ -359,7 +359,7 @@ vm.files[path="/etc/motd"]
         query: typing.List[typing.Tuple[LocatableString, ExpressionStatement]],
         wrapped_query: typing.List["WrappedKwargs"],
     ):
-        ReferenceStatement.__init__(self, list(chain([v for (_, v) in query], [rootobject], wrapped_query)))
+        ReferenceStatement.__init__(self, list(chain((v for (_, v) in query), [rootobject], wrapped_query)))
         self.rootobject = rootobject
         self.relation = str(relation)
         self.querypart: typing.List[typing.Tuple[str, ExpressionStatement]] = [(str(n), e) for n, e in query]
@@ -395,8 +395,8 @@ vm.files[path="/etc/motd"]
             list(
                 chain(
                     [(relation.end.name, root_object)],
-                    [(k, v.execute(requires, resolver, queue)) for (k, v) in self.querypart],
-                    [(k, v) for kwargs in self.wrapped_querypart for (k, v) in kwargs.execute(requires, resolver, queue)],
+                    ((k, v.execute(requires, resolver, queue)) for (k, v) in self.querypart),
+                    ((k, v) for kwargs in self.wrapped_querypart for (k, v) in kwargs.execute(requires, resolver, queue)),
                 )
             ),
             self,
