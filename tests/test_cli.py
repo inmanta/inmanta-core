@@ -108,6 +108,10 @@ async def test_environment(server, client, cli):
     try:
         result = await cli.run("environment", "save", env_name)
         assert result.exit_code == 0
+        assert os.path.isfile(filename)
+        with open(filename, "r") as environment_file:
+            environment_file_content = environment_file.read()
+            assert f"environment={env_id}" in environment_file_content
     finally:
         if os.path.isfile(filename):
             os.remove(filename)

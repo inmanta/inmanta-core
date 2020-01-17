@@ -322,7 +322,7 @@ port=%(port)s
         "port": client.port,
     }
     if os.path.exists(".inmanta"):
-        click.echo(".inmanta exits, not writing config", err=True)
+        click.echo(".inmanta exists, not writing config", err=True)
     else:
         with open(".inmanta", "w") as f:
             f.write(cfg)
