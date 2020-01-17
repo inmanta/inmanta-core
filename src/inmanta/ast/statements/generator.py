@@ -34,7 +34,7 @@ from inmanta.ast import (
     TypingException,
 )
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import DynamicStatement, ExpressionStatement, Literal
+from inmanta.ast.statements import DynamicStatement, ExpressionStatement
 from inmanta.ast.statements.assign import SetAttributeHelper
 from inmanta.ast.type import Type as InmantaType
 from inmanta.const import LOG_LEVEL_TRACE
@@ -315,8 +315,8 @@ class Constructor(ExpressionStatement):
 
     def requires(self) -> List[str]:
         out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
-        out.extend([req for kwargs in self.__wrapped_kwarg_attributes for req in kwargs.requires()])
-        out.extend([req for (k, v) in self.get_default_values().items() for req in v.requires()])
+        out.extend(req for kwargs in self.__wrapped_kwarg_attributes for req in kwargs.requires())
+        out.extend(req for (k, v) in self.get_default_values().items() for req in v.requires())
         return out
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
@@ -343,24 +343,19 @@ class Constructor(ExpressionStatement):
         type_class = self.type.get_entity()
 
         # kwargs
-        direct_kwarg_attrs: Dict[str, InmantaType] = {}
-        indirect_kwarg_attrs: Dict[str, ExpressionStatement] = {}
+        kwarg_attrs: Dict[str, InmantaType] = {}
         for kwargs in self.wrapped_kwargs:
             for (k, v) in kwargs.execute(requires, resolver, queue):
-                if k in self.attributes or k in direct_kwarg_attrs or k in indirect_kwarg_attrs:
+                if k in self.attributes or k in kwarg_attrs:
                     raise RuntimeException(
                         self, "The attribute %s is set twice in the constructor call of %s." % (k, self.class_type)
                     )
-                if k in self.required_kwargs:
-                    direct_kwarg_attrs[k] = v
-                else:
-                    attribute = self.type.get_entity().get_attribute(k)
-                    if attribute is None:
-                        raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
-                    expr: ExpressionStatement = Literal(v)
-                    kwargs.dictionary.copy_location(expr)
-                    indirect_kwarg_attrs[k] = expr
-        missing_attrs: List[str] = [attr for attr in self.required_kwargs if attr not in direct_kwarg_attrs]
+                attribute = self.type.get_entity().get_attribute(k)
+                if attribute is None:
+                    raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
+                kwarg_attrs[k] = v
+
+        missing_attrs: List[str] = [attr for attr in self.required_kwargs if attr not in kwarg_attrs]
         if missing_attrs:
             raise TypingException(
                 self, "attributes %s are part of an index and should be set in the constructor." % ",".join(missing_attrs)
@@ -368,7 +363,7 @@ class Constructor(ExpressionStatement):
 
         # the attributes
         attributes = {k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()}
-        attributes.update(direct_kwarg_attrs)
+        attributes.update(kwarg_attrs)
 
         # check if the instance already exists in the index (if there is one)
         instances = []
@@ -400,7 +395,7 @@ class Constructor(ExpressionStatement):
             object_instance = type_class.get_instance(attributes, resolver, queue, self.location)
 
         # deferred execution for indirect attributes
-        for attributename, valueexpression in chain(self._indirect_attributes.items(), indirect_kwarg_attrs.items()):
+        for attributename, valueexpression in self._indirect_attributes.items():
             var = object_instance.get_attribute(attributename)
             if var.is_multi():
                 # gradual only for multi
