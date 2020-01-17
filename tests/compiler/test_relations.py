@@ -578,17 +578,13 @@ implement AContainer using std::none
 AContainer.aa [0:2] -- A
 
 
-x = A()
-y = A()
-z = A()
-
-container = AContainer(aa = [x, y])
-container.aa = z
+container = AContainer(aa = [A(), A()])
+container.aa = A()
         """,
         ""
-        "Could not set attribute `aa` on instance `__config__::AContainer (instantiated at {dir}/main.cf:16)`"
-        " (reported in container.aa = z ({dir}/main.cf:17))"
+        "Could not set attribute `aa` on instance `__config__::AContainer (instantiated at {dir}/main.cf:12)`"
+        " (reported in container.aa = Construct(A) ({dir}/main.cf:13))"
         "\ncaused by:"
-        "\n  Exceeded relation arity on attribute 'aa' of instance '__config__::AContainer (instantiated at {dir}/main.cf:16)'"
-        " (reported in container.aa = z ({dir}/main.cf:17:16))",
+        "\n  Exceeded relation arity on attribute 'aa' of instance '__config__::AContainer (instantiated at {dir}/main.cf:12)'"
+        " (reported in container.aa = Construct(A) ({dir}/main.cf:13))",
     )
