@@ -1385,3 +1385,128 @@ val2 = false
     assert isinstance(statements[1], Assign)
     assert str(statements[0].rhs) == "true"
     assert str(statements[1].rhs) == "false"
+
+
+def test_1341_syntax_error_output_1():
+    """
+    Test the readability of a syntax error message.
+    """
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+var=é,
+)
+            """
+        )
+    exc: ParserException = pytest_e.value
+    assert exc.location.file == "test"
+    assert exc.location.lnr == 2
+    assert exc.location.start_char == 5
+    assert exc.location.end_lnr == 2
+    assert exc.location.end_char == 5
+    assert exc.value == "é"
+    assert exc.msg == "Syntax error: Illegal character 'é'"
+
+
+def test_1341_syntax_error_output_2():
+    """
+    Test the readability of a syntax error message.
+    """
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+deployment2 = k8s::Deployment(
+    name="hello-nginx2",
+    var=🤔,
+    cluster=cluster
+)
+            """
+        )
+    exc: ParserException = pytest_e.value
+    assert exc.location.file == "test"
+    assert exc.location.lnr == 4
+    assert exc.location.start_char == 9
+    assert exc.location.end_lnr == 4
+    assert exc.location.end_char == 9
+    assert exc.value == "🤔"
+    assert exc.msg == "Syntax error: Illegal character '🤔'"
+
+
+def test_1341_syntax_error_output_3():
+    """
+    Test the readability of a syntax error message.
+    """
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+é
+            """
+        )
+    exc: ParserException = pytest_e.value
+    assert exc.location.file == "test"
+    assert exc.location.lnr == 2
+    assert exc.location.start_char == 1
+    assert exc.location.end_lnr == 2
+    assert exc.location.end_char == 1
+    assert exc.value == "é"
+    assert exc.msg == "Syntax error: Illegal character 'é'"
+
+
+def test_1341_syntax_error_output_4():
+    """
+    Test the readability of a syntax error message.
+    """
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+aé=66
+            """
+        )
+    exc: ParserException = pytest_e.value
+    assert exc.location.file == "test"
+    assert exc.location.lnr == 2
+    assert exc.location.start_char == 2
+    assert exc.location.end_lnr == 2
+    assert exc.location.end_char == 2
+    assert exc.value == "é"
+    assert exc.msg == "Syntax error: Illegal character 'é'"
+
+
+def test_1341_syntax_error_output_5():
+    """
+    Test the readability of a syntax error message.
+    """
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+K8éééYamlResource.cluster [1] -- Cluster
+            """
+        )
+    exc: ParserException = pytest_e.value
+    assert exc.location.file == "test"
+    assert exc.location.lnr == 2
+    assert exc.location.start_char == 3
+    assert exc.location.end_lnr == 2
+    assert exc.location.end_char == 3
+    assert exc.value == "é"
+    assert exc.msg == "Syntax error: Illegal character 'é'"
+
+
+def test_640_syntax_error_output_6():
+    """
+    Test the readability of a syntax error message.
+    """
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+typedef positive as number matching self >= 1-
+            """
+        )
+    exc: ParserException = pytest_e.value
+    assert exc.location.file == "test"
+    assert exc.location.lnr == 2
+    assert exc.location.start_char == 46
+    assert exc.location.end_lnr == 2
+    assert exc.location.end_char == 46
+    assert exc.value == "-"
+    assert exc.msg == "Syntax error: Illegal character '-'"
