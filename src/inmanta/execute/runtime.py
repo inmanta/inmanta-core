@@ -21,6 +21,7 @@ from typing import Dict, Generic, List, Optional, Set, TypeVar, Union
 
 from inmanta.ast import (
     AttributeException,
+    CompilerException,
     DoubleSetException,
     Locatable,
     Location,
@@ -396,13 +397,22 @@ class ListVariable(BaseListVariable):
     __slots__ = ("attribute", "myself")
 
     def __init__(self, attribute: "RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
-        self.attribute = attribute
+        self.attribute: "RelationAttribute" = attribute
         self.myself = instance
         super().__init__(queue)
 
     def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
-        if not self._set_value(value, location, recur):
-            return
+        try:
+            if not self._set_value(value, location, recur):
+                return
+        except ModifiedAfterFreezeException as e:
+            if len(self.value) == self.attribute.high:
+                new_exception: CompilerException = RuntimeException(
+                    None, "Exceeded relation arity on attribute '%s' of instance '%s'" % (self.attribute.name, self.myself)
+                )
+                new_exception.set_location(location)
+                raise new_exception
+            raise e
         # set counterpart
         if self.attribute.end is not None and recur:
             value.set_attribute(self.attribute.end.name, self.myself, location, False)
