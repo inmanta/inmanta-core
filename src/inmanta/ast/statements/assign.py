@@ -31,7 +31,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import AssignStatement, ExpressionStatement, Resumer, Statement
-from inmanta.ast.type import Dict, List
+from inmanta.ast.type import Dict, List, Type
 from inmanta.execute.runtime import (
     ExecutionUnit,
     HangUnit,
@@ -122,6 +122,13 @@ class CreateList(ReferenceStatement):
 
         return qlist
 
+    def validate_as_default_attribute(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
+        if multi:
+            for item in self.items:
+                item.validate_as_default_attribute(expected_type, False, False)
+        else:
+            expected_type.validate(self.items)
+
     def __repr__(self) -> str:
         return "List()"
 
@@ -156,6 +163,9 @@ class CreateDict(ReferenceStatement):
             qlist[key] = value.execute(requires, resolver, queue)
 
         return qlist
+
+    def validate_as_default_attribute(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
+        expected_type.validate(dict(self.items))
 
     def __repr__(self) -> str:
         return "Dict()"

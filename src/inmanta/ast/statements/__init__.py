@@ -17,8 +17,9 @@
 """
 from typing import Any, Dict, List, Optional, Tuple  # noqa: F401
 
-from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced
+from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced, RuntimeException
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
+from inmanta.execute.util import NoneValue
 
 try:
     from typing import TYPE_CHECKING
@@ -114,6 +115,9 @@ class ExpressionStatement(DynamicStatement):
     def requires_emit_gradual(self, resolver: Resolver, queue: QueueScheduler, resultcollector) -> Dict[object, ResultVariable]:
         return self.requires_emit(resolver, queue)
 
+    def validate_as_default_attribute(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
+        raise RuntimeException(None, "Invalid expression '%s', expected %s" % (self, expected_type.type_string()))
+
 
 class Resumer(ExpressionStatement):
     def resume(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
@@ -192,6 +196,10 @@ class Literal(ExpressionStatement):
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
         return self.value
+
+    def validate_as_default_attribute(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
+        if not (nullable and self.value == NoneValue()):
+            expected_type.validate(self.value)
 
 
 class DefinitionStatement(Statement):
