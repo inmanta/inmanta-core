@@ -90,20 +90,31 @@ def postgres_db(postgresql_proc):
 
 
 @pytest.fixture(scope="function")
-async def create_db(postgres_db, database_name):
+async def create_db(postgres_db, database_name_internal):
+    """
+        This one is linked to eventloop fixture, which is function scoped. This kind of makes this messy
+        in general
+    """
     connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
     try:
-        await connection.execute("CREATE DATABASE " + database_name)
+        await connection.execute("CREATE DATABASE " + database_name_internal)
     except DuplicateDatabaseError:
         pass
     finally:
         await connection.close()
+    return database_name_internal
 
 
 @pytest.fixture(scope="session")
-def database_name():
+def database_name_internal():
+    """can not depend on create_db due to scoping issues, unsafe to use, as database may not exist """
     ten_random_digits = "".join(random.choice(string.digits) for _ in range(10))
-    yield "inmanta" + ten_random_digits
+    return "inmanta" + ten_random_digits
+
+
+@pytest.fixture(scope="function")
+def database_name(create_db):
+    return create_db
 
 
 @pytest.fixture(scope="function")
