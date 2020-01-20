@@ -1916,53 +1916,6 @@ async def test_dryrun(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
-async def test_form(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    form = data.Form(environment=env.id, form_type="a type")
-    await form.insert()
-    other_form = data.Form(environment=env.id, form_type="other type")
-    await other_form.insert()
-
-    retrieved_form = await data.Form.get_form(env.id, "a type")
-    assert retrieved_form is not None
-    assert (retrieved_form.environment, retrieved_form.form_type) == (form.environment, form.form_type)
-
-    non_existing_form = await data.Form.get_form(env.id, "non-existing-form")
-    assert non_existing_form is None
-
-
-@pytest.mark.asyncio
-async def test_formrecord(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    form = data.Form(environment=env.id, form_type="a type")
-    await form.insert()
-
-    fields_for_record = {"field1": "val1", "field2": "val2"}
-    changed = datetime.datetime.now()
-    formrecord = data.FormRecord(environment=env.id, form=form.form_type, fields=fields_for_record, changed=changed)
-    await formrecord.insert()
-
-    results = await data.FormRecord.get_list()
-    assert len(results) == 1
-    result = results[0]
-    assert result.id == formrecord.id
-    assert len(result.fields) == 2
-    for key, value in fields_for_record.items():
-        assert result.fields[key] == value
-    assert result.changed == formrecord.changed
-
-
-@pytest.mark.asyncio
 async def test_reports_append(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()

@@ -37,7 +37,7 @@ from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.resources import Id
-from inmanta.types import JsonType, PrimitiveTypes, SimpleTypes
+from inmanta.types import JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -957,7 +957,6 @@ class Environment(BaseDocument):
                 await model.delete_cascade()
 
             await Parameter.delete_all(environment=self.id)
-            await Form.delete_all(environment=self.id)
             await Resource.delete_all(environment=self.id)
             await ResourceAction.delete_all(environment=self.id)
         else:
@@ -979,7 +978,7 @@ RETURNING last_version;
         return version
 
 
-SOURCE = ("fact", "plugin", "user", "form", "report")
+SOURCE = ("fact", "plugin", "user", "report")
 
 
 class Parameter(BaseDocument):
@@ -1386,47 +1385,6 @@ class Compile(BaseDocument):
             metadata=self.metadata,
             environment_variables=self.environment_variables,
         )
-
-
-class Form(BaseDocument):
-    """
-        A form in the dashboard defined by the configuration model
-    """
-
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    form_type: str = Field(field_type=str, required=True, part_of_primary_key=True)
-    options: Dict[str, str] = Field(field_type=dict)
-    fields: Dict[str, str] = Field(field_type=dict)
-    defaults: Dict[str, SimpleTypes] = Field(field_type=dict)
-    field_options: Dict[str, Dict[str, str]] = Field(field_type=dict)
-
-    @classmethod
-    async def get_form(cls, environment: uuid.UUID, form_type: str) -> "Form":
-        """
-            Get a form based on its typed and environment
-        """
-        forms = await cls.get_list(environment=environment, form_type=form_type)
-        if len(forms) == 0:
-            return None
-        else:
-            return forms[0]
-
-    def to_dict(self) -> JsonType:
-        me = super(Form, self).to_dict()
-        me["id"] = self.form_type
-        return me
-
-
-class FormRecord(BaseDocument):
-    """
-        A form record
-    """
-
-    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
-    form: str = Field(field_type=str, required=True)
-    fields: Dict[str, SimpleTypes] = Field(field_type=dict)
-    changed: datetime.datetime = Field(field_type=datetime.datetime)
 
 
 class LogLine(DataDocument):
@@ -2560,8 +2518,6 @@ _classes = [
     Code,
     Parameter,
     DryRun,
-    Form,
-    FormRecord,
     Compile,
     Report,
 ]

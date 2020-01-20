@@ -409,6 +409,8 @@ The syntax for implements and implementation is:
     		 | 'implement' class 'using' 'parents';
 
 
+.. _language_reference_indexes_and_queries:
+
 Indexes and queries
 ===================
 

@@ -563,3 +563,29 @@ Test1.peer [1] -- Test1.peer [1]
 """
     )
     compiler.do_compile()
+
+
+def test_1600_relation_arity_exceeded_error_message(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity A:
+end
+implement A using std::none
+entity AContainer:
+end
+implement AContainer using std::none
+
+AContainer.aa [0:2] -- A
+
+
+container = AContainer(aa = [A(), A()])
+container.aa = A()
+        """,
+        "Could not set attribute `aa` on instance `__config__::AContainer (instantiated at {dir}/main.cf:12)`"
+        " (reported in container.aa = Construct(A) ({dir}/main.cf:13))"
+        "\n"
+        "caused by:"
+        "\n"
+        "  Exceeded relation arity on attribute 'aa' of instance '__config__::AContainer (instantiated at {dir}/main.cf:12)'"
+        " (reported in container.aa = Construct(A) ({dir}/main.cf:13))",
+    )

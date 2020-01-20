@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2020 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,18 +15,13 @@
 
     Contact: code@inmanta.com
 """
+from asyncpg import Connection
 
-from inmanta.ast import CompilerException, Range
 
-
-class ParserException(CompilerException):
-    """Exception occurring during the parsing of the code"""
-
-    def __init__(self, location: Range, value, msg=None):
-        if msg is None:
-            msg = "Syntax error at token %s" % value
-        else:
-            msg = "Syntax error: %s" % msg
-        CompilerException.__init__(self, msg)
-        self.set_location(location)
-        self.value = value
+async def update(connection: Connection) -> None:
+    schema = """
+    DROP TABLE IF EXISTS public.formrecord;
+    DROP TABLE IF EXISTS public.form;
+    """
+    async with connection.transaction():
+        await connection.execute(schema)

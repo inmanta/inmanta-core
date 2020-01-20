@@ -117,7 +117,7 @@ def test_null_on_dict_err(snippetcompiler):
         implement A using std::none
         a = A()
     """,
-        'Syntax error null can not be assigned to dict, did you mean "dict? a = null" ({dir}/main.cf:3:18)',
+        'Syntax error: null can not be assigned to dict, did you mean "dict? a = null" ({dir}/main.cf:3:18)',
     )
 
 
