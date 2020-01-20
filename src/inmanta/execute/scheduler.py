@@ -152,11 +152,12 @@ class Scheduler(object):
         indices = [t for t in others if isinstance(t, DefineIndex)]
         others = [t for t in others if not isinstance(t, DefineIndex)]
 
-        # first entities, so we have inheritance
-        # parents first
+        # first type constraints so attribute defaults can be type checked
         for d in type_constraints:
             d.evaluate()
 
+        # then entities, so we have inheritance
+        # parents first
         for d in self.sort_entities(entities):
             d.evaluate()
 
