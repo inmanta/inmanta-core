@@ -92,8 +92,7 @@ def postgres_db(postgresql_proc):
 @pytest.fixture(scope="function")
 async def create_db(postgres_db, database_name_internal):
     """
-        This one is linked to eventloop fixture, which is function scoped. This kind of makes this messy
-        in general
+    see :py:database_name_internal:
     """
     connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
     try:
@@ -107,7 +106,17 @@ async def create_db(postgres_db, database_name_internal):
 
 @pytest.fixture(scope="session")
 def database_name_internal():
-    """can not depend on create_db due to scoping issues, unsafe to use, as database may not exist """
+    """
+    The database_name fixture is expected to yield the database name to an existing database, and should be session scoped.
+
+    However, async fixtures all depend on the event loop, which is function scoped.
+    To create the database, we need asyncpg, which needs an eventloop.
+
+    To resolve this, there is a session scoped fixture called database_name_internal that provides a fixed name,
+    but can not ensure the database has been created.
+
+    and a database_name fixtures that does ensure the database is created, but this forces it to be function scoped
+    """
     ten_random_digits = "".join(random.choice(string.digits) for _ in range(10))
     return "inmanta" + ten_random_digits
 
