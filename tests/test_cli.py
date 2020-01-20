@@ -108,11 +108,11 @@ async def test_environment(server, client, cli, tmpdir):
     result = await cli.run("environment", "save", env_name)
     assert result.exit_code == 0
 
-    dot_inmanta_file = os.path.join(tmpdir, ".inmanta")
-    assert os.path.isfile(dot_inmanta_file)
-    with open(dot_inmanta_file, "r") as environment_file:
-        environment_file_content = environment_file.read()
-        assert f"environment={env_id}" in environment_file_content
+    path_dot_inmanta_file = os.path.join(tmpdir, ".inmanta")
+    assert os.path.isfile(path_dot_inmanta_file)
+    with open(path_dot_inmanta_file, "r") as f:
+        file_content = f.read()
+        assert f"environment={env_id}" in file_content
 
 
 @pytest.mark.asyncio
