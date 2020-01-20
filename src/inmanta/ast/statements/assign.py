@@ -19,6 +19,7 @@
 # pylint: disable-msg=W0613
 
 import typing
+from itertools import chain
 
 from inmanta.ast import (
     AttributeException,
@@ -54,6 +55,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.variables import Reference  # noqa: F401
+    from inmanta.ast.statements.generator import WrappedKwargs  # noqa: F401
 
 
 class CreateList(ReferenceStatement):
@@ -305,12 +307,16 @@ class IndexLookup(ReferenceStatement, Resumer):
     """
 
     def __init__(
-        self, index_type: LocatableString, query: typing.List[typing.Tuple[LocatableString, ExpressionStatement]]
+        self,
+        index_type: LocatableString,
+        query: typing.List[typing.Tuple[LocatableString, ExpressionStatement]],
+        wrapped_query: typing.List["WrappedKwargs"],
     ) -> None:
-        ReferenceStatement.__init__(self, [v for (_, v) in query])
+        ReferenceStatement.__init__(self, list(chain((v for (_, v) in query), wrapped_query)))
         self.index_type = str(index_type)
         self.anchors.append(TypeReferenceAnchor(index_type.get_location(), index_type.namespace, str(index_type)))
         self.query = [(str(n), e) for n, e in query]
+        self.wrapped_query: typing.List["WrappedKwargs"] = wrapped_query
 
     def normalize(self) -> None:
         ReferenceStatement.normalize(self)
@@ -327,7 +333,16 @@ class IndexLookup(ReferenceStatement, Resumer):
     def resume(
         self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
     ) -> None:
-        self.type.lookup_index([(k, v.execute(requires, resolver, queue)) for (k, v) in self.query], self, target)
+        self.type.lookup_index(
+            list(
+                chain(
+                    ((k, v.execute(requires, resolver, queue)) for (k, v) in self.query),
+                    ((k, v) for kwargs in self.wrapped_query for (k, v) in kwargs.execute(requires, resolver, queue)),
+                )
+            ),
+            self,
+            target,
+        )
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
@@ -336,7 +351,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         """
             The representation of this statement
         """
-        return "%s[%s]" % (self.index_type, self.query)
+        return "%s[%s]" % (self.index_type, ",".join([repr(x) for x in chain([self.query], self.wrapped_query)]))
 
 
 class ShortIndexLookup(IndexLookup):
@@ -352,11 +367,13 @@ vm.files[path="/etc/motd"]
         rootobject: ExpressionStatement,
         relation: LocatableString,
         query: typing.List[typing.Tuple[LocatableString, ExpressionStatement]],
+        wrapped_query: typing.List["WrappedKwargs"],
     ):
-        ReferenceStatement.__init__(self, [v for (_, v) in query] + [rootobject])
+        ReferenceStatement.__init__(self, list(chain((v for (_, v) in query), [rootobject], wrapped_query)))
         self.rootobject = rootobject
         self.relation = str(relation)
         self.querypart: typing.List[typing.Tuple[str, ExpressionStatement]] = [(str(n), e) for n, e in query]
+        self.wrapped_querypart: typing.List["WrappedKwargs"] = wrapped_query
 
     def normalize(self) -> None:
         ReferenceStatement.normalize(self)
@@ -384,16 +401,27 @@ vm.files[path="/etc/motd"]
 
         self.type = relation.get_type()
 
-        args: typing.List[typing.Tuple[str, object]] = [(relation.end.name, root_object)]
-        args = args + [(k, v.execute(requires, resolver, queue)) for (k, v) in self.querypart]
-
-        self.type.lookup_index(args, self, target)
+        self.type.lookup_index(
+            list(
+                chain(
+                    [(relation.end.name, root_object)],
+                    ((k, v.execute(requires, resolver, queue)) for (k, v) in self.querypart),
+                    ((k, v) for kwargs in self.wrapped_querypart for (k, v) in kwargs.execute(requires, resolver, queue)),
+                )
+            ),
+            self,
+            target,
+        )
 
     def __repr__(self) -> str:
         """
             The representation of this statement
         """
-        return "%s.%s[%s]" % (self.rootobject, self.relation, self.querypart)
+        return "%s.%s[%s]" % (
+            self.rootobject,
+            self.relation,
+            ",".join(repr(part) for part in chain([self.querypart], self.wrapped_querypart)),
+        )
 
 
 class StringFormat(ReferenceStatement):

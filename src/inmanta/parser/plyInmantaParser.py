@@ -43,7 +43,7 @@ from inmanta.ast.statements.define import (
     DefineTypeConstraint,
     DefineTypeDefault,
 )
-from inmanta.ast.statements.generator import Constructor, For, If
+from inmanta.ast.statements.generator import Constructor, For, If, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException, plyInmantaLex
@@ -122,6 +122,11 @@ def p_top_stmt(p: YaccProduction) -> None:
                 | index
                 | import """
     p[0] = p[1]
+
+
+def p_empty(p: YaccProduction) -> None:
+    "empty : "
+    pass
 
 
 #######################
@@ -636,7 +641,7 @@ def p_map_lookup(p: YaccProduction) -> None:
 
 def p_constructor(p: YaccProduction) -> None:
     " constructor : class_ref '(' param_list ')' "
-    p[0] = Constructor(p[1], p[3], Location(file, p.lineno(2)), namespace)
+    p[0] = Constructor(p[1], p[3][0], p[3][1], Location(file, p.lineno(2)), namespace)
 
 
 def p_function_call(p: YaccProduction) -> None:
@@ -681,14 +686,16 @@ def p_map_def_empty(p: YaccProduction) -> None:
 
 def p_index_lookup(p: YaccProduction) -> None:
     " index_lookup : class_ref '[' param_list ']'"
-    p[0] = IndexLookup(p[1], p[3])
+    # TODO: test case for index lookup (parse test and compile test)
+    p[0] = IndexLookup(p[1], p[3][0], p[3][1])
     attach_lnr(p, 2)
 
 
 def p_short_index_lookup(p: YaccProduction) -> None:
     " index_lookup : attr_ref '[' param_list ']'"
+    # TODO: test case for index lookup (parse test and compile test)
     attref = p[1]
-    p[0] = ShortIndexLookup(attref.instance, attref.attribute, p[3])
+    p[0] = ShortIndexLookup(attref.instance, attref.attribute, p[3][0], p[3][1])
     attach_lnr(p, 2)
 
 
@@ -799,20 +806,44 @@ def p_constants_collect(p: YaccProduction) -> None:
     p[0] = p[3]
 
 
-def p_param_list_collect(p: YaccProduction) -> None:
-    """param_list : ID '=' operand ',' param_list"""
-    p[5].insert(0, (p[1], p[3]))
-    p[0] = p[5]
+def p_wrapped_kwargs(p: YaccProduction) -> None:
+    "wrapped_kwargs : '*' '*' operand"
+    p[0] = WrappedKwargs(p[3])
 
 
-def p_param_list_term(p: YaccProduction) -> None:
-    "param_list : ID '=' operand"
-    p[0] = [(p[1], p[3])]
+def p_param_list_element_explicit(p: YaccProduction) -> None:
+    # param_list_element: Tuple[Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
+    "param_list_element : ID '=' operand"
+    p[0] = ((p[1], p[3]), None)
 
 
-def p_param_list_term_2(p: YaccProduction) -> None:
-    "param_list : "
-    p[0] = []
+def p_param_list_element_kwargs(p: YaccProduction) -> None:
+    "param_list_element : wrapped_kwargs"
+    # param_list_element: Tuple[Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
+    p[0] = (None, p[1])
+
+
+def p_param_list_empty(p: YaccProduction) -> None:
+    """param_list : param_list_empty
+        param_list_empty : empty"""
+    # param_list: Tuple[List[Tuple[ID, operand]], List[wrapped_kwargs]]
+    p[0] = ([], [])
+
+
+def p_param_list_nonempty(p: YaccProduction) -> None:
+    """param_list : param_list_element empty param_list_empty
+            | param_list_element ',' param_list"""
+    # param_list parses a sequence of named arguments.
+    # The arguments are separated by commas and take one of two forms:
+    #   "key = value" -> p_param_list_element_explicit
+    #   "**dict_of_name_value_pairs" -> p_param_list_element_kwargs
+    # param_list: Tuple[List[Tuple[ID, operand]], List[wrapped_kwargs]]
+    (pair, kwargs) = p[1]
+    if pair is not None:
+        p[3][0].insert(0, pair)
+    if kwargs is not None:
+        p[3][1].insert(0, kwargs)
+    p[0] = p[3]
 
 
 def p_operand_list_collect(p: YaccProduction) -> None:
