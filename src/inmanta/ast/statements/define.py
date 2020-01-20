@@ -164,7 +164,7 @@ class DefineEntity(TypeDefinitionStatement):
                 if attribute.default is not None:
                     default_type: Type = self.namespace.get_type(str(attribute.type))
                     try:
-                        attribute.default.validate_as_default_attribute(default_type, attribute.multi, attribute.nullable)
+                        attribute.default.check_type_for_constant(default_type, attribute.multi, attribute.nullable)
                     except RuntimeException as exception:
                         if exception.stmt is None or isinstance(exception.stmt, Type):
                             exception.set_statement(attribute)

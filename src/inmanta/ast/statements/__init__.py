@@ -115,7 +115,7 @@ class ExpressionStatement(DynamicStatement):
     def requires_emit_gradual(self, resolver: Resolver, queue: QueueScheduler, resultcollector) -> Dict[object, ResultVariable]:
         return self.requires_emit(resolver, queue)
 
-    def validate_as_default_attribute(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
+    def check_type_for_constant(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
         raise RuntimeException(None, "Invalid expression '%s', expected %s" % (self, expected_type.type_string()))
 
 
@@ -197,7 +197,7 @@ class Literal(ExpressionStatement):
     def execute_direct(self, requires: Dict[object, object]) -> object:
         return self.value
 
-    def validate_as_default_attribute(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
+    def check_type_for_constant(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
         if self.value == NoneValue():
             if nullable:
                 return

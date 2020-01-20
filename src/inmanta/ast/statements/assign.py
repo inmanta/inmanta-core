@@ -122,10 +122,10 @@ class CreateList(ReferenceStatement):
 
         return qlist
 
-    def validate_as_default_attribute(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
+    def check_type_for_constant(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
         if multi:
             for item in self.items:
-                item.validate_as_default_attribute(expected_type, False, False)
+                item.check_type_for_constant(expected_type, False, False)
         else:
             expected_type.validate(self.items)
 
@@ -164,7 +164,7 @@ class CreateDict(ReferenceStatement):
 
         return qlist
 
-    def validate_as_default_attribute(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
+    def check_type_for_constant(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
         expected_type.validate(dict(self.items))
 
     def __repr__(self) -> str:
