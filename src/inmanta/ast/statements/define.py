@@ -166,7 +166,8 @@ class DefineEntity(TypeDefinitionStatement):
                     try:
                         attribute.default.validate_as_default_attribute(default_type, attribute.multi, attribute.nullable)
                     except RuntimeException as exception:
-                        exception.set_statement(attribute)
+                        if exception.stmt is None:
+                            exception.set_statement(attribute)
                         raise exception
                     entity_type.add_default_value(name, attribute.default)
                 elif attribute.remove_default:

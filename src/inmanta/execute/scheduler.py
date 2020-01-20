@@ -27,7 +27,7 @@ from inmanta import plugins
 from inmanta.ast import CompilerException, CycleExcpetion, Location, MultiException, RuntimeException
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
-from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineRelation, DefineTypeDefault
+from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineRelation, DefineTypeConstraint, DefineTypeDefault
 from inmanta.ast.type import TYPES, Type
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.proxy import UnsetException
@@ -139,13 +139,17 @@ class Scheduler(object):
         implements = [t for t in definitions if isinstance(t, DefineImplement)]
         others = [t for t in definitions if not isinstance(t, DefineImplement)]
         entities = {t.fullName: t for t in others if isinstance(t, DefineEntity)}
+        type_constraints = [t for t in others if isinstance(t, DefineTypeConstraint)]
         typedefaults = [t for t in others if isinstance(t, DefineTypeDefault)]
-        others = [t for t in others if not (isinstance(t, DefineEntity) or isinstance(t, DefineTypeDefault))]
+        others = [t for t in others if not isinstance(t, (DefineEntity, DefineTypeDefault, DefineTypeConstraint))]
         indices = [t for t in others if isinstance(t, DefineIndex)]
         others = [t for t in others if not isinstance(t, DefineIndex)]
 
         # first entities, so we have inheritance
         # parents first
+        for d in type_constraints:
+            d.evaluate()
+
         for d in self.sort_entities(entities):
             d.evaluate()
 
