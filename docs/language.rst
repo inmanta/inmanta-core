@@ -352,7 +352,7 @@ Values can be assigned to the remaining properties as if they are variables. To 
     // s1.files still equals [f1, f2, f3]
 
 In addition, attributes can be assigned in a constructor using keyword arguments by using `**dct` where `dct` is a dictionary that contains
-attribute names as keys and the desired values as values. This method does however have a small performance impact. For example:
+attribute names as keys and the desired values as values. For example:
 
 .. code-block:: inmanta
 
