@@ -1,6 +1,7 @@
 # v 2019.6 (?) Changes in this release:
 
 ## Fixed
+ - Added support for \*\*dict as kwargs for constructor calls and index lookups (#620, #1702)
  - Various compiler error reporting improvements (#1584, #1341, #1600)
  - CRUDHandler bugfix, ensure update is not called on purged resources
  - Changes in default values: AUTO_DEPLOY, PUSH_ON_AUTO_DEPLOY are enabled by default,
