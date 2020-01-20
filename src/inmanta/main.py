@@ -17,7 +17,6 @@
 """
 
 import datetime
-import json
 import logging
 import os
 import uuid
@@ -157,32 +156,6 @@ class Client(object):
 
         return env_id
 
-    def to_form_id(self, ref: str, environment: uuid.UUID) -> uuid.UUID:
-        """
-            Convert ref to a form uuid
-        """
-        try:
-            env_id = uuid.UUID(ref)
-        except ValueError:
-            # try to resolve the id as project name
-            forms = self.get_list("list_forms", "forms", arguments=dict(tid=environment))
-
-            id_list = []
-            for form in forms:
-                if ref == form["form_type"]:
-                    id_list.append(form["form_id"])
-
-            if len(id_list) == 0:
-                raise Exception("Unable to find a form with the given id or name")
-
-            elif len(id_list) > 1:
-                raise Exception("Found multiple forms with %s name, please use the ID." % ref)
-
-            else:
-                env_id = uuid.UUID(id_list[0])
-
-        return env_id
-
 
 def print_table(header: List[str], rows: List[List[str]], data_type: List[str] = None) -> None:
     width, _ = click.get_terminal_size()
@@ -295,7 +268,16 @@ def environment_create(client: Client, name: str, project: str, repo_url: str, b
     project_data = client.get_dict("get_project", "project", {"id": project_id})
 
     if save:
-        cfg = """
+        save_config(client, env)
+
+    print_table(
+        ["Environment ID", "Environment name", "Project ID", "Project name"],
+        [[env["id"], env["name"], project_data["id"], project_data["name"]]],
+    )
+
+
+def save_config(client: Client, env: Dict[str, str]):
+    cfg = """
 [config]
 fact-expire = 1800
 environment=%(env)s
@@ -308,20 +290,15 @@ port=%(port)s
 host=%(host)s
 port=%(port)s
 """ % {
-            "env": env["id"],
-            "host": client.host,
-            "port": client.port,
-        }
-        if os.path.exists(".inmanta"):
-            click.echo(".inmanta exits, not writing config", err=True)
-        else:
-            with open(".inmanta", "w") as f:
-                f.write(cfg)
-
-    print_table(
-        ["Environment ID", "Environment name", "Project ID", "Project name"],
-        [[env["id"], env["name"], project_data["id"], project_data["name"]]],
-    )
+        "env": env["id"],
+        "host": client.host,
+        "port": client.port,
+    }
+    if os.path.exists(".inmanta"):
+        click.echo(".inmanta exists, not writing config", err=True)
+    else:
+        with open(".inmanta", "w") as f:
+            f.write(cfg)
 
 
 @environment.command(name="list")
@@ -349,6 +326,14 @@ def environment_show(client: Client, environment: str) -> None:
     print_table(
         ["ID", "Name", "Repository URL", "Branch Name"], [[env["id"], env["name"], env["repo_url"], env["repo_branch"]]]
     )
+
+
+@environment.command(name="save", help="Save the ID of the environment and the server to the .inmanta config file")
+@click.argument("environment")
+@click.pass_obj
+def environment_write_config(client: Client, environment: str) -> None:
+    env = client.get_dict("get_environment", "environment", dict(id=client.to_environment_id(environment)))
+    save_config(client, env)
 
 
 @environment.command(name="modify")
@@ -642,192 +627,6 @@ def version_report(client: Client, environment: str, version: str, l: bool) -> N
                     pass
 
             click.echo("")
-
-
-@cmd.group("form")
-@click.pass_context
-def form(ctx: click.Context) -> None:
-    pass
-
-
-@form.command(name="list")
-@click.option("--environment", "-e", help="The environment to use", required=True)
-@click.pass_obj
-def form_list(client: Client, environment: str) -> None:
-    result = client.get_list("list_forms", "forms", arguments=dict(tid=client.to_environment_id(environment)))
-
-    data = []
-    for p in result:
-        data.append([p["form_type"], p["form_id"]])
-
-    print_table(["Form Type", "Form ID"], data)
-
-
-@form.command(name="show")
-@click.option("--environment", "-e", help="The environment to use", required=True)
-@click.option("--form-type", "-t", help="Show details of this form", required=True)
-@click.pass_obj
-def form_show(client: Client, environment: str, form_type: str) -> None:
-    result = client.get_dict("get_form", "form", arguments=dict(tid=client.to_environment_id(environment), id=form_type))
-    values = []
-    for k, v in result["fields"].items():
-        if k in result["defaults"] and result["defaults"][k] != "":
-            values.append([k, "type: %s, default: %s" % (v, result["defaults"][k])])
-        else:
-            values.append([k, "type: %s" % v])
-
-    print_table(["Field", "Spec"], values)
-
-
-@form.command(name="export")
-@click.option("--environment", "-e", help="The environment to use", required=True)
-@click.option("--form-type", "-t", help="Show details of this form", required=True)
-@click.pass_obj
-def form_export(client: Client, environment: str, form_type: str) -> None:
-    tid = client.to_environment_id(environment)
-    form_def = client.get_dict("get_form", "form", arguments=dict(tid=tid, id=form_type))
-    form_records = client.get_list("list_records", "records", arguments=dict(tid=tid, form_type=form_type, include_record=True))
-
-    click.echo(json.dumps({"form_type": form_def, "records": form_records}))
-
-
-@form.command(name="import")
-@click.option("--environment", "-e", help="The environment to use", required=True)
-@click.option("--form-type", "-t", help="Show details of this form", required=True)
-@click.option("--file", help="The json file with the record data", required=True)
-@click.pass_obj
-def form_import(client: Client, environment: str, form_type: str, file: str) -> None:
-    tid = client.to_environment_id(environment)
-    if not os.path.exists(file):
-        raise Exception("%s file does not exist." % file)
-
-    data = {}
-    with open(file, "r") as fd:
-        try:
-            data = json.load(fd)
-        except Exception as e:
-            raise Exception("Unable to load records, invalid json") from e
-
-    if "records" not in data:
-        raise Exception("No records found in input file")
-
-    form_type_def: Dict[str, str] = data["form_type"]
-    if form_type != form_type_def["form_type"]:
-        raise click.ClickException("Unable to load form data for %s into form %s" % (form_type_def["form_type"], form_type))
-
-    records = cast(List[JsonType], data["records"])
-    for record in records:
-        if record["form"] == form_type:
-            client.do_request("create_record", "record", arguments=dict(tid=tid, form_type=form_type, form=record["fields"]))
-
-
-@cmd.group("record")
-@click.pass_context
-def record(ctx: click.Context) -> None:
-    pass
-
-
-@record.command(name="list")
-@click.option("--environment", "-e", help="The environment to use", required=True)
-@click.option("--form-type", "-t", help="Show details of this form", required=True)
-@click.option("--show-all", "-a", help="Show all fields", is_flag=True, default=False)
-@click.pass_obj
-def record_list(client: Client, environment: str, form_type: str, show_all: bool) -> None:
-    tid = client.to_environment_id(environment)
-
-    if not show_all:
-        result = client.get_list("list_records", "records", arguments=dict(tid=tid, form_type=form_type))
-        data = []
-        for p in result:
-            data.append([p["id"], p["changed"]])
-
-        print_table(["Record ID", "Changed"], data)
-    else:
-        result = client.get_list("list_records", "records", arguments=dict(tid=tid, form_type=form_type, include_record=True))
-        fields = []
-        data = []
-        for p in result:
-            fields = p["fields"].keys()
-            values = [p["id"], p["changed"]]
-            values.extend(p["fields"].values())
-            data.append(values)
-
-        allfields = ["Record ID", "Changed"]
-        allfields.extend(fields)
-        print_table(allfields, data)
-
-
-@record.command(name="create")
-@click.option("--environment", "-e", help="The environment to use", required=True)
-@click.option("--form-type", "-t", help="Create a record of this type.", required=True)
-@click.option("--field", "-p", help="Field values", multiple=True, default=[])
-@click.pass_obj
-def record_create(client: Client, environment: str, form_type: str, field: List[str]) -> None:
-    tid = client.to_environment_id(environment)
-
-    fields = {}
-    for f in field:
-        parts = f.split("=")
-        if len(parts) != 2:
-            raise Exception("Argument %s should be in the key=value form." % f)
-
-        fields[parts[0].strip()] = parts[1].strip()
-
-    try:
-        uuid.UUID(form_type)
-        raise Exception("Form type should be the type string, not the uuid.")
-    except ValueError:
-        pass
-
-    result = client.get_list("create_record", "record", arguments=dict(tid=tid, form_type=form_type, form=fields))
-
-    values = []
-    fields = cast(List[Dict[str, str]], result["fields"])
-    for k in sorted(fields.keys()):
-        values.append([k, fields[k]])
-
-    print_table(["Field", "Value"], values)
-
-
-@record.command(name="update")
-@click.option("--environment", "-e", help="The environment to use", required=True)
-@click.option("--record", "-r", help="The id of the record to edit", required=True)
-@click.option("--field", "-p", help="Field values", multiple=True, default=[])
-@click.pass_obj
-def record_update(client: Client, environment: str, record: str, field: List[str]) -> None:
-    tid = client.to_environment_id(environment)
-
-    fields = {}
-    for f in field:
-        parts = f.split("=")
-        if len(parts) != 2:
-            raise Exception("Argument %s should be in the key=value form." % f)
-
-        fields[parts[0].strip()] = parts[1].strip()
-
-    result = cast(
-        Dict[str, Dict[str, str]], client.do_request("update_record", "record", arguments=dict(tid=tid, id=record, form=fields))
-    )
-
-    values = []
-    for k in sorted(result["fields"].keys()):
-        values.append([k, result["fields"][k]])
-
-    print_table(["Field", "Value"], values)
-
-
-@record.command(name="delete")
-@click.option("--environment", "-e", help="The environment to use", required=True)
-@click.argument("record")
-@click.pass_obj
-def record_delete(client: Client, environment: str, record: str) -> None:
-    tid = client.to_environment_id(environment)
-    try:
-        record_id = uuid.UUID(record)
-    except ValueError:
-        raise Exception("The record id should be a valid UUID")
-
-    client.do_request("delete_record", arguments=dict(tid=tid, id=record_id))
 
 
 @cmd.command(name="monitor")

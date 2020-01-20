@@ -68,6 +68,14 @@ class Range(Location):
     __slots__ = ("start_char", "end_lnr", "end_char")
 
     def __init__(self, file: str, start_lnr: int, start_char: int, end_lnr: int, end_char: int) -> None:
+        """
+        Create a new Range instance.
+        :param file: the file this Range is in
+        :param start_lnr: the line number this Range starts on, 1-based
+        :param start_char: the start character number of the Range, 1-based
+        :param end_lnr: the line number this Range ends on, 1-based
+        :param end_char: the end character number of the Range, exclusive, 1-based
+        """
         Location.__init__(self, file, start_lnr)
         self.start_char = start_char
         self.end_lnr = end_lnr

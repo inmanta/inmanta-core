@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+from re import error as RegexError
+
 import ply.lex as lex
 
 from inmanta.ast import LocatableString, Range
@@ -191,9 +193,17 @@ def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r"/([^/\\]|\\.)+/"
     value = Reference("self")  # anonymous value
-    expr = Regex(value, t.value[1:-1])
-    t.value = expr
-    return t
+    try:
+        expr = Regex(value, t.value[1:-1])
+        t.value = expr
+        return t
+    except RegexError as error:
+        end = t.lexer.lexpos - t.lexer.linestart + 1
+        (s, e) = t.lexer.lexmatch.span()
+        start = end - (e - s)
+
+        r: Range = Range(t.lexer.inmfile, t.lexer.lineno, start, t.lexer.lineno, end)
+        raise ParserException(r, t.value, "Regex error in %s: '%s'" % (t.value, error))
 
 
 # Define a rule so we can track line numbers
@@ -219,19 +229,12 @@ t_mls_ignore = ""
 
 
 def t_ANY_error(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    value = t.value
-    if len(value) > 10:
-        value = value[:10]
-
     lexer = t.lexer
 
     end = lexer.lexpos - lexer.linestart + 1
-    (s, e) = lexer.lexmatch.span()
-    start = end - (e - s)
-
-    r = Range(lexer.inmfile, lexer.lineno, start, lexer.lineno, end)
-
-    raise ParserException("", r, value)
+    char: str = t.value[0]
+    r: Range = Range(lexer.inmfile, lexer.lineno, end, lexer.lineno, end + 1)
+    raise ParserException(r, char, "Illegal character '%s'" % char)
 
 
 # Build the lexer

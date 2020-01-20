@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+import os
+
 import pytest
 
 from inmanta import data
@@ -101,6 +103,18 @@ async def test_environment(server, client, cli):
     assert result.exit_code == 0
     assert env_name in result.output
     assert env_id in result.output
+
+    filename = ".inmanta"
+    try:
+        result = await cli.run("environment", "save", env_name)
+        assert result.exit_code == 0
+        assert os.path.isfile(filename)
+        with open(filename, "r") as environment_file:
+            environment_file_content = environment_file.read()
+            assert f"environment={env_id}" in environment_file_content
+    finally:
+        if os.path.isfile(filename):
+            os.remove(filename)
 
 
 @pytest.mark.asyncio
@@ -205,110 +219,3 @@ async def test_param(server, client, environment, cli):
     result = await cli.run("param", "list", "-e", environment)
     assert result.exit_code == 0
     assert "var1" in result.output
-
-
-@pytest.mark.asyncio
-async def test_form_and_records(server, client, environment, cli):
-    form_type = "FormType"
-    result = await client.put_form(
-        tid=environment,
-        id=form_type,
-        form={
-            "attributes": {
-                "field1": {"default": 1, "options": {"min": 1, "max": 100}, "type": "number"},
-                "field2": {"default": "", "options": {}, "type": "string"},
-            },
-            "options": {},
-            "type": form_type,
-        },
-    )
-    assert result.code == 200
-    form_id = result.result["form"]["id"]
-
-    result = await cli.run("form", "list", "-e", environment)
-    assert result.exit_code == 0
-    assert form_id in result.output
-
-    result = await cli.run("form", "show", "-e", environment, "-t", form_type)
-    assert result.exit_code == 0
-    assert "field1" in result.output
-    assert "field2" in result.output
-
-    result = await cli.run("record", "create", "-e", environment, "-t", form_type, "-p", "field1=1234", "-p", "field2=test456")
-    assert result.exit_code == 0
-    assert "1234" in result.output
-    assert "test456" in result.output
-
-    records = await client.list_records(tid=environment, form_type=form_type)
-    assert records.code == 200
-    record = records.result["records"][0]
-    record_id = record["id"]
-
-    result = await cli.run("record", "list", "-e", environment, "-t", form_type)
-    assert result.exit_code == 0
-    assert record_id in result.output
-
-    result = await cli.run("record", "list", "-e", environment, "-t", form_type, "--show-all")
-    assert result.exit_code == 0
-
-    result = await cli.run("record", "update", "-e", environment, "-r", record_id, "-p", "field1=98765")
-    assert result.exit_code == 0
-    assert "98765" in result.output
-
-    result = await cli.run("record", "delete", "-e", environment, record_id)
-    assert result.exit_code == 0
-
-    records = await client.list_records(tid=environment, form_type=form_type)
-    assert records.code == 200
-    assert len(records.result["records"]) == 0
-
-
-@pytest.mark.asyncio
-async def test_import_export(server, client, environment, cli, tmpdir):
-    env = await data.Environment.get_by_id(environment)
-    await env.set(data.SERVER_COMPILE, False)
-
-    form_type = "FormType"
-    result = await client.put_form(
-        tid=environment,
-        id=form_type,
-        form={
-            "attributes": {
-                "field1": {"default": 1, "options": {"min": 1, "max": 100}, "type": "number"},
-                "field2": {"default": "", "options": {}, "type": "string"},
-            },
-            "options": {},
-            "type": form_type,
-        },
-    )
-    assert result.code == 200
-    form_id = result.result["form"]["id"]
-
-    result = await cli.run("record", "create", "-e", environment, "-t", form_type, "-p", "field1=1234", "-p", "field2=test456")
-    assert result.exit_code == 0
-
-    result = await cli.run("form", "export", "-e", environment, "-t", form_type)
-    assert result.exit_code == 0, f"{result.output}"
-    assert form_id in result.output
-
-    f = tmpdir.join("export.json")
-    print(result.output)
-    print(str(f))
-    with open(str(f), "w") as fh:
-        fh.write(result.output)
-
-    records = await client.list_records(tid=environment, form_type=form_type)
-    assert records.code == 200
-    record = records.result["records"][0]
-
-    await client.delete_record(tid=environment, id=record["id"])
-    records = await client.list_records(tid=environment, form_type=form_type)
-    assert records.code == 200
-    assert len(records.result["records"]) == 0
-
-    result = await cli.run("form", "import", "-e", environment, "-t", form_type, "--file", str(f))
-    assert result.exit_code == 0
-
-    records = await client.list_records(tid=environment, form_type=form_type)
-    assert records.code == 200
-    assert len(records.result["records"]) == 1
