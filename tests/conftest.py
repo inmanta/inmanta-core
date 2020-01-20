@@ -74,10 +74,36 @@ else:
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 logger = logging.getLogger(__name__)
 
+TABLES_TO_KEEP = [x.table_name() for x in data._classes]
+
+# Database
+@pytest.fixture
+def postgres_proc(unused_tcp_port_factory):
+    proc = PostgresProc(unused_tcp_port_factory())
+    yield proc
+    proc.stop()
+
 
 @pytest.fixture(scope="session", autouse=True)
 def postgres_db(postgresql_proc):
     yield postgresql_proc
+
+
+@pytest.fixture(scope="function")
+async def create_db(postgres_db, database_name):
+    connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
+    try:
+        await connection.execute("CREATE DATABASE " + database_name)
+    except DuplicateDatabaseError:
+        pass
+    finally:
+        await connection.close()
+
+
+@pytest.fixture(scope="session")
+def database_name():
+    ten_random_digits = "".join(random.choice(string.digits) for _ in range(10))
+    yield "inmanta" + ten_random_digits
 
 
 @pytest.fixture(scope="function")
@@ -101,58 +127,6 @@ async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_res
     await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None)
     yield
     await data.disconnect()
-
-
-@pytest.fixture(scope="function", autouse=True)
-def deactive_venv():
-    old_os_path = os.environ.get("PATH", "")
-    old_prefix = sys.prefix
-    old_path = sys.path
-
-    yield
-
-    os.environ["PATH"] = old_os_path
-    sys.prefix = old_prefix
-    sys.path = old_path
-    pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
-
-
-def reset_metrics():
-    pyformance.set_global_registry(MetricsRegistry())
-
-
-@pytest.fixture(scope="function", autouse=True)
-async def clean_reset(create_db, clean_db):
-    reset_all_objects()
-    config.Config._reset()
-    methods = inmanta.protocol.common.MethodProperties.methods.copy()
-    yield
-    inmanta.protocol.common.MethodProperties.methods = methods
-    config.Config._reset()
-    reset_all_objects()
-
-
-def reset_all_objects():
-    resources.resource.reset()
-    process.Subprocess.uninitialize()
-    asyncio.set_child_watcher(None)
-    reset_metrics()
-    # No dynamic loading of commands at the moment, so no need to reset/reload
-    # command.Commander.reset()
-    handler.Commander.reset()
-    Project._project = None
-    unknown_parameters.clear()
-
-
-@pytest.fixture(scope="function")
-async def create_db(postgres_db, database_name):
-    connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
-    try:
-        await connection.execute("CREATE DATABASE " + database_name)
-    except DuplicateDatabaseError:
-        pass
-    finally:
-        await connection.close()
 
 
 async def postgress_get_custom_types(postgresql_client):
@@ -208,9 +182,6 @@ async def hard_clean_db_post(postgresql_client):
     await do_clean_hard(postgresql_client)
 
 
-TABLES_TO_KEEP = [x.table_name() for x in data._classes]
-
-
 @pytest.fixture(scope="function")
 async def clean_db(postgresql_client, create_db):
     """
@@ -232,6 +203,60 @@ async def clean_db(postgresql_client, create_db):
     if tables_to_truncate:
         truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
         await postgresql_client.execute(truncate_query)
+
+
+@pytest.fixture(scope="function")
+def get_columns_in_db_table(postgresql_client):
+    async def _get_columns_in_db_table(table_name):
+        result = await postgresql_client.fetch(
+            "SELECT column_name "
+            "FROM information_schema.columns "
+            "WHERE table_schema='public' AND table_name='" + table_name + "'"
+        )
+        return [r["column_name"] for r in result]
+
+    return _get_columns_in_db_table
+
+
+@pytest.fixture(scope="function", autouse=True)
+def deactive_venv():
+    old_os_path = os.environ.get("PATH", "")
+    old_prefix = sys.prefix
+    old_path = sys.path
+
+    yield
+
+    os.environ["PATH"] = old_os_path
+    sys.prefix = old_prefix
+    sys.path = old_path
+    pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+
+
+def reset_metrics():
+    pyformance.set_global_registry(MetricsRegistry())
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def clean_reset(create_db, clean_db):
+    reset_all_objects()
+    config.Config._reset()
+    methods = inmanta.protocol.common.MethodProperties.methods.copy()
+    yield
+    inmanta.protocol.common.MethodProperties.methods = methods
+    config.Config._reset()
+    reset_all_objects()
+
+
+def reset_all_objects():
+    resources.resource.reset()
+    process.Subprocess.uninitialize()
+    asyncio.set_child_watcher(None)
+    reset_metrics()
+    # No dynamic loading of commands at the moment, so no need to reset/reload
+    # command.Commander.reset()
+    handler.Commander.reset()
+    Project._project = None
+    unknown_parameters.clear()
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -284,12 +309,6 @@ def inmanta_config():
 def server_pre_start():
     """ This fixture is called by the server. Override this fixture to influence server config
     """
-
-
-@pytest.fixture(scope="session")
-def database_name():
-    ten_random_digits = "".join(random.choice(string.digits) for _ in range(10))
-    yield "inmanta" + ten_random_digits
 
 
 @pytest.fixture(scope="function")
@@ -612,19 +631,6 @@ def write_db_update_file():
     yield _write_db_update_file
 
 
-@pytest.fixture(scope="function")
-def get_columns_in_db_table(postgresql_client):
-    async def _get_columns_in_db_table(table_name):
-        result = await postgresql_client.fetch(
-            "SELECT column_name "
-            "FROM information_schema.columns "
-            "WHERE table_schema='public' AND table_name='" + table_name + "'"
-        )
-        return [r["column_name"] for r in result]
-
-    return _get_columns_in_db_table
-
-
 class KeepOnFail(object):
     def keep(self) -> "Optional[Dict[str, str]]":
         pass
@@ -817,13 +823,6 @@ class CLI(object):
 def cli():
     o = CLI()
     yield o
-
-
-@pytest.fixture
-def postgres_proc(unused_tcp_port_factory):
-    proc = PostgresProc(unused_tcp_port_factory())
-    yield proc
-    proc.stop()
 
 
 class AsyncCleaner(object):
