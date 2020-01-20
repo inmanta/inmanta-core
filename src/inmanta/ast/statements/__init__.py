@@ -198,8 +198,12 @@ class Literal(ExpressionStatement):
         return self.value
 
     def validate_as_default_attribute(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
-        if not (nullable and self.value == NoneValue()):
-            expected_type.validate(self.value)
+        if self.value == NoneValue():
+            if nullable:
+                return
+            if multi:
+                raise RuntimeException(None, "Invalid value '%s', expected %s[]" % (self.value, expected_type.type_string()))
+        expected_type.validate(self.value)
 
 
 class DefinitionStatement(Statement):
