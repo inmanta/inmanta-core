@@ -71,7 +71,7 @@ class DefineAttribute(Statement):
     def __str__(self) -> str:
         return (
             f"{self.type}{'[]' if self.multi else ''}{'?' if self.nullable else ''} {self.name}"
-            "{' = ' + str(self.default) if self.default else ''}"
+            f"{' = ' + str(self.default) if self.default else ''}"
         )
 
 
