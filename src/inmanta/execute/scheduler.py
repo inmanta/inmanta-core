@@ -27,7 +27,14 @@ from inmanta import plugins
 from inmanta.ast import CompilerException, CycleExcpetion, Location, MultiException, RuntimeException
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
-from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineRelation, DefineTypeConstraint, DefineTypeDefault
+from inmanta.ast.statements.define import (
+    DefineEntity,
+    DefineImplement,
+    DefineIndex,
+    DefineRelation,
+    DefineTypeConstraint,
+    DefineTypeDefault,
+)
 from inmanta.ast.type import TYPES, Type
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.proxy import UnsetException

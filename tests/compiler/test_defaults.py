@@ -237,7 +237,7 @@ end
 
 Test(t=5)
         """,
-        "Invalid value 'str', expected Number (reported in number t = 'str' ({dir}/main.cf:3))"
+        "Invalid value 'str', expected Number (reported in number t = 'str' ({dir}/main.cf:3))",
     )
 
 
@@ -252,7 +252,7 @@ implement Test using std::none
 
 Test(t = ["str"])
         """,
-        "Invalid value '1', expected String (reported in string[]? t = List() ({dir}/main.cf:3))"
+        "Invalid value '1', expected String (reported in string[]? t = List() ({dir}/main.cf:3))",
     )
 
 
@@ -267,7 +267,7 @@ implement Test using std::none
 
 Test(t = 12)
         """,
-        "Invalid value '[1, 2]', expected Number (reported in number? t = List() ({dir}/main.cf:3))"
+        "Invalid value '[1, 2]', expected Number (reported in number? t = List() ({dir}/main.cf:3))",
     )
 
 
@@ -284,5 +284,16 @@ implement Test using std::none
 
 Test(t = 8)
         """,
-        "Invalid value '12', constraint does not match (reported in digit t = 12 ({dir}/main.cf:5))"
+        "Invalid value '12', constraint does not match (reported in digit t = 12 ({dir}/main.cf:5))",
+    )
+
+
+def test_1292_default_type_check5(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    number t = "str"
+end
+        """,
+        "Invalid value 'str', expected Number (reported in number t = 'str' ({dir}/main.cf:3))",
     )
