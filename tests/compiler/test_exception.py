@@ -80,7 +80,5 @@ def test_direct_execute_error(snippetcompiler):
 
         A()
         """,
-        """Could not set attribute `aa` on instance `__config__::A (instantiated at {dir}/main.cf:12)` (reported in Construct(A) ({dir}/main.cf:12))
-caused by:
-  The statement Format({{{{a}}}}) can not be executed in this context (reported in Format({{{{a}}}}) ({dir}/main.cf:4))""",  # noqa: E501
+        "The statement Format({{{{a}}}}) can not be executed in this context (reported in Format({{{{a}}}}) ({dir}/main.cf:4))",
     )
