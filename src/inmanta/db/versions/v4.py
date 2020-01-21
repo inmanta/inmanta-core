@@ -83,7 +83,7 @@ DROP INDEX IF EXISTS resourceversionid_environment_resource_version_id_index;
 DROP INDEX IF EXISTS resourceversionid_action_id_index;
 DROP TABLE IF EXISTS public.resourceversionid;
 
--- Add index
+-- Setup/Remove indexes
 CREATE INDEX resourceaction_resource_version_ids_index ON resourceaction USING gin(resource_version_ids);
 DROP INDEX resourceaction_action_id_started_index;
 CREATE INDEX resourceaction_environment_action_started_index ON resourceaction(environment,action,started DESC);
