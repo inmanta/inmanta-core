@@ -98,6 +98,9 @@ async def create_db(postgres_db, database_name_internal):
     try:
         await connection.execute(f"CREATE DATABASE {database_name_internal}")
     except DuplicateDatabaseError:
+        # Because it is async, this fixture can not be made session scoped.
+        # Only the first time it is called, it will actually create a database
+        # All other times will drop through here
         pass
     finally:
         await connection.close()
