@@ -114,11 +114,10 @@ def database_name_internal():
 
     The database_name fixture is expected to yield the database name to an existing database, and should be session scoped.
 
-    However, async fixtures all depend on the event loop, which is function scoped.
-    To create the database, we need asyncpg, which needs an eventloop.
+    To create the database we need asyncpg. However, async fixtures all depend on the event loop. The event loop is function scoped.
 
-    To resolve this, there is a session scoped fixture called database_name_internal that provides a fixed name,
-    but can not ensure the database has been created.
+    To resolve this, there is a session scoped fixture called database_name_internal that provides a fixed name. create_db
+    ensures that the database has been created.
     """
     ten_random_digits = "".join(random.choice(string.digits) for _ in range(10))
     return "inmanta" + ten_random_digits
