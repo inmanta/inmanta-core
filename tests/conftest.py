@@ -96,7 +96,7 @@ async def create_db(postgres_db, database_name_internal):
     """
     connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
     try:
-        await connection.execute("CREATE DATABASE " + database_name_internal)
+        await connection.execute(f"CREATE DATABASE {database_name_internal}")
     except DuplicateDatabaseError:
         pass
     finally:
