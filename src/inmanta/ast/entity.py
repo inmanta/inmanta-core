@@ -447,12 +447,17 @@ class Entity(EntityLike, NamedType):
                     self.index_queue.pop(keys)
 
     def lookup_index(
-        self, params: "List[str,object]", stmt: "Statement", target: "Optional[ResultVariable]" = None
+        self, params: "List[Tuple[str,object]]", stmt: "Statement", target: "Optional[ResultVariable]" = None
     ) -> "Optional[Instance]":
         """
             Search an instance in the index.
         """
-        attributes = set([x[0] for x in params])
+        all_attributes: List[str] = [x[0] for x in params]
+        attributes: Set[str] = set(())
+        for attr in all_attributes:
+            if attr in attributes:
+                raise RuntimeException(stmt, "Attribute %s provided twice in index lookup" % attr)
+            attributes.add(attr)
 
         found_index = False
         for index_attributes in self.get_indices():

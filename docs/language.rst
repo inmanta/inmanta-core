@@ -351,6 +351,17 @@ Values can be assigned to the remaining properties as if they are variables. To 
     // adding a value twice does not affect the relation,
     // s1.files still equals [f1, f2, f3]
 
+In addition, attributes can be assigned in a constructor using keyword arguments by using `**dct` where `dct` is a dictionary that contains
+attribute names as keys and the desired values as values. For example:
+
+.. code-block:: inmanta
+
+    Host.files [0:] -- File.host [1]
+    h1 = Host("test")
+
+    file1_config = {"path": "/opt/1"}
+    f1 = File(host=h1, **file1_config)
+
 Refinements
 ===========
 

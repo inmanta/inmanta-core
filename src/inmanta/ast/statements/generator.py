@@ -19,7 +19,8 @@
 # pylint: disable-msg=W0613,R0201
 
 import logging
-from typing import Dict, List, Set, Tuple  # noqa: F401
+from itertools import chain
+from typing import Dict, Iterator, List, Optional, Set, Tuple  # noqa: F401
 
 from inmanta.ast import (
     AttributeReferenceAnchor,
@@ -35,6 +36,7 @@ from inmanta.ast import (
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DynamicStatement, ExpressionStatement
 from inmanta.ast.statements.assign import SetAttributeHelper
+from inmanta.ast.type import Type as InmantaType
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver, ResultCollector, ResultVariable
 from inmanta.execute.tracking import ImplementsTracker
@@ -242,31 +244,45 @@ class Constructor(ExpressionStatement):
         self,
         class_type: LocatableString,
         attributes: List[Tuple[LocatableString, ExpressionStatement]],
+        wrapped_kwargs: List["WrappedKwargs"],
         location: Location,
         namespace: Namespace,
     ) -> None:
         super().__init__()
         self.class_type = str(class_type)
         self.__attributes = {}  # type: Dict[str,ExpressionStatement]
+        self.__wrapped_kwarg_attributes: List[WrappedKwargs] = wrapped_kwargs
         self.location = location
         self.namespace = namespace
         self.anchors.append(TypeReferenceAnchor(class_type.get_location(), namespace, str(class_type)))
         for a in attributes:
             self.add_attribute(a[0], a[1])
+        self.type: Optional["EntityLike"] = None
+        self.required_kwargs: List[str] = []
 
         self._direct_attributes = {}  # type: Dict[str,ExpressionStatement]
         self._indirect_attributes = {}  # type: Dict[str,ExpressionStatement]
 
     def pretty_print(self) -> str:
-        return "%s(%s)" % (self.class_type, ",".join(("%s=%s" % (k, v.pretty_print()) for k, v in self.attributes.items())))
+        return "%s(%s)" % (
+            self.class_type,
+            ",".join(
+                chain(
+                    ("%s=%s" % (k, v.pretty_print()) for k, v in self.attributes.items()),
+                    ("**%s" % kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
+                )
+            ),
+        )
 
     def normalize(self) -> None:
-        mytype = self.namespace.get_type(self.class_type)
-
-        self.type = mytype  # type: EntityLike
+        mytype: "EntityLike" = self.namespace.get_type(self.class_type)
+        self.type = mytype
 
         for (k, v) in self.__attributes.items():
             v.normalize()
+
+        for wrapped_kwargs in self.wrapped_kwargs:
+            wrapped_kwargs.normalize()
 
         inindex = set()
 
@@ -278,8 +294,14 @@ class Constructor(ExpressionStatement):
         for index in self.type.get_entity().get_indices():
             for attr in index:
                 if attr not in all_attributes:
-                    raise TypingException(self, "%s is part of an index and should be set in the constructor." % attr)
+                    self.required_kwargs.append(attr)
+                    continue
                 inindex.add(attr)
+        if self.required_kwargs and not self.wrapped_kwargs:
+            raise TypingException(
+                self,
+                "attributes %s are part of an index and should be set in the constructor." % ",".join(self.required_kwargs),
+            )
 
         for (k, v) in all_attributes.items():
             attribute = self.type.get_entity().get_attribute(k)
@@ -292,7 +314,8 @@ class Constructor(ExpressionStatement):
 
     def requires(self) -> List[str]:
         out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
-        out.extend([req for (k, v) in self.get_default_values().items() for req in v.requires()])
+        out.extend(req for kwargs in self.__wrapped_kwarg_attributes for req in kwargs.requires())
+        out.extend(req for (k, v) in self.get_default_values().items() for req in v.requires())
         return out
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
@@ -300,6 +323,9 @@ class Constructor(ExpressionStatement):
         direct = [x for x in self._direct_attributes.items()]
 
         direct_requires = {rk: rv for (k, v) in direct for (rk, rv) in v.requires_emit(resolver, queue).items()}
+        direct_requires.update(
+            {rk: rv for kwargs in self.__wrapped_kwarg_attributes for (rk, rv) in kwargs.requires_emit(resolver, queue).items()}
+        )
         LOGGER.log(
             LOG_LEVEL_TRACE, "emitting constructor for %s at %s with %s", self.class_type, self.location, direct_requires
         )
@@ -315,8 +341,28 @@ class Constructor(ExpressionStatement):
         # the type to construct
         type_class = self.type.get_entity()
 
+        # kwargs
+        kwarg_attrs: Dict[str, InmantaType] = {}
+        for kwargs in self.wrapped_kwargs:
+            for (k, v) in kwargs.execute(requires, resolver, queue):
+                if k in self.attributes or k in kwarg_attrs:
+                    raise RuntimeException(
+                        self, "The attribute %s is set twice in the constructor call of %s." % (k, self.class_type)
+                    )
+                attribute = self.type.get_entity().get_attribute(k)
+                if attribute is None:
+                    raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
+                kwarg_attrs[k] = v
+
+        missing_attrs: List[str] = [attr for attr in self.required_kwargs if attr not in kwarg_attrs]
+        if missing_attrs:
+            raise TypingException(
+                self, "attributes %s are part of an index and should be set in the constructor." % ",".join(missing_attrs)
+            )
+
         # the attributes
         attributes = {k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()}
+        attributes.update(kwarg_attrs)
 
         # check if the instance already exists in the index (if there is one)
         instances = []
@@ -387,10 +433,48 @@ class Constructor(ExpressionStatement):
         """
         return self.__attributes
 
+    def get_wrapped_kwargs(self) -> List["WrappedKwargs"]:
+        """
+            Get the wrapped kwargs that are set for this constructor call
+        """
+        return self.__wrapped_kwarg_attributes
+
     attributes = property(get_attributes)
+    wrapped_kwargs = property(get_wrapped_kwargs)
 
     def __repr__(self) -> str:
         """
             The representation of the this statement
         """
         return "Construct(%s)" % (self.class_type)
+
+
+class WrappedKwargs(ExpressionStatement):
+    """
+    Keyword arguments wrapped in a dictionary.
+    Separate AST node for the type check it provides in the execute method.
+    """
+
+    def __init__(self, dictionary: ExpressionStatement) -> None:
+        super().__init__()
+        self.dictionary: ExpressionStatement = dictionary
+
+    def __repr__(self) -> str:
+        return "**%s" % repr(self.dictionary)
+
+    def normalize(self) -> None:
+        self.dictionary.normalize()
+
+    def requires(self) -> List[str]:
+        return self.dictionary.requires()
+
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        return self.dictionary.requires_emit(resolver, queue)
+
+    def execute(
+        self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler
+    ) -> List[Tuple[str, InmantaType]]:
+        dct: object = self.dictionary.execute(requires, resolver, queue)
+        if not isinstance(dct, Dict):
+            raise TypingException(self, "The ** operator can only be applied to dictionaries")
+        return list(dct.items())

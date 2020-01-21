@@ -614,6 +614,54 @@ File(host = 5, path = "Jos")
     assert {k: v.value for k, v in stmt.attributes.items()} == {"host": 5, "path": "Jos"}
 
 
+def test_ctr_dict():
+    statements = parse_code(
+        """
+dct = { "host": "myhost", "path": "/dir/file" }
+File(**dct)
+"""
+    )
+
+    assert len(statements) == 2
+    stmt = statements[1]
+    assert isinstance(stmt, Constructor)
+    assert str(stmt.class_type) == "File"
+    assert stmt.attributes == {}
+    assert len(stmt.wrapped_kwargs) == 1
+
+
+def test_ctr_dict_multi_param():
+    statements = parse_code(
+        """
+dct = { "host": "myhost" }
+File(**dct, path = "/dir/file")
+"""
+    )
+
+    assert len(statements) == 2
+    stmt = statements[1]
+    assert isinstance(stmt, Constructor)
+    assert str(stmt.class_type) == "File"
+    assert {k: v.value for k, v in stmt.attributes.items()} == {"path": "/dir/file"}
+    assert len(stmt.wrapped_kwargs) == 1
+
+
+def test_ctr_dict_multi_param3():
+    statements = parse_code(
+        """
+dct = { "host": "myhost" }
+File(path = "/dir/file", **dct)
+"""
+    )
+
+    assert len(statements) == 2
+    stmt = statements[1]
+    assert isinstance(stmt, Constructor)
+    assert str(stmt.class_type) == "File"
+    assert {k: v.value for k, v in stmt.attributes.items()} == {"path": "/dir/file"}
+    assert len(stmt.wrapped_kwargs) == 1
+
+
 def test_indexlookup():
     statements = parse_code(
         """
@@ -626,6 +674,22 @@ a=File[host = 5, path = "Jos"]
     assert isinstance(stmt, IndexLookup)
     assert stmt.index_type == "File"
     assert {k: v.value for k, v in stmt.query} == {"host": 5, "path": "Jos"}
+
+
+def test_indexlookup_kwargs():
+    statements = parse_code(
+        """
+dct = {"path": "/dir/file"}
+a=File[host = "myhost", **dct]
+"""
+    )
+
+    assert len(statements) == 2
+    stmt = statements[1].value
+    assert isinstance(stmt, IndexLookup)
+    assert stmt.index_type == "File"
+    assert {k: v.value for k, v in stmt.query} == {"host": "myhost"}
+    assert len(stmt.wrapped_query) == 1
 
 
 def test_short_index_lookup():
@@ -642,6 +706,24 @@ a = vm.files[path="/etc/motd"]
     assert stmt.rootobject.name == "vm"
     assert stmt.relation == "files"
     assert {k: v.value for k, v in stmt.querypart} == {"path": "/etc/motd"}
+
+
+def test_short_index_lookup_kwargs():
+    statements = parse_code(
+        """
+dct = {"path": "/etc/motd"}
+a = vm.files[**dct]
+"""
+    )
+
+    assert len(statements) == 2
+    stmt = statements[1].value
+    assert isinstance(stmt, ShortIndexLookup)
+    assert isinstance(stmt.rootobject, Reference)
+    assert stmt.rootobject.name == "vm"
+    assert stmt.relation == "files"
+    assert stmt.querypart == []
+    assert len(stmt.wrapped_querypart) == 1
 
 
 def test_ctr_2():

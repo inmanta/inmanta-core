@@ -66,7 +66,7 @@ async def test_project(server, client, cli):
 
 
 @pytest.mark.asyncio
-async def test_environment(server, client, cli):
+async def test_environment(server, client, cli, tmpdir):
     project_name = "test_project"
     result = await client.create_project(project_name)
     assert result.code == 200
@@ -104,17 +104,15 @@ async def test_environment(server, client, cli):
     assert env_name in result.output
     assert env_id in result.output
 
-    filename = ".inmanta"
-    try:
-        result = await cli.run("environment", "save", env_name)
-        assert result.exit_code == 0
-        assert os.path.isfile(filename)
-        with open(filename, "r") as environment_file:
-            environment_file_content = environment_file.read()
-            assert f"environment={env_id}" in environment_file_content
-    finally:
-        if os.path.isfile(filename):
-            os.remove(filename)
+    os.chdir(tmpdir)
+    result = await cli.run("environment", "save", env_name)
+    assert result.exit_code == 0
+
+    path_dot_inmanta_file = os.path.join(tmpdir, ".inmanta")
+    assert os.path.isfile(path_dot_inmanta_file)
+    with open(path_dot_inmanta_file, "r") as f:
+        file_content = f.read()
+        assert f"environment={env_id}" in file_content
 
 
 @pytest.mark.asyncio

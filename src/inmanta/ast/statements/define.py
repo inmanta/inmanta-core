@@ -28,6 +28,7 @@ from inmanta.ast import (
     LocatableString,
     Namespace,
     NotFoundException,
+    RuntimeException,
     TypeNotFoundException,
     TypeReferenceAnchor,
     TypingException,
@@ -66,6 +67,12 @@ class DefineAttribute(Statement):
         self.multi = multi
         self.remove_default = remove_default
         self.nullable = nullable
+
+    def __str__(self) -> str:
+        return (
+            f"{self.type}{'[]' if self.multi else ''}{'?' if self.nullable else ''} {self.name}"
+            f"{' = ' + str(self.default) if self.default else ''}"
+        )
 
 
 class DefineEntity(TypeDefinitionStatement):
@@ -155,6 +162,14 @@ class DefineEntity(TypeDefinitionStatement):
                 add_attributes[name] = attr_obj
 
                 if attribute.default is not None:
+                    default_type: Type = self.namespace.get_type(str(attribute.type))
+                    try:
+                        attribute.default.check_type_for_constant(default_type, attribute.multi, attribute.nullable)
+                    except RuntimeException as exception:
+                        if exception.stmt is None or isinstance(exception.stmt, Type):
+                            exception.set_statement(attribute)
+                            exception.location = attribute.location
+                        raise exception
                     entity_type.add_default_value(name, attribute.default)
                 elif attribute.remove_default:
                     entity_type.add_default_value(name, None)

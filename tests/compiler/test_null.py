@@ -131,9 +131,7 @@ def test_null_err(snippetcompiler):
         a = A()
 
     """,
-        """Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)` (reported in Construct(A) ({dir}/main.cf:6))
-caused by:
-  Invalid value 'null', expected String (reported in Construct(A) ({dir}/main.cf:6))""",  # noqa: E501
+        "Invalid value 'null', expected String (reported in string a = null ({dir}/main.cf:3))",
     )
 
 
@@ -146,7 +144,5 @@ def test_null_on_list_err(snippetcompiler):
         implement A using std::none
         a = A()
     """,
-        """Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)` (reported in Construct(A) ({dir}/main.cf:6))
-caused by:
-  Invalid value 'null', expected list (reported in Construct(A) ({dir}/main.cf:6))""",  # noqa: E501
+        "Invalid value 'null', expected string[] (reported in string[] a = null ({dir}/main.cf:3))",
     )
