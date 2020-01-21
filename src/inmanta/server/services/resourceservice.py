@@ -255,20 +255,23 @@ class ResourceService(protocol.ServerSlice):
             deploy_model.append(rv.to_dict())
             resource_ids.append(rv.resource_version_id)
 
-        now = datetime.datetime.now()
-
-        log_line = data.LogLine.log(logging.INFO, "Resource version pulled by client for agent %(agent)s state", agent=agent)
-        self.log_resource_action(env.id, resource_ids, logging.INFO, now, log_line.msg)
-        ra = data.ResourceAction(
-            environment=env.id,
-            resource_version_ids=resource_ids,
-            action=const.ResourceAction.pull,
-            action_id=uuid.uuid4(),
-            started=started,
-            finished=now,
-            messages=[log_line],
-        )
-        await ra.insert()
+        if resource_ids:
+            now = datetime.datetime.now()
+            log_line = data.LogLine.log(
+                logging.INFO, "Resource version pulled by client for agent %(agent)s state", agent=agent
+            )
+            self.log_resource_action(env.id, resource_ids, logging.INFO, now, log_line.msg)
+            ra = data.ResourceAction(
+                environment=env.id,
+                version=version,
+                resource_version_ids=resource_ids,
+                action=const.ResourceAction.pull,
+                action_id=uuid.uuid4(),
+                started=started,
+                finished=now,
+                messages=[log_line],
+            )
+            await ra.insert()
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
@@ -342,18 +345,20 @@ class ResourceService(protocol.ServerSlice):
             deploy_model.append(rv.to_dict())
             resource_ids.append(rv.resource_version_id)
 
-        ra = data.ResourceAction(
-            environment=env.id,
-            resource_version_ids=resource_ids,
-            action=const.ResourceAction.pull,
-            action_id=uuid.uuid4(),
-            started=started,
-            finished=now,
-            messages=[
-                data.LogLine.log(logging.INFO, "Resource version pulled by client for agent %(agent)s state", agent=agent)
-            ],
-        )
-        await ra.insert()
+        if resource_ids:
+            ra = data.ResourceAction(
+                environment=env.id,
+                version=version,
+                resource_version_ids=resource_ids,
+                action=const.ResourceAction.pull,
+                action_id=uuid.uuid4(),
+                started=started,
+                finished=now,
+                messages=[
+                    data.LogLine.log(logging.INFO, "Resource version pulled by client for agent %(agent)s state", agent=agent)
+                ],
+            )
+            await ra.insert()
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
@@ -443,8 +448,14 @@ class ResourceService(protocol.ServerSlice):
             if started is None:
                 return 500, {"message": "A resource action can only be created with a start datetime."}
 
+            version = Id.parse_id(resource_ids[0]).version
             resource_action = data.ResourceAction(
-                environment=env.id, resource_version_ids=resource_ids, action_id=action_id, action=action, started=started
+                environment=env.id,
+                version=version,
+                resource_version_ids=resource_ids,
+                action_id=action_id,
+                action=action,
+                started=started,
             )
             await resource_action.insert()
         else:

@@ -339,19 +339,22 @@ class OrchestrationService(protocol.ServerSlice):
         for agent in agents:
             await self.agentmanager_service.ensure_agent_registered(env, agent)
 
-        now = datetime.datetime.now()
-        log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
-        self.resource_service.log_resource_action(env.id, resource_version_ids, logging.INFO, now, log_line.msg)
-        ra = data.ResourceAction(
-            environment=env.id,
-            resource_version_ids=resource_version_ids,
-            action_id=uuid.uuid4(),
-            action=const.ResourceAction.store,
-            started=started,
-            finished=now,
-            messages=[log_line],
-        )
-        await ra.insert()
+        if resource_version_ids:
+            now = datetime.datetime.now()
+            log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
+            self.resource_service.log_resource_action(env.id, resource_version_ids, logging.INFO, now, log_line.msg)
+            ra = data.ResourceAction(
+                environment=env.id,
+                version=version,
+                resource_version_ids=resource_version_ids,
+                action_id=uuid.uuid4(),
+                action=const.ResourceAction.store,
+                started=started,
+                finished=now,
+                messages=[log_line],
+            )
+            await ra.insert()
+
         LOGGER.debug("Successfully stored version %d", version)
 
         self.resource_service.clear_env_cache(env)

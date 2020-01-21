@@ -17,10 +17,12 @@
 """
 
 import os
+import uuid
 
 import pytest
 from asyncpg import Connection
 
+from _collections import defaultdict
 from db.common import PGRestore
 from inmanta.server.bootloader import InmantaBootloader
 
@@ -31,50 +33,45 @@ async def migrate_v3_to_v4(hard_clean_db, hard_clean_db_post, postgresql_client:
     with open(os.path.join(os.path.dirname(__file__), "dumps/v3.sql"), "r") as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
-    result = await postgresql_client.fetch(
-        """
-            SELECT EXISTS
-            (SELECT 1
-            FROM pg_tables
-            WHERE schemaname = 'public'
-            AND tablename = 'form');"""
-    )
-    assert result[0]["exists"]
+    for table_name in ["form", "formrecord", "resourceversionid"]:
+        assert await does_table_exist(postgresql_client, table_name)
 
-    result = await postgresql_client.fetch(
-        """
-                SELECT EXISTS
-                (SELECT 1
-                FROM pg_tables
-                WHERE schemaname = 'public'
-                AND tablename = 'formrecord');"""
-    )
-    assert result[0]["exists"]
+    result = await postgresql_client.fetch("SELECT action_id, resource_version_id FROM public.resourceversionid")
+    resource_version_id_dict = defaultdict(list)
+    for r in result:
+        resource_version_id_dict[r["action_id"]].append(r["resource_version_id"])
+
     ibl = InmantaBootloader()
 
     # When the bootloader is started, it also executes the migration to v4
     await ibl.start()
     async_finalizer(ibl.stop)
 
+    yield resource_version_id_dict
+
 
 @pytest.mark.asyncio
-async def test_forms_tables_deleted(migrate_v3_to_v4, postgresql_client: Connection):
-    result = await postgresql_client.fetch(
-        """
-                SELECT EXISTS
-                (SELECT 1
-                FROM pg_tables
-                WHERE schemaname = 'public'
-                AND tablename = 'form');"""
-    )
-    assert not result[0]["exists"]
+async def test_db_migration(migrate_v3_to_v4, postgresql_client: Connection):
+    for table_name in ["form", "formrecord", "resourceversionid"]:
+        assert not await does_table_exist(postgresql_client, table_name)
 
+    result = await postgresql_client.fetch("SELECT environment, action_id, resource_version_ids FROM public.resourceaction")
+    for r in result:
+        assert r["environment"] == uuid.UUID("6c66ca44-da58-4924-ad17-151abc2f3726")
+        rvids_old_table = migrate_v3_to_v4[r["action_id"]]
+        rvids_new_table = r["resource_version_ids"]
+        assert sorted(rvids_old_table) == sorted(rvids_new_table)
+    # Verify that the number of action_ids match
+    assert len(result) == len(migrate_v3_to_v4)
+
+
+async def does_table_exist(postgresql_client: Connection, table_name: str) -> bool:
     result = await postgresql_client.fetch(
-        """
-                    SELECT EXISTS
-                    (SELECT 1
-                    FROM pg_tables
-                    WHERE schemaname = 'public'
-                    AND tablename = 'formrecord');"""
+        f"""
+            SELECT EXISTS
+            (SELECT 1
+            FROM pg_tables
+            WHERE schemaname = 'public'
+            AND tablename = '{table_name}');"""
     )
-    assert not result[0]["exists"]
+    return result[0]["exists"]
