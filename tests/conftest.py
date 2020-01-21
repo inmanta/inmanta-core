@@ -107,6 +107,8 @@ async def create_db(postgres_db, database_name_internal):
 @pytest.fixture(scope="session")
 def database_name_internal():
     """
+    Internal use only, use database_name instead.
+
     The database_name fixture is expected to yield the database name to an existing database, and should be session scoped.
 
     However, async fixtures all depend on the event loop, which is function scoped.
@@ -114,8 +116,6 @@ def database_name_internal():
 
     To resolve this, there is a session scoped fixture called database_name_internal that provides a fixed name,
     but can not ensure the database has been created.
-
-    and a database_name fixtures that does ensure the database is created, but this forces it to be function scoped
     """
     ten_random_digits = "".join(random.choice(string.digits) for _ in range(10))
     return "inmanta" + ten_random_digits
