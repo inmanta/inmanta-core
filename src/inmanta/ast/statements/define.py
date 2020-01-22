@@ -28,7 +28,6 @@ from inmanta.ast import (
     LocatableString,
     Namespace,
     NotFoundException,
-    RuntimeException,
     TypeNotFoundException,
     TypeReferenceAnchor,
     TypingException,
@@ -161,18 +160,8 @@ class DefineEntity(TypeDefinitionStatement):
 
                 add_attributes[name] = attr_obj
 
-                if attribute.default is not None:
-                    default_type: Type = self.namespace.get_type(str(attribute.type))
-                    try:
-                        attribute.default.check_type_for_constant(default_type, attribute.multi, attribute.nullable)
-                    except RuntimeException as exception:
-                        if exception.stmt is None or isinstance(exception.stmt, Type):
-                            exception.set_statement(attribute)
-                            exception.location = attribute.location
-                        raise exception
-                    entity_type.add_default_value(name, attribute.default)
-                elif attribute.remove_default:
-                    entity_type.add_default_value(name, None)
+                if attribute.default is not None or attribute.remove_default:
+                    entity_type.add_default_value(name, attribute)
 
             if len(set(self.parents)) != len(self.parents):
                 raise TypingException(self, "same parent defined twice")
