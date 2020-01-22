@@ -214,7 +214,7 @@ class FunctionParameterHandler:
             if parameter_name in path
         }
 
-    def _filter_non_path_params(self, function_parameters: Dict[str, inspect.Parameter]):
+    def _filter_non_path_params(self, function_parameters: Dict[str, inspect.Parameter]) -> Dict[str, inspect.Parameter]:
         non_path_params = {
             parameter_name: parameter_type
             for parameter_name, parameter_type in function_parameters.items()
