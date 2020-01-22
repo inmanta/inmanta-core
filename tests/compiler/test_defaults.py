@@ -297,3 +297,25 @@ end
         """,
         "Invalid value 'str', expected Number (reported in number t = 'str' ({dir}/main.cf:3))",
     )
+
+
+def test_1725_default_type_check_with_plugin(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    std::date d = "2020-01-22"
+end
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_1725_default_type_check_with_plugin_incorrect(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    std::date d = "nodatevalue"
+end
+        """,
+        "Invalid value 'nodatevalue', constraint does not match (reported in std::date d = 'nodatevalue' ({dir}/main.cf:3))",
+    )

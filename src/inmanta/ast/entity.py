@@ -46,7 +46,7 @@ except ImportError:
 if TYPE_CHECKING:
     from inmanta.execute.runtime import ExecutionContext, ResultVariable  # noqa: F401
     from inmanta.ast.statements import Statement, ExpressionStatement  # noqa: F401
-    from inmanta.ast.statements.define import DefineImport  # noqa: F401
+    from inmanta.ast.statements.define import DefineAttribute, DefineImport  # noqa: F401
     from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast import Namespaced
 
@@ -117,7 +117,7 @@ class Entity(EntityLike, NamedType):
         self.implements_inherits = False
 
         # default values
-        self.__default_value = {}  # type: Dict[str,object]
+        self.__default_values = {}  # type: Dict[str, DefineAttribute]
 
         self._index_def = []  # type: List[List[str]]
         self._index = {}  # type: Dict[str,Instance]
@@ -130,6 +130,17 @@ class Entity(EntityLike, NamedType):
         self.normalized = False
 
     def normalize(self) -> None:
+        for attribute in self.__default_values.values():
+            if attribute.default is not None:
+                default_type: Type = self.namespace.get_type(str(attribute.type))
+                try:
+                    attribute.default.check_type_for_constant(default_type, attribute.multi, attribute.nullable)
+                except RuntimeException as exception:
+                    if exception.stmt is None or isinstance(exception.stmt, Type):
+                        exception.set_statement(attribute)
+                        exception.location = attribute.location
+                    raise exception
+
         for d in self.implementations:
             d.normalize()
 
@@ -149,14 +160,14 @@ class Entity(EntityLike, NamedType):
         else:
             return self.implements
 
-    def add_default_value(self, name: str, value: object) -> None:
+    def add_default_value(self, name: str, value: "DefineAttribute") -> None:
         """
             Add a default value for an attribute
         """
-        self.__default_value[name] = value
+        self.__default_values[name] = value
 
-    def get_defaults(self) -> "Dict[str, ExpressionStatement]":
-        return self.__default_value
+    def get_defaults(self) -> "Dict[str, Optional[ExpressionStatement]]":
+        return dict((k, v.default) for k, v in self.__default_values.items() if v.default is not None or v.remove_default)
 
     def get_namespace(self) -> Namespace:
         """

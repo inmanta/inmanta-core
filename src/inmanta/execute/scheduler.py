@@ -175,8 +175,12 @@ class Scheduler(object):
         for d in implements:
             d.evaluate()
 
-        types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type) or isinstance(v, plugins.Plugin)}
         compiler.plugins = {k: v for k, v in types_and_impl.items() if isinstance(v, plugins.Plugin)}
+        types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
+
+        # normalize plugins
+        for p in compiler.plugins.values():
+            p.normalize()
 
         # give type info to all types, to normalize blocks inside them
         for t in types.values():
