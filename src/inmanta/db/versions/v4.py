@@ -17,8 +17,6 @@
 """
 from asyncpg import Connection
 
-from inmanta.resources import Id
-
 
 async def update(connection: Connection) -> None:
     async with connection.transaction():
@@ -53,18 +51,13 @@ SET environment=(SELECT DISTINCT rvi.environment
 -- Remove dangling resource actions. Due to a bug, the environment is
 -- unknown when no resources are associated with a resource action.
 DELETE FROM public.resourceaction WHERE environment IS NULL;
-"""
-        )
 
-        # Populate the version column
-        result = await connection.fetch("SELECT action_id, resource_version_ids FROM public.resourceaction")
-        for elem in result:
-            action_id = elem["action_id"]
-            version = Id.parse_id(elem["resource_version_ids"][0]).version
-            await connection.execute("UPDATE public.resourceaction SET version=$1 WHERE action_id=$2", version, action_id)
+-- Populate the version column
+UPDATE public.resourceaction AS ra
+SET version=(SELECT model
+             FROM public.resource AS rs
+             WHERE rs.environment=ra.environment AND rs.resource_version_id=ra.resource_version_ids[1]);
 
-        await connection.execute(
-            """
 -- Delete resource actions from the database for which the configuration model doesn't exist anymore.
 -- This is caused by a cascading delete issue.
 DELETE FROM public.resourceaction AS ra WHERE NOT EXISTS(SELECT 1
