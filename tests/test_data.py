@@ -1584,6 +1584,10 @@ async def test_resources_report(init_dataclasses_and_load_schema):
 
 @pytest.mark.asyncio
 async def test_resource_action(init_dataclasses_and_load_schema):
+    """
+        Test whether the save() method of a ResourceAction writes its changes, logs and fields
+        correctly to the database.
+    """
     project = data.Project(name="test")
     await project.insert()
 

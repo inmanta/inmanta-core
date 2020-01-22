@@ -1473,6 +1473,7 @@ class ResourceAction(BaseDocument):
     async def get_log(
         cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, action: Optional[str] = None, limit: int = 0
     ) -> List["ResourceAction"]:
+        # The @> operator is required to use the GIN index on the resource_version_ids column
         query = f"""SELECT *
                     FROM {cls.table_name()}
                     WHERE environment=$1 AND resource_version_ids::varchar[] @> ARRAY[$2]::varchar[]

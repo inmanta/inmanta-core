@@ -339,6 +339,8 @@ class OrchestrationService(protocol.ServerSlice):
         for agent in agents:
             await self.agentmanager_service.ensure_agent_registered(env, agent)
 
+        # Don't log ResourceActions without resource_version_ids, because
+        # no API call exists to retrieve them.
         if resource_version_ids:
             now = datetime.datetime.now()
             log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)

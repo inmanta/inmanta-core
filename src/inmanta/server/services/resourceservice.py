@@ -255,6 +255,8 @@ class ResourceService(protocol.ServerSlice):
             deploy_model.append(rv.to_dict())
             resource_ids.append(rv.resource_version_id)
 
+        # Don't log ResourceActions without resource_version_ids, because
+        # no API call exists to retrieve them.
         if resource_ids:
             now = datetime.datetime.now()
             log_line = data.LogLine.log(
@@ -345,6 +347,8 @@ class ResourceService(protocol.ServerSlice):
             deploy_model.append(rv.to_dict())
             resource_ids.append(rv.resource_version_id)
 
+        # Don't log ResourceActions without resource_version_ids, because
+        # no API call exists to retrieve them.
         if resource_ids:
             ra = data.ResourceAction(
                 environment=env.id,

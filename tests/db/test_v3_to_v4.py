@@ -24,8 +24,8 @@ from asyncpg import Connection
 
 from _collections import defaultdict
 from db.common import PGRestore
-from inmanta.server.bootloader import InmantaBootloader
 from inmanta.resources import Id
+from inmanta.server.bootloader import InmantaBootloader
 
 
 @pytest.fixture
@@ -56,9 +56,11 @@ async def test_db_migration(migrate_v3_to_v4, postgresql_client: Connection):
     for table_name in ["form", "formrecord", "resourceversionid"]:
         assert not await does_table_exist(postgresql_client, table_name)
 
-    result = await postgresql_client.fetch("""SELECT environment, version, action_id, resource_version_ids
-                                              FROM public.resourceaction
-                                           """)
+    result = await postgresql_client.fetch(
+        """SELECT environment, version, action_id, resource_version_ids
+           FROM public.resourceaction
+        """
+    )
     for r in result:
         assert r["environment"] == uuid.UUID("6c66ca44-da58-4924-ad17-151abc2f3726")
         rvids_old_table = migrate_v3_to_v4[r["action_id"]]

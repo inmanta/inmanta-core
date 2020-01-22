@@ -19,9 +19,8 @@ from asyncpg import Connection
 
 
 async def update(connection: Connection) -> None:
-    async with connection.transaction():
-        await connection.execute(
-            """
+    await connection.execute(
+        """
 --------------------------------
 -- Remove forms functionality --
 --------------------------------
@@ -81,4 +80,4 @@ CREATE INDEX resourceaction_resource_version_ids_index ON resourceaction USING g
 DROP INDEX resourceaction_action_id_started_index;
 CREATE INDEX resourceaction_environment_action_started_index ON resourceaction(environment,action,started DESC);
 """
-        )
+    )
