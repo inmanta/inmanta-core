@@ -235,7 +235,7 @@ class FunctionParameterHandler:
 
     def build_json_request_body(self, properties: Dict) -> RequestBody:
         request_body = RequestBody(
-            required=True, content={"application/json": {"schema": {"type": "object", "properties": properties}}}
+            required=True, content={"application/json": MediaType(schema=Schema(type="object", properties=properties))}
         )
         return request_body
 
