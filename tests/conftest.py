@@ -826,7 +826,7 @@ def modules_dir():
 
 
 class CLI(object):
-    async def run(self, *args):
+    async def run(self, *args, **kwargs):
         # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
         runner = testing.CliRunner(mix_stderr=False)
@@ -834,7 +834,7 @@ class CLI(object):
         cmd_args.extend(args)
 
         def invoke():
-            return runner.invoke(cli=inmanta.main.cmd, args=cmd_args, catch_exceptions=False)
+            return runner.invoke(cli=inmanta.main.cmd, args=cmd_args, catch_exceptions=False, **kwargs)
 
         result = await asyncio.get_event_loop().run_in_executor(None, invoke)
         # reset to default again

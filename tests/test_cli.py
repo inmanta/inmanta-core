@@ -217,3 +217,40 @@ async def test_param(server, client, environment, cli):
     result = await cli.run("param", "list", "-e", environment)
     assert result.exit_code == 0
     assert "var1" in result.output
+
+@pytest.mark.asyncio
+async def test_create_environment(tmpdir, server, client, cli):
+    os.chdir(tmpdir)
+    file_path = os.path.join(os.getcwd(), ".inmanta")
+    result = await client.create_project("test")
+    assert result.code == 200
+
+    result = await cli.run("environment", "create", "-n", "test-env-0", "-p", "test", "--save")
+    assert result.exit_code == 0
+    assert os.path.exists(file_path)
+
+    with open(file_path, 'r') as inmanta_file:
+        file_content_0 = inmanta_file.read()
+    ctime_0 = os.path.getctime(file_path)
+
+    result = await cli.run("environment", "create", "-n", "test-env-1", "-p", "test", "--save", input='n')
+    assert result.exit_code == 0
+
+    with open(file_path, 'r') as inmanta_file:
+        file_content_1 = inmanta_file.read()
+
+    ctime_1 = os.path.getctime(file_path)
+
+    assert file_content_0 == file_content_1
+    assert ctime_0 == ctime_1
+
+    result = await cli.run("environment", "create", "-n", "test-env-2", "-p", "test", "--save", input='y')
+    assert result.exit_code == 0
+
+    with open(file_path, 'r') as inmanta_file:
+        file_content_2 = inmanta_file.read()
+
+    ctime_2 = os.path.getctime(file_path)
+
+    assert file_content_0 != file_content_2
+    assert ctime_0 != ctime_2

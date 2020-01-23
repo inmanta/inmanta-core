@@ -296,11 +296,7 @@ port=%(port)s
     }
 
     if os.path.exists(".inmanta") and not click.confirm(".inmanta exits, do you want to overwrite it?"):
-        if click.confirm(".inmanta exists, do you want to overwrite it?"):
-            with open(".inmanta", "w") as f:
-                f.write(cfg)
-        else:
-            click.echo("not writing config", err=True)
+        click.echo("not writing config", err=True)
     else:
         with open(".inmanta", "w") as f:
             f.write(cfg)
