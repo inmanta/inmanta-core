@@ -29,12 +29,16 @@ from inmanta import const, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.common import ReturnValue
+from inmanta.protocol.rest.model import HtmlContentType, OctetStreamContentType
 from inmanta.types import Apireturn, JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
 CONTENT_TYPE = "Content-Type"
 JSON_CONTENT = "application/json"
+HTML_CONTENT = "text/html"
+OCTET_STREAM_CONTENT = "application/octet-stream"
+VALID_CONTENT_TYPES = [JSON_CONTENT, HTML_CONTENT, OCTET_STREAM_CONTENT]
 
 """
 
@@ -311,6 +315,14 @@ class CallArguments(object):
                     return common.Response.create(
                         ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
                     )
+
+            elif isinstance(result, HtmlContentType):
+                headers[CONTENT_TYPE] = HTML_CONTENT
+                return common.Response(status_code=200, headers=headers, body=result.content)
+
+            elif isinstance(result, OctetStreamContentType):
+                headers[CONTENT_TYPE] = OCTET_STREAM_CONTENT
+                return common.Response(status_code=200, headers=headers, body=result.content)
 
             elif isinstance(result, BaseModel):
                 return common.Response.create(

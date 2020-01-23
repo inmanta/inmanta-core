@@ -24,7 +24,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest
 
 from inmanta import config as inmanta_config
 from inmanta.protocol import common
-from inmanta.protocol.rest import LOGGER, RESTBase
+from inmanta.protocol.rest import CONTENT_TYPE, HTML_CONTENT, JSON_CONTENT, LOGGER, OCTET_STREAM_CONTENT, RESTBase
 
 if TYPE_CHECKING:
     from inmanta.protocol.endpoints import Endpoint
@@ -137,4 +137,11 @@ class RESTClient(RESTBase):
             LOGGER.exception("Failed to send request")
             return common.Result(code=500, result={"message": str(e)})
 
-        return common.Result(code=response.code, result=self._decode(response.body))
+        if CONTENT_TYPE not in response.headers or response.headers[CONTENT_TYPE] == JSON_CONTENT:
+            return common.Result(code=response.code, result=self._decode(response.body))
+        elif response.headers[CONTENT_TYPE] == HTML_CONTENT:
+            return common.Result(code=response.code, result=response.body.decode("utf-8"))
+        elif response.headers[CONTENT_TYPE] == OCTET_STREAM_CONTENT:
+            return common.Result(code=response.code, result=response.body)
+        else:
+            raise Exception(f"Unsupported content-type retrieved from server: {response.headers[CONTENT_TYPE]}")

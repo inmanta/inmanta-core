@@ -718,7 +718,7 @@ def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[Lis
 
 
 def json_encode(value: ReturnTypes) -> str:
-    """ Our json encodde is able to also serialize other types than a dict.
+    """ Our json encode is able to also serialize other types than a dict.
     """
     # see json_encode in tornado.escape
     return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")

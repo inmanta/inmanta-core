@@ -31,7 +31,7 @@ from inmanta import config as inmanta_config
 from inmanta import const
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.common import UrlMethod
-from inmanta.protocol.rest import CONTENT_TYPE, JSON_CONTENT, LOGGER, RESTBase
+from inmanta.protocol.rest import CONTENT_TYPE, JSON_CONTENT, LOGGER, VALID_CONTENT_TYPES, RESTBase
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth
 from inmanta.types import ReturnTypes
@@ -83,11 +83,16 @@ class RESTHandler(tornado.web.RequestHandler):
     def respond(self, body: ReturnTypes, headers: MutableMapping[str, str], status: int) -> None:
         if CONTENT_TYPE not in headers:
             headers[CONTENT_TYPE] = JSON_CONTENT
-        elif headers[CONTENT_TYPE] != JSON_CONTENT:
-            raise Exception("Invalid content type header provided. Only %s is supported" % JSON_CONTENT)
+        elif headers[CONTENT_TYPE] not in VALID_CONTENT_TYPES:
+            raise Exception(
+                f"Invalid content type header '{headers[CONTENT_TYPE]}' provided. Supported types: {VALID_CONTENT_TYPES}"
+            )
 
         if body is not None:
-            self.write(common.json_encode(body))
+            if headers[CONTENT_TYPE] == JSON_CONTENT:
+                self.write(common.json_encode(body))
+            else:
+                self.write(body)
 
         for header, value in headers.items():
             self.set_header(header, value)
