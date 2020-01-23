@@ -33,14 +33,14 @@ from inmanta.protocol.openapi.converter import (
     OpenApiTypeConverter,
     OperationHandler,
 )
-from inmanta.protocol.openapi.model import Parameter
+from inmanta.protocol.openapi.model import MediaType, Parameter, Schema
 
 
 @pytest.mark.asyncio
 async def test_generate_openapi_definiton(server):
     global_url_map = server._transport.get_global_url_map(server.get_slices().values())
     openapi = OpenApiConverter(global_url_map)
-    openapi_json = openapi.generate_openapi_definition()
+    openapi_json = openapi.generate_openapi_json()
     assert openapi_json
     openapi_parsed = json.loads(openapi_json)
     openapi_v3_spec_validator.validate(openapi_parsed)
@@ -91,7 +91,7 @@ async def test_return_value():
 
     json_response_content = operation_handler._build_return_value_wrapper(MethodProperties.methods["post_method"][0])
     assert json_response_content == {
-        "application/json": {"schema": {"type": "object", "properties": {"data": {"type": "object"}}}}
+        "application/json": MediaType(schema=Schema(type="object", properties={"data": {"type": "object"}}))
     }
 
 
@@ -102,17 +102,17 @@ async def test_get_openapi_types():
     openapi_type = type_converter.get_openapi_type(
         inspect.Parameter("param", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=UUID)
     )
-    assert openapi_type == {"type": "string", "format": "uuid"}
+    assert openapi_type == Schema(type="string", format="uuid")
 
     openapi_type = type_converter.get_openapi_type(
         inspect.Parameter("param", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=data.Environment)
     )
-    assert openapi_type == {"type": "object"}
+    assert openapi_type == Schema(type="object")
 
     openapi_type = type_converter.get_openapi_type(
         inspect.Parameter("param", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=int)
     )
-    assert openapi_type == {"type": "integer"}
+    assert openapi_type == Schema(type="integer")
 
 
 @pytest.mark.asyncio
