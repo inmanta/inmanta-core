@@ -306,7 +306,6 @@ port=%(port)s
             f.write(cfg)
 
 
-
 @environment.command(name="list")
 @click.pass_obj
 def environment_list(client: Client) -> None:
