@@ -218,8 +218,13 @@ async def test_param(server, client, environment, cli):
     assert result.exit_code == 0
     assert "var1" in result.output
 
+
 @pytest.mark.asyncio
 async def test_create_environment(tmpdir, server, client, cli):
+    """
+        Tests the "inmanta-cli environment create" command
+        and overwrite prompt/overwriting of the .inmanta file
+    """
     os.chdir(tmpdir)
     file_path = os.path.join(os.getcwd(), ".inmanta")
     result = await client.create_project("test")
