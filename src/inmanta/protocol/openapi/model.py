@@ -114,6 +114,9 @@ class Parameter(ParameterBase):
     name: str
     in_: ParameterType = Field(..., alias="in")
 
+    class Config:
+        allow_population_by_field_name = True
+
 
 class Header(ParameterBase):
     pass

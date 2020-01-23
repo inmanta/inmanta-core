@@ -113,14 +113,10 @@ class ArgOptionHandler:
         for option_name, option in arg_options.items():
             if option.header:
                 parameters.append(
-                    Parameter(**{"in": ParameterType.header, "name": option.header, "schema": Schema(type="string")})
+                    Parameter(in_=ParameterType.header, name=option.header, schema=Schema(type="string"))
                 )
             elif option_name in path:
-                parameters.append(
-                    Parameter(
-                        **{"in": ParameterType.path, "name": option_name, "required": True, "schema": Schema(type="string")}
-                    )
-                )
+                parameters.append(Parameter(in_=ParameterType.path, name=option_name, required=True, schema=Schema(type="string")))
         return parameters
 
     def extract_response_headers_from_arg_options(self, arg_options: Dict[str, ArgOption]) -> Optional[Dict[str, Header]]:
@@ -182,7 +178,7 @@ class FunctionParameterHandler:
         parameters: List[Parameter] = []
         for parameter_name, parameter_type in self.non_path_params.items():
             type_description = self.type_converter.get_openapi_type(parameter_type)
-            parameters.append(Parameter(**{"name": parameter_name, "in": ParameterType.query, "schema": type_description}))
+            parameters.append(Parameter(name=parameter_name, in_=ParameterType.query, schema=type_description))
         return parameters
 
     def _convert_function_params_to_openapi_request_body_properties(
@@ -199,7 +195,7 @@ class FunctionParameterHandler:
         for parameter_name, parameter_type in function_parameters.items():
             type_description = self.type_converter.get_openapi_type(parameter_type)
             parameters.append(
-                Parameter(**{"name": parameter_name, "in": ParameterType.path, "required": True, "schema": type_description})
+                Parameter(name=parameter_name, in_=ParameterType.path, required=True, schema=type_description)
             )
         return parameters
 
