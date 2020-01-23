@@ -250,12 +250,7 @@ class RESTServer(RESTBase):
     def validate_sid(self, sid: uuid.UUID) -> bool:
         return self.session_manager.validate_sid(sid)
 
-    async def start(
-        self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
-    ) -> None:
-        """
-            Start the server on the current ioloop
-        """
+    def get_global_url_map(self, targets: List[inmanta.protocol.endpoints.CallTarget]) -> Dict[str, Dict[str, UrlMethod]]:
         global_url_map: Dict[str, Dict[str, UrlMethod]] = defaultdict(dict)
         for slice in targets:
             url_map = slice.get_op_mapping()
@@ -263,6 +258,15 @@ class RESTServer(RESTBase):
                 handler_config = global_url_map[url]
                 for op, cfg in configs.items():
                     handler_config[op] = cfg
+        return global_url_map
+
+    async def start(
+        self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
+    ) -> None:
+        """
+            Start the server on the current ioloop
+        """
+        global_url_map: Dict[str, Dict[str, UrlMethod]] = self.get_global_url_map(targets)
 
         rules: List[routing.Rule] = []
         rules.extend(additional_rules)
