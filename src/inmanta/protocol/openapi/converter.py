@@ -21,6 +21,7 @@ import uuid
 from typing import Callable, Dict, List, Optional, Union
 
 from pydantic.main import BaseModel
+from pydantic.networks import AnyUrl
 
 from inmanta import util
 from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
@@ -33,6 +34,7 @@ from inmanta.protocol.openapi.model import (
     Parameter,
     ParameterType,
     PathItem,
+    Reference,
     RequestBody,
     Response,
     Schema,
@@ -61,10 +63,14 @@ class OpenApiConverter:
     def _collect_server_information(self) -> List[Server]:
         bind_port = config.get_bind_port()
         bind_addresses = config.server_bind_address.get()
-        return [Server(url=f"http://{bind_address}:{bind_port}/") for bind_address in bind_addresses]
+        return [
+            Server(url=AnyUrl(url=f"http://{bind_address}:{bind_port}/", scheme="http", host=bind_address, port=bind_port))
+            for bind_address in bind_addresses
+        ]
 
     def generate_openapi_definition(self) -> OpenAPI:
-        info = Info(title="Inmanta Service Orchestrator", version=get_compiler_version())
+        version = get_compiler_version()
+        info = Info(title="Inmanta Service Orchestrator", version=version if version else "")
         servers = self._collect_server_information()
         paths = {}
         for path, methods in self.global_url_map.items():
@@ -85,7 +91,7 @@ class OpenApiConverter:
     def _format_path(self, path: str) -> str:
         return path.replace("(?P<", "{").replace(">[^/]+)", "}")
 
-    def _extract_operations_from_methods(self, api_methods: Dict[str, UrlMethod], path: str) -> Optional[PathItem]:
+    def _extract_operations_from_methods(self, api_methods: Dict[str, UrlMethod], path: str) -> PathItem:
         path_item = PathItem()
         for http_method_name, url_method in api_methods.items():
             operation_handler = OperationHandler(self.type_converter, self.arg_option_handler)
@@ -108,15 +114,17 @@ class ArgOptionHandler:
         Extracts header, response header and path parameter information from ArgOptions
     """
 
-    def extract_parameters_from_arg_options(self, path: str, arg_options: Dict[str, ArgOption]) -> List[Parameter]:
-        parameters = []
+    def extract_parameters_from_arg_options(
+        self, path: str, arg_options: Dict[str, ArgOption]
+    ) -> List[Union[Parameter, Reference]]:
+        parameters: List[Union[Parameter, Reference]] = []
         for option_name, option in arg_options.items():
             if option.header:
-                parameters.append(
-                    Parameter(in_=ParameterType.header, name=option.header, schema=Schema(type="string"))
-                )
+                parameters.append(Parameter(in_=ParameterType.header, name=option.header, schema=Schema(type="string")))
             elif option_name in path:
-                parameters.append(Parameter(in_=ParameterType.path, name=option_name, required=True, schema=Schema(type="string")))
+                parameters.append(
+                    Parameter(in_=ParameterType.path, name=option_name, required=True, schema=Schema(type="string"))
+                )
         return parameters
 
     def extract_response_headers_from_arg_options(self, arg_options: Dict[str, ArgOption]) -> Optional[Dict[str, Header]]:
@@ -165,17 +173,20 @@ class FunctionParameterHandler:
         self.non_path_params: Dict[str, inspect.Parameter] = {}
 
     def _extract_function_parameters(
-        self, already_existing_parameters: List[Parameter], url_method_function: Callable
+        self, already_existing_parameters: List[Union[Parameter, Reference]], url_method_function: Callable
     ) -> Dict[str, inspect.Parameter]:
+
         function_parameters = {
             parameter_name: parameter_type
             for parameter_name, parameter_type in inspect.signature(url_method_function).parameters.items()
-            if parameter_name != "tid" and parameter_name not in [parameter.name for parameter in already_existing_parameters]
+            if parameter_name != "tid"
+            and parameter_name
+            not in [parameter.name for parameter in already_existing_parameters if isinstance(parameter, Parameter)]
         }
         return function_parameters
 
-    def convert_function_params_to_query_params(self) -> List[Parameter]:
-        parameters: List[Parameter] = []
+    def convert_function_params_to_query_params(self) -> List[Union[Parameter, Reference]]:
+        parameters: List[Union[Parameter, Reference]] = []
         for parameter_name, parameter_type in self.non_path_params.items():
             type_description = self.type_converter.get_openapi_type(parameter_type)
             parameters.append(Parameter(name=parameter_name, in_=ParameterType.query, schema=type_description))
@@ -190,13 +201,13 @@ class FunctionParameterHandler:
             properties[parameter_name] = type_description
         return properties
 
-    def _convert_path_params_to_openapi(self, function_parameters: Dict[str, inspect.Parameter]) -> List[Parameter]:
-        parameters: List[Parameter] = []
+    def _convert_path_params_to_openapi(
+        self, function_parameters: Dict[str, inspect.Parameter]
+    ) -> List[Union[Parameter, Reference]]:
+        parameters: List[Union[Parameter, Reference]] = []
         for parameter_name, parameter_type in function_parameters.items():
             type_description = self.type_converter.get_openapi_type(parameter_type)
-            parameters.append(
-                Parameter(name=parameter_name, in_=ParameterType.path, required=True, schema=type_description)
-            )
+            parameters.append(Parameter(name=parameter_name, in_=ParameterType.path, required=True, schema=type_description))
         return parameters
 
     def _filter_path_params(self, function_parameters: Dict[str, inspect.Parameter], path: str) -> Dict[str, inspect.Parameter]:
@@ -214,8 +225,10 @@ class FunctionParameterHandler:
         }
         return non_path_params
 
-    def convert_header_and_path_params(self, method_properties: MethodProperties) -> List[Parameter]:
-        parameters = self.arg_option_handler.extract_parameters_from_arg_options(self.path, method_properties.arg_options)
+    def convert_header_and_path_params(self, method_properties: MethodProperties) -> List[Union[Parameter, Reference]]:
+        parameters: List[Union[Parameter, Reference]] = self.arg_option_handler.extract_parameters_from_arg_options(
+            self.path, method_properties.arg_options
+        )
 
         function_parameters = self._extract_function_parameters(parameters, method_properties.function)
         self.path_params = self._filter_path_params(function_parameters, self.path)
