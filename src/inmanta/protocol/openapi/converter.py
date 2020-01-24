@@ -155,7 +155,7 @@ class OpenApiTypeConverter:
     def get_openapi_type(self, parameter_type: inspect.Parameter) -> Schema:
         # TODO handle inmanta types
         type_annotation = parameter_type.annotation
-        if issubclass(type_annotation, BaseModel):
+        if inspect.isclass(type_annotation) and issubclass(type_annotation, BaseModel):
             return Schema(type="object")
         return self.python_to_openapi_types.get(type_annotation, Schema(type="object"))
 
