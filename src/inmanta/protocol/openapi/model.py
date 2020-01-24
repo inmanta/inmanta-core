@@ -65,6 +65,8 @@ class SchemaBase(BaseModel):
     readOnly: Optional[bool] = None
     example: Optional[Any] = None
     deprecated: Optional[bool] = None
+    anyOf: Optional[List[Any]] = None
+    enum: Optional[List[str]] = None
 
 
 class Schema(SchemaBase):

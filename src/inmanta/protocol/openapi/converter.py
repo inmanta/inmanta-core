@@ -17,15 +17,21 @@
 """
 import inspect
 import json
+import typing
 import uuid
-from typing import Callable, Dict, List, Optional, Union
+from datetime import datetime
+from enum import Enum
+from typing import Callable, Dict, List, Optional, Type, Union
 
+import typing_inspect
 from pydantic.main import BaseModel
 from pydantic.networks import AnyUrl
+from pydantic.schema import model_schema
 
 from inmanta import util
 from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.model import (
+    Components,
     Header,
     Info,
     MediaType,
@@ -38,6 +44,7 @@ from inmanta.protocol.openapi.model import (
     RequestBody,
     Response,
     Schema,
+    SchemaBase,
     Server,
 )
 from inmanta.server import config
@@ -57,8 +64,8 @@ class OpenApiConverter:
 
     def __init__(self, global_url_map: Dict[str, Dict[str, UrlMethod]]):
         self.global_url_map = global_url_map
-        self.arg_option_handler = ArgOptionHandler()
         self.type_converter = OpenApiTypeConverter()
+        self.arg_option_handler = ArgOptionHandler(self.type_converter)
 
     def _collect_server_information(self) -> List[Server]:
         bind_port = config.get_bind_port()
@@ -79,7 +86,7 @@ class OpenApiConverter:
                 path_in_openapi_format = self._format_path(path)
                 path_item = self._extract_operations_from_methods(api_methods, path_in_openapi_format)
                 paths[path_in_openapi_format] = path_item
-        return OpenAPI(openapi="3.0.2", info=info, paths=paths, servers=servers)
+        return OpenAPI(openapi="3.0.2", info=info, paths=paths, servers=servers, components=self.type_converter.components)
 
     def _filter_api_methods(self, methods: Dict[str, UrlMethod]) -> Dict[str, UrlMethod]:
         return {
@@ -109,55 +116,89 @@ class OpenApiConverter:
         return json.dumps(openapi, default=openapi_json_encoder)
 
 
-class ArgOptionHandler:
-    """
-        Extracts header, response header and path parameter information from ArgOptions
-    """
-
-    def extract_parameters_from_arg_options(
-        self, path: str, arg_options: Dict[str, ArgOption]
-    ) -> List[Union[Parameter, Reference]]:
-        parameters: List[Union[Parameter, Reference]] = []
-        for option_name, option in arg_options.items():
-            if option.header:
-                parameters.append(Parameter(in_=ParameterType.header, name=option.header, schema=Schema(type="string")))
-            elif option_name in path:
-                parameters.append(
-                    Parameter(in_=ParameterType.path, name=option_name, required=True, schema=Schema(type="string"))
-                )
-        return parameters
-
-    def extract_response_headers_from_arg_options(self, arg_options: Dict[str, ArgOption]) -> Optional[Dict[str, Header]]:
-        headers = {}
-        for option_name, option in arg_options.items():
-            if option.header and option.reply_header:
-                headers[option.header] = Header(description=option.header, schema=Schema(type="string"))
-        return headers if headers else None
-
-
 class OpenApiTypeConverter:
     """
         Lookup for OpenAPI types corresponding to python types
     """
+
+    components = Components(schemas={})
 
     python_to_openapi_types = {
         bool: Schema(type="boolean"),
         int: Schema(type="integer"),
         str: Schema(type="string"),
         dict: Schema(type="object"),
-        list: Schema(type="array", items={}),
-        tuple: Schema(type="array", items={}),
+        list: Schema(type="array", items=Schema()),
+        tuple: Schema(type="array", items=Schema()),
         float: Schema(type="number", format="float"),
         bytes: Schema(type="string", format="binary"),
+        datetime: Schema(type="string", format="date-time"),
         uuid.UUID: Schema(type="string", format="uuid"),
     }
 
-    def get_openapi_type(self, parameter_type: inspect.Parameter) -> Schema:
-        # TODO handle inmanta types
+    def get_openapi_type_of_parameter(self, parameter_type: inspect.Parameter) -> Schema:
         type_annotation = parameter_type.annotation
-        if inspect.isclass(type_annotation) and issubclass(type_annotation, BaseModel):
-            return Schema(type="object")
+        return self.get_openapi_type(type_annotation)
+
+    def get_openapi_type(self, type_annotation: Type) -> Schema:
+        if typing_inspect.is_optional_type(type_annotation):
+            type_args = typing_inspect.get_args(type_annotation, evaluate=True)
+            for type_arg in type_args:
+                if not issubclass(type_arg, type(None)):
+                    openapi_type = self.get_openapi_type(type_arg).copy(deep=True)
+                    openapi_type.nullable = True
+                    return openapi_type
+        elif typing_inspect.is_union_type(type_annotation):
+            type_args = typing_inspect.get_args(type_annotation, evaluate=True)
+            openapi_types = [self.get_openapi_type(type_arg) for type_arg in type_args]
+            return Schema(anyOf=openapi_types)
+        elif typing_inspect.get_origin(type_annotation) == typing.Dict:
+            return Schema(type="object", format=str(type_annotation))
+        elif inspect.isclass(type_annotation) and issubclass(type_annotation, BaseModel):
+            schema = model_schema(type_annotation, by_alias=True, ref_prefix="#/components/schemas/")
+            if "definitions" in schema.keys():
+                definitions = schema.pop("definitions")
+                if self.components.schemas is not None:
+                    self.components.schemas.update(definitions)
+            return Schema(**schema)
+        elif inspect.isclass(type_annotation) and issubclass(type_annotation, Enum):
+            enum_keys = [name for name in type_annotation.__members__.keys()]
+            return Schema(type="string", enum=enum_keys)
+        elif typing_inspect.get_origin(type_annotation) == typing.List:
+            list_member_type = typing_inspect.get_args(type_annotation, evaluate=True)
+            return Schema(type="array", items=self.get_openapi_type(list_member_type[0]))
         return self.python_to_openapi_types.get(type_annotation, Schema(type="object"))
+
+
+class ArgOptionHandler:
+    """
+        Extracts header, response header and path parameter information from ArgOptions
+    """
+
+    def __init__(self, type_converter: OpenApiTypeConverter):
+        self.type_converter = type_converter
+
+    def extract_parameters_from_arg_options(
+        self, path: str, arg_options: Dict[str, ArgOption], function_parameters: Dict[str, inspect.Parameter]
+    ) -> List[Union[Parameter, Reference]]:
+        parameters: List[Union[Parameter, Reference]] = []
+        for option_name, option in arg_options.items():
+            param = function_parameters[option_name]
+            param_schema = self.type_converter.get_openapi_type_of_parameter(param)
+            if option.header:
+                parameters.append(Parameter(in_=ParameterType.header, name=option.header, schema_=param_schema))
+            elif option_name in path:
+                parameters.append(Parameter(in_=ParameterType.path, name=option_name, required=True, schema_=param_schema))
+        return parameters
+
+    def extract_response_headers_from_arg_options(
+        self, arg_options: Dict[str, ArgOption]
+    ) -> Optional[Dict[str, Union[Header, Reference]]]:
+        headers: Dict[str, Union[Header, Reference]] = {}
+        for option_name, option in arg_options.items():
+            if option.header and option.reply_header:
+                headers[option.header] = Header(description=option.header, schema=Schema(type="string"))
+        return headers if headers else None
 
 
 class FunctionParameterHandler:
@@ -172,24 +213,18 @@ class FunctionParameterHandler:
         self.path_params: Dict[str, inspect.Parameter] = {}
         self.non_path_params: Dict[str, inspect.Parameter] = {}
 
-    def _extract_function_parameters(
-        self, already_existing_parameters: List[Union[Parameter, Reference]], url_method_function: Callable
-    ) -> Dict[str, inspect.Parameter]:
-
+    def _extract_function_parameters(self, url_method_function: Callable) -> Dict[str, inspect.Parameter]:
         function_parameters = {
             parameter_name: parameter_type
             for parameter_name, parameter_type in inspect.signature(url_method_function).parameters.items()
-            if parameter_name != "tid"
-            and parameter_name
-            not in [parameter.name for parameter in already_existing_parameters if isinstance(parameter, Parameter)]
         }
         return function_parameters
 
     def convert_function_params_to_query_params(self) -> List[Union[Parameter, Reference]]:
         parameters: List[Union[Parameter, Reference]] = []
         for parameter_name, parameter_type in self.non_path_params.items():
-            type_description = self.type_converter.get_openapi_type(parameter_type)
-            parameters.append(Parameter(name=parameter_name, in_=ParameterType.query, schema=type_description))
+            type_description = self.type_converter.get_openapi_type_of_parameter(parameter_type)
+            parameters.append(Parameter(name=parameter_name, in_=ParameterType.query, schema_=type_description))
         return parameters
 
     def _convert_function_params_to_openapi_request_body_properties(
@@ -197,7 +232,7 @@ class FunctionParameterHandler:
     ) -> Dict[str, Schema]:
         properties = {}
         for parameter_name, parameter_type in function_parameters.items():
-            type_description = self.type_converter.get_openapi_type(parameter_type)
+            type_description = self.type_converter.get_openapi_type_of_parameter(parameter_type)
             properties[parameter_name] = type_description
         return properties
 
@@ -206,15 +241,15 @@ class FunctionParameterHandler:
     ) -> List[Union[Parameter, Reference]]:
         parameters: List[Union[Parameter, Reference]] = []
         for parameter_name, parameter_type in function_parameters.items():
-            type_description = self.type_converter.get_openapi_type(parameter_type)
-            parameters.append(Parameter(name=parameter_name, in_=ParameterType.path, required=True, schema=type_description))
+            type_description = self.type_converter.get_openapi_type_of_parameter(parameter_type)
+            parameters.append(Parameter(name=parameter_name, in_=ParameterType.path, required=True, schema_=type_description))
         return parameters
 
-    def _filter_path_params(self, function_parameters: Dict[str, inspect.Parameter], path: str) -> Dict[str, inspect.Parameter]:
+    def _filter_path_params(self, function_parameters: Dict[str, inspect.Parameter]) -> Dict[str, inspect.Parameter]:
         return {
             parameter_name: parameter_type
             for parameter_name, parameter_type in function_parameters.items()
-            if parameter_name in path
+            if parameter_name in self.path
         }
 
     def _filter_non_path_params(self, function_parameters: Dict[str, inspect.Parameter]) -> Dict[str, inspect.Parameter]:
@@ -225,13 +260,25 @@ class FunctionParameterHandler:
         }
         return non_path_params
 
-    def convert_header_and_path_params(self, method_properties: MethodProperties) -> List[Union[Parameter, Reference]]:
-        parameters: List[Union[Parameter, Reference]] = self.arg_option_handler.extract_parameters_from_arg_options(
-            self.path, method_properties.arg_options
-        )
+    def _filter_already_processed_function_params(
+        self, function_parameters: Dict[str, inspect.Parameter], already_existing_parameters: List[Union[Parameter, Reference]]
+    ) -> Dict[str, inspect.Parameter]:
+        return {
+            parameter_name: parameter_type
+            for parameter_name, parameter_type in function_parameters.items()
+            if parameter_name != "tid"
+            and parameter_name
+            not in [parameter.name for parameter in already_existing_parameters if isinstance(parameter, Parameter)]
+        }
 
-        function_parameters = self._extract_function_parameters(parameters, method_properties.function)
-        self.path_params = self._filter_path_params(function_parameters, self.path)
+    def convert_header_and_path_params(self, method_properties: MethodProperties) -> List[Union[Parameter, Reference]]:
+        function_parameters = self._extract_function_parameters(method_properties.function)
+        parameters: List[Union[Parameter, Reference]] = self.arg_option_handler.extract_parameters_from_arg_options(
+            self.path, method_properties.arg_options, function_parameters
+        )
+        function_parameters = self._filter_already_processed_function_params(function_parameters, parameters)
+
+        self.path_params = self._filter_path_params(function_parameters)
         self.non_path_params = self._filter_non_path_params(function_parameters)
 
         openapi_path_params = self._convert_path_params_to_openapi(self.path_params)
@@ -284,9 +331,10 @@ class OperationHandler:
 
     def _build_return_value_wrapper(self, url_method_properties: MethodProperties) -> Optional[Dict[str, MediaType]]:
         return_type = inspect.signature(url_method_properties.function).return_annotation
-        if return_type != inspect.Signature.empty:
-            return_properties = {}
+        if return_type is not None and return_type != inspect.Signature.empty:
+            return_properties: Optional[Dict[str, SchemaBase]] = None
+            openapi_return_type = self.type_converter.get_openapi_type(return_type)
             if url_method_properties.envelope:
-                return_properties = {url_method_properties.envelope_key: {"type": "object"}}
+                return_properties = {url_method_properties.envelope_key: openapi_return_type}
             return {"application/json": MediaType(schema=Schema(type="object", properties=return_properties))}
         return None

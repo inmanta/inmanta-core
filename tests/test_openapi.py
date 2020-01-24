@@ -17,12 +17,14 @@
 """
 import inspect
 import json
+from typing import Dict, List, Optional, Union
 from uuid import UUID
 
 import pytest
 from openapi_spec_validator import openapi_v3_spec_validator
 
-from inmanta import data
+from inmanta.const import INMANTA_MT_HEADER, ResourceAction
+from inmanta.data import model
 from inmanta.protocol import method
 from inmanta.protocol.common import MethodProperties, UrlMethod
 from inmanta.protocol.methods import ENV_OPTS
@@ -37,7 +39,7 @@ from inmanta.protocol.openapi.model import MediaType, Parameter, Schema
 
 
 @pytest.mark.asyncio
-async def test_generate_openapi_definiton(server):
+async def test_generate_openapi_definition(server):
     global_url_map = server._transport.get_global_url_map(server.get_slices().values())
     openapi = OpenApiConverter(global_url_map)
     openapi_json = openapi.generate_openapi_json()
@@ -73,12 +75,31 @@ async def test_get_function_parameters():
     def dummy_method(param: int, tid: UUID, id: UUID) -> str:
         return ""
 
-    function_parameter_handler = FunctionParameterHandler(OpenApiTypeConverter(), ArgOptionHandler(), "/basepath")
-    function_parameters = function_parameter_handler._extract_function_parameters(
-        [Parameter(**{"name": "id", "in": "path"})], dummy_method
+    function_parameter_handler = FunctionParameterHandler(
+        OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()), "/basepath"
     )
-    assert len(function_parameters) == 1
+    function_parameters = function_parameter_handler._extract_function_parameters(dummy_method)
+    assert len(function_parameters) == 3
     assert function_parameters["param"] == inspect.Parameter("param", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=int)
+
+
+@pytest.mark.asyncio
+async def test_filter_function_parameters():
+    function_parameter_handler = FunctionParameterHandler(
+        OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()), "/basepath"
+    )
+    function_parameters = {
+        "tid": inspect.Parameter("tid", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=UUID),
+        "param": inspect.Parameter("param", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
+    }
+    already_existing_parameters = [Parameter(in_="header", required=True, name=INMANTA_MT_HEADER)]
+    filtered_function_parameters = function_parameter_handler._filter_already_processed_function_params(
+        function_parameters, already_existing_parameters
+    )
+    assert len(filtered_function_parameters) == 1
+    assert filtered_function_parameters["param"] == inspect.Parameter(
+        "param", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=int
+    )
 
 
 @pytest.mark.asyncio
@@ -87,7 +108,7 @@ async def test_return_value():
     def post_method() -> object:
         return ""
 
-    operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler())
+    operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
 
     json_response_content = operation_handler._build_return_value_wrapper(MethodProperties.methods["post_method"][0])
     assert json_response_content == {
@@ -99,20 +120,63 @@ async def test_return_value():
 async def test_get_openapi_types():
     type_converter = OpenApiTypeConverter()
 
-    openapi_type = type_converter.get_openapi_type(
+    openapi_type = type_converter.get_openapi_type_of_parameter(
         inspect.Parameter("param", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=UUID)
     )
     assert openapi_type == Schema(type="string", format="uuid")
 
-    openapi_type = type_converter.get_openapi_type(
-        inspect.Parameter("param", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=data.Environment)
-    )
-    assert openapi_type == Schema(type="object")
-
-    openapi_type = type_converter.get_openapi_type(
+    openapi_type = type_converter.get_openapi_type_of_parameter(
         inspect.Parameter("param", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=int)
     )
     assert openapi_type == Schema(type="integer")
+
+
+@pytest.mark.asyncio
+async def test_openapi_types_base_model():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type_of_parameter(
+        inspect.Parameter("param", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=model.Environment)
+    )
+    assert openapi_type.required == ["id", "name", "project_id", "repo_url", "repo_branch", "settings"]
+
+
+@pytest.mark.asyncio
+async def test_openapi_types_union():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Union[str, bytes])
+    assert openapi_type == Schema(anyOf=[Schema(type="string"), Schema(type="string", format="binary")])
+
+
+@pytest.mark.asyncio
+async def test_openapi_types_optional():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Optional[str])
+    assert openapi_type == Schema(type="string", nullable=True)
+
+
+@pytest.mark.asyncio
+async def test_openapi_types_list():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(List[Union[int, UUID]])
+    assert openapi_type == Schema(
+        type="array", items=Schema(anyOf=[Schema(type="integer"), Schema(type="string", format="uuid")])
+    )
+
+
+@pytest.mark.asyncio
+async def test_openapi_types_enum():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(List[ResourceAction])
+    assert openapi_type == Schema(
+        type="array", items=Schema(type="string", enum=["store", "push", "pull", "deploy", "dryrun", "getfact", "other"])
+    )
+
+
+@pytest.mark.asyncio
+async def test_openapi_types_dict():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Dict[str, UUID])
+    assert openapi_type == Schema(type="object", format="typing.Dict[str, uuid.UUID]")
 
 
 @pytest.mark.asyncio
@@ -125,7 +189,7 @@ async def test_post_operation():
         properties=MethodProperties.methods["dummy_method"][0], slice=None, method_name="dummy_method", handler=None
     )
 
-    operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler())
+    operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
     operation = operation_handler.handle_method_with_request_body(post, "/operation")
     assert "X-Inmanta-tid" in [parameter.name for parameter in operation.parameters]
     assert "param" in operation.requestBody.content["application/json"].schema_.properties.keys()
@@ -143,7 +207,7 @@ async def test_get_operation():
         properties=MethodProperties.methods["dummy_method"][0], slice=None, method_name="dummy_method", handler=None
     )
 
-    operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler())
+    operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
     operation = operation_handler.handle_method_without_request_body(get, "/operation")
     assert "X-Inmanta-tid" in [parameter.name for parameter in operation.parameters]
     assert "param" in [parameter.name for parameter in operation.parameters]
