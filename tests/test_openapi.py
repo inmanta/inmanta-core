@@ -26,6 +26,7 @@ from openapi_spec_validator import openapi_v3_spec_validator
 
 from inmanta.const import INMANTA_MT_HEADER, ResourceAction
 from inmanta.data import model
+from inmanta.data.model import EnvironmentSetting
 from inmanta.protocol import method
 from inmanta.protocol.common import MethodProperties, UrlMethod
 from inmanta.protocol.methods import ENV_OPTS
@@ -238,6 +239,14 @@ def test_openapi_types_uuid():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(UUID)
     assert openapi_type == Schema(type="string", format="uuid")
+
+
+def test_openapi_types_env_setting():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(EnvironmentSetting)
+    assert openapi_type.title == "EnvironmentSetting"
+    assert openapi_type.type == "object"
+    assert openapi_type.required == ["name", "type", "default", "doc", "recompile", "update_model", "agent_restart"]
 
 
 def test_post_operation():
