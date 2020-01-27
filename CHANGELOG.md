@@ -7,6 +7,7 @@
  - Changes in default values: AUTO_DEPLOY, PUSH_ON_AUTO_DEPLOY are enabled by default,
  AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY is set to incremental deployment
  - Fixed deadlock triggered by std::AgenConfigHandler (#1662)
+ - Removed the resourceversionid table from the database (#1627)
 
 ## Added
 - Add get_environment_id to exporter (#1683)
