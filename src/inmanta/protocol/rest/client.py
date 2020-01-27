@@ -21,7 +21,7 @@ import re
 from asyncio import CancelledError
 from typing import TYPE_CHECKING, Any, AnyStr, Dict, List, Optional, Set, Tuple
 
-from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest
+from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
 
 from inmanta import config as inmanta_config
 from inmanta.protocol import common
@@ -140,14 +140,16 @@ class RESTClient(RESTBase):
             LOGGER.exception("Failed to send request")
             return common.Result(code=500, result={"message": str(e)})
 
-        if common.CONTENT_TYPE not in response.headers or response.headers[common.CONTENT_TYPE] == common.JSON_CONTENT:
+        return self._decode_response(response)
+
+    def _decode_response(self, response: HTTPResponse):
+        content_type = response.headers.get(common.CONTENT_TYPE, None)
+
+        if content_type is None or content_type == common.JSON_CONTENT:
             return common.Result(code=response.code, result=self._decode(response.body))
-        elif response.headers[common.CONTENT_TYPE] == common.HTML_CONTENT:
+        elif content_type == common.HTML_CONTENT:
             return common.Result(code=response.code, result=response.body.decode(common.HTML_ENCODING))
-        elif (
-            response.headers[common.CONTENT_TYPE] == common.OCTET_STREAM_CONTENT
-            or response.headers[common.CONTENT_TYPE] == common.ZIP_CONTENT
-        ):
+        elif content_type == common.OCTET_STREAM_CONTENT or content_type == common.ZIP_CONTENT:
             return common.Result(code=response.code, result=response.body)
         else:
-            raise Exception(f"Unsupported content-type retrieved from server: {response.headers[common.CONTENT_TYPE]}")
+            raise Exception(f"Unsupported content-type retrieved from server: {content_type}")
