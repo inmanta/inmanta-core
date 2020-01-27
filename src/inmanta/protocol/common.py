@@ -245,19 +245,11 @@ class Response(object):
     """
 
     @classmethod
-    def create(
-        cls,
-        result: ReturnValue,
-        additional_headers: MutableMapping[str, str],
-        envelope: bool,
-        envelope_key: Optional[str] = None,
-    ) -> "Response":
+    def create(cls, result: ReturnValue, envelope: bool, envelope_key: Optional[str] = None,) -> "Response":
         """
             Create a response from a return value
         """
-        headers = result.headers
-        headers.update(additional_headers)
-        return cls(status_code=result.status_code, headers=headers, body=result.get_body(envelope, envelope_key))
+        return cls(status_code=result.status_code, headers=result.headers, body=result.get_body(envelope, envelope_key))
 
     def __init__(self, status_code: int, headers: MutableMapping[str, str], body: ReturnTypes = None) -> None:
         self._status_code = status_code
