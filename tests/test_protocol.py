@@ -34,9 +34,15 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from inmanta import config, protocol
 from inmanta.data.model import BaseModel
 from inmanta.protocol import VersionMatch, exceptions, json_encode
-from inmanta.protocol.common import InvalidMethodDefinition, InvalidPathException, ReturnValue
+from inmanta.protocol.common import (
+    HTML_CONTENT,
+    OCTET_STREAM_CONTENT,
+    ZIP_CONTENT,
+    InvalidMethodDefinition,
+    InvalidPathException,
+    ReturnValue,
+)
 from inmanta.protocol.rest import CallArguments
-from inmanta.protocol.rest.model import HtmlContentType, OctetStreamContentType
 from inmanta.server import config as opt
 from inmanta.server.protocol import Server, ServerSlice
 from inmanta.types import Apireturn
@@ -989,7 +995,7 @@ async def test_method_definition():
             """
 
     assert (
-        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, StrictNonIntBool, datetime or a "
+        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, StrictNonIntBool, datetime, bytes or a "
         "List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
@@ -1012,7 +1018,7 @@ async def test_method_definition():
             """
 
     assert (
-        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, StrictNonIntBool, datetime or a "
+        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, StrictNonIntBool, datetime, bytes or a "
         "List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
@@ -1320,13 +1326,13 @@ async def test_html_content_type(unused_tcp_port, postgres_db, database_name, as
     html_content = "<html><body>test</body></html>"
 
     @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
-    def test_method() -> HtmlContentType:  # NOQA
+    def test_method() -> ReturnValue[str]:  # NOQA
         pass
 
     class TestServer(ServerSlice):
         @protocol.handle(test_method)
-        async def test_methodY(self) -> HtmlContentType:  # NOQA
-            return HtmlContentType(content=html_content)
+        async def test_methodY(self) -> ReturnValue[str]:  # NOQA
+            return ReturnValue(response=html_content, content_type=HTML_CONTENT)
 
     rs = Server()
     server = TestServer(name="testserver")
@@ -1351,13 +1357,13 @@ async def test_octet_stream_content_type(unused_tcp_port, postgres_db, database_
     byte_stream = b"test123"
 
     @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
-    def test_method() -> OctetStreamContentType:  # NOQA
+    def test_method() -> ReturnValue[bytes]:  # NOQA
         pass
 
     class TestServer(ServerSlice):
         @protocol.handle(test_method)
-        async def test_methodY(self) -> OctetStreamContentType:  # NOQA
-            return OctetStreamContentType(content=byte_stream)
+        async def test_methodY(self) -> ReturnValue[bytes]:  # NOQA
+            return ReturnValue(response=byte_stream, content_type=OCTET_STREAM_CONTENT)
 
     rs = Server()
     server = TestServer(name="testserver")
@@ -1371,3 +1377,34 @@ async def test_octet_stream_content_type(unused_tcp_port, postgres_db, database_
     response = await client.test_method()
     assert response.code == 200
     assert response.result == byte_stream
+
+
+@pytest.mark.asyncio
+async def test_zip_content_type(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    """ Test whether API endpoints with an application/zip content-type work.
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    zip_content = b"test123"
+
+    @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
+    def test_method() -> ReturnValue[bytes]:  # NOQA
+        pass
+
+    class TestServer(ServerSlice):
+        @protocol.handle(test_method)
+        async def test_methodY(self) -> ReturnValue[bytes]:  # NOQA
+            return ReturnValue(response=zip_content, content_type=ZIP_CONTENT)
+
+    rs = Server()
+    server = TestServer(name="testserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    # client based calls
+    client = protocol.Client("client")
+    response = await client.test_method()
+    assert response.code == 200
+    assert response.result == zip_content

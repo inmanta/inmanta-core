@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import logging
 import ssl
 import uuid
 from asyncio import CancelledError
@@ -30,11 +31,12 @@ import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta import const
 from inmanta.protocol import common, exceptions
-from inmanta.protocol.common import UrlMethod
-from inmanta.protocol.rest import CONTENT_TYPE, JSON_CONTENT, LOGGER, VALID_CONTENT_TYPES, RESTBase
+from inmanta.protocol.rest import RESTBase
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth
 from inmanta.types import ReturnTypes
+
+LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 class RESTHandler(tornado.web.RequestHandler):
@@ -81,18 +83,8 @@ class RESTHandler(tornado.web.RequestHandler):
             self.set_header("Access-Control-Allow-Origin", server_origin)
 
     def respond(self, body: ReturnTypes, headers: MutableMapping[str, str], status: int) -> None:
-        if CONTENT_TYPE not in headers:
-            headers[CONTENT_TYPE] = JSON_CONTENT
-        elif headers[CONTENT_TYPE] not in VALID_CONTENT_TYPES:
-            raise Exception(
-                f"Invalid content type header '{headers[CONTENT_TYPE]}' provided. Supported types: {VALID_CONTENT_TYPES}"
-            )
-
         if body is not None:
-            if headers[CONTENT_TYPE] == JSON_CONTENT:
-                self.write(common.json_encode(body))
-            else:
-                self.write(body)
+            self.write(body)
 
         for header, value in headers.items():
             self.set_header(header, value)
@@ -261,7 +253,7 @@ class RESTServer(RESTBase):
         """
             Start the server on the current ioloop
         """
-        global_url_map: Dict[str, Dict[str, UrlMethod]] = defaultdict(dict)
+        global_url_map: Dict[str, Dict[str, common.UrlMethod]] = defaultdict(dict)
         for slice in targets:
             url_map = slice.get_op_mapping()
             for url, configs in url_map.items():

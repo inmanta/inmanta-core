@@ -70,6 +70,13 @@ if TYPE_CHECKING:
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
+HTML_ENCODING = "ISO-8859-1"
+CONTENT_TYPE = "Content-Type"
+JSON_CONTENT = "application/json"
+HTML_CONTENT = "text/html"
+OCTET_STREAM_CONTENT = "application/octet-stream"
+ZIP_CONTENT = "application/zip"
+
 
 class ArgOption(object):
     """
@@ -160,11 +167,19 @@ class ReturnValue(Generic[T]):
         An object that handlers can return to provide a response to a method call.
     """
 
-    def __init__(self, status_code: int = 200, headers: MutableMapping[str, str] = {}, response: Optional[T] = None) -> None:
+    def __init__(
+        self,
+        status_code: int = 200,
+        headers: MutableMapping[str, str] = {},
+        response: Optional[T] = None,
+        content_type: str = JSON_CONTENT,
+    ) -> None:
         self._status_code = status_code
-        self._headers = headers
-        self._response = response
         self._warnings: List[str] = []
+        self._headers = headers
+        self._headers[CONTENT_TYPE] = content_type
+        self._content_type = content_type
+        self._response = response
 
     @property
     def status_code(self) -> int:
@@ -187,7 +202,7 @@ class ReturnValue(Generic[T]):
 
         return self._response
 
-    def _get_with_envelope(self, envelope: bool, envelope_key: str) -> ReturnTypes:
+    def _get_with_envelope(self, envelope_key: str) -> ReturnTypes:
         """ Get the body with an envelope specified
         """
         response: Dict[str, Any] = {}
@@ -200,15 +215,29 @@ class ReturnValue(Generic[T]):
         return response
 
     def get_body(self, envelope: bool, envelope_key: str) -> ReturnTypes:
-        """ Get the response body
+        """ Get the response body.
+
+            When the content_type of this ReturnValue is not 'application/json',
+            the parameter `envelope` and `envelope_key` will be ignored. In that
+            case, this method will behave as if envelope=False was used.
 
             :param envelope: Should the response be mapped into a data key
             :param envelope_key: The envelope key to use
         """
-        if not envelope:
-            return self._get_without_envelope()
+        if not envelope or self._headers[CONTENT_TYPE] != JSON_CONTENT:
+            body = self._get_without_envelope()
+        else:
+            body = self._get_with_envelope(envelope_key)
 
-        return self._get_with_envelope(envelope, envelope_key)
+        return self._encode_body(body)
+
+    def _encode_body(self, body) -> Optional[Union[str, bytes]]:
+        if body is not None:
+            if self._content_type == JSON_CONTENT:
+                return json_encode(body)
+            if self._content_type == HTML_CONTENT:
+                return body.encode(HTML_ENCODING)
+        return body
 
     def add_warnings(self, warnings: List[str]) -> None:
         self._warnings.extend(warnings)
@@ -227,12 +256,18 @@ class Response(object):
 
     @classmethod
     def create(
-        cls, result: ReturnValue, additional_headers: MutableMapping[str, str], envelope: bool, envelope_key: str
+        cls,
+        result: ReturnValue,
+        additional_headers: MutableMapping[str, str],
+        envelope: bool,
+        envelope_key: Optional[str] = None,
     ) -> "Response":
         """
             Create a response from a return value
         """
-        return cls(status_code=result.status_code, headers=additional_headers, body=result.get_body(envelope, envelope_key))
+        headers = result.headers
+        headers.update(additional_headers)
+        return cls(status_code=result.status_code, headers=headers, body=result.get_body(envelope, envelope_key))
 
     def __init__(self, status_code: int, headers: MutableMapping[str, str], body: ReturnTypes = None) -> None:
         self._status_code = status_code
@@ -309,7 +344,7 @@ class InvalidMethodDefinition(Exception):
 
 
 VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
-VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNonIntBool, datetime)
+VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNonIntBool, datetime, bytes)
 
 
 class MethodProperties(object):

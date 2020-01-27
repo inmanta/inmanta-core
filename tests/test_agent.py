@@ -23,17 +23,26 @@ from inmanta.data.model import AttributeStateChange
 from inmanta.resources import Id, PurgeableResource
 from inmanta.server import SLICE_SESSION_MANAGER
 
+import logging
 
 @pytest.mark.slowtest
 @pytest.mark.asyncio
-async def test_agent_get_status(server, environment, agent):
+async def test_agent_get_status(server, environment, agent, caplog):
+    caplog.set_level(logging.DEBUG)
     clients = server.get_slice(SLICE_SESSION_MANAGER)._sessions.values()
     assert len(clients) == 1
     clients = [x for x in clients]
     client = clients[0].get_client()
     status = await client.get_status()
+    print(status.__dict__)
     status = status.get_result()
+    print(status)
+
+    for l in caplog.messages:
+        print(l)
+
     for name in reporting.reports.keys():
+        print(name)
         assert name in status and status[name] != "ERROR"
 
 

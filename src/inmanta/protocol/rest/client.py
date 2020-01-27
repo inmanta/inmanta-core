@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import logging
 import re
 from asyncio import CancelledError
 from typing import TYPE_CHECKING, Any, AnyStr, Dict, List, Optional, Set, Tuple
@@ -24,10 +25,12 @@ from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest
 
 from inmanta import config as inmanta_config
 from inmanta.protocol import common
-from inmanta.protocol.rest import CONTENT_TYPE, HTML_CONTENT, JSON_CONTENT, LOGGER, OCTET_STREAM_CONTENT, RESTBase
+from inmanta.protocol.rest import RESTBase
 
 if TYPE_CHECKING:
     from inmanta.protocol.endpoints import Endpoint
+
+LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 class RESTClient(RESTBase):
@@ -131,17 +134,20 @@ class RESTClient(RESTBase):
                 return common.Result(code=e.code, result=result)
 
             return common.Result(code=e.code, result={"message": str(e)})
-        except CancelledError:
+        except CancelledError as e:
             raise
         except Exception as e:
             LOGGER.exception("Failed to send request")
             return common.Result(code=500, result={"message": str(e)})
 
-        if CONTENT_TYPE not in response.headers or response.headers[CONTENT_TYPE] == JSON_CONTENT:
+        if common.CONTENT_TYPE not in response.headers or response.headers[common.CONTENT_TYPE] == common.JSON_CONTENT:
             return common.Result(code=response.code, result=self._decode(response.body))
-        elif response.headers[CONTENT_TYPE] == HTML_CONTENT:
-            return common.Result(code=response.code, result=response.body.decode("utf-8"))
-        elif response.headers[CONTENT_TYPE] == OCTET_STREAM_CONTENT:
+        elif response.headers[common.CONTENT_TYPE] == common.HTML_CONTENT:
+            return common.Result(code=response.code, result=response.body.decode(common.HTML_ENCODING))
+        elif (
+            response.headers[common.CONTENT_TYPE] == common.OCTET_STREAM_CONTENT
+            or response.headers[common.CONTENT_TYPE] == common.ZIP_CONTENT
+        ):
             return common.Result(code=response.code, result=response.body)
         else:
-            raise Exception(f"Unsupported content-type retrieved from server: {response.headers[CONTENT_TYPE]}")
+            raise Exception(f"Unsupported content-type retrieved from server: {response.headers[common.CONTENT_TYPE]}")

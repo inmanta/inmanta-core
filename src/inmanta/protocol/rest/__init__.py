@@ -29,16 +29,10 @@ from inmanta import const, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.common import ReturnValue
-from inmanta.protocol.rest.model import HtmlContentType, OctetStreamContentType
 from inmanta.types import Apireturn, JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
-CONTENT_TYPE = "Content-Type"
-JSON_CONTENT = "application/json"
-HTML_CONTENT = "text/html"
-OCTET_STREAM_CONTENT = "application/octet-stream"
-VALID_CONTENT_TYPES = [JSON_CONTENT, HTML_CONTENT, OCTET_STREAM_CONTENT]
 
 """
 
@@ -293,7 +287,7 @@ class CallArguments(object):
                 if result is not None:
                     raise exceptions.ServerError(f"Method {config.method_name} returned a result but is defined as -> None")
 
-                return common.Response(headers=headers, status_code=200)
+                return common.Response.create(ReturnValue(status_code=200, response=None), headers, envelope=False)
 
             # There is no obvious method to check if the return_type is a specific version of the generic ReturnValue
             # The way this is implemented in typing is different for python 3.6 and 3.7. In this code we "trust" that the
@@ -315,14 +309,6 @@ class CallArguments(object):
                     return common.Response.create(
                         ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
                     )
-
-            elif isinstance(result, HtmlContentType):
-                headers[CONTENT_TYPE] = HTML_CONTENT
-                return common.Response(status_code=200, headers=headers, body=result.content)
-
-            elif isinstance(result, OctetStreamContentType):
-                headers[CONTENT_TYPE] = OCTET_STREAM_CONTENT
-                return common.Response(status_code=200, headers=headers, body=result.content)
 
             elif isinstance(result, BaseModel):
                 return common.Response.create(
@@ -357,14 +343,27 @@ class CallArguments(object):
 
             if body is not None:
                 if config.properties.reply:
-                    if config.properties.envelope:
-                        return common.Response(body={config.properties.envelope_key: body}, headers=headers, status_code=code)
-                    return common.Response(body=body, headers=headers, status_code=code)
-
+                    return common.Response.create(
+                        ReturnValue(status_code=code, response=body),
+                        headers,
+                        config.properties.envelope,
+                        config.properties.envelope_key,
+                    )
                 else:
                     LOGGER.warning("Method %s returned a result although it has no reply!")
 
-            return common.Response(headers=headers, status_code=code)
+            return common.Response.create(ReturnValue(status_code=code, response=None), headers, envelope=False)
+
+            # if body is not None:
+            #     if config.properties.reply:
+            #         if config.properties.envelope:
+            #             return common.Response(body={config.properties.envelope_key: body}, headers=headers, status_code=code)
+            #         return common.Response(body=body, headers=headers, status_code=code)
+            #
+            #     else:
+            #         LOGGER.warning("Method %s returned a result although it has no reply!")
+            #
+            # return common.Response(headers=headers, status_code=code)
 
 
 # Shared

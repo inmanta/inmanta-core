@@ -67,7 +67,7 @@ class ReturnClient(Client):
         call_spec = method_properties.build_call(args, kwargs)
         try:
             return_value = await self.session.put_call(call_spec, timeout=method_properties.timeout)
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as e:
             return common.Result(code=500, result={"message": "Call timed out"})
 
         return common.Result(code=return_value["code"], result=return_value["result"])
