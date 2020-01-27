@@ -20,6 +20,7 @@ import json
 from uuid import UUID
 
 import pytest
+from openapi_spec_validator import openapi_v3_spec_validator
 
 from inmanta import data
 from inmanta.protocol import method
@@ -33,7 +34,6 @@ from inmanta.protocol.openapi.converter import (
     OperationHandler,
 )
 from inmanta.protocol.openapi.model import MediaType, Parameter, Schema
-from openapi_spec_validator import openapi_v3_spec_validator
 
 
 @pytest.mark.asyncio
