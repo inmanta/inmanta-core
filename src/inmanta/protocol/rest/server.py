@@ -21,7 +21,7 @@ import ssl
 import uuid
 from asyncio import CancelledError
 from collections import defaultdict
-from typing import Dict, List, MutableMapping, Optional
+from typing import Dict, List, MutableMapping, Optional, Union
 
 import tornado
 from pyformance import timer
@@ -83,13 +83,24 @@ class RESTHandler(tornado.web.RequestHandler):
             self.set_header("Access-Control-Allow-Origin", server_origin)
 
     def respond(self, body: ReturnTypes, headers: MutableMapping[str, str], status: int) -> None:
+        if common.CONTENT_TYPE not in headers:
+            headers[common.CONTENT_TYPE] = common.JSON_CONTENT
+
         if body is not None:
-            self.write(body)
+            encoded_body = self._encode_body(body, headers[common.CONTENT_TYPE])
+            self.write(encoded_body)
 
         for header, value in headers.items():
             self.set_header(header, value)
 
         self.set_status(status)
+
+    def _encode_body(self, body: ReturnTypes, content_type: str) -> Union[ReturnTypes, bytes]:
+        if content_type == common.JSON_CONTENT:
+            return common.json_encode(body)
+        if content_type == common.HTML_CONTENT:
+            return body.encode(common.HTML_ENCODING)
+        return body
 
     async def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> None:
         """
@@ -247,8 +258,9 @@ class RESTServer(RESTBase):
     def validate_sid(self, sid: uuid.UUID) -> bool:
         return self.session_manager.validate_sid(sid)
 
-    def get_global_url_map(self, targets: List[inmanta.protocol.endpoints.CallTarget]) -> Dict[str, Dict[str,
-                                                                                                         common.UrlMethod]]:
+    def get_global_url_map(
+        self, targets: List[inmanta.protocol.endpoints.CallTarget]
+    ) -> Dict[str, Dict[str, common.UrlMethod]]:
         global_url_map: Dict[str, Dict[str, common.UrlMethod]] = defaultdict(dict)
         for slice in targets:
             url_map = slice.get_op_mapping()

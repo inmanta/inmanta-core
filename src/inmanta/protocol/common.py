@@ -225,19 +225,9 @@ class ReturnValue(Generic[T]):
             :param envelope_key: The envelope key to use
         """
         if not envelope or self._headers[CONTENT_TYPE] != JSON_CONTENT:
-            body = self._get_without_envelope()
+            return self._get_without_envelope()
         else:
-            body = self._get_with_envelope(envelope_key)
-
-        return self._encode_body(body)
-
-    def _encode_body(self, body) -> Optional[Union[str, bytes]]:
-        if body is not None:
-            if self._content_type == JSON_CONTENT:
-                return json_encode(body)
-            if self._content_type == HTML_CONTENT:
-                return body.encode(HTML_ENCODING)
-        return body
+            return self._get_with_envelope(envelope_key)
 
     def add_warnings(self, warnings: List[str]) -> None:
         self._warnings.extend(warnings)

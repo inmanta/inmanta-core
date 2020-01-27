@@ -234,14 +234,14 @@ async def test_create_environment(tmpdir, server, client, cli):
     assert result.exit_code == 0
     assert os.path.exists(file_path)
 
-    with open(file_path, 'r') as inmanta_file:
+    with open(file_path, "r") as inmanta_file:
         file_content_0 = inmanta_file.read()
     ctime_0 = os.path.getctime(file_path)
 
-    result = await cli.run("environment", "create", "-n", "test-env-1", "-p", "test", "--save", input='n')
+    result = await cli.run("environment", "create", "-n", "test-env-1", "-p", "test", "--save", input="n")
     assert result.exit_code == 0
 
-    with open(file_path, 'r') as inmanta_file:
+    with open(file_path, "r") as inmanta_file:
         file_content_1 = inmanta_file.read()
 
     ctime_1 = os.path.getctime(file_path)
@@ -249,10 +249,10 @@ async def test_create_environment(tmpdir, server, client, cli):
     assert file_content_0 == file_content_1
     assert ctime_0 == ctime_1
 
-    result = await cli.run("environment", "create", "-n", "test-env-2", "-p", "test", "--save", input='y')
+    result = await cli.run("environment", "create", "-n", "test-env-2", "-p", "test", "--save", input="y")
     assert result.exit_code == 0
 
-    with open(file_path, 'r') as inmanta_file:
+    with open(file_path, "r") as inmanta_file:
         file_content_2 = inmanta_file.read()
 
     ctime_2 = os.path.getctime(file_path)

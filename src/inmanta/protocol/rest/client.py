@@ -134,7 +134,7 @@ class RESTClient(RESTBase):
                 return common.Result(code=e.code, result=result)
 
             return common.Result(code=e.code, result={"message": str(e)})
-        except CancelledError as e:
+        except CancelledError:
             raise
         except Exception as e:
             LOGGER.exception("Failed to send request")
