@@ -127,8 +127,6 @@ class OpenApiTypeConverter:
         bool: Schema(type="boolean"),
         int: Schema(type="integer"),
         str: Schema(type="string"),
-        dict: Schema(type="object"),
-        list: Schema(type="array", items=Schema()),
         tuple: Schema(type="array", items=Schema()),
         float: Schema(type="number", format="float"),
         bytes: Schema(type="string", format="binary"),
@@ -140,33 +138,62 @@ class OpenApiTypeConverter:
         type_annotation = parameter_type.annotation
         return self.get_openapi_type(type_annotation)
 
+    def _handle_optional_type(self, type_annotation: Type) -> Schema:
+        type_args = typing_inspect.get_args(type_annotation, evaluate=True)
+        for type_arg in type_args:
+            if not issubclass(type_arg, type(None)):
+                openapi_type = self.get_openapi_type(type_arg).copy(deep=True)
+                # An Optional value in the OpenAPI Schema is nullable
+                openapi_type.nullable = True
+                return openapi_type
+
+    def _handle_union_type(self, type_annotation: Type) -> Schema:
+        type_args = typing_inspect.get_args(type_annotation, evaluate=True)
+        openapi_types = [self.get_openapi_type(type_arg) for type_arg in type_args]
+        # A Union type can be expressed as a schema that matches any of the type arguments
+        return Schema(anyOf=openapi_types)
+
+    def _handle_dictionary(self, type_annotation: Type) -> Schema:
+        # Specifying the types, but not the property names is not supported in OpenAPI 3
+        # It would require "patternProperties" from JsonSchema, but the two differ in this case
+        # https://github.com/OAI/OpenAPI-Specification/issues/687
+        return Schema(type="object")
+
+    def _handle_pydantic_model(self, type_annotation: Type) -> Schema:
+        # JsonSchema stores the model (and sub-model) definitions at #/definitions,
+        # but OpenAPI requires them to be placed at "#/components/schemas/"
+        # The ref_prefix changes the references, but the actual schemas are still at #/definitions
+        schema = model_schema(type_annotation, by_alias=True, ref_prefix="#/components/schemas/")
+        if "definitions" in schema.keys():
+            definitions = schema.pop("definitions")
+            if self.components.schemas is not None:
+                self.components.schemas.update(definitions)
+        return Schema(**schema)
+
+    def _handle_enums(self, type_annotation: Type) -> Schema:
+        enum_keys = [name for name in type_annotation.__members__.keys()]
+        return Schema(type="string", enum=enum_keys)
+
+    def _handle_list(self, type_annotation: Type) -> Schema:
+        # Type argument is always present, see protocol.common.MethodProperties._validate_type_arg()
+        list_member_type = typing_inspect.get_args(type_annotation, evaluate=True)
+        return Schema(type="array", items=self.get_openapi_type(list_member_type[0]))
+
     def get_openapi_type(self, type_annotation: Type) -> Schema:
+
         if typing_inspect.is_optional_type(type_annotation):
-            type_args = typing_inspect.get_args(type_annotation, evaluate=True)
-            for type_arg in type_args:
-                if not issubclass(type_arg, type(None)):
-                    openapi_type = self.get_openapi_type(type_arg).copy(deep=True)
-                    openapi_type.nullable = True
-                    return openapi_type
+            return self._handle_optional_type(type_annotation)
         elif typing_inspect.is_union_type(type_annotation):
-            type_args = typing_inspect.get_args(type_annotation, evaluate=True)
-            openapi_types = [self.get_openapi_type(type_arg) for type_arg in type_args]
-            return Schema(anyOf=openapi_types)
-        elif typing_inspect.get_origin(type_annotation) == typing.Dict:
-            return Schema(type="object", format=str(type_annotation))
+            return self._handle_union_type(type_annotation)
         elif inspect.isclass(type_annotation) and issubclass(type_annotation, BaseModel):
-            schema = model_schema(type_annotation, by_alias=True, ref_prefix="#/components/schemas/")
-            if "definitions" in schema.keys():
-                definitions = schema.pop("definitions")
-                if self.components.schemas is not None:
-                    self.components.schemas.update(definitions)
-            return Schema(**schema)
+            return self._handle_pydantic_model(type_annotation)
         elif inspect.isclass(type_annotation) and issubclass(type_annotation, Enum):
-            enum_keys = [name for name in type_annotation.__members__.keys()]
-            return Schema(type="string", enum=enum_keys)
-        elif typing_inspect.get_origin(type_annotation) == typing.List:
-            list_member_type = typing_inspect.get_args(type_annotation, evaluate=True)
-            return Schema(type="array", items=self.get_openapi_type(list_member_type[0]))
+            return self._handle_enums(type_annotation)
+        elif typing_inspect.get_origin(type_annotation) == dict or typing_inspect.get_origin(type_annotation) == typing.Dict:
+            return self._handle_dictionary(type_annotation)
+        elif typing_inspect.get_origin(type_annotation) == list or typing_inspect.get_origin(type_annotation) == typing.List:
+            return self._handle_list(type_annotation)
+        # Fallback to primitive types
         return self.python_to_openapi_types.get(type_annotation, Schema(type="object"))
 
 

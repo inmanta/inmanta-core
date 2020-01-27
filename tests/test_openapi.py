@@ -17,6 +17,7 @@
 """
 import inspect
 import json
+from datetime import datetime
 from typing import Dict, List, Optional, Union
 from uuid import UUID
 
@@ -48,8 +49,7 @@ async def test_generate_openapi_definition(server):
     openapi_v3_spec_validator.validate(openapi_parsed)
 
 
-@pytest.mark.asyncio
-async def test_filter_api_methods(server):
+def test_filter_api_methods(server):
     @method(path="/operation", client_types=["api", "agent"], envelope=True)
     def post_method() -> object:
         return ""
@@ -70,8 +70,7 @@ async def test_filter_api_methods(server):
     assert len(api_methods) == 1
 
 
-@pytest.mark.asyncio
-async def test_get_function_parameters():
+def test_get_function_parameters():
     def dummy_method(param: int, tid: UUID, id: UUID) -> str:
         return ""
 
@@ -83,8 +82,7 @@ async def test_get_function_parameters():
     assert function_parameters["param"] == inspect.Parameter("param", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=int)
 
 
-@pytest.mark.asyncio
-async def test_filter_function_parameters():
+def test_filter_function_parameters():
     function_parameter_handler = FunctionParameterHandler(
         OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()), "/basepath"
     )
@@ -102,8 +100,7 @@ async def test_filter_function_parameters():
     )
 
 
-@pytest.mark.asyncio
-async def test_return_value():
+def test_return_value():
     @method(path="/operation", client_types=["api", "agent"], envelope=True)
     def post_method() -> object:
         return ""
@@ -116,8 +113,7 @@ async def test_return_value():
     }
 
 
-@pytest.mark.asyncio
-async def test_get_openapi_types():
+def test_get_openapi_types():
     type_converter = OpenApiTypeConverter()
 
     openapi_type = type_converter.get_openapi_type_of_parameter(
@@ -131,8 +127,7 @@ async def test_get_openapi_types():
     assert openapi_type == Schema(type="integer")
 
 
-@pytest.mark.asyncio
-async def test_openapi_types_base_model():
+def test_openapi_types_base_model():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type_of_parameter(
         inspect.Parameter("param", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=model.Environment)
@@ -140,22 +135,19 @@ async def test_openapi_types_base_model():
     assert openapi_type.required == ["id", "name", "project_id", "repo_url", "repo_branch", "settings"]
 
 
-@pytest.mark.asyncio
-async def test_openapi_types_union():
+def test_openapi_types_union():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(Union[str, bytes])
     assert openapi_type == Schema(anyOf=[Schema(type="string"), Schema(type="string", format="binary")])
 
 
-@pytest.mark.asyncio
-async def test_openapi_types_optional():
+def test_openapi_types_optional():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(Optional[str])
     assert openapi_type == Schema(type="string", nullable=True)
 
 
-@pytest.mark.asyncio
-async def test_openapi_types_list():
+def test_openapi_types_list():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(List[Union[int, UUID]])
     assert openapi_type == Schema(
@@ -163,8 +155,7 @@ async def test_openapi_types_list():
     )
 
 
-@pytest.mark.asyncio
-async def test_openapi_types_enum():
+def test_openapi_types_enum():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(List[ResourceAction])
     assert openapi_type == Schema(
@@ -172,15 +163,84 @@ async def test_openapi_types_enum():
     )
 
 
-@pytest.mark.asyncio
-async def test_openapi_types_dict():
+def test_openapi_types_dict():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(Dict[str, UUID])
-    assert openapi_type == Schema(type="object", format="typing.Dict[str, uuid.UUID]")
+    assert openapi_type == Schema(type="object")
 
 
-@pytest.mark.asyncio
-async def test_post_operation():
+def test_openapi_types_list_of_model():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(List[model.Project])
+    assert openapi_type.type == "array"
+    assert openapi_type.items.title == "Project"
+    assert openapi_type.items.required == ["id", "name", "environments"]
+
+
+def test_openapi_types_list_of_list_of_optional_model():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(List[List[Optional[model.Project]]])
+    assert openapi_type.type == "array"
+    assert openapi_type.items.type == "array"
+    assert openapi_type.items.items.required == ["id", "name", "environments"]
+    assert openapi_type.items.items.nullable
+
+
+def test_openapi_types_dict_of_union():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Dict[str, Union[model.Project, model.Environment]])
+    assert openapi_type == Schema(type="object")
+
+
+def test_openapi_types_datetime():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(datetime)
+    assert openapi_type == Schema(type="string", format="date-time")
+
+
+def test_openapi_types_tuple():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(tuple)
+    assert openapi_type == Schema(type="array", items=Schema())
+
+
+def test_openapi_types_bool():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(bool)
+    assert openapi_type == Schema(type="boolean")
+
+
+def test_openapi_types_int():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(int)
+    assert openapi_type == Schema(type="integer")
+
+
+def test_openapi_types_string():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(str)
+    assert openapi_type == Schema(type="string")
+
+
+def test_openapi_types_float():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(float)
+    assert openapi_type == Schema(type="number", format="float")
+
+
+def test_openapi_types_bytes():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(bytes)
+    assert openapi_type == Schema(type="string", format="binary")
+
+
+def test_openapi_types_uuid():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(UUID)
+    assert openapi_type == Schema(type="string", format="uuid")
+
+
+def test_post_operation():
     @method(path="/operation", client_types=["api", "agent"], envelope=True, arg_options=ENV_OPTS)
     def dummy_method(tid: UUID, param: int, id: UUID) -> str:
         return ""
@@ -197,8 +257,7 @@ async def test_post_operation():
     assert "X-Inmanta-tid" in operation.responses["200"].headers.keys()
 
 
-@pytest.mark.asyncio
-async def test_get_operation():
+def test_get_operation():
     @method(path="/operation", client_types=["api", "agent"], envelope=True, arg_options=ENV_OPTS, operation="GET")
     def dummy_method(tid: UUID, param: int, id: UUID) -> str:
         return ""
