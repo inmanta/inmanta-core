@@ -110,7 +110,7 @@ def test_return_value():
 
     json_response_content = operation_handler._build_return_value_wrapper(MethodProperties.methods["post_method"][0])
     assert json_response_content == {
-        "application/json": MediaType(schema=Schema(type="object", properties={"data": {"type": "object"}}))
+        "application/json": MediaType(schema=Schema(type="object", properties={"data": Schema(type="object")}))
     }
 
 
@@ -167,7 +167,7 @@ def test_openapi_types_enum():
 def test_openapi_types_dict():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(Dict[str, UUID])
-    assert openapi_type == Schema(type="object")
+    assert openapi_type == Schema(type="object", additionalProperties=Schema(type="string", format="uuid"))
 
 
 def test_openapi_types_list_of_model():
@@ -190,7 +190,24 @@ def test_openapi_types_list_of_list_of_optional_model():
 def test_openapi_types_dict_of_union():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(Dict[str, Union[model.Project, model.Environment]])
-    assert openapi_type == Schema(type="object")
+    assert openapi_type.type == "object"
+    assert len(openapi_type.additionalProperties.anyOf) == 2
+    assert openapi_type.additionalProperties.anyOf[0].title == "Project"
+    assert openapi_type.additionalProperties.anyOf[1].title == "Environment"
+
+
+def test_openapi_types_optional_union():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Optional[Union[str, int]])
+    assert len(openapi_type.anyOf) == 2
+    assert openapi_type.nullable
+
+
+def test_openapi_types_union_optional():
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Union[Optional[str], Optional[int]])
+    assert len(openapi_type.anyOf) == 2
+    assert openapi_type.nullable
 
 
 def test_openapi_types_datetime():

@@ -72,6 +72,7 @@ class SchemaBase(BaseModel):
 class Schema(SchemaBase):
     items: Optional[SchemaBase] = None
     properties: Optional[Dict[str, SchemaBase]] = None
+    additionalProperties: Optional[Union[SchemaBase, bool]] = None
 
 
 class Example(BaseModel):

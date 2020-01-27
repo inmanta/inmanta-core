@@ -28,7 +28,7 @@ from pydantic.main import BaseModel
 from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
 
-from inmanta import util
+from inmanta import types, util
 from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.model import (
     Components,
@@ -132,6 +132,8 @@ class OpenApiTypeConverter:
         bytes: Schema(type="string", format="binary"),
         datetime: Schema(type="string", format="date-time"),
         uuid.UUID: Schema(type="string", format="uuid"),
+        typing.Any: Schema(type="string"),
+        types.StrictNonIntBool: Schema(type="boolean"),
     }
 
     def get_openapi_type_of_parameter(self, parameter_type: inspect.Parameter) -> Schema:
@@ -147,17 +149,21 @@ class OpenApiTypeConverter:
                 openapi_type.nullable = True
                 return openapi_type
 
+    def _is_none_type(self, type_annotation: Type) -> bool:
+        return inspect.isclass(type_annotation) and issubclass(type_annotation, type(None))
+
     def _handle_union_type(self, type_annotation: Type) -> Schema:
         type_args = typing_inspect.get_args(type_annotation, evaluate=True)
-        openapi_types = [self.get_openapi_type(type_arg) for type_arg in type_args]
+        openapi_types = [self.get_openapi_type(type_arg) for type_arg in type_args if not self._is_none_type(type_arg)]
+        none_type_in_type_args = len([type_arg for type_arg in type_args if self._is_none_type(type_arg)]) > 0
+        if none_type_in_type_args:
+            return Schema(anyOf=openapi_types, nullable=True)
         # A Union type can be expressed as a schema that matches any of the type arguments
         return Schema(anyOf=openapi_types)
 
     def _handle_dictionary(self, type_annotation: Type) -> Schema:
-        # Specifying the types, but not the property names is not supported in OpenAPI 3
-        # It would require "patternProperties" from JsonSchema, but the two differ in this case
-        # https://github.com/OAI/OpenAPI-Specification/issues/687
-        return Schema(type="object")
+        type_args = typing_inspect.get_args(type_annotation, evaluate=True)
+        return Schema(type="object", additionalProperties=self.get_openapi_type(type_args[1]))
 
     def _handle_pydantic_model(self, type_annotation: Type) -> Schema:
         # JsonSchema stores the model (and sub-model) definitions at #/definitions,
@@ -180,18 +186,24 @@ class OpenApiTypeConverter:
         return Schema(type="array", items=self.get_openapi_type(list_member_type[0]))
 
     def get_openapi_type(self, type_annotation: Type) -> Schema:
-
-        if typing_inspect.is_optional_type(type_annotation):
+        if (
+            typing_inspect.is_optional_type(type_annotation)
+            and len(typing_inspect.get_args(type_annotation, evaluate=True)) == 2
+        ):
             return self._handle_optional_type(type_annotation)
-        elif typing_inspect.is_union_type(type_annotation):
+        if typing_inspect.is_union_type(type_annotation):
             return self._handle_union_type(type_annotation)
         elif inspect.isclass(type_annotation) and issubclass(type_annotation, BaseModel):
             return self._handle_pydantic_model(type_annotation)
         elif inspect.isclass(type_annotation) and issubclass(type_annotation, Enum):
             return self._handle_enums(type_annotation)
-        elif typing_inspect.get_origin(type_annotation) == dict or typing_inspect.get_origin(type_annotation) == typing.Dict:
+        elif inspect.isclass(typing_inspect.get_origin(type_annotation)) and issubclass(
+            typing_inspect.get_origin(type_annotation), typing.Mapping
+        ):
             return self._handle_dictionary(type_annotation)
-        elif typing_inspect.get_origin(type_annotation) == list or typing_inspect.get_origin(type_annotation) == typing.List:
+        elif inspect.isclass(typing_inspect.get_origin(type_annotation)) and issubclass(
+            typing_inspect.get_origin(type_annotation), typing.Sequence
+        ):
             return self._handle_list(type_annotation)
         # Fallback to primitive types
         return self.python_to_openapi_types.get(type_annotation, Schema(type="object"))
