@@ -53,9 +53,10 @@ Requires:       python36
 Requires:       python3-devel
 %define __python3 /usr/bin/python3.6
 %else
-BuildRequires:  python3-devel
-Requires:       python3
-Requires:       python3-devel
+BuildRequires:  python36-devel
+Requires:       python36
+Requires:       python36-devel
+%define __python3 /usr/bin/python3.6
 %endif
 %endif
 
