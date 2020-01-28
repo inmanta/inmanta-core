@@ -29,6 +29,7 @@ from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
 
 from inmanta import types, util
+from inmanta.const import INMANTA_MT_HEADER
 from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.model import (
     Components,
@@ -140,23 +141,20 @@ class OpenApiTypeConverter:
         type_annotation = parameter_type.annotation
         return self.get_openapi_type(type_annotation)
 
-    def _handle_optional_type(self, type_annotation: Type) -> Schema:
-        type_args = typing_inspect.get_args(type_annotation, evaluate=True)
-        for type_arg in type_args:
-            if not issubclass(type_arg, type(None)):
-                openapi_type = self.get_openapi_type(type_arg).copy(deep=True)
-                # An Optional value in the OpenAPI Schema is nullable
-                openapi_type.nullable = True
-                return openapi_type
-
     def _is_none_type(self, type_annotation: Type) -> bool:
         return inspect.isclass(type_annotation) and issubclass(type_annotation, type(None))
 
     def _handle_union_type(self, type_annotation: Type) -> Schema:
+        # An Optional is always a Union
         type_args = typing_inspect.get_args(type_annotation, evaluate=True)
         openapi_types = [self.get_openapi_type(type_arg) for type_arg in type_args if not self._is_none_type(type_arg)]
         none_type_in_type_args = len([type_arg for type_arg in type_args if self._is_none_type(type_arg)]) > 0
         if none_type_in_type_args:
+            if len(openapi_types) == 1:
+                openapi_type = openapi_types[0].copy(deep=True)
+                # An Optional in the OpenAPI Schema is nullable
+                openapi_type.nullable = True
+                return openapi_type
             return Schema(anyOf=openapi_types, nullable=True)
         # A Union type can be expressed as a schema that matches any of the type arguments
         return Schema(anyOf=openapi_types)
@@ -186,24 +184,16 @@ class OpenApiTypeConverter:
         return Schema(type="array", items=self.get_openapi_type(list_member_type[0]))
 
     def get_openapi_type(self, type_annotation: Type) -> Schema:
-        if (
-            typing_inspect.is_optional_type(type_annotation)
-            and len(typing_inspect.get_args(type_annotation, evaluate=True)) == 2
-        ):
-            return self._handle_optional_type(type_annotation)
+        type_origin = typing_inspect.get_origin(type_annotation)
         if typing_inspect.is_union_type(type_annotation):
             return self._handle_union_type(type_annotation)
         elif inspect.isclass(type_annotation) and issubclass(type_annotation, BaseModel):
             return self._handle_pydantic_model(type_annotation)
         elif inspect.isclass(type_annotation) and issubclass(type_annotation, Enum):
             return self._handle_enums(type_annotation)
-        elif inspect.isclass(typing_inspect.get_origin(type_annotation)) and issubclass(
-            typing_inspect.get_origin(type_annotation), typing.Mapping
-        ):
+        elif inspect.isclass(type_origin) and issubclass(type_origin, typing.Mapping):
             return self._handle_dictionary(type_annotation)
-        elif inspect.isclass(typing_inspect.get_origin(type_annotation)) and issubclass(
-            typing_inspect.get_origin(type_annotation), typing.Sequence
-        ):
+        elif inspect.isclass(type_origin) and issubclass(type_origin, typing.Sequence):
             return self._handle_list(type_annotation)
         # Fallback to primitive types
         return self.python_to_openapi_types.get(type_annotation, Schema(type="object"))
@@ -226,7 +216,7 @@ class ArgOptionHandler:
             param_schema = self.type_converter.get_openapi_type_of_parameter(param)
             if option.header:
                 parameters.append(Parameter(in_=ParameterType.header, name=option.header, schema_=param_schema))
-            elif option_name in path:
+            elif f"{{{option_name}}}" in path:
                 parameters.append(Parameter(in_=ParameterType.path, name=option_name, required=True, schema_=param_schema))
         return parameters
 
@@ -288,7 +278,7 @@ class FunctionParameterHandler:
         return {
             parameter_name: parameter_type
             for parameter_name, parameter_type in function_parameters.items()
-            if parameter_name in self.path
+            if f"{{{parameter_name}}}" in self.path
         }
 
     def _filter_non_path_params(self, function_parameters: Dict[str, inspect.Parameter]) -> Dict[str, inspect.Parameter]:
@@ -302,24 +292,31 @@ class FunctionParameterHandler:
     def _filter_already_processed_function_params(
         self, function_parameters: Dict[str, inspect.Parameter], already_existing_parameters: List[Union[Parameter, Reference]]
     ) -> Dict[str, inspect.Parameter]:
+        parameter_names = [parameter.name for parameter in already_existing_parameters if isinstance(parameter, Parameter)]
         return {
             parameter_name: parameter_type
             for parameter_name, parameter_type in function_parameters.items()
-            if parameter_name != "tid"
-            and parameter_name
-            not in [parameter.name for parameter in already_existing_parameters if isinstance(parameter, Parameter)]
+            if parameter_name == "tid"
+            and INMANTA_MT_HEADER not in parameter_names
+            or parameter_name != "tid"
+            and parameter_name not in parameter_names
         }
 
     def convert_header_and_path_params(self, method_properties: MethodProperties) -> List[Union[Parameter, Reference]]:
+        # Get the parameters of the handler function
         function_parameters = self._extract_function_parameters(method_properties.function)
+        # Create OpenAPI Parameter objects based on the ArgOptions
         parameters: List[Union[Parameter, Reference]] = self.arg_option_handler.extract_parameters_from_arg_options(
             self.path, method_properties.arg_options, function_parameters
         )
+        # Remove the function parameters from the list, that already have an OpenAPI Parameter object
         function_parameters = self._filter_already_processed_function_params(function_parameters, parameters)
 
+        # Separate the path and non-path parameters
         self.path_params = self._filter_path_params(function_parameters)
         self.non_path_params = self._filter_non_path_params(function_parameters)
 
+        # Create OpenAPI Parameter objects for the path parameters and add them to the parameter list
         openapi_path_params = self._convert_path_params_to_openapi(self.path_params)
         parameters.extend(openapi_path_params)
         return parameters
