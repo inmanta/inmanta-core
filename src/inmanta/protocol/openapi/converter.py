@@ -133,7 +133,7 @@ class OpenApiTypeConverter:
         bytes: Schema(type="string", format="binary"),
         datetime: Schema(type="string", format="date-time"),
         uuid.UUID: Schema(type="string", format="uuid"),
-        typing.Any: Schema(type="string"),
+        typing.Any: Schema(),
         types.StrictNonIntBool: Schema(type="boolean"),
     }
 
