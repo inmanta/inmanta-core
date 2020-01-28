@@ -149,7 +149,6 @@ class RESTClient(RESTBase):
             return common.Result(code=response.code, result=self._decode(response.body))
         elif content_type == common.HTML_CONTENT:
             return common.Result(code=response.code, result=response.body.decode(common.HTML_ENCODING))
-        elif content_type == common.OCTET_STREAM_CONTENT or content_type == common.ZIP_CONTENT:
-            return common.Result(code=response.code, result=response.body)
         else:
-            raise Exception(f"Unsupported content-type retrieved from server: {content_type}")
+            # Any other content-type will leave the encoding unchanged
+            return common.Result(code=response.code, result=response.body)

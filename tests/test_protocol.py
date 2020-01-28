@@ -36,6 +36,7 @@ from inmanta.data.model import BaseModel
 from inmanta.protocol import VersionMatch, exceptions, json_encode
 from inmanta.protocol.common import (
     HTML_CONTENT,
+    HTML_CONTENT_WITH_UTF8_CHARSET,
     OCTET_STREAM_CONTENT,
     ZIP_CONTENT,
     InvalidMethodDefinition,
@@ -1333,6 +1334,38 @@ async def test_html_content_type(unused_tcp_port, postgres_db, database_name, as
         @protocol.handle(test_method)
         async def test_methodY(self) -> ReturnValue[str]:  # NOQA
             return ReturnValue(response=html_content, content_type=HTML_CONTENT)
+
+    rs = Server()
+    server = TestServer(name="testserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    # client based calls
+    client = protocol.Client("client")
+    response = await client.test_method()
+    assert response.code == 200
+    assert response.result == html_content
+
+
+@pytest.mark.asyncio
+async def test_html_content_type_with_utf8_encoding(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    """ Test whether API endpoints with a "text/html; charset=UTF-8" content-type work.
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    html_content = "<html><body>test</body></html>".encode(encoding="utf-8")
+
+    @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
+    def test_method() -> ReturnValue[str]:  # NOQA
+        pass
+
+    class TestServer(ServerSlice):
+        @protocol.handle(test_method)
+        async def test_methodY(self) -> ReturnValue[str]:  # NOQA
+
+            return ReturnValue(response=html_content, content_type=HTML_CONTENT_WITH_UTF8_CHARSET)
 
     rs = Server()
     server = TestServer(name="testserver")

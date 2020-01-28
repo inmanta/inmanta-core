@@ -76,6 +76,8 @@ JSON_CONTENT = "application/json"
 HTML_CONTENT = "text/html"
 OCTET_STREAM_CONTENT = "application/octet-stream"
 ZIP_CONTENT = "application/zip"
+UTF8_CHARSET = "charset=UTF-8"
+HTML_CONTENT_WITH_UTF8_CHARSET = f"{HTML_CONTENT}; {UTF8_CHARSET}"
 
 
 class ArgOption(object):
