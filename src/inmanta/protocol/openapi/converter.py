@@ -23,7 +23,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Callable, Dict, List, Optional, Type, Union
 
-import typing_inspect
+import typing_inspect  # type: ignore
 from pydantic.main import BaseModel
 from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
@@ -148,7 +148,7 @@ class OpenApiTypeConverter:
         # An Optional is always a Union
         type_args = typing_inspect.get_args(type_annotation, evaluate=True)
         openapi_types = [self.get_openapi_type(type_arg) for type_arg in type_args if not self._is_none_type(type_arg)]
-        none_type_in_type_args = len([type_arg for type_arg in type_args if self._is_none_type(type_arg)]) > 0
+        none_type_in_type_args = len(openapi_types) < len(type_args)
         if none_type_in_type_args:
             if len(openapi_types) == 1:
                 openapi_type = openapi_types[0].copy(deep=True)
