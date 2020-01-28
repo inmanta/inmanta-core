@@ -373,7 +373,7 @@ caused by:
 
     def exec(*cmd):
         process = do_run([sys.executable, "-m", "inmanta.app"] + list(cmd), cwd=snippetcompiler.project_dir)
-        out, err = process.communicate(timeout=5)
+        out, err = process.communicate(timeout=30)
         assert out.decode() == ""
         assert err.decode() == output
 
@@ -395,7 +395,7 @@ end
     )
 
     process = do_run([sys.executable, "-m", "inmanta.app"] + cmd, cwd=snippetcompiler.project_dir)
-    out, err = process.communicate(timeout=10)
+    out, err = process.communicate(timeout=30)
     assert out.decode() == ""
     if "-X" in cmd:
         assert "inmanta.ast.TypeNotFoundException: could not find type nuber in namespace" in str(err)
@@ -427,7 +427,7 @@ end
     config_options = ["-c", non_existing_config_file, "-vvv"]
     args = [sys.executable, "-m", "inmanta.app"] + config_options + ["compile"]
     process = do_run(args, cwd=snippetcompiler.project_dir)
-    out, err = process.communicate(timeout=5)
+    out, err = process.communicate(timeout=30)
     assert process.returncode == 0
 
     out = out.decode()
