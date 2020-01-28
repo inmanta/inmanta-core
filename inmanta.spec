@@ -53,10 +53,16 @@ Requires:       python36
 Requires:       python3-devel
 %define __python3 /usr/bin/python3.6
 %else
+%if 0%{?centos} < 77
 BuildRequires:  python36-devel
 Requires:       python36
 Requires:       python36-devel
 %define __python3 /usr/bin/python3.6
+%else
+BuildRequires:  python3-devel
+Requires:       python3
+Requires:       python3-devel
+%endif
 %endif
 %endif
 
@@ -95,6 +101,7 @@ mkdir -p %{buildroot}/opt/inmanta
 # Fix shebang
 find %{venv}/bin/ -type f | xargs sed -i "s|%{buildroot}||g"
 find %{venv} -name RECORD | xargs sed -i "s|%{buildroot}||g"
+ln -sf %{venv}/bin/python3 /usr/bin/python3.6
 
 # Put symlinks
 mkdir -p %{buildroot}%{_bindir}
