@@ -275,7 +275,10 @@ def test_openapi_types_env_setting():
 
 def test_post_operation(api_methods_fixture):
     post = UrlMethod(
-        properties=MethodProperties.methods["dummy_post_with_parameters"][0], slice=None, method_name="dummy_post_with_parameters", handler=None
+        properties=MethodProperties.methods["dummy_post_with_parameters"][0],
+        slice=None,
+        method_name="dummy_post_with_parameters",
+        handler=None,
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
@@ -288,7 +291,10 @@ def test_post_operation(api_methods_fixture):
 
 def test_get_operation(api_methods_fixture):
     get = UrlMethod(
-        properties=MethodProperties.methods["dummy_get_with_parameters"][0], slice=None, method_name="dummy_get_with_parameters", handler=None
+        properties=MethodProperties.methods["dummy_get_with_parameters"][0],
+        slice=None,
+        method_name="dummy_get_with_parameters",
+        handler=None,
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
