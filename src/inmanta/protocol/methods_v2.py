@@ -23,6 +23,7 @@ from inmanta.protocol.common import ReturnValue
 
 from . import methods
 from .decorators import typedmethod
+from .openapi.model import OpenAPI
 
 
 # Method for working with projects
@@ -234,4 +235,11 @@ def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
 def reserve_version(tid: uuid.UUID) -> int:
     """
         Reserve a version number in this environment.
+    """
+
+
+@typedmethod(path="/docs", operation="GET", client_types=["api"], api_version=2)
+def get_api_docs(format: Optional[str] = None) -> ReturnValue[Optional[OpenAPI]]:
+    """
+       Get the OpenAPI definition of the API
     """

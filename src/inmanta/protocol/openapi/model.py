@@ -23,7 +23,7 @@ https://github.com/tiangolo/fastapi
 """
 
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 from pydantic import AnyUrl, Field
 
@@ -65,8 +65,11 @@ class SchemaBase(BaseModel):
     readOnly: Optional[bool] = None
     example: Optional[Any] = None
     deprecated: Optional[bool] = None
-    anyOf: Optional[List[Any]] = None
+    anyOf: Optional[Sequence["SchemaBase"]] = None
     enum: Optional[List[str]] = None
+
+
+SchemaBase.update_forward_refs()
 
 
 class Schema(SchemaBase):

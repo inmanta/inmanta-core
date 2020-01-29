@@ -52,7 +52,6 @@ def api_methods_fixture():
 
     @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=ENV_OPTS)
     def dummy_post_with_parameters(tid: UUID, param: int, id: UUID) -> str:
-
         """
             This is a brief description.
 
@@ -409,6 +408,8 @@ def test_post_operation_no_docstring(api_methods_fixture):
         Test whether an OpenAPI operation is constructed correctly for a
         POST method which doesn't have a docstring.
     """
+    print(MethodProperties.methods)
+
     post = UrlMethod(
         properties=MethodProperties.methods["dummy_post_with_parameters_no_docstring"][0],
         slice=None,
@@ -554,3 +555,11 @@ def test_get_operation_partial_documentation(api_methods_fixture):
     # Asserts on response
     assert sorted(["header-doc", "header-no-doc"]) == sorted(list(operation.responses["200"].headers.keys()))
     assert operation.responses["200"].description == ""
+
+
+@pytest.mark.asyncio
+async def test_openapi_endpoint(client):
+    result = await client.get_api_docs("openapi")
+    assert result.code == 200
+    openapi_spec = result.result["data"]
+    openapi_v3_spec_validator.validate(openapi_spec)
