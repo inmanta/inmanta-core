@@ -304,3 +304,11 @@ def test_get_operation(api_methods_fixture):
     assert "id" in [parameter.name for parameter in operation.parameters]
     assert not operation.requestBody
     assert "X-Inmanta-tid" in operation.responses["200"].headers.keys()
+
+
+@pytest.mark.asyncio
+async def test_openapi_endpoint(client):
+    result = await client.get_api_docs("openapi")
+    assert result.code == 200
+    openapi_spec = result.result["data"]
+    openapi_v3_spec_validator.validate(openapi_spec)
