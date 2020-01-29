@@ -23,7 +23,7 @@ https://github.com/tiangolo/fastapi
 """
 
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 from pydantic import AnyUrl, Field
 
