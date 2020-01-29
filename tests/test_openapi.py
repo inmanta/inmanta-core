@@ -267,8 +267,23 @@ def test_openapi_types_env_setting():
 
 
 def test_post_operation():
-    @method(path="/operation", client_types=["api", "agent"], envelope=True, arg_options=ENV_OPTS)
+    short_description = "This is a brief description."
+    long_description = "This is a more in depth description of the method."
+    tid_description = "The inmanta environment id."
+    param_description = "A parameter."
+    id_description = "The id of the resource."
+
+    @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=ENV_OPTS)
     def dummy_method(tid: UUID, param: int, id: UUID) -> str:
+        """
+        This is a brief description.
+
+        This is a more in depth description of the method.
+
+        :param tid: The inmanta environment id.
+        :param param: A parameter.
+        :param id: The id of the resource.
+        """
         return ""
 
     post = UrlMethod(
@@ -276,16 +291,42 @@ def test_post_operation():
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
-    operation = operation_handler.handle_method_with_request_body(post, "/operation")
-    assert "X-Inmanta-tid" in [parameter.name for parameter in operation.parameters]
+    operation = operation_handler.handle_method_with_request_body(post, "/operation/<id>")
+    # TODO: requestBody parameters are not collected
+    assert sorted(["X-Inmanta-tid", "param", "id"]) == sorted([parameter.name for parameter in operation.parameters])
     assert "param" in operation.requestBody.content["application/json"].schema_.properties.keys()
-    assert "id" in operation.requestBody.content["application/json"].schema_.properties.keys()
     assert "X-Inmanta-tid" in operation.responses["200"].headers.keys()
+
+    assert operation.summary == short_description
+    assert operation.description == long_description
+    param_map = {param.name: param.description for param in operation.parameters}
+    assert len(param_map) == 3
+    assert param_map["X-Inmanta-tid"] == tid_description
+    assert param_map["param"] == param_description
+    assert param_map["id"] == id_description
 
 
 def test_get_operation():
-    @method(path="/operation", client_types=["api", "agent"], envelope=True, arg_options=ENV_OPTS, operation="GET")
+    short_description = "This is a brief description."
+    long_description = "This is a more in depth description of the method."
+    tid_description = "The inmanta environment id."
+    param_description = "A parameter."
+    id_description = "The id of the resource."
+    raises_description = "An exception"
+
+    @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=ENV_OPTS, operation="GET")
     def dummy_method(tid: UUID, param: int, id: UUID) -> str:
+        """
+            This is a brief description.
+
+            This is a more in depth description of the method.
+
+            :param tid: The inmanta environment id.
+            :param param: A parameter.
+            :param id: The id of the resource.
+            :return: A return value.
+            :raises Exc: An exception
+        """
         return ""
 
     get = UrlMethod(
@@ -293,9 +334,19 @@ def test_get_operation():
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
-    operation = operation_handler.handle_method_without_request_body(get, "/operation")
-    assert "X-Inmanta-tid" in [parameter.name for parameter in operation.parameters]
-    assert "param" in [parameter.name for parameter in operation.parameters]
-    assert "id" in [parameter.name for parameter in operation.parameters]
-    assert not operation.requestBody
+    operation = operation_handler.handle_method_without_request_body(get, "/operation/<id>")
+    assert sorted(["X-Inmanta-tid", "param", "id"]) == sorted([parameter.name for parameter in operation.parameters])
+    assert operation.requestBody is None
     assert "X-Inmanta-tid" in operation.responses["200"].headers.keys()
+
+    assert operation.summary == short_description
+    assert operation.description == long_description
+    param_map = {param.name: param.description for param in operation.parameters}
+    assert len(param_map) == 3
+    assert param_map["X-Inmanta-tid"] == tid_description
+    assert param_map["param"] == param_description
+    assert param_map["id"] == id_description
+
+    assert len(operation.responses) == 2
+
+    assert operation.responses["ValueError"].description == raises_description

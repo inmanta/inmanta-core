@@ -802,7 +802,7 @@ def trigger_agent(tid: uuid.UUID, id: str):
 
         :param tid: The environment this agent is defined in
         :param id: The name of the agent
-        :return The requested node
+        :return: The requested node
     """
 
 

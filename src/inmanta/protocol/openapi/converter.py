@@ -218,16 +218,28 @@ class ArgOptionHandler:
         self.type_converter = type_converter
 
     def extract_parameters_from_arg_options(
-        self, path: str, arg_options: Dict[str, ArgOption], function_parameters: Dict[str, inspect.Parameter]
+        self, path: str, method_properties: MethodProperties, function_parameters: Dict[str, inspect.Parameter]
     ) -> List[Union[Parameter, Reference]]:
         parameters: List[Union[Parameter, Reference]] = []
-        for option_name, option in arg_options.items():
+        for option_name, option in method_properties.arg_options.items():
             param = function_parameters[option_name]
             param_schema = self.type_converter.get_openapi_type_of_parameter(param)
+            param_description = method_properties.get_description_for_param(option_name)
             if option.header:
-                parameters.append(Parameter(in_=ParameterType.header, name=option.header, schema_=param_schema))
+                parameters.append(Parameter(
+                    in_=ParameterType.header,
+                    name=option.header,
+                    schema_=param_schema,
+                    description=param_description)
+                )
             elif option_name in path:
-                parameters.append(Parameter(in_=ParameterType.path, name=option_name, required=True, schema_=param_schema))
+                parameters.append(Parameter(
+                    in_=ParameterType.path,
+                    name=option_name,
+                    required=True,
+                    schema_=param_schema,
+                    description=param_description)
+                )
         return parameters
 
     def extract_response_headers_from_arg_options(
@@ -259,11 +271,19 @@ class FunctionParameterHandler:
         }
         return function_parameters
 
-    def convert_function_params_to_query_params(self) -> List[Union[Parameter, Reference]]:
+    def convert_function_params_to_query_params(self, method_properties: MethodProperties) -> List[Union[Parameter, Reference]]:
         parameters: List[Union[Parameter, Reference]] = []
         for parameter_name, parameter_type in self.non_path_params.items():
             type_description = self.type_converter.get_openapi_type_of_parameter(parameter_type)
-            parameters.append(Parameter(name=parameter_name, in_=ParameterType.query, schema_=type_description))
+            param_description = method_properties.get_description_for_param(parameter_name)
+            parameters.append(
+                Parameter(
+                    name=parameter_name,
+                    in_=ParameterType.query,
+                    schema_=type_description,
+                    description=param_description
+                )
+            )
         return parameters
 
     def _convert_function_params_to_openapi_request_body_properties(
@@ -276,12 +296,21 @@ class FunctionParameterHandler:
         return properties
 
     def _convert_path_params_to_openapi(
-        self, function_parameters: Dict[str, inspect.Parameter]
+        self, function_parameters: Dict[str, inspect.Parameter], method_properties: MethodProperties
     ) -> List[Union[Parameter, Reference]]:
         parameters: List[Union[Parameter, Reference]] = []
         for parameter_name, parameter_type in function_parameters.items():
             type_description = self.type_converter.get_openapi_type_of_parameter(parameter_type)
-            parameters.append(Parameter(name=parameter_name, in_=ParameterType.path, required=True, schema_=type_description))
+            param_description = method_properties.get_description_for_param(parameter_name)
+            parameters.append(
+                Parameter(
+                    name=parameter_name,
+                    in_=ParameterType.path,
+                    required=True,
+                    schema_=type_description,
+                    description=param_description,
+                )
+            )
         return parameters
 
     def _filter_path_params(self, function_parameters: Dict[str, inspect.Parameter]) -> Dict[str, inspect.Parameter]:
@@ -313,14 +342,14 @@ class FunctionParameterHandler:
     def convert_header_and_path_params(self, method_properties: MethodProperties) -> List[Union[Parameter, Reference]]:
         function_parameters = self._extract_function_parameters(method_properties.function)
         parameters: List[Union[Parameter, Reference]] = self.arg_option_handler.extract_parameters_from_arg_options(
-            self.path, method_properties.arg_options, function_parameters
+            self.path, method_properties, function_parameters
         )
         function_parameters = self._filter_already_processed_function_params(function_parameters, parameters)
 
         self.path_params = self._filter_path_params(function_parameters)
         self.non_path_params = self._filter_non_path_params(function_parameters)
 
-        openapi_path_params = self._convert_path_params_to_openapi(self.path_params)
+        openapi_path_params = self._convert_path_params_to_openapi(self.path_params, method_properties)
         parameters.extend(openapi_path_params)
         return parameters
 
@@ -350,18 +379,29 @@ class OperationHandler:
         request_body = function_parameter_handler.convert_request_body()
         ok_response = self._build_response(path, url_method.properties)
         responses = {"200": ok_response}
-        return Operation(responses=responses, parameters=(parameters if len(parameters) else None), requestBody=request_body,)
+        return Operation(
+            responses=responses,
+            parameters=(parameters if len(parameters) else None),
+            requestBody=request_body,
+            summary=url_method.short_method_description,
+            description=url_method.long_method_description,
+        )
 
     def handle_method_without_request_body(self, url_method: UrlMethod, path: str) -> Operation:
         function_parameter_handler = FunctionParameterHandler(self.type_converter, self.arg_option_handler, path)
         parameters = function_parameter_handler.convert_header_and_path_params(url_method.properties)
-        query_params = function_parameter_handler.convert_function_params_to_query_params()
+        query_params = function_parameter_handler.convert_function_params_to_query_params(url_method.properties)
         parameters.extend(query_params)
 
         ok_response = self._build_response(path, url_method.properties)
 
         responses = {"200": ok_response}
-        return Operation(responses=responses, parameters=(parameters if len(parameters) else None),)
+        return Operation(
+            responses=responses,
+            parameters=(parameters if len(parameters) else None),
+            summary=url_method.short_method_description,
+            description=url_method.long_method_description,
+        )
 
     def _build_response(self, description: str, url_method_properties: MethodProperties) -> Response:
         response_headers = self.arg_option_handler.extract_response_headers_from_arg_options(url_method_properties.arg_options)

@@ -58,3 +58,4 @@ zipp==2.0.1
 apipkg==1.5
 asn1crypto==1.3.0
 cffi==1.13.2
+docstring-parser==0.6
