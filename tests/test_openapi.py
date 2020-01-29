@@ -40,6 +40,25 @@ from inmanta.protocol.openapi.converter import (
 from inmanta.protocol.openapi.model import MediaType, Parameter, Schema
 
 
+@pytest.fixture(scope="function")
+def api_methods_fixture():
+    @method(path="/simpleoperation", client_types=["api", "agent"], envelope=True)
+    def post_method() -> object:
+        return ""
+
+    @method(path="/simpleoperation", client_types=["agent"], operation="GET")
+    def get_method():
+        pass
+
+    @method(path="/operation", client_types=["api", "agent"], envelope=True, arg_options=ENV_OPTS)
+    def dummy_post_with_parameters(tid: UUID, param: int, id: UUID) -> str:
+        return ""
+
+    @method(path="/operation", client_types=["api", "agent"], envelope=True, arg_options=ENV_OPTS, operation="GET")
+    def dummy_get_with_parameters(tid: UUID, param: int, id: UUID) -> str:
+        return ""
+
+
 @pytest.mark.asyncio
 async def test_generate_openapi_definition(server):
     global_url_map = server._transport.get_global_url_map(server.get_slices().values())
@@ -50,15 +69,7 @@ async def test_generate_openapi_definition(server):
     openapi_v3_spec_validator.validate(openapi_parsed)
 
 
-def test_filter_api_methods(server):
-    @method(path="/operation", client_types=["api", "agent"], envelope=True)
-    def post_method() -> object:
-        return ""
-
-    @method(path="/operation", client_types=["agent"], operation="GET")
-    def get_method():
-        pass
-
+def test_filter_api_methods(server, api_methods_fixture):
     post = UrlMethod(properties=MethodProperties.methods["post_method"][0], slice=None, method_name="post_method", handler=None)
     methods = {
         "POST": post,
@@ -101,11 +112,7 @@ def test_filter_function_parameters():
     )
 
 
-def test_return_value():
-    @method(path="/operation", client_types=["api", "agent"], envelope=True)
-    def post_method() -> object:
-        return ""
-
+def test_return_value(api_methods_fixture):
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
 
     json_response_content = operation_handler._build_return_value_wrapper(MethodProperties.methods["post_method"][0])
@@ -198,14 +205,14 @@ def test_openapi_types_dict_of_union():
 
 def test_openapi_types_optional_union():
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(Optional[Union[str, int]])
+    openapi_type = type_converter.get_openapi_type(Optional[Union[int, str]])
     assert len(openapi_type.anyOf) == 2
     assert openapi_type.nullable
 
 
 def test_openapi_types_union_optional():
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(Union[Optional[str], Optional[int]])
+    openapi_type = type_converter.get_openapi_type(Union[Optional[int], Optional[str]])
     assert len(openapi_type.anyOf) == 2
     assert openapi_type.nullable
 
@@ -266,6 +273,8 @@ def test_openapi_types_env_setting():
     assert openapi_type.required == ["name", "type", "default", "doc", "recompile", "update_model", "agent_restart"]
 
 
+def test_post_operation(api_methods_fixture):
+    # TODO: FIX
 def test_post_operation():
     short_description = "This is a brief description."
     long_description = "This is a more in depth description of the method."
@@ -287,7 +296,10 @@ def test_post_operation():
         return ""
 
     post = UrlMethod(
-        properties=MethodProperties.methods["dummy_method"][0], slice=None, method_name="dummy_method", handler=None
+        properties=MethodProperties.methods["dummy_post_with_parameters"][0],
+        slice=None,
+        method_name="dummy_post_with_parameters",
+        handler=None,
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
@@ -306,6 +318,8 @@ def test_post_operation():
     assert param_map["id"] == id_description
 
 
+def test_get_operation(api_methods_fixture):
+    # TODO : Fix
 def test_get_operation():
     short_description = "This is a brief description."
     long_description = "This is a more in depth description of the method."
@@ -330,7 +344,10 @@ def test_get_operation():
         return ""
 
     get = UrlMethod(
-        properties=MethodProperties.methods["dummy_method"][0], slice=None, method_name="dummy_method", handler=None
+        properties=MethodProperties.methods["dummy_get_with_parameters"][0],
+        slice=None,
+        method_name="dummy_get_with_parameters",
+        handler=None,
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
