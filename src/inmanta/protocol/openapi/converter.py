@@ -129,6 +129,8 @@ class OpenApiTypeConverter:
         int: Schema(type="integer"),
         str: Schema(type="string"),
         tuple: Schema(type="array", items=Schema()),
+        list: Schema(type="array", items=Schema()),
+        dict: Schema(type="object"),
         float: Schema(type="number", format="float"),
         bytes: Schema(type="string", format="binary"),
         datetime: Schema(type="string", format="date-time"),
