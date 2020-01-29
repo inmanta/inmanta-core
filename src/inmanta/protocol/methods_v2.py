@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
@@ -239,7 +239,7 @@ def reserve_version(tid: uuid.UUID) -> int:
 
 
 @typedmethod(path="/docs", operation="GET", client_types=["api"], api_version=2)
-def get_api_docs(format: Optional[str] = None) -> ReturnValue[Optional[OpenAPI]]:
+def get_api_docs(format: Optional[str] = None) -> ReturnValue[Union[OpenAPI, str]]:
     """
        Get the OpenAPI definition of the API
     """

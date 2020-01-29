@@ -312,3 +312,9 @@ async def test_openapi_endpoint(client):
     assert result.code == 200
     openapi_spec = result.result["data"]
     openapi_v3_spec_validator.validate(openapi_spec)
+
+
+@pytest.mark.asyncio
+async def test_swagger_endpoint(client):
+    result = await client.get_api_docs()
+    assert result.code == 200
