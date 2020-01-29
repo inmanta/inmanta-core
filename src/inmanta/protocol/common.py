@@ -49,13 +49,13 @@ from typing import (
 )
 from urllib import parse
 
+import docstring_parser
 import jwt
 import pydantic
 import typing_inspect
 from pydantic.error_wrappers import ValidationError
 from pydantic.main import create_model
 from tornado import web
-import docstring_parser
 
 from inmanta import config as inmanta_config
 from inmanta import const, execute, util
@@ -617,6 +617,12 @@ class MethodProperties(object):
         """
         return self._docstring_parameter_map.get(param_name, None)
 
+    def get_description_return_value(self) -> str:
+        if self._parsed_docstring.returns is not None and self._parsed_docstring.returns.description is not None:
+            return self._parsed_docstring.returns.description
+        else:
+            return ""
+
     def get_call_headers(self) -> Set[str]:
         """
             Returns the set of headers required to create call
@@ -729,6 +735,9 @@ class UrlMethod(object):
             Return the full description present in the docstring of the method, excluding the first paragraph.
         """
         return self._properties.get_long_method_description()
+
+    def get_operation(self) -> str:
+        return self._properties.operation
 
 
 # Util functions
