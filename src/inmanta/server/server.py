@@ -29,7 +29,6 @@ from inmanta.protocol import exceptions, methods, methods_v2
 from inmanta.protocol.common import HTML_CONTENT_WITH_UTF8_CHARSET, ReturnValue, attach_warnings
 from inmanta.protocol.openapi.converter import OpenApiConverter
 from inmanta.protocol.openapi.model import OpenAPI
-from inmanta.protocol.openapi.swagger import get_swagger_html
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
@@ -215,5 +214,5 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             openapi_dict = json.loads(openapi_json_str)
             return ReturnValue(response=openapi_dict)
 
-        swagger_html = get_swagger_html(openapi_json_str)
+        swagger_html = openapi.get_swagger_html(openapi_json_str)
         return ReturnValue(content_type=HTML_CONTENT_WITH_UTF8_CHARSET, response=swagger_html)

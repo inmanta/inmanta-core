@@ -116,6 +116,42 @@ class OpenApiConverter:
 
         return json.dumps(openapi, default=openapi_json_encoder)
 
+    def generate_swagger_html(self) -> str:
+        return self.get_swagger_html(self.generate_openapi_json())
+
+    def get_swagger_html(self, openapi_spec: str) -> str:
+        template = f"""
+        <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="//unpkg.com/swagger-ui-dist@^3.25.0/swagger-ui-standalone-preset.js"></script>
+        <script src="//unpkg.com/swagger-ui-dist@^3.25.0/swagger-ui-bundle.js"></script>
+        <link rel="stylesheet" href="//unpkg.com/swagger-ui-dist@^3.25.0/swagger-ui.css" />
+        <title>Inmanta Service Orchestrator API</title>
+    </head>
+    <body>
+        <div id="swagger-ui"></div>
+        <script>
+            window.onload = function() {{
+              SwaggerUIBundle({{
+                spec: {openapi_spec},
+                dom_id: '#swagger-ui',
+                presets: [
+                  SwaggerUIBundle.presets.apis,
+                  SwaggerUIStandalonePreset
+                ],
+                layout: "StandaloneLayout"
+              }})
+            }}
+        </script>
+    </body>
+    </html>
+        """
+
+        return template
+
 
 class OpenApiTypeConverter:
     """
