@@ -33,8 +33,6 @@ from inmanta.types import Apireturn, JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
-CONTENT_TYPE = "Content-Type"
-JSON_CONTENT = "application/json"
 
 """
 
@@ -277,7 +275,7 @@ class CallArguments(object):
                 f"Failed to validate generic type {arg_type} of return value, only List and Dict are supported"
             )
 
-    async def process_return(self, config: common.UrlMethod, headers: Dict[str, str], result: Apireturn) -> common.Response:
+    async def process_return(self, config: common.UrlMethod, result: Apireturn) -> common.Response:
         """ A handler can return ApiReturn, so lets handle all possible return types and convert it to a Response
 
             Apireturn = Union[int, Tuple[int, Optional[JsonType]], "ReturnValue", "BaseModel"]
@@ -289,7 +287,7 @@ class CallArguments(object):
                 if result is not None:
                     raise exceptions.ServerError(f"Method {config.method_name} returned a result but is defined as -> None")
 
-                return common.Response(headers=headers, status_code=200)
+                return common.Response.create(ReturnValue(status_code=200, response=None), envelope=False)
 
             # There is no obvious method to check if the return_type is a specific version of the generic ReturnValue
             # The way this is implemented in typing is different for python 3.6 and 3.7. In this code we "trust" that the
@@ -300,26 +298,26 @@ class CallArguments(object):
             if typing_inspect.is_union_type(return_type):
                 self._validate_union_return(return_type, result)
                 return common.Response.create(
-                    ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
+                    ReturnValue(response=result), config.properties.envelope, config.properties.envelope_key
                 )
 
             if typing_inspect.is_generic_type(return_type):
                 if isinstance(result, ReturnValue):
-                    return common.Response.create(result, headers, config.properties.envelope, config.properties.envelope_key)
+                    return common.Response.create(result, config.properties.envelope, config.properties.envelope_key)
                 else:
                     self._validate_generic_return(return_type, result)
                     return common.Response.create(
-                        ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
+                        ReturnValue(response=result), config.properties.envelope, config.properties.envelope_key
                     )
 
             elif isinstance(result, BaseModel):
                 return common.Response.create(
-                    ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
+                    ReturnValue(response=result), config.properties.envelope, config.properties.envelope_key
                 )
 
             elif isinstance(result, common.VALID_SIMPLE_ARG_TYPES):
                 return common.Response.create(
-                    ReturnValue(response=result), headers, config.properties.envelope, config.properties.envelope_key
+                    ReturnValue(response=result), config.properties.envelope, config.properties.envelope_key
                 )
 
             else:
@@ -345,14 +343,15 @@ class CallArguments(object):
 
             if body is not None:
                 if config.properties.reply:
-                    if config.properties.envelope:
-                        return common.Response(body={config.properties.envelope_key: body}, headers=headers, status_code=code)
-                    return common.Response(body=body, headers=headers, status_code=code)
-
+                    return common.Response.create(
+                        ReturnValue(status_code=code, response=body),
+                        config.properties.envelope,
+                        config.properties.envelope_key,
+                    )
                 else:
                     LOGGER.warning("Method %s returned a result although it has no reply!")
 
-            return common.Response(headers=headers, status_code=code)
+            return common.Response.create(ReturnValue(status_code=code, response=None), envelope=False)
 
 
 # Shared
@@ -389,8 +388,6 @@ class RESTBase(util.TaskHandler):
         request_headers: Mapping[str, str],
         auth: Optional[MutableMapping[str, str]] = None,
     ) -> common.Response:
-
-        headers: Dict[str, str] = {}
         try:
             if kwargs is None or config is None:
                 raise Exception("This method is unknown! This should not occur!")
@@ -424,7 +421,7 @@ class RESTBase(util.TaskHandler):
             )
 
             result = await config.handler(**arguments.call_args)
-            return await arguments.process_return(config, headers, result)
+            return await arguments.process_return(config, result)
         except pydantic.ValidationError:
             LOGGER.exception(f"The handler {config.handler} caused a validation error in a data model (pydantic).")
             raise exceptions.ServerError("data validation error.")
