@@ -50,6 +50,14 @@ class StrictNonIntBool(object):
 
         raise errors.StrictBoolError()
 
+    @classmethod
+    def __modify_schema__(cls, f_schema: Dict[str, Any]) -> Dict[str, Any]:
+        """
+            Should be handled as a boolean in OpenAPI schemas
+        """
+        f_schema["type"] = "boolean"
+        return f_schema
+
 
 PrimitiveTypes = Union[uuid.UUID, StrictNonIntBool, int, float, datetime, str]
 SimpleTypes = Union["BaseModel", Enum, PrimitiveTypes]
