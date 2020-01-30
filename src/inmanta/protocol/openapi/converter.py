@@ -254,7 +254,10 @@ class FunctionParameterHandler:
         for param_name, param in self.all_params_dct.items():
             if f"{{{param_name}}}" in self.path:
                 self.path_params[param_name] = param
-            elif param_name in self.method_properties.arg_options.keys():
+            elif (
+                param_name in self.method_properties.arg_options.keys()
+                and self.method_properties.arg_options[param_name].header is not None
+            ):
                 self.header_params[param_name] = param
             else:
                 self.non_path_and_non_header_params[param_name] = param
