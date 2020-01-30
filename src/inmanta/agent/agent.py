@@ -35,7 +35,7 @@ from inmanta.agent import config as cfg
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import ResourceHandler
-from inmanta.agent.io.remote import RemoteExecException
+from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ResourceState
 from inmanta.data.model import AttributeStateChange, Event, ResourceIdStr, ResourceVersionIdStr
@@ -147,19 +147,13 @@ class ResourceAction(object):
         provider: Optional[ResourceHandler] = None
         try:
             provider = await self.scheduler.agent.get_provider(self.resource)
-        except RemoteExecException:
+        except ChannelClosedException as e:
             if provider is not None:
                 provider.close()
 
             cache.close_version(self.resource.id.get_version())
             ctx.set_status(const.ResourceState.unavailable)
-            ctx.exception(
-                "Failed to execute remote command, this is most likely caused by either "
-                "the target machine being unavailable "
-                "or the python command being missing. "
-                "(Missing python command can be verified by checking /var/log/agent-%(agent_id)s.log)",
-                agent_id=self.scheduler.agent.name
-            )
+            ctx.exception(e.message)
             return False, False
 
         except Exception:
@@ -186,6 +180,10 @@ class ResourceAction(object):
                 await asyncio.get_event_loop().run_in_executor(
                     self.scheduler.agent.thread_pool, provider.execute, ctx, self.resource
                 )
+
+            except ChannelClosedException as e:
+                ctx.set_status(const.ResourceState.failed)
+                ctx.exception(e.message)
 
             except Exception as e:
                 ctx.set_status(const.ResourceState.failed)
