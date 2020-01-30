@@ -49,6 +49,7 @@ from typing import (
 )
 from urllib import parse
 
+import docstring_parser
 import jwt
 import pydantic
 import typing_inspect
@@ -69,6 +70,15 @@ if TYPE_CHECKING:
 
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
+
+HTML_ENCODING = "ISO-8859-1"
+CONTENT_TYPE = "Content-Type"
+JSON_CONTENT = "application/json"
+HTML_CONTENT = "text/html"
+OCTET_STREAM_CONTENT = "application/octet-stream"
+ZIP_CONTENT = "application/zip"
+UTF8_CHARSET = "charset=UTF-8"
+HTML_CONTENT_WITH_UTF8_CHARSET = f"{HTML_CONTENT}; {UTF8_CHARSET}"
 
 
 class ArgOption(object):
@@ -160,11 +170,19 @@ class ReturnValue(Generic[T]):
         An object that handlers can return to provide a response to a method call.
     """
 
-    def __init__(self, status_code: int = 200, headers: MutableMapping[str, str] = {}, response: Optional[T] = None) -> None:
+    def __init__(
+        self,
+        status_code: int = 200,
+        headers: MutableMapping[str, str] = {},
+        response: Optional[T] = None,
+        content_type: str = JSON_CONTENT,
+    ) -> None:
         self._status_code = status_code
-        self._headers = headers
-        self._response = response
         self._warnings: List[str] = []
+        self._headers = headers
+        self._headers[CONTENT_TYPE] = content_type
+        self._content_type = content_type
+        self._response = response
 
     @property
     def status_code(self) -> int:
@@ -187,7 +205,7 @@ class ReturnValue(Generic[T]):
 
         return self._response
 
-    def _get_with_envelope(self, envelope: bool, envelope_key: str) -> ReturnTypes:
+    def _get_with_envelope(self, envelope_key: str) -> ReturnTypes:
         """ Get the body with an envelope specified
         """
         response: Dict[str, Any] = {}
@@ -200,15 +218,19 @@ class ReturnValue(Generic[T]):
         return response
 
     def get_body(self, envelope: bool, envelope_key: str) -> ReturnTypes:
-        """ Get the response body
+        """ Get the response body.
+
+            When the content_type of this ReturnValue is not 'application/json',
+            the parameter `envelope` and `envelope_key` will be ignored. In that
+            case, this method will behave as if envelope=False was used.
 
             :param envelope: Should the response be mapped into a data key
             :param envelope_key: The envelope key to use
         """
-        if not envelope:
+        if not envelope or self._headers[CONTENT_TYPE] != JSON_CONTENT:
             return self._get_without_envelope()
-
-        return self._get_with_envelope(envelope, envelope_key)
+        else:
+            return self._get_with_envelope(envelope_key)
 
     def add_warnings(self, warnings: List[str]) -> None:
         self._warnings.extend(warnings)
@@ -226,13 +248,11 @@ class Response(object):
     """
 
     @classmethod
-    def create(
-        cls, result: ReturnValue, additional_headers: MutableMapping[str, str], envelope: bool, envelope_key: str
-    ) -> "Response":
+    def create(cls, result: ReturnValue, envelope: bool, envelope_key: Optional[str] = None,) -> "Response":
         """
             Create a response from a return value
         """
-        return cls(status_code=result.status_code, headers=additional_headers, body=result.get_body(envelope, envelope_key))
+        return cls(status_code=result.status_code, headers=result.headers, body=result.get_body(envelope, envelope_key))
 
     def __init__(self, status_code: int, headers: MutableMapping[str, str], body: ReturnTypes = None) -> None:
         self._status_code = status_code
@@ -309,7 +329,7 @@ class InvalidMethodDefinition(Exception):
 
 
 VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
-VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNonIntBool, datetime)
+VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNonIntBool, datetime, bytes)
 
 
 class MethodProperties(object):
@@ -392,6 +412,9 @@ class MethodProperties(object):
         self._envelope = envelope
         self._envelope_key = envelope_key
         self.function = function
+
+        self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.styles.Style.rest)
+        self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
 
         # validate client types
         for ct in self._client_types:
@@ -595,6 +618,30 @@ class MethodProperties(object):
     def api_version(self) -> int:
         return self._api_version
 
+    def get_long_method_description(self) -> Optional[str]:
+        """
+            Return the full description present in the docstring of the method, excluding the first paragraph.
+        """
+        return self._parsed_docstring.long_description
+
+    def get_short_method_description(self) -> Optional[str]:
+        """
+            Return the first paragraph of the description present in the docstring of the method.
+        """
+        return self._parsed_docstring.short_description
+
+    def get_description_for_param(self, param_name: str) -> Optional[str]:
+        """
+            Return the description for a certain parameter present in the docstring.
+        """
+        return self._docstring_parameter_map.get(param_name, None)
+
+    def get_description_return_value(self) -> str:
+        if self._parsed_docstring.returns is not None and self._parsed_docstring.returns.description is not None:
+            return self._parsed_docstring.returns.description
+        else:
+            return ""
+
     def get_call_headers(self) -> Set[str]:
         """
             Returns the set of headers required to create call
@@ -694,6 +741,23 @@ class UrlMethod(object):
     def method_name(self) -> str:
         return self._method_name
 
+    @property
+    def short_method_description(self) -> Optional[str]:
+        """
+            Return the first paragraph of the description present in the docstring of the method
+        """
+        return self._properties.get_short_method_description()
+
+    @property
+    def long_method_description(self) -> Optional[str]:
+        """
+            Return the full description present in the docstring of the method, excluding the first paragraph.
+        """
+        return self._properties.get_long_method_description()
+
+    def get_operation(self) -> str:
+        return self._properties.operation
+
 
 # Util functions
 def custom_json_encoder(o: object) -> Union[Dict, str, List]:
@@ -718,7 +782,7 @@ def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[Lis
 
 
 def json_encode(value: ReturnTypes) -> str:
-    """ Our json encodde is able to also serialize other types than a dict.
+    """ Our json encode is able to also serialize other types than a dict.
     """
     # see json_encode in tornado.escape
     return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
