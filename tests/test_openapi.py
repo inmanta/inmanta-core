@@ -40,7 +40,7 @@ from inmanta.protocol.openapi.model import MediaType, Schema
 
 
 @pytest.fixture(scope="function")
-def api_methods_fixture():
+def api_methods_fixture(clean_reset):
     @method(path="/simpleoperation", client_types=["api", "agent"], envelope=True)
     def post_method() -> object:
         return ""
