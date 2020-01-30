@@ -300,6 +300,14 @@ class CacheTests(unittest.TestCase):
         assert seq.count == 3
 
     def test_decorator(self):
+        class Closeable:
+            def __init__(self):
+                self.closed = False
+
+            def close(self):
+                self.closed = True
+
+        my_closable = Closeable()
 
         xcache = AgentCache()
 
@@ -309,7 +317,7 @@ class CacheTests(unittest.TestCase):
                 self.count = 0
                 self.c2 = 0
 
-            @cache
+            @cache()
             def test_method(self):
                 self.count += 1
                 return "x"
@@ -326,6 +334,11 @@ class CacheTests(unittest.TestCase):
                     return None
                 else:
                     return "X"
+
+            @cache(call_on_delete=lambda x: x.close())
+            def test_close(self, version):
+                self.count += 1
+                return my_closable
 
         test = DT(xcache)
         assert "x" == test.test_method()
@@ -352,3 +365,13 @@ class CacheTests(unittest.TestCase):
         assert 2 == test.c2
         assert "X" == test.test_method_3()
         assert 2 == test.c2
+
+        test.count = 0
+        xcache.open_version(3)
+        test.test_close(version=3)
+        assert test.count == 1
+        test.test_close(version=3)
+        assert test.count == 1
+        assert not my_closable.closed
+        xcache.close_version(3)
+        assert my_closable.closed
