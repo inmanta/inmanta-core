@@ -20,6 +20,7 @@ requires = [
     "pydantic",
     "typing_inspect",
     "importlib_metadata",
+    "docstring-parser",
 ]
 
 # Package a dummy extensions so that the namespace package for extensions is not empty

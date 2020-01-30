@@ -29,7 +29,6 @@ from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
 
 from inmanta import types, util
-from inmanta.const import INMANTA_MT_HEADER
 from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.model import (
     Components,
@@ -103,11 +102,7 @@ class OpenApiConverter:
         path_item = PathItem()
         for http_method_name, url_method in api_methods.items():
             operation_handler = OperationHandler(self.type_converter, self.arg_option_handler)
-            if http_method_name in ["POST", "PUT", "PATCH"]:
-                operation = operation_handler.handle_method_with_request_body(url_method, path)
-            else:
-                operation = operation_handler.handle_method_without_request_body(url_method, path)
-
+            operation = operation_handler.handle_method(url_method, path)
             path_item.__setattr__(http_method_name.lower(), operation)
         return path_item
 
@@ -210,17 +205,18 @@ class ArgOptionHandler:
         self.type_converter = type_converter
 
     def extract_parameters_from_arg_options(
-        self, path: str, arg_options: Dict[str, ArgOption], function_parameters: Dict[str, inspect.Parameter]
-    ) -> List[Union[Parameter, Reference]]:
-        parameters: List[Union[Parameter, Reference]] = []
-        for option_name, option in arg_options.items():
+        self, method_properties: MethodProperties, function_parameters: Dict[str, inspect.Parameter]
+    ) -> List[Parameter]:
+        result: List[Parameter] = []
+        for option_name, option in method_properties.arg_options.items():
             param = function_parameters[option_name]
             param_schema = self.type_converter.get_openapi_type_of_parameter(param)
+            param_description = method_properties.get_description_for_param(option_name)
             if option.header:
-                parameters.append(Parameter(in_=ParameterType.header, name=option.header, schema_=param_schema))
-            elif f"{{{option_name}}}" in path:
-                parameters.append(Parameter(in_=ParameterType.path, name=option_name, required=True, schema_=param_schema))
-        return parameters
+                result.append(
+                    Parameter(in_=ParameterType.header, name=option.header, schema_=param_schema, description=param_description)
+                )
+        return result
 
     def extract_response_headers_from_arg_options(
         self, arg_options: Dict[str, ArgOption]
@@ -237,12 +233,36 @@ class FunctionParameterHandler:
         Creates OpenAPI Parameters and RequestBody items based on the handler function parameters
     """
 
-    def __init__(self, type_converter: OpenApiTypeConverter, arg_option_handler: ArgOptionHandler, path: str):
+    def __init__(
+        self,
+        type_converter: OpenApiTypeConverter,
+        arg_option_handler: ArgOptionHandler,
+        path: str,
+        method_properties: MethodProperties,
+    ):
         self.type_converter = type_converter
         self.arg_option_handler = arg_option_handler
         self.path = path
+        self.method_properties = method_properties
+
+        # Get the parameters of the handler function
+        self.all_params_dct: Dict[str, inspect.Parameter] = self._extract_function_parameters(method_properties.function)
         self.path_params: Dict[str, inspect.Parameter] = {}
-        self.non_path_params: Dict[str, inspect.Parameter] = {}
+        self.header_params: Dict[str, inspect.Parameter] = {}
+        self.non_path_and_non_header_params: Dict[str, inspect.Parameter] = {}
+
+        for param_name, param in self.all_params_dct.items():
+            if f"{{{param_name}}}" in self.path:
+                self.path_params[param_name] = param
+            elif (
+                param_name in self.method_properties.arg_options.keys()
+                and self.method_properties.arg_options[param_name].header is not None
+            ):
+                self.header_params[param_name] = param
+            else:
+                self.non_path_and_non_header_params[param_name] = param
+
+    # Parameters
 
     def _extract_function_parameters(self, url_method_function: Callable) -> Dict[str, inspect.Parameter]:
         function_parameters = {
@@ -251,85 +271,78 @@ class FunctionParameterHandler:
         }
         return function_parameters
 
-    def convert_function_params_to_query_params(self) -> List[Union[Parameter, Reference]]:
+    def get_parameters(self) -> List[Parameter]:
+        result = self._convert_header_and_path_params()
+        if self.method_properties.operation not in ["POST", "PUT", "PATCH"]:
+            result.extend(self._convert_function_params_to_query_params())
+        return result
+
+    def _convert_header_and_path_params(self) -> List[Parameter]:
+        arg_options_params: List[Parameter] = self.arg_option_handler.extract_parameters_from_arg_options(
+            self.method_properties, self.all_params_dct
+        )
+        path_params: List[Parameter] = self._convert_path_params_to_openapi()
+        return arg_options_params + path_params
+
+    def _convert_path_params_to_openapi(self) -> List[Parameter]:
         parameters: List[Union[Parameter, Reference]] = []
-        for parameter_name, parameter_type in self.non_path_params.items():
+        for parameter_name, parameter_type in self.path_params.items():
             type_description = self.type_converter.get_openapi_type_of_parameter(parameter_type)
-            parameters.append(Parameter(name=parameter_name, in_=ParameterType.query, schema_=type_description))
+            param_description = self.method_properties.get_description_for_param(parameter_name)
+            parameters.append(
+                Parameter(
+                    name=parameter_name,
+                    in_=ParameterType.path,
+                    required=True,
+                    schema_=type_description,
+                    description=param_description,
+                )
+            )
         return parameters
 
-    def _convert_function_params_to_openapi_request_body_properties(
-        self, function_parameters: Dict[str, inspect.Parameter]
-    ) -> Dict[str, Schema]:
+    def _convert_function_params_to_query_params(self) -> List[Parameter]:
+        parameters: List[Parameter] = []
+        for parameter_name, parameter_type in self.non_path_and_non_header_params.items():
+            type_description = self.type_converter.get_openapi_type_of_parameter(parameter_type)
+            param_description = self.method_properties.get_description_for_param(parameter_name)
+            parameters.append(
+                Parameter(name=parameter_name, in_=ParameterType.query, schema_=type_description, description=param_description)
+            )
+        return parameters
+
+    # Request body
+
+    def convert_request_body(self) -> RequestBody:
+        properties = self._convert_function_params_to_openapi_request_body_properties()
+        return self._build_json_request_body(properties)
+
+    def _convert_function_params_to_openapi_request_body_properties(self) -> Dict[str, Schema]:
         properties = {}
-        for parameter_name, parameter_type in function_parameters.items():
+        for parameter_name, parameter_type in self.non_path_and_non_header_params.items():
             type_description = self.type_converter.get_openapi_type_of_parameter(parameter_type)
             properties[parameter_name] = type_description
         return properties
 
-    def _convert_path_params_to_openapi(
-        self, function_parameters: Dict[str, inspect.Parameter]
-    ) -> List[Union[Parameter, Reference]]:
-        parameters: List[Union[Parameter, Reference]] = []
-        for parameter_name, parameter_type in function_parameters.items():
-            type_description = self.type_converter.get_openapi_type_of_parameter(parameter_type)
-            parameters.append(Parameter(name=parameter_name, in_=ParameterType.path, required=True, schema_=type_description))
-        return parameters
+    def _get_request_body_description(self) -> str:
+        """
+            OpenAPI supports only a single description field for the full request body. As such,
+            this method return the description of the request body in CommonMark syntax to create
+            an itemization of the different parameters in the request body.
+        """
+        result = ""
+        for param_name in sorted(self.non_path_and_non_header_params.keys()):
+            description = self.method_properties.get_description_for_param(param_name)
+            if description is not None:
+                result += f"* **{param_name}:** {description}\n"
+            else:
+                result += f"* **{param_name}:**\n"
+        return result
 
-    def _filter_path_params(self, function_parameters: Dict[str, inspect.Parameter]) -> Dict[str, inspect.Parameter]:
-        return {
-            parameter_name: parameter_type
-            for parameter_name, parameter_type in function_parameters.items()
-            if f"{{{parameter_name}}}" in self.path
-        }
-
-    def _filter_non_path_params(self, function_parameters: Dict[str, inspect.Parameter]) -> Dict[str, inspect.Parameter]:
-        non_path_params = {
-            parameter_name: parameter_type
-            for parameter_name, parameter_type in function_parameters.items()
-            if parameter_name not in self.path_params.keys()
-        }
-        return non_path_params
-
-    def _filter_already_processed_function_params(
-        self, function_parameters: Dict[str, inspect.Parameter], already_existing_parameters: List[Union[Parameter, Reference]]
-    ) -> Dict[str, inspect.Parameter]:
-        parameter_names = [parameter.name for parameter in already_existing_parameters if isinstance(parameter, Parameter)]
-        return {
-            parameter_name: parameter_type
-            for parameter_name, parameter_type in function_parameters.items()
-            if parameter_name == "tid"
-            and INMANTA_MT_HEADER not in parameter_names
-            or parameter_name != "tid"
-            and parameter_name not in parameter_names
-        }
-
-    def convert_header_and_path_params(self, method_properties: MethodProperties) -> List[Union[Parameter, Reference]]:
-        # Get the parameters of the handler function
-        function_parameters = self._extract_function_parameters(method_properties.function)
-        # Create OpenAPI Parameter objects based on the ArgOptions
-        parameters: List[Union[Parameter, Reference]] = self.arg_option_handler.extract_parameters_from_arg_options(
-            self.path, method_properties.arg_options, function_parameters
-        )
-        # Remove the function parameters from the list, that already have an OpenAPI Parameter object
-        function_parameters = self._filter_already_processed_function_params(function_parameters, parameters)
-
-        # Separate the path and non-path parameters
-        self.path_params = self._filter_path_params(function_parameters)
-        self.non_path_params = self._filter_non_path_params(function_parameters)
-
-        # Create OpenAPI Parameter objects for the path parameters and add them to the parameter list
-        openapi_path_params = self._convert_path_params_to_openapi(self.path_params)
-        parameters.extend(openapi_path_params)
-        return parameters
-
-    def convert_request_body(self) -> RequestBody:
-        properties = self._convert_function_params_to_openapi_request_body_properties(self.non_path_params)
-        return self.build_json_request_body(properties)
-
-    def build_json_request_body(self, properties: Dict) -> RequestBody:
+    def _build_json_request_body(self, properties: Dict) -> RequestBody:
         request_body = RequestBody(
-            required=True, content={"application/json": MediaType(schema=Schema(type="object", properties=properties))}
+            required=True,
+            content={"application/json": MediaType(schema=Schema(type="object", properties=properties))},
+            description=self._get_request_body_description(),
         )
         return request_body
 
@@ -343,26 +356,29 @@ class OperationHandler:
         self.type_converter = type_converter
         self.arg_option_handler = arg_option_handler
 
-    def handle_method_with_request_body(self, url_method: UrlMethod, path: str) -> Operation:
-        function_parameter_handler = FunctionParameterHandler(self.type_converter, self.arg_option_handler, path)
-        parameters = function_parameter_handler.convert_header_and_path_params(url_method.properties)
-        request_body = function_parameter_handler.convert_request_body()
-        ok_response = self._build_response(path, url_method.properties)
+    def handle_method(self, url_method: UrlMethod, path: str) -> Operation:
+        function_parameter_handler = FunctionParameterHandler(
+            self.type_converter, self.arg_option_handler, path, url_method.properties
+        )
+        parameters = function_parameter_handler.get_parameters()
+        ok_response = self._build_response(url_method.properties)
         responses = {"200": ok_response}
-        return Operation(responses=responses, parameters=(parameters if len(parameters) else None), requestBody=request_body,)
 
-    def handle_method_without_request_body(self, url_method: UrlMethod, path: str) -> Operation:
-        function_parameter_handler = FunctionParameterHandler(self.type_converter, self.arg_option_handler, path)
-        parameters = function_parameter_handler.convert_header_and_path_params(url_method.properties)
-        query_params = function_parameter_handler.convert_function_params_to_query_params()
-        parameters.extend(query_params)
+        if url_method.get_operation() in ["POST", "PUT", "PATCH"]:
+            extra_params = {"requestBody": function_parameter_handler.convert_request_body()}
+        else:
+            extra_params = {}
 
-        ok_response = self._build_response(path, url_method.properties)
+        return Operation(
+            responses=responses,
+            parameters=(parameters if len(parameters) else None),
+            summary=url_method.short_method_description,
+            description=url_method.long_method_description,
+            **extra_params,
+        )
 
-        responses = {"200": ok_response}
-        return Operation(responses=responses, parameters=(parameters if len(parameters) else None),)
-
-    def _build_response(self, description: str, url_method_properties: MethodProperties) -> Response:
+    def _build_response(self, url_method_properties: MethodProperties) -> Response:
+        description = url_method_properties.get_description_return_value()
         response_headers = self.arg_option_handler.extract_response_headers_from_arg_options(url_method_properties.arg_options)
         return_value = self._build_return_value_wrapper(url_method_properties)
         return Response(description=description, content=return_value, headers=response_headers)

@@ -24,12 +24,11 @@ from uuid import UUID
 import pytest
 from openapi_spec_validator import openapi_v3_spec_validator
 
-from inmanta.const import INMANTA_MT_HEADER, ResourceAction
+from inmanta.const import ResourceAction
 from inmanta.data import model
 from inmanta.data.model import EnvironmentSetting
 from inmanta.protocol import method
-from inmanta.protocol.common import MethodProperties, UrlMethod
-from inmanta.protocol.methods import ENV_OPTS
+from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.converter import (
     ArgOptionHandler,
     FunctionParameterHandler,
@@ -37,11 +36,11 @@ from inmanta.protocol.openapi.converter import (
     OpenApiTypeConverter,
     OperationHandler,
 )
-from inmanta.protocol.openapi.model import MediaType, Parameter, Schema
+from inmanta.protocol.openapi.model import MediaType, Schema
 
 
 @pytest.fixture(scope="function")
-def api_methods_fixture():
+def api_methods_fixture(clean_reset):
     @method(path="/simpleoperation", client_types=["api", "agent"], envelope=True)
     def post_method() -> object:
         return ""
@@ -50,12 +49,89 @@ def api_methods_fixture():
     def get_method():
         pass
 
-    @method(path="/operation", client_types=["api", "agent"], envelope=True, arg_options=ENV_OPTS)
-    def dummy_post_with_parameters(tid: UUID, param: int, id: UUID) -> str:
+    arg_options = {
+        "header": ArgOption(header="header-val", reply_header=True, getter=lambda x, y: "test"),
+        "non_header": ArgOption(getter=lambda x, y: "test"),
+    }
+
+    @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=arg_options)
+    def dummy_post_with_parameters(header: str, non_header: str, param: int, id: UUID) -> str:
+        """
+            This is a brief description.
+
+            This is a more in depth description of the method.
+
+            :param header: A header value.
+            :param non_header: Non header value via arg_options.
+            :param param: A parameter.
+            :param id: The id of the resource.
+            :return: A return value.
+        """
         return ""
 
-    @method(path="/operation", client_types=["api", "agent"], envelope=True, arg_options=ENV_OPTS, operation="GET")
-    def dummy_get_with_parameters(tid: UUID, param: int, id: UUID) -> str:
+    @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=arg_options, operation="GET")
+    def dummy_get_with_parameters(header: str, non_header: str, param: int, id: UUID) -> str:
+        """
+            This is a brief description.
+
+            This is a more in depth description of the method.
+
+            :param header: A header value.
+            :param non_header: Non header value via arg_options.
+            :param param: A parameter.
+            :param id: The id of the resource.
+            :return: A return value.
+        """
+        return ""
+
+    @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=arg_options)
+    def dummy_post_with_parameters_no_docstring(header: str, non_header: str, param: int, id: UUID) -> str:
+        return ""
+
+    @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=arg_options, operation="GET")
+    def dummy_get_with_parameters_no_docstring(header: str, non_header: str, param: int, id: UUID) -> str:
+        return ""
+
+    arg_options_partial_doc = {
+        "tid_doc": ArgOption(header="header-doc", reply_header=True, getter=lambda x, y: "test"),
+        "tid_no_doc": ArgOption(header="header-no-doc", reply_header=True, getter=lambda x, y: "test"),
+    }
+
+    @method(
+        path="/operation/<id_doc>/<id_no_doc>",
+        client_types=["api", "agent"],
+        envelope=True,
+        arg_options=arg_options_partial_doc,
+    )
+    def dummy_post_with_parameters_partial_documentation(
+        tid_doc: UUID, tid_no_doc: UUID, param_doc: int, param_no_doc: int, id_doc: UUID, id_no_doc: UUID
+    ) -> str:
+        """
+            This is a brief description.
+
+            :param tid_doc: The inmanta environment id.
+            :param param_doc: A parameter.
+            :param id_doc: The id of the resource.
+        """
+        return ""
+
+    @method(
+        path="/operation/<id_doc>/<id_no_doc>",
+        client_types=["api", "agent"],
+        envelope=True,
+        arg_options=arg_options_partial_doc,
+        operation="GET",
+    )
+    def dummy_get_with_parameters_partial_documentation(
+        tid_doc: UUID, tid_no_doc: UUID, param_doc: int, param_no_doc: int, id_doc: UUID, id_no_doc: UUID
+    ) -> str:
+        """
+            This is a brief description.
+
+            :param tid_doc: The inmanta environment id.
+            :param param_doc: A parameter.
+            :param id_doc: The id of the resource.
+        """
         return ""
 
 
@@ -82,34 +158,19 @@ def test_filter_api_methods(server, api_methods_fixture):
     assert len(api_methods) == 1
 
 
-def test_get_function_parameters():
-    def dummy_method(param: int, tid: UUID, id: UUID) -> str:
-        return ""
-
-    function_parameter_handler = FunctionParameterHandler(
-        OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()), "/basepath"
+def test_get_function_parameters(api_methods_fixture):
+    url_method = UrlMethod(
+        properties=MethodProperties.methods["dummy_get_with_parameters"][0],
+        slice=None,
+        method_name="dummy_get_with_parameters",
+        handler=None,
     )
-    function_parameters = function_parameter_handler._extract_function_parameters(dummy_method)
-    assert len(function_parameters) == 3
+    function_parameter_handler = FunctionParameterHandler(
+        OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()), "/basepath", url_method.properties
+    )
+    function_parameters = function_parameter_handler.all_params_dct
+    assert len(function_parameters) == 4
     assert function_parameters["param"] == inspect.Parameter("param", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=int)
-
-
-def test_filter_function_parameters():
-    function_parameter_handler = FunctionParameterHandler(
-        OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()), "/basepath"
-    )
-    function_parameters = {
-        "tid": inspect.Parameter("tid", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=UUID),
-        "param": inspect.Parameter("param", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
-    }
-    already_existing_parameters = [Parameter(in_="header", required=True, name=INMANTA_MT_HEADER)]
-    filtered_function_parameters = function_parameter_handler._filter_already_processed_function_params(
-        function_parameters, already_existing_parameters
-    )
-    assert len(filtered_function_parameters) == 1
-    assert filtered_function_parameters["param"] == inspect.Parameter(
-        "param", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=int
-    )
 
 
 def test_return_value(api_methods_fixture):
@@ -274,6 +335,18 @@ def test_openapi_types_env_setting():
 
 
 def test_post_operation(api_methods_fixture):
+    """
+        Test whether an OpenAPI operation is constructed correctly for a
+        POST method which is fully annotated and documented.
+    """
+    short_description = "This is a brief description."
+    long_description = "This is a more in depth description of the method."
+    header_description = "A header value."
+    non_header_description = "Non header value via arg_options."
+    param_description = "A parameter."
+    id_description = "The id of the resource."
+    return_value_description = "A return value."
+
     post = UrlMethod(
         properties=MethodProperties.methods["dummy_post_with_parameters"][0],
         slice=None,
@@ -282,14 +355,43 @@ def test_post_operation(api_methods_fixture):
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
-    operation = operation_handler.handle_method_with_request_body(post, "/operation")
-    assert "X-Inmanta-tid" in [parameter.name for parameter in operation.parameters]
-    assert "param" in operation.requestBody.content["application/json"].schema_.properties.keys()
-    assert "id" in operation.requestBody.content["application/json"].schema_.properties.keys()
-    assert "X-Inmanta-tid" in operation.responses["200"].headers.keys()
+    operation = operation_handler.handle_method(post, "/operation/{id}")
+
+    # Asserts on request body
+    expected_params = ["param", "non_header"]
+    actual_params = list(operation.requestBody.content["application/json"].schema_.properties.keys())
+    assert sorted(expected_params) == sorted(actual_params)
+    assert (
+        f"* **non_header:** {non_header_description}\n* **param:** {param_description}\n" == operation.requestBody.description
+    )
+
+    # Asserts on parameters
+    assert operation.summary == short_description
+    assert operation.description == long_description
+    assert sorted(["header-val", "id"]) == sorted([parameter.name for parameter in operation.parameters])
+    param_map = {param.name: param.description for param in operation.parameters}
+    assert len(param_map) == 2
+    assert param_map["header-val"] == header_description
+    assert param_map["id"] == id_description
+
+    # Asserts on response
+    assert ["header-val"] == list(operation.responses["200"].headers.keys())
+    assert return_value_description == operation.responses["200"].description
 
 
 def test_get_operation(api_methods_fixture):
+    """
+        Test whether an OpenAPI operation is constructed correctly for a
+        GET method which is fully annotated and documented.
+    """
+    short_description = "This is a brief description."
+    long_description = "This is a more in depth description of the method."
+    header_description = "A header value."
+    non_header_description = "Non header value via arg_options."
+    param_description = "A parameter."
+    id_description = "The id of the resource."
+    return_value_description = "A return value."
+
     get = UrlMethod(
         properties=MethodProperties.methods["dummy_get_with_parameters"][0],
         slice=None,
@@ -298,12 +400,180 @@ def test_get_operation(api_methods_fixture):
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
-    operation = operation_handler.handle_method_without_request_body(get, "/operation")
-    assert "X-Inmanta-tid" in [parameter.name for parameter in operation.parameters]
-    assert "param" in [parameter.name for parameter in operation.parameters]
-    assert "id" in [parameter.name for parameter in operation.parameters]
-    assert not operation.requestBody
-    assert "X-Inmanta-tid" in operation.responses["200"].headers.keys()
+    operation = operation_handler.handle_method(get, "/operation/{id}")
+
+    # Asserts on request body
+    assert operation.requestBody is None
+
+    # Asserts on parameters
+    assert operation.summary == short_description
+    assert operation.description == long_description
+    assert sorted(["header-val", "non_header", "param", "id"]) == sorted([parameter.name for parameter in operation.parameters])
+    param_map = {param.name: param.description for param in operation.parameters}
+    assert len(param_map) == 4
+    assert param_map["header-val"] == header_description
+    assert param_map["non_header"] == non_header_description
+    assert param_map["param"] == param_description
+    assert param_map["id"] == id_description
+
+    # Asserts on response
+    assert ["header-val"] == list(operation.responses["200"].headers.keys())
+    assert return_value_description == operation.responses["200"].description
+
+
+def test_post_operation_no_docstring(api_methods_fixture):
+    """
+        Test whether an OpenAPI operation is constructed correctly for a
+        POST method which doesn't have a docstring.
+    """
+    post = UrlMethod(
+        properties=MethodProperties.methods["dummy_post_with_parameters_no_docstring"][0],
+        slice=None,
+        method_name="dummy_post_with_parameters_no_docstring",
+        handler=None,
+    )
+
+    operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
+    operation = operation_handler.handle_method(post, "/operation/{id}")
+
+    # Asserts on request body
+    expected_params = ["param", "non_header"]
+    actual_params = list(operation.requestBody.content["application/json"].schema_.properties.keys())
+    assert sorted(expected_params) == sorted(actual_params)
+    assert operation.requestBody.description == "* **non_header:**\n* **param:**\n"
+
+    # Asserts on parameters
+    assert operation.summary is None
+    assert operation.description is None
+    assert sorted(["header-val", "id"]) == sorted([parameter.name for parameter in operation.parameters])
+    param_map = {param.name: param.description for param in operation.parameters}
+    assert len(param_map) == 2
+    assert param_map["header-val"] is None
+    assert param_map["id"] is None
+
+    # Asserts on response
+    assert ["header-val"] == list(operation.responses["200"].headers.keys())
+    assert operation.responses["200"].description == ""
+
+
+def test_get_operation_no_docstring(api_methods_fixture):
+    """
+        Test whether an OpenAPI operation is constructed correctly for a
+        GET method which doesn't have a docstring.
+    """
+    get = UrlMethod(
+        properties=MethodProperties.methods["dummy_get_with_parameters_no_docstring"][0],
+        slice=None,
+        method_name="dummy_get_with_parameters_no_docstring",
+        handler=None,
+    )
+
+    operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
+    operation = operation_handler.handle_method(get, "/operation/{id}")
+
+    # Asserts on request body
+    assert operation.requestBody is None
+
+    # Asserts on parameters
+    assert operation.summary is None
+    assert operation.description is None
+    assert sorted(["header-val", "non_header", "param", "id"]) == sorted([parameter.name for parameter in operation.parameters])
+    param_map = {param.name: param.description for param in operation.parameters}
+    assert len(param_map) == 4
+    assert param_map["header-val"] is None
+    assert param_map["non_header"] is None
+    assert param_map["param"] is None
+    assert param_map["id"] is None
+
+    # Asserts on response
+    assert ["header-val"] == list(operation.responses["200"].headers.keys())
+    assert operation.responses["200"].description == ""
+
+
+def test_post_operation_partial_documentation(api_methods_fixture):
+    """
+        Test whether an OpenAPI operation is constructed correctly for a
+        POST method which has missing entries in its docstring.
+    """
+    short_description = "This is a brief description."
+    tid_description = "The inmanta environment id."
+    param_description = "A parameter."
+    id_description = "The id of the resource."
+    post = UrlMethod(
+        properties=MethodProperties.methods["dummy_post_with_parameters_partial_documentation"][0],
+        slice=None,
+        method_name="dummy_post_with_parameters_partial_documentation",
+        handler=None,
+    )
+
+    operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
+    operation = operation_handler.handle_method(post, "/operation/{id_doc}/{id_no_doc}")
+
+    # Asserts on request body
+    request_body_parameters = list(operation.requestBody.content["application/json"].schema_.properties.keys())
+    assert sorted(["param_doc", "param_no_doc"]) == sorted(request_body_parameters)
+    assert operation.requestBody.description == f"* **param_doc:** {param_description}\n* **param_no_doc:**\n"
+
+    # Asserts on parameters
+    assert operation.summary == short_description
+    assert operation.description is None
+    expected_parameters = ["header-doc", "header-no-doc", "id_doc", "id_no_doc"]
+    actual_parameters = [parameter.name for parameter in operation.parameters]
+    assert sorted(expected_parameters) == sorted(actual_parameters)
+    param_map = {param.name: param.description for param in operation.parameters}
+    assert len(param_map) == 4
+    assert param_map["header-doc"] == tid_description
+    assert param_map["header-no-doc"] is None
+    assert param_map["id_doc"] == id_description
+    assert param_map["id_no_doc"] is None
+
+    # Asserts on response
+    assert sorted(["header-doc", "header-no-doc"]) == sorted(list(operation.responses["200"].headers.keys()))
+    assert operation.responses["200"].description == ""
+
+
+def test_get_operation_partial_documentation(api_methods_fixture):
+    """
+        Test whether an OpenAPI operation is constructed correctly for a
+        GET method which has missing entries in its docstring.
+    """
+    short_description = "This is a brief description."
+    tid_description = "The inmanta environment id."
+    param_description = "A parameter."
+    id_description = "The id of the resource."
+
+    get = UrlMethod(
+        properties=MethodProperties.methods["dummy_get_with_parameters_partial_documentation"][0],
+        slice=None,
+        method_name="dummy_get_with_parameters_partial_documentation",
+        handler=None,
+    )
+
+    operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
+    operation = operation_handler.handle_method(get, "/operation/{id_doc}/{id_no_doc}")
+
+    # Asserts on request body
+    assert operation.requestBody is None
+
+    # Asserts on parameters
+    assert operation.summary == short_description
+    assert operation.description is None
+
+    expected_parameters = ["header-doc", "header-no-doc", "param_doc", "param_no_doc", "id_doc", "id_no_doc"]
+    actual_parameters = [parameter.name for parameter in operation.parameters]
+    assert sorted(expected_parameters) == sorted(actual_parameters)
+    param_map = {param.name: param.description for param in operation.parameters}
+    assert len(param_map) == 6
+    assert param_map["header-doc"] == tid_description
+    assert param_map["header-no-doc"] is None
+    assert param_map["param_doc"] == param_description
+    assert param_map["param_no_doc"] is None
+    assert param_map["id_doc"] == id_description
+    assert param_map["id_no_doc"] is None
+
+    # Asserts on response
+    assert sorted(["header-doc", "header-no-doc"]) == sorted(list(operation.responses["200"].headers.keys()))
+    assert operation.responses["200"].description == ""
 
 
 @pytest.mark.asyncio

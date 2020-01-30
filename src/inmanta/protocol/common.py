@@ -49,6 +49,7 @@ from typing import (
 )
 from urllib import parse
 
+import docstring_parser
 import jwt
 import pydantic
 import typing_inspect
@@ -412,6 +413,9 @@ class MethodProperties(object):
         self._envelope_key = envelope_key
         self.function = function
 
+        self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.styles.Style.rest)
+        self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
+
         # validate client types
         for ct in self._client_types:
             if ct not in const.VALID_CLIENT_TYPES:
@@ -614,6 +618,30 @@ class MethodProperties(object):
     def api_version(self) -> int:
         return self._api_version
 
+    def get_long_method_description(self) -> Optional[str]:
+        """
+            Return the full description present in the docstring of the method, excluding the first paragraph.
+        """
+        return self._parsed_docstring.long_description
+
+    def get_short_method_description(self) -> Optional[str]:
+        """
+            Return the first paragraph of the description present in the docstring of the method.
+        """
+        return self._parsed_docstring.short_description
+
+    def get_description_for_param(self, param_name: str) -> Optional[str]:
+        """
+            Return the description for a certain parameter present in the docstring.
+        """
+        return self._docstring_parameter_map.get(param_name, None)
+
+    def get_description_return_value(self) -> str:
+        if self._parsed_docstring.returns is not None and self._parsed_docstring.returns.description is not None:
+            return self._parsed_docstring.returns.description
+        else:
+            return ""
+
     def get_call_headers(self) -> Set[str]:
         """
             Returns the set of headers required to create call
@@ -712,6 +740,23 @@ class UrlMethod(object):
     @property
     def method_name(self) -> str:
         return self._method_name
+
+    @property
+    def short_method_description(self) -> Optional[str]:
+        """
+            Return the first paragraph of the description present in the docstring of the method
+        """
+        return self._properties.get_short_method_description()
+
+    @property
+    def long_method_description(self) -> Optional[str]:
+        """
+            Return the full description present in the docstring of the method, excluding the first paragraph.
+        """
+        return self._properties.get_long_method_description()
+
+    def get_operation(self) -> str:
+        return self._properties.operation
 
 
 # Util functions
