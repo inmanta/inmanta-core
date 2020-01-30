@@ -52,7 +52,7 @@ pip==20.0.2
 # Transitive dependencies
 MarkupSafe==1.1.1
 mypy-extensions==0.4.3
-lxml==4.4.2
+lxml==4.5.0
 pycparser==2.19
 zipp==2.1.0
 apipkg==1.5
