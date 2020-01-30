@@ -22,6 +22,13 @@ from tornado import web
 from inmanta.types import JsonType
 
 
+"""
+    Classes which extend from the BaseHttpException class cannot have mandatory arguments
+    in its constructor. This is required to determine the status_code of the exception in
+    inmanta.protocol.common.MethodProperties._get_http_status_code_for_exception()
+"""
+
+
 class BaseHttpException(web.HTTPError):
     """
         A base exception for errors in the server

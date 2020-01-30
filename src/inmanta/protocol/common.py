@@ -17,6 +17,7 @@
 """
 import enum
 import gzip
+import importlib
 import inspect
 import io
 import json
@@ -60,7 +61,7 @@ from tornado import web
 from inmanta import config as inmanta_config
 from inmanta import const, execute, util
 from inmanta.data.model import BaseModel
-from inmanta.protocol.exceptions import BadRequest
+from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes, StrictNonIntBool
 
 from . import exceptions
@@ -636,11 +637,58 @@ class MethodProperties(object):
         """
         return self._docstring_parameter_map.get(param_name, None)
 
-    def get_description_return_value(self) -> str:
-        if self._parsed_docstring.returns is not None and self._parsed_docstring.returns.description is not None:
-            return self._parsed_docstring.returns.description
+    def _get_http_status_code_for_exception(self, exception_name: str) -> int:
+        """
+            Returns the HTTP status code for a given exception. Exceptions can be
+            specified in two different ways:
+
+            1) A fully qualified path to the exception.
+            2) The name of the exception if the exception is defined in the
+               inmanta.protocol.exceptions module.
+
+            Status code 500 is returned for exceptions which don't extend BaseHttpException.
+        """
+        if "." in exception_name:
+            # Exception name was specified with fully-qualified path
+            splitted_exception_name = exception_name.rsplit(".", maxsplit=1)
+            module_path = splitted_exception_name[0]
+            cls_name = splitted_exception_name[1]
         else:
-            return ""
+            # Exception should be located in the inmanta.protocol.exceptions module
+            module_path = "inmanta.protocol.exceptions"
+            cls_name = exception_name
+
+        try:
+            module = importlib.import_module(module_path)
+            cls = module.__getattribute__(cls_name)
+            if not inspect.isclass(cls) or BaseHttpException not in cls.mro():
+                return 500
+            cls_instance = cls()
+            return cls_instance.to_status()
+        except Exception:
+            return 500
+
+    def get_description_foreach_http_status_code(self) -> Dict[int, str]:
+        """
+            This method return a mapping from the HTTP status code to
+            the associated description specified in the docstring using
+            the :returns: and :raises <exception>: statements.
+        """
+        result = {}
+
+        # Get description for return statement
+        if self._parsed_docstring.returns is not None and self._parsed_docstring.returns.description is not None:
+            result[200] = self._parsed_docstring.returns.description
+        else:
+            result[200] = ""
+
+        # Get descriptions for raises statements
+        for raise_statement in self._parsed_docstring.raises:
+            exception_name = raise_statement.type_name
+            status_code = self._get_http_status_code_for_exception(exception_name)
+            result[status_code] = raise_statement.description
+
+        return result
 
     def get_call_headers(self) -> Set[str]:
         """
