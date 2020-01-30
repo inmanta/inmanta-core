@@ -12,6 +12,7 @@
 ## Added
 - Add get_environment_id to exporter (#1683)
 - Added inmanta-cli environment save command (#1666)
+- Added finalizer support to @cache annotation
 
 ## Removed
  - Removed the inmanta module validate command. Use pytest-inmanta fixtures to test your modules instead.
