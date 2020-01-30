@@ -242,4 +242,5 @@ def reserve_version(tid: uuid.UUID) -> int:
 def get_api_docs(format: Optional[str] = None) -> ReturnValue[Union[OpenAPI, str]]:
     """
        Get the OpenAPI definition of the API
+       :param format: Use 'openapi' to get the schema in json format
     """
