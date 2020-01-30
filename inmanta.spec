@@ -97,7 +97,7 @@ find %{venv}/bin/ -type f | xargs sed -i "s|%{buildroot}||g"
 find %{venv} -name RECORD | xargs sed -i "s|%{buildroot}||g"
 
 # Make sure we use python3.6 and don't have dangeling symlink
-ln -sf %{venv}/bin/python3 /usr/bin/python3.6
+ln -sf /usr/bin/python3.6 %{venv}/bin/python3
 
 # Put symlinks
 mkdir -p %{buildroot}%{_bindir}
