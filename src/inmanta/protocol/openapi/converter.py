@@ -409,7 +409,7 @@ class OperationHandler:
             **extra_params,
         )
 
-    def _build_responses(self, url_method_properties: MethodProperties) -> Response:
+    def _build_responses(self, url_method_properties: MethodProperties) -> Dict[str, Response]:
         result: Dict[str, Response] = {}
         status_code_to_description_map = url_method_properties.get_description_foreach_http_status_code()
         for status_code, description in status_code_to_description_map.items():
