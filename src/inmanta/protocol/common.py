@@ -742,14 +742,14 @@ class UrlMethod(object):
         return self._method_name
 
     @property
-    def short_method_description(self) -> str:
+    def short_method_description(self) -> Optional[str]:
         """
             Return the first paragraph of the description present in the docstring of the method
         """
         return self._properties.get_short_method_description()
 
     @property
-    def long_method_description(self) -> str:
+    def long_method_description(self) -> Optional[str]:
         """
             Return the full description present in the docstring of the method, excluding the first paragraph.
         """
