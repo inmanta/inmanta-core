@@ -39,6 +39,10 @@ class RemoteException(Exception):
         super().__init__(exception_type, msg, traceback)
 
 
+class RemoteExecException(Exception):
+    """Raised if execnet's remote_exec throws an OSError"""
+
+
 class SshIO(local.IOBase):
     """
         This class provides handler IO methods. This io method is used when the ssh scheme is provided in the agent uri.
@@ -125,10 +129,13 @@ class SshIO(local.IOBase):
 
     def _execute(self, function_name, *args, **kwargs):
         with self._lock:
-            ch = self._gw.remote_exec(local)
-            ch.send((function_name, args, kwargs))
-            result = ch.receive()
-            ch.close()
+            try:
+                ch = self._gw.remote_exec(local)
+                ch.send((function_name, args, kwargs))
+                result = ch.receive()
+                ch.close()
+            except OSError:
+                raise RemoteExecException
 
         # check if we got an exception
         if isinstance(result, dict) and "__type__" in result and result["__type__"] == "RemoteException":
