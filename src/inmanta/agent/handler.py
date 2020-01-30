@@ -116,7 +116,8 @@ def cache(
         :param for_version: if true, this value is evicted from the cache when this deploy is ready
         :param ignore: a list of argument names that should not be part of the cache key
         :param cache_none: cache returned none values
-        :param call_on_delete: A callback function that is called when the value is removed from the cache, with the value as argument.
+        :param call_on_delete: A callback function that is called when the value is removed from the cache,
+                with the value as argument.
     """
 
     def actual(f) -> T_FUNC:
