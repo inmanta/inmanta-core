@@ -501,3 +501,25 @@ deployment2 = Deployment(
     )
 
     (_, scopes) = compiler.do_compile()
+
+
+def test_1435_instance_in_list(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity A:
+end
+implement A using std::none
+
+entity ListContainer:
+    list lst
+end
+
+implement ListContainer using std::none
+
+x = ListContainer()
+x.lst = [x]
+        """,
+        """Could not set attribute `lst` on instance `__config__::ListContainer (instantiated at {dir}/main.cf:12)` (reported in x.lst = List() ({dir}/main.cf:13))
+caused by:
+  Invalid value '__config__::ListContainer (instantiated at {dir}/main.cf:12)', expected Literal (reported in x.lst = List() ({dir}/main.cf:13))""",
+    )
