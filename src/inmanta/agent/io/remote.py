@@ -133,10 +133,9 @@ class SshIO(local.IOBase):
                 ch = self._gw.remote_exec(local)
             except OSError:
                 raise ChannelClosedException(
-                    "Failed to execute remote command on %(uri)s, this is most likely caused by "
+                    f"Failed to execute remote command on {self.host}:{self.port}, this is most likely caused by "
                     "either the target machine being unavailable "
-                    "or the python command being unavailable on the target machine.",
-                    remote_host=self._host + ":" + str(self._port)
+                    "or the python command being unavailable on the target machine."
                 )
 
         ch.send((function_name, args, kwargs))

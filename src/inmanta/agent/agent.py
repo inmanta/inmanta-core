@@ -148,18 +148,12 @@ class ResourceAction(object):
         try:
             provider = await self.scheduler.agent.get_provider(self.resource)
         except ChannelClosedException as e:
-            if provider is not None:
-                provider.close()
-
             cache.close_version(self.resource.id.get_version())
             ctx.set_status(const.ResourceState.unavailable)
-            ctx.exception(e.message)
+            ctx.exception(str(e))
             return False, False
 
         except Exception:
-            if provider is not None:
-                provider.close()
-
             cache.close_version(self.resource.id.get_version())
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=self.resource.id.resource_version_str())
@@ -183,7 +177,7 @@ class ResourceAction(object):
 
             except ChannelClosedException as e:
                 ctx.set_status(const.ResourceState.failed)
-                ctx.exception(e.message)
+                ctx.exception(str(e))
 
             except Exception as e:
                 ctx.set_status(const.ResourceState.failed)
