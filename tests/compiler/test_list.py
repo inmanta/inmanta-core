@@ -519,7 +519,11 @@ implement ListContainer using std::none
 x = ListContainer()
 x.lst = [x]
         """,
-        """Could not set attribute `lst` on instance `__config__::ListContainer (instantiated at {dir}/main.cf:12)` (reported in x.lst = List() ({dir}/main.cf:13))
-caused by:
-  Invalid value '__config__::ListContainer (instantiated at {dir}/main.cf:12)', expected Literal (reported in x.lst = List() ({dir}/main.cf:13))""",
+        "Could not set attribute `lst` on instance `__config__::ListContainer (instantiated at {dir}/main.cf:12)`"
+        " (reported in x.lst = List() ({dir}/main.cf:13))"
+        "\n"
+        "caused by:"
+        "\n"
+        "  Invalid value '__config__::ListContainer (instantiated at {dir}/main.cf:12)', expected Literal"
+        " (reported in x.lst = List() ({dir}/main.cf:13))",
     )
