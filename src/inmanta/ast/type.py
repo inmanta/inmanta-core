@@ -17,7 +17,8 @@
 """
 
 import numbers
-from typing import Any, Optional
+import typing
+from typing import Any, Optional, Union
 
 from inmanta.ast import DuplicateException, Locatable, Location, Named, Namespace, RuntimeException, TypeNotFoundException
 from inmanta.execute.util import AnyType, NoneValue
@@ -88,11 +89,14 @@ class Type(Locatable):
             inmanta instance is an instance of a different python type
             1. ConstraintType
             2. NullableType
+            3. Literal
+            4. LiteralList
+            5. LiteralDict
 
     """
 
     @classmethod
-    def validate(cls, value: object) -> None:
+    def validate(cls, value: object) -> bool:
         """
             Validate the given value to check if it satisfies the constraints
             associated with this type
@@ -338,14 +342,8 @@ class TypedList(Type):
             Validate the given value to check if it satisfies the constraint and
             the basetype.
         """
-        if isinstance(value, AnyType):
-            return True
-
-        if value is None:
-            return True
-
-        if not isinstance(value, list):
-            raise RuntimeException(None, "Invalid value '%s', expected list" % value)
+        if not List.validate(value):
+            return False
 
         for x in value:
             self.basetype.validate(x)
@@ -353,10 +351,10 @@ class TypedList(Type):
         return True
 
     def type_string(self):
-        return "%s[]" % (self.type_string())
+        return "%s[]" % (self.basetype.type_string())
 
     def __str__(self):
-        return str(self.basetype)
+        return self.type_string()
 
 
 class List(Type, list):
@@ -408,6 +406,99 @@ class List(Type, list):
     @classmethod
     def get_location(cls) -> Location:
         return None
+
+
+class LiteralList(TypedList):
+    """
+    This class represents a list type containing only literals.
+    (instances of the class represent the type)
+    """
+
+    def __init__(self):
+        TypedList.__init__(self, Literal())
+
+    def __str__(self):
+        return list.__str__(self)
+
+
+class LiteralDict(Type):
+    """
+    This class represents a dict type containing only literals as values.
+    (instances of the class represent the type)
+    """
+
+    def __init__(self):
+        Type.__init__(self)
+        self.basetype = Literal()
+
+    def normalize(self):
+        self.basetype.normalize()
+
+    def cast(self, value: object) -> "Dict":
+        """
+            Cast the value to the basetype of this constraint
+        """
+        if not isinstance(value, dict):
+            raise CastException()
+        return Dict.cast((k, self.basetype.cast(v)) for k, v in value.items())
+
+    def validate(self, value: object) -> bool:
+        """
+            Validate the given value to check if it satisfies the constraint and
+            the basetype.
+        """
+        if not Dict.validate(value):
+            return False
+
+        assert isinstance(value, dict)
+        for element in value.values():
+            if not self.basetype.validate(element):
+                return False
+
+        return True
+
+    def type_string(self):
+        return "literaldict"
+
+    def __str__(self):
+        return self.type_string()
+
+
+class Literal(Type):
+    """
+    This class represents a literal in the configuration model.
+    (instances of the class represent the type)
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.literal_types: Union[typing.List[typing.Type[Type]], typing.List[Type]] = [
+            Number,
+            Bool,
+            String,
+            NullableType(self),
+            LiteralList(),
+            LiteralDict(),
+        ]
+
+    @classmethod
+    def cast(cls, value: Any) -> Any:
+        raise CastException()
+
+    def validate(self, value: object) -> bool:
+        for literal_type in self.literal_types:
+            try:
+                if literal_type.validate(value):
+                    return True
+            except RuntimeException:
+                pass
+        raise RuntimeException(None, "Invalid value '%s', expected Literal" % value)
+
+    def type_string(self) -> str:
+        return "literal"
+
+    def __str__(self) -> str:
+        return self.type_string()
 
 
 class Dict(Type, dict):
