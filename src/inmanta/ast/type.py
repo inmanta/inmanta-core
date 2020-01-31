@@ -417,6 +417,10 @@ class LiteralList(TypedList):
     def __init__(self):
         TypedList.__init__(self, Literal())
 
+    @classmethod
+    def get_location(cls) -> Location:
+        return None
+
     def __str__(self):
         return list.__str__(self)
 
@@ -456,6 +460,10 @@ class LiteralDict(Type):
                 return False
 
         return True
+
+    @classmethod
+    def get_location(cls) -> Location:
+        return None
 
     def type_string(self):
         return "literaldict"
