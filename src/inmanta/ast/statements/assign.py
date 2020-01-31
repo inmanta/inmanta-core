@@ -32,7 +32,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import AssignStatement, ExpressionStatement, Resumer, Statement
-from inmanta.ast.type import Dict, List, Type
+from inmanta.ast.type import Dict, List, Type, TypedList
 from inmanta.execute.runtime import (
     ExecutionUnit,
     HangUnit,
@@ -128,6 +128,9 @@ class CreateList(ReferenceStatement):
         if multi:
             for item in self.items:
                 item.check_type_for_constant(expected_type, False, False)
+        elif isinstance(expected_type, TypedList):
+            for item in self.items:
+                item.check_type_for_constant(expected_type.basetype, multi, nullable)
         else:
             expected_type.validate(self.items)
 

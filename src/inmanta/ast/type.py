@@ -472,13 +472,14 @@ class Literal(Type):
 
     def __init__(self):
         super().__init__()
-        self.literal_types: Union[typing.List[typing.Type[Type]], typing.List[Type]] = [
-            Number,
+        self.direct_literal_types: Union[typing.List[typing.Type[Type]], typing.List[Type]] = [
+            NullableType(Number),
             Bool,
             String,
-            NullableType(self),
-            LiteralList(),
-            LiteralDict(),
+        ]
+        self.lazy_literal_types: typing.List[typing.Type[Type]] = [
+            LiteralList,
+            LiteralDict,
         ]
 
     @classmethod
@@ -486,12 +487,18 @@ class Literal(Type):
         raise CastException()
 
     def validate(self, value: object) -> bool:
-        for literal_type in self.literal_types:
+        def try_type(literal_type: Union[typing.Type[Type], Type]) -> bool:
             try:
-                if literal_type.validate(value):
-                    return True
+                return literal_type.validate(value)
             except RuntimeException:
-                pass
+                return False
+
+        for literal_type in self.direct_literal_types:
+            if try_type(literal_type):
+                return True
+        for lazy_type in self.lazy_literal_types:
+            if try_type(lazy_type()):
+                return True
         raise RuntimeException(None, "Invalid value '%s', expected Literal" % value)
 
     def type_string(self) -> str:
@@ -644,4 +651,4 @@ def create_function(expression):
     return function
 
 
-TYPES = {"string": String, "number": Number, "bool": Bool, "list": List, "dict": Dict}
+TYPES = {"string": String, "number": Number, "bool": Bool, "list": LiteralList(), "dict": Dict}
