@@ -341,8 +341,8 @@ async def test_send_events_cross_agent_fail(resource_container, environment, ser
     res_id_1 = "test::Resource[agent1,key=key1],v=%d" % version
     fail_r = "test::FailFast[agent2,key=key2],v=%d" % version
     resources = [
-        {"key": "key1", "value": "value1", "id": res_id_1, "send_event": False, "purged": False, "requires": [fail_r],},
-        {"key": "key2", "value": "value2", "id": fail_r, "send_event": True, "requires": [], "purged": False,},
+        {"key": "key1", "value": "value1", "id": res_id_1, "send_event": False, "purged": False, "requires": [fail_r]},
+        {"key": "key2", "value": "value2", "id": fail_r, "send_event": True, "requires": [], "purged": False},
     ]
 
     result = await client.put_version(
