@@ -750,7 +750,7 @@ file( )
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, FunctionCall)
-    assert stmt.name == "file"
+    assert str(stmt.name) == "file"
 
 
 def test_function_2():
@@ -763,7 +763,7 @@ file(b)
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, FunctionCall)
-    assert stmt.name == "file"
+    assert str(stmt.name) == "file"
 
 
 def test_function_3():
@@ -776,7 +776,7 @@ file(b,)
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, FunctionCall)
-    assert stmt.name == "file"
+    assert str(stmt.name) == "file"
 
 
 def test_list_def():
