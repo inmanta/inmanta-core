@@ -314,7 +314,7 @@ class IndexLookup(ReferenceStatement, Resumer):
     ) -> None:
         ReferenceStatement.__init__(self, list(chain((v for (_, v) in query), wrapped_query)))
         self.index_type = index_type
-        self.anchors.append(TypeReferenceAnchor(index_type.get_location(), index_type.namespace, index_type))
+        self.anchors.append(TypeReferenceAnchor(index_type.namespace, index_type))
         self.query = [(str(n), e) for n, e in query]
         self.wrapped_query: typing.List["WrappedKwargs"] = wrapped_query
 

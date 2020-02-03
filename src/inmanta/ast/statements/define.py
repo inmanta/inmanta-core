@@ -94,7 +94,7 @@ class DefineEntity(TypeDefinitionStatement):
         name = str(lname)
         TypeDefinitionStatement.__init__(self, namespace, name)
 
-        self.anchors = [TypeReferenceAnchor(x.get_location(), namespace, x) for x in parents]
+        self.anchors = [TypeReferenceAnchor(namespace, x) for x in parents]
 
         self.name = name
         self.attributes = attributes
@@ -106,7 +106,8 @@ class DefineEntity(TypeDefinitionStatement):
         self.parents = parents
 
         if len(self.parents) == 0 and not (self.name == "Entity" and self.namespace.name == "std"):
-            self.parents.append(LocatableString("std::Entity", Range("__internal__", -1, -1, -1, -1), -1, namespace))
+            dummy_location: Range = Range("__internal__", -1, -1, -1, -1)
+            self.parents.append(LocatableString("std::Entity", dummy_location, -1, namespace))
 
         self.type = Entity(self.name, namespace)
         self.type.location = lname.location
@@ -154,7 +155,7 @@ class DefineEntity(TypeDefinitionStatement):
                 name = str(attribute.name)
                 attr_obj = Attribute(entity_type, attr_type, name, attribute.multi, attribute.nullable)
                 attr_obj.location = attribute.get_location()
-                self.anchors.append(TypeReferenceAnchor(attribute.type.get_location(), self.namespace, attribute.type))
+                self.anchors.append(TypeReferenceAnchor(self.namespace, attribute.type))
 
                 if name in add_attributes:
                     raise DuplicateException(attr_obj, add_attributes[name], "Same attribute defined twice in one entity")
@@ -229,7 +230,7 @@ class DefineImplementation(TypeDefinitionStatement):
 
         self.type = Implementation(str(self.name), self.block, self.namespace, str(target_type), self.comment)
         self.type.location = name.get_location()
-        self.anchors = [TypeReferenceAnchor(target_type.get_location(), namespace, target_type)]
+        self.anchors = [TypeReferenceAnchor(namespace, target_type)]
         self.anchors.extend(statements.get_anchors())
 
     def __repr__(self) -> str:
@@ -266,7 +267,7 @@ class DefineImplementInherits(DefinitionStatement):
         else:
             self.comment = None
         self.location = entity_name.get_location()
-        self.anchors.append(TypeReferenceAnchor(entity_name.get_location(), entity_name.namespace, entity_name))
+        self.anchors.append(TypeReferenceAnchor(entity_name.namespace, entity_name))
 
     def __repr__(self) -> str:
         """
@@ -314,8 +315,8 @@ class DefineImplement(DefinitionStatement):
         self.entity = entity_name
         self.entity_location = entity_name.get_location()
         self.implementations = implementations
-        self.anchors = [TypeReferenceAnchor(x.get_location(), x.namespace, x) for x in implementations]
-        self.anchors.append(TypeReferenceAnchor(entity_name.get_location(), entity_name.namespace, entity_name))
+        self.anchors = [TypeReferenceAnchor(x.namespace, x) for x in implementations]
+        self.anchors.append(TypeReferenceAnchor(entity_name.namespace, entity_name))
         self.anchors.extend(select.get_anchors())
         self.select = select
         if comment is not None:
@@ -393,7 +394,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         TypeDefinitionStatement.__init__(self, namespace, str(name))
         self.set_location(name.get_location())
         self.basetype = basetype
-        self.anchors.append(TypeReferenceAnchor(basetype.get_location(), namespace, basetype))
+        self.anchors.append(TypeReferenceAnchor(namespace, basetype))
         self.anchors.extend(expression.get_anchors())
         self.set_expression(expression)
         self.type = ConstraintType(self.namespace, str(name))
@@ -512,8 +513,8 @@ class DefineRelation(BiStatement):
         self.annotations = [exp[0] for exp in self.annotation_expression]
 
         self.anchors.extend((y for x in annotations for y in x.get_anchors()))
-        self.anchors.append(TypeReferenceAnchor(left[0].get_location(), left[0].namespace, left[0]))
-        self.anchors.append(TypeReferenceAnchor(right[0].get_location(), right[0].namespace, right[0]))
+        self.anchors.append(TypeReferenceAnchor(left[0].namespace, left[0]))
+        self.anchors.append(TypeReferenceAnchor(right[0].namespace, right[0]))
 
         self.left = left
         self.right = right
@@ -619,7 +620,7 @@ class DefineIndex(DefinitionStatement):
         DefinitionStatement.__init__(self)
         self.type = entity_type
         self.attributes = [str(a) for a in attributes]
-        self.anchors.append(TypeReferenceAnchor(entity_type.get_location(), entity_type.namespace, entity_type))
+        self.anchors.append(TypeReferenceAnchor(entity_type.namespace, entity_type))
         self.anchors.extend(
             [AttributeReferenceAnchor(x.get_location(), entity_type.namespace, entity_type, str(x)) for x in attributes]
         )

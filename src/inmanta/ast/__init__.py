@@ -186,8 +186,8 @@ class Anchor(object):
 
 
 class TypeReferenceAnchor(Anchor):
-    def __init__(self, range: Range, namespace: "Namespace", type: LocatableString) -> None:
-        Anchor.__init__(self, range=range)
+    def __init__(self, namespace: "Namespace", type: LocatableString) -> None:
+        Anchor.__init__(self, range=type.get_location())
         self.namespace = namespace
         self.type = type
 

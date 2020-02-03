@@ -254,7 +254,7 @@ class Constructor(ExpressionStatement):
         self.__wrapped_kwarg_attributes: List[WrappedKwargs] = wrapped_kwargs
         self.location = location
         self.namespace = namespace
-        self.anchors.append(TypeReferenceAnchor(class_type.get_location(), namespace, class_type))
+        self.anchors.append(TypeReferenceAnchor(namespace, class_type))
         for a in attributes:
             self.add_attribute(a[0], a[1])
         self.type: Optional["EntityLike"] = None
