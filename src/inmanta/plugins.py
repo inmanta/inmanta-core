@@ -22,7 +22,7 @@ import subprocess
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Type, TypeVar
 
 from inmanta import const, protocol
-from inmanta.ast import CompilerException, Namespace, RuntimeException, TypeNotFoundException
+from inmanta.ast import CompilerException, LocatableString, Namespace, RuntimeException, TypeNotFoundException
 from inmanta.ast.type import TypedList
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
@@ -70,12 +70,12 @@ class Context(object):
     def get_resolver(self) -> Resolver:
         return self.resolver
 
-    def get_type(self, name: str):
+    def get_type(self, name: LocatableString):
         """
             Get a type from the configuration model.
         """
         try:
-            return self.queue.get_types()[name]
+            return self.queue.get_types()[str(name)]
         except KeyError:
             raise TypeNotFoundException(name, self.owner.namespace)
 

@@ -517,3 +517,16 @@ ar = Test[a="a", a="b"]
         """,
         "Attribute a provided twice in index lookup (reported in Test[[('a', 'a'), ('a', 'b')]] ({dir}/main.cf:13))",
     )
+
+
+def test_1652_index_on_missing_type_location(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test_A:
+    string name
+end
+
+index TestA(name)
+        """,
+        "could not find type TestA in namespace __config__ ({dir}/main.cf:5:7)",
+    )
