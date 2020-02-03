@@ -404,7 +404,7 @@ class RemoteResourceAction(ResourceAction):
             self.status = status
             self.change = change
             self.changes = changes
-            self.future.set_result(ResourceActionResult(True, send_events, False))
+            self.future.set_result(ResourceActionResult(status == const.ResourceState.deployed, send_events, False))
 
 
 class ResourceScheduler(object):
