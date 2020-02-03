@@ -28,7 +28,7 @@ from inmanta.const import ResourceAction
 from inmanta.data import model
 from inmanta.data.model import EnvironmentSetting
 from inmanta.protocol import method
-from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
+from inmanta.protocol.common import ArgOption, BaseHttpException, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.converter import (
     ArgOptionHandler,
     FunctionParameterHandler,
@@ -37,6 +37,11 @@ from inmanta.protocol.openapi.converter import (
     OperationHandler,
 )
 from inmanta.protocol.openapi.model import MediaType, Schema
+
+
+class DummyException(BaseHttpException):
+    def __init__(self):
+        super(DummyException, self).__init__(status_code=405)
 
 
 @pytest.fixture(scope="function")
@@ -66,6 +71,9 @@ def api_methods_fixture(clean_reset):
             :param param: A parameter.
             :param id: The id of the resource.
             :return: A return value.
+            :raises OSError: Something went wrong
+            :raises NotFound: Resource was not found.
+            :raises test_openapi.DummyException: A dummy exception
         """
         return ""
 
@@ -81,6 +89,9 @@ def api_methods_fixture(clean_reset):
             :param param: A parameter.
             :param id: The id of the resource.
             :return: A return value.
+            :raises OSError: Something went wrong
+            :raises NotFound: Resource was not found.
+            :raises test_openapi.DummyException: A dummy exception
         """
         return ""
 
@@ -346,6 +357,9 @@ def test_post_operation(api_methods_fixture):
     param_description = "A parameter."
     id_description = "The id of the resource."
     return_value_description = "A return value."
+    raises_os_error_description = "Something went wrong"
+    raises_not_found_description = "Resource was not found."
+    raises_dummy_exception_description = "A dummy exception"
 
     post = UrlMethod(
         properties=MethodProperties.methods["dummy_post_with_parameters"][0],
@@ -375,8 +389,11 @@ def test_post_operation(api_methods_fixture):
     assert param_map["id"] == id_description
 
     # Asserts on response
-    assert ["header-val"] == list(operation.responses["200"].headers.keys())
-    assert return_value_description == operation.responses["200"].description
+    assert len(operation.responses) == 4
+    assert operation.responses["200"].description == return_value_description
+    assert operation.responses["404"].description == raises_not_found_description
+    assert operation.responses["405"].description == raises_dummy_exception_description
+    assert operation.responses["500"].description == raises_os_error_description
 
 
 def test_get_operation(api_methods_fixture):
@@ -391,6 +408,9 @@ def test_get_operation(api_methods_fixture):
     param_description = "A parameter."
     id_description = "The id of the resource."
     return_value_description = "A return value."
+    raises_os_error_description = "Something went wrong"
+    raises_not_found_description = "Resource was not found."
+    raises_dummy_exception_description = "A dummy exception"
 
     get = UrlMethod(
         properties=MethodProperties.methods["dummy_get_with_parameters"][0],
@@ -417,8 +437,11 @@ def test_get_operation(api_methods_fixture):
     assert param_map["id"] == id_description
 
     # Asserts on response
-    assert ["header-val"] == list(operation.responses["200"].headers.keys())
-    assert return_value_description == operation.responses["200"].description
+    assert len(operation.responses) == 4
+    assert operation.responses["200"].description == return_value_description
+    assert operation.responses["404"].description == raises_not_found_description
+    assert operation.responses["405"].description == raises_dummy_exception_description
+    assert operation.responses["500"].description == raises_os_error_description
 
 
 def test_post_operation_no_docstring(api_methods_fixture):
@@ -452,6 +475,7 @@ def test_post_operation_no_docstring(api_methods_fixture):
     assert param_map["id"] is None
 
     # Asserts on response
+    assert len(operation.responses) == 1
     assert ["header-val"] == list(operation.responses["200"].headers.keys())
     assert operation.responses["200"].description == ""
 
@@ -486,6 +510,7 @@ def test_get_operation_no_docstring(api_methods_fixture):
     assert param_map["id"] is None
 
     # Asserts on response
+    assert len(operation.responses) == 1
     assert ["header-val"] == list(operation.responses["200"].headers.keys())
     assert operation.responses["200"].description == ""
 
@@ -528,6 +553,7 @@ def test_post_operation_partial_documentation(api_methods_fixture):
     assert param_map["id_no_doc"] is None
 
     # Asserts on response
+    assert len(operation.responses) == 1
     assert sorted(["header-doc", "header-no-doc"]) == sorted(list(operation.responses["200"].headers.keys()))
     assert operation.responses["200"].description == ""
 
@@ -572,6 +598,7 @@ def test_get_operation_partial_documentation(api_methods_fixture):
     assert param_map["id_no_doc"] is None
 
     # Asserts on response
+    assert len(operation.responses) == 1
     assert sorted(["header-doc", "header-no-doc"]) == sorted(list(operation.responses["200"].headers.keys()))
     assert operation.responses["200"].description == ""
 
