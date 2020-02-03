@@ -1,16 +1,3 @@
-Configure server
-################
-This guide goes through the steps to set up an Inmanta service orchestrator server. This guide assumes a RHEL 7 or CentOS 7
-server is used. The rpm packages install the server configuration file in `/etc/inmanta/inmanta.cfg`.
-
-Optional step 1: Setup SSL and authentication
----------------------------------------------
-
-Follow the instructions in :ref:`auth-setup` to configure both SSL and authentication.
-While not mandatory, it is highly recommended you do so.
-
-.. include:: ./install-server/install-postgres.rst
-
 .. _install-step-4:
 
 Step 4: Set the database connection details
@@ -30,6 +17,7 @@ Replace <password> in the above-mentioned snippet with the password of the inman
 connect to the local server and uses the database inmanta. See the :inmanta.config:group:`database` section in the
 configfile for other options.
 
+.. _configure_server_step_5:
 
 Step 5: Set the server address
 ------------------------------
