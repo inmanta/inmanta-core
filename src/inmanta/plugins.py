@@ -22,7 +22,7 @@ import subprocess
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Type, TypeVar
 
 from inmanta import const, protocol
-from inmanta.ast import CompilerException, LocatableString, Namespace, RuntimeException, TypeNotFoundException
+from inmanta.ast import CompilerException, LocatableString, Namespace, Range, RuntimeException, TypeNotFoundException
 from inmanta.ast.type import TypedList
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
@@ -252,7 +252,7 @@ class Plugin(object, metaclass=PluginMeta):
             return "%s(%s)" % (self.__class__.__function_name__, args)
         return "%s(%s) -> %s" % (self.__class__.__function_name__, args, self._return)
 
-    def to_type(self, arg_type, resolver):
+    def to_type(self, arg_type: Optional[object], resolver):
         """
             Convert a string representation of a type to a type
         """
@@ -264,6 +264,12 @@ class Plugin(object, metaclass=PluginMeta):
                 "bad annotation in plugin %s::%s, expected str but got %s (%s)"
                 % (self.ns, self.__class__.__function_name__, type(arg_type), arg_type)
             )
+        filename: Optional[str] = inspect.getsourcefile(self.__class__.__function__)
+        location: Range
+        assert filename is not None
+        line: int = inspect.getsourcelines(self.__class__.__function__)[1] + 1
+        location = Range(filename, line, 1, line, -1)
+        locatable_type: LocatableString = LocatableString(arg_type, location, 0, None)
 
         if arg_type == "any":
             return None
@@ -275,11 +281,11 @@ class Plugin(object, metaclass=PluginMeta):
             return None
 
         if arg_type.endswith("[]"):
-            basetypename = arg_type[0:-2]
-            basetype = resolver.get_type(basetypename)
+            locatable_type.value = arg_type[0:-2]
+            basetype = resolver.get_type(locatable_type)
             return TypedList(basetype)
 
-        return resolver.get_type(arg_type)
+        return resolver.get_type(locatable_type)
 
     def _is_instance(self, value: Any, arg_type: Type) -> bool:
         """
