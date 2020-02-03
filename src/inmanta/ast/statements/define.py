@@ -164,7 +164,7 @@ class DefineEntity(TypeDefinitionStatement):
                 if attribute.default is not None or attribute.remove_default:
                     entity_type.add_default_value(name, attribute)
 
-            if len(set(self.parents)) != len(self.parents):
+            if len({str(p) for p in self.parents}) != len(self.parents):
                 raise TypingException(self, "same parent defined twice")
             for parent in self.parents:
                 parent_type = self.namespace.get_type(parent)

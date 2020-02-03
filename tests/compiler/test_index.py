@@ -528,5 +528,5 @@ end
 
 index TestA(name)
         """,
-        "could not find type TestA in namespace __config__ ({dir}/main.cf:5:7)",
+        "could not find type TestA in namespace __config__ ({dir}/main.cf:6:7)",
     )

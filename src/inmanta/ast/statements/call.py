@@ -19,7 +19,7 @@
 import logging
 
 from inmanta import plugins
-from inmanta.ast import ExternalException, RuntimeException, WrappingRuntimeException
+from inmanta.ast import ExternalException, LocatableString, RuntimeException, WrappingRuntimeException
 from inmanta.ast.statements import ReferenceStatement
 from inmanta.execute.proxy import UnknownException, UnsetException
 from inmanta.execute.runtime import ResultVariable, Waiter
@@ -40,7 +40,7 @@ class FunctionCall(ReferenceStatement):
         contributes:
     """
 
-    def __init__(self, name, arguments):
+    def __init__(self, name: LocatableString, arguments):
         ReferenceStatement.__init__(self, arguments)
         self.name = name
         self.arguments = arguments
