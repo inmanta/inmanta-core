@@ -32,7 +32,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import AssignStatement, ExpressionStatement, Resumer, Statement
-from inmanta.ast.type import Dict, List, Type, TypedList
+from inmanta.ast.type import Type, TypedList
 from inmanta.execute.runtime import (
     ExecutionUnit,
     HangUnit,
@@ -104,7 +104,7 @@ class CreateList(ReferenceStatement):
         if self in requires:
             return requires[self]
 
-        qlist = List()
+        qlist = []
 
         for i in range(len(self.items)):
             value = self.items[i].execute(requires, resolver, queue)
@@ -116,7 +116,7 @@ class CreateList(ReferenceStatement):
         return qlist
 
     def execute_direct(self, requires):
-        qlist = List()
+        qlist = []
 
         for i in range(len(self.items)):
             value = self.items[i]
@@ -130,7 +130,7 @@ class CreateList(ReferenceStatement):
                 item.check_type_for_constant(expected_type, False, False)
         elif isinstance(expected_type, TypedList):
             for item in self.items:
-                item.check_type_for_constant(expected_type.basetype, multi, nullable)
+                item.check_type_for_constant(expected_type.element_type, multi, nullable)
         else:
             expected_type.validate(self.items)
 
@@ -149,7 +149,7 @@ class CreateDict(ReferenceStatement):
             seen[x] = v
 
     def execute_direct(self, requires):
-        qlist = Dict()
+        qlist = {}
 
         for i in range(len(self.items)):
             key, value = self.items[i]
@@ -161,7 +161,7 @@ class CreateDict(ReferenceStatement):
         """
             Create this list
         """
-        qlist = Dict()
+        qlist = {}
 
         for i in range(len(self.items)):
             key, value = self.items[i]

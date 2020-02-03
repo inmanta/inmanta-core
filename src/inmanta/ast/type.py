@@ -18,7 +18,11 @@
 
 import numbers
 import typing
-from typing import Any, Optional, Union
+from typing import Any, Iterable
+from typing import List as PythonList
+from typing import Optional
+from typing import Union as PythonUnion
+from typing import cast
 
 from inmanta.ast import DuplicateException, Locatable, Location, Named, Namespace, RuntimeException, TypeNotFoundException
 from inmanta.execute.util import AnyType, NoneValue
@@ -71,40 +75,18 @@ class Type(Locatable):
         This class is the base class for all types that represent basic data.
         These are types that are not relations.
 
-        This code is rather tricky, as not all types are used in the same way
-
-        1. types that are used as python types and inmanta types
-            (i.e. an inmanta instance === python instance of the python class === the inmanta type)
-            1. List
-            2. Dict
-        2. types for which the inmanta type == the python class and
-            inmanta instances are python instances of a the corresponding python type
-            1. Bool  => bool
-            2. Number => float/int
-            3. String => str
-        3. types for which the inmanta type is an instance of the python type and
-            inmanta instance is also an instance of the python type
-            1. TypedList
-        4. types for which the inmanta type is an instance of the python type and
-            inmanta instance is an instance of a different python type
-            1. ConstraintType
-            2. NullableType
-            3. Literal
-            4. LiteralList
-            5. LiteralDict
-
+        An instance of Type (or a subclass) represents an Inmanta type.
+        Inmanta instances are represented by instances of other Python types.
     """
 
-    @classmethod
-    def validate(cls, value: object) -> bool:
+    def validate(self, value: Optional[object]) -> bool:
         """
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
         raise NotImplementedError()
 
-    @classmethod
-    def cast(cls, value: Any) -> Any:
+    def cast(self, value: Optional[object]) -> Optional[object]:
         """
             Cast the given value to this type. If this fails a CastException
             is thrown.
@@ -145,7 +127,7 @@ class NullableType(Type):
         """
         return self.basetype.cast(value)
 
-    def validate(self, value):
+    def validate(self, value: Optional[object]) -> bool:
         """
             Validate the given value to check if it satisfies the constraint and
             the basetype.
@@ -176,8 +158,7 @@ class Number(Type):
     def __init__(self):
         Type.__init__(self)
 
-    @classmethod
-    def validate(cls, value):
+    def validate(self, value):
         """
             Validate the given value to check if it satisfies the constraints
             associated with this type
@@ -190,8 +171,7 @@ class Number(Type):
 
         return True  # allow this function to be called from a lambda function
 
-    @classmethod
-    def cast(cls, value: Any) -> int:
+    def cast(self, value: Optional[object]) -> Optional[PythonUnion[int, float]]:
         """
             Cast the value to a number.
 
@@ -201,9 +181,9 @@ class Number(Type):
             return value
 
         try:
-            fl_value = float(value)
+            fl_value = float(cast(Any, value))
             try:
-                int_value = int(value)
+                int_value = int(cast(Any, value))
             except ValueError:
                 int_value = 0
 
@@ -214,20 +194,16 @@ class Number(Type):
         except ValueError:
             raise CastException()
 
-    @classmethod
-    def __str__(cls):
+    def __str__(self):
         return "number"
 
-    @classmethod
-    def is_primitive(cls):
+    def is_primitive(self):
         return True
 
-    @classmethod
-    def get_location(cls) -> Location:
+    def get_location(self) -> Location:
         return None
 
-    @classmethod
-    def type_string(cls):
+    def type_string(self):
         return "number"
 
 
@@ -239,8 +215,7 @@ class Bool(Type):
     def __init__(self):
         Type.__init__(self)
 
-    @classmethod
-    def validate(cls, value):
+    def validate(self, value):
         """
             Validate the given value to check if it satisfies the constraints
             associated with this type
@@ -249,11 +224,9 @@ class Bool(Type):
             return True
         if isinstance(value, bool):
             return True
-        else:
-            raise RuntimeException(None, "Invalid value '%s', expected Bool" % value)
+        raise RuntimeException(None, "Invalid value '%s', expected Bool" % value)
 
-    @classmethod
-    def cast(cls, value: Any) -> bool:
+    def cast(self, value: Optional[object]) -> bool:
         """
             Convert the given value to value that can be used by the operators
             defined on this type.
@@ -266,30 +239,25 @@ class Bool(Type):
 
         raise CastException()
 
-    @classmethod
-    def type_string(cls):
+    def type_string(self):
         return "bool"
 
-    @classmethod
-    def is_primitive(cls):
+    def is_primitive(self):
         return True
 
-    @classmethod
-    def get_location(cls) -> Location:
+    def get_location(self) -> Location:
         return None
 
 
-class String(Type, str):
+class String(Type):
     """
         This class represents a string type in the configuration model.
     """
 
     def __init__(self):
         Type.__init__(self)
-        str.__init__(self)
 
-    @classmethod
-    def cast(cls, value: Any) -> str:
+    def cast(self, value: Optional[object]) -> str:
         """
             Cast the given value to a string
 
@@ -297,8 +265,7 @@ class String(Type, str):
         """
         return str(value)
 
-    @classmethod
-    def validate(cls, value):
+    def validate(self, value):
         """
             Validate the given value to check if it satisfies the constraints
             associated with this type
@@ -310,64 +277,25 @@ class String(Type, str):
 
         return True
 
-    @classmethod
-    def type_string(cls):
+    def type_string(self):
         return "string"
 
-    @classmethod
-    def is_primitive(cls):
+    def is_primitive(self):
         return True
 
-    @classmethod
-    def get_location(cls) -> Location:
+    def get_location(self) -> Location:
         return None
 
 
-class TypedList(Type):
-    def __init__(self, basetype):
-        Type.__init__(self)
-        self.basetype = basetype
-
-    def normalize(self):
-        self.basetype.normalize()
-
-    def cast(self, value):
-        """
-            Cast the value to the basetype of this constraint
-        """
-        return list([self.basetype.cast(x) for x in value])
-
-    def validate(self, value):
-        """
-            Validate the given value to check if it satisfies the constraint and
-            the basetype.
-        """
-        if not List.validate(value):
-            return False
-
-        for x in value:
-            self.basetype.validate(x)
-
-        return True
-
-    def type_string(self):
-        return "%s[]" % (self.basetype.type_string())
-
-    def __str__(self):
-        return self.type_string()
-
-
-class List(Type, list):
+class List(Type):
     """
         This class represents a list type in the configuration model. (instances represent instances)
     """
 
     def __init__(self):
         Type.__init__(self)
-        list.__init__(self)
 
-    @classmethod
-    def cast(cls, value):
+    def cast(self, value):
         """
             Cast the given value to a string
 
@@ -375,8 +303,7 @@ class List(Type, list):
         """
         return list(value)
 
-    @classmethod
-    def validate(cls, value):
+    def validate(self, value):
         """
             Validate the given value to check if it satisfies the constraints
             associated with this type
@@ -396,16 +323,47 @@ class List(Type, list):
     #     def __str__(cls):
     #         return "list"
 
-    @classmethod
-    def type_string(cls):
+    def type_string(self):
         return "list"
 
     def __str__(self):
-        return list.__str__(self)
+        return self.type_string()
 
-    @classmethod
-    def get_location(cls) -> Location:
+    def get_location(self) -> Location:
         return None
+
+
+class TypedList(List):
+    def __init__(self, element_type):
+        List.__init__(self)
+        self.element_type: Type = element_type
+
+    def normalize(self):
+        self.element_type.normalize()
+
+    def cast(self, value):
+        if not isinstance(value, Iterable):
+            raise CastException()
+        return list([self.element_type.cast(x) for x in value])
+
+    def validate(self, value: Optional[object]) -> bool:
+        if not List().validate(value):
+            return False
+
+        assert isinstance(value, list)
+        for element in value:
+            self.element_type.validate(element)
+
+        return True
+
+    def type_string(self):
+        return "%s[]" % (self.element_type.type_string())
+
+    def get_location(self) -> Location:
+        return None
+
+    def __str__(self):
+        return self.type_string()
 
 
 class LiteralList(TypedList):
@@ -417,116 +375,16 @@ class LiteralList(TypedList):
     def __init__(self):
         TypedList.__init__(self, Literal())
 
-    @classmethod
-    def get_location(cls) -> Location:
-        return None
 
-    def __str__(self):
-        return list.__str__(self)
-
-
-class LiteralDict(Type):
-    """
-    This class represents a dict type containing only literals as values.
-    (instances of the class represent the type)
-    """
-
-    def __init__(self):
-        Type.__init__(self)
-        self.basetype = Literal()
-
-    def normalize(self):
-        self.basetype.normalize()
-
-    def cast(self, value: object) -> "Dict":
-        """
-            Cast the value to the basetype of this constraint
-        """
-        if not isinstance(value, dict):
-            raise CastException()
-        return Dict.cast((k, self.basetype.cast(v)) for k, v in value.items())
-
-    def validate(self, value: object) -> bool:
-        """
-            Validate the given value to check if it satisfies the constraint and
-            the basetype.
-        """
-        if not Dict.validate(value):
-            return False
-
-        assert isinstance(value, dict)
-        for element in value.values():
-            if not self.basetype.validate(element):
-                return False
-
-        return True
-
-    @classmethod
-    def get_location(cls) -> Location:
-        return None
-
-    def type_string(self):
-        return "literaldict"
-
-    def __str__(self):
-        return self.type_string()
-
-
-class Literal(Type):
-    """
-    This class represents a literal in the configuration model.
-    (instances of the class represent the type)
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.direct_literal_types: Union[typing.List[typing.Type[Type]], typing.List[Type]] = [
-            NullableType(Number),
-            Bool,
-            String,
-        ]
-        self.lazy_literal_types: typing.List[typing.Type[Type]] = [
-            LiteralList,
-            LiteralDict,
-        ]
-
-    @classmethod
-    def cast(cls, value: Any) -> Any:
-        raise CastException()
-
-    def validate(self, value: object) -> bool:
-        def try_type(literal_type: Union[typing.Type[Type], Type]) -> bool:
-            try:
-                return literal_type.validate(value)
-            except RuntimeException:
-                return False
-
-        for literal_type in self.direct_literal_types:
-            if try_type(literal_type):
-                return True
-        for lazy_type in self.lazy_literal_types:
-            if try_type(lazy_type()):
-                return True
-        raise RuntimeException(None, "Invalid value '%s', expected Literal" % value)
-
-    def type_string(self) -> str:
-        return "literal"
-
-    def __str__(self) -> str:
-        return self.type_string()
-
-
-class Dict(Type, dict):
+class Dict(Type):
     """
         This class represents a list type in the configuration model. (instances represent instances)
     """
 
     def __init__(self):
         Type.__init__(self)
-        dict.__init__(self)
 
-    @classmethod
-    def cast(cls, value):
+    def cast(self, value):
         """
             Cast the given value to a string
 
@@ -534,8 +392,7 @@ class Dict(Type, dict):
         """
         return dict(value)
 
-    @classmethod
-    def validate(cls, value):
+    def validate(self, value):
         """
             Validate the given value to check if it satisfies the constraints
             associated with this type
@@ -551,16 +408,93 @@ class Dict(Type, dict):
 
         return True
 
-    @classmethod
-    def type_string(cls):
+    def type_string(self):
         return "dict"
 
     def __str__(self):
-        return dict.__str__(self)
+        return self.type_string()
 
-    @classmethod
-    def get_location(cls) -> Location:
+    def get_location(self) -> Location:
         return None
+
+
+class TypedDict(Dict):
+    def __init__(self, element_type):
+        List.__init__(self)
+        self.element_type: Type = element_type
+
+    def normalize(self):
+        self.element_type.normalize()
+
+    def cast(self, value):
+        if not isinstance(value, dict):
+            raise CastException()
+        return list({k: self.element_type.cast(v) for k, v in value.items()})
+
+    def validate(self, value: Optional[object]) -> bool:
+        if not Dict().validate(value):
+            return False
+
+        assert isinstance(value, dict)
+        for element in value.values():
+            self.element_type.validate(element)
+
+        return True
+
+    def type_string(self):
+        return "dict[%s, %s]" % (String().type_string(), self.element_type.type_string())
+
+    def get_location(self) -> Location:
+        return None
+
+    def __str__(self):
+        return self.type_string()
+
+
+class LiteralDict(TypedDict):
+    """
+    This class represents a dict type containing only literals as values.
+    (instances of the class represent the type)
+    """
+
+    def __init__(self):
+        TypedDict.__init__(self, Literal())
+
+
+class Union(Type):
+    def __init__(self, types: PythonList[Type]):
+        Type.__init__(self)
+        self.types: PythonList[Type] = types
+
+    def cast(self, value: Any) -> Any:
+        if self.validate(value):
+            return value
+        raise CastException()
+
+    def validate(self, value: object) -> bool:
+        for typ in self.types:
+            try:
+                if typ.validate(value):
+                    return True
+            except RuntimeException:
+                pass
+        raise RuntimeException(None, "Invalid value '%s', expected Literal" % value)
+
+    def type_string(self) -> str:
+        return "literal"
+
+    def __str__(self) -> str:
+        return self.type_string()
+
+
+class Literal(Union):
+    """
+    This class represents a literal in the configuration model.
+    (instances of the class represent the type)
+    """
+
+    def __init__(self):
+        Union.__init__(self, [NullableType(Number()), Bool(), String(), TypedList(self), TypedDict(self)])
 
 
 class ConstraintType(NamedType):
@@ -574,7 +508,7 @@ class ConstraintType(NamedType):
     comment: Optional[str]
 
     def __init__(self, namespace, name):
-        Type.__init__(self)
+        NamedType.__init__(self)
 
         self.basetype = None  # : ConstrainableType
         self._constraint = None
@@ -659,4 +593,4 @@ def create_function(expression):
     return function
 
 
-TYPES = {"string": String, "number": Number, "bool": Bool, "list": LiteralList(), "dict": Dict}
+TYPES = {"string": String(), "number": Number(), "bool": Bool(), "list": LiteralList(), "dict": Dict()}
