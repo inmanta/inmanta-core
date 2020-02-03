@@ -258,8 +258,12 @@ class VirtualEnv(object):
         """
             Install requirements from a list of requirement strings
         """
-        requirements_list = sorted(requirements_list)
+        # Install url-based requirements directly to prevent parsing issues
+        url_based_requirements = [r for r in requirements_list if "://" in r]
+        self._install(url_based_requirements)
 
+        # Install other requirements only when not already present in parent venv
+        requirements_list = sorted([r for r in requirements_list if "://" not in r])
         if detailed_cache:
             requirements_list = sorted(list(set(requirements_list) - self.__cache_done))
             if len(requirements_list) == 0:
