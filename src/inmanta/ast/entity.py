@@ -396,13 +396,6 @@ class Entity(EntityLike, NamedType):
         """
         return self.get_full_name()
 
-    @classmethod
-    def cast(cls, value):
-        """
-            Cast a value
-        """
-        return value
-
     def __eq__(self, other: object) -> bool:
         """
             Override list eq method
