@@ -9,6 +9,7 @@
  - Fixed deadlock triggered by std::AgenConfigHandler (#1662)
  - Removed the resourceversionid table from the database (#1627)
  - Remote machines not being available or not having a python interpreter now results in a clearer error.
+ - Parse comments and urls correctly from the requirements.txt file of an Inmanta module (#1764)
 
 ## Added
 - Add get_environment_id to exporter (#1683)
