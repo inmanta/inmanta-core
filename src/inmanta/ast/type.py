@@ -17,7 +17,6 @@
 """
 
 import numbers
-import typing
 from typing import Any, Iterable
 from typing import List as PythonList
 from typing import Optional
