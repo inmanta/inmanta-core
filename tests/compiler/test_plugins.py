@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import os
 
 
 def test_plugin_excn(snippetcompiler):
@@ -27,4 +28,14 @@ def test_plugin_excn(snippetcompiler):
 caused by:
   jinja2.exceptions.TemplateNotFound: /tet.tmpl
 """,
+    )
+
+
+def test_1221_plugin_incorrect_type_annotation(snippetcompiler):
+    modpath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "modules", "test_1221")
+    snippetcompiler.setup_for_error(
+        """
+import test_1221
+        """,
+        "could not find type std::WrongName in namespace std (%s/plugins/__init__.py:5:1)" % modpath,
     )
