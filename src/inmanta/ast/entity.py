@@ -134,7 +134,6 @@ class Entity(EntityLike, NamedType):
             if attribute.default is not None:
                 default_type: Type = attribute.type.get_type(self.namespace)
                 try:
-                    print(type(default_type))
                     default_type.validate(attribute.default.as_constant())
                 except RuntimeException as exception:
                     if exception.stmt is None or isinstance(exception.stmt, Type):
