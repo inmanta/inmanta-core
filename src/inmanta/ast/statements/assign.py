@@ -32,7 +32,6 @@ from inmanta.ast import (
 )
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import AssignStatement, ExpressionStatement, Resumer, Statement
-from inmanta.ast.type import Type, TypedList
 from inmanta.execute.runtime import (
     ExecutionUnit,
     HangUnit,
@@ -124,15 +123,8 @@ class CreateList(ReferenceStatement):
 
         return qlist
 
-    def check_type_for_constant(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
-        if multi:
-            for item in self.items:
-                item.check_type_for_constant(expected_type, False, False)
-        elif isinstance(expected_type, TypedList):
-            for item in self.items:
-                item.check_type_for_constant(expected_type.element_type, multi, nullable)
-        else:
-            expected_type.validate(self.items)
+    def as_constant(self) -> typing.List[object]:
+        return [item.as_constant() for item in self.items]
 
     def __repr__(self) -> str:
         return "List()"
@@ -169,8 +161,8 @@ class CreateDict(ReferenceStatement):
 
         return qlist
 
-    def check_type_for_constant(self, expected_type: "Type", multi: bool = False, nullable: bool = False) -> None:
-        expected_type.validate(dict(self.items))
+    def as_constant(self) -> typing.Dict[str, object]:
+        return {k: v.as_constant() for k, v in self.items}
 
     def __repr__(self) -> str:
         return "Dict()"

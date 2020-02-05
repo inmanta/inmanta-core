@@ -40,6 +40,7 @@ from inmanta.ast.statements.define import (
     DefineImport,
     DefineIndex,
     DefineRelation,
+    DefineType,
     DefineTypeConstraint,
     DefineTypeDefault,
 )
@@ -269,85 +270,59 @@ def p_entity_body(p: YaccProduction) -> None:
     p[0] = [p[1]]
 
 
-def p_attribute_type(p: YaccProduction) -> None:
-    """attr_type : ns_ref"""
-    p[0] = (p[1], False)
+def p_attribute_base_type(p: YaccProduction) -> None:
+    """attr_base_type : ns_ref"""
+    p[0] = DefineType(p[1])
+
+
+def p_attribute_type_multi(p: YaccProduction) -> None:
+    """attr_type_multi : attr_base_type '[' ']'"""
+    p[1].multi = True
+    p[0] = p[1]
 
 
 def p_attribute_type_opt(p: YaccProduction) -> None:
-    "attr_type : ns_ref '?'"
-    p[0] = (p[1], True)
+    """attr_type_opt : attr_type_multi '?'
+        | attr_base_type '?'"""
+    p[1].nullable = True
+    p[0] = p[1]
+
+
+def p_attribute_type(p: YaccProduction) -> None:
+    """attr_type : attr_type_opt
+        | attr_type_multi
+        | attr_base_type"""
+    p[0] = p[1]
 
 
 def p_attr(p: YaccProduction) -> None:
     "attr : attr_type ID"
-    (attr, nullable) = p[1]
-    p[0] = DefineAttribute(attr, p[2], None, nullable=nullable)
+    p[0] = DefineAttribute(p[1], p[2], None)
     attach_lnr(p, 2)
 
 
 def p_attr_cte(p: YaccProduction) -> None:
     """attr : attr_type ID '=' constant
            | attr_type ID '=' constant_list"""
-    (attr, nullable) = p[1]
-    p[0] = DefineAttribute(attr, p[2], p[4], nullable=nullable)
+    p[0] = DefineAttribute(p[1], p[2], p[4])
     attach_lnr(p, 2)
 
 
 def p_attr_undef(p: YaccProduction) -> None:
     "attr : attr_type ID '=' UNDEF"
-    (attr, nullable) = p[1]
-    p[0] = DefineAttribute(attr, p[2], None, remove_default=True, nullable=nullable)
+    p[0] = DefineAttribute(p[1], p[2], None, remove_default=True)
     attach_lnr(p, 2)
-
-
-def p_attribute_type_multi(p: YaccProduction) -> None:
-    "attr_type_multi : ns_ref '[' ']'"
-    p[0] = (p[1], False, Location(file, p.lineno(1)))
-
-
-def p_attribute_type_multi_opt(p: YaccProduction) -> None:
-    "attr_type_multi : ns_ref '[' ']' '?'"
-    p[0] = (p[1], True, Location(file, p.lineno(1)))
-
-
-def p_attr_list(p: YaccProduction) -> None:
-    "attr : attr_type_multi ID"
-    (attr, nullable, location) = p[1]
-    p[0] = DefineAttribute(attr, p[2], None, True, nullable=nullable)
-    attach_lnr(p, 2)
-
-
-def p_attr_list_cte(p: YaccProduction) -> None:
-    "attr : attr_type_multi ID '=' constant_list"
-    (attr, nullable, _) = p[1]
-    p[0] = DefineAttribute(attr, p[2], p[4], True, nullable=nullable)
-    attach_lnr(p, 3)
-
-
-def p_attr_list_undef(p: YaccProduction) -> None:
-    "attr : attr_type_multi ID '=' UNDEF"
-    (attr, nullable, _) = p[1]
-    p[0] = DefineAttribute(attr, p[2], None, True, remove_default=True, nullable=nullable)
-    attach_lnr(p, 3)
-
-
-def p_attr_list_null(p: YaccProduction) -> None:
-    "attr : attr_type_multi ID '=' NULL"
-    (attr, nullable, _) = p[1]
-    p[0] = DefineAttribute(attr, p[2], make_none(p, 3), True, nullable=nullable)
-    attach_lnr(p, 3)
 
 
 def p_attr_dict(p: YaccProduction) -> None:
     "attr : DICT ID"
-    p[0] = DefineAttribute(p[1], p[2], None)
+    p[0] = DefineAttribute(DefineType(p[1]), p[2], None)
     attach_lnr(p, 1)
 
 
 def p_attr_list_dict(p: YaccProduction) -> None:
     "attr : DICT ID '=' map_def"
-    p[0] = DefineAttribute(p[1], p[2], p[4])
+    p[0] = DefineAttribute(DefineType(p[1]), p[2], p[4])
     attach_lnr(p, 1)
 
 
@@ -358,19 +333,19 @@ def p_attr_list_dict_null_err(p: YaccProduction) -> None:
 
 def p_attr_dict_nullable(p: YaccProduction) -> None:
     "attr : DICT '?' ID"
-    p[0] = DefineAttribute(p[1], p[3], None, nullable=True)
+    p[0] = DefineAttribute(DefineType(p[1], nullable=True), p[3], None)
     attach_lnr(p, 1)
 
 
 def p_attr_list_dict_nullable(p: YaccProduction) -> None:
     "attr : DICT '?'  ID '=' map_def"
-    p[0] = DefineAttribute(p[1], p[3], p[5], nullable=True)
+    p[0] = DefineAttribute(DefineType(p[1], nullable=True), p[3], p[5])
     attach_lnr(p, 1)
 
 
 def p_attr_list_dict_null(p: YaccProduction) -> None:
     "attr : DICT '?'  ID '=' NULL"
-    p[0] = DefineAttribute(p[1], p[3], make_none(p, 5), nullable=True)
+    p[0] = DefineAttribute(DefineType(p[1], nullable=True), p[3], make_none(p, 5))
     attach_lnr(p, 1)
 
 

@@ -470,4 +470,4 @@ def create_function(expression: "ExpressionStatement"):
     return function
 
 
-TYPES = {"string": String(), "number": Number(), "bool": Bool(), "list": LiteralList(), "dict": Dict()}
+TYPES = {"string": String(), "number": Number(), "bool": Bool(), "list": LiteralList(), "dict": LiteralDict()}
