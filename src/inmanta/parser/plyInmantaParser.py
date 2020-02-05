@@ -646,7 +646,7 @@ def p_constructor(p: YaccProduction) -> None:
 
 def p_function_call(p: YaccProduction) -> None:
     " function_call : ns_ref '(' operand_list ')'"
-    p[0] = FunctionCall(str(p[1]), p[3])
+    p[0] = FunctionCall(p[1], p[3])
     attach_lnr(p, 2)
 
 

@@ -125,7 +125,7 @@ def test_400_typeloops_2(snippetcompiler):
 def test_unknown_type_in_relation(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
-        foo::Entity.test [1] -- std::Entity
+foo::Entity.test [1] -- std::Entity
         """,
-        "could not find type foo::Entity in namespace __config__ ({dir}/main.cf:2)",
+        "could not find type foo::Entity in namespace __config__ ({dir}/main.cf:2:1)",
     )

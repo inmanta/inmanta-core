@@ -249,12 +249,12 @@ class Constructor(ExpressionStatement):
         namespace: Namespace,
     ) -> None:
         super().__init__()
-        self.class_type = str(class_type)
+        self.class_type = class_type
         self.__attributes = {}  # type: Dict[str,ExpressionStatement]
         self.__wrapped_kwarg_attributes: List[WrappedKwargs] = wrapped_kwargs
         self.location = location
         self.namespace = namespace
-        self.anchors.append(TypeReferenceAnchor(class_type.get_location(), namespace, str(class_type)))
+        self.anchors.append(TypeReferenceAnchor(namespace, class_type))
         for a in attributes:
             self.add_attribute(a[0], a[1])
         self.type: Optional["EntityLike"] = None
