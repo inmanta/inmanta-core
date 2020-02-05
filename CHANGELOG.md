@@ -2,6 +2,7 @@
 
 ## Fixed
  - Disallowed entities in list attributes (#1435)
+ - Inmanta type module cleanup and type coverage
  - Added support for \*\*dict as kwargs for constructor calls and index lookups (#620, #1702)
  - Various compiler error reporting improvements (#1584, #1341, #1600, #1292)
  - CRUDHandler bugfix, ensure update is not called on purged resources
