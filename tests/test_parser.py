@@ -86,7 +86,7 @@ end
     stmt = statements[0]
     assert isinstance(stmt, define.DefineEntity)
     assert stmt.name == "Test"
-    assert stmt.parents == ["std::Entity"]
+    assert [str(p) for p in stmt.parents] == ["std::Entity"]
     assert len(stmt.attributes) == 0
     assert stmt.comment is None
 
@@ -104,7 +104,7 @@ end"""
     stmt = statements[0]
     assert isinstance(stmt, define.DefineEntity)
     assert stmt.name == "Test"
-    assert stmt.parents == ["Foo"]
+    assert [str(p) for p in stmt.parents] == ["Foo"]
     assert len(stmt.attributes) == 2
     assert stmt.comment is None
 
@@ -132,7 +132,7 @@ end
     assert len(statements) == 1
 
     stmt = statements[0]
-    assert stmt.parents == ["Foo"]
+    assert [str(p) for p in stmt.parents] == ["Foo"]
 
 
 def test_complex_entity():
@@ -156,7 +156,7 @@ end
 
     stmt = statements[0]
     assert len(stmt.parents) == 2
-    assert stmt.parents == ["Foo", "foo::sub::Bar"]
+    assert [str(p) for p in stmt.parents] == ["Foo", "foo::sub::Bar"]
     assert str(stmt.comment).strip() == documentation
     assert len(stmt.attributes) == 3
 
@@ -343,7 +343,7 @@ end
     assert len(statements) == 1
     assert len(statements[0].block.get_stmts()) == 0
     assert statements[0].name == "test"
-    assert isinstance(statements[0].entity, str)
+    assert isinstance(statements[0].entity, LocatableString)
 
     statements = parse_code(
         """
@@ -389,7 +389,7 @@ implement Test using test
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
     assert str(stmt.entity) == "Test"
-    assert stmt.implementations == ["test"]
+    assert [str(i) for i in stmt.implementations] == ["test"]
     assert str(stmt.select) == "true"
 
 
@@ -406,7 +406,7 @@ implement Test using test, blah when (self > 5)
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
     assert str(stmt.entity) == "Test"
-    assert stmt.implementations == ["test", "blah"]
+    assert [str(p) for p in stmt.implementations] == ["test", "blah"]
     assert isinstance(stmt.select, GreaterThan)
     assert stmt.select.children[0].name == "self"
     assert stmt.select.children[1].value == 5
@@ -422,7 +422,7 @@ implement Test using parents  \""" testc \"""
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, DefineImplementInherits)
-    assert stmt.entity == "Test"
+    assert str(stmt.entity) == "Test"
 
 
 def test_implements_selector():
@@ -437,8 +437,8 @@ implement Test using test when not (fg(self) and false)
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
-    assert stmt.entity == "Test"
-    assert stmt.implementations == ["test"]
+    assert str(stmt.entity) == "Test"
+    assert [str(i) for i in stmt.implementations] == ["test"]
     assert isinstance(stmt.select, Not)
     assert isinstance(stmt.select.children[0], And)
     assert isinstance(stmt.select.children[0].children[0], FunctionCall)
@@ -528,7 +528,7 @@ typedef uuid as string matching /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a
     stmt = statements[0]
     assert isinstance(stmt, DefineTypeConstraint)
     assert str(stmt.name) == "uuid"
-    assert stmt.basetype == "string"
+    assert str(stmt.basetype) == "string"
     assert isinstance(stmt.get_expression(), Regex)
     assert stmt.get_expression().children[1].value == re.compile(
         r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
@@ -546,7 +546,7 @@ typedef abc as string matching self in ["a","b","c"]
     stmt = statements[0]
     assert isinstance(stmt, DefineTypeConstraint)
     assert str(stmt.name) == "abc"
-    assert stmt.basetype == "string"
+    assert str(stmt.basetype) == "string"
     assert isinstance(stmt.get_expression(), In)
     assert [x.value for x in stmt.get_expression().children[1].items] == ["a", "b", "c"]
 
@@ -566,7 +566,7 @@ typedef abc as string matching std::is_base64_encoded(self)
     stmt = statements[0]
     assert isinstance(stmt, DefineTypeConstraint)
     assert str(stmt.name) == "abc"
-    assert stmt.basetype == "string"
+    assert str(stmt.basetype) == "string"
     assert isinstance(stmt.get_expression(), Equals)
     left_side_equals = stmt.get_expression()._arguments[0]
     right_side_equals = stmt.get_expression()._arguments[1]
@@ -599,7 +599,7 @@ index File(host, path)
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, DefineIndex)
-    assert stmt.type == "File"
+    assert str(stmt.type) == "File"
     assert stmt.attributes == ["host", "path"]
 
 
@@ -675,7 +675,7 @@ a=File[host = 5, path = "Jos"]
     assert len(statements) == 1
     stmt = statements[0].value
     assert isinstance(stmt, IndexLookup)
-    assert stmt.index_type == "File"
+    assert str(stmt.index_type) == "File"
     assert {k: v.value for k, v in stmt.query} == {"host": 5, "path": "Jos"}
 
 
@@ -690,7 +690,7 @@ a=File[host = "myhost", **dct]
     assert len(statements) == 2
     stmt = statements[1].value
     assert isinstance(stmt, IndexLookup)
-    assert stmt.index_type == "File"
+    assert str(stmt.index_type) == "File"
     assert {k: v.value for k, v in stmt.query} == {"host": "myhost"}
     assert len(stmt.wrapped_query) == 1
 
@@ -753,7 +753,7 @@ file( )
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, FunctionCall)
-    assert stmt.name == "file"
+    assert str(stmt.name) == "file"
 
 
 def test_function_2():
@@ -766,7 +766,7 @@ file(b)
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, FunctionCall)
-    assert stmt.name == "file"
+    assert str(stmt.name) == "file"
 
 
 def test_function_3():
@@ -779,7 +779,7 @@ file(b,)
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, FunctionCall)
-    assert stmt.name == "file"
+    assert str(stmt.name) == "file"
 
 
 def test_list_def():

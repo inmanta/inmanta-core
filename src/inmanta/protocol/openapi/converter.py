@@ -111,6 +111,39 @@ class OpenApiConverter:
 
         return json.dumps(openapi, default=openapi_json_encoder)
 
+    def generate_swagger_html(self) -> str:
+        return self.get_swagger_html(self.generate_openapi_json())
+
+    def get_swagger_html(self, openapi_spec: str) -> str:
+        template = f"""
+        <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="//unpkg.com/swagger-ui-dist@^3.25.0/swagger-ui-bundle.js"></script>
+        <link rel="stylesheet" href="//unpkg.com/swagger-ui-dist@^3.25.0/swagger-ui.css" />
+        <title>Inmanta Service Orchestrator API</title>
+    </head>
+    <body>
+        <div id="swagger-ui"></div>
+        <script>
+            window.onload = function() {{
+              SwaggerUIBundle({{
+                spec: {openapi_spec},
+                dom_id: '#swagger-ui',
+                presets: [
+                  SwaggerUIBundle.presets.apis
+                ],
+              }})
+            }}
+        </script>
+    </body>
+    </html>
+        """
+
+        return template
+
 
 class OpenApiTypeConverter:
     """
@@ -361,8 +394,7 @@ class OperationHandler:
             self.type_converter, self.arg_option_handler, path, url_method.properties
         )
         parameters = function_parameter_handler.get_parameters()
-        ok_response = self._build_response(url_method.properties)
-        responses = {"200": ok_response}
+        responses = self._build_responses(url_method.properties)
 
         if url_method.get_operation() in ["POST", "PUT", "PATCH"]:
             extra_params = {"requestBody": function_parameter_handler.convert_request_body()}
@@ -377,11 +409,20 @@ class OperationHandler:
             **extra_params,
         )
 
-    def _build_response(self, url_method_properties: MethodProperties) -> Response:
-        description = url_method_properties.get_description_return_value()
-        response_headers = self.arg_option_handler.extract_response_headers_from_arg_options(url_method_properties.arg_options)
-        return_value = self._build_return_value_wrapper(url_method_properties)
-        return Response(description=description, content=return_value, headers=response_headers)
+    def _build_responses(self, url_method_properties: MethodProperties) -> Dict[str, Response]:
+        result: Dict[str, Response] = {}
+        status_code_to_description_map = url_method_properties.get_description_foreach_http_status_code()
+        for status_code, description in status_code_to_description_map.items():
+            if status_code == 200:
+                response_headers = self.arg_option_handler.extract_response_headers_from_arg_options(
+                    url_method_properties.arg_options
+                )
+                return_value = self._build_return_value_wrapper(url_method_properties)
+                result[str(status_code)] = Response(description=description, content=return_value, headers=response_headers)
+            else:
+                result[str(status_code)] = Response(description=description)
+
+        return result
 
     def _build_return_value_wrapper(self, url_method_properties: MethodProperties) -> Optional[Dict[str, MediaType]]:
         return_type = inspect.signature(url_method_properties.function).return_annotation

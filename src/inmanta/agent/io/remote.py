@@ -39,6 +39,10 @@ class RemoteException(Exception):
         super().__init__(exception_type, msg, traceback)
 
 
+class ChannelClosedException(Exception):
+    """Raised if execnet's remote_exec throws an OSError"""
+
+
 class SshIO(local.IOBase):
     """
         This class provides handler IO methods. This io method is used when the ssh scheme is provided in the agent uri.
@@ -125,10 +129,18 @@ class SshIO(local.IOBase):
 
     def _execute(self, function_name, *args, **kwargs):
         with self._lock:
-            ch = self._gw.remote_exec(local)
-            ch.send((function_name, args, kwargs))
-            result = ch.receive()
-            ch.close()
+            try:
+                ch = self._gw.remote_exec(local)
+            except OSError:
+                raise ChannelClosedException(
+                    f"Failed to execute remote command on {self.host}:{self.port}, this is most likely caused by "
+                    "either the target machine being unavailable "
+                    "or the python command being unavailable on the target machine."
+                )
+
+        ch.send((function_name, args, kwargs))
+        result = ch.receive()
+        ch.close()
 
         # check if we got an exception
         if isinstance(result, dict) and "__type__" in result and result["__type__"] == "RemoteException":

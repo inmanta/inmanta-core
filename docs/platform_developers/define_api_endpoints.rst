@@ -22,11 +22,17 @@ An example is shown in the code snippet below.
     @method(path="/project/<id>", operation="GET", client_types=["api"])
     def get_project(id: uuid.UUID):
         """
-            Get a project and a list of the ids of all environments
+            Get a project and a list of the ids of all environments.
+
+            :param id: The id of the project to retrieve.
+            :return: The project and a list of environment ids.
+            :raises NotFound: The project with the given id doesn't exist.
         """
 
 This API method defines an HTTP GET operation at the path ``/project/<id>`` which can be used by a client of type api (cli,
-dashboard and 3rd party service). The id parameter in the path will be passed to the associate API handle.
+dashboard and 3rd party service). The id parameter in the path will be passed to the associate API handle. A docstring can be
+associated with the API method. This information will be included in the OpenAPI documentation, available
+via the ``/docs`` endpoint of the Inmanta server.
 
 A complete list of all the arguments accepted by the ``method`` decorator is given below.
 

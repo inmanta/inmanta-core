@@ -48,7 +48,7 @@ from . import DefinitionStatement
 LOGGER = logging.getLogger(__name__)
 
 
-class DefineType(Statement, Locatable):
+class DefineType(Statement):
     def __init__(self, basetype: LocatableString, multi: bool = False, nullable: bool = False,) -> None:
         Statement.__init__(self)
         self.basetype: LocatableString = basetype
@@ -56,7 +56,7 @@ class DefineType(Statement, Locatable):
         self.nullable = nullable
 
     def get_basetype(self, namespace: Namespace) -> Type:
-        return namespace.get_type(str(self.basetype))
+        return namespace.get_type(self.basetype)
 
     def get_type(self, namespace: Namespace) -> Type:
         tp: Type = self.get_basetype(namespace)
@@ -65,9 +65,6 @@ class DefineType(Statement, Locatable):
         if self.nullable:
             tp = NullableType(tp)
         return tp
-
-    def get_location(self) -> Range:
-        return self.basetype.get_location()
 
     def __str__(self) -> str:
         return f"{self.basetype}{'[]' if self.multi else ''}{'?' if self.nullable else ''}"
@@ -113,7 +110,7 @@ class DefineEntity(TypeDefinitionStatement):
         name = str(lname)
         TypeDefinitionStatement.__init__(self, namespace, name)
 
-        self.anchors = [TypeReferenceAnchor(x.get_location(), namespace, str(x)) for x in parents]
+        self.anchors = [TypeReferenceAnchor(namespace, x) for x in parents]
 
         self.name = name
         self.attributes = attributes
@@ -122,10 +119,11 @@ class DefineEntity(TypeDefinitionStatement):
         else:
             self.comment = None
 
-        self.parents = [str(x) for x in parents]
+        self.parents = parents
 
         if len(self.parents) == 0 and not (self.name == "Entity" and self.namespace.name == "std"):
-            self.parents.append("std::Entity")
+            dummy_location: Range = Range("__internal__", -1, -1, -1, -1)
+            self.parents.append(LocatableString("std::Entity", dummy_location, -1, namespace))
 
         self.type = Entity(self.name, namespace)
         self.type.location = lname.location
@@ -145,8 +143,8 @@ class DefineEntity(TypeDefinitionStatement):
         return "Entity(%s)" % self.name
 
     def get_full_parent_names(self) -> List[str]:
-        def resolve_parent(parent: str) -> str:
-            ptype = self.namespace.get_type(str(parent))
+        def resolve_parent(parent: LocatableString) -> str:
+            ptype = self.namespace.get_type(parent)
             assert isinstance(ptype, Entity), "Parents of entities should be entities, but %s is a %s" % (parent, type(ptype))
             return ptype.get_full_name()
 
@@ -179,9 +177,7 @@ class DefineEntity(TypeDefinitionStatement):
                     attribute.type.nullable,
                 )
                 attr_obj.location = attribute.get_location()
-                self.anchors.append(
-                    TypeReferenceAnchor(attribute.type.get_location(), self.namespace, str(attribute.type.basetype))
-                )
+                self.anchors.append(TypeReferenceAnchor(self.namespace, attribute.type.basetype))
 
                 if name in add_attributes:
                     raise DuplicateException(attr_obj, add_attributes[name], "Same attribute defined twice in one entity")
@@ -191,10 +187,10 @@ class DefineEntity(TypeDefinitionStatement):
                 if attribute.default is not None or attribute.remove_default:
                     entity_type.add_default_value(name, attribute)
 
-            if len(set(self.parents)) != len(self.parents):
+            if len({str(p) for p in self.parents}) != len(self.parents):
                 raise TypingException(self, "same parent defined twice")
             for parent in self.parents:
-                parent_type = self.namespace.get_type(str(parent))
+                parent_type = self.namespace.get_type(parent)
                 if parent_type is self.type:
                     raise TypingException(self, "Entity can not be its own parent (%s) " % parent)
                 if not isinstance(parent_type, Entity):
@@ -246,7 +242,7 @@ class DefineImplementation(TypeDefinitionStatement):
         TypeDefinitionStatement.__init__(self, namespace, str(name))
         self.name = str(name)
         self.block = statements
-        self.entity = str(target_type)
+        self.entity = target_type
 
         self.comment = None
         if comment is not None:
@@ -256,7 +252,7 @@ class DefineImplementation(TypeDefinitionStatement):
 
         self.type = Implementation(str(self.name), self.block, self.namespace, str(target_type), self.comment)
         self.type.location = name.get_location()
-        self.anchors = [TypeReferenceAnchor(target_type.get_location(), namespace, str(target_type))]
+        self.anchors = [TypeReferenceAnchor(namespace, target_type)]
         self.anchors.extend(statements.get_anchors())
 
     def __repr__(self) -> str:
@@ -287,13 +283,13 @@ class DefineImplementInherits(DefinitionStatement):
 
     def __init__(self, entity_name: LocatableString, comment: LocatableString = None):
         DefinitionStatement.__init__(self)
-        self.entity = str(entity_name)
+        self.entity = entity_name
         if comment is not None:
             self.comment = str(comment)
         else:
             self.comment = None
         self.location = entity_name.get_location()
-        self.anchors.append(TypeReferenceAnchor(entity_name.get_location(), entity_name.namespace, str(entity_name)))
+        self.anchors.append(TypeReferenceAnchor(entity_name.namespace, entity_name))
 
     def __repr__(self) -> str:
         """
@@ -338,11 +334,11 @@ class DefineImplement(DefinitionStatement):
         comment: LocatableString = None,
     ) -> None:
         DefinitionStatement.__init__(self)
-        self.entity = str(entity_name)
+        self.entity = entity_name
         self.entity_location = entity_name.get_location()
-        self.implementations = [str(x) for x in implementations]
-        self.anchors = [TypeReferenceAnchor(x.get_location(), x.namespace, str(x)) for x in implementations]
-        self.anchors.append(TypeReferenceAnchor(entity_name.get_location(), entity_name.namespace, str(entity_name)))
+        self.implementations = implementations
+        self.anchors = [TypeReferenceAnchor(x.namespace, x) for x in implementations]
+        self.anchors.append(TypeReferenceAnchor(entity_name.namespace, entity_name))
         self.anchors.extend(select.get_anchors())
         self.select = select
         if comment is not None:
@@ -361,7 +357,7 @@ class DefineImplement(DefinitionStatement):
             Evaluate this statement.
         """
         try:
-            entity_type = self.namespace.get_type(str(self.entity))
+            entity_type = self.namespace.get_type(self.entity)
 
             if not isinstance(entity_type, EntityLike):
                 raise TypingException(
@@ -419,8 +415,8 @@ class DefineTypeConstraint(TypeDefinitionStatement):
     ) -> None:
         TypeDefinitionStatement.__init__(self, namespace, str(name))
         self.set_location(name.get_location())
-        self.basetype = str(basetype)
-        self.anchors.append(TypeReferenceAnchor(basetype.get_location(), namespace, str(basetype)))
+        self.basetype = basetype
+        self.anchors.append(TypeReferenceAnchor(namespace, basetype))
         self.anchors.extend(expression.get_anchors())
         self.set_expression(expression)
         self.type = ConstraintType(self.namespace, str(name))
@@ -539,8 +535,8 @@ class DefineRelation(BiStatement):
         self.annotations = [exp[0] for exp in self.annotation_expression]
 
         self.anchors.extend((y for x in annotations for y in x.get_anchors()))
-        self.anchors.append(TypeReferenceAnchor(left[0].get_location(), left[0].namespace, str(left[0])))
-        self.anchors.append(TypeReferenceAnchor(right[0].get_location(), right[0].namespace, str(right[0])))
+        self.anchors.append(TypeReferenceAnchor(left[0].namespace, left[0]))
+        self.anchors.append(TypeReferenceAnchor(right[0].namespace, right[0]))
 
         self.left = left
         self.right = right
@@ -558,7 +554,7 @@ class DefineRelation(BiStatement):
             Add this relation to the participating ends
         """
         try:
-            left = self.namespace.get_type(str(self.left[0]))
+            left = self.namespace.get_type(self.left[0])
         except TypeNotFoundException as e:
             e.set_location(self.location)
             raise e
@@ -580,7 +576,7 @@ class DefineRelation(BiStatement):
             )
 
         try:
-            right = self.namespace.get_type(str(self.right[0]))
+            right = self.namespace.get_type(self.right[0])
         except TypeNotFoundException as e:
             e.set_location(self.location)
             raise e
@@ -644,14 +640,14 @@ class DefineIndex(DefinitionStatement):
 
     def __init__(self, entity_type: LocatableString, attributes: List[LocatableString]):
         DefinitionStatement.__init__(self)
-        self.type = str(entity_type)
+        self.type = entity_type
         self.attributes = [str(a) for a in attributes]
-        self.anchors.append(TypeReferenceAnchor(entity_type.get_location(), entity_type.namespace, str(entity_type)))
+        self.anchors.append(TypeReferenceAnchor(entity_type.namespace, entity_type))
         self.anchors.extend(
-            [AttributeReferenceAnchor(x.get_location(), entity_type.namespace, str(entity_type), str(x)) for x in attributes]
+            [AttributeReferenceAnchor(x.get_location(), entity_type.namespace, entity_type, str(x)) for x in attributes]
         )
 
-    def types(self, recursive: bool = False) -> List[Tuple[str, str]]:
+    def types(self, recursive: bool = False) -> List[Tuple[str, LocatableString]]:
         """
             @see Statement#types
         """

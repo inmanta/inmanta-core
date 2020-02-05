@@ -655,10 +655,43 @@ class Project(ModuleLike):
         """
             Collect the list of all python requirements off all modules in this project
         """
-        pyreq = [x.strip() for x in [mod.get_python_requirements() for mod in self.modules.values()] if x is not None]
-        pyreqa = "\n".join(pyreq).split("\n")
-        pyreqb = [x for x in pyreqa if len(x.strip()) > 0]
-        return list(set(pyreqb))
+        req_files = [x.strip() for x in [mod.get_python_requirements() for mod in self.modules.values()] if x is not None]
+        req_lines = [x for x in "\n".join(req_files).split("\n") if len(x.strip()) > 0]
+        req_lines = self._remove_comments(req_lines)
+        req_lines = self._remove_line_continuations(req_lines)
+        return list(set(req_lines))
+
+    def _remove_comments(self, lines: List[str]) -> List[str]:
+        """
+            Remove comments from lines in requirements.txt file.
+        """
+        result = []
+        for line in lines:
+            if line.strip().startswith("#"):
+                continue
+            if " #" in line:
+                line_without_comment = line.split(" #", maxsplit=1)[0]
+                result.append(line_without_comment)
+            else:
+                result.append(line)
+        return result
+
+    def _remove_line_continuations(self, lines: List[str]) -> List[str]:
+        """
+            Remove line continuation from lines in requirements.txt file.
+        """
+        result = []
+        line_continuation_buffer = ""
+        for line in lines:
+            if line.endswith("\\"):
+                line_continuation_buffer = f"{line_continuation_buffer}{line[0:-1]}"
+            else:
+                if line_continuation_buffer:
+                    result.append(f"{line_continuation_buffer}{line}")
+                    line_continuation_buffer = ""
+                else:
+                    result.append(line)
+        return result
 
     def get_name(self) -> str:
         return "project.yml"

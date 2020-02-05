@@ -258,14 +258,12 @@ class VirtualEnv(object):
         """
             Install requirements from a list of requirement strings
         """
-        requirements_list = sorted(requirements_list)
-
         if detailed_cache:
             requirements_list = sorted(list(set(requirements_list) - self.__cache_done))
             if len(requirements_list) == 0:
                 return
 
-        requirements_list = self._remove_requirements_present_in_parent_env(requirements_list)
+        requirements_list = sorted(self._remove_requirements_present_in_parent_env(requirements_list))
 
         # hash it
         sha1sum = hashlib.sha1()
@@ -286,6 +284,9 @@ class VirtualEnv(object):
         reqs_to_remove = []
         packages_installed_in_parent = self.get_package_installed_in_parent_env()
         for r in requirements_list:
+            # Always install url-based requirements
+            if "://" in r:
+                continue
             parsed_req = list(pkg_resources.parse_requirements(r))[0]
             # Package is installed and its version fits the constraint
             if (
