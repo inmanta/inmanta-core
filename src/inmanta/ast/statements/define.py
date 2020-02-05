@@ -39,7 +39,7 @@ from inmanta.ast.constraint.expression import Equals
 from inmanta.ast.entity import Default, Entity, EntityLike, Implement, Implementation
 from inmanta.ast.statements import BiStatement, ExpressionStatement, Literal, Statement, TypeDefinitionStatement
 from inmanta.ast.statements.generator import Constructor
-from inmanta.ast.type import ConstraintType, Type
+from inmanta.ast.type import ConstraintType, NullableType, Type, TypedList
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 
 from . import DefinitionStatement
@@ -47,15 +47,46 @@ from . import DefinitionStatement
 LOGGER = logging.getLogger(__name__)
 
 
+class TypeDeclaration(Statement):
+    """
+        Declaration of a type. A type declaration consists of a base type string and can be
+        multi ('basetype[]'), nullable ('basetype?') or both ('basetype[]?').
+    """
+
+    def __init__(self, basetype: LocatableString, multi: bool = False, nullable: bool = False,) -> None:
+        Statement.__init__(self)
+        self.basetype: LocatableString = basetype
+        self.multi: bool = multi
+        self.nullable: bool = nullable
+
+    def get_basetype(self, namespace: Namespace) -> Type:
+        """
+            Returns the base type for this declaration as a Type.
+        """
+        return namespace.get_type(self.basetype)
+
+    def get_type(self, namespace: Namespace) -> Type:
+        """
+            Returns the type for this declaration as a Type.
+        """
+        tp: Type = self.get_basetype(namespace)
+        if self.multi:
+            tp = TypedList(tp)
+        if self.nullable:
+            tp = NullableType(tp)
+        return tp
+
+    def __str__(self) -> str:
+        return f"{self.basetype}{'[]' if self.multi else ''}{'?' if self.nullable else ''}"
+
+
 class DefineAttribute(Statement):
     def __init__(
         self,
-        attr_type: LocatableString,
+        attr_type: TypeDeclaration,
         name: LocatableString,
-        default_value: ExpressionStatement = None,
-        multi: bool = False,
+        default_value: Optional[ExpressionStatement] = None,
         remove_default: bool = True,
-        nullable: bool = False,
     ) -> None:
         """
             if default_value is None, this is an explicit removal of a default value
@@ -64,15 +95,10 @@ class DefineAttribute(Statement):
         self.type = attr_type
         self.name = name
         self.default = default_value
-        self.multi = multi
         self.remove_default = remove_default
-        self.nullable = nullable
 
     def __str__(self) -> str:
-        return (
-            f"{self.type}{'[]' if self.multi else ''}{'?' if self.nullable else ''} {self.name}"
-            f"{' = ' + str(self.default) if self.default else ''}"
-        )
+        return f"{self.type} {self.name} = {str(self.default) if self.default else ''}"
 
 
 class DefineEntity(TypeDefinitionStatement):
@@ -118,7 +144,7 @@ class DefineEntity(TypeDefinitionStatement):
         """
             Add an attribute to this entity
         """
-        self.attributes.append(DefineAttribute(attr_type, name, default_value))
+        self.attributes.append(DefineAttribute(TypeDeclaration(attr_type), name, default_value))
 
     def __repr__(self) -> str:
         """
@@ -148,14 +174,20 @@ class DefineEntity(TypeDefinitionStatement):
 
             add_attributes: Dict[str, Attribute] = {}
             for attribute in self.attributes:
-                attr_type = self.namespace.get_type(attribute.type)
+                attr_type: Type = attribute.type.get_type(self.namespace)
                 if not isinstance(attr_type, (Type, type)):
                     raise TypingException(self, "Attributes can only be a type. Entities need to be defined as relations.")
 
                 name = str(attribute.name)
-                attr_obj = Attribute(entity_type, attr_type, name, attribute.multi, attribute.nullable)
+                attr_obj = Attribute(
+                    entity_type,
+                    attribute.type.get_basetype(self.namespace),
+                    name,
+                    attribute.type.multi,
+                    attribute.type.nullable,
+                )
                 attr_obj.location = attribute.get_location()
-                self.anchors.append(TypeReferenceAnchor(self.namespace, attribute.type))
+                self.anchors.append(TypeReferenceAnchor(self.namespace, attribute.type.basetype))
 
                 if name in add_attributes:
                     raise DuplicateException(attr_obj, add_attributes[name], "Same attribute defined twice in one entity")

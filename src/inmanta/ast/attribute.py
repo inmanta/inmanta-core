@@ -48,7 +48,7 @@ class Attribute(Locatable):
         self.__entity = entity
         self.__type = value_type
         self.__multi = multi
-        self.__nullallble = nullable
+        self.__nullable = nullable
         self.low = 0 if nullable else 1
         self.comment = None  # type: Optional[str]
         self.end: Optional[RelationAttribute] = None
@@ -102,7 +102,7 @@ class Attribute(Locatable):
 
         out: ResultVariable["Instance"]
 
-        if self.__nullallble:
+        if self.__nullable:
             # be a 0-1 relation
             self.end = None
             self.low = 0
@@ -116,7 +116,7 @@ class Attribute(Locatable):
         return out
 
     def is_optional(self) -> bool:
-        return self.__nullallble
+        return self.__nullable
 
     def is_multi(self) -> bool:
         return self.__multi

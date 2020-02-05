@@ -132,9 +132,9 @@ class Entity(EntityLike, NamedType):
     def normalize(self) -> None:
         for attribute in self.__default_values.values():
             if attribute.default is not None:
-                default_type: Type = self.namespace.get_type(str(attribute.type))
+                default_type: Type = attribute.type.get_type(self.namespace)
                 try:
-                    attribute.default.check_type_for_constant(default_type, attribute.multi, attribute.nullable)
+                    default_type.validate(attribute.default.as_constant())
                 except RuntimeException as exception:
                     if exception.stmt is None or isinstance(exception.stmt, Type):
                         exception.set_statement(attribute)
@@ -395,13 +395,6 @@ class Entity(EntityLike, NamedType):
             The pretty string of this type
         """
         return self.get_full_name()
-
-    @classmethod
-    def cast(cls, value):
-        """
-            Cast a value
-        """
-        return value
 
     def __eq__(self, other: object) -> bool:
         """

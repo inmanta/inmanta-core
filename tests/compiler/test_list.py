@@ -19,7 +19,6 @@ import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import AttributeException, OptionalValueException, RuntimeException
-from inmanta.parser import ParserException
 
 
 def test_list_atributes(snippetcompiler):
@@ -70,7 +69,7 @@ implement Jos using std::none
 c = Jos()
 """
     )
-    with pytest.raises(ParserException):
+    with pytest.raises(RuntimeException):
         compiler.do_compile()
 
 
@@ -501,3 +500,29 @@ deployment2 = Deployment(
     )
 
     (_, scopes) = compiler.do_compile()
+
+
+def test_1435_instance_in_list(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity A:
+end
+implement A using std::none
+
+entity ListContainer:
+    list lst
+end
+
+implement ListContainer using std::none
+
+x = ListContainer()
+x.lst = [x]
+        """,
+        "Could not set attribute `lst` on instance `__config__::ListContainer (instantiated at {dir}/main.cf:12)`"
+        " (reported in x.lst = List() ({dir}/main.cf:13))"
+        "\n"
+        "caused by:"
+        "\n"
+        "  Invalid value '__config__::ListContainer (instantiated at {dir}/main.cf:12)', expected Literal"
+        " (reported in x.lst = List() ({dir}/main.cf:13))",
+    )
