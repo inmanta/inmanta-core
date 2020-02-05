@@ -52,6 +52,7 @@ class TypeDeclaration(Statement):
         Declaration of a type. A type declaration consists of a base type string and can be
         multi ('basetype[]'), nullable ('basetype?') or both ('basetype[]?').
     """
+
     def __init__(self, basetype: LocatableString, multi: bool = False, nullable: bool = False,) -> None:
         Statement.__init__(self)
         self.basetype: LocatableString = basetype
