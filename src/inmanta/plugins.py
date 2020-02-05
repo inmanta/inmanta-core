@@ -268,7 +268,7 @@ class Plugin(object, metaclass=PluginMeta):
         location: Range
         assert filename is not None
         line: int = inspect.getsourcelines(self.__class__.__function__)[1] + 1
-        location = Range(filename, line, 1, line, -1)
+        location = Range(filename, line, 1, line, 2)
         locatable_type: LocatableString = LocatableString(arg_type, location, 0, None)
 
         if arg_type == "any":
