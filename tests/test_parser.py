@@ -40,6 +40,7 @@ from inmanta.ast.statements.define import (
     DefineImplement,
     DefineImplementInherits,
     DefineIndex,
+    DefineType,
     DefineTypeConstraint,
     DefineTypeDefault,
 )
@@ -108,7 +109,8 @@ end"""
     assert stmt.comment is None
 
     for ad in stmt.attributes:
-        assert isinstance(ad.type, LocatableString)
+        assert isinstance(ad.type, DefineType)
+        assert isinstance(ad.type.basetype, LocatableString)
         assert isinstance(ad.name, LocatableString)
         assert ad.default is None
         assert ad.remove_default
@@ -159,7 +161,8 @@ end
     assert len(stmt.attributes) == 3
 
     for ad in stmt.attributes:
-        assert isinstance(ad.type, LocatableString)
+        assert isinstance(ad.type, DefineType)
+        assert isinstance(ad.type.basetype, LocatableString)
         assert isinstance(ad.name, LocatableString)
 
     assert str(stmt.attributes[0].name) == "hello"
@@ -1074,9 +1077,9 @@ def assert_is_non_value(x):
 def compare_attr(attr, name, mytype, defs, multi=False, opt=False):
     assert str(attr.name) == name
     defs(attr.default)
-    assert attr.multi == multi
-    assert str(attr.type) == mytype
-    assert attr.nullable == opt
+    assert attr.type.multi == multi
+    assert str(attr.type.basetype) == mytype
+    assert attr.type.nullable == opt
 
 
 def assert_is_none(x):

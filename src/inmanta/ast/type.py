@@ -239,7 +239,7 @@ class List(Type):
             return True
 
         if not isinstance(value, list):
-            raise RuntimeException(None, "Invalid value '%s', expected list" % value)
+            raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
 
         return True
 
@@ -259,7 +259,7 @@ class TypedList(List):
         self.element_type.normalize()
 
     def validate(self, value: Optional[object]) -> bool:
-        if not List().validate(value):
+        if not List.validate(self, value):
             return False
 
         assert isinstance(value, list)
@@ -325,7 +325,7 @@ class TypedDict(Dict):
         self.element_type.normalize()
 
     def validate(self, value: Optional[object]) -> bool:
-        if not Dict().validate(value):
+        if not Dict.validate(self, value):
             return False
 
         assert isinstance(value, dict)

@@ -70,7 +70,7 @@ implement Jos using std::none
 c = Jos()
 """
     )
-    with pytest.raises(ParserException):
+    with pytest.raises(RuntimeException):
         compiler.do_compile()
 
 

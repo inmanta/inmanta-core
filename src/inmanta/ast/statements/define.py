@@ -91,7 +91,7 @@ class DefineAttribute(Statement):
         self.remove_default = remove_default
 
     def __str__(self) -> str:
-        return f"{self.type} {self.name} {' = ' + str(self.default) if self.default else ''}"
+        return f"{self.type} {self.name} = {str(self.default) if self.default else ''}"
 
 
 class DefineEntity(TypeDefinitionStatement):
