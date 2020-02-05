@@ -48,16 +48,26 @@ LOGGER = logging.getLogger(__name__)
 
 
 class TypeDeclaration(Statement):
+    """
+        Declaration of a type. A type declaration consists of a base type string and can be
+        multi ('basetype[]'), nullable ('basetype?') or both ('basetype[]?').
+    """
     def __init__(self, basetype: LocatableString, multi: bool = False, nullable: bool = False,) -> None:
         Statement.__init__(self)
         self.basetype: LocatableString = basetype
-        self.multi = multi
-        self.nullable = nullable
+        self.multi: bool = multi
+        self.nullable: bool = nullable
 
     def get_basetype(self, namespace: Namespace) -> Type:
+        """
+            Returns the base type for this declaration as a Type.
+        """
         return namespace.get_type(self.basetype)
 
     def get_type(self, namespace: Namespace) -> Type:
+        """
+            Returns the type for this declaration as a Type.
+        """
         tp: Type = self.get_basetype(namespace)
         if self.multi:
             tp = TypedList(tp)

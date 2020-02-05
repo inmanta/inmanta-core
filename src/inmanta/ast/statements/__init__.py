@@ -115,6 +115,9 @@ class ExpressionStatement(DynamicStatement):
         return self.requires_emit(resolver, queue)
 
     def as_constant(self) -> object:
+        """
+            Returns this expression as a constant value, if possible. Otherwise, raise a RuntimeException.
+        """
         raise RuntimeException(None, "%s is not a constant")
 
 
