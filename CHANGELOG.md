@@ -1,6 +1,7 @@
 # v 2019.6 (?) Changes in this release:
 
 ## Fixed
+ - Added support for nullable types in plugins (#674)
  - Disallowed entities in list attributes (#1435)
  - Inmanta type module cleanup and type coverage
  - Added support for \*\*dict as kwargs for constructor calls and index lookups (#620, #1702)
