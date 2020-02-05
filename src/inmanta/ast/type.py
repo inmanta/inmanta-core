@@ -364,10 +364,10 @@ class Union(Type):
                     return True
             except RuntimeException:
                 pass
-        raise RuntimeException(None, "Invalid value '%s', expected " % (value, self.type_string())
+        raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
 
     def type_string(self) -> str:
-        return "literal"
+        return "Union[%s]" % ",".join((t.type_string() for t in self.types))
 
 
 class Literal(Union):
