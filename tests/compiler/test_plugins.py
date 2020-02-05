@@ -17,6 +17,8 @@
 """
 import os
 
+import inmanta.compiler as compiler
+
 
 def test_plugin_excn(snippetcompiler):
     snippetcompiler.setup_for_error(
@@ -39,3 +41,50 @@ import test_1221
         """,
         "could not find type std::WrongName in namespace std (%s/plugins/__init__.py:5:1)" % modpath,
     )
+
+
+def test_674_nullable_type_in_plugin_arguments(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_674
+
+test_674::test_nullable("str")
+test_674::test_nullable(null)
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_674_nullable_type_in_plugin_arguments_error(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+import test_674
+
+test_674::test_not_nullable(null)
+        """,
+        "Invalid value 'null', expected String (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))",
+    )
+
+
+def test_674_nullable_list_type_in_plugin_arguments(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_674
+
+test_674::test_nullable_list([42, 12])
+test_674::test_nullable_list(null)
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_674_nullable_type_in_plugin_return(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_674
+
+x = test_674::test_returns_none()
+x = null
+        """,
+    )
+    compiler.do_compile()

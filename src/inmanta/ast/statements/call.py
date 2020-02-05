@@ -23,7 +23,7 @@ from inmanta.ast import ExternalException, LocatableString, RuntimeException, Wr
 from inmanta.ast.statements import ReferenceStatement
 from inmanta.execute.proxy import UnknownException, UnsetException
 from inmanta.execute.runtime import ResultVariable, Waiter
-from inmanta.execute.util import Unknown
+from inmanta.execute.util import NoneValue, Unknown
 
 LOGGER = logging.getLogger(__name__)
 
@@ -100,7 +100,7 @@ class FunctionCall(ReferenceStatement):
         else:
             try:
                 value = function(*arguments)
-                result.set_value(value, self.location)
+                result.set_value(value if value is not None else NoneValue(), self.location)
             except UnknownException as e:
                 result.set_value(e.unknown, self.location)
             except UnsetException as e:
