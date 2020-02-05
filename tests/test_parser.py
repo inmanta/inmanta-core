@@ -40,9 +40,9 @@ from inmanta.ast.statements.define import (
     DefineImplement,
     DefineImplementInherits,
     DefineIndex,
-    DefineType,
     DefineTypeConstraint,
     DefineTypeDefault,
+    TypeDeclaration,
 )
 from inmanta.ast.statements.generator import Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
@@ -109,7 +109,7 @@ end"""
     assert stmt.comment is None
 
     for ad in stmt.attributes:
-        assert isinstance(ad.type, DefineType)
+        assert isinstance(ad.type, TypeDeclaration)
         assert isinstance(ad.type.basetype, LocatableString)
         assert isinstance(ad.name, LocatableString)
         assert ad.default is None
@@ -161,7 +161,7 @@ end
     assert len(stmt.attributes) == 3
 
     for ad in stmt.attributes:
-        assert isinstance(ad.type, DefineType)
+        assert isinstance(ad.type, TypeDeclaration)
         assert isinstance(ad.type.basetype, LocatableString)
         assert isinstance(ad.name, LocatableString)
 

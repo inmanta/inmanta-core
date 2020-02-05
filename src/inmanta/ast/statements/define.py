@@ -48,7 +48,7 @@ from . import DefinitionStatement
 LOGGER = logging.getLogger(__name__)
 
 
-class DefineType(Statement):
+class TypeDeclaration(Statement):
     def __init__(self, basetype: LocatableString, multi: bool = False, nullable: bool = False,) -> None:
         Statement.__init__(self)
         self.basetype: LocatableString = basetype
@@ -73,7 +73,7 @@ class DefineType(Statement):
 class DefineAttribute(Statement):
     def __init__(
         self,
-        attr_type: DefineType,
+        attr_type: TypeDeclaration,
         name: LocatableString,
         default_value: Optional[ExpressionStatement] = None,
         remove_default: bool = True,
@@ -134,7 +134,7 @@ class DefineEntity(TypeDefinitionStatement):
         """
             Add an attribute to this entity
         """
-        self.attributes.append(DefineAttribute(DefineType(attr_type), name, default_value))
+        self.attributes.append(DefineAttribute(TypeDeclaration(attr_type), name, default_value))
 
     def __repr__(self) -> str:
         """

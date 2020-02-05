@@ -40,9 +40,9 @@ from inmanta.ast.statements.define import (
     DefineImport,
     DefineIndex,
     DefineRelation,
-    DefineType,
     DefineTypeConstraint,
     DefineTypeDefault,
+    TypeDeclaration,
 )
 from inmanta.ast.statements.generator import Constructor, For, If, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
@@ -272,7 +272,7 @@ def p_entity_body(p: YaccProduction) -> None:
 
 def p_attribute_base_type(p: YaccProduction) -> None:
     """attr_base_type : ns_ref"""
-    p[0] = DefineType(p[1])
+    p[0] = TypeDeclaration(p[1])
 
 
 def p_attribute_type_multi(p: YaccProduction) -> None:
@@ -316,13 +316,13 @@ def p_attr_undef(p: YaccProduction) -> None:
 
 def p_attr_dict(p: YaccProduction) -> None:
     "attr : DICT ID"
-    p[0] = DefineAttribute(DefineType(p[1]), p[2], None)
+    p[0] = DefineAttribute(TypeDeclaration(p[1]), p[2], None)
     attach_lnr(p, 1)
 
 
 def p_attr_list_dict(p: YaccProduction) -> None:
     "attr : DICT ID '=' map_def"
-    p[0] = DefineAttribute(DefineType(p[1]), p[2], p[4])
+    p[0] = DefineAttribute(TypeDeclaration(p[1]), p[2], p[4])
     attach_lnr(p, 1)
 
 
@@ -333,19 +333,19 @@ def p_attr_list_dict_null_err(p: YaccProduction) -> None:
 
 def p_attr_dict_nullable(p: YaccProduction) -> None:
     "attr : DICT '?' ID"
-    p[0] = DefineAttribute(DefineType(p[1], nullable=True), p[3], None)
+    p[0] = DefineAttribute(TypeDeclaration(p[1], nullable=True), p[3], None)
     attach_lnr(p, 1)
 
 
 def p_attr_list_dict_nullable(p: YaccProduction) -> None:
     "attr : DICT '?'  ID '=' map_def"
-    p[0] = DefineAttribute(DefineType(p[1], nullable=True), p[3], p[5])
+    p[0] = DefineAttribute(TypeDeclaration(p[1], nullable=True), p[3], p[5])
     attach_lnr(p, 1)
 
 
 def p_attr_list_dict_null(p: YaccProduction) -> None:
     "attr : DICT '?'  ID '=' NULL"
-    p[0] = DefineAttribute(DefineType(p[1], nullable=True), p[3], make_none(p, 5))
+    p[0] = DefineAttribute(TypeDeclaration(p[1], nullable=True), p[3], make_none(p, 5))
     attach_lnr(p, 1)
 
 
