@@ -19,7 +19,6 @@ import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import AttributeException, OptionalValueException, RuntimeException
-from inmanta.parser import ParserException
 
 
 def test_list_atributes(snippetcompiler):

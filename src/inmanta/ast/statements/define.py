@@ -25,7 +25,6 @@ from inmanta.ast import (
     DuplicateException,
     Import,
     IndexException,
-    Locatable,
     LocatableString,
     Namespace,
     NotFoundException,
