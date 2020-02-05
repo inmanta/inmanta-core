@@ -264,7 +264,8 @@ class TypedList(List):
 
         assert isinstance(value, list)
         for element in value:
-            self.element_type.validate(element)
+            if not self.element_type.validate(element):
+                return False
 
         return True
 
@@ -363,7 +364,7 @@ class Union(Type):
                     return True
             except RuntimeException:
                 pass
-        raise RuntimeException(None, "Invalid value '%s', expected Literal" % value)
+        raise RuntimeException(None, "Invalid value '%s', expected " % (value, self.type_string())
 
     def type_string(self) -> str:
         return "literal"
