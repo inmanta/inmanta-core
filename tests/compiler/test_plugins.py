@@ -17,6 +17,8 @@
 """
 import os
 
+import inmanta.compiler as compiler
+
 
 def test_plugin_excn(snippetcompiler):
     snippetcompiler.setup_for_error(
@@ -39,3 +41,25 @@ import test_1221
         """,
         "could not find type std::WrongName in namespace std (%s/plugins/__init__.py:5:1)" % modpath,
     )
+
+
+def test_1774_plugin_returning_entity_in_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_1774
+
+test_1774::test_list(test_1774::Test())
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_1774_plugin_returning_entity_in_dict(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_1774
+
+test_1774::test_dict(test_1774::Test())
+        """,
+    )
+    compiler.do_compile()

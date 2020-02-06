@@ -23,7 +23,8 @@ from typing import TYPE_CHECKING, Any, Callable, List, Optional, Type, TypeVar
 
 from inmanta import const, protocol
 from inmanta.ast import CompilerException, LocatableString, Namespace, Range, RuntimeException, TypeNotFoundException
-from inmanta.ast.type import TypedList
+from inmanta.ast.entity import EntityLike
+from inmanta.ast.type import Literal, Type as InmantaType, TypedDict, TypedList, Union as InmantaUnion
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
@@ -190,7 +191,7 @@ class Plugin(object, metaclass=PluginMeta):
     def normalize(self) -> None:
         self.resolver = self.namespace
         self.argtypes = [self.to_type(x[1], self.namespace) for x in self.arguments]
-        self.returntype = self.to_type(self._return, self.namespace)
+        self.returntype = self.to_type(self._return, self.namespace, allow_entity_collections=True)
 
     def _load_signature(self, function):
         """
@@ -252,7 +253,7 @@ class Plugin(object, metaclass=PluginMeta):
             return "%s(%s)" % (self.__class__.__function_name__, args)
         return "%s(%s) -> %s" % (self.__class__.__function_name__, args, self._return)
 
-    def to_type(self, arg_type: Optional[object], resolver):
+    def to_type(self, arg_type: Optional[object], resolver, allow_entity_collections: bool = False) -> Optional[InmantaType]:
         """
             Convert a string representation of a type to a type
         """
@@ -274,11 +275,16 @@ class Plugin(object, metaclass=PluginMeta):
         if arg_type == "any":
             return None
 
-        if arg_type == "list":
-            return list
-
         if arg_type == "expression":
             return None
+
+        # quickfix issue #1774
+        if allow_entity_collections:
+            allowed_element_type: InmantaType = InmantaType()
+            if arg_type == "list":
+                return TypedList(allowed_element_type)
+            if arg_type == "dict":
+                return TypedDict(allowed_element_type)
 
         if arg_type.endswith("[]"):
             locatable_type.value = arg_type[0:-2]
