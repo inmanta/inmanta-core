@@ -22,11 +22,9 @@ import subprocess
 from functools import reduce
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Type, TypeVar
 
+import inmanta.ast.type as InmantaType
 from inmanta import const, protocol
 from inmanta.ast import CompilerException, LocatableString, Namespace, Range, RuntimeException, TypeNotFoundException
-from inmanta.ast.type import NullableType
-from inmanta.ast.type import Type as InmantaType
-from inmanta.ast.type import TypedList
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
@@ -284,17 +282,17 @@ class Plugin(object, metaclass=PluginMeta):
         location = Range(filename, line, 1, line, 2)
         locatable_type: LocatableString = LocatableString(arg_type, location, 0, None)
 
-        # stack of transformations to be applied to the base InmantaType
+        # stack of transformations to be applied to the base InmantaType.Type
         # transformations will be applied right to left
-        transformation_stack: List[Callable[[InmantaType], InmantaType]] = []
+        transformation_stack: List[Callable[[InmantaType.Type], InmantaType.Type]] = []
 
         if locatable_type.value.endswith("?"):
             locatable_type.value = locatable_type.value[0:-1]
-            transformation_stack.append(NullableType)
+            transformation_stack.append(InmantaType.NullableType)
 
         if locatable_type.value.endswith("[]"):
             locatable_type.value = locatable_type.value[0:-2]
-            transformation_stack.append(TypedList)
+            transformation_stack.append(InmantaType.TypedList)
 
         return reduce(lambda acc, transform: transform(acc), reversed(transformation_stack), resolver.get_type(locatable_type))
 
