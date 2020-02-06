@@ -3,7 +3,6 @@
 ## Fixed
  - Disallowed entities in list attributes (#1435)
  - Inmanta type module cleanup and type coverage
- - Added support for \*\*dict as kwargs for constructor calls and index lookups (#620, #1702)
  - Various compiler error reporting improvements (#1584, #1341, #1600, #1292, #1652, #1221)
  - CRUDHandler bugfix, ensure update is not called on purged resources
  - Changes in default values: AUTO_DEPLOY, PUSH_ON_AUTO_DEPLOY are enabled by default,
@@ -14,9 +13,11 @@
  - Parse comments and urls correctly from the requirements.txt file of an Inmanta module (#1764)
 
 ## Added
-- Add get_environment_id to exporter (#1683)
-- Added inmanta-cli environment save command (#1666)
-- Added finalizer support to @cache annotation
+ - Add get_environment_id to exporter (#1683)
+ - Added inmanta-cli environment save command (#1666)
+ - Added finalizer support to @cache annotation
+ - Added support for \*\*dict as kwargs for constructor calls and index lookups (#620, #1702)
+ - Added support for kwargs in plugin calls, as named arguments as well as using \*\*dict (#1143)
 
 ## Removed
  - Removed the inmanta module validate command. Use pytest-inmanta fixtures to test your modules instead.
