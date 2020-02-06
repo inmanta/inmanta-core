@@ -55,7 +55,18 @@ test_674::test_nullable(null)
     compiler.do_compile()
 
 
-def test_674_nullable_type_in_plugin_arguments_error(snippetcompiler):
+def test_674_not_nullable_type_in_plugin_arguments(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_674
+
+test_674::test_not_nullable("Hello World!")
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_674_not_nullable_type_in_plugin_arguments_error(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
 import test_674
@@ -76,6 +87,28 @@ test_674::test_nullable_list(null)
         """,
     )
     compiler.do_compile()
+
+
+def test_674_not_nullable_list_type_in_plugin_arguments(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_674
+
+test_674::test_not_nullable_list([1,2])
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_674_not_nullable_list_type_in_plugin_arguments_error(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+import test_674
+
+test_674::test_not_nullable_list(null)
+        """,
+        "Invalid value 'null', expected number[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))",
+    )
 
 
 def test_674_nullable_type_in_plugin_return(snippetcompiler):

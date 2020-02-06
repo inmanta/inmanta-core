@@ -379,6 +379,9 @@ class Literal(Union):
     def __init__(self) -> None:
         Union.__init__(self, [NullableType(Number()), Bool(), String(), TypedList(self), TypedDict(self)])
 
+    def type_string(self) -> str:
+        return "Literal"
+
 
 class ConstraintType(NamedType):
     """
