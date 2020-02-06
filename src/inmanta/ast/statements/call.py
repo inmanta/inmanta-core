@@ -108,9 +108,9 @@ class FunctionCall(ReferenceStatement):
         # get the object to call the function on
         function = self.function
         arguments = [a.execute(requires, resolver, queue) for a in self.arguments]
-        kwargs = {k: v.execute_direct(requires, resolver, queue) for k, v in self.kwargs}
+        kwargs = {k: v.execute(requires, resolver, queue) for k, v in self.kwargs.items()}
         for wrapped_kwarg_expr in self.wrapped_kwargs:
-            for k, v in wrapped_kwarg_expr.execute_direct(requires, resolver, queue):
+            for k, v in wrapped_kwarg_expr.execute(requires, resolver, queue):
                 if k in kwargs:
                     raise RuntimeException(self, "Keyword argument %s repeated in function call" % k)
                 kwargs[k] = v

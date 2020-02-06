@@ -17,6 +17,9 @@
 """
 import os
 
+import inmanta.compiler as compiler
+from inmanta.ast import Namespace
+
 
 def test_plugin_excn(snippetcompiler):
     snippetcompiler.setup_for_error(
@@ -39,3 +42,29 @@ import test_1221
         """,
         "could not find type std::WrongName in namespace std (%s/plugins/__init__.py:5:1)" % modpath,
     )
+
+
+def test_kwargs_in_plugin_call(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+str = std::replace("Hello World!", new = "You", old = "World")
+        """,
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    assert root.lookup("str").get_value() == "Hello You!"
+
+
+def test_wrapped_kwargs_in_plugin_call(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+dct = {
+    "new": "You",
+    "old": "World",
+}
+str = std::replace("Hello World!", **dct)
+        """,
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    assert root.lookup("str").get_value() == "Hello You!"

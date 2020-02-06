@@ -303,14 +303,18 @@ class Plugin(object, metaclass=PluginMeta):
         """
             Check if the arguments of the call match the function signature
         """
+        nb_args = len(args) + len(kwargs)
         max_arg = len(self.arguments)
-        required = len([x for x in self.arguments if len(x) == 2])
+        required_args = [x[0] for x in self.arguments if len(x) == 2]
 
-        if len(args) < required or len(args) + len(kwargs) > max_arg:
+        if nb_args < len(required_args) or nb_args > max_arg:
             raise Exception(
                 "Incorrect number of arguments for %s. Expected at least %d, got %d"
-                % (self.get_signature(), required, len(args))
+                % (self.get_signature(), len(required_args), len(args))
             )
+        nb_missing_kwargs = len(required_args) - len(args) - len(list(filter(lambda k: k in required_args, kwargs.keys())))
+        if nb_missing_kwargs > 0:
+            raise RuntimeException(None, "Missing at least %d arguments" % nb_missing_kwargs)
 
         def is_valid(expected_arg, expected_type, arg):
             if isinstance(arg, Unknown):
@@ -321,11 +325,12 @@ class Plugin(object, metaclass=PluginMeta):
                     ("Invalid type for argument %d of '%s', it should be " "%s and %s given.")
                     % (i + 1, self.__class__.__function_name__, expected_arg[1], arg.__class__.__name__)
                 )
+            return True
 
         for i in range(len(args)):
-            if not is_valid(self.arguments[i][0], self.argtypes[i], args[i]):
+            if not is_valid(self.arguments[i], self.argtypes[i], args[i]):
                 return False
-        for k, v in kwargs:
+        for k, v in kwargs.items():
             try:
                 (expected_arg, expected_type) = next(filter(lambda x: x[0][0] == k, zip(self.arguments, self.argtypes)))
                 if not is_valid(expected_arg, expected_type, v):
@@ -377,7 +382,7 @@ class Plugin(object, metaclass=PluginMeta):
                 return DynamicProxy.return_value(arg)
 
         new_args = [new_arg(arg) for arg in args]
-        new_kwargs = {k: new_arg(v) for k, v in kwargs}
+        new_kwargs = {k: new_arg(v) for k, v in kwargs.items()}
 
         value = self.call(*new_args, **new_kwargs)
 
