@@ -43,6 +43,28 @@ import test_1221
     )
 
 
+def test_1774_plugin_returning_entity_in_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_1774
+
+test_1774::test_list(test_1774::Test())
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_1774_plugin_returning_entity_in_dict(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_1774
+
+test_1774::test_dict(test_1774::Test())
+        """,
+    )
+    compiler.do_compile()
+
+
 def test_674_nullable_type_in_plugin_arguments(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

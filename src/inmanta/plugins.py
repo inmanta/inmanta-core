@@ -253,7 +253,7 @@ class Plugin(object, metaclass=PluginMeta):
             return "%s(%s)" % (self.__class__.__function_name__, args)
         return "%s(%s) -> %s" % (self.__class__.__function_name__, args, self._return)
 
-    def to_type(self, arg_type: Optional[object], resolver):
+    def to_type(self, arg_type: Optional[object], resolver) -> Optional[InmantaType.Type]:
         """
             Convert a string representation of a type to a type
         """
@@ -269,11 +269,15 @@ class Plugin(object, metaclass=PluginMeta):
         if arg_type == "any":
             return None
 
-        if arg_type == "list":
-            return list
-
         if arg_type == "expression":
             return None
+
+        # quickfix issue #1774
+        allowed_element_type: InmantaType.Type = InmantaType.Type()
+        if arg_type == "list":
+            return InmantaType.TypedList(allowed_element_type)
+        if arg_type == "dict":
+            return InmantaType.TypedDict(allowed_element_type)
 
         filename: Optional[str] = inspect.getsourcefile(self.__class__.__function__)
         location: Range
