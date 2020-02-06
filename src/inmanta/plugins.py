@@ -191,7 +191,7 @@ class Plugin(object, metaclass=PluginMeta):
     def normalize(self) -> None:
         self.resolver = self.namespace
         self.argtypes = [self.to_type(x[1], self.namespace) for x in self.arguments]
-        self.returntype = self.to_type(self._return, self.namespace, allow_entity_collections=True)
+        self.returntype = self.to_type(self._return, self.namespace)
 
     def _load_signature(self, function):
         """
@@ -253,7 +253,7 @@ class Plugin(object, metaclass=PluginMeta):
             return "%s(%s)" % (self.__class__.__function_name__, args)
         return "%s(%s) -> %s" % (self.__class__.__function_name__, args, self._return)
 
-    def to_type(self, arg_type: Optional[object], resolver, allow_entity_collections: bool = False) -> Optional[InmantaType]:
+    def to_type(self, arg_type: Optional[object], resolver) -> Optional[InmantaType]:
         """
             Convert a string representation of a type to a type
         """
@@ -279,12 +279,11 @@ class Plugin(object, metaclass=PluginMeta):
             return None
 
         # quickfix issue #1774
-        if allow_entity_collections:
-            allowed_element_type: InmantaType = InmantaType()
-            if arg_type == "list":
-                return TypedList(allowed_element_type)
-            if arg_type == "dict":
-                return TypedDict(allowed_element_type)
+        allowed_element_type: InmantaType = InmantaType()
+        if arg_type == "list":
+            return TypedList(allowed_element_type)
+        if arg_type == "dict":
+            return TypedDict(allowed_element_type)
 
         if arg_type.endswith("[]"):
             locatable_type.value = arg_type[0:-2]
