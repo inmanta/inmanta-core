@@ -81,11 +81,11 @@ class Type(Locatable):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
-        raise NotImplementedError()
+        return True
 
     def type_string(self) -> str:
         """get the name of the type """
-        raise NotImplementedError(type(self))
+        return "Type"
 
     def __str__(self) -> str:
         """get the string representation of the instance of the type """

@@ -21,9 +21,9 @@ import os
 import subprocess
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Type, TypeVar
 
+import inmanta.ast.type as InmantaType
 from inmanta import const, protocol
 from inmanta.ast import CompilerException, LocatableString, Namespace, Range, RuntimeException, TypeNotFoundException
-from inmanta.ast.type import TypedList
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
@@ -252,7 +252,7 @@ class Plugin(object, metaclass=PluginMeta):
             return "%s(%s)" % (self.__class__.__function_name__, args)
         return "%s(%s) -> %s" % (self.__class__.__function_name__, args, self._return)
 
-    def to_type(self, arg_type: Optional[object], resolver):
+    def to_type(self, arg_type: Optional[object], resolver) -> Optional[InmantaType.Type]:
         """
             Convert a string representation of a type to a type
         """
@@ -274,16 +274,20 @@ class Plugin(object, metaclass=PluginMeta):
         if arg_type == "any":
             return None
 
-        if arg_type == "list":
-            return list
-
         if arg_type == "expression":
             return None
+
+        # quickfix issue #1774
+        allowed_element_type: InmantaType.Type = InmantaType.Type()
+        if arg_type == "list":
+            return InmantaType.TypedList(allowed_element_type)
+        if arg_type == "dict":
+            return InmantaType.TypedDict(allowed_element_type)
 
         if arg_type.endswith("[]"):
             locatable_type.value = arg_type[0:-2]
             basetype = resolver.get_type(locatable_type)
-            return TypedList(basetype)
+            return InmantaType.TypedList(basetype)
 
         return resolver.get_type(locatable_type)
 
