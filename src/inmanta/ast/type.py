@@ -382,6 +382,7 @@ class Literal(Union):
     def type_string(self) -> str:
         return "Literal"
 
+
 class ConstraintType(NamedType):
     """
         A type that is based on Number or String but defines additional constraint on this type.

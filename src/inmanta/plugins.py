@@ -284,18 +284,19 @@ class Plugin(object, metaclass=PluginMeta):
         location = Range(filename, line, 1, line, 2)
         locatable_type: LocatableString = LocatableString(arg_type, location, 0, None)
 
-        # transformations in reverse order
-        transformations: List[Callable[[InmantaType], InmantaType]] = []
+        # stack of transformations to be applied to the base InmantaType
+        # transformations will be applied right to left
+        transformation_stack: List[Callable[[InmantaType], InmantaType]] = []
 
         if locatable_type.value.endswith("?"):
             locatable_type.value = locatable_type.value[0:-1]
-            transformations.append(NullableType)
+            transformation_stack.append(NullableType)
 
         if locatable_type.value.endswith("[]"):
             locatable_type.value = locatable_type.value[0:-2]
-            transformations.append(TypedList)
+            transformation_stack.append(TypedList)
 
-        return reduce(lambda acc, transform: transform(acc), reversed(transformations), resolver.get_type(locatable_type))
+        return reduce(lambda acc, transform: transform(acc), reversed(transformation_stack), resolver.get_type(locatable_type))
 
     def _is_instance(self, value: Any, arg_type: Type) -> bool:
         """

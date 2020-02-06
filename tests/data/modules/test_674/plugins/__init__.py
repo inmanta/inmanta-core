@@ -17,5 +17,10 @@ def test_nullable_list(param: "number[]?") -> "bool":
 
 
 @plugin
+def test_not_nullable_list(param: "number[]") -> "bool":
+    return True
+
+
+@plugin
 def test_returns_none() -> "string?":
     return None
