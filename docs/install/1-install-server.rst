@@ -1,3 +1,5 @@
+.. _install-server:
+
 Install Inmanta
 ***************
 
