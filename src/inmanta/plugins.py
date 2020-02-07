@@ -362,7 +362,7 @@ class Plugin(object, metaclass=PluginMeta):
                 if not is_valid(expected_arg, expected_type, v):
                     return False
             except StopIteration:
-                raise RuntimeException(None, "Invalid keyword argument '%s' for '%s'" % (self.__class__.__function_name__, k))
+                raise RuntimeException(None, "Invalid keyword argument '%s' for '%s()'" % (k, self.__class__.__function_name__))
         return True
 
     def emit_statement(self) -> "DynamicStatement":
