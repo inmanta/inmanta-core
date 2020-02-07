@@ -96,3 +96,105 @@ std::equals(42, arg2=42, arg2=42)
         "Keyword argument arg2 repeated in function call std::equals()"
         " (reported in std::equals(42,arg2=42) ({dir}/main.cf:2))",
     )
+
+
+def test_1774_plugin_returning_entity_in_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_1774
+
+test_1774::test_list(test_1774::Test())
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_1774_plugin_returning_entity_in_dict(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_1774
+
+test_1774::test_dict(test_1774::Test())
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_674_nullable_type_in_plugin_arguments(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_674
+
+test_674::test_nullable("str")
+test_674::test_nullable(null)
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_674_not_nullable_type_in_plugin_arguments(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_674
+
+test_674::test_not_nullable("Hello World!")
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_674_not_nullable_type_in_plugin_arguments_error(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+import test_674
+
+test_674::test_not_nullable(null)
+        """,
+        "Invalid value 'null', expected String (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))",
+    )
+
+
+def test_674_nullable_list_type_in_plugin_arguments(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_674
+
+test_674::test_nullable_list([42, 12])
+test_674::test_nullable_list(null)
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_674_not_nullable_list_type_in_plugin_arguments(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_674
+
+test_674::test_not_nullable_list([1,2])
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_674_not_nullable_list_type_in_plugin_arguments_error(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+import test_674
+
+test_674::test_not_nullable_list(null)
+        """,
+        "Invalid value 'null', expected number[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))",
+    )
+
+
+def test_674_nullable_type_in_plugin_return(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_674
+
+x = test_674::test_returns_none()
+x = null
+        """,
+    )
+    compiler.do_compile()

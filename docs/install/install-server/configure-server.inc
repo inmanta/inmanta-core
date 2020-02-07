@@ -9,6 +9,7 @@ That file should look as follows:
 .. code-block:: text
 
   [database]
+  host=<ip-address-database-server>
   name=inmanta
   username=inmanta
   password=<password>

@@ -26,7 +26,7 @@ from inmanta.ast.statements import ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.proxy import UnknownException, UnsetException
 from inmanta.execute.runtime import ResultVariable, Waiter
-from inmanta.execute.util import Unknown
+from inmanta.execute.util import NoneValue, Unknown
 
 LOGGER = logging.getLogger(__name__)
 
@@ -132,7 +132,7 @@ class FunctionCall(ReferenceStatement):
         else:
             try:
                 value = function(*arguments, **kwargs)
-                result.set_value(value, self.location)
+                result.set_value(value if value is not None else NoneValue(), self.location)
             except UnknownException as e:
                 result.set_value(e.unknown, self.location)
             except UnsetException as e:
