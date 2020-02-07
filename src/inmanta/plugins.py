@@ -19,6 +19,7 @@
 import inspect
 import os
 import subprocess
+from functools import reduce
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Type, TypeVar
 
 import inmanta.ast.type as InmantaType
@@ -264,12 +265,6 @@ class Plugin(object, metaclass=PluginMeta):
                 "bad annotation in plugin %s::%s, expected str but got %s (%s)"
                 % (self.ns, self.__class__.__function_name__, type(arg_type), arg_type)
             )
-        filename: Optional[str] = inspect.getsourcefile(self.__class__.__function__)
-        location: Range
-        assert filename is not None
-        line: int = inspect.getsourcelines(self.__class__.__function__)[1] + 1
-        location = Range(filename, line, 1, line, 2)
-        locatable_type: LocatableString = LocatableString(arg_type, location, 0, None)
 
         if arg_type == "any":
             return None
@@ -284,12 +279,26 @@ class Plugin(object, metaclass=PluginMeta):
         if arg_type == "dict":
             return InmantaType.TypedDict(allowed_element_type)
 
-        if arg_type.endswith("[]"):
-            locatable_type.value = arg_type[0:-2]
-            basetype = resolver.get_type(locatable_type)
-            return InmantaType.TypedList(basetype)
+        filename: Optional[str] = inspect.getsourcefile(self.__class__.__function__)
+        location: Range
+        assert filename is not None
+        line: int = inspect.getsourcelines(self.__class__.__function__)[1] + 1
+        location = Range(filename, line, 1, line, 2)
+        locatable_type: LocatableString = LocatableString(arg_type, location, 0, None)
 
-        return resolver.get_type(locatable_type)
+        # stack of transformations to be applied to the base InmantaType.Type
+        # transformations will be applied right to left
+        transformation_stack: List[Callable[[InmantaType.Type], InmantaType.Type]] = []
+
+        if locatable_type.value.endswith("?"):
+            locatable_type.value = locatable_type.value[0:-1]
+            transformation_stack.append(InmantaType.NullableType)
+
+        if locatable_type.value.endswith("[]"):
+            locatable_type.value = locatable_type.value[0:-2]
+            transformation_stack.append(InmantaType.TypedList)
+
+        return reduce(lambda acc, transform: transform(acc), reversed(transformation_stack), resolver.get_type(locatable_type))
 
     def _is_instance(self, value: Any, arg_type: Type) -> bool:
         """
