@@ -24,12 +24,17 @@ import docstring_parser
 class DocString:
     def __init__(self, doc_string: docstring_parser.Docstring):
         for attr in doc_string.meta:
+            # attr.args contains the part of an attribute definition in the docstring between the
+            # colons splitted on white spaces. This check enforces the format :attr <attribute-name>:
             if len(attr.args) != 2 or attr.args[0] != "attr":
                 raise Exception(f"Failed to parse attribute {' '.join(attr.args)}")
-        self._attr_description_map = {attr.args[1]: attr.description for attr in doc_string.meta}
-        self._doc_string = doc_string
+        self._attr_description_map: Dict[str, str] = {attr.args[1]: attr.description for attr in doc_string.meta}
+        self._doc_string: docstring_parser.Docstring = doc_string
 
     def get_description(self) -> Optional[str]:
+        """
+            Return the general description in the docstring.
+        """
         if self._doc_string.short_description is None:
             return None
         if self._doc_string.long_description is not None:
@@ -38,9 +43,15 @@ class DocString:
             return self._doc_string.short_description
 
     def get_description_for_attribute(self, attr_name: str) -> Optional[str]:
+        """
+            Return the description for a certain attribute.
+        """
         return self._attr_description_map.get(attr_name, None)
 
     def get_attribute_description_map(self) -> Dict[str, str]:
+        """
+            Return the dict which maps the attribute name to its description.
+        """
         return dict(self._attr_description_map)
 
 
