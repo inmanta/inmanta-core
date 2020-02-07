@@ -26,12 +26,12 @@ LOGGER = logging.getLogger(__name__)
 
 class DocString:
     def __init__(self, doc_string: docstring_parser.Docstring):
+        # Ignore attribute definitions with a syntax error
         new_meta = []
         for attr in doc_string.meta:
             # attr.args contains the part of an attribute definition in the docstring between the
             # colons splitted on white spaces. This check enforces the format :attr <attribute-name>:
             if len(attr.args) != 2 or attr.args[0] != "attr":
-                # Ignore attributes with a syntax error
                 LOGGER.warning("Failed to parse attribute: ':%s: %s'", " ".join(attr.args), attr.description)
             else:
                 new_meta.append(attr)
