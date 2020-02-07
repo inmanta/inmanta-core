@@ -622,8 +622,7 @@ def p_constructor(p: YaccProduction) -> None:
 def p_function_call(p: YaccProduction) -> None:
     " function_call : ns_ref '(' function_param_list ')'"
     (args, kwargs, wrapped_kwargs) = p[3]
-    p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs)
-    attach_lnr(p, 2)
+    p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs, Location(file, p.lineno(2)), namespace)
 
 
 def p_list_def(p: YaccProduction) -> None:

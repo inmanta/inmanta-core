@@ -19,7 +19,8 @@
 import inspect
 import os
 import subprocess
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type, TypeVar
+from itertools import count
+from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Type, TypeVar
 
 from inmanta import const, protocol
 from inmanta.ast import CompilerException, LocatableString, Namespace, Range, RuntimeException, TypeNotFoundException
@@ -303,18 +304,24 @@ class Plugin(object, metaclass=PluginMeta):
         """
             Check if the arguments of the call match the function signature
         """
-        nb_args = len(args) + len(kwargs)
         max_arg = len(self.arguments)
         required_args = [x[0] for x in self.arguments if len(x) == 2]
 
-        if nb_args < len(required_args) or nb_args > max_arg:
+        if len(args) + len(kwargs) > max_arg:
             raise Exception(
-                "Incorrect number of arguments for %s. Expected at least %d, got %d"
-                % (self.get_signature(), len(required_args), len(args))
+                "Incorrect number of arguments for %s. Expected at most %d, got %d"
+                % (self.get_signature(), max_arg, len(args) + len(kwargs))
             )
-        nb_missing_kwargs = len(required_args) - len(args) - len(list(filter(lambda k: k in required_args, kwargs.keys())))
-        if nb_missing_kwargs > 0:
-            raise RuntimeException(None, "Missing at least %d arguments" % nb_missing_kwargs)
+        if len(args) < len(required_args):
+            required_kwargs: FrozenSet[str] = frozenset(self.arguments[i][0] for i in range(len(args), len(required_args)))
+            present_kwargs: FrozenSet[str] = frozenset(kwargs.keys())
+            if not required_kwargs.issubset(present_kwargs):
+                missing: FrozenSet[str] = required_kwargs.difference(present_kwargs)
+                raise RuntimeException(
+                    None,
+                    "Missing %d required arguments for %s(): %s"
+                    % (len(missing), self.__class__.__function_name__, ",".join(missing)),
+                )
 
         def is_valid(expected_arg, expected_type, arg):
             if isinstance(arg, Unknown):
@@ -332,7 +339,13 @@ class Plugin(object, metaclass=PluginMeta):
                 return False
         for k, v in kwargs.items():
             try:
-                (expected_arg, expected_type) = next(filter(lambda x: x[0][0] == k, zip(self.arguments, self.argtypes)))
+                (i, expected_arg, expected_type) = next(
+                    filter(lambda x: x[1][0] == k, zip(count(0), self.arguments, self.argtypes))
+                )
+                if i < len(args):
+                    raise RuntimeException(
+                        None, "Multiple values for %s in %s" % (expected_arg[0], self.__class__.__function_name__)
+                    )
                 if not is_valid(expected_arg, expected_type, v):
                     return False
             except StopIteration:

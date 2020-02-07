@@ -21,7 +21,7 @@ from itertools import chain
 from typing import Dict, List, Tuple
 
 from inmanta import plugins
-from inmanta.ast import ExternalException, LocatableString, RuntimeException, WrappingRuntimeException
+from inmanta.ast import ExternalException, LocatableString, Location, Namespace, RuntimeException, WrappingRuntimeException
 from inmanta.ast.statements import ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.proxy import UnknownException, UnsetException
@@ -49,17 +49,21 @@ class FunctionCall(ReferenceStatement):
         arguments: List[ExpressionStatement],
         kwargs: List[Tuple[LocatableString, ExpressionStatement]],
         wrapped_kwargs: List[WrappedKwargs],
+        location: Location,
+        namespace: Namespace,
     ) -> None:
         ReferenceStatement.__init__(self, list(chain(arguments, (v for _, v in kwargs), wrapped_kwargs)))
         self.name: LocatableString = name
         self.arguments: List[ExpressionStatement] = arguments
+        self.wrapped_kwargs: List[WrappedKwargs] = wrapped_kwargs
+        self.location: Location = location
+        self.namespace: Namespace = namespace
         self.kwargs: Dict[str, ExpressionStatement] = {}
         for loc_name, expr in kwargs:
             arg_name: str = str(loc_name)
             if arg_name in self.kwargs:
-                raise RuntimeException(self, "Keyword argument %s repeated in function call" % arg_name)
+                raise RuntimeException(self, "Keyword argument %s repeated in function call %s()" % (arg_name, self.name))
             self.kwargs[arg_name] = expr
-        self.wrapped_kwargs: List[WrappedKwargs] = wrapped_kwargs
 
     def normalize(self):
         ReferenceStatement.normalize(self)
@@ -79,7 +83,7 @@ class FunctionCall(ReferenceStatement):
     def execute_direct(self, requires):
         function = self.function
         arguments = [a.execute_direct(requires) for a in self.arguments]
-        kwargs = {k: v.execute_direct(requires) for k, v in self.kwargs}
+        kwargs = {k: v.execute_direct(requires) for k, v in self.kwargs.items()}
         for wrapped_kwarg_expr in self.wrapped_kwargs:
             for k, v in wrapped_kwarg_expr.execute_direct(requires):
                 if k in kwargs:
@@ -139,10 +143,28 @@ class FunctionCall(ReferenceStatement):
                 raise ExternalException(self, "Exception in plugin %s" % self.name, e)
 
     def __repr__(self):
-        return "%s(%s)" % (self.name, ",".join([repr(a) for a in self.arguments]))
+        return "%s(%s)" % (
+            self.name,
+            ",".join(
+                chain(
+                    (repr(a) for a in self.arguments),
+                    ("%s=%s" % (k, repr(v)) for k, v in self.kwargs.items()),
+                    ("**%s" % repr(kwargs) for kwargs in self.wrapped_kwargs),
+                )
+            ),
+        )
 
     def pretty_print(self):
-        return "%s(%s)" % (self.name, ",".join([a.pretty_print() for a in self.arguments]))
+        return "%s(%s)" % (
+            self.name,
+            ",".join(
+                chain(
+                    (a.pretty_print() for a in self.arguments),
+                    ("%s=%s" % (k, v.pretty_print()) for k, v in self.kwargs.items()),
+                    ("**%s" % kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
+                )
+            ),
+        )
 
 
 class FunctionUnit(Waiter):
