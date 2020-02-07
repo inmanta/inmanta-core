@@ -16,8 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import pytest
-
 from inmanta.docstringParser import parse_docstring
 
 
@@ -80,9 +78,9 @@ def test_empty_docstring():
     assert len(parsed_docstring.get_attribute_description_map()) == 0
 
 
-def test_syntax_error_in_attr_definition_docstring():
+def test_syntax_error_in_attr_definition_docstring(caplog):
     """
-        Verify that an exception is raised when a syntax error
+        Verify that a warning is logged when a syntax error
         exists in the definition of an attribute.
     """
     docstring = """
@@ -93,5 +91,5 @@ def test_syntax_error_in_attr_definition_docstring():
                       More description param2.
     """
 
-    with pytest.raises(Exception, match="Failed to parse attribute"):
-        parse_docstring(docstring)
+    parse_docstring(docstring)
+    assert "Failed to parse attribute: ':attr: Description param1.'" in caplog.messages
