@@ -43,6 +43,8 @@ LOGGER = logging.getLogger(__name__)
 async def test_autostart(server, client, environment, caplog):
     """
         Test auto start of agent
+        An agent is started and then killed to simulate unexpected failure
+        When the second agent is started for the same environment, the first is terminated in a controlled manner
     """
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": "", "iaas_agentx": ""})
@@ -85,6 +87,7 @@ async def test_autostart(server, client, environment, caplog):
     assert len(agentmanager._agent_procs) == 0
 
     log_doesnt_contain(caplog, "inmanta.config", logging.WARNING, "rest_transport not defined")
+    log_doesnt_contain(caplog, "inmanta.server.agentmanager", logging.WARNING, "Agent processes did not close in time")
 
 
 @pytest.mark.asyncio(timeout=60)
