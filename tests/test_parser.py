@@ -89,6 +89,7 @@ end
     assert [str(p) for p in stmt.parents] == ["std::Entity"]
     assert len(stmt.attributes) == 0
     assert stmt.comment is None
+    assert stmt.type.comment is None
 
 
 def test_undefine_default():
@@ -107,6 +108,7 @@ end"""
     assert [str(p) for p in stmt.parents] == ["Foo"]
     assert len(stmt.attributes) == 2
     assert stmt.comment is None
+    assert stmt.type.comment is None
 
     for ad in stmt.attributes:
         assert isinstance(ad.type, TypeDeclaration)
@@ -158,6 +160,7 @@ end
     assert len(stmt.parents) == 2
     assert [str(p) for p in stmt.parents] == ["Foo", "foo::sub::Bar"]
     assert str(stmt.comment).strip() == documentation
+    assert str(stmt.type.comment).strip() == documentation
     assert len(stmt.attributes) == 3
 
     for ad in stmt.attributes:
@@ -1206,6 +1209,15 @@ end
     """
     )
 
+    assert (
+        str(stmt.type.comment)
+        == """
+        This entity provides management, orchestration and monitoring
+
+        More test
+    """
+    )
+
 
 def test_bad():
     with pytest.raises(ParserException):
@@ -1311,6 +1323,7 @@ end
 
     stmt = statements[0]
     assert str(stmt.comment).strip() == "Bla bla"
+    assert str(stmt.type.comment).strip() == "Bla bla"
 
 
 def test_doc_string_on_implements():
