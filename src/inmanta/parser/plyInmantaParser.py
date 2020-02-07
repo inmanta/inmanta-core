@@ -632,30 +632,21 @@ def p_list_def(p: YaccProduction) -> None:
 
 
 def p_pair_list_collect(p: YaccProduction) -> None:
-    """pair_list : STRING ':' operand ',' pair_list"""
+    """pair_list : STRING ':' operand ',' pair_list
+        | STRING ':' operand empty pair_list_empty"""
     p[5].insert(0, (str(p[1]), p[3]))
     p[0] = p[5]
 
 
-def p_pair_list_term(p: YaccProduction) -> None:
-    "pair_list : STRING ':' operand"
-    p[0] = [(str(p[1]), p[3])]
-
-
-def p_pair_list_term_2(p: YaccProduction) -> None:
-    "pair_list : "
+def p_pair_list_empty(p: YaccProduction) -> None:
+    """pair_list : pair_list_empty
+        pair_list_empty : empty"""
     p[0] = []
 
 
 def p_map_def(p: YaccProduction) -> None:
     " map_def : '{' pair_list '}'"
     p[0] = CreateDict(p[2])
-    attach_lnr(p, 1)
-
-
-def p_map_def_empty(p: YaccProduction) -> None:
-    " map_def : '{' '}'"
-    p[0] = CreateDict([])
     attach_lnr(p, 1)
 
 
