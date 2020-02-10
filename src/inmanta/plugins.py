@@ -327,7 +327,7 @@ class Plugin(object, metaclass=PluginMeta):
         present_kwargs: FrozenSet[str] = frozenset(kwargs.keys())
         # check for missing arguments
         if len(args) < len(required_args):
-            required_kwargs: FrozenSet[str] = frozenset(self.arguments[i][0] for i in range(len(args), len(required_args)))
+            required_kwargs: FrozenSet[str] = frozenset(arg[0] for arg in self.arguments[len(args) : len(required_args)])
             if not required_kwargs.issubset(present_kwargs):
                 missing: FrozenSet[str] = required_kwargs.difference(present_kwargs)
                 raise RuntimeException(
