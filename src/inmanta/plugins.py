@@ -20,7 +20,6 @@ import inspect
 import os
 import subprocess
 from functools import reduce
-from itertools import count
 from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar
 
 import inmanta.ast.type as InmantaType
