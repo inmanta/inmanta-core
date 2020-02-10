@@ -84,8 +84,9 @@ set_parameters
 
 async def wait_for_proc_bounded(procs: Iterable[process.Subprocess], timeout: float = const.SHUTDOWN_GRACE_HARD) -> None:
     try:
+        unfinished_processes = [proc for proc in procs if proc.returncode is None]
         await asyncio.wait_for(
-            asyncio.gather(*[asyncio.shield(proc.wait_for_exit(raise_error=False)) for proc in procs]), timeout
+            asyncio.gather(*[asyncio.shield(proc.wait_for_exit(raise_error=False)) for proc in unfinished_processes]), timeout
         )
     except asyncio.TimeoutError:
         LOGGER.warning("Agent processes did not close in time (%s)", procs)
