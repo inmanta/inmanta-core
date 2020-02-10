@@ -21,7 +21,7 @@ import os
 import subprocess
 from functools import reduce
 from itertools import count
-from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar
 
 import inmanta.ast.type as InmantaType
 from inmanta import const, protocol
@@ -325,9 +325,10 @@ class Plugin(object, metaclass=PluginMeta):
                 "Incorrect number of arguments for %s. Expected at most %d, got %d"
                 % (self.get_signature(), max_arg, len(args) + len(kwargs))
             )
+        present_kwargs: FrozenSet[str] = frozenset(kwargs.keys())
+        # check for missing arguments
         if len(args) < len(required_args):
             required_kwargs: FrozenSet[str] = frozenset(self.arguments[i][0] for i in range(len(args), len(required_args)))
-            present_kwargs: FrozenSet[str] = frozenset(kwargs.keys())
             if not required_kwargs.issubset(present_kwargs):
                 missing: FrozenSet[str] = required_kwargs.difference(present_kwargs)
                 raise RuntimeException(
@@ -335,6 +336,14 @@ class Plugin(object, metaclass=PluginMeta):
                     "Missing %d required arguments for %s(): %s"
                     % (len(missing), self.__class__.__function_name__, ",".join(missing)),
                 )
+        present_positional_args: FrozenSet[str] = frozenset(arg[0] for arg in self.arguments[: len(args)])
+        # check for kwargs overlap with positional arguments
+        if not present_kwargs.isdisjoint(present_positional_args):
+            raise RuntimeException(
+                None,
+                "Multiple values for %s in %s()"
+                % (",".join(present_kwargs.intersection(present_positional_args)), self.__class__.__function_name__),
+            )
 
         def is_valid(expected_arg, expected_type, arg):
             if isinstance(arg, Unknown):
@@ -350,18 +359,16 @@ class Plugin(object, metaclass=PluginMeta):
         for i in range(len(args)):
             if not is_valid(self.arguments[i], self.argtypes[i], args[i]):
                 return False
+        Argument = Tuple[str, ...]
+        arg_types: Dict[str, Tuple[Argument, Optional[InmantaType.Type]]] = {
+            arg[0]: (arg, self.argtypes[i]) for i, arg in enumerate(self.arguments)
+        }
         for k, v in kwargs.items():
             try:
-                (i, expected_arg, expected_type) = next(
-                    filter(lambda x: x[1][0] == k, zip(count(0), self.arguments, self.argtypes))
-                )
-                if i < len(args):
-                    raise RuntimeException(
-                        None, "Multiple values for %s in %s" % (expected_arg[0], self.__class__.__function_name__)
-                    )
+                (expected_arg, expected_type) = arg_types[k]
                 if not is_valid(expected_arg, expected_type, v):
                     return False
-            except StopIteration:
+            except KeyError:
                 raise RuntimeException(None, "Invalid keyword argument '%s' for '%s()'" % (k, self.__class__.__function_name__))
         return True
 

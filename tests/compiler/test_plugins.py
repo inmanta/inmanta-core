@@ -84,7 +84,7 @@ def test_kwargs_in_plugin_call_double_arg(snippetcompiler):
         """
 std::equals(42, 42, arg1=42)
         """,
-        "Multiple values for arg1 in equals (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2))",
+        "Multiple values for arg1 in equals() (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2))",
     )
 
 
