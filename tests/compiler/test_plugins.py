@@ -198,3 +198,13 @@ x = null
         """,
     )
     compiler.do_compile()
+
+
+def test_1778_context_as_kwarg_reject(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+std::generate_password("pw_id", context=42)
+        """,
+        "Invalid keyword argument 'context' for 'generate_password()'"
+        " (reported in std::generate_password('pw_id',context=42) ({dir}/main.cf:2))"
+    )
