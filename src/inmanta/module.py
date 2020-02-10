@@ -474,8 +474,10 @@ class Project(ModuleLike):
         (statements, _) = self.get_ast()
         imports = [x for x in statements if isinstance(x, DefineImport)]
         if self.autostd:
-            std_locatable = LocatableString("std", Range("internal", 0, 0, 0, 0), 0, self.root_ns)
-            imports.insert(0, DefineImport(std_locatable, std_locatable))
+            std_locatable = LocatableString("std", Range("__internal__", 1, 1, 1, 1), -1, self.root_ns)
+            imp = DefineImport(std_locatable, std_locatable)
+            imp.location = std_locatable.location
+            imports.insert(0, imp)
         return imports
 
     @lru_cache()
