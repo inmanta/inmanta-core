@@ -652,14 +652,12 @@ def p_map_def(p: YaccProduction) -> None:
 
 def p_index_lookup(p: YaccProduction) -> None:
     " index_lookup : class_ref '[' param_list ']'"
-    # TODO: test case for index lookup (parse test and compile test)
     p[0] = IndexLookup(p[1], p[3][0], p[3][1])
     attach_lnr(p, 2)
 
 
 def p_short_index_lookup(p: YaccProduction) -> None:
     " index_lookup : attr_ref '[' param_list ']'"
-    # TODO: test case for index lookup (parse test and compile test)
     attref = p[1]
     p[0] = ShortIndexLookup(attref.instance, attref.attribute, p[3][0], p[3][1])
     attach_lnr(p, 2)
