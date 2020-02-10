@@ -101,7 +101,7 @@ class Entity(EntityLike, NamedType):
 
     comment: Optional[str]
 
-    def __init__(self, name: str, namespace: Namespace) -> None:
+    def __init__(self, name: str, namespace: Namespace, comment: Optional[str] = None) -> None:
         NamedType.__init__(self)
 
         self.__name = name  # type: str
@@ -125,7 +125,7 @@ class Entity(EntityLike, NamedType):
 
         self._instance_list = set()  # type: Set[Instance]
 
-        self.comment = ""
+        self.comment = comment
 
         self.normalized = False
 

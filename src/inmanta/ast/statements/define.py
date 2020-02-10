@@ -135,7 +135,7 @@ class DefineEntity(TypeDefinitionStatement):
             dummy_location: Range = Range("__internal__", -1, -1, -1, -1)
             self.parents.append(LocatableString("std::Entity", dummy_location, -1, namespace))
 
-        self.type = Entity(self.name, namespace)
+        self.type = Entity(self.name, namespace, self.comment)
         self.type.location = lname.location
 
     def add_attribute(

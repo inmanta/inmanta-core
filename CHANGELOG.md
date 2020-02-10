@@ -4,6 +4,7 @@
 - Entity instances are no longer allowed in list and dict attributes, this was previously possible due to bug (#1435)
 
 ## Fixed
+ - Fixed syntax error when parsing empty model (#1766)
  - Added support for nullable types in plugins (#674)
  - Inmanta type module cleanup and type coverage
  - Various compiler error reporting improvements (#1584, #1341, #1600, #1292, #1652, #1221)
@@ -16,9 +17,11 @@
  - Parse comments and urls correctly from the requirements.txt file of an Inmanta module (#1764)
 
 ## Added
+
  - Add get_environment_id to exporter (#1683)
  - Added inmanta-cli environment save command (#1666)
  - Added finalizer support to @cache annotation
+ - Added support to parse the docstring of an entity
  - Added support for \*\*dict as kwargs for constructor calls and index lookups (#620, #1702)
  - Added support for kwargs in plugin calls, as named arguments as well as using \*\*dict (#1143)
 
