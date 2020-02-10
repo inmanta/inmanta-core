@@ -1626,3 +1626,22 @@ typedef positive as number matching self >= 1-
     assert exc.location.end_char == 47
     assert exc.value == "-"
     assert exc.msg == "Syntax error: Illegal character '-'"
+
+
+def test_1766_empty_model_single_newline():
+    statements = parse_code(
+        """
+        """
+    )
+    assert len(statements) == 0
+
+
+def test_1766_empty_model_multiple_newline():
+    statements = parse_code(
+        """
+
+
+
+        """
+    )
+    assert len(statements) == 0

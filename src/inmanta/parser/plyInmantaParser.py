@@ -101,15 +101,15 @@ def make_none(p: YaccProduction, token: int) -> Literal:
 
 
 def p_main_collect(p: YaccProduction) -> None:
-    """main : top_stmt main"""
+    "main : top_stmt main"
     v = p[2]
     v.insert(0, p[1])
     p[0] = v
 
 
 def p_main_term(p: YaccProduction) -> None:
-    "main : top_stmt"
-    p[0] = [p[1]]
+    "main : empty"
+    p[0] = []
 
 
 def p_top_stmt(p: YaccProduction) -> None:
