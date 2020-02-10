@@ -40,7 +40,7 @@ logger = logging.getLogger("inmanta.test.server_agent")
 
 
 @pytest.mark.asyncio(timeout=150)
-async def test_deploy_empty(server, client, clienthelper, resource_container, environment, no_agent_backoff, async_finalizer):
+async def test_deploy_empty(server, client, clienthelper, environment, no_agent_backoff, async_finalizer):
     """
        Test deployment of empty model
     """
@@ -72,19 +72,19 @@ async def test_deploy_empty(server, client, clienthelper, resource_container, en
 
 
 @pytest.mark.asyncio(timeout=100)
-async def test_deploy_with_undefined(server_multi, client_multi, resource_container, async_finalizer, no_agent_backoff):
+async def test_deploy_with_undefined(server, client, resource_container, async_finalizer, no_agent_backoff):
     """
          Test deploy of resource with undefined
     """
-    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     Config.set("config", "agent-deploy-interval", "100")
 
     resource_container.Provider.reset()
-    result = await client_multi.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = await client_multi.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
     env = await data.Environment.get_by_id(uuid.UUID(env_id))
     await env.set(data.AUTO_DEPLOY, False)
@@ -102,7 +102,7 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
 
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
-    clienthelper = ClientHelper(client_multi, env_id)
+    clienthelper = ClientHelper(client, env_id)
 
     version = await clienthelper.get_version()
 
@@ -145,7 +145,7 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
         "test::Resource[agent2,key=key4]": const.ResourceState.undefined,
         "test::Resource[agent2,key=key2]": const.ResourceState.undefined,
     }
-    result = await client_multi.put_version(
+    result = await client.put_version(
         tid=env_id,
         version=version,
         resources=resources,
@@ -157,7 +157,7 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
     assert result.code == 200
 
     # do a deploy
-    result = await client_multi.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
+    result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
@@ -165,19 +165,19 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
     assert result.result["model"]["result"] == "deploying"
 
     # The server will mark the full version as deployed even though the agent has not done anything yet.
-    result = await client_multi.get_version(env_id, version)
+    result = await client.get_version(env_id, version)
     assert result.code == 200
 
-    await _wait_until_deployment_finishes(client_multi, env_id, version)
+    await _wait_until_deployment_finishes(client, env_id, version)
 
-    result = await client_multi.get_version(env_id, version)
+    result = await client.get_version(env_id, version)
     assert result.result["model"]["done"] == len(resources)
     assert result.code == 200
 
     actions = await data.ResourceAction.get_list()
     assert len([x for x in actions if x.status == const.ResourceState.undefined]) >= 1
 
-    result = await client_multi.get_version(env_id, version)
+    result = await client.get_version(env_id, version)
     assert result.code == 200
 
     assert resource_container.Provider.changecount("agent2", "key4") == 0
@@ -191,7 +191,7 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
     # Do a second deploy of the same model on agent2 with undefined resources
     await agent.trigger_update("env_id", "agent2", incremental_deploy=False)
 
-    result = await client_multi.get_version(env_id, version, include_logs=True)
+    result = await client.get_version(env_id, version, include_logs=True)
 
     def done():
         return (
@@ -294,8 +294,8 @@ async def test_spontaneous_deploy(
 
     env_id = environment
 
-    Config.set("config", "agent-deploy-interval", "2")
-    Config.set("config", "agent-deploy-splay-time", "2")
+    Config.set("config", "agent-deploy-interval", "1")
+    Config.set("config", "agent-deploy-splay-time", "1")
     Config.set("config", "agent-repair-interval", "0")
 
     agent = await get_agent(server, environment, "agent1", "node1")
@@ -368,8 +368,8 @@ async def test_spontaneous_repair(
 
     env_id = environment
 
-    Config.set("config", "agent-repair-interval", "2")
-    Config.set("config", "agent-repair-splay-time", "2")
+    Config.set("config", "agent-repair-interval", "1")
+    Config.set("config", "agent-repair-splay-time", "1")
     Config.set("config", "agent-deploy-interval", "0")
 
     agent = await get_agent(server, environment, "agent1", "node1")
@@ -2894,12 +2894,10 @@ async def test_agent_run_sync(resource_container, environment, server, client, c
 
 
 @pytest.mark.asyncio
-async def test_format_token_in_logline(
-    server_multi, agent_multi, client_multi, environment_multi, resource_container, caplog, no_agent_backoff
-):
+async def test_format_token_in_logline(server, agent, client, environment, resource_container, caplog, no_agent_backoff):
     """Deploy a resource that logs a line that after formatting on the agent contains an invalid formatting character.
     """
-    version = (await client_multi.reserve_version(environment_multi)).result["data"]
+    version = (await client.reserve_version(environment)).result["data"]
     resource_container.Provider.set("agent1", "key1", "incorrect_value")
 
     resource = {
@@ -2911,8 +2909,8 @@ async def test_format_token_in_logline(
         "requires": [],
     }
 
-    result = await client_multi.put_version(
-        tid=environment_multi,
+    result = await client.put_version(
+        tid=environment,
         version=version,
         resources=[resource],
         unknowns=[],
@@ -2923,18 +2921,18 @@ async def test_format_token_in_logline(
     assert result.code == 200
 
     # do a deploy
-    result = await client_multi.release_version(environment_multi, version, True, const.AgentTriggerMethod.push_full_deploy)
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
     assert result.result["model"]["result"] == "deploying"
 
-    result = await client_multi.get_version(environment_multi, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
-    await _wait_until_deployment_finishes(client_multi, environment_multi, version)
+    await _wait_until_deployment_finishes(client, environment, version)
 
-    result = await client_multi.get_version(environment_multi, version)
+    result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == 1
 
     log_string = "Set key '%(key)s' to value '%(value)s'" % dict(key=resource["key"], value=resource["value"])
