@@ -53,7 +53,7 @@ Test(value="ab")
 """,
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:10)` (reported in Construct(Test) ({dir}/main.cf:10))
 caused by:
-  Invalid value 'ab', constraint does not match (reported in __config__::abc ({dir}/main.cf:2:9))""",  # noqa: E501
+  Invalid value 'ab', does not match constraint `(self in ['a','b','c'])` (reported in __config__::abc ({dir}/main.cf:2:9))""",  # noqa: E501
     )
 
 

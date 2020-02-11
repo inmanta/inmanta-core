@@ -284,7 +284,8 @@ implement Test using std::none
 
 Test(t = 8)
         """,
-        "Invalid value '12', constraint does not match (reported in digit t = 12 ({dir}/main.cf:5))",
+        "Invalid value 12, does not match constraint `((self > 0) and (self < 10))`"
+        " (reported in digit t = 12 ({dir}/main.cf:5))",
     )
 
 
@@ -317,5 +318,6 @@ entity Test:
     std::date d = "nodatevalue"
 end
         """,
-        "Invalid value 'nodatevalue', constraint does not match (reported in std::date d = 'nodatevalue' ({dir}/main.cf:3))",
+        "Invalid value 'nodatevalue', does not match constraint `(std::validate_type('datetime.date',self) == true)`"
+        " (reported in std::date d = 'nodatevalue' ({dir}/main.cf:3))",
     )
