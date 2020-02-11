@@ -63,7 +63,7 @@ class JinjaExplainer(Explainer):
 
     def get_template(self, problem: CompilerException) -> str:
         path = os.path.join(os.path.dirname(__file__), self.template)
-        with open(path, "r") as fh:
+        with open(path, "r", encoding="utf-8") as fh:
             return fh.read()
 
     def explain(self, problem: CompilerException) -> List[str]:

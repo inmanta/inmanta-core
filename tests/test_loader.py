@@ -39,7 +39,7 @@ def test_code_manager():
 
     def get_code():
         filename = inspect.getsourcefile(test_code_manager)
-        with open(filename, "r") as fd:
+        with open(filename, "r", encoding="utf-8") as fd:
             return fd.read()
 
     content = get_code()

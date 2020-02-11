@@ -298,7 +298,7 @@ port=%(port)s
     if os.path.exists(".inmanta") and not click.confirm(".inmanta exists, do you want to overwrite it?"):
         click.echo("not writing config", err=True)
     else:
-        with open(".inmanta", "w") as f:
+        with open(".inmanta", "w", encoding="utf-8") as f:
             f.write(cfg)
 
 

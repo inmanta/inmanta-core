@@ -110,7 +110,7 @@ async def test_environment(server, client, cli, tmpdir):
 
     path_dot_inmanta_file = os.path.join(tmpdir, ".inmanta")
     assert os.path.isfile(path_dot_inmanta_file)
-    with open(path_dot_inmanta_file, "r") as f:
+    with open(path_dot_inmanta_file, "r", encoding="utf-8") as f:
         file_content = f.read()
         assert f"environment={env_id}" in file_content
 
