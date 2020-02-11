@@ -5,6 +5,7 @@
 
 ## Fixed
  - Fixed error message for out of place regex (#1707)
+ - Added error message when compiling model with repo set to faulty value in project.yml (#1480, #1767)
  - Fixed syntax error when parsing empty model (#1766)
  - Added support for nullable types in plugins (#674)
  - Inmanta type module cleanup and type coverage
