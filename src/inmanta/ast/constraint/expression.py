@@ -309,7 +309,7 @@ class Regex(BinaryOperator):
         """
             Return a representation of the op
         """
-        return "%s(%s, %s)" % (self.__class__.__name__, self._arguments[0], self._arguments[1].value)
+        return "/%s/" % self._arguments[1].value.pattern
 
 
 class Equals(BinaryOperator):
