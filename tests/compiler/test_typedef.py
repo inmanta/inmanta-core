@@ -62,3 +62,49 @@ def test_typedef_exception(snippetcompiler):
         "typedef test as string matching std::to_number({}) > 0",
         """typedef expressions should reference the self variable (reported in Type(test) ({dir}/main.cf:1:9))""",
     )
+
+
+def test_1575_enum_constraint_mismatch_exception(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+typedef mytype as string matching self in ["accepted", "values"]
+
+entity Test:
+        mytype v = "value"
+end
+
+implement Test using std::none
+        """,
+        "Invalid value 'value', does not match constraint `(self in ['accepted','values'])`"
+        " (reported in mytype v = 'value' ({dir}/main.cf:5))",
+    )
+
+
+def test_1575_regex_constraint_mismatch_exception(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+typedef mytype as string matching /accepted_value/
+
+entity Test:
+        mytype v = "value"
+end
+
+implement Test using std::none
+        """,
+        "Invalid value 'value', does not match constraint `/accepted_value/`"
+        " (reported in mytype v = 'value' ({dir}/main.cf:5))",
+    )
+
+
+def test_1575_plugin_constraint_mismatch_exception(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+typedef mytype as list matching std::unique(self)
+
+entity A:
+        mytype v = [42, 42]
+end
+        """,
+        "Invalid value [42, 42], does not match constraint `(std::unique(self) == true)`"
+        " (reported in mytype v = List() ({dir}/main.cf:5))",
+    )

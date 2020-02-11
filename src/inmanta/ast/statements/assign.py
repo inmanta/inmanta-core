@@ -126,6 +126,9 @@ class CreateList(ReferenceStatement):
     def as_constant(self) -> typing.List[object]:
         return [item.as_constant() for item in self.items]
 
+    def pretty_print(self) -> str:
+        return "[%s]" % ",".join(item.pretty_print() for item in self.items)
+
     def __repr__(self) -> str:
         return "List()"
 
