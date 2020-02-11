@@ -689,6 +689,7 @@ async def off_main_thread(func):
 class SnippetCompilationTest(KeepOnFail):
     def setUpClass(self):
         self.libs = tempfile.mkdtemp()
+        self.repo = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
         config.Config.load_config()
         self.cwd = os.getcwd()
@@ -736,8 +737,8 @@ class SnippetCompilationTest(KeepOnFail):
             modulepath: %s
             downloadpath: %s
             version: 1.0
-            repo: ['https://github.com/inmanta/']"""
-                % (module_path, self.libs)
+            repo: ['%s']"""
+                % (module_path, self.libs, self.repo)
             )
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w") as x:
