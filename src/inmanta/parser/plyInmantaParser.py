@@ -620,9 +620,9 @@ def p_constructor(p: YaccProduction) -> None:
 
 
 def p_function_call(p: YaccProduction) -> None:
-    " function_call : ns_ref '(' operand_list ')'"
-    p[0] = FunctionCall(p[1], p[3])
-    attach_lnr(p, 2)
+    " function_call : ns_ref '(' function_param_list ')'"
+    (args, kwargs, wrapped_kwargs) = p[3]
+    p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs, Location(file, p.lineno(2)), namespace)
 
 
 def p_list_def(p: YaccProduction) -> None:
@@ -807,6 +807,45 @@ def p_param_list_nonempty(p: YaccProduction) -> None:
         p[3][0].insert(0, pair)
     if kwargs is not None:
         p[3][1].insert(0, kwargs)
+    p[0] = p[3]
+
+
+def p_function_param_list_element(p: YaccProduction) -> None:
+    # function_param_list_element: Tuple[Optional[argument], Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
+    """function_param_list_element : param_list_element"""
+    (kwargs, wrapped_kwargs) = p[1]
+    p[0] = (None, kwargs, wrapped_kwargs)
+
+
+def p_function_param_list_element_arg(p: YaccProduction) -> None:
+    # function_param_list_element: Tuple[Optional[argument], Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
+    """function_param_list_element : operand"""
+    p[0] = (p[1], None, None)
+
+
+def p_function_param_list_empty(p: YaccProduction) -> None:
+    """function_param_list : function_param_list_empty
+        function_param_list_empty : empty"""
+    # param_list: Tuple[List[Tuple[ID, operand]], List[wrapped_kwargs]]
+    p[0] = ([], [], [])
+
+
+def p_function_param_list_nonempty(p: YaccProduction) -> None:
+    """function_param_list : function_param_list_element empty function_param_list_empty
+            | function_param_list_element ',' function_param_list"""
+    # function_param_list parses a sequence of named arguments.
+    # The arguments are separated by commas and take one of three forms:
+    #   "value" -> p_function_param_list_element_arg
+    #   "key = value" -> p_function_param_list_element
+    #   "**dict_of_name_value_pairs" -> p_function_param_list_element
+    # function_param_list: Tuple[List[argument], List[Tuple[ID, operand]], List[wrapped_kwargs]]
+    (args, kwargs, wrapped_kwargs) = p[1]
+    if args is not None:
+        p[3][0].insert(0, args)
+    if kwargs is not None:
+        p[3][1].insert(0, kwargs)
+    if wrapped_kwargs is not None:
+        p[3][2].insert(0, wrapped_kwargs)
     p[0] = p[3]
 
 

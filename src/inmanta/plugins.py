@@ -20,7 +20,7 @@ import inspect
 import os
 import subprocess
 from functools import reduce
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar
 
 import inmanta.ast.type as InmantaType
 from inmanta import const, protocol
@@ -312,28 +312,63 @@ class Plugin(object, metaclass=PluginMeta):
 
         return isinstance(value, arg_type)
 
-    def check_args(self, args: List[Any]) -> bool:
+    def check_args(self, args: List[Any], kwargs: Dict[str, object]) -> bool:
         """
             Check if the arguments of the call match the function signature
         """
         max_arg = len(self.arguments)
-        required = len([x for x in self.arguments if len(x) == 2])
+        required_args = [x[0] for x in self.arguments if len(x) == 2]
 
-        if len(args) < required or len(args) > max_arg:
+        if len(args) + len(kwargs) > max_arg:
             raise Exception(
-                "Incorrect number of arguments for %s. Expected at least %d, got %d"
-                % (self.get_signature(), required, len(args))
+                "Incorrect number of arguments for %s. Expected at most %d, got %d"
+                % (self.get_signature(), max_arg, len(args) + len(kwargs))
+            )
+        present_kwargs: FrozenSet[str] = frozenset(kwargs.keys())
+        # check for missing arguments
+        if len(args) < len(required_args):
+            required_kwargs: FrozenSet[str] = frozenset(arg[0] for arg in self.arguments[len(args) : len(required_args)])
+            if not required_kwargs.issubset(present_kwargs):
+                missing: FrozenSet[str] = required_kwargs.difference(present_kwargs)
+                raise RuntimeException(
+                    None,
+                    "Missing %d required arguments for %s(): %s"
+                    % (len(missing), self.__class__.__function_name__, ",".join(missing)),
+                )
+        present_positional_args: FrozenSet[str] = frozenset(arg[0] for arg in self.arguments[: len(args)])
+        # check for kwargs overlap with positional arguments
+        if not present_kwargs.isdisjoint(present_positional_args):
+            raise RuntimeException(
+                None,
+                "Multiple values for %s in %s()"
+                % (",".join(present_kwargs.intersection(present_positional_args)), self.__class__.__function_name__),
             )
 
-        for i in range(len(args)):
-            if isinstance(args[i], Unknown):
+        def is_valid(expected_arg, expected_type, arg):
+            if isinstance(arg, Unknown):
                 return False
 
-            if self.arguments[i][0] is not None and not self._is_instance(args[i], self.argtypes[i]):
+            if expected_arg[0] is not None and not self._is_instance(arg, expected_type):
                 raise Exception(
                     ("Invalid type for argument %d of '%s', it should be " "%s and %s given.")
-                    % (i + 1, self.__class__.__function_name__, self.arguments[i][1], args[i].__class__.__name__)
+                    % (i + 1, self.__class__.__function_name__, expected_arg[1], arg.__class__.__name__)
                 )
+            return True
+
+        for i in range(len(args)):
+            if not is_valid(self.arguments[i], self.argtypes[i], args[i]):
+                return False
+        Argument = Tuple[str, ...]
+        arg_types: Dict[str, Tuple[Argument, Optional[InmantaType.Type]]] = {
+            arg[0]: (arg, self.argtypes[i]) for i, arg in enumerate(self.arguments)
+        }
+        for k, v in kwargs.items():
+            try:
+                (expected_arg, expected_type) = arg_types[k]
+                if not is_valid(expected_arg, expected_type, v):
+                    return False
+            except KeyError:
+                raise RuntimeException(None, "Invalid keyword argument '%s' for '%s()'" % (k, self.__class__.__function_name__))
         return True
 
     def emit_statement(self) -> "DynamicStatement":
@@ -364,21 +399,24 @@ class Plugin(object, metaclass=PluginMeta):
                 if len(result[0]) == 0:
                     raise Exception("%s requires %s to be available in $PATH" % (self.__function_name__, _bin))
 
-    def __call__(self, *args):
+    def __call__(self, *args, **kwargs):
         """
             The function call itself
         """
         self.check_requirements()
-        new_args = []
-        for arg in args:
-            if isinstance(arg, Context):
-                new_args.append(arg)
-            elif isinstance(arg, Unknown) and self.is_accept_unknowns():
-                new_args.append(arg)
-            else:
-                new_args.append(DynamicProxy.return_value(arg))
 
-        value = self.call(*new_args)
+        def new_arg(arg):
+            if isinstance(arg, Context):
+                return arg
+            elif isinstance(arg, Unknown) and self.is_accept_unknowns():
+                return arg
+            else:
+                return DynamicProxy.return_value(arg)
+
+        new_args = [new_arg(arg) for arg in args]
+        new_kwargs = {k: new_arg(v) for k, v in kwargs.items()}
+
+        value = self.call(*new_args, **new_kwargs)
 
         value = DynamicProxy.unwrap(value)
 
@@ -430,11 +468,11 @@ def plugin(
                 Create class to register the function and return the function itself
             """
 
-            def wrapper(self, *args):
+            def wrapper(self, *args, **kwargs):
                 """
                     Python will bind the function as method into the class
                 """
-                return fnc(*args)
+                return fnc(*args, **kwargs)
 
             nonlocal name, commands, emits_statements
 

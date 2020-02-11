@@ -17,10 +17,13 @@
 """
 
 import logging
+from itertools import chain
+from typing import Dict, List, Tuple
 
 from inmanta import plugins
-from inmanta.ast import ExternalException, LocatableString, RuntimeException, WrappingRuntimeException
-from inmanta.ast.statements import ReferenceStatement
+from inmanta.ast import ExternalException, LocatableString, Location, Namespace, RuntimeException, WrappingRuntimeException
+from inmanta.ast.statements import ExpressionStatement, ReferenceStatement
+from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.proxy import UnknownException, UnsetException
 from inmanta.execute.runtime import ResultVariable, Waiter
 from inmanta.execute.util import NoneValue, Unknown
@@ -40,10 +43,27 @@ class FunctionCall(ReferenceStatement):
         contributes:
     """
 
-    def __init__(self, name: LocatableString, arguments):
-        ReferenceStatement.__init__(self, arguments)
-        self.name = name
-        self.arguments = arguments
+    def __init__(
+        self,
+        name: LocatableString,
+        arguments: List[ExpressionStatement],
+        kwargs: List[Tuple[LocatableString, ExpressionStatement]],
+        wrapped_kwargs: List[WrappedKwargs],
+        location: Location,
+        namespace: Namespace,
+    ) -> None:
+        ReferenceStatement.__init__(self, list(chain(arguments, (v for _, v in kwargs), wrapped_kwargs)))
+        self.name: LocatableString = name
+        self.arguments: List[ExpressionStatement] = arguments
+        self.wrapped_kwargs: List[WrappedKwargs] = wrapped_kwargs
+        self.location: Location = location
+        self.namespace: Namespace = namespace
+        self.kwargs: Dict[str, ExpressionStatement] = {}
+        for loc_name, expr in kwargs:
+            arg_name: str = str(loc_name)
+            if arg_name in self.kwargs:
+                raise RuntimeException(self, "Keyword argument %s repeated in function call %s()" % (arg_name, self.name))
+            self.kwargs[arg_name] = expr
 
     def normalize(self):
         ReferenceStatement.normalize(self)
@@ -63,7 +83,13 @@ class FunctionCall(ReferenceStatement):
     def execute_direct(self, requires):
         function = self.function
         arguments = [a.execute_direct(requires) for a in self.arguments]
-        no_unknows = function.check_args(arguments)
+        kwargs = {k: v.execute_direct(requires) for k, v in self.kwargs.items()}
+        for wrapped_kwarg_expr in self.wrapped_kwargs:
+            for k, v in wrapped_kwarg_expr.execute_direct(requires):
+                if k in kwargs:
+                    raise RuntimeException(self, "Keyword argument %s repeated in function call" % k)
+                kwargs[k] = v
+        no_unknows = function.check_args(arguments, kwargs)
 
         if not no_unknows and not self.allow_unknown:
             raise RuntimeException("Received unknown value during direct execution")
@@ -75,7 +101,7 @@ class FunctionCall(ReferenceStatement):
             raise RuntimeException("emits_statements functions are not allowed in direct execution")
         else:
             try:
-                return function(*arguments)
+                return function(*arguments, **kwargs)
             except Exception as e:
                 raise WrappingRuntimeException(self, "Exception in direct execution for plugin %s" % self.name, e)
 
@@ -86,7 +112,13 @@ class FunctionCall(ReferenceStatement):
         # get the object to call the function on
         function = self.function
         arguments = [a.execute(requires, resolver, queue) for a in self.arguments]
-        no_unknows = function.check_args(arguments)
+        kwargs = {k: v.execute(requires, resolver, queue) for k, v in self.kwargs.items()}
+        for wrapped_kwarg_expr in self.wrapped_kwargs:
+            for k, v in wrapped_kwarg_expr.execute(requires, resolver, queue):
+                if k in kwargs:
+                    raise RuntimeException(self, "Keyword argument %s repeated in function call" % k)
+                kwargs[k] = v
+        no_unknows = function.check_args(arguments, kwargs)
 
         if not no_unknows and not self.allow_unknown:
             result.set_value(Unknown(self), self.location)
@@ -99,7 +131,7 @@ class FunctionCall(ReferenceStatement):
             function(*arguments)
         else:
             try:
-                value = function(*arguments)
+                value = function(*arguments, **kwargs)
                 result.set_value(value if value is not None else NoneValue(), self.location)
             except UnknownException as e:
                 result.set_value(e.unknown, self.location)
@@ -111,10 +143,28 @@ class FunctionCall(ReferenceStatement):
                 raise ExternalException(self, "Exception in plugin %s" % self.name, e)
 
     def __repr__(self):
-        return "%s(%s)" % (self.name, ",".join([repr(a) for a in self.arguments]))
+        return "%s(%s)" % (
+            self.name,
+            ",".join(
+                chain(
+                    (repr(a) for a in self.arguments),
+                    ("%s=%s" % (k, repr(v)) for k, v in self.kwargs.items()),
+                    ("**%s" % repr(kwargs) for kwargs in self.wrapped_kwargs),
+                )
+            ),
+        )
 
     def pretty_print(self):
-        return "%s(%s)" % (self.name, ",".join([a.pretty_print() for a in self.arguments]))
+        return "%s(%s)" % (
+            self.name,
+            ",".join(
+                chain(
+                    (a.pretty_print() for a in self.arguments),
+                    ("%s=%s" % (k, v.pretty_print()) for k, v in self.kwargs.items()),
+                    ("**%s" % kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
+                )
+            ),
+        )
 
 
 class FunctionUnit(Waiter):

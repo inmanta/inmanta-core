@@ -18,6 +18,7 @@
 import os
 
 import inmanta.compiler as compiler
+from inmanta.ast import Namespace
 
 
 def test_plugin_excn(snippetcompiler):
@@ -40,6 +41,60 @@ def test_1221_plugin_incorrect_type_annotation(snippetcompiler):
 import test_1221
         """,
         "could not find type std::WrongName in namespace std (%s/plugins/__init__.py:5:1)" % modpath,
+    )
+
+
+def test_kwargs_in_plugin_call(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+str = std::replace("Hello World!", new = "You", old = "World")
+        """,
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    assert root.lookup("str").get_value() == "Hello You!"
+
+
+def test_wrapped_kwargs_in_plugin_call(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+dct = {
+    "new": "You",
+    "old": "World",
+}
+str = std::replace("Hello World!", **dct)
+        """,
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    assert root.lookup("str").get_value() == "Hello You!"
+
+
+def test_kwargs_in_plugin_call_missing_arg(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+std::equals(42, desc="they differ")
+        """,
+        "Missing 1 required arguments for equals(): arg2" " (reported in std::equals(42,desc='they differ') ({dir}/main.cf:2))",
+    )
+
+
+def test_kwargs_in_plugin_call_double_arg(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+std::equals(42, 42, arg1=42)
+        """,
+        "Multiple values for arg1 in equals() (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2))",
+    )
+
+
+def test_kwargs_in_plugin_call_double_kwarg(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+std::equals(42, arg2=42, arg2=42)
+        """,
+        "Keyword argument arg2 repeated in function call std::equals()"
+        " (reported in std::equals(42,arg2=42) ({dir}/main.cf:2))",
     )
 
 
@@ -143,3 +198,13 @@ x = null
         """,
     )
     compiler.do_compile()
+
+
+def test_1778_context_as_kwarg_reject(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+std::generate_password("pw_id", context=42)
+        """,
+        "Invalid keyword argument 'context' for 'generate_password()'"
+        " (reported in std::generate_password('pw_id',context=42) ({dir}/main.cf:2))",
+    )
