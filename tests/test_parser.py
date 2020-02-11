@@ -1656,3 +1656,21 @@ def test_1707_out_of_place_regex():
         )
     exc: ParserException = pytest_e.value
     assert exc.msg == "Syntax error at token /some_out_of_place_regex/"
+
+
+def test_1804_bool_condition_as_bool():
+    statements = parse_code(
+        """
+if false and true == true:
+end
+        """,
+    )
+    assert len(statements) == 1
+    if_stmt = statements[0]
+    assert isinstance(if_stmt, If)
+    and_stmt = if_stmt.condition
+    assert isinstance(and_stmt, And)
+    assert len(and_stmt.children) == 2
+    false_stmt = and_stmt.children[0]
+    assert isinstance(false_stmt, Literal)
+    assert isinstance(false_stmt.value, bool)
