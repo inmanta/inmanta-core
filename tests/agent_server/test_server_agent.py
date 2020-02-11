@@ -294,8 +294,8 @@ async def test_spontaneous_deploy(
 
     env_id = environment
 
-    Config.set("config", "agent-deploy-interval", "1")
-    Config.set("config", "agent-deploy-splay-time", "1")
+    Config.set("config", "agent-deploy-interval", "2")
+    Config.set("config", "agent-deploy-splay-time", "2")
     Config.set("config", "agent-repair-interval", "0")
 
     agent = await get_agent(server, environment, "agent1", "node1")
@@ -368,8 +368,8 @@ async def test_spontaneous_repair(
 
     env_id = environment
 
-    Config.set("config", "agent-repair-interval", "1")
-    Config.set("config", "agent-repair-splay-time", "1")
+    Config.set("config", "agent-repair-interval", "2")
+    Config.set("config", "agent-repair-splay-time", "2")
     Config.set("config", "agent-deploy-interval", "0")
 
     agent = await get_agent(server, environment, "agent1", "node1")
