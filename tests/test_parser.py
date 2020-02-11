@@ -1645,3 +1645,14 @@ def test_1766_empty_model_multiple_newline():
         """
     )
     assert len(statements) == 0
+
+
+def test_1707_out_of_place_regex():
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+/some_out_of_place_regex/
+            """,
+        )
+    exc: ParserException = pytest_e.value
+    assert exc.msg == "Syntax error at token /some_out_of_place_regex/"
