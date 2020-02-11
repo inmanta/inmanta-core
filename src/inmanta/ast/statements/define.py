@@ -279,7 +279,7 @@ class DefineImplementation(TypeDefinitionStatement):
             cls = self.namespace.get_type(self.entity)
             if not isinstance(cls, Entity):
                 raise TypingException(
-                    self, "Implementation can only be define for an Entity, but %s is a %s" % (self.entity, type(self.entity))
+                    self, "Implementation can only be define for an Entity, but %s is a %s" % (self.entity, cls)
                 )
             self.type.set_type(cls)
             self.copy_location(self.type)
@@ -316,7 +316,7 @@ class DefineImplementInherits(DefinitionStatement):
 
             if not isinstance(entity_type, Entity):
                 raise TypingException(
-                    self, "Implementation can only be define for an Entity, but %s is a %s" % (self.entity, type(self.entity))
+                    self, "Implementation can only be define for an Entity, but %s is a %s" % (self.entity, entity_type)
                 )
 
             entity_type.implements_inherits = True
@@ -371,7 +371,7 @@ class DefineImplement(DefinitionStatement):
 
             if not isinstance(entity_type, EntityLike):
                 raise TypingException(
-                    self, "Implementation can only be define for an Entity, but %s is a %s" % (self.entity, type(self.entity))
+                    self, "Implementation can only be define for an Entity, but %s is a %s" % (self.entity, entity_type)
                 )
 
             entity_type = entity_type.get_entity()
