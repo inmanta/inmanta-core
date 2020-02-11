@@ -4,6 +4,7 @@
 - Entity instances are no longer allowed in list and dict attributes, this was previously possible due to bug (#1435)
 
 ## Fixed
+ - Added error message when compiling model with repo set to faulty value in project.yml (#1480, #1767)
  - Fixed syntax error when parsing empty model (#1766)
  - Added support for nullable types in plugins (#674)
  - Inmanta type module cleanup and type coverage

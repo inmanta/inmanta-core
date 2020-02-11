@@ -132,7 +132,7 @@ class DefineEntity(TypeDefinitionStatement):
         self.parents = parents
 
         if len(self.parents) == 0 and not (self.name == "Entity" and self.namespace.name == "std"):
-            dummy_location: Range = Range("__internal__", -1, -1, -1, -1)
+            dummy_location: Range = Range("__internal__", 1, 1, 1, 1)
             self.parents.append(LocatableString("std::Entity", dummy_location, -1, namespace))
 
         self.type = Entity(self.name, namespace, self.comment)
