@@ -821,6 +821,16 @@ def snippetcompiler(snippetcompiler_global, modules_dir):
     snippetcompiler_global.tear_down_func()
 
 
+@pytest.fixture(scope="function")
+def snippetcompiler_clean(modules_dir):
+    ast = SnippetCompilationTest()
+    ast.setUpClass()
+    ast.setup_func(modules_dir)
+    yield ast
+    ast.tear_down_func()
+    ast.tearDownClass()
+
+
 @pytest.fixture(scope="session")
 def modules_dir():
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules")

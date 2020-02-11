@@ -38,10 +38,11 @@ def test_issue_120_bad_import_extra(snippetcompiler):
         assert e.location.lnr == 1
 
 
-def test_1480_1767_invalid_repo(snippetcompiler):
-    snippetcompiler.repo = "some_invalid_url"
-    snippetcompiler.setup_for_error(
+def test_1480_1767_invalid_repo(snippetcompiler_clean):
+    snippetcompiler_clean.repo = "some_invalid_url"
+    snippetcompiler_clean.setup_for_error(
         """
+
         """,
         "could not find module std (reported in import std (__internal__:1:1))"
         "\ncaused by:"
