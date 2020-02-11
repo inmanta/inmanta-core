@@ -316,7 +316,7 @@ def test_check_shutdown():
     except TimeoutExpired:
         pass
     process.send_signal(signal.SIGUSR1)
-    out, err, code = do_kill(process, killtime=6, termtime=3)
+    out, err, code = do_kill(process, killtime=3, termtime=1)
     print(out, err)
     assert code == 0
     assert "----- Thread Dump ----" in out

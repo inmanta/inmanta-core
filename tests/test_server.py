@@ -532,10 +532,10 @@ def make_source(collector, filename, module, source, req):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_code_upload(server_multi, client_multi, agent_multi, environment_multi):
+async def test_code_upload(server, client, agent, environment):
     """ Test upload of a single code definition
     """
-    version = (await client_multi.reserve_version(environment_multi)).result["data"]
+    version = (await client.reserve_version(environment)).result["data"]
 
     resources = [
         {
@@ -552,8 +552,8 @@ async def test_code_upload(server_multi, client_multi, agent_multi, environment_
         }
     ]
 
-    res = await client_multi.put_version(
-        tid=environment_multi,
+    res = await client.put_version(
+        tid=environment,
         version=version,
         resources=resources,
         unknowns=[],
@@ -565,10 +565,10 @@ async def test_code_upload(server_multi, client_multi, agent_multi, environment_
     sources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
     sources = make_source(sources, "b.py", "std.xxx", "rvvWBVWHUvejIVJE UWEBVKW", ["pytest"])
 
-    res = await client_multi.upload_code(tid=environment_multi, id=version, resource="std::File", sources=sources)
+    res = await client.upload_code(tid=environment, id=version, resource="std::File", sources=sources)
     assert res.code == 200
 
-    res = await agent_multi._client.get_code(tid=environment_multi, id=version, resource="std::File")
+    res = await agent._client.get_code(tid=environment, id=version, resource="std::File")
     assert res.code == 200
     assert res.result["sources"] == sources
 
@@ -614,8 +614,8 @@ async def test_batched_code_upload(
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_resource_action_log(server_multi, client_multi, environment_multi):
-    version = (await client_multi.reserve_version(environment_multi)).result["data"]
+async def test_resource_action_log(server, client, environment):
+    version = (await client.reserve_version(environment)).result["data"]
     resources = [
         {
             "group": "root",
@@ -630,8 +630,8 @@ async def test_resource_action_log(server_multi, client_multi, environment_multi
             "version": version,
         }
     ]
-    res = await client_multi.put_version(
-        tid=environment_multi,
+    res = await client.put_version(
+        tid=environment,
         version=version,
         resources=resources,
         unknowns=[],
@@ -640,18 +640,18 @@ async def test_resource_action_log(server_multi, client_multi, environment_multi
     )
     assert res.code == 200
 
-    resource_action_log = server_multi.get_slice(SLICE_RESOURCE).get_resource_action_log_file(environment_multi)
+    resource_action_log = server.get_slice(SLICE_RESOURCE).get_resource_action_log_file(environment)
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_invalid_sid(server_multi, client_multi, environment_multi):
+async def test_invalid_sid(server, client, environment):
     """
         Test the server to manage the updates on a model during agent deploy
     """
     # request get_code with a compiler client that does not have a sid
-    res = await client_multi.get_code(tid=environment_multi, id=1, resource="std::File")
+    res = await client.get_code(tid=environment, id=1, resource="std::File")
     assert res.code == 400
     assert res.result["message"] == "Invalid request: this is an agent to server call, it should contain an agent session id"
 
