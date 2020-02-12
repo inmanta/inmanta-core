@@ -21,7 +21,7 @@ syn keyword Keyword implementation end using entity when implement extends in or
 syn keyword PreProc import
 syn keyword Typedef typedef
 syn keyword Boolean true false
-syn keyword Type string number bool list dict
+syn keyword Type string number int bool list dict
 
 "syn match impInstance "\%(\%(def\s\|class\s\|@\)\s*\)\@<=\h\%(\w\|\.\)*" contained
 
