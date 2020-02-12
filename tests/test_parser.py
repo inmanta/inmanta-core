@@ -1656,3 +1656,16 @@ def test_1707_out_of_place_regex():
         )
     exc: ParserException = pytest_e.value
     assert exc.msg == "Syntax error at token /some_out_of_place_regex/"
+
+
+def test_1573_condition_dict_lookup():
+    statements = parse_code(
+        """
+dct = {"b": true}
+
+if dct["b"]:
+end
+        """,
+    )
+    assert len(statements) == 2
+    assert isinstance(statements[1], If)
