@@ -435,7 +435,9 @@ class ConstraintType(NamedType):
 
         assert self._constraint is not None
         if not self._constraint(value):
-            raise RuntimeException(self, "Invalid value '%s', constraint does not match" % value)
+            raise RuntimeException(
+                self, "Invalid value %s, does not match constraint `%s`" % (repr(value), self.expression.pretty_print())
+            )
 
         return True
 
