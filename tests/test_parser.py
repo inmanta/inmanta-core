@@ -1674,3 +1674,4 @@ end
     false_stmt = and_stmt.children[0]
     assert isinstance(false_stmt, Literal)
     assert isinstance(false_stmt.value, bool)
+    assert false_stmt.value is False
