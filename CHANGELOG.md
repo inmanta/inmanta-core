@@ -4,7 +4,6 @@
 - Entity instances are no longer allowed in list and dict attributes, this was previously possible due to bug (#1435)
 
 ## Fixed
- - Added support for dict lookup in conditions (#1573)
  - Added support for nullable types in plugins (#674)
  - Inmanta type module cleanup and type coverage
  - Various compiler error reporting improvements (#1584, #1341, #1600, #1292, #1652, #1221, #1707, #1480, #1767, #1766, #1762, #1575)
@@ -17,7 +16,7 @@
  - Parse comments and urls correctly from the requirements.txt file of an Inmanta module (#1764)
 
 ## Added
-
+ - Added support for dict lookup in conditions (#1573)
  - Add get_environment_id to exporter (#1683)
  - Added inmanta-cli environment save command (#1666)
  - Added finalizer support to @cache annotation
