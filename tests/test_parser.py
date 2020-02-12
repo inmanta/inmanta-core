@@ -1656,3 +1656,16 @@ def test_1707_out_of_place_regex():
         )
     exc: ParserException = pytest_e.value
     assert exc.msg == "Syntax error at token /some_out_of_place_regex/"
+
+
+def test_multiline_string_interpolation():
+    statements = parse_code(
+        """
+str = \"\"\"
+    var == {{var}}
+\"\"\"
+        """,
+    )
+    assert len(statements) == 1
+    assert isinstance(statements[0], Assign)
+    assert isinstance(statements[0].rhs, StringFormat)

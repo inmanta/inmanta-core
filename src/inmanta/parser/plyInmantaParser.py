@@ -667,12 +667,6 @@ def p_short_index_lookup(p: YaccProduction) -> None:
 # HELPERS
 
 
-def p_constant_mls(p: YaccProduction) -> None:
-    """ constant : mls """
-    p[0] = Literal(str(p[1]))
-    attach_from_string(p, 1)
-
-
 def p_constant(p: YaccProduction) -> None:
     """ constant : INT
     | FLOAT
@@ -714,7 +708,8 @@ format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
 def p_string(p: YaccProduction) -> None:
-    " constant : STRING "
+    """ constant : STRING
+            | mls """
     value = p[1]
     match_obj = format_regex_compiled.findall(str(value))
 
@@ -722,10 +717,10 @@ def p_string(p: YaccProduction) -> None:
         p[0] = create_string_format(value, match_obj, Location(file, p.lineno(1)))
     else:
         p[0] = Literal(str(value))
-    attach_lnr(p)
+    attach_from_string(p, 1)
 
 
-def create_string_format(format_string: str, variables: List[str], location: Location) -> StringFormat:
+def create_string_format(format_string: str, variables: List[List[str]], location: Location) -> StringFormat:
     """
         Create a string interpolation statement
     """
