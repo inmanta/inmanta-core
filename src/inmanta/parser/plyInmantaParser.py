@@ -584,10 +584,8 @@ def p_condition_is_defined_short(p: YaccProduction) -> None:
 
 
 def p_condition_term_1(p: YaccProduction) -> None:
-    """condition : TRUE
-                | FALSE"""
-    p[0] = Literal(p[1])
-    attach_lnr(p)
+    "condition : boolean_constant"
+    p[0] = p[1]
 
 
 #######################
@@ -689,15 +687,20 @@ def p_constant_regex(p: YaccProduction) -> None:
     attach_lnr(p)
 
 
-def p_constant_t(p: YaccProduction) -> None:
-    """ constant : TRUE
+def p_constant_bool(p: YaccProduction) -> None:
+    " constant : boolean_constant "
+    p[0] = p[1]
+
+
+def p_boolean_constant_t(p: YaccProduction) -> None:
+    """ boolean_constant : TRUE
     """
     p[0] = Literal(True)
     attach_lnr(p)
 
 
-def p_constant_f(p: YaccProduction) -> None:
-    """ constant : FALSE
+def p_boolean_constant_f(p: YaccProduction) -> None:
+    """ boolean_constant : FALSE
     """
     p[0] = Literal(False)
     attach_lnr(p)

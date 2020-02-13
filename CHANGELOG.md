@@ -4,6 +4,7 @@
 - Entity instances are no longer allowed in list and dict attributes, this was previously possible due to bug (#1435)
 
 ## Fixed
+ - Fixed incorrect parsing of booleans as conditions (#1804)
  - Added support for nullable types in plugins (#674)
  - Inmanta type module cleanup and type coverage
  - Various compiler error reporting improvements (#1584, #1341, #1600, #1292, #1652, #1221, #1707, #1480, #1767, #1766, #1762, #1575)
