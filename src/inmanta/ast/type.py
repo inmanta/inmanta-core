@@ -231,6 +231,13 @@ class String(Primitive):
 
         return True
 
+    def cast(self, value: Optional[object]) -> object:
+        if value is True:
+            return "true"
+        if value is False:
+            return "false"
+        return super().cast(value)
+
     def type_string(self) -> str:
         return "string"
 

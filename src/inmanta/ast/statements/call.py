@@ -117,7 +117,7 @@ class FunctionCall(ReferenceStatement):
                 chain(
                     (repr(a) for a in self.arguments),
                     ("%s=%s" % (k, repr(v)) for k, v in self.kwargs.items()),
-                    ("**%s" % repr(kwargs) for kwargs in self.wrapped_kwargs),
+                    ("%s" % repr(kwargs) for kwargs in self.wrapped_kwargs),
                 )
             ),
         )
@@ -129,7 +129,7 @@ class FunctionCall(ReferenceStatement):
                 chain(
                     (a.pretty_print() for a in self.arguments),
                     ("%s=%s" % (k, v.pretty_print()) for k, v in self.kwargs.items()),
-                    ("**%s" % kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
+                    ("%s" % kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
                 )
             ),
         )
@@ -162,14 +162,14 @@ class Cast(Function):
             raise RuntimeException(self.ast_node, "Only positional arguments allowed in type cast")
         if len(args) != 1:
             raise RuntimeException(
-                self.ast_node, "Illegal arguments %s: type cast expects exactly 1 argument" % ",".join(repr(args))
+                self.ast_node, "Illegal arguments %s: type cast expects exactly 1 argument" % ",".join(map(repr, args))
             )
         return self.type.cast(*args)
 
     def call_in_context(
         self, args: List[object], kwargs: Dict[str, object], resolver: Resolver, queue: QueueScheduler, result: ResultVariable
     ) -> None:
-        result.set_value(self.call(args, {}), self.ast_node.location)
+        result.set_value(self.call(args, kwargs), self.ast_node.location)
 
 
 class PluginFunction(Function):
