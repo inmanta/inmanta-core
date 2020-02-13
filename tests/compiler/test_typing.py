@@ -257,5 +257,5 @@ def test_cast_exception_int_value_error(snippetcompiler):
         """
 int("0.0")
         """,
-        "Failed to cast '0.0' to number (reported in number('0.0') ({dir}/main.cf:2))",
+        "Failed to cast '0.0' to int (reported in int('0.0') ({dir}/main.cf:2))",
     )
