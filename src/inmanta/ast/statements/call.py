@@ -17,7 +17,6 @@
 """
 
 import logging
-from abc import abstractmethod
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
 
@@ -140,14 +139,12 @@ class Function:
     def __init__(self, ast_node: FunctionCall) -> None:
         self.ast_node: FunctionCall = ast_node
 
-    @abstractmethod
     def call(self, args, kwargs) -> object:
         """
             Call this function and return the result.
         """
         raise NotImplementedError()
 
-    @abstractmethod
     def call_in_context(self, args, kwargs, resolver: Resolver, queue: QueueScheduler, result: ResultVariable) -> None:
         """
             Call this function in the supplied context and store the result in the supplied ResultVariable.
@@ -210,7 +207,6 @@ class PluginFunction(Function):
             args.insert(self.function._context, plugins.Context(resolver, queue, self.ast_node, result))
 
         if self.function.opts["emits_statements"]:
-            # TODO: shouldn't this also add kwargs?
             self.function(*args)
         else:
             try:
