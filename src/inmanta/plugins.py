@@ -52,10 +52,11 @@ class Context(object):
             cls.__client = protocol.Client("compiler")
         return cls.__client
 
-    def __init__(self, resolver: Resolver, queue: QueueScheduler, owner: "FunctionCall", result: ResultVariable) -> None:
+    def __init__(self, resolver: Resolver, queue: QueueScheduler, owner: "FunctionCall", plugin: "Plugin", result: ResultVariable) -> None:
         self.resolver = resolver
         self.queue = queue
         self.owner = owner
+        self.plugin = plugin
         self.result = result
         self.compiler = queue.get_compiler()
 
@@ -98,7 +99,7 @@ class Context(object):
         """
             Get the path to the data dir (and create if it does not exist yet
         """
-        data_dir = os.path.join("data", self.owner.function.plugin.namespace.get_full_name())
+        data_dir = os.path.join("data", self.plugin.namespace.get_full_name())
 
         if not os.path.exists(data_dir):
             os.makedirs(data_dir, exist_ok=True)

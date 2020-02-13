@@ -204,7 +204,7 @@ class PluginFunction(Function):
             return
 
         if self.plugin._context is not -1:
-            args.insert(self.plugin._context, plugins.Context(resolver, queue, self.ast_node, result))
+            args.insert(self.plugin._context, plugins.Context(resolver, queue, self.ast_node, self.plugin, result))
 
         if self.plugin.opts["emits_statements"]:
             self.plugin(*args)
