@@ -715,11 +715,12 @@ def p_constant_mls(p: YaccProduction) -> None:
     attach_from_string(p)
 
 
-def get_string_ast_node(string: LocatableString, location: Location) -> Union[Literal, StringFormat]:
-    format_regex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
-    format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
-    match_obj = format_regex_compiled.findall(str(string))
+format_regex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
+format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
+
+def get_string_ast_node(string: LocatableString, location: Location) -> Union[Literal, StringFormat]:
+    match_obj = format_regex_compiled.findall(str(string))
     if len(match_obj) == 0:
         return Literal(str(string))
     return create_string_format(string, match_obj, location)
