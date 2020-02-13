@@ -66,3 +66,31 @@ net1 = Network(segmentation_id="10")
     )
     with pytest.raises(AttributeException):
         compiler.do_compile()
+
+
+def test_int_type(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    int i = 0
+end
+
+implement Test using std::none
+
+Test(i = 42)
+Test(i = -42)
+Test()
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_int_type_invalid(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    int i = 0.0
+end
+        """,
+        "Invalid value '0.0', expected int (reported in int i = 0.0 ({dir}/main.cf:3))",
+    )
