@@ -19,7 +19,7 @@
 import numbers
 from typing import Callable
 from typing import List as PythonList
-from typing import Optional
+from typing import Optional, Sequence
 
 from inmanta.ast import DuplicateException, Locatable, Location, Named, Namespace, RuntimeException, TypeNotFoundException
 from inmanta.execute.util import AnyType, NoneValue
@@ -130,7 +130,7 @@ class NullableType(Type):
 class Primitive(Type):
     def __init__(self) -> None:
         Type.__init__(self)
-        self.try_cast_functions: PythonList[Callable[[Optional[object]], object]] = []
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = []
 
     def cast(self, value: Optional[object]) -> object:
         exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self.type_string()))
@@ -155,7 +155,7 @@ class Number(Primitive):
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: PythonList[Callable[[Optional[object]], numbers.Number]] = [int, float]
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [int, float]
 
     def validate(self, value: Optional[object]) -> bool:
         """
@@ -187,7 +187,7 @@ class Bool(Primitive):
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: PythonList[Callable[[Optional[object]], object]] = [bool]
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [bool]
 
     def validate(self, value: Optional[object]) -> bool:
         """
@@ -217,7 +217,7 @@ class String(Primitive):
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: PythonList[Callable[[Optional[object]], object]] = [str]
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [str]
 
     def validate(self, value: Optional[object]) -> bool:
         """

@@ -173,44 +173,44 @@ class Cast(Function):
 
 
 class PluginFunction(Function):
-    def __init__(self, ast_node: FunctionCall, function: plugins.Plugin) -> None:
+    def __init__(self, ast_node: FunctionCall, plugin: plugins.Plugin) -> None:
         Function.__init__(self, ast_node)
-        self.function: plugins.Plugin = function
+        self.plugin: plugins.Plugin = plugin
 
     def call(self, args: List[object], kwargs: Dict[str, object]) -> object:
-        no_unknows = self.function.check_args(args, kwargs)
+        no_unknows = self.plugin.check_args(args, kwargs)
 
-        if not no_unknows and not self.function.opts["allow_unknown"]:
-            raise RuntimeException("Received unknown value during direct execution")
+        if not no_unknows and not self.plugin.opts["allow_unknown"]:
+            raise RuntimeException(self.ast_node, "Received unknown value during direct execution")
 
-        if self.function._context is not -1:
-            raise RuntimeException("Context Aware functions are not allowed in direct execution")
+        if self.plugin._context is not -1:
+            raise RuntimeException(self.ast_node, "Context Aware functions are not allowed in direct execution")
 
-        if self.function.opts["emits_statements"]:
-            raise RuntimeException("emits_statements functions are not allowed in direct execution")
+        if self.plugin.opts["emits_statements"]:
+            raise RuntimeException(self.ast_node, "emits_statements functions are not allowed in direct execution")
         else:
             try:
-                return self.function(*args, **kwargs)
+                return self.plugin(*args, **kwargs)
             except Exception as e:
-                raise WrappingRuntimeException(self, "Exception in direct execution for plugin %s" % self.name, e)
+                raise WrappingRuntimeException(self.ast_node, "Exception in direct execution for plugin %s" % self.name, e)
 
     def call_in_context(
         self, args: List[object], kwargs: Dict[str, object], resolver: Resolver, queue: QueueScheduler, result: ResultVariable
     ) -> None:
-        no_unknows = self.function.check_args(args, kwargs)
+        no_unknows = self.plugin.check_args(args, kwargs)
 
-        if not no_unknows and not self.function.opts["allow_unknown"]:
+        if not no_unknows and not self.plugin.opts["allow_unknown"]:
             result.set_value(Unknown(self), self.ast_node.location)
             return
 
-        if self.function._context is not -1:
-            args.insert(self.function._context, plugins.Context(resolver, queue, self.ast_node, result))
+        if self.plugin._context is not -1:
+            args.insert(self.plugin._context, plugins.Context(resolver, queue, self.ast_node, result))
 
-        if self.function.opts["emits_statements"]:
-            self.function(*args)
+        if self.plugin.opts["emits_statements"]:
+            self.plugin(*args)
         else:
             try:
-                value = self.function(*args, **kwargs)
+                value = self.plugin(*args, **kwargs)
                 result.set_value(value if value is not None else NoneValue(), self.ast_node.location)
             except UnknownException as e:
                 result.set_value(e.unknown, self.ast_node.location)
