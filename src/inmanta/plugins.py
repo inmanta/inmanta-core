@@ -52,7 +52,9 @@ class Context(object):
             cls.__client = protocol.Client("compiler")
         return cls.__client
 
-    def __init__(self, resolver: Resolver, queue: QueueScheduler, owner: "FunctionCall", plugin: "Plugin", result: ResultVariable) -> None:
+    def __init__(
+        self, resolver: Resolver, queue: QueueScheduler, owner: "FunctionCall", plugin: "Plugin", result: ResultVariable
+    ) -> None:
         self.resolver = resolver
         self.queue = queue
         self.owner = owner
