@@ -56,7 +56,7 @@ class EntityLike(NamedType):
     parent_entities: "List[Entity]"
 
     @abstractmethod
-    def get_defaults(self) -> "Dict[str, ExpressionStatement]":
+    def _get_own_defaults(self) -> "Dict[str, ExpressionStatement]":
         """ get defaults defined on this entity"""
         pass
 
@@ -77,7 +77,7 @@ class EntityLike(NamedType):
             values.extend(parent.get_default_values().items())
 
         # self takes precedence
-        values.extend(self.get_defaults().items())
+        values.extend(self._get_own_defaults().items())
         # make dict, remove doubles
         dvalues = dict(values)
         # remove erased defaults
@@ -166,7 +166,7 @@ class Entity(EntityLike, NamedType):
         """
         self.__default_values[name] = value
 
-    def get_defaults(self) -> "Dict[str, Optional[ExpressionStatement]]":
+    def _get_own_defaults(self) -> "Dict[str, Optional[ExpressionStatement]]":
         return dict((k, v.default) for k, v in self.__default_values.items() if v.default is not None or v.remove_default)
 
     def get_namespace(self) -> Namespace:
@@ -591,7 +591,7 @@ class Default(EntityLike):
         self._defaults = {}  # type: Dict[str,ExpressionStatement]
         self.comment = None  # type: Optional[str]
 
-    def get_defaults(self) -> "Dict[str, ExpressionStatement]":
+    def _get_own_defaults(self) -> "Dict[str, ExpressionStatement]":
         return self._defaults
 
     def set_entity(self, entity: EntityLike) -> None:
