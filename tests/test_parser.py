@@ -1669,3 +1669,22 @@ end
     )
     assert len(statements) == 2
     assert isinstance(statements[1], If)
+
+
+def test_1804_bool_condition_as_bool():
+    statements = parse_code(
+        """
+if false and true == true:
+end
+        """,
+    )
+    assert len(statements) == 1
+    if_stmt = statements[0]
+    assert isinstance(if_stmt, If)
+    and_stmt = if_stmt.condition
+    assert isinstance(and_stmt, And)
+    assert len(and_stmt.children) == 2
+    false_stmt = and_stmt.children[0]
+    assert isinstance(false_stmt, Literal)
+    assert isinstance(false_stmt.value, bool)
+    assert false_stmt.value is False
