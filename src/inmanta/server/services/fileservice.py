@@ -151,7 +151,7 @@ class FileService(protocol.ServerSlice):
             if not os.path.exists(a_path):
                 raise NotFound()
 
-            with open(a_path, "r") as fd:
+            with open(a_path, "r", encoding="utf-8") as fd:
                 a_lines = fd.readlines()
 
         if b == "" or b == "0":
@@ -161,7 +161,7 @@ class FileService(protocol.ServerSlice):
             if not os.path.exists(b_path):
                 raise NotFound()
 
-            with open(b_path, "r") as fd:
+            with open(b_path, "r", encoding="utf-8") as fd:
                 b_lines = fd.readlines()
 
         try:

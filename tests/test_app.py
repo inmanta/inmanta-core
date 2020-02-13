@@ -54,7 +54,7 @@ def get_command(
     else:
         port = inmanta.util.get_free_tcp_port()
 
-    with open(config_file, "w+") as f:
+    with open(config_file, "w+", encoding="utf-8") as f:
         f.write("[config]\n")
         f.write("log-dir=" + log_dir + "\n")
         f.write("state-dir=" + state_dir + "\n")

@@ -1021,7 +1021,7 @@ def myparse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statement
     lexer.begin("INITIAL")
 
     if content is None:
-        with open(tfile, "r") as myfile:
+        with open(tfile, "r", encoding="utf-8") as myfile:
             data = myfile.read()
             if len(data) == 0:
                 return []

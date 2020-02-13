@@ -361,7 +361,7 @@ class Project(ModuleLike):
         if not os.path.exists(project_file):
             raise Exception("Project directory does not contain a project file")
 
-        with open(project_file, "r") as fd:
+        with open(project_file, "r", encoding="utf-8") as fd:
             self._meta = yaml.safe_load(fd)
 
         if "modulepath" not in self._meta:
@@ -756,7 +756,7 @@ class Module(ModuleLike):
 
     def rewrite_version(self, new_version: str) -> None:
         new_version = str(new_version)  # make sure it is a string!
-        with open(self.get_config_file_name(), "r") as fd:
+        with open(self.get_config_file_name(), "r", encoding="utf-8") as fd:
             module_def = fd.read()
 
         module_info = yaml.safe_load(module_def)
@@ -781,7 +781,7 @@ class Module(ModuleLike):
                 "Unable to write module definition, should be %s got %s instead." % (new_version, new_info["version"])
             )
 
-        with open(self.get_config_file_name(), "w+") as fd:
+        with open(self.get_config_file_name(), "w+", encoding="utf-8") as fd:
             fd.write(new_module_def)
 
         self._meta = new_info
@@ -977,7 +977,7 @@ class Module(ModuleLike):
         """
             Load the module definition file
         """
-        with open(self.get_config_file_name(), "r") as fd:
+        with open(self.get_config_file_name(), "r", encoding="utf-8") as fd:
             mod_def = yaml.safe_load(fd)
 
             if mod_def is None or len(mod_def) < len(Module.requires_fields):
@@ -1187,7 +1187,7 @@ class Module(ModuleLike):
         """
         file = os.path.join(self._path, "requirements.txt")
         if os.path.exists(file):
-            with open(file, "r") as fd:
+            with open(file, "r", encoding="utf-8") as fd:
                 return fd.read()
         else:
             return None
