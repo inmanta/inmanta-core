@@ -121,7 +121,7 @@ Literal values can be assigned to variables
 Primitive types
 ==============================
 
-The basic primitive types are ``string``, ``number`` or ``bool``.
+The basic primitive types are ``string``, ``number``, ``int`` or ``bool``.
 
 Constrained primitive types can be derived from the basic primitive type with a typedef statement.
 Constrained primitive types add additional constraints to the basic primitive type with either a Python regex or a logical
@@ -136,7 +136,7 @@ For example
 
 .. code-block:: inmanta
 
-    typedef tcp_port as number matching self > 0 and self < 65565
+    typedef tcp_port as int matching self > 0 and self < 65565
     typedef mac_addr as string matching /([0-9a-fA-F]{2})(:[0-9a-fA-F]{2}){5}$/
 
 
@@ -257,7 +257,7 @@ Defining entities in a configuration model
     entity File:
        string path
        string content
-       number mode = 640
+       int mode = 640
        string[] list = []
        dict things = {}
     end
