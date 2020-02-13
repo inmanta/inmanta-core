@@ -37,7 +37,7 @@ class CompilerFixture(object):
         project_dir = tempfile.mkdtemp()
         os.symlink(self.env, os.path.join(project_dir, ".env"))
 
-        with open(os.path.join(project_dir, "project.yml"), "w") as cfg:
+        with open(os.path.join(project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 """
             name: snippet test
@@ -48,7 +48,7 @@ class CompilerFixture(object):
                 % (self.libs, self.libs)
             )
 
-        with open(os.path.join(project_dir, "main.cf"), "w") as x:
+        with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as x:
             x.write(snippet)
 
         Project.set(Project(project_dir))
@@ -64,7 +64,7 @@ class CompilerFixture(object):
         project = os.path.join(project_dir, "project.yml")
         if os.path.exists(project):
             os.remove(project)
-        with open(project, "w") as cfg:
+        with open(project, "w", encoding="utf-8") as cfg:
             cfg.write(
                 """
             name: snippet test
@@ -80,7 +80,7 @@ class CompilerFixture(object):
         os.remove(project)
 
     def run_file(self, filename):
-        with open(filename, "r") as f:
+        with open(filename, "r", encoding="utf-8") as f:
             self.run_snippet(f.read())
 
 

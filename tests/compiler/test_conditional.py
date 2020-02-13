@@ -245,3 +245,46 @@ t = Test()
     (_, scopes) = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     assert not root.lookup("t").get_value().lookup("multiple").get_value()
+
+
+def test_1804_false_and_condition(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    number n
+end
+implement A using std::none
+
+x = A(n = 42)
+if false and true == true:
+    x.n = 0
+else:
+    x.n = 42
+end
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_1804_implementation_condition_false(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    bool b
+end
+
+implement A using t when true
+implement A using f when false
+
+implementation t for A:
+    self.b = true
+end
+
+implementation f for A:
+    self.b = false
+end
+
+A()
+        """,
+    )
+    compiler.do_compile()

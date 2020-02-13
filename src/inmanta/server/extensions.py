@@ -116,7 +116,7 @@ class FeatureManager:
             LOGGER.warning("Feature file %s configured but file does not exist.", feature_file)
             return {}
 
-        with open(feature_file) as fd:
+        with open(feature_file, encoding="utf-8") as fd:
             result = yaml.safe_load(fd)
 
         if "slices" in result:

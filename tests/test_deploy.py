@@ -69,13 +69,13 @@ def test_embedded_inmanta_server(tmpdir, postgres_db):
     os.chdir(project_dir)
     main_cf_file = project_dir.join("main.cf")
     project_yml_file = project_dir.join("project.yml")
-    with open(project_yml_file, "w") as f:
+    with open(project_yml_file, "w", encoding="utf-8") as f:
         f.write("name: test\n")
         f.write("modulepath: " + str(project_dir.join("libs")) + "\n")
         f.write("downloadpath: " + str(project_dir.join("libs")) + "\n")
         f.write("repo: https://github.com/inmanta/\n")
         f.write("description: Test\n")
-    with open(main_cf_file, "w") as f:
+    with open(main_cf_file, "w", encoding="utf-8") as f:
         f.write("")
 
     Options = collections.namedtuple("Options", ["dryrun", "dashboard"])

@@ -390,7 +390,7 @@ def log_file():
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
     output_file = os.path.join(output_dir, "log.txt")
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         yield f
 
 
@@ -648,7 +648,7 @@ def write_db_update_file():
         if not os.path.exists(schema_updates_dir):
             os.mkdir(schema_updates_dir)
         schema_update_file = os.path.join(schema_updates_dir, str(schema_version) + ".sql")
-        with open(schema_update_file, "w+") as f:
+        with open(schema_update_file, "w+", encoding="utf-8") as f:
             f.write(content_file)
 
     yield _write_db_update_file
@@ -730,7 +730,7 @@ class SnippetCompilationTest(KeepOnFail):
             module_path = f"[{self.libs}, {self.modules_dir}]"
         else:
             module_path = f"{self.libs}"
-        with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
+        with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 """
             name: snippet test
@@ -741,7 +741,7 @@ class SnippetCompilationTest(KeepOnFail):
                 % (module_path, self.libs, self.repo)
             )
         self.main = os.path.join(self.project_dir, "main.cf")
-        with open(self.main, "w") as x:
+        with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
 
     def do_export(self, include_status=False, do_raise=True):

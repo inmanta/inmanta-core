@@ -180,6 +180,26 @@ class Number(Primitive):
         return "number"
 
 
+class Integer(Number):
+    """
+        An innstance of this class represent the int type in the configuration model.
+    """
+
+    def __init__(self) -> None:
+        Number.__init__(self)
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [int]
+
+    def validate(self, value: Optional[object]) -> bool:
+        if not super().validate(value):
+            return False
+        if not isinstance(value, numbers.Integral):
+            raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
+        return True
+
+    def type_string(self) -> str:
+        return "int"
+
+
 class Bool(Primitive):
     """
         This class represents a simple boolean that can hold true or false.
@@ -505,4 +525,11 @@ def create_function(expression: "ExpressionStatement"):
     return function
 
 
-TYPES = {"string": String(), "number": Number(), "bool": Bool(), "list": LiteralList(), "dict": LiteralDict()}
+TYPES = {
+    "string": String(),
+    "number": Number(),
+    "int": Integer(),
+    "bool": Bool(),
+    "list": LiteralList(),
+    "dict": LiteralDict(),
+}
