@@ -62,8 +62,8 @@ precedence = (
     ("left", "OR"),
     ("left", "AND"),
     ("left", "CMP_OP"),
-    ("left", "IN"),
     ("right", "NOT"),
+    ("left", "IN"),
     ("right", "MLS"),
     ("right", "MLS_END"),
 )
