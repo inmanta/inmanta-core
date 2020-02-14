@@ -710,6 +710,7 @@ class RawUnit(Waiter):
             self.resumer.resume(self.requires, self.resolver, self.queue)
         except RuntimeException as e:
             e.set_statement(self.resumer)
+            e.location = self.resumer.location
             raise e
         self.done = True
 
