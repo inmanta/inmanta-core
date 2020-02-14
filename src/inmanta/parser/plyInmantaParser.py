@@ -58,7 +58,15 @@ LOGGER = logging.getLogger()
 file = "NOFILE"
 namespace = None
 
-precedence = (("left", "OR"), ("left", "AND"), ("right", "NOT"), ("right", "MLS"), ("right", "MLS_END"))
+precedence = (
+    ("left", "OR"),
+    ("left", "AND"),
+    ("left", "CMP_OP"),
+    ("left", "IN"),
+    ("right", "NOT"),
+    ("right", "MLS"),
+    ("right", "MLS_END"),
+)
 
 
 def attach_lnr(p: YaccProduction, token: int = 1) -> None:
@@ -201,13 +209,13 @@ def p_for(p: YaccProduction) -> None:
 
 
 def p_if(p: YaccProduction) -> None:
-    "if : IF condition ':' block"
+    "if : IF expression ':' block"
     p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, []))
     attach_lnr(p, 1)
 
 
 def p_if_else(p: YaccProduction) -> None:
-    "if : IF condition ':' stmt_list ELSE ':' block"
+    "if : IF expression ':' stmt_list ELSE ':' block"
     p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, p[7]))
     attach_lnr(p, 1)
 
@@ -363,7 +371,7 @@ def p_implement(p: YaccProduction) -> None:
 
 
 def p_implement_when(p: YaccProduction) -> None:
-    "implement_def : IMPLEMENT class_ref USING ns_list WHEN condition"
+    "implement_def : IMPLEMENT class_ref USING ns_list WHEN expression"
     p[0] = DefineImplement(p[2], p[4], p[6])
     attach_lnr(p)
 
@@ -381,7 +389,7 @@ def p_implement_inh_comment(p: YaccProduction) -> None:
 
 
 def p_implement_when_comment(p: YaccProduction) -> None:
-    "implement_def : IMPLEMENT class_ref USING ns_list WHEN condition mls"
+    "implement_def : IMPLEMENT class_ref USING ns_list WHEN expression mls"
     p[0] = DefineImplement(p[2], p[4], p[6], comment=p[7])
     attach_lnr(p)
 
@@ -518,8 +526,7 @@ def p_typedef_outer_comment(p: YaccProduction) -> None:
 
 
 def p_typedef_1(p: YaccProduction) -> None:
-    """typedef_inner : TYPEDEF ID AS ns_ref MATCHING REGEX
-                | TYPEDEF ID AS ns_ref MATCHING condition"""
+    """typedef_inner : TYPEDEF ID AS ns_ref MATCHING expression"""
     p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[6])
     attach_lnr(p, 2)
 
@@ -540,68 +547,57 @@ def p_index(p: YaccProduction) -> None:
 
 
 #######################
-# CONDITIONALS
+# EXPRESSIONS
 
 
-def p_condition_1(p: YaccProduction) -> None:
-    "condition : '(' condition ')'"
+def p_expression(p: YaccProduction) -> None:
+    """ expression : boolean_expression
+            | constant
+            | function_call
+            | var_ref
+            | constructor
+            | list_def
+            | map_def
+            | map_lookup
+            | index_lookup """
+    p[0] = p[1]
+
+
+def p_expression_parentheses(p: YaccProduction) -> None:
+    """ expression : '(' expression ')' """
     p[0] = p[2]
 
 
-def p_condition_2(p: YaccProduction) -> None:
-    """condition : operand CMP_OP operand
-                | operand IN list_def
-                | operand IN var_ref
-                | condition AND condition
-                | condition OR condition """
+def p_boolean_expression(p: YaccProduction) -> None:
+    """ boolean_expression : expression CMP_OP expression
+            | expression IN expression
+            | expression AND expression
+            | expression OR expression """
     operator = Operator.get_operator_class(str(p[2]))
     p[0] = operator(p[1], p[3])
     attach_lnr(p, 2)
 
 
-def p_condition_3(p: YaccProduction) -> None:
-    """condition : function_call
-                | var_ref"""
-    p[0] = p[1]
-
-
-def p_condition_not(p: YaccProduction) -> None:
-    """condition : NOT condition"""
+def p_boolean_expression_not(p: YaccProduction) -> None:
+    """ boolean_expression : NOT expression """
     p[0] = Not(p[2])
     attach_lnr(p)
 
 
-def p_condition_is_defined(p: YaccProduction) -> None:
-    """condition : var_ref '.' ID IS DEFINED"""
+def p_boolean_expression_is_defined(p: YaccProduction) -> None:
+    """ boolean_expression : var_ref '.' ID IS DEFINED"""
     p[0] = IsDefined(p[1], p[3])
     attach_lnr(p, 2)
 
 
-def p_condition_is_defined_short(p: YaccProduction) -> None:
-    """condition : ID IS DEFINED"""
+def p_boolean_expression_is_defined_short(p: YaccProduction) -> None:
+    """ boolean_expression : ID IS DEFINED """
     p[0] = IsDefined(None, p[1])
     attach_lnr(p)
 
 
-def p_condition_term_1(p: YaccProduction) -> None:
-    "condition : boolean_constant"
-    p[0] = p[1]
-
-
-#######################
-# EXPRESSIONS
-
-
-# TODO
 def p_operand(p: YaccProduction) -> None:
-    """ operand : constant
-              | function_call
-              | constructor
-              | list_def
-              | map_def
-              | var_ref
-              | index_lookup
-              | map_lookup"""
+    """ operand : expression """
     p[0] = p[1]
 
 
@@ -687,20 +683,15 @@ def p_constant_regex(p: YaccProduction) -> None:
     attach_lnr(p)
 
 
-def p_constant_bool(p: YaccProduction) -> None:
-    " constant : boolean_constant "
-    p[0] = p[1]
-
-
-def p_boolean_constant_t(p: YaccProduction) -> None:
-    """ boolean_constant : TRUE
+def p_constant_true(p: YaccProduction) -> None:
+    """ constant : TRUE
     """
     p[0] = Literal(True)
     attach_lnr(p)
 
 
-def p_boolean_constant_f(p: YaccProduction) -> None:
-    """ boolean_constant : FALSE
+def p_constant_false(p: YaccProduction) -> None:
+    """ constant : FALSE
     """
     p[0] = Literal(False)
     attach_lnr(p)
