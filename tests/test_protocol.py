@@ -1441,3 +1441,62 @@ async def test_zip_content_type(unused_tcp_port, postgres_db, database_name, asy
     response = await client.test_method()
     assert response.code == 200
     assert response.result == zip_content
+
+
+@pytest.fixture
+async def options_server():
+    @protocol.typedmethod(path="/test", operation="OPTIONS", client_types=["api"])
+    def test_method() -> ReturnValue[bytes]:  # NOQA
+        pass
+
+    class TestServer(ServerSlice):
+        @protocol.handle(test_method)
+        async def test_methodY(self) -> ReturnValue[str]:  # NOQA
+            return ReturnValue(response="content")
+
+    return TestServer(name="testserver")
+
+
+@pytest.fixture
+def options_request(unused_tcp_port):
+    return HTTPRequest(
+        url=f"http://localhost:{unused_tcp_port}/api/v1/test",
+        method="OPTIONS",
+        connect_timeout=1.0,
+        request_timeout=1.0,
+        decompress_response=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_auth_enabled_options_method(
+    unused_tcp_port, postgres_db, database_name, async_finalizer, options_server, options_request
+):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+    config.Config.set("server", "auth", "true")
+    rs = Server()
+    rs.add_slice(options_server)
+    await rs.start()
+    async_finalizer.add(options_server.stop)
+    async_finalizer.add(rs.stop)
+    client = AsyncHTTPClient()
+    response = await client.fetch(options_request)
+    assert response.code == 200
+    assert "Authorization" in response.headers.get("Access-Control-Allow-Headers")
+
+
+@pytest.mark.asyncio
+async def test_auth_disabled_options_method(
+    unused_tcp_port, postgres_db, database_name, async_finalizer, options_server, options_request
+):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+    config.Config.set("server", "auth", "false")
+    rs = Server()
+    rs.add_slice(options_server)
+    await rs.start()
+    async_finalizer.add(options_server.stop)
+    async_finalizer.add(rs.stop)
+    client = AsyncHTTPClient()
+    response = await client.fetch(options_request)
+    assert response.code == 200
+    assert "Authorization" not in response.headers.get("Access-Control-Allow-Headers")
