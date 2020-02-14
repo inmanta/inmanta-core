@@ -108,3 +108,19 @@ end
         "Invalid value [42, 42], does not match constraint `(std::unique(self) == true)`"
         " (reported in mytype v = List() ({dir}/main.cf:5))",
     )
+
+
+def test_1810_type_constraint_resolution_error_message(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+x = ["allowed", "values"]
+typedef mytype as string matching self in x
+
+entity A:
+    mytype myvalue = "allowed"
+end
+implement A using std::none
+        """,
+        "Unable to resolve `x`: a type constraint has no access to the surrounding namespace."
+        " (reported in x ({dir}/main.cf:3:43))",
+    )
