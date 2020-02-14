@@ -20,7 +20,7 @@
 
 import logging
 import re
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
@@ -666,12 +666,6 @@ def p_short_index_lookup(p: YaccProduction) -> None:
 # HELPERS
 
 
-def p_constant_mls(p: YaccProduction) -> None:
-    """ constant : mls """
-    p[0] = Literal(str(p[1]))
-    attach_from_string(p, 1)
-
-
 def p_constant(p: YaccProduction) -> None:
     """ constant : INT
     | FLOAT
@@ -713,23 +707,30 @@ def p_boolean_constant_f(p: YaccProduction) -> None:
     attach_lnr(p)
 
 
+def p_constant_string(p: YaccProduction) -> None:
+    " constant : STRING "
+    p[0] = get_string_ast_node(p[1], Location(file, p.lineno(1)))
+    attach_lnr(p)
+
+
+def p_constant_mls(p: YaccProduction) -> None:
+    " constant : mls "
+    p[0] = get_string_ast_node(p[1], p[1].location)
+    attach_from_string(p)
+
+
 format_regex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
 format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
-def p_string(p: YaccProduction) -> None:
-    " constant : STRING "
-    value = p[1]
-    match_obj = format_regex_compiled.findall(str(value))
-
-    if len(match_obj) > 0:
-        p[0] = create_string_format(value, match_obj, Location(file, p.lineno(1)))
-    else:
-        p[0] = Literal(str(value))
-    attach_lnr(p)
+def get_string_ast_node(string: LocatableString, location: Location) -> Union[Literal, StringFormat]:
+    match_obj = format_regex_compiled.findall(str(string))
+    if len(match_obj) == 0:
+        return Literal(str(string))
+    return create_string_format(string, match_obj, location)
 
 
-def create_string_format(format_string: str, variables: List[str], location: Location) -> StringFormat:
+def create_string_format(format_string: LocatableString, variables: List[List[str]], location: Location) -> StringFormat:
     """
         Create a string interpolation statement
     """
@@ -1021,7 +1022,7 @@ def myparse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statement
     lexer.begin("INITIAL")
 
     if content is None:
-        with open(tfile, "r") as myfile:
+        with open(tfile, "r", encoding="utf-8") as myfile:
             data = myfile.read()
             if len(data) == 0:
                 return []

@@ -41,7 +41,7 @@ def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mod
     if imports is None:
         imports = [x[0] for x in deps]
 
-    with open(os.path.join(path, mainfile), "w") as projectfile:
+    with open(os.path.join(path, mainfile), "w", encoding="utf-8") as projectfile:
         projectfile.write("name: " + name)
         projectfile.write("\nlicense: Apache 2.0")
         projectfile.write("\nversion: '0.0.1'")
@@ -69,11 +69,11 @@ repo: %s"""
     os.makedirs(model)
 
     if not project:
-        with open(os.path.join(model, "_init.cf"), "w") as projectfile:
+        with open(os.path.join(model, "_init.cf"), "w", encoding="utf-8") as projectfile:
             for i in imports:
                 projectfile.write("import %s\n" % i)
     else:
-        with open(os.path.join(path, "main.cf"), "w") as projectfile:
+        with open(os.path.join(path, "main.cf"), "w", encoding="utf-8") as projectfile:
             for i in imports:
                 projectfile.write("import %s\n" % i)
 
@@ -85,7 +85,7 @@ repo: %s"""
 
 
 def add_file(modpath, file, content, msg, version=None):
-    with open(os.path.join(modpath, file), "w") as projectfile:
+    with open(os.path.join(modpath, file), "w", encoding="utf-8") as projectfile:
         projectfile.write(content)
 
     if version is None:
@@ -100,12 +100,12 @@ def add_file(modpath, file, content, msg, version=None):
 
 def add_file_and_compiler_constraint(modpath, file, content, msg, version, compiler_version):
     cfgfile = os.path.join(modpath, "module.yml")
-    with open(cfgfile, "r") as fd:
+    with open(cfgfile, "r", encoding="utf-8") as fd:
         cfg = yaml.safe_load(fd)
 
     cfg["compiler_version"] = compiler_version
 
-    with open(cfgfile, "w") as fd:
+    with open(cfgfile, "w", encoding="utf-8") as fd:
         yaml.dump(cfg, fd)
     add_file(modpath, file, content, msg, version)
 

@@ -18,6 +18,9 @@
 
 ## Added
  - Added support for dict lookup in conditions (#1573)
+ - Added support for type casts for primitive types (#1798)
+ - Added support for multiline string interpolations (#1568)
+ - Added int type to the language (#1568)
  - Add get_environment_id to exporter (#1683)
  - Added inmanta-cli environment save command (#1666)
  - Added finalizer support to @cache annotation

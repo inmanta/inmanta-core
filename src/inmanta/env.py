@@ -210,7 +210,7 @@ class VirtualEnv(object):
 
         try:
             fdnum, path = tempfile.mkstemp()
-            fd = os.fdopen(fdnum, "w+")
+            fd = os.fdopen(fdnum, "w+", encoding="utf-8")
             fd.write(requirements_file)
             fd.close()
 
@@ -243,7 +243,7 @@ class VirtualEnv(object):
         if not os.path.exists(path):
             return ""
 
-        with open(path, "r") as fd:
+        with open(path, "r", encoding="utf-8") as fd:
             return fd.read().strip()
 
     def _set_current_requirements_hash(self, new_hash):
@@ -251,7 +251,7 @@ class VirtualEnv(object):
             Set the current requirements hahs
         """
         path = os.path.join(self.env_path, "requirements.sha1sum")
-        with open(path, "w+") as fd:
+        with open(path, "w+", encoding="utf-8") as fd:
             fd.write(new_hash)
 
     def install_from_list(self, requirements_list: List[str], detailed_cache: bool = False, cache: bool = True) -> None:

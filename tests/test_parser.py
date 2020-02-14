@@ -1658,17 +1658,17 @@ def test_1707_out_of_place_regex():
     assert exc.msg == "Syntax error at token /some_out_of_place_regex/"
 
 
-def test_1573_condition_dict_lookup():
+def test_multiline_string_interpolation():
     statements = parse_code(
         """
-dct = {"b": true}
-
-if dct["b"]:
-end
+str = \"\"\"
+    var == {{var}}
+\"\"\"
         """,
     )
-    assert len(statements) == 2
-    assert isinstance(statements[1], If)
+    assert len(statements) == 1
+    assert isinstance(statements[0], Assign)
+    assert isinstance(statements[0].rhs, StringFormat)
 
 
 def test_1804_bool_condition_as_bool():
@@ -1688,3 +1688,16 @@ end
     assert isinstance(false_stmt, Literal)
     assert isinstance(false_stmt.value, bool)
     assert false_stmt.value is False
+
+
+def test_1573_condition_dict_lookup():
+    statements = parse_code(
+        """
+dct = {"b": true}
+
+if dct["b"]:
+end
+        """,
+    )
+    assert len(statements) == 2
+    assert isinstance(statements[1], If)

@@ -498,7 +498,7 @@ class AgentManager(ServerSlice, SessionListener):
             os.mkdir(config_dir)
 
         config_path = os.path.join(config_dir, "agent.cfg")
-        with open(config_path, "w+") as fd:
+        with open(config_path, "w+", encoding="utf-8") as fd:
             fd.write(config)
 
         out: str = os.path.join(self._server_storage["logs"], "agent-%s.out" % env.id)

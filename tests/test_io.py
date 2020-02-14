@@ -42,7 +42,7 @@ def testdir():
 @pytest.mark.parametrize("io", io_list)
 def test_check_hash(io, testdir):
     filename = os.path.join(testdir, "hashfile")
-    with open(filename, "w+") as fd:
+    with open(filename, "w+", encoding="utf-8") as fd:
         fd.write("test")
 
     assert io.hash_file(filename) == "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3"
@@ -109,7 +109,7 @@ def test_check_file_exists(io, testdir):
     filename = os.path.join(testdir, "testfile" + str(io))
     assert not io.file_exists(filename)
 
-    with open(filename, "w+") as fd:
+    with open(filename, "w+", encoding="utf-8") as fd:
         fd.write("")
 
     assert io.file_exists(filename)
@@ -162,7 +162,7 @@ def test_check_rmdir(io, testdir):
     assert os.path.exists(path)
 
     path2 = os.path.join(path, "testfile" + str(io))
-    with open(path2, "w+") as fd:
+    with open(path2, "w+", encoding="utf-8") as fd:
         fd.write("")
     assert os.path.exists(path2)
 
@@ -184,7 +184,7 @@ def test_check_filestat(io, testdir):
 def test_check_chown(io, testdir):
     # chown to the same user so we do not need root to run this test
     path = os.path.join(testdir, "chown" + str(io))
-    with open(path, "w+") as fd:
+    with open(path, "w+", encoding="utf-8") as fd:
         fd.write("")
 
     assert os.path.exists(path)
@@ -222,7 +222,7 @@ def test_check_put(io, testdir):
 @pytest.mark.parametrize("io", io_list)
 def test_check_chmod(io, testdir):
     path = os.path.join(testdir, "chmod" + str(io))
-    with open(path, "w+") as fd:
+    with open(path, "w+", encoding="utf-8") as fd:
         fd.write("Test\n")
 
     st = os.stat(path)

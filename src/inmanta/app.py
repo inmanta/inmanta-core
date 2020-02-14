@@ -447,7 +447,7 @@ def export(options: argparse.Namespace) -> None:
 
     if options.model:
         modelexporter = ModelExporter(types)
-        with open("testdump.json", "w") as fh:
+        with open("testdump.json", "w", encoding="utf-8") as fh:
             print(yaml.dump(modelexporter.export_all()))
             json.dump(modelexporter.export_all(), fh)
 

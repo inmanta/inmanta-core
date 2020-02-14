@@ -192,7 +192,7 @@ class ProjectTool(ModuleLikeTool):
 
         set_yaml_order_perserving()
 
-        with open(project.get_config_file_name(), "r") as fd:
+        with open(project.get_config_file_name(), "r", encoding="utf-8") as fd:
             newconfig = yaml.safe_load(fd)
 
         requires = sorted([k + " " + v for k, v in freeze.items()])
@@ -316,7 +316,7 @@ class ModuleTool(ModuleLikeTool):
             return
 
         os.mkdir(mod_path)
-        with open(os.path.join(mod_path, "module.yml"), "w+") as fd:
+        with open(os.path.join(mod_path, "module.yml"), "w+", encoding="utf-8") as fd:
             fd.write(
                 """name: %(name)s
 license: ASL 2.0
@@ -325,10 +325,10 @@ version: 0.0.1dev0"""
             )
 
         os.mkdir(os.path.join(mod_path, "model"))
-        with open(os.path.join(mod_path, "model", "_init.cf"), "w+") as fd:
+        with open(os.path.join(mod_path, "model", "_init.cf"), "w+", encoding="utf-8") as fd:
             fd.write("\n")
 
-        with open(os.path.join(mod_path, ".gitignore"), "w+") as fd:
+        with open(os.path.join(mod_path, ".gitignore"), "w+", encoding="utf-8") as fd:
             fd.write(
                 """*.swp
 *.pyc
@@ -538,7 +538,7 @@ version: 0.0.1dev0"""
 
         set_yaml_order_perserving()
 
-        with open(module.get_config_file_name(), "r") as fd:
+        with open(module.get_config_file_name(), "r", encoding="utf-8") as fd:
             newconfig = yaml.safe_load(fd)
 
         requires = sorted([k + " " + v for k, v in freeze.items()])

@@ -533,19 +533,19 @@ def export_dumpfiles(exporter: Exporter, types: ProxiedType) -> None:
 
     for file in types["std::File"]:
         path = os.path.join(prefix, file.host.name + file.path.replace("/", "+"))
-        with open(path, "w+") as fd:
+        with open(path, "w+", encoding="utf-8") as fd:
             if isinstance(file.content, Unknown):
                 fd.write("UNKNOWN -> error")
             else:
                 fd.write(file.content)
 
     path = os.path.join(prefix, "services")
-    with open(path, "w+") as fd:
+    with open(path, "w+", encoding="utf-8") as fd:
         for svc in types["std::Service"]:
             fd.write("%s -> %s\n" % (svc.host.name, svc.name))
 
     path = os.path.join(prefix, "packages")
-    with open(path, "w+") as fd:
+    with open(path, "w+", encoding="utf-8") as fd:
         for pkg in types["std::Package"]:
             fd.write("%s -> %s\n" % (pkg.host.name, pkg.name))
 
