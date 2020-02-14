@@ -34,7 +34,7 @@ Test(value="a")
 """,
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:11)` (reported in Construct(Test) ({dir}/main.cf:11))
 caused by:
-  Could not resolve the value a in this static context (reported in a ({dir}/main.cf:3:41))""",  # noqa: E501
+  Unable to resolve `a`: a type constraint has no access to the surrounding namespace. (reported in a ({dir}/main.cf:3:41))""",  # noqa: E501
     )
 
 
