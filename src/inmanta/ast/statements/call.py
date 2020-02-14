@@ -95,7 +95,7 @@ class FunctionCall(ReferenceStatement):
                 if k in kwargs:
                     raise RuntimeException(self, "Keyword argument %s repeated in function call" % k)
                 kwargs[k] = v
-        return self.function.call(arguments, kwargs)
+        return self.function.call_direct(arguments, kwargs)
 
     def resume(self, requires, resolver, queue, result):
         """
@@ -139,7 +139,7 @@ class Function:
     def __init__(self, ast_node: FunctionCall) -> None:
         self.ast_node: FunctionCall = ast_node
 
-    def call(self, args, kwargs) -> object:
+    def call_direct(self, args, kwargs) -> object:
         """
             Call this function and return the result.
         """
@@ -157,7 +157,7 @@ class Cast(Function):
         Function.__init__(self, ast_node)
         self.type = tp
 
-    def call(self, args: List[object], kwargs: Dict[str, object]) -> object:
+    def call_direct(self, args: List[object], kwargs: Dict[str, object]) -> object:
         if len(kwargs) > 0:
             raise RuntimeException(self.ast_node, "Only positional arguments allowed in type cast")
         if len(args) != 1:
@@ -169,7 +169,7 @@ class Cast(Function):
     def call_in_context(
         self, args: List[object], kwargs: Dict[str, object], resolver: Resolver, queue: QueueScheduler, result: ResultVariable
     ) -> None:
-        result.set_value(self.call(args, kwargs), self.ast_node.location)
+        result.set_value(self.call_direct(args, kwargs), self.ast_node.location)
 
 
 class PluginFunction(Function):
@@ -177,7 +177,7 @@ class PluginFunction(Function):
         Function.__init__(self, ast_node)
         self.plugin: plugins.Plugin = plugin
 
-    def call(self, args: List[object], kwargs: Dict[str, object]) -> object:
+    def call_direct(self, args: List[object], kwargs: Dict[str, object]) -> object:
         no_unknows = self.plugin.check_args(args, kwargs)
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
