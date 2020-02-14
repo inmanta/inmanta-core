@@ -82,3 +82,24 @@ def test_direct_execute_error(snippetcompiler):
         """,
         "The statement Format({{{{a}}}}) can not be executed in this context (reported in Format({{{{a}}}}) ({dir}/main.cf:4))",
     )
+
+
+def test_optional_value_exception(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    number? n
+    number m
+end
+
+implementation i for Test:
+    self.m = self.n
+end
+
+implement Test using i
+
+Test()
+        """,
+        "Optional variable accessed that has no value (attribute `n` of `__config__::Test (instantiated at {dir}/main.cf:13)`)"
+        " (reported in self.n ({dir}/main.cf:8))",
+    )
