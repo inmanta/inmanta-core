@@ -1706,7 +1706,6 @@ end
         ),
         ("not (42 in x)", (Not, [(In, [(Literal, 42), (Reference, "x")])])),
         ("not 42 in x", (Not, [(In, [(Literal, 42), (Reference, "x")])])),
-        # TODO: more tests?
     ],
 )
 def test_1815_conditional_expressions(expression, expected_tree):
