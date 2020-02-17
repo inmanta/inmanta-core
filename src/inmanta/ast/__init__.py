@@ -543,6 +543,12 @@ class RuntimeException(CompilerException):
         return super(RuntimeException, self).format()
 
 
+class CompilerWarning(RuntimeWarning, RuntimeException):
+    def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
+        RuntimeWarning.__init__(self)
+        RuntimeException.__init__(self, stmt, msg)
+
+
 class TypeNotFoundException(RuntimeException):
     """Exception raised when a type is referenced that does not exist"""
 
