@@ -206,6 +206,8 @@ class RESTHandler(tornado.web.RequestHandler):
         allow_headers = "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s" % const.INMANTA_MT_HEADER
         if len(self._transport.headers):
             allow_headers += ", " + ", ".join(self._transport.headers)
+        if server_enable_auth.get():
+            allow_headers += ", Authorization"
 
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
         self.set_header("Access-Control-Allow-Headers", allow_headers)
