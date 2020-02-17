@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.docstringParser import parse_docstring
+from inmanta.docstring_parser import parse_docstring
 
 
 def test_docstring():
