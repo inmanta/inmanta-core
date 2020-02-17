@@ -159,7 +159,8 @@ Lists of primitive types are also primitive types: ``string[]``, ``number[]``, `
 Conditions
 ==========================
 
-Conditions can be used in typedef, implements and if statements. Conditions can have the following forms
+Conditions can be used in typedef, implements and if statements. A condition is an expression that evaluates to a boolean
+value. It can have the following forms
 
 .. code-block:: antlr
 
@@ -167,10 +168,9 @@ Conditions can be used in typedef, implements and if statements. Conditions can 
         | condition 'or' condition
         | condition 'and' condition
         | 'not' condition
+        | value
         | value ('>' | '>=' | '<' | '<=' | '==' | '!=') value
         | value 'in' value
-        | 'true'
-        | 'false'
         | functioncall
         | value 'is' 'defined'
         ;
