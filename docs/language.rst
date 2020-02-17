@@ -167,6 +167,7 @@ Conditions can be used in typedef, implements and if statements. Conditions can 
         | condition 'or' condition
         | condition 'and' condition
         | 'not' condition
+        | value
         | value ('>' | '>=' | '<' | '<=' | '==' | '!=') value
         | value 'in' value
         | 'true'

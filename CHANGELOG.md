@@ -17,6 +17,7 @@
  - Parse comments and urls correctly from the requirements.txt file of an Inmanta module (#1764)
 
 ## Added
+ - Added support for dict lookup in conditions (#1573)
  - Added support for type casts for primitive types (#1798)
  - Added support for multiline string interpolations (#1568)
  - Added int type to the language (#1568)

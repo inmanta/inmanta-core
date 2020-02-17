@@ -1688,3 +1688,16 @@ end
     assert isinstance(false_stmt, Literal)
     assert isinstance(false_stmt.value, bool)
     assert false_stmt.value is False
+
+
+def test_1573_condition_dict_lookup():
+    statements = parse_code(
+        """
+dct = {"b": true}
+
+if dct["b"]:
+end
+        """,
+    )
+    assert len(statements) == 2
+    assert isinstance(statements[1], If)

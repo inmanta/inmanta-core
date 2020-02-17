@@ -561,7 +561,8 @@ def p_condition_2(p: YaccProduction) -> None:
 
 def p_condition_3(p: YaccProduction) -> None:
     """condition : function_call
-                | var_ref"""
+                | var_ref
+                | map_lookup"""
     p[0] = p[1]
 
 

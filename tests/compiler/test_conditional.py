@@ -247,6 +247,66 @@ t = Test()
     assert not root.lookup("t").get_value().lookup("multiple").get_value()
 
 
+def test_1573_if_dict_lookup(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    bool t_success
+    bool f_success
+end
+
+implement Test using std::none
+
+dct = {"t": true, "f": false}
+
+x = Test()
+if dct["t"]:
+    x.t_success = true
+else:
+    x.t_success = false
+end
+
+if dct["f"]:
+    x.f_success = false
+else:
+    x.f_success = true
+end
+        """,
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    assert root.lookup("x").get_value().lookup("t_success").get_value() is True
+    assert root.lookup("x").get_value().lookup("f_success").get_value() is True
+
+
+def test_1573_implementation_condition_dict_lookup(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    bool success
+end
+
+implementation i_t for Test:
+    self.success = true
+end
+
+implementation i_f for Test:
+    self.success = false
+end
+
+dct = {"t": true, "f": false}
+
+implement Test using i_t when dct["t"]
+implement Test using i_f when dct["f"]
+
+x = Test()
+        """,
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    assert root.lookup("x").get_value().lookup("success").get_value() is True
+
+
 def test_1804_false_and_condition(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
