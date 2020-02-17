@@ -25,6 +25,7 @@ class WarningRule:
     """
         A single rule for warning handling.
     """
+
     def __init__(
         self,
         action: str,
@@ -48,6 +49,7 @@ class WarningOption:
     """
         An option to manage warnings.
     """
+
     def __init__(self, name: str, options: Dict[Union[str, bool], WarningRule], default: Optional[WarningRule] = None,) -> None:
         self.name: str = name
         self.options: Dict[Union[str, bool], WarningRule] = options
@@ -66,6 +68,7 @@ class WarningsManager:
     """
         Contains all WarningOptions.
     """
+
     options: List[WarningOption] = [
         WarningOption(
             "default", {"warn": WarningRule("default"), "ignore": WarningRule("ignore"), "error": WarningRule("error")}
