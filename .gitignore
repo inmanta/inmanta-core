@@ -73,3 +73,5 @@ build-result
 .coverage*
 _build
 logs
+
+docs/reference/openapi.json

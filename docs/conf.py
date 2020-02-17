@@ -29,7 +29,20 @@ import sys, os
 extensions = [
     'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.ifconfig', 'sphinx.ext.viewcode',
     'sphinxarg.ext', 'sphinxcontrib.inmanta.config', 'sphinxcontrib.inmanta.dsl', 'sphinx_tabs.tabs',
-    'sphinxcontrib.inmanta.environmentsettings'
+    'sphinxcontrib.inmanta.environmentsettings', 'sphinxcontrib.redoc',
+]
+
+redoc_uri = 'https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js'
+redoc = [
+    {
+        'name': 'Inmanta REST API',
+        'page': 'reference/openapi',
+        'spec': 'reference/openapi.json',
+        'opts': {
+            'hide-hostname': True,
+            'path-in-middle-panel': True,
+        }
+    },
 ]
 
 # Add any paths that contain templates here, relative to this directory.
