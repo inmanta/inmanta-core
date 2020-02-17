@@ -1446,7 +1446,7 @@ async def test_zip_content_type(unused_tcp_port, postgres_db, database_name, asy
 @pytest.fixture
 async def options_server():
     @protocol.typedmethod(path="/test", operation="OPTIONS", client_types=["api"])
-    def test_method() -> ReturnValue[bytes]:  # NOQA
+    def test_method() -> ReturnValue[str]:  # NOQA
         pass
 
     class TestServer(ServerSlice):
@@ -1469,11 +1469,19 @@ def options_request(unused_tcp_port):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("auth_enabled, auth_header_allowed", [(True, True), (False, False)])
 async def test_auth_enabled_options_method(
-    unused_tcp_port, postgres_db, database_name, async_finalizer, options_server, options_request
+    auth_enabled,
+    auth_header_allowed,
+    unused_tcp_port,
+    postgres_db,
+    database_name,
+    async_finalizer,
+    options_server,
+    options_request,
 ):
     configure(unused_tcp_port, database_name, postgres_db.port)
-    config.Config.set("server", "auth", "true")
+    config.Config.set("server", "auth", str(auth_enabled))
     rs = Server()
     rs.add_slice(options_server)
     await rs.start()
@@ -1482,21 +1490,4 @@ async def test_auth_enabled_options_method(
     client = AsyncHTTPClient()
     response = await client.fetch(options_request)
     assert response.code == 200
-    assert "Authorization" in response.headers.get("Access-Control-Allow-Headers")
-
-
-@pytest.mark.asyncio
-async def test_auth_disabled_options_method(
-    unused_tcp_port, postgres_db, database_name, async_finalizer, options_server, options_request
-):
-    configure(unused_tcp_port, database_name, postgres_db.port)
-    config.Config.set("server", "auth", "false")
-    rs = Server()
-    rs.add_slice(options_server)
-    await rs.start()
-    async_finalizer.add(options_server.stop)
-    async_finalizer.add(rs.stop)
-    client = AsyncHTTPClient()
-    response = await client.fetch(options_request)
-    assert response.code == 200
-    assert "Authorization" not in response.headers.get("Access-Control-Allow-Headers")
+    assert ("Authorization" in response.headers.get("Access-Control-Allow-Headers")) == auth_header_allowed
