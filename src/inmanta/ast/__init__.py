@@ -544,6 +544,9 @@ class RuntimeException(CompilerException):
 
 
 class CompilerWarning(RuntimeWarning, RuntimeException):
+    """
+        Baseclass for compiler warnings.
+    """
     def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
         RuntimeWarning.__init__(self)
         RuntimeException.__init__(self, stmt, msg)
