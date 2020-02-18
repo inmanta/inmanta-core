@@ -32,10 +32,14 @@ extensions = [
     'sphinxcontrib.inmanta.environmentsettings',
 ]
 
-# noinspection PyUnresolvedReferences
-# "tags" are injected while the file is being read
-if tags.has("include_redoc"):
-    extensions.append('sphinxcontrib.redoc')
+
+try:
+    # noinspection PyUnresolvedReferences
+    # "tags" are injected while the file is being read
+    if tags.has("include_redoc"):
+        extensions.append('sphinxcontrib.redoc')
+except NameError as e:
+    print("Openapi definition with Redoc won't be included", e)
 
 redoc_uri = 'https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js'
 redoc = [
