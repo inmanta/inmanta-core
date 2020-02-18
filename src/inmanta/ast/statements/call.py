@@ -18,14 +18,15 @@
 
 import logging
 from itertools import chain
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
+import inmanta.ast.type as InmantaType
 from inmanta import plugins
 from inmanta.ast import ExternalException, LocatableString, Location, Namespace, RuntimeException, WrappingRuntimeException
 from inmanta.ast.statements import ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.proxy import UnknownException, UnsetException
-from inmanta.execute.runtime import ResultVariable, Waiter
+from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, Waiter
 from inmanta.execute.util import NoneValue, Unknown
 
 LOGGER = logging.getLogger(__name__)
@@ -64,11 +65,17 @@ class FunctionCall(ReferenceStatement):
             if arg_name in self.kwargs:
                 raise RuntimeException(self, "Keyword argument %s repeated in function call %s()" % (arg_name, self.name))
             self.kwargs[arg_name] = expr
+        self.function: Optional[Function] = None
 
     def normalize(self):
         ReferenceStatement.normalize(self)
-        self.function = self.namespace.get_type(self.name)
-        self.allow_unknown = self.function.opts["allow_unknown"]
+        func = self.namespace.get_type(self.name)
+        if isinstance(func, InmantaType.Primitive):
+            self.function = Cast(self, func)
+        elif isinstance(func, plugins.Plugin):
+            self.function = PluginFunction(self, func)
+        else:
+            raise RuntimeException(self, "Can not call '%s', can only call plugin or primitive type cast" % self.name)
 
     def requires_emit(self, resolver, queue):
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
@@ -81,7 +88,6 @@ class FunctionCall(ReferenceStatement):
         return requires[self]
 
     def execute_direct(self, requires):
-        function = self.function
         arguments = [a.execute_direct(requires) for a in self.arguments]
         kwargs = {k: v.execute_direct(requires) for k, v in self.kwargs.items()}
         for wrapped_kwarg_expr in self.wrapped_kwargs:
@@ -89,28 +95,12 @@ class FunctionCall(ReferenceStatement):
                 if k in kwargs:
                     raise RuntimeException(self, "Keyword argument %s repeated in function call" % k)
                 kwargs[k] = v
-        no_unknows = function.check_args(arguments, kwargs)
-
-        if not no_unknows and not self.allow_unknown:
-            raise RuntimeException("Received unknown value during direct execution")
-
-        if function._context is not -1:
-            raise RuntimeException("Context Aware functions are not allowed in direct execution")
-
-        if function.opts["emits_statements"]:
-            raise RuntimeException("emits_statements functions are not allowed in direct execution")
-        else:
-            try:
-                return function(*arguments, **kwargs)
-            except Exception as e:
-                raise WrappingRuntimeException(self, "Exception in direct execution for plugin %s" % self.name, e)
+        return self.function.call_direct(arguments, kwargs)
 
     def resume(self, requires, resolver, queue, result):
         """
             Evaluate this statement.
         """
-        # get the object to call the function on
-        function = self.function
         arguments = [a.execute(requires, resolver, queue) for a in self.arguments]
         kwargs = {k: v.execute(requires, resolver, queue) for k, v in self.kwargs.items()}
         for wrapped_kwarg_expr in self.wrapped_kwargs:
@@ -118,29 +108,7 @@ class FunctionCall(ReferenceStatement):
                 if k in kwargs:
                     raise RuntimeException(self, "Keyword argument %s repeated in function call" % k)
                 kwargs[k] = v
-        no_unknows = function.check_args(arguments, kwargs)
-
-        if not no_unknows and not self.allow_unknown:
-            result.set_value(Unknown(self), self.location)
-            return
-
-        if function._context is not -1:
-            arguments.insert(function._context, plugins.Context(resolver, queue, self, result))
-
-        if function.opts["emits_statements"]:
-            function(*arguments)
-        else:
-            try:
-                value = function(*arguments, **kwargs)
-                result.set_value(value if value is not None else NoneValue(), self.location)
-            except UnknownException as e:
-                result.set_value(e.unknown, self.location)
-            except UnsetException as e:
-                raise e
-            except RuntimeException as e:
-                raise WrappingRuntimeException(self, "Exception in plugin %s" % self.name, e)
-            except Exception as e:
-                raise ExternalException(self, "Exception in plugin %s" % self.name, e)
+        self.function.call_in_context(arguments, kwargs, resolver, queue, result)
 
     def __repr__(self):
         return "%s(%s)" % (
@@ -149,7 +117,7 @@ class FunctionCall(ReferenceStatement):
                 chain(
                     (repr(a) for a in self.arguments),
                     ("%s=%s" % (k, repr(v)) for k, v in self.kwargs.items()),
-                    ("**%s" % repr(kwargs) for kwargs in self.wrapped_kwargs),
+                    ("%s" % repr(kwargs) for kwargs in self.wrapped_kwargs),
                 )
             ),
         )
@@ -161,10 +129,97 @@ class FunctionCall(ReferenceStatement):
                 chain(
                     (a.pretty_print() for a in self.arguments),
                     ("%s=%s" % (k, v.pretty_print()) for k, v in self.kwargs.items()),
-                    ("**%s" % kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
+                    ("%s" % kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
                 )
             ),
         )
+
+
+class Function:
+    def __init__(self, ast_node: FunctionCall) -> None:
+        self.ast_node: FunctionCall = ast_node
+
+    def call_direct(self, args, kwargs) -> object:
+        """
+            Call this function and return the result.
+        """
+        raise NotImplementedError()
+
+    def call_in_context(self, args, kwargs, resolver: Resolver, queue: QueueScheduler, result: ResultVariable) -> None:
+        """
+            Call this function in the supplied context and store the result in the supplied ResultVariable.
+        """
+        raise NotImplementedError()
+
+
+class Cast(Function):
+    def __init__(self, ast_node: FunctionCall, tp: InmantaType.Primitive) -> None:
+        Function.__init__(self, ast_node)
+        self.type = tp
+
+    def call_direct(self, args: List[object], kwargs: Dict[str, object]) -> object:
+        if len(kwargs) > 0:
+            raise RuntimeException(self.ast_node, "Only positional arguments allowed in type cast")
+        if len(args) != 1:
+            raise RuntimeException(
+                self.ast_node, "Illegal arguments %s: type cast expects exactly 1 argument" % ",".join(map(repr, args))
+            )
+        return self.type.cast(*args)
+
+    def call_in_context(
+        self, args: List[object], kwargs: Dict[str, object], resolver: Resolver, queue: QueueScheduler, result: ResultVariable
+    ) -> None:
+        result.set_value(self.call_direct(args, kwargs), self.ast_node.location)
+
+
+class PluginFunction(Function):
+    def __init__(self, ast_node: FunctionCall, plugin: plugins.Plugin) -> None:
+        Function.__init__(self, ast_node)
+        self.plugin: plugins.Plugin = plugin
+
+    def call_direct(self, args: List[object], kwargs: Dict[str, object]) -> object:
+        no_unknows = self.plugin.check_args(args, kwargs)
+
+        if not no_unknows and not self.plugin.opts["allow_unknown"]:
+            raise RuntimeException(self.ast_node, "Received unknown value during direct execution")
+
+        if self.plugin._context is not -1:
+            raise RuntimeException(self.ast_node, "Context Aware functions are not allowed in direct execution")
+
+        if self.plugin.opts["emits_statements"]:
+            raise RuntimeException(self.ast_node, "emits_statements functions are not allowed in direct execution")
+        else:
+            try:
+                return self.plugin(*args, **kwargs)
+            except Exception as e:
+                raise WrappingRuntimeException(self.ast_node, "Exception in direct execution for plugin %s" % self.name, e)
+
+    def call_in_context(
+        self, args: List[object], kwargs: Dict[str, object], resolver: Resolver, queue: QueueScheduler, result: ResultVariable
+    ) -> None:
+        no_unknows = self.plugin.check_args(args, kwargs)
+
+        if not no_unknows and not self.plugin.opts["allow_unknown"]:
+            result.set_value(Unknown(self), self.ast_node.location)
+            return
+
+        if self.plugin._context is not -1:
+            args.insert(self.plugin._context, plugins.Context(resolver, queue, self.ast_node, self.plugin, result))
+
+        if self.plugin.opts["emits_statements"]:
+            self.plugin(*args, **kwargs)
+        else:
+            try:
+                value = self.plugin(*args, **kwargs)
+                result.set_value(value if value is not None else NoneValue(), self.ast_node.location)
+            except UnknownException as e:
+                result.set_value(e.unknown, self.ast_node.location)
+            except UnsetException as e:
+                raise e
+            except RuntimeException as e:
+                raise WrappingRuntimeException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
+            except Exception as e:
+                raise ExternalException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
 
 
 class FunctionUnit(Waiter):

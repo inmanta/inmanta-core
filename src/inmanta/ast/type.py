@@ -17,8 +17,9 @@
 """
 
 import numbers
+from typing import Callable
 from typing import List as PythonList
-from typing import Optional
+from typing import Optional, Sequence
 
 from inmanta.ast import (
     DuplicateException,
@@ -135,7 +136,25 @@ class NullableType(Type):
         self.basetype.normalize()
 
 
-class Number(Type):
+class Primitive(Type):
+    def __init__(self) -> None:
+        Type.__init__(self)
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = []
+
+    def cast(self, value: Optional[object]) -> object:
+        exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self.type_string()))
+
+        for cast in self.try_cast_functions:
+            try:
+                return cast(value)
+            except ValueError:
+                continue
+            except TypeError:
+                raise exception
+        raise exception
+
+
+class Number(Primitive):
     """
         This class represents an integer or float in the configuration model. On
         these integers the following operations are supported:
@@ -144,7 +163,8 @@ class Number(Type):
     """
 
     def __init__(self) -> None:
-        Type.__init__(self)
+        Primitive.__init__(self)
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [int, float]
 
     def validate(self, value: Optional[object]) -> bool:
         """
@@ -176,6 +196,7 @@ class Integer(Number):
 
     def __init__(self) -> None:
         Number.__init__(self)
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [int]
 
     def validate(self, value: Optional[object]) -> bool:
         if not super().validate(value):
@@ -188,13 +209,14 @@ class Integer(Number):
         return "int"
 
 
-class Bool(Type):
+class Bool(Primitive):
     """
         This class represents a simple boolean that can hold true or false.
     """
 
     def __init__(self) -> None:
-        Type.__init__(self)
+        Primitive.__init__(self)
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [bool]
 
     def validate(self, value: Optional[object]) -> bool:
         """
@@ -217,13 +239,14 @@ class Bool(Type):
         return None
 
 
-class String(Type):
+class String(Primitive):
     """
         This class represents a string type in the configuration model.
     """
 
     def __init__(self) -> None:
-        Type.__init__(self)
+        Primitive.__init__(self)
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [str]
 
     def validate(self, value: Optional[object]) -> bool:
         """
@@ -236,6 +259,13 @@ class String(Type):
             raise RuntimeException(None, "Invalid value '%s', expected String" % value)
 
         return True
+
+    def cast(self, value: Optional[object]) -> object:
+        if value is True:
+            return "true"
+        if value is False:
+            return "false"
+        return super().cast(value)
 
     def type_string(self) -> str:
         return "string"
