@@ -207,7 +207,7 @@ class PluginFunction(Function):
             args.insert(self.plugin._context, plugins.Context(resolver, queue, self.ast_node, self.plugin, result))
 
         if self.plugin.opts["emits_statements"]:
-            self.plugin(*args)
+            self.plugin(*args, **kwargs)
         else:
             try:
                 value = self.plugin(*args, **kwargs)
