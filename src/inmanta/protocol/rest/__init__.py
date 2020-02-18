@@ -131,7 +131,7 @@ class CallArguments(object):
         if opts.header is None:
             return None
 
-        value = self._request_headers[opts.header]
+        value = self._request_headers.get(opts.header)
         if opts.reply_header:
             self._headers[opts.header] = value
 
