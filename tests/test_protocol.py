@@ -45,6 +45,7 @@ from inmanta.protocol.common import (
 )
 from inmanta.protocol.rest import CallArguments
 from inmanta.server import config as opt
+from inmanta.server.config import server_bind_port
 from inmanta.server.protocol import Server, ServerSlice
 from inmanta.types import Apireturn
 from inmanta.util import hash_file
@@ -1491,3 +1492,10 @@ async def test_auth_enabled_options_method(
     response = await client.fetch(options_request)
     assert response.code == 200
     assert ("Authorization" in response.headers.get("Access-Control-Allow-Headers")) == auth_header_allowed
+
+
+@pytest.mark.asyncio
+async def test_required_header_not_present(server):
+    client = AsyncHTTPClient()
+    response = await client.fetch(f"http://localhost:{server_bind_port.get()}/api/v2/environment_settings", raise_error=False)
+    assert response.code == 400
