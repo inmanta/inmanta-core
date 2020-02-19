@@ -24,6 +24,7 @@ sphinx-rtd-theme==0.4.3
 sphinx-tabs==1.1.13
 sphinx==2.4.1
 sphinxcontrib-serializinghtml==1.1.3
+sphinxcontrib-redoc==1.5.1
 texttable==1.6.2
 tornado==6.0.3
 tox==3.14.3
