@@ -119,7 +119,7 @@ def test_project_freeze_disk(modules_dir, modules_repo, capsys):
     assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
     assert len(err) == 0, err
 
-    with open(os.path.join(coroot, "project.yml"), "r") as fh:
+    with open(os.path.join(coroot, "project.yml"), "r", encoding="utf-8") as fh:
         assert (
             fh.read()
             == """name: projectA
@@ -169,7 +169,7 @@ requires:
 
 def test_project_options_in_config(modules_dir, modules_repo, capsys):
     coroot = install_project(modules_dir, "projectA")
-    with open("project.yml", "w") as fh:
+    with open("project.yml", "w", encoding="utf-8") as fh:
         fh.write(
             """name: projectA
 license: Apache 2.0
@@ -190,7 +190,7 @@ freeze_operator: ==
         assert len(err) == 0, err
         assert len(out) == 0, out
 
-        with open("project.yml", "r") as fh:
+        with open("project.yml", "r", encoding="utf-8") as fh:
             assert fh.read() == (
                 """name: projectA
 license: Apache 2.0
@@ -257,7 +257,7 @@ def test_module_freeze_self_disk(modules_dir, modules_repo, capsys):
         assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
         assert os.path.getsize(modpath) != 0
 
-        with open(modpath, "r") as fh:
+        with open(modpath, "r", encoding="utf-8") as fh:
             outf = fh.read()
             assert outf == (
                 """name: modC

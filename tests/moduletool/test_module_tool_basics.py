@@ -115,15 +115,15 @@ def test_module_corruption(modules_dir, modules_repo):
     assert os.path.exists(main)
     assert os.path.exists(projectyml)
 
-    with open(main, "w") as fh:
+    with open(main, "w", encoding="utf-8") as fh:
         fh.write("import mod9::b")
 
-    with open(projectyml, "r") as fh:
+    with open(projectyml, "r", encoding="utf-8") as fh:
         pyml = yaml.load(fh)
 
     pyml["requires"] = ["mod10 == 4.0"]
 
-    with open(projectyml, "w") as fh:
+    with open(projectyml, "w", encoding="utf-8") as fh:
         yaml.dump(pyml, fh)
 
     # clear cache

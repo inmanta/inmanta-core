@@ -46,7 +46,7 @@ except ImportError:
 if TYPE_CHECKING:
     from inmanta.execute.runtime import ExecutionContext, ResultVariable  # noqa: F401
     from inmanta.ast.statements import Statement, ExpressionStatement  # noqa: F401
-    from inmanta.ast.statements.define import DefineImport  # noqa: F401
+    from inmanta.ast.statements.define import DefineAttribute, DefineImport  # noqa: F401
     from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast import Namespaced
 
@@ -56,7 +56,7 @@ class EntityLike(NamedType):
     parent_entities: "List[Entity]"
 
     @abstractmethod
-    def get_defaults(self) -> "Dict[str, ExpressionStatement]":
+    def _get_own_defaults(self) -> "Dict[str, ExpressionStatement]":
         """ get defaults defined on this entity"""
         pass
 
@@ -77,7 +77,7 @@ class EntityLike(NamedType):
             values.extend(parent.get_default_values().items())
 
         # self takes precedence
-        values.extend(self.get_defaults().items())
+        values.extend(self._get_own_defaults().items())
         # make dict, remove doubles
         dvalues = dict(values)
         # remove erased defaults
@@ -101,7 +101,7 @@ class Entity(EntityLike, NamedType):
 
     comment: Optional[str]
 
-    def __init__(self, name: str, namespace: Namespace) -> None:
+    def __init__(self, name: str, namespace: Namespace, comment: Optional[str] = None) -> None:
         NamedType.__init__(self)
 
         self.__name = name  # type: str
@@ -117,7 +117,7 @@ class Entity(EntityLike, NamedType):
         self.implements_inherits = False
 
         # default values
-        self.__default_value = {}  # type: Dict[str,object]
+        self.__default_values = {}  # type: Dict[str, DefineAttribute]
 
         self._index_def = []  # type: List[List[str]]
         self._index = {}  # type: Dict[str,Instance]
@@ -125,11 +125,22 @@ class Entity(EntityLike, NamedType):
 
         self._instance_list = set()  # type: Set[Instance]
 
-        self.comment = ""
+        self.comment = comment
 
         self.normalized = False
 
     def normalize(self) -> None:
+        for attribute in self.__default_values.values():
+            if attribute.default is not None:
+                default_type: Type = attribute.type.get_type(self.namespace)
+                try:
+                    default_type.validate(attribute.default.as_constant())
+                except RuntimeException as exception:
+                    if exception.stmt is None or isinstance(exception.stmt, Type):
+                        exception.set_statement(attribute)
+                        exception.location = attribute.location
+                    raise exception
+
         for d in self.implementations:
             d.normalize()
 
@@ -149,14 +160,14 @@ class Entity(EntityLike, NamedType):
         else:
             return self.implements
 
-    def add_default_value(self, name: str, value: object) -> None:
+    def add_default_value(self, name: str, value: "DefineAttribute") -> None:
         """
             Add a default value for an attribute
         """
-        self.__default_value[name] = value
+        self.__default_values[name] = value
 
-    def get_defaults(self) -> "Dict[str, ExpressionStatement]":
-        return self.__default_value
+    def _get_own_defaults(self) -> "Dict[str, Optional[ExpressionStatement]]":
+        return dict((k, v.default) for k, v in self.__default_values.items() if v.default is not None or v.remove_default)
 
     def get_namespace(self) -> Namespace:
         """
@@ -385,13 +396,6 @@ class Entity(EntityLike, NamedType):
         """
         return self.get_full_name()
 
-    @classmethod
-    def cast(cls, value):
-        """
-            Cast a value
-        """
-        return value
-
     def __eq__(self, other: object) -> bool:
         """
             Override list eq method
@@ -447,12 +451,17 @@ class Entity(EntityLike, NamedType):
                     self.index_queue.pop(keys)
 
     def lookup_index(
-        self, params: "List[str,object]", stmt: "Statement", target: "Optional[ResultVariable]" = None
+        self, params: "List[Tuple[str,object]]", stmt: "Statement", target: "Optional[ResultVariable]" = None
     ) -> "Optional[Instance]":
         """
             Search an instance in the index.
         """
-        attributes = set([x[0] for x in params])
+        all_attributes: List[str] = [x[0] for x in params]
+        attributes: Set[str] = set(())
+        for attr in all_attributes:
+            if attr in attributes:
+                raise RuntimeException(stmt, "Attribute %s provided twice in index lookup" % attr)
+            attributes.add(attr)
 
         found_index = False
         for index_attributes in self.get_indices():
@@ -582,7 +591,7 @@ class Default(EntityLike):
         self._defaults = {}  # type: Dict[str,ExpressionStatement]
         self.comment = None  # type: Optional[str]
 
-    def get_defaults(self) -> "Dict[str, ExpressionStatement]":
+    def _get_own_defaults(self) -> "Dict[str, ExpressionStatement]":
         return self._defaults
 
     def set_entity(self, entity: EntityLike) -> None:

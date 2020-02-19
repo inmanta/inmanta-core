@@ -314,3 +314,69 @@ async def test_send_events_cross_agent_restart(
         assert res_id.attribute_value == "key2"
         assert res["status"] == const.ResourceState.deployed
         assert res["change"] == const.Change.created
+
+
+@pytest.mark.asyncio
+async def test_send_events_cross_agent_fail(resource_container, environment, server, client, async_finalizer, clienthelper):
+    """
+        Send and receive events over agents, ensure failures are reported correctly
+    """
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    resource_container.Provider.reset()
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    async_finalizer.add(agent.stop)
+    agent.add_end_point_name("agent1")
+    await agent.start()
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
+    async_finalizer.add(agent2.stop)
+    agent2.add_end_point_name("agent2")
+    await agent2.start()
+    await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
+
+    version = await clienthelper.get_version()
+
+    res_id_1 = "test::Resource[agent1,key=key1],v=%d" % version
+    fail_r = "test::FailFast[agent2,key=key2],v=%d" % version
+    resources = [
+        {"key": "key1", "value": "value1", "id": res_id_1, "send_event": False, "purged": False, "requires": [fail_r]},
+        {"key": "key2", "value": "value2", "id": fail_r, "send_event": True, "requires": [], "purged": False},
+    ]
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+
+    # do a deploy
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    # first resource is not executed
+    assert resource_container.Provider.get("agent1", "key1") is None
+
+    events = resource_container.Provider.getevents("agent1", "key1")
+    assert len(events) == 1
+    for res_id, res in events[0].items():
+        assert res_id.agent_name == "agent2"
+        assert res_id.attribute_value == "key2"
+        assert res["status"] == const.ResourceState.failed
+
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+
+    r_to_s = {r["resource_version_id"]: r["status"] for r in result.result["resources"]}
+    assert r_to_s[res_id_1] == "skipped"
+    assert r_to_s[fail_r] == "failed"

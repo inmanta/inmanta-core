@@ -16,18 +16,21 @@
     Contact: code@inmanta.com
 """
 
+import logging
 import re
 from asyncio import CancelledError
 from typing import TYPE_CHECKING, Any, AnyStr, Dict, List, Optional, Set, Tuple
 
-from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest
+from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
 
 from inmanta import config as inmanta_config
 from inmanta.protocol import common
-from inmanta.protocol.rest import LOGGER, RESTBase
+from inmanta.protocol.rest import RESTBase
 
 if TYPE_CHECKING:
     from inmanta.protocol.endpoints import Endpoint
+
+LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 class RESTClient(RESTBase):
@@ -137,4 +140,15 @@ class RESTClient(RESTBase):
             LOGGER.exception("Failed to send request")
             return common.Result(code=500, result={"message": str(e)})
 
-        return common.Result(code=response.code, result=self._decode(response.body))
+        return self._decode_response(response)
+
+    def _decode_response(self, response: HTTPResponse):
+        content_type = response.headers.get(common.CONTENT_TYPE, None)
+
+        if content_type is None or content_type == common.JSON_CONTENT:
+            return common.Result(code=response.code, result=self._decode(response.body))
+        elif content_type == common.HTML_CONTENT:
+            return common.Result(code=response.code, result=response.body.decode(common.HTML_ENCODING))
+        else:
+            # Any other content-type will leave the encoding unchanged
+            return common.Result(code=response.code, result=response.body)

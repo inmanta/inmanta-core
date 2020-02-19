@@ -1,10 +1,44 @@
+# v 2020.1 (2020-02-19) Changes in this release:
+
+## Breaking changes
+- Entity instances are no longer allowed in list and dict attributes, this was previously possible due to bug (#1435)
+
+## Fixed
+ - Fixed incorrect parsing of booleans as conditions (#1804)
+ - Added support for nullable types in plugins (#674)
+ - Inmanta type module cleanup and type coverage
+ - Various compiler error reporting improvements (#1584, #1341, #1600, #1292, #1652, #1221, #1707, #1480, #1767, #1766, #1762, #1575)
+ - CRUDHandler bugfix, ensure update is not called on purged resources
+ - Changes in default values: AUTO_DEPLOY, PUSH_ON_AUTO_DEPLOY are enabled by default,
+ AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY is set to incremental deployment
+ - Fixed deadlock triggered by std::AgenConfigHandler (#1662)
+ - Removed the resourceversionid table from the database (#1627)
+ - Remote machines not being available or not having a python interpreter now results in a clearer error.
+ - Parse comments and urls correctly from the requirements.txt file of an Inmanta module (#1764)
+
+## Added
+ - Added support for dict lookup in conditions (#1573)
+ - Added support for type casts for primitive types (#1798)
+ - Added support for multiline string interpolations (#1568)
+ - Added int type to the language (#1568)
+ - Add get_environment_id to exporter (#1683)
+ - Added inmanta-cli environment save command (#1666)
+ - Added finalizer support to @cache annotation
+ - Added support to parse the docstring of an entity
+ - Added support for \*\*dict as kwargs for constructor calls and index lookups (#620, #1702)
+ - Added support for kwargs in plugin calls, as named arguments as well as using \*\*dict (#1143)
+
+## Removed
+ - Removed the inmanta module validate command. Use pytest-inmanta fixtures to test your modules instead.
+ - Removed Forms functionality (#1667)
+
 # v 2019.5 (2019-12-05) Changes in this release:
 
 ## Fixed
  - Compiler bugfix, ensure done nodes are correctly removed from zerowaiters
  - Fixed memory leak in database layer
  - Fixed lexing of strings ending in an escaped backslash (#1601)
- - Fixed bug where `module freeze` results in empty module.yml (#1598)  
+ - Fixed bug where `module freeze` results in empty module.yml (#1598)
  - Fixed inconsistent behavior of `export` and `export -j` (#1595)
 
 IMPORTANT CHANGES:

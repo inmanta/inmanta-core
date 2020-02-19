@@ -104,7 +104,7 @@ class Compiler(object):
         """
             Return the content of the given file
         """
-        with open(path, "r") as file_d:
+        with open(path, "r", encoding="utf-8") as file_d:
             return file_d.read()
 
     def _load_plugins(self, plugin_dir, namespace):

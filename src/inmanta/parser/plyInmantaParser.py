@@ -20,7 +20,7 @@
 
 import logging
 import re
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
@@ -42,8 +42,9 @@ from inmanta.ast.statements.define import (
     DefineRelation,
     DefineTypeConstraint,
     DefineTypeDefault,
+    TypeDeclaration,
 )
-from inmanta.ast.statements.generator import Constructor, For, If
+from inmanta.ast.statements.generator import Constructor, For, If, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException, plyInmantaLex
@@ -100,15 +101,15 @@ def make_none(p: YaccProduction, token: int) -> Literal:
 
 
 def p_main_collect(p: YaccProduction) -> None:
-    """main : top_stmt main"""
+    "main : top_stmt main"
     v = p[2]
     v.insert(0, p[1])
     p[0] = v
 
 
 def p_main_term(p: YaccProduction) -> None:
-    "main : top_stmt"
-    p[0] = [p[1]]
+    "main : empty"
+    p[0] = []
 
 
 def p_top_stmt(p: YaccProduction) -> None:
@@ -122,6 +123,11 @@ def p_top_stmt(p: YaccProduction) -> None:
                 | index
                 | import """
     p[0] = p[1]
+
+
+def p_empty(p: YaccProduction) -> None:
+    "empty : "
+    pass
 
 
 #######################
@@ -264,85 +270,59 @@ def p_entity_body(p: YaccProduction) -> None:
     p[0] = [p[1]]
 
 
-def p_attribute_type(p: YaccProduction) -> None:
-    """attr_type : ns_ref"""
-    p[0] = (p[1], False)
+def p_attribute_base_type(p: YaccProduction) -> None:
+    """attr_base_type : ns_ref"""
+    p[0] = TypeDeclaration(p[1])
+
+
+def p_attribute_type_multi(p: YaccProduction) -> None:
+    """attr_type_multi : attr_base_type '[' ']'"""
+    p[1].multi = True
+    p[0] = p[1]
 
 
 def p_attribute_type_opt(p: YaccProduction) -> None:
-    "attr_type : ns_ref '?'"
-    p[0] = (p[1], True)
+    """attr_type_opt : attr_type_multi '?'
+        | attr_base_type '?'"""
+    p[1].nullable = True
+    p[0] = p[1]
+
+
+def p_attribute_type(p: YaccProduction) -> None:
+    """attr_type : attr_type_opt
+        | attr_type_multi
+        | attr_base_type"""
+    p[0] = p[1]
 
 
 def p_attr(p: YaccProduction) -> None:
     "attr : attr_type ID"
-    (attr, nullable) = p[1]
-    p[0] = DefineAttribute(attr, p[2], None, nullable=nullable)
+    p[0] = DefineAttribute(p[1], p[2], None)
     attach_lnr(p, 2)
 
 
 def p_attr_cte(p: YaccProduction) -> None:
     """attr : attr_type ID '=' constant
            | attr_type ID '=' constant_list"""
-    (attr, nullable) = p[1]
-    p[0] = DefineAttribute(attr, p[2], p[4], nullable=nullable)
+    p[0] = DefineAttribute(p[1], p[2], p[4])
     attach_lnr(p, 2)
 
 
 def p_attr_undef(p: YaccProduction) -> None:
     "attr : attr_type ID '=' UNDEF"
-    (attr, nullable) = p[1]
-    p[0] = DefineAttribute(attr, p[2], None, remove_default=True, nullable=nullable)
+    p[0] = DefineAttribute(p[1], p[2], None, remove_default=True)
     attach_lnr(p, 2)
-
-
-def p_attribute_type_multi(p: YaccProduction) -> None:
-    "attr_type_multi : ns_ref '[' ']'"
-    p[0] = (p[1], False, Location(file, p.lineno(1)))
-
-
-def p_attribute_type_multi_opt(p: YaccProduction) -> None:
-    "attr_type_multi : ns_ref '[' ']' '?'"
-    p[0] = (p[1], True, Location(file, p.lineno(1)))
-
-
-def p_attr_list(p: YaccProduction) -> None:
-    "attr : attr_type_multi ID"
-    (attr, nullable, location) = p[1]
-    p[0] = DefineAttribute(attr, p[2], None, True, nullable=nullable)
-    attach_lnr(p, 2)
-
-
-def p_attr_list_cte(p: YaccProduction) -> None:
-    "attr : attr_type_multi ID '=' constant_list"
-    (attr, nullable, _) = p[1]
-    p[0] = DefineAttribute(attr, p[2], p[4], True, nullable=nullable)
-    attach_lnr(p, 3)
-
-
-def p_attr_list_undef(p: YaccProduction) -> None:
-    "attr : attr_type_multi ID '=' UNDEF"
-    (attr, nullable, _) = p[1]
-    p[0] = DefineAttribute(attr, p[2], None, True, remove_default=True, nullable=nullable)
-    attach_lnr(p, 3)
-
-
-def p_attr_list_null(p: YaccProduction) -> None:
-    "attr : attr_type_multi ID '=' NULL"
-    (attr, nullable, _) = p[1]
-    p[0] = DefineAttribute(attr, p[2], make_none(p, 3), True, nullable=nullable)
-    attach_lnr(p, 3)
 
 
 def p_attr_dict(p: YaccProduction) -> None:
     "attr : DICT ID"
-    p[0] = DefineAttribute(p[1], p[2], None)
+    p[0] = DefineAttribute(TypeDeclaration(p[1]), p[2], None)
     attach_lnr(p, 1)
 
 
 def p_attr_list_dict(p: YaccProduction) -> None:
     "attr : DICT ID '=' map_def"
-    p[0] = DefineAttribute(p[1], p[2], p[4])
+    p[0] = DefineAttribute(TypeDeclaration(p[1]), p[2], p[4])
     attach_lnr(p, 1)
 
 
@@ -353,19 +333,19 @@ def p_attr_list_dict_null_err(p: YaccProduction) -> None:
 
 def p_attr_dict_nullable(p: YaccProduction) -> None:
     "attr : DICT '?' ID"
-    p[0] = DefineAttribute(p[1], p[3], None, nullable=True)
+    p[0] = DefineAttribute(TypeDeclaration(p[1], nullable=True), p[3], None)
     attach_lnr(p, 1)
 
 
 def p_attr_list_dict_nullable(p: YaccProduction) -> None:
     "attr : DICT '?'  ID '=' map_def"
-    p[0] = DefineAttribute(p[1], p[3], p[5], nullable=True)
+    p[0] = DefineAttribute(TypeDeclaration(p[1], nullable=True), p[3], p[5])
     attach_lnr(p, 1)
 
 
 def p_attr_list_dict_null(p: YaccProduction) -> None:
     "attr : DICT '?'  ID '=' NULL"
-    p[0] = DefineAttribute(p[1], p[3], make_none(p, 5), nullable=True)
+    p[0] = DefineAttribute(TypeDeclaration(p[1], nullable=True), p[3], make_none(p, 5))
     attach_lnr(p, 1)
 
 
@@ -581,7 +561,8 @@ def p_condition_2(p: YaccProduction) -> None:
 
 def p_condition_3(p: YaccProduction) -> None:
     """condition : function_call
-                | var_ref"""
+                | var_ref
+                | map_lookup"""
     p[0] = p[1]
 
 
@@ -604,10 +585,8 @@ def p_condition_is_defined_short(p: YaccProduction) -> None:
 
 
 def p_condition_term_1(p: YaccProduction) -> None:
-    """condition : TRUE
-                | FALSE"""
-    p[0] = Literal(p[1])
-    attach_lnr(p)
+    "condition : boolean_constant"
+    p[0] = p[1]
 
 
 #######################
@@ -636,13 +615,13 @@ def p_map_lookup(p: YaccProduction) -> None:
 
 def p_constructor(p: YaccProduction) -> None:
     " constructor : class_ref '(' param_list ')' "
-    p[0] = Constructor(p[1], p[3], Location(file, p.lineno(2)), namespace)
+    p[0] = Constructor(p[1], p[3][0], p[3][1], Location(file, p.lineno(2)), namespace)
 
 
 def p_function_call(p: YaccProduction) -> None:
-    " function_call : ns_ref '(' operand_list ')'"
-    p[0] = FunctionCall(str(p[1]), p[3])
-    attach_lnr(p, 2)
+    " function_call : ns_ref '(' function_param_list ')'"
+    (args, kwargs, wrapped_kwargs) = p[3]
+    p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs, Location(file, p.lineno(2)), namespace)
 
 
 def p_list_def(p: YaccProduction) -> None:
@@ -652,18 +631,15 @@ def p_list_def(p: YaccProduction) -> None:
 
 
 def p_pair_list_collect(p: YaccProduction) -> None:
-    """pair_list : STRING ':' operand ',' pair_list"""
+    """pair_list : STRING ':' operand ',' pair_list
+        | STRING ':' operand empty pair_list_empty"""
     p[5].insert(0, (str(p[1]), p[3]))
     p[0] = p[5]
 
 
-def p_pair_list_term(p: YaccProduction) -> None:
-    "pair_list : STRING ':' operand"
-    p[0] = [(str(p[1]), p[3])]
-
-
-def p_pair_list_term_2(p: YaccProduction) -> None:
-    "pair_list : "
+def p_pair_list_empty(p: YaccProduction) -> None:
+    """pair_list : pair_list_empty
+        pair_list_empty : empty"""
     p[0] = []
 
 
@@ -673,33 +649,21 @@ def p_map_def(p: YaccProduction) -> None:
     attach_lnr(p, 1)
 
 
-def p_map_def_empty(p: YaccProduction) -> None:
-    " map_def : '{' '}'"
-    p[0] = CreateDict([])
-    attach_lnr(p, 1)
-
-
 def p_index_lookup(p: YaccProduction) -> None:
     " index_lookup : class_ref '[' param_list ']'"
-    p[0] = IndexLookup(p[1], p[3])
+    p[0] = IndexLookup(p[1], p[3][0], p[3][1])
     attach_lnr(p, 2)
 
 
 def p_short_index_lookup(p: YaccProduction) -> None:
     " index_lookup : attr_ref '[' param_list ']'"
     attref = p[1]
-    p[0] = ShortIndexLookup(attref.instance, attref.attribute, p[3])
+    p[0] = ShortIndexLookup(attref.instance, attref.attribute, p[3][0], p[3][1])
     attach_lnr(p, 2)
 
 
 #######################
 # HELPERS
-
-
-def p_constant_mls(p: YaccProduction) -> None:
-    """ constant : mls """
-    p[0] = Literal(str(p[1]))
-    attach_from_string(p, 1)
 
 
 def p_constant(p: YaccProduction) -> None:
@@ -724,37 +688,49 @@ def p_constant_regex(p: YaccProduction) -> None:
     attach_lnr(p)
 
 
-def p_constant_t(p: YaccProduction) -> None:
-    """ constant : TRUE
+def p_constant_bool(p: YaccProduction) -> None:
+    " constant : boolean_constant "
+    p[0] = p[1]
+
+
+def p_boolean_constant_t(p: YaccProduction) -> None:
+    """ boolean_constant : TRUE
     """
     p[0] = Literal(True)
     attach_lnr(p)
 
 
-def p_constant_f(p: YaccProduction) -> None:
-    """ constant : FALSE
+def p_boolean_constant_f(p: YaccProduction) -> None:
+    """ boolean_constant : FALSE
     """
     p[0] = Literal(False)
     attach_lnr(p)
+
+
+def p_constant_string(p: YaccProduction) -> None:
+    " constant : STRING "
+    p[0] = get_string_ast_node(p[1], Location(file, p.lineno(1)))
+    attach_lnr(p)
+
+
+def p_constant_mls(p: YaccProduction) -> None:
+    " constant : mls "
+    p[0] = get_string_ast_node(p[1], p[1].location)
+    attach_from_string(p)
 
 
 format_regex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
 format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
-def p_string(p: YaccProduction) -> None:
-    " constant : STRING "
-    value = p[1]
-    match_obj = format_regex_compiled.findall(str(value))
-
-    if len(match_obj) > 0:
-        p[0] = create_string_format(value, match_obj, Location(file, p.lineno(1)))
-    else:
-        p[0] = Literal(str(value))
-    attach_lnr(p)
+def get_string_ast_node(string: LocatableString, location: Location) -> Union[Literal, StringFormat]:
+    match_obj = format_regex_compiled.findall(str(string))
+    if len(match_obj) == 0:
+        return Literal(str(string))
+    return create_string_format(string, match_obj, location)
 
 
-def create_string_format(format_string: str, variables: List[str], location: Location) -> StringFormat:
+def create_string_format(format_string: LocatableString, variables: List[List[str]], location: Location) -> StringFormat:
     """
         Create a string interpolation statement
     """
@@ -799,20 +775,83 @@ def p_constants_collect(p: YaccProduction) -> None:
     p[0] = p[3]
 
 
-def p_param_list_collect(p: YaccProduction) -> None:
-    """param_list : ID '=' operand ',' param_list"""
-    p[5].insert(0, (p[1], p[3]))
-    p[0] = p[5]
+def p_wrapped_kwargs(p: YaccProduction) -> None:
+    "wrapped_kwargs : '*' '*' operand"
+    p[0] = WrappedKwargs(p[3])
 
 
-def p_param_list_term(p: YaccProduction) -> None:
-    "param_list : ID '=' operand"
-    p[0] = [(p[1], p[3])]
+def p_param_list_element_explicit(p: YaccProduction) -> None:
+    # param_list_element: Tuple[Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
+    "param_list_element : ID '=' operand"
+    p[0] = ((p[1], p[3]), None)
 
 
-def p_param_list_term_2(p: YaccProduction) -> None:
-    "param_list : "
-    p[0] = []
+def p_param_list_element_kwargs(p: YaccProduction) -> None:
+    "param_list_element : wrapped_kwargs"
+    # param_list_element: Tuple[Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
+    p[0] = (None, p[1])
+
+
+def p_param_list_empty(p: YaccProduction) -> None:
+    """param_list : param_list_empty
+        param_list_empty : empty"""
+    # param_list: Tuple[List[Tuple[ID, operand]], List[wrapped_kwargs]]
+    p[0] = ([], [])
+
+
+def p_param_list_nonempty(p: YaccProduction) -> None:
+    """param_list : param_list_element empty param_list_empty
+            | param_list_element ',' param_list"""
+    # param_list parses a sequence of named arguments.
+    # The arguments are separated by commas and take one of two forms:
+    #   "key = value" -> p_param_list_element_explicit
+    #   "**dict_of_name_value_pairs" -> p_param_list_element_kwargs
+    # param_list: Tuple[List[Tuple[ID, operand]], List[wrapped_kwargs]]
+    (pair, kwargs) = p[1]
+    if pair is not None:
+        p[3][0].insert(0, pair)
+    if kwargs is not None:
+        p[3][1].insert(0, kwargs)
+    p[0] = p[3]
+
+
+def p_function_param_list_element(p: YaccProduction) -> None:
+    # function_param_list_element: Tuple[Optional[argument], Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
+    """function_param_list_element : param_list_element"""
+    (kwargs, wrapped_kwargs) = p[1]
+    p[0] = (None, kwargs, wrapped_kwargs)
+
+
+def p_function_param_list_element_arg(p: YaccProduction) -> None:
+    # function_param_list_element: Tuple[Optional[argument], Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
+    """function_param_list_element : operand"""
+    p[0] = (p[1], None, None)
+
+
+def p_function_param_list_empty(p: YaccProduction) -> None:
+    """function_param_list : function_param_list_empty
+        function_param_list_empty : empty"""
+    # param_list: Tuple[List[Tuple[ID, operand]], List[wrapped_kwargs]]
+    p[0] = ([], [], [])
+
+
+def p_function_param_list_nonempty(p: YaccProduction) -> None:
+    """function_param_list : function_param_list_element empty function_param_list_empty
+            | function_param_list_element ',' function_param_list"""
+    # function_param_list parses a sequence of named arguments.
+    # The arguments are separated by commas and take one of three forms:
+    #   "value" -> p_function_param_list_element_arg
+    #   "key = value" -> p_function_param_list_element
+    #   "**dict_of_name_value_pairs" -> p_function_param_list_element
+    # function_param_list: Tuple[List[argument], List[Tuple[ID, operand]], List[wrapped_kwargs]]
+    (args, kwargs, wrapped_kwargs) = p[1]
+    if args is not None:
+        p[3][0].insert(0, args)
+    if kwargs is not None:
+        p[3][1].insert(0, kwargs)
+    if wrapped_kwargs is not None:
+        p[3][2].insert(0, wrapped_kwargs)
+    p[0] = p[3]
 
 
 def p_operand_list_collect(p: YaccProduction) -> None:
@@ -950,7 +989,7 @@ def p_error(p: YaccProduction) -> None:
 
     if p is None:
         # at end of file
-        raise ParserException(r, "Unexpected end of file")
+        raise ParserException(r, None, "Unexpected end of file")
 
     # keyword instead of ID
     if p.type in reserved.values():
@@ -983,7 +1022,7 @@ def myparse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statement
     lexer.begin("INITIAL")
 
     if content is None:
-        with open(tfile, "r") as myfile:
+        with open(tfile, "r", encoding="utf-8") as myfile:
             data = myfile.read()
             if len(data) == 0:
                 return []

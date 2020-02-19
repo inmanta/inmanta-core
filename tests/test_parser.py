@@ -42,6 +42,7 @@ from inmanta.ast.statements.define import (
     DefineIndex,
     DefineTypeConstraint,
     DefineTypeDefault,
+    TypeDeclaration,
 )
 from inmanta.ast.statements.generator import Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
@@ -85,9 +86,10 @@ end
     stmt = statements[0]
     assert isinstance(stmt, define.DefineEntity)
     assert stmt.name == "Test"
-    assert stmt.parents == ["std::Entity"]
+    assert [str(p) for p in stmt.parents] == ["std::Entity"]
     assert len(stmt.attributes) == 0
     assert stmt.comment is None
+    assert stmt.type.comment is None
 
 
 def test_undefine_default():
@@ -103,12 +105,14 @@ end"""
     stmt = statements[0]
     assert isinstance(stmt, define.DefineEntity)
     assert stmt.name == "Test"
-    assert stmt.parents == ["Foo"]
+    assert [str(p) for p in stmt.parents] == ["Foo"]
     assert len(stmt.attributes) == 2
     assert stmt.comment is None
+    assert stmt.type.comment is None
 
     for ad in stmt.attributes:
-        assert isinstance(ad.type, LocatableString)
+        assert isinstance(ad.type, TypeDeclaration)
+        assert isinstance(ad.type.basetype, LocatableString)
         assert isinstance(ad.name, LocatableString)
         assert ad.default is None
         assert ad.remove_default
@@ -130,7 +134,7 @@ end
     assert len(statements) == 1
 
     stmt = statements[0]
-    assert stmt.parents == ["Foo"]
+    assert [str(p) for p in stmt.parents] == ["Foo"]
 
 
 def test_complex_entity():
@@ -154,12 +158,14 @@ end
 
     stmt = statements[0]
     assert len(stmt.parents) == 2
-    assert stmt.parents == ["Foo", "foo::sub::Bar"]
+    assert [str(p) for p in stmt.parents] == ["Foo", "foo::sub::Bar"]
     assert str(stmt.comment).strip() == documentation
+    assert str(stmt.type.comment).strip() == documentation
     assert len(stmt.attributes) == 3
 
     for ad in stmt.attributes:
-        assert isinstance(ad.type, LocatableString)
+        assert isinstance(ad.type, TypeDeclaration)
+        assert isinstance(ad.type.basetype, LocatableString)
         assert isinstance(ad.name, LocatableString)
 
     assert str(stmt.attributes[0].name) == "hello"
@@ -340,7 +346,7 @@ end
     assert len(statements) == 1
     assert len(statements[0].block.get_stmts()) == 0
     assert statements[0].name == "test"
-    assert isinstance(statements[0].entity, str)
+    assert isinstance(statements[0].entity, LocatableString)
 
     statements = parse_code(
         """
@@ -386,7 +392,7 @@ implement Test using test
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
     assert str(stmt.entity) == "Test"
-    assert stmt.implementations == ["test"]
+    assert [str(i) for i in stmt.implementations] == ["test"]
     assert str(stmt.select) == "true"
 
 
@@ -403,7 +409,7 @@ implement Test using test, blah when (self > 5)
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
     assert str(stmt.entity) == "Test"
-    assert stmt.implementations == ["test", "blah"]
+    assert [str(p) for p in stmt.implementations] == ["test", "blah"]
     assert isinstance(stmt.select, GreaterThan)
     assert stmt.select.children[0].name == "self"
     assert stmt.select.children[1].value == 5
@@ -419,7 +425,7 @@ implement Test using parents  \""" testc \"""
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, DefineImplementInherits)
-    assert stmt.entity == "Test"
+    assert str(stmt.entity) == "Test"
 
 
 def test_implements_selector():
@@ -434,8 +440,8 @@ implement Test using test when not (fg(self) and false)
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
-    assert stmt.entity == "Test"
-    assert stmt.implementations == ["test"]
+    assert str(stmt.entity) == "Test"
+    assert [str(i) for i in stmt.implementations] == ["test"]
     assert isinstance(stmt.select, Not)
     assert isinstance(stmt.select.children[0], And)
     assert isinstance(stmt.select.children[0].children[0], FunctionCall)
@@ -496,6 +502,24 @@ c = /\/1/
     assert stmt.children[1].value == re.compile(r"\/1")
 
 
+def test_1584_regex_error():
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+a = /)/
+            """
+        )
+
+    exception: ParserException = pytest_e.value
+    assert exception.location.file == "test"
+    assert exception.location.lnr == 2
+    assert exception.location.start_char == 5
+    assert exception.location.end_lnr == 2
+    assert exception.location.end_char == 8
+    assert exception.value == "/)/"
+    assert exception.msg == "Syntax error: Regex error in /)/: 'unbalanced parenthesis at position 0'"
+
+
 def test_typedef():
     statements = parse_code(
         """
@@ -507,7 +531,7 @@ typedef uuid as string matching /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a
     stmt = statements[0]
     assert isinstance(stmt, DefineTypeConstraint)
     assert str(stmt.name) == "uuid"
-    assert stmt.basetype == "string"
+    assert str(stmt.basetype) == "string"
     assert isinstance(stmt.get_expression(), Regex)
     assert stmt.get_expression().children[1].value == re.compile(
         r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
@@ -525,7 +549,7 @@ typedef abc as string matching self in ["a","b","c"]
     stmt = statements[0]
     assert isinstance(stmt, DefineTypeConstraint)
     assert str(stmt.name) == "abc"
-    assert stmt.basetype == "string"
+    assert str(stmt.basetype) == "string"
     assert isinstance(stmt.get_expression(), In)
     assert [x.value for x in stmt.get_expression().children[1].items] == ["a", "b", "c"]
 
@@ -545,7 +569,7 @@ typedef abc as string matching std::is_base64_encoded(self)
     stmt = statements[0]
     assert isinstance(stmt, DefineTypeConstraint)
     assert str(stmt.name) == "abc"
-    assert stmt.basetype == "string"
+    assert str(stmt.basetype) == "string"
     assert isinstance(stmt.get_expression(), Equals)
     left_side_equals = stmt.get_expression()._arguments[0]
     right_side_equals = stmt.get_expression()._arguments[1]
@@ -578,7 +602,7 @@ index File(host, path)
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, DefineIndex)
-    assert stmt.type == "File"
+    assert str(stmt.type) == "File"
     assert stmt.attributes == ["host", "path"]
 
 
@@ -596,6 +620,54 @@ File(host = 5, path = "Jos")
     assert {k: v.value for k, v in stmt.attributes.items()} == {"host": 5, "path": "Jos"}
 
 
+def test_ctr_dict():
+    statements = parse_code(
+        """
+dct = { "host": "myhost", "path": "/dir/file" }
+File(**dct)
+"""
+    )
+
+    assert len(statements) == 2
+    stmt = statements[1]
+    assert isinstance(stmt, Constructor)
+    assert str(stmt.class_type) == "File"
+    assert stmt.attributes == {}
+    assert len(stmt.wrapped_kwargs) == 1
+
+
+def test_ctr_dict_multi_param():
+    statements = parse_code(
+        """
+dct = { "host": "myhost" }
+File(**dct, path = "/dir/file")
+"""
+    )
+
+    assert len(statements) == 2
+    stmt = statements[1]
+    assert isinstance(stmt, Constructor)
+    assert str(stmt.class_type) == "File"
+    assert {k: v.value for k, v in stmt.attributes.items()} == {"path": "/dir/file"}
+    assert len(stmt.wrapped_kwargs) == 1
+
+
+def test_ctr_dict_multi_param3():
+    statements = parse_code(
+        """
+dct = { "host": "myhost" }
+File(path = "/dir/file", **dct)
+"""
+    )
+
+    assert len(statements) == 2
+    stmt = statements[1]
+    assert isinstance(stmt, Constructor)
+    assert str(stmt.class_type) == "File"
+    assert {k: v.value for k, v in stmt.attributes.items()} == {"path": "/dir/file"}
+    assert len(stmt.wrapped_kwargs) == 1
+
+
 def test_indexlookup():
     statements = parse_code(
         """
@@ -606,8 +678,24 @@ a=File[host = 5, path = "Jos"]
     assert len(statements) == 1
     stmt = statements[0].value
     assert isinstance(stmt, IndexLookup)
-    assert stmt.index_type == "File"
+    assert str(stmt.index_type) == "File"
     assert {k: v.value for k, v in stmt.query} == {"host": 5, "path": "Jos"}
+
+
+def test_indexlookup_kwargs():
+    statements = parse_code(
+        """
+dct = {"path": "/dir/file"}
+a=File[host = "myhost", **dct]
+"""
+    )
+
+    assert len(statements) == 2
+    stmt = statements[1].value
+    assert isinstance(stmt, IndexLookup)
+    assert str(stmt.index_type) == "File"
+    assert {k: v.value for k, v in stmt.query} == {"host": "myhost"}
+    assert len(stmt.wrapped_query) == 1
 
 
 def test_short_index_lookup():
@@ -624,6 +712,24 @@ a = vm.files[path="/etc/motd"]
     assert stmt.rootobject.name == "vm"
     assert stmt.relation == "files"
     assert {k: v.value for k, v in stmt.querypart} == {"path": "/etc/motd"}
+
+
+def test_short_index_lookup_kwargs():
+    statements = parse_code(
+        """
+dct = {"path": "/etc/motd"}
+a = vm.files[**dct]
+"""
+    )
+
+    assert len(statements) == 2
+    stmt = statements[1].value
+    assert isinstance(stmt, ShortIndexLookup)
+    assert isinstance(stmt.rootobject, Reference)
+    assert stmt.rootobject.name == "vm"
+    assert stmt.relation == "files"
+    assert stmt.querypart == []
+    assert len(stmt.wrapped_querypart) == 1
 
 
 def test_ctr_2():
@@ -650,7 +756,7 @@ file( )
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, FunctionCall)
-    assert stmt.name == "file"
+    assert str(stmt.name) == "file"
 
 
 def test_function_2():
@@ -663,7 +769,7 @@ file(b)
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, FunctionCall)
-    assert stmt.name == "file"
+    assert str(stmt.name) == "file"
 
 
 def test_function_3():
@@ -676,7 +782,7 @@ file(b,)
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, FunctionCall)
-    assert stmt.name == "file"
+    assert str(stmt.name) == "file"
 
 
 def test_list_def():
@@ -974,9 +1080,9 @@ def assert_is_non_value(x):
 def compare_attr(attr, name, mytype, defs, multi=False, opt=False):
     assert str(attr.name) == name
     defs(attr.default)
-    assert attr.multi == multi
-    assert str(attr.type) == mytype
-    assert attr.nullable == opt
+    assert attr.type.multi == multi
+    assert str(attr.type.basetype) == mytype
+    assert attr.type.nullable == opt
 
 
 def assert_is_none(x):
@@ -1103,6 +1209,15 @@ end
     """
     )
 
+    assert (
+        str(stmt.type.comment)
+        == """
+        This entity provides management, orchestration and monitoring
+
+        More test
+    """
+    )
+
 
 def test_bad():
     with pytest.raises(ParserException):
@@ -1208,6 +1323,7 @@ end
 
     stmt = statements[0]
     assert str(stmt.comment).strip() == "Bla bla"
+    assert str(stmt.type.comment).strip() == "Bla bla"
 
 
 def test_doc_string_on_implements():
@@ -1385,3 +1501,203 @@ val2 = false
     assert isinstance(statements[1], Assign)
     assert str(statements[0].rhs) == "true"
     assert str(statements[1].rhs) == "false"
+
+
+def test_1341_syntax_error_output_1():
+    """
+    Test the readability of a syntax error message.
+    """
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+var=é,
+)
+            """
+        )
+    exc: ParserException = pytest_e.value
+    assert exc.location.file == "test"
+    assert exc.location.lnr == 2
+    assert exc.location.start_char == 5
+    assert exc.location.end_lnr == 2
+    assert exc.location.end_char == 6
+    assert exc.value == "é"
+    assert exc.msg == "Syntax error: Illegal character 'é'"
+
+
+def test_1341_syntax_error_output_2():
+    """
+    Test the readability of a syntax error message.
+    """
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+deployment2 = k8s::Deployment(
+    name="hello-nginx2",
+    var=🤔,
+    cluster=cluster
+)
+            """
+        )
+    exc: ParserException = pytest_e.value
+    assert exc.location.file == "test"
+    assert exc.location.lnr == 4
+    assert exc.location.start_char == 9
+    assert exc.location.end_lnr == 4
+    assert exc.location.end_char == 10
+    assert exc.value == "🤔"
+    assert exc.msg == "Syntax error: Illegal character '🤔'"
+
+
+def test_1341_syntax_error_output_3():
+    """
+    Test the readability of a syntax error message.
+    """
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+é
+            """
+        )
+    exc: ParserException = pytest_e.value
+    assert exc.location.file == "test"
+    assert exc.location.lnr == 2
+    assert exc.location.start_char == 1
+    assert exc.location.end_lnr == 2
+    assert exc.location.end_char == 2
+    assert exc.value == "é"
+    assert exc.msg == "Syntax error: Illegal character 'é'"
+
+
+def test_1341_syntax_error_output_4():
+    """
+    Test the readability of a syntax error message.
+    """
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+aé=66
+            """
+        )
+    exc: ParserException = pytest_e.value
+    assert exc.location.file == "test"
+    assert exc.location.lnr == 2
+    assert exc.location.start_char == 2
+    assert exc.location.end_lnr == 2
+    assert exc.location.end_char == 3
+    assert exc.value == "é"
+    assert exc.msg == "Syntax error: Illegal character 'é'"
+
+
+def test_1341_syntax_error_output_5():
+    """
+    Test the readability of a syntax error message.
+    """
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+K8éééYamlResource.cluster [1] -- Cluster
+            """
+        )
+    exc: ParserException = pytest_e.value
+    assert exc.location.file == "test"
+    assert exc.location.lnr == 2
+    assert exc.location.start_char == 3
+    assert exc.location.end_lnr == 2
+    assert exc.location.end_char == 4
+    assert exc.value == "é"
+    assert exc.msg == "Syntax error: Illegal character 'é'"
+
+
+def test_640_syntax_error_output_6():
+    """
+    Test the readability of a syntax error message.
+    """
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+typedef positive as number matching self >= 1-
+            """
+        )
+    exc: ParserException = pytest_e.value
+    assert exc.location.file == "test"
+    assert exc.location.lnr == 2
+    assert exc.location.start_char == 46
+    assert exc.location.end_lnr == 2
+    assert exc.location.end_char == 47
+    assert exc.value == "-"
+    assert exc.msg == "Syntax error: Illegal character '-'"
+
+
+def test_1766_empty_model_single_newline():
+    statements = parse_code(
+        """
+        """
+    )
+    assert len(statements) == 0
+
+
+def test_1766_empty_model_multiple_newline():
+    statements = parse_code(
+        """
+
+
+
+        """
+    )
+    assert len(statements) == 0
+
+
+def test_1707_out_of_place_regex():
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            """
+/some_out_of_place_regex/
+            """,
+        )
+    exc: ParserException = pytest_e.value
+    assert exc.msg == "Syntax error at token /some_out_of_place_regex/"
+
+
+def test_multiline_string_interpolation():
+    statements = parse_code(
+        """
+str = \"\"\"
+    var == {{var}}
+\"\"\"
+        """,
+    )
+    assert len(statements) == 1
+    assert isinstance(statements[0], Assign)
+    assert isinstance(statements[0].rhs, StringFormat)
+
+
+def test_1804_bool_condition_as_bool():
+    statements = parse_code(
+        """
+if false and true == true:
+end
+        """,
+    )
+    assert len(statements) == 1
+    if_stmt = statements[0]
+    assert isinstance(if_stmt, If)
+    and_stmt = if_stmt.condition
+    assert isinstance(and_stmt, And)
+    assert len(and_stmt.children) == 2
+    false_stmt = and_stmt.children[0]
+    assert isinstance(false_stmt, Literal)
+    assert isinstance(false_stmt.value, bool)
+    assert false_stmt.value is False
+
+
+def test_1573_condition_dict_lookup():
+    statements = parse_code(
+        """
+dct = {"b": true}
+
+if dct["b"]:
+end
+        """,
+    )
+    assert len(statements) == 2
+    assert isinstance(statements[1], If)

@@ -473,3 +473,60 @@ Site()
 caused by:
   Type found in index is not an exact match (original at ({dir}/main.cf:20)) (duplicate at ({dir}/main.cf:21))""",  # noqa: E501
     )
+
+
+def test_index_lookup(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    string a
+end
+
+index Test(a)
+
+implement Test using std::none
+
+b = Test(a="b")
+a = Test(a="a")
+
+ar = Test[a="a"]
+        """
+    )
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+    ar = root.lookup("ar").get_value()
+    assert a is ar
+
+
+def test_index_lookup_double_argument(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    string a
+end
+
+index Test(a)
+
+implement Test using std::none
+
+b = Test(a="b")
+a = Test(a="a")
+
+ar = Test[a="a", a="b"]
+        """,
+        "Attribute a provided twice in index lookup (reported in Test[[('a', 'a'), ('a', 'b')]] ({dir}/main.cf:13))",
+    )
+
+
+def test_1652_index_on_missing_type_location(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test_A:
+    string name
+end
+
+index TestA(name)
+        """,
+        "could not find type TestA in namespace __config__ ({dir}/main.cf:6:7)",
+    )

@@ -121,7 +121,7 @@ Literal values can be assigned to variables
 Primitive types
 ==============================
 
-The basic primitive types are ``string``, ``number`` or ``bool``.
+The basic primitive types are ``string``, ``number``, ``int`` or ``bool``.
 
 Constrained primitive types can be derived from the basic primitive type with a typedef statement.
 Constrained primitive types add additional constraints to the basic primitive type with either a Python regex or a logical
@@ -136,7 +136,7 @@ For example
 
 .. code-block:: inmanta
 
-    typedef tcp_port as number matching self > 0 and self < 65565
+    typedef tcp_port as int matching self > 0 and self < 65565
     typedef mac_addr as string matching /([0-9a-fA-F]{2})(:[0-9a-fA-F]{2}){5}$/
 
 
@@ -167,6 +167,7 @@ Conditions can be used in typedef, implements and if statements. Conditions can 
         | condition 'or' condition
         | condition 'and' condition
         | 'not' condition
+        | value
         | value ('>' | '>=' | '<' | '<=' | '==' | '!=') value
         | value 'in' value
         | 'true'
@@ -257,7 +258,7 @@ Defining entities in a configuration model
     entity File:
        string path
        string content
-       number mode = 640
+       int mode = 640
        string[] list = []
        dict things = {}
     end
@@ -351,6 +352,17 @@ Values can be assigned to the remaining properties as if they are variables. To 
     // adding a value twice does not affect the relation,
     // s1.files still equals [f1, f2, f3]
 
+In addition, attributes can be assigned in a constructor using keyword arguments by using `**dct` where `dct` is a dictionary that contains
+attribute names as keys and the desired values as values. For example:
+
+.. code-block:: inmanta
+
+    Host.files [0:] -- File.host [1]
+    h1 = Host("test")
+
+    file1_config = {"path": "/opt/1"}
+    f1 = File(host=h1, **file1_config)
+
 Refinements
 ===========
 
@@ -397,6 +409,8 @@ The syntax for implements and implementation is:
     implement: 'implement' class 'using' ID ('when' condition)?
     		 | 'implement' class 'using' 'parents';
 
+
+.. _language_reference_indexes_and_queries:
 
 Indexes and queries
 ===================

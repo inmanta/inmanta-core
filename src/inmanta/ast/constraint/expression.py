@@ -305,11 +305,14 @@ class Regex(BinaryOperator):
 
         return arg2.match(arg1) is not None
 
+    def pretty_print(self) -> str:
+        return "/%s/" % self._arguments[1].value.pattern
+
     def __repr__(self):
         """
             Return a representation of the op
         """
-        return "%s(%s, %s)" % (self.__class__.__name__, self._arguments[0], self._arguments[1].value)
+        return self.pretty_print()
 
 
 class Equals(BinaryOperator):

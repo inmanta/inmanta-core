@@ -35,6 +35,7 @@ from inmanta.agent import config as cfg
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import ResourceHandler
+from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ResourceState
 from inmanta.data.model import AttributeStateChange, Event, ResourceIdStr, ResourceVersionIdStr
@@ -146,10 +147,13 @@ class ResourceAction(object):
         provider: Optional[ResourceHandler] = None
         try:
             provider = await self.scheduler.agent.get_provider(self.resource)
-        except Exception:
-            if provider is not None:
-                provider.close()
+        except ChannelClosedException as e:
+            cache.close_version(self.resource.id.get_version())
+            ctx.set_status(const.ResourceState.unavailable)
+            ctx.exception(str(e))
+            return False, False
 
+        except Exception:
             cache.close_version(self.resource.id.get_version())
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=self.resource.id.resource_version_str())
@@ -170,6 +174,10 @@ class ResourceAction(object):
                 await asyncio.get_event_loop().run_in_executor(
                     self.scheduler.agent.thread_pool, provider.execute, ctx, self.resource
                 )
+
+            except ChannelClosedException as e:
+                ctx.set_status(const.ResourceState.failed)
+                ctx.exception(str(e))
 
             except Exception as e:
                 ctx.set_status(const.ResourceState.failed)
@@ -396,7 +404,7 @@ class RemoteResourceAction(ResourceAction):
             self.status = status
             self.change = change
             self.changes = changes
-            self.future.set_result(ResourceActionResult(True, send_events, False))
+            self.future.set_result(ResourceActionResult(status == const.ResourceState.deployed, send_events, False))
 
 
 class ResourceScheduler(object):

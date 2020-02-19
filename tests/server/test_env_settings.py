@@ -21,11 +21,11 @@ from inmanta import data
 
 
 @pytest.mark.asyncio
-async def test_environment_settings(client, server, environment):
+async def test_environment_settings(client, server, environment_default):
     """
         Test environment settings
     """
-    result = await client.list_settings(tid=environment)
+    result = await client.list_settings(tid=environment_default)
     assert result.code == 200
     assert "settings" in result.result
     assert "metadata" in result.result
@@ -33,90 +33,92 @@ async def test_environment_settings(client, server, environment):
     assert len(result.result["settings"]) == 0
 
     # set invalid value
-    result = await client.set_setting(tid=environment, id="auto_deploy", value="test")
+    result = await client.set_setting(tid=environment_default, id="auto_deploy", value="test")
     assert result.code == 500
 
     # set non existing setting
-    result = await client.set_setting(tid=environment, id="auto_deploy_non", value=False)
+    result = await client.set_setting(tid=environment_default, id="auto_deploy_non", value=False)
     assert result.code == 404
 
-    result = await client.set_setting(tid=environment, id="auto_deploy", value=False)
+    result = await client.set_setting(tid=environment_default, id="auto_deploy", value=False)
     assert result.code == 200
 
-    result = await client.list_settings(tid=environment)
+    result = await client.list_settings(tid=environment_default)
     assert result.code == 200
     assert len(result.result["settings"]) == 1
 
-    result = await client.get_setting(tid=environment, id="auto_deploy")
+    result = await client.get_setting(tid=environment_default, id="auto_deploy")
     assert result.code == 200
     assert not result.result["value"]
 
-    result = await client.get_setting(tid=environment, id="test2")
+    result = await client.get_setting(tid=environment_default, id="test2")
     assert result.code == 404
 
-    result = await client.set_setting(tid=environment, id="auto_deploy", value=True)
+    result = await client.set_setting(tid=environment_default, id="auto_deploy", value=True)
     assert result.code == 200
 
-    result = await client.get_setting(tid=environment, id="auto_deploy")
+    result = await client.get_setting(tid=environment_default, id="auto_deploy")
     assert result.code == 200
     assert result.result["value"]
 
-    result = await client.delete_setting(tid=environment, id="test2")
+    result = await client.delete_setting(tid=environment_default, id="test2")
     assert result.code == 404
 
-    result = await client.delete_setting(tid=environment, id="auto_deploy")
+    result = await client.delete_setting(tid=environment_default, id="auto_deploy")
     assert result.code == 200
 
-    result = await client.list_settings(tid=environment)
+    result = await client.list_settings(tid=environment_default)
     assert result.code == 200
     assert "settings" in result.result
     assert len(result.result["settings"]) == 1
 
-    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value=20)
+    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value=20)
     assert result.code == 200
 
-    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value="30")
+    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value="30")
     assert result.code == 200
 
-    result = await client.get_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
+    result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
     assert result.code == 200
     assert result.result["value"] == 30
 
-    result = await client.delete_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
+    result = await client.delete_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
     assert result.code == 200
 
     result = await client.set_setting(
-        tid=environment, id=data.AUTOSTART_AGENT_MAP, value={"agent1": "", "agent2": "localhost", "agent3": "user@agent3"}
+        tid=environment_default,
+        id=data.AUTOSTART_AGENT_MAP,
+        value={"agent1": "", "agent2": "localhost", "agent3": "user@agent3"},
     )
     assert result.code == 200
 
-    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP, value="")
+    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP, value="")
     assert result.code == 500
 
 
 @pytest.mark.asyncio
-async def test_environment_settings_v2(client_v2, server, environment):
+async def test_environment_settings_v2(client_v2, server, environment_default):
     """
         Test environment settings
     """
-    response = await client_v2.environment_settings_list(tid=environment)
+    response = await client_v2.environment_settings_list(tid=environment_default)
     assert response.code == 200
     assert "settings" in response.result["data"]
     assert "definition" in response.result["data"]
     assert "auto_deploy" in response.result["data"]["definition"]
     assert len(response.result["data"]["settings"]) == 0
 
-    response = await client_v2.environment_settings_set(tid=environment, id="auto_deploy", value=False)
+    response = await client_v2.environment_settings_set(tid=environment_default, id="auto_deploy", value=False)
     assert response.code == 200
 
-    response = await client_v2.environment_settings_set(tid=environment, id="auto_deploy2", value=False)
+    response = await client_v2.environment_settings_set(tid=environment_default, id="auto_deploy2", value=False)
     assert response.code == 404
 
-    response = await client_v2.environment_settings_set(tid=environment, id="auto_deploy", value="error")
+    response = await client_v2.environment_settings_set(tid=environment_default, id="auto_deploy", value="error")
     assert response.code == 500
 
-    response = await client_v2.environment_setting_delete(tid=environment, id="auto_deploy")
+    response = await client_v2.environment_setting_delete(tid=environment_default, id="auto_deploy")
     assert response.code == 200
 
-    response = await client_v2.environment_setting_delete(tid=environment, id="auto_deploy2")
+    response = await client_v2.environment_setting_delete(tid=environment_default, id="auto_deploy2")
     assert response.code == 404

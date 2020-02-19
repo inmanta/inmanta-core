@@ -255,7 +255,7 @@ async def test_compile_runner(server, tmpdir, client):
 
     def make_main(marker_print):
         # add main.cf
-        with open(os.path.join(project_source_dir, "main.cf"), "w") as fd:
+        with open(os.path.join(project_source_dir, "main.cf"), "w", encoding="utf-8") as fd:
             fd.write(
                 f"""
     marker = std::get_env("{testmarker_env}","{no_marker}")
@@ -462,7 +462,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     monkeypatch.setenv(key_env_var, value_env_var)
 
     # add main.cf
-    with open(os.path.join(project_dir, "main.cf"), "w") as fd:
+    with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
         fd.write(
             f"""
         host = std::Host(name="test", os=std::linux)

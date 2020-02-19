@@ -226,3 +226,98 @@ implement Option using std::none
 """
     )
     compiler.do_compile()
+
+
+def test_1292_default_type_check(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    number t = "str"
+end
+
+Test(t=5)
+        """,
+        "Invalid value 'str', expected Number (reported in number t = 'str' ({dir}/main.cf:3))",
+    )
+
+
+def test_1292_default_type_check2(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    string[]? t = [1, "str"]
+end
+
+implement Test using std::none
+
+Test(t = ["str"])
+        """,
+        "Invalid value '1', expected String (reported in string[]? t = List() ({dir}/main.cf:3))",
+    )
+
+
+def test_1292_default_type_check3(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    number? t = [1, 2]
+end
+
+implement Test using std::none
+
+Test(t = 12)
+        """,
+        "Invalid value '[1, 2]', expected Number (reported in number? t = List() ({dir}/main.cf:3))",
+    )
+
+
+def test_1292_default_type_check4(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+typedef digit as number matching self > 0 and self < 10
+
+entity Test:
+    digit t = 12
+end
+
+implement Test using std::none
+
+Test(t = 8)
+        """,
+        "Invalid value 12, does not match constraint `((self > 0) and (self < 10))`"
+        " (reported in digit t = 12 ({dir}/main.cf:5))",
+    )
+
+
+def test_1292_default_type_check5(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    number t = "str"
+end
+        """,
+        "Invalid value 'str', expected Number (reported in number t = 'str' ({dir}/main.cf:3))",
+    )
+
+
+def test_1725_default_type_check_with_plugin(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    std::date d = "2020-01-22"
+end
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_1725_default_type_check_with_plugin_incorrect(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    std::date d = "nodatevalue"
+end
+        """,
+        "Invalid value 'nodatevalue', does not match constraint `(std::validate_type('datetime.date',self) == true)`"
+        " (reported in std::date d = 'nodatevalue' ({dir}/main.cf:3))",
+    )

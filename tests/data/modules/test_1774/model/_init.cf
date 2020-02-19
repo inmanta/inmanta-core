@@ -1,0 +1,4 @@
+entity Test:
+end
+
+implement Test using std::none

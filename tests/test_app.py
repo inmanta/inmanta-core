@@ -54,7 +54,7 @@ def get_command(
     else:
         port = inmanta.util.get_free_tcp_port()
 
-    with open(config_file, "w+") as f:
+    with open(config_file, "w+", encoding="utf-8") as f:
         f.write("[config]\n")
         f.write("log-dir=" + log_dir + "\n")
         f.write("state-dir=" + state_dir + "\n")
@@ -316,7 +316,7 @@ def test_check_shutdown():
     except TimeoutExpired:
         pass
     process.send_signal(signal.SIGUSR1)
-    out, err, code = do_kill(process, killtime=6, termtime=3)
+    out, err, code = do_kill(process, killtime=3, termtime=1)
     print(out, err)
     assert code == 0
     assert "----- Thread Dump ----" in out
@@ -373,7 +373,7 @@ caused by:
 
     def exec(*cmd):
         process = do_run([sys.executable, "-m", "inmanta.app"] + list(cmd), cwd=snippetcompiler.project_dir)
-        out, err = process.communicate(timeout=5)
+        out, err = process.communicate(timeout=30)
         assert out.decode() == ""
         assert err.decode() == output
 
@@ -395,7 +395,7 @@ end
     )
 
     process = do_run([sys.executable, "-m", "inmanta.app"] + cmd, cwd=snippetcompiler.project_dir)
-    out, err = process.communicate(timeout=10)
+    out, err = process.communicate(timeout=30)
     assert out.decode() == ""
     if "-X" in cmd:
         assert "inmanta.ast.TypeNotFoundException: could not find type nuber in namespace" in str(err)
@@ -427,7 +427,7 @@ end
     config_options = ["-c", non_existing_config_file, "-vvv"]
     args = [sys.executable, "-m", "inmanta.app"] + config_options + ["compile"]
     process = do_run(args, cwd=snippetcompiler.project_dir)
-    out, err = process.communicate(timeout=5)
+    out, err = process.communicate(timeout=30)
     assert process.returncode == 0
 
     out = out.decode()

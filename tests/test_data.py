@@ -285,6 +285,17 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
         await res1.insert()
         resource_ids.append((res1.environment, res1.resource_version_id))
 
+    resource_version_ids = [f"std::File[agent1,path=/etc/file0],v={version}", f"std::File[agent1,path=/etc/file1],v={version}"]
+    resource_action = data.ResourceAction(
+        environment=env.id,
+        version=version,
+        resource_version_ids=resource_version_ids,
+        action_id=uuid.uuid4(),
+        action=const.ResourceAction.deploy,
+        started=datetime.datetime.now(),
+    )
+    await resource_action.insert()
+
     code = data.Code(version=version, resource="std::File", environment=env.id)
     await code.insert()
 
@@ -301,6 +312,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     assert (await data.Agent.get_one(environment=agent.environment, name=agent.name)) is not None
     for environment, resource_version_id in resource_ids:
         assert (await data.Resource.get_one(environment=environment, resource_version_id=resource_version_id)) is not None
+    assert await data.ResourceAction.get_by_id(resource_action.action_id) is not None
     assert (await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version)) is not None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is not None
     assert (await env.get(data.AUTO_DEPLOY)) is True
@@ -315,6 +327,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     assert (await data.Agent.get_one(environment=agent.environment, name=agent.name)) is None
     for environment, resource_version_id in resource_ids:
         assert (await data.Resource.get_one(environment=environment, resource_version_id=resource_version_id)) is None
+    assert await data.ResourceAction.get_by_id(resource_action.action_id) is None
     assert (await data.Code.get_one(environment=code.environment, version=code.version)) is None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
     assert (await env.get(data.AUTO_DEPLOY)) is True
@@ -328,11 +341,11 @@ async def test_environment_set_setting_parameter(init_dataclasses_and_load_schem
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    assert (await env.get(data.AUTO_DEPLOY)) is False
-    await env.set(data.AUTO_DEPLOY, True)
     assert (await env.get(data.AUTO_DEPLOY)) is True
-    await env.unset(data.AUTO_DEPLOY)
+    await env.set(data.AUTO_DEPLOY, False)
     assert (await env.get(data.AUTO_DEPLOY)) is False
+    await env.unset(data.AUTO_DEPLOY)
+    assert (await env.get(data.AUTO_DEPLOY)) is True
 
     with pytest.raises(KeyError):
         await env.set("set_non_existing_parameter", 1)
@@ -1570,9 +1583,14 @@ async def test_resources_report(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
-async def test_resources_delete_cascade(init_dataclasses_and_load_schema):
+async def test_resource_action(init_dataclasses_and_load_schema):
+    """
+        Test whether the save() method of a ResourceAction writes its changes, logs and fields
+        correctly to the database.
+    """
     project = data.Project(name="test")
     await project.insert()
+
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
@@ -1588,70 +1606,12 @@ async def test_resources_delete_cascade(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
-    res1 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
-        status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime.now(),
-        attributes={"path": "/etc/file1"},
-    )
-    await res1.insert()
-    res2 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
-        status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime.now(),
-        attributes={"path": "/etc/file1"},
-    )
-    await res2.insert()
-    action_id_resource_action_1 = uuid.uuid4()
-    resource_action1 = data.ResourceAction(
-        environment=env.id,
-        resource_version_ids=[res1.resource_version_id],
-        action_id=action_id_resource_action_1,
-        action=const.ResourceAction.deploy,
-        started=datetime.datetime.now(),
-    )
-    await resource_action1.insert()
-
-    action_id_resource_action_2 = uuid.uuid4()
-    resource_action2 = data.ResourceAction(
-        environment=env.id,
-        resource_version_ids=[res2.resource_version_id],
-        action_id=action_id_resource_action_2,
-        action=const.ResourceAction.deploy,
-        started=datetime.datetime.now(),
-    )
-    await resource_action2.insert()
-
-    await res1.delete_cascade()
-
-    assert (await data.Resource.get_one(environment=res1.environment, resource_version_id=res1.resource_version_id)) is None
-    assert (await data.ResourceAction.get_one(action_id=resource_action1.action_id)) is None
-    resource = await data.Resource.get_one(environment=res2.environment, resource_version_id=res2.resource_version_id)
-    assert resource is not None
-    assert (resource.environment, resource.resource_version_id) == (res2.environment, res2.resource_version_id)
-    resource_action = await data.ResourceAction.get_one(action_id=resource_action2.action_id)
-    assert resource_action is not None
-    assert resource_action.action_id == resource_action2.action_id
-    resource_version_ids = await data.ResourceVersionId.get_list(environment=env.id)
-    assert len(resource_version_ids) == 1
-    assert resource_version_ids[0].action_id == action_id_resource_action_2
-
-
-@pytest.mark.asyncio
-async def test_resource_action(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
     now = datetime.datetime.now()
     action_id = uuid.uuid4()
     resource_version_ids = ["std::File[agent1,path=/etc/file1],v=1", "std::File[agent1,path=/etc/file2],v=1"]
     resource_action = data.ResourceAction(
         environment=env.id,
+        version=version,
         resource_version_ids=resource_version_ids,
         action_id=action_id,
         action=const.ResourceAction.deploy,
@@ -1664,12 +1624,15 @@ async def test_resource_action(init_dataclasses_and_load_schema):
     resource_action.set_field("status", const.ResourceState.failed)
     await resource_action.save()
 
-    ra_via_get_by_id = await data.ResourceAction.get_one(action_id=resource_action.action_id)
+    ra_via_get_one = await data.ResourceAction.get_one(action_id=resource_action.action_id)
+    ra_via_get_by_id = await data.ResourceAction.get_by_id(resource_action.action_id)
     ra_list = await data.ResourceAction.get_list(action_id=resource_action.action_id)
     assert len(ra_list) == 1
     ra_via_get_list = ra_list[0]
     ra_via_get = await data.ResourceAction.get(action_id=resource_action.action_id)
-    for ra in [ra_via_get_by_id, ra_via_get_list, ra_via_get]:
+    for ra in [ra_via_get_one, ra_via_get_by_id, ra_via_get_list, ra_via_get]:
+        assert ra.environment == env.id
+        assert ra.version == version
         assert ra.action_id == action_id
         assert ra.action == const.ResourceAction.deploy
         assert ra.started == now
@@ -1698,10 +1661,15 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
+    version = int(time.time())
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    await cm.insert()
+
     for i in range(1, 11):
         action_id = uuid.uuid4()
         resource_action = data.ResourceAction(
             environment=env.id,
+            version=version,
             resource_version_ids=["std::File[agent1,path=/etc/motd],v=%1"],
             action_id=action_id,
             action=const.ResourceAction.deploy,
@@ -1715,6 +1683,7 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
 
     resource_action = data.ResourceAction(
         environment=env.id,
+        version=version,
         resource_version_ids=["std::File[agent1,path=/etc/motd],v=%1"],
         action_id=action_id,
         action=const.ResourceAction.dryrun,
@@ -1749,6 +1718,10 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
         assert len(action.messages) == 1
         assert action.messages[0]["level"] == LogLevel.INFO.name
 
+    # Get logs for non-existing resource_version_id
+    resource_actions = await data.ResourceAction.get_log(env.id, "std::File[agent11,path=/etc/motd],v=%1")
+    assert len(resource_actions) == 0
+
 
 @pytest.mark.asyncio
 async def test_data_document_recursion(init_dataclasses_and_load_schema):
@@ -1758,9 +1731,14 @@ async def test_data_document_recursion(init_dataclasses_and_load_schema):
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
+    version = 1
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    await cm.insert()
+
     now = datetime.datetime.now()
     ra = data.ResourceAction(
         environment=env.id,
+        version=version,
         resource_version_ids=["test"],
         action_id=uuid.uuid4(),
         action=const.ResourceAction.store,
@@ -1913,53 +1891,6 @@ async def test_dryrun(init_dataclasses_and_load_schema):
     key = str(uuid.uuid5(dryrun.id, resource_version_id))
     assert dryrun_retrieved.resources[key]["changes"] == {}
     assert dryrun_retrieved.resources[key]["id"] == resource_version_id
-
-
-@pytest.mark.asyncio
-async def test_form(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    form = data.Form(environment=env.id, form_type="a type")
-    await form.insert()
-    other_form = data.Form(environment=env.id, form_type="other type")
-    await other_form.insert()
-
-    retrieved_form = await data.Form.get_form(env.id, "a type")
-    assert retrieved_form is not None
-    assert (retrieved_form.environment, retrieved_form.form_type) == (form.environment, form.form_type)
-
-    non_existing_form = await data.Form.get_form(env.id, "non-existing-form")
-    assert non_existing_form is None
-
-
-@pytest.mark.asyncio
-async def test_formrecord(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    form = data.Form(environment=env.id, form_type="a type")
-    await form.insert()
-
-    fields_for_record = {"field1": "val1", "field2": "val2"}
-    changed = datetime.datetime.now()
-    formrecord = data.FormRecord(environment=env.id, form=form.form_type, fields=fields_for_record, changed=changed)
-    await formrecord.insert()
-
-    results = await data.FormRecord.get_list()
-    assert len(results) == 1
-    result = results[0]
-    assert result.id == formrecord.id
-    assert len(result.fields) == 2
-    for key, value in fields_for_record.items():
-        assert result.fields[key] == value
-    assert result.changed == formrecord.changed
 
 
 @pytest.mark.asyncio
@@ -2165,12 +2096,25 @@ async def test_purgelog_test(init_dataclasses_and_load_schema):
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
+    version = 1
+    cm = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        released=True,
+        deployed=True,
+    )
+    await cm.insert()
+
     # ResourceAction 1
     timestamp_ra1 = datetime.datetime.now() - datetime.timedelta(days=8)
     log_line_ra1 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=1)
     action_id = uuid.uuid4()
     ra1 = data.ResourceAction(
         environment=env.id,
+        version=version,
         resource_version_ids=["id1"],
         action_id=action_id,
         action=const.ResourceAction.store,
@@ -2186,6 +2130,7 @@ async def test_purgelog_test(init_dataclasses_and_load_schema):
     action_id = uuid.uuid4()
     ra2 = data.ResourceAction(
         environment=env.id,
+        version=version,
         resource_version_ids=["id2"],
         action_id=action_id,
         action=const.ResourceAction.store,

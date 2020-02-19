@@ -15,17 +15,20 @@
 
     Contact: code@inmanta.com
 """
+import json
 import logging
 import os
 import uuid
-from typing import TYPE_CHECKING, Dict, List, cast
+from typing import TYPE_CHECKING, Dict, List, Optional, Union, cast
 
 import importlib_metadata
 
 from inmanta import data
 from inmanta.data.model import ExtensionStatus, FeatureStatus, SliceStatus, StatusResponse
-from inmanta.protocol import exceptions, methods
-from inmanta.protocol.common import attach_warnings
+from inmanta.protocol import exceptions, methods, methods_v2
+from inmanta.protocol.common import HTML_CONTENT_WITH_UTF8_CHARSET, ReturnValue, attach_warnings
+from inmanta.protocol.openapi.converter import OpenApiConverter
+from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
@@ -164,7 +167,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if product_metadata["version"] is None:
             raise exceptions.ServerError(
                 "Could not find version number for the inmanta compiler."
-                "Is inmanta installed? Use stuptools install or setuptools dev to install."
+                "Is inmanta installed? Use setuptools install or setuptools dev to install."
             )
 
         slices = []
@@ -200,3 +203,16 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         )
 
         return response
+
+    @protocol.handle(methods_v2.get_api_docs)
+    async def get_api_docs(self, format: Optional[str]) -> ReturnValue[Union[OpenAPI, str]]:
+        url_map = self._server._transport.get_global_url_map(self._server.get_slices().values())
+        openapi = OpenApiConverter(url_map)
+        # Get rid of none values with custom json encoder
+        openapi_json_str = openapi.generate_openapi_json()
+        if format == "openapi":
+            openapi_dict = json.loads(openapi_json_str)
+            return ReturnValue(response=openapi_dict)
+
+        swagger_html = openapi.get_swagger_html(openapi_json_str)
+        return ReturnValue(content_type=HTML_CONTENT_WITH_UTF8_CHARSET, response=swagger_html)

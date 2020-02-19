@@ -16,11 +16,12 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import logging
 import ssl
 import uuid
 from asyncio import CancelledError
 from collections import defaultdict
-from typing import Dict, List, MutableMapping, Optional
+from typing import Dict, List, MutableMapping, Optional, Union
 
 import tornado
 from pyformance import timer
@@ -30,11 +31,12 @@ import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta import const
 from inmanta.protocol import common, exceptions
-from inmanta.protocol.common import UrlMethod
-from inmanta.protocol.rest import CONTENT_TYPE, JSON_CONTENT, LOGGER, RESTBase
+from inmanta.protocol.rest import RESTBase
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth
 from inmanta.types import ReturnTypes
+
+LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 class RESTHandler(tornado.web.RequestHandler):
@@ -81,18 +83,24 @@ class RESTHandler(tornado.web.RequestHandler):
             self.set_header("Access-Control-Allow-Origin", server_origin)
 
     def respond(self, body: ReturnTypes, headers: MutableMapping[str, str], status: int) -> None:
-        if CONTENT_TYPE not in headers:
-            headers[CONTENT_TYPE] = JSON_CONTENT
-        elif headers[CONTENT_TYPE] != JSON_CONTENT:
-            raise Exception("Invalid content type header provided. Only %s is supported" % JSON_CONTENT)
+        if common.CONTENT_TYPE not in headers:
+            headers[common.CONTENT_TYPE] = common.JSON_CONTENT
 
         if body is not None:
-            self.write(common.json_encode(body))
+            encoded_body = self._encode_body(body, headers[common.CONTENT_TYPE])
+            self.write(encoded_body)
 
         for header, value in headers.items():
             self.set_header(header, value)
 
         self.set_status(status)
+
+    def _encode_body(self, body: ReturnTypes, content_type: str) -> Union[ReturnTypes, bytes]:
+        if content_type == common.JSON_CONTENT:
+            return common.json_encode(body)
+        if content_type == common.HTML_CONTENT:
+            return body.encode(common.HTML_ENCODING)
+        return body
 
     async def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> None:
         """
@@ -198,6 +206,8 @@ class RESTHandler(tornado.web.RequestHandler):
         allow_headers = "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s" % const.INMANTA_MT_HEADER
         if len(self._transport.headers):
             allow_headers += ", " + ", ".join(self._transport.headers)
+        if server_enable_auth.get():
+            allow_headers += ", Authorization"
 
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
         self.set_header("Access-Control-Allow-Headers", allow_headers)
@@ -250,19 +260,25 @@ class RESTServer(RESTBase):
     def validate_sid(self, sid: uuid.UUID) -> bool:
         return self.session_manager.validate_sid(sid)
 
-    async def start(
-        self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
-    ) -> None:
-        """
-            Start the server on the current ioloop
-        """
-        global_url_map: Dict[str, Dict[str, UrlMethod]] = defaultdict(dict)
+    def get_global_url_map(
+        self, targets: List[inmanta.protocol.endpoints.CallTarget]
+    ) -> Dict[str, Dict[str, common.UrlMethod]]:
+        global_url_map: Dict[str, Dict[str, common.UrlMethod]] = defaultdict(dict)
         for slice in targets:
             url_map = slice.get_op_mapping()
             for url, configs in url_map.items():
                 handler_config = global_url_map[url]
                 for op, cfg in configs.items():
                     handler_config[op] = cfg
+        return global_url_map
+
+    async def start(
+        self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
+    ) -> None:
+        """
+            Start the server on the current ioloop
+        """
+        global_url_map: Dict[str, Dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
 
         rules: List[routing.Rule] = []
         rules.extend(additional_rules)

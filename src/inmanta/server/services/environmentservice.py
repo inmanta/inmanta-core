@@ -91,7 +91,7 @@ class EnvironmentService(protocol.ServerSlice):
 
         if setting.agent_restart:
             LOGGER.info("Environment setting %s changed. Restarting agents.", key)
-            await self.agentmanager.restart_agents(env)
+            self.add_background_task(self.agentmanager.restart_agents(env))
 
         return warnings
 

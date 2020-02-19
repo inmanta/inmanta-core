@@ -92,7 +92,7 @@ def test_configfile_hierarchy(monkeypatch, tmpdir):
     monkeypatch.setenv("INMANTA_SERVER_AUTH", "true")
     monkeypatch.setenv("INMANTA_SERVER_AGENT_TIMEOUT", "60")
 
-    with open(main_inmanta_cfg_file, "w") as f:
+    with open(main_inmanta_cfg_file, "w", encoding="utf-8") as f:
         f.write(
             """
 [server]
@@ -113,7 +113,7 @@ client-id=test
         """
         )
 
-    with open(inmanta_d_cfg_file01, "w") as f:
+    with open(inmanta_d_cfg_file01, "w", encoding="utf-8") as f:
         f.write(
             """
 [database]
@@ -124,7 +124,7 @@ host=host2
         """
         )
 
-    with open(inmanta_d_cfg_file02, "w") as f:
+    with open(inmanta_d_cfg_file02, "w", encoding="utf-8") as f:
         f.write(
             """
 [database]
@@ -135,7 +135,7 @@ interval=20
         """
         )
 
-    with open(inmanta_d_cfg_file_no_cfg_extension, "w") as f:
+    with open(inmanta_d_cfg_file_no_cfg_extension, "w", encoding="utf-8") as f:
         f.write(
             """
 [database]
@@ -143,7 +143,7 @@ port=9999
         """
         )
 
-    with open(dot_inmanta_file, "w") as f:
+    with open(dot_inmanta_file, "w", encoding="utf-8") as f:
         f.write(
             """
 [database]
@@ -155,7 +155,7 @@ path=/some/other/directory
         """
         )
 
-    with open(dot_inmanta_cfg_file, "w") as f:
+    with open(dot_inmanta_cfg_file, "w", encoding="utf-8") as f:
         f.write(
             """
 [dashboard]
@@ -164,7 +164,7 @@ client-id=test123
         """
         )
 
-    with open(min_c_file, "w") as f:
+    with open(min_c_file, "w", encoding="utf-8") as f:
         f.write(
             """
 [dashboard]

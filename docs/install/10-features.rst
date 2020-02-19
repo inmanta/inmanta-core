@@ -13,7 +13,6 @@ to a yaml file that enables or disables features. The format of this file is:
 Currently the following features are available:
 
  - core.server::dashboard
- - core.forms::forms
 
 An example feature file is:
 

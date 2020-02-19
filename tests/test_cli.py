@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+import os
+
 import pytest
 
 from inmanta import data
@@ -64,7 +66,7 @@ async def test_project(server, client, cli):
 
 
 @pytest.mark.asyncio
-async def test_environment(server, client, cli):
+async def test_environment(server, client, cli, tmpdir):
     project_name = "test_project"
     result = await client.create_project(project_name)
     assert result.code == 200
@@ -101,6 +103,16 @@ async def test_environment(server, client, cli):
     assert result.exit_code == 0
     assert env_name in result.output
     assert env_id in result.output
+
+    os.chdir(tmpdir)
+    result = await cli.run("environment", "save", env_name)
+    assert result.exit_code == 0
+
+    path_dot_inmanta_file = os.path.join(tmpdir, ".inmanta")
+    assert os.path.isfile(path_dot_inmanta_file)
+    with open(path_dot_inmanta_file, "r", encoding="utf-8") as f:
+        file_content = f.read()
+        assert f"environment={env_id}" in file_content
 
 
 @pytest.mark.asyncio
@@ -208,107 +220,42 @@ async def test_param(server, client, environment, cli):
 
 
 @pytest.mark.asyncio
-async def test_form_and_records(server, client, environment, cli):
-    form_type = "FormType"
-    result = await client.put_form(
-        tid=environment,
-        id=form_type,
-        form={
-            "attributes": {
-                "field1": {"default": 1, "options": {"min": 1, "max": 100}, "type": "number"},
-                "field2": {"default": "", "options": {}, "type": "string"},
-            },
-            "options": {},
-            "type": form_type,
-        },
-    )
+async def test_create_environment(tmpdir, server, client, cli):
+    """
+        Tests the "inmanta-cli environment create" command
+        and overwrite prompt/overwriting of the .inmanta file
+    """
+    os.chdir(tmpdir)
+    file_path = os.path.join(os.getcwd(), ".inmanta")
+    result = await client.create_project("test")
     assert result.code == 200
-    form_id = result.result["form"]["id"]
 
-    result = await cli.run("form", "list", "-e", environment)
+    result = await cli.run("environment", "create", "-n", "test-env-0", "-p", "test", "--save")
     assert result.exit_code == 0
-    assert form_id in result.output
+    assert os.path.exists(file_path)
 
-    result = await cli.run("form", "show", "-e", environment, "-t", form_type)
-    assert result.exit_code == 0
-    assert "field1" in result.output
-    assert "field2" in result.output
+    with open(file_path, "r") as inmanta_file:
+        file_content_0 = inmanta_file.read()
+    ctime_0 = os.path.getctime(file_path)
 
-    result = await cli.run("record", "create", "-e", environment, "-t", form_type, "-p", "field1=1234", "-p", "field2=test456")
-    assert result.exit_code == 0
-    assert "1234" in result.output
-    assert "test456" in result.output
-
-    records = await client.list_records(tid=environment, form_type=form_type)
-    assert records.code == 200
-    record = records.result["records"][0]
-    record_id = record["id"]
-
-    result = await cli.run("record", "list", "-e", environment, "-t", form_type)
-    assert result.exit_code == 0
-    assert record_id in result.output
-
-    result = await cli.run("record", "list", "-e", environment, "-t", form_type, "--show-all")
+    result = await cli.run("environment", "create", "-n", "test-env-1", "-p", "test", "--save", input="n")
     assert result.exit_code == 0
 
-    result = await cli.run("record", "update", "-e", environment, "-r", record_id, "-p", "field1=98765")
-    assert result.exit_code == 0
-    assert "98765" in result.output
+    with open(file_path, "r") as inmanta_file:
+        file_content_1 = inmanta_file.read()
 
-    result = await cli.run("record", "delete", "-e", environment, record_id)
-    assert result.exit_code == 0
+    ctime_1 = os.path.getctime(file_path)
 
-    records = await client.list_records(tid=environment, form_type=form_type)
-    assert records.code == 200
-    assert len(records.result["records"]) == 0
+    assert file_content_0 == file_content_1
+    assert ctime_0 == ctime_1
 
-
-@pytest.mark.asyncio
-async def test_import_export(server, client, environment, cli, tmpdir):
-    env = await data.Environment.get_by_id(environment)
-    await env.set(data.SERVER_COMPILE, False)
-
-    form_type = "FormType"
-    result = await client.put_form(
-        tid=environment,
-        id=form_type,
-        form={
-            "attributes": {
-                "field1": {"default": 1, "options": {"min": 1, "max": 100}, "type": "number"},
-                "field2": {"default": "", "options": {}, "type": "string"},
-            },
-            "options": {},
-            "type": form_type,
-        },
-    )
-    assert result.code == 200
-    form_id = result.result["form"]["id"]
-
-    result = await cli.run("record", "create", "-e", environment, "-t", form_type, "-p", "field1=1234", "-p", "field2=test456")
+    result = await cli.run("environment", "create", "-n", "test-env-2", "-p", "test", "--save", input="y")
     assert result.exit_code == 0
 
-    result = await cli.run("form", "export", "-e", environment, "-t", form_type)
-    assert result.exit_code == 0, f"{result.output}"
-    assert form_id in result.output
+    with open(file_path, "r") as inmanta_file:
+        file_content_2 = inmanta_file.read()
 
-    f = tmpdir.join("export.json")
-    print(result.output)
-    print(str(f))
-    with open(str(f), "w") as fh:
-        fh.write(result.output)
+    ctime_2 = os.path.getctime(file_path)
 
-    records = await client.list_records(tid=environment, form_type=form_type)
-    assert records.code == 200
-    record = records.result["records"][0]
-
-    await client.delete_record(tid=environment, id=record["id"])
-    records = await client.list_records(tid=environment, form_type=form_type)
-    assert records.code == 200
-    assert len(records.result["records"]) == 0
-
-    result = await cli.run("form", "import", "-e", environment, "-t", form_type, "--file", str(f))
-    assert result.exit_code == 0
-
-    records = await client.list_records(tid=environment, form_type=form_type)
-    assert records.code == 200
-    assert len(records.result["records"]) == 1
+    assert file_content_0 != file_content_2
+    assert ctime_0 != ctime_2

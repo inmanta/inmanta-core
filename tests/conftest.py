@@ -51,7 +51,7 @@ import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.main
-from inmanta import config, data, protocol, resources
+from inmanta import config, const, data, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
@@ -74,10 +74,59 @@ else:
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 logger = logging.getLogger(__name__)
 
+TABLES_TO_KEEP = [x.table_name() for x in data._classes]
+
+# Database
+@pytest.fixture
+def postgres_proc(unused_tcp_port_factory):
+    proc = PostgresProc(unused_tcp_port_factory())
+    yield proc
+    proc.stop()
+
 
 @pytest.fixture(scope="session", autouse=True)
 def postgres_db(postgresql_proc):
     yield postgresql_proc
+
+
+@pytest.fixture(scope="function")
+async def create_db(postgres_db, database_name_internal):
+    """
+    see :py:database_name_internal:
+    """
+    connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
+    try:
+        await connection.execute(f"CREATE DATABASE {database_name_internal}")
+    except DuplicateDatabaseError:
+        # Because it is async, this fixture can not be made session scoped.
+        # Only the first time it is called, it will actually create a database
+        # All other times will drop through here
+        pass
+    finally:
+        await connection.close()
+    return database_name_internal
+
+
+@pytest.fixture(scope="session")
+def database_name_internal():
+    """
+    Internal use only, use database_name instead.
+
+    The database_name fixture is expected to yield the database name to an existing database, and should be session scoped.
+
+    To create the database we need asyncpg. However, async fixtures all depend on the event loop.
+    The event loop is function scoped.
+
+    To resolve this, there is a session scoped fixture called database_name_internal that provides a fixed name. create_db
+    ensures that the database has been created.
+    """
+    ten_random_digits = "".join(random.choice(string.digits) for _ in range(10))
+    return "inmanta" + ten_random_digits
+
+
+@pytest.fixture(scope="function")
+def database_name(create_db):
+    return create_db
 
 
 @pytest.fixture(scope="function")
@@ -101,58 +150,6 @@ async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_res
     await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None)
     yield
     await data.disconnect()
-
-
-@pytest.fixture(scope="function", autouse=True)
-def deactive_venv():
-    old_os_path = os.environ.get("PATH", "")
-    old_prefix = sys.prefix
-    old_path = sys.path
-
-    yield
-
-    os.environ["PATH"] = old_os_path
-    sys.prefix = old_prefix
-    sys.path = old_path
-    pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
-
-
-def reset_metrics():
-    pyformance.set_global_registry(MetricsRegistry())
-
-
-@pytest.fixture(scope="function", autouse=True)
-async def clean_reset(create_db, clean_db):
-    reset_all_objects()
-    config.Config._reset()
-    methods = inmanta.protocol.common.MethodProperties.methods.copy()
-    yield
-    inmanta.protocol.common.MethodProperties.methods = methods
-    config.Config._reset()
-    reset_all_objects()
-
-
-def reset_all_objects():
-    resources.resource.reset()
-    process.Subprocess.uninitialize()
-    asyncio.set_child_watcher(None)
-    reset_metrics()
-    # No dynamic loading of commands at the moment, so no need to reset/reload
-    # command.Commander.reset()
-    handler.Commander.reset()
-    Project._project = None
-    unknown_parameters.clear()
-
-
-@pytest.fixture(scope="function")
-async def create_db(postgres_db, database_name):
-    connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
-    try:
-        await connection.execute("CREATE DATABASE " + database_name)
-    except DuplicateDatabaseError:
-        pass
-    finally:
-        await connection.close()
 
 
 async def postgress_get_custom_types(postgresql_client):
@@ -208,9 +205,6 @@ async def hard_clean_db_post(postgresql_client):
     await do_clean_hard(postgresql_client)
 
 
-TABLES_TO_KEEP = [x.table_name() for x in data._classes]
-
-
 @pytest.fixture(scope="function")
 async def clean_db(postgresql_client, create_db):
     """
@@ -232,6 +226,60 @@ async def clean_db(postgresql_client, create_db):
     if tables_to_truncate:
         truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
         await postgresql_client.execute(truncate_query)
+
+
+@pytest.fixture(scope="function")
+def get_columns_in_db_table(postgresql_client):
+    async def _get_columns_in_db_table(table_name):
+        result = await postgresql_client.fetch(
+            "SELECT column_name "
+            "FROM information_schema.columns "
+            "WHERE table_schema='public' AND table_name='" + table_name + "'"
+        )
+        return [r["column_name"] for r in result]
+
+    return _get_columns_in_db_table
+
+
+@pytest.fixture(scope="function", autouse=True)
+def deactive_venv():
+    old_os_path = os.environ.get("PATH", "")
+    old_prefix = sys.prefix
+    old_path = sys.path
+
+    yield
+
+    os.environ["PATH"] = old_os_path
+    sys.prefix = old_prefix
+    sys.path = old_path
+    pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+
+
+def reset_metrics():
+    pyformance.set_global_registry(MetricsRegistry())
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def clean_reset(create_db, clean_db):
+    reset_all_objects()
+    config.Config._reset()
+    methods = inmanta.protocol.common.MethodProperties.methods.copy()
+    yield
+    inmanta.protocol.common.MethodProperties.methods = methods
+    config.Config._reset()
+    reset_all_objects()
+
+
+def reset_all_objects():
+    resources.resource.reset()
+    process.Subprocess.uninitialize()
+    asyncio.set_child_watcher(None)
+    reset_metrics()
+    # No dynamic loading of commands at the moment, so no need to reset/reload
+    # command.Commander.reset()
+    handler.Commander.reset()
+    Project._project = None
+    unknown_parameters.clear()
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -284,12 +332,6 @@ def inmanta_config():
 def server_pre_start():
     """ This fixture is called by the server. Override this fixture to influence server config
     """
-
-
-@pytest.fixture(scope="session")
-def database_name():
-    ten_random_digits = "".join(random.choice(string.digits) for _ in range(10))
-    yield "inmanta" + ten_random_digits
 
 
 @pytest.fixture(scope="function")
@@ -348,7 +390,7 @@ def log_file():
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
     output_file = os.path.join(output_dir, "log.txt")
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         yield f
 
 
@@ -552,7 +594,21 @@ def capture_warnings():
 
 
 @pytest.fixture(scope="function")
-async def environment(client, server):
+async def environment(client, server, environment_default):
+    """
+        Create a project and environment, with auto_deploy turned off. This fixture returns the uuid of the environment
+    """
+
+    env = await data.Environment.get_by_id(uuid.UUID(environment_default))
+    await env.set(data.AUTO_DEPLOY, False)
+    await env.set(data.PUSH_ON_AUTO_DEPLOY, False)
+    await env.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
+
+    yield environment_default
+
+
+@pytest.fixture(scope="function")
+async def environment_default(client, server):
     """
         Create a project and environment. This fixture returns the uuid of the environment
     """
@@ -592,23 +648,10 @@ def write_db_update_file():
         if not os.path.exists(schema_updates_dir):
             os.mkdir(schema_updates_dir)
         schema_update_file = os.path.join(schema_updates_dir, str(schema_version) + ".sql")
-        with open(schema_update_file, "w+") as f:
+        with open(schema_update_file, "w+", encoding="utf-8") as f:
             f.write(content_file)
 
     yield _write_db_update_file
-
-
-@pytest.fixture(scope="function")
-def get_columns_in_db_table(postgresql_client):
-    async def _get_columns_in_db_table(table_name):
-        result = await postgresql_client.fetch(
-            "SELECT column_name "
-            "FROM information_schema.columns "
-            "WHERE table_schema='public' AND table_name='" + table_name + "'"
-        )
-        return [r["column_name"] for r in result]
-
-    return _get_columns_in_db_table
 
 
 class KeepOnFail(object):
@@ -646,6 +689,7 @@ async def off_main_thread(func):
 class SnippetCompilationTest(KeepOnFail):
     def setUpClass(self):
         self.libs = tempfile.mkdtemp()
+        self.repo = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
         config.Config.load_config()
         self.cwd = os.getcwd()
@@ -686,18 +730,18 @@ class SnippetCompilationTest(KeepOnFail):
             module_path = f"[{self.libs}, {self.modules_dir}]"
         else:
             module_path = f"{self.libs}"
-        with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
+        with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 """
             name: snippet test
             modulepath: %s
             downloadpath: %s
             version: 1.0
-            repo: ['https://github.com/inmanta/']"""
-                % (module_path, self.libs)
+            repo: ['%s']"""
+                % (module_path, self.libs, self.repo)
             )
         self.main = os.path.join(self.project_dir, "main.cf")
-        with open(self.main, "w") as x:
+        with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
 
     def do_export(self, include_status=False, do_raise=True):
@@ -777,13 +821,23 @@ def snippetcompiler(snippetcompiler_global, modules_dir):
     snippetcompiler_global.tear_down_func()
 
 
+@pytest.fixture(scope="function")
+def snippetcompiler_clean(modules_dir):
+    ast = SnippetCompilationTest()
+    ast.setUpClass()
+    ast.setup_func(modules_dir)
+    yield ast
+    ast.tear_down_func()
+    ast.tearDownClass()
+
+
 @pytest.fixture(scope="session")
 def modules_dir():
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules")
 
 
 class CLI(object):
-    async def run(self, *args):
+    async def run(self, *args, **kwargs):
         # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
         runner = testing.CliRunner(mix_stderr=False)
@@ -791,7 +845,7 @@ class CLI(object):
         cmd_args.extend(args)
 
         def invoke():
-            return runner.invoke(cli=inmanta.main.cmd, args=cmd_args, catch_exceptions=False)
+            return runner.invoke(cli=inmanta.main.cmd, args=cmd_args, catch_exceptions=False, **kwargs)
 
         result = await asyncio.get_event_loop().run_in_executor(None, invoke)
         # reset to default again
@@ -803,13 +857,6 @@ class CLI(object):
 def cli():
     o = CLI()
     yield o
-
-
-@pytest.fixture
-def postgres_proc(unused_tcp_port_factory):
-    proc = PostgresProc(unused_tcp_port_factory())
-    yield proc
-    proc.stop()
 
 
 class AsyncCleaner(object):
