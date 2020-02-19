@@ -183,7 +183,7 @@ class PluginFunction(Function):
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
             raise RuntimeException(self.ast_node, "Received unknown value during direct execution")
 
-        if self.plugin._context is not -1:
+        if self.plugin._context != -1:
             raise RuntimeException(self.ast_node, "Context Aware functions are not allowed in direct execution")
 
         if self.plugin.opts["emits_statements"]:
@@ -203,7 +203,7 @@ class PluginFunction(Function):
             result.set_value(Unknown(self), self.ast_node.location)
             return
 
-        if self.plugin._context is not -1:
+        if self.plugin._context != -1:
             args.insert(self.plugin._context, plugins.Context(resolver, queue, self.ast_node, self.plugin, result))
 
         if self.plugin.opts["emits_statements"]:
