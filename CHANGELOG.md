@@ -1,4 +1,4 @@
-# v 2020.1 (?) Changes in this release:
+# v 2020.1 (2020-02-19) Changes in this release:
 
 ## Breaking changes
 - Entity instances are no longer allowed in list and dict attributes, this was previously possible due to bug (#1435)
