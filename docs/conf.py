@@ -39,7 +39,8 @@ try:
     if tags.has("include_redoc"):
         extensions.append('sphinxcontrib.redoc')
 except NameError as e:
-    print("Openapi definition with Redoc won't be included", e)
+    # Openapi definition with Redoc won't be included
+    pass
 
 redoc_uri = 'https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js'
 redoc = [

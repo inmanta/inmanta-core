@@ -166,7 +166,8 @@ doctest:
 
 .PHONY: openapi
 openapi:
-	pytest ../tests/extract_openapi_json.py
+	pip install pytest-inmanta-extensions
+	pytest ./extract_openapi_json.py
 	mv openapi.json reference/openapi.json
 
 # Pattern rule for converting SVG to PDF
