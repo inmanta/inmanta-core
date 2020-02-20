@@ -21,7 +21,6 @@
 from abc import abstractmethod
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union  # noqa: F401
 
-import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     CompilerException,
     DuplicateException,

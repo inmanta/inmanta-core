@@ -16,8 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from functools import reduce
-from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Set
+from typing import TYPE_CHECKING, Dict, Iterable, Iterator, Optional
 
 if TYPE_CHECKING:
     from inmanta.execute.runtime import Resolver
