@@ -121,6 +121,5 @@ entity A:
 end
 implement A using std::none
         """,
-        "Unable to resolve `x`: a type constraint can not reference variables."
-        " (reported in x ({dir}/main.cf:3:43))",
+        "Unable to resolve `x`: a type constraint can not reference variables. (reported in x ({dir}/main.cf:3:43))",
     )
