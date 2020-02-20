@@ -54,7 +54,7 @@ clean:
 	-rm -rf $(PNGs)
 
 html: openapi
-	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
+	$(SPHINXBUILD) -b html -t include_redoc $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
 
@@ -166,7 +166,8 @@ doctest:
 
 .PHONY: openapi
 openapi:
-	pytest ../tests/extract_openapi_json.py
+	pip install pytest-inmanta-extensions
+	pytest ./extract_openapi_json.py
 	mv openapi.json reference/openapi.json
 
 # Pattern rule for converting SVG to PDF
