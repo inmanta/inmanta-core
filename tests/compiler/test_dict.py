@@ -213,7 +213,7 @@ implement X using std::none
 """,
         """Could not set attribute `x` on instance `__config__::X (instantiated at {dir}/main.cf:8)` (reported in Construct(X) ({dir}/main.cf:8))
 caused by:
-  Unable to resolve `z`: a type constraint has no access to the surrounding namespace. (reported in z ({dir}/main.cf:1:55))""",  # noqa: E501,
+  Unable to resolve `z`: a type constraint can not reference variables. (reported in z ({dir}/main.cf:1:55))""",  # noqa: E501,
     )
 
 
