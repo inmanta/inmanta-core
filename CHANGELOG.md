@@ -1,10 +1,15 @@
 # v 2020.2 (?) Changes in this release:
 
+## Breaking changes
+- Non-boolean arguments to boolean operators are no longer allowed, this was previously possible due to bug (#1808)
+
 # v 2020.1 (2020-02-19) Changes in this release:
+
+## Fixed
+ - Added support for conditions as expressions and vice versa (#1815)
 
 ## Breaking changes
 - Entity instances are no longer allowed in list and dict attributes, this was previously possible due to bug (#1435)
-- Non-boolean arguments to boolean operators are no longer allowed, this was previously possible due to bug (#1808)
 
 ## Fixed
  - Fixed incorrect parsing of booleans as conditions (#1804)
@@ -20,7 +25,6 @@
  - Parse comments and urls correctly from the requirements.txt file of an Inmanta module (#1764)
 
 ## Added
- - Added support for conditions as expressions and vice versa (#1815)
  - Added support for dict lookup in conditions (#1573)
  - Added support for type casts for primitive types (#1798)
  - Added support for multiline string interpolations (#1568)
