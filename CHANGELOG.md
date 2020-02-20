@@ -1,5 +1,8 @@
 # v 2020.2 (?) Changes in this release:
 
+## Fixed
+ - Various compiler error reporting improvements (#1810)
+
 # v 2020.1 (2020-02-19) Changes in this release:
 
 ## Breaking changes
@@ -9,7 +12,7 @@
  - Fixed incorrect parsing of booleans as conditions (#1804)
  - Added support for nullable types in plugins (#674)
  - Inmanta type module cleanup and type coverage
- - Various compiler error reporting improvements (#1584, #1341, #1600, #1292, #1652, #1221, #1707, #1480, #1767, #1766, #1762, #1575, #1810)
+ - Various compiler error reporting improvements (#1584, #1341, #1600, #1292, #1652, #1221, #1707, #1480, #1767, #1766, #1762, #1575)
  - CRUDHandler bugfix, ensure update is not called on purged resources
  - Changes in default values: AUTO_DEPLOY, PUSH_ON_AUTO_DEPLOY are enabled by default,
  AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY is set to incremental deployment
