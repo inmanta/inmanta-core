@@ -532,7 +532,7 @@ def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
         try:
             return expression.execute_direct({"self": args[0]})
         except NotFoundException as e:
-            e.msg = "Unable to resolve `%s`: a type constraint has no access to the surrounding namespace." % e.stmt.name
+            e.msg = "Unable to resolve `%s`: a type constraint can not reference variables." % e.stmt.name
             raise e
 
     return function
