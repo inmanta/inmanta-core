@@ -21,6 +21,7 @@
 import typing
 from itertools import chain
 
+import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     AttributeException,
     DuplicateException,
@@ -32,6 +33,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import AssignStatement, ExpressionStatement, Resumer, Statement
+from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionUnit,
     HangUnit,
@@ -41,6 +43,7 @@ from inmanta.execute.runtime import (
     ResultCollector,
     ResultVariable,
     TempListVariable,
+    Typeorvalue,
 )
 from inmanta.execute.util import Unknown
 
@@ -183,7 +186,14 @@ class SetAttribute(AssignStatement, Resumer):
         self.value = value
         self.list_only = list_only
 
+    def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
+        if graph is None:
+            return
+        node: dataflow.AttributeNodeReference = self.instance.get_dataflow_node(graph).get_attribute(self.attribute_name)
+        node.assign(self.value.get_dataflow_node(graph), self, graph)
+
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        self._add_to_dataflow_graph(resolver.dataflow_graph)
         reqs = self.instance.requires_emit(resolver, queue)
         HangUnit(queue, resolver, reqs, ResultVariable(), self)
 
@@ -208,6 +218,9 @@ class SetAttribute(AssignStatement, Resumer):
             reqs = self.value.requires_emit(resolver, queue)
 
         SetAttributeHelper(queue, resolver, var, reqs, self.value, self, instance, self.attribute_name)
+
+    def pretty_print(self) -> str:
+        return "%s.%s = %s" % (self.instance.pretty_print(), self.attribute_name, self.value.pretty_print())
 
     def __str__(self) -> str:
         return "%s.%s = %s" % (str(self.instance), self.attribute_name, str(self.value))
@@ -257,11 +270,24 @@ class Assign(AssignStatement):
         self.name = name
         self.value = value
 
+    def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
+        if graph is None:
+            return
+        node: dataflow.AssignableNodeReference = graph.resolver.get_dataflow_node(self.name)
+        node.assign(self.value.get_dataflow_node(graph), self, graph)
+        target: Typeorvalue = graph.resolver.lookup(self.name)
+        assert isinstance(target, ResultVariable)
+        target.set_dataflow_node(node)
+
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        self._add_to_dataflow_graph(resolver.dataflow_graph)
         target = resolver.lookup(self.name)
         assert isinstance(target, ResultVariable)
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self.value, owner=self)
+
+    def pretty_print(self) -> str:
+        return f"{self.name} = {self.value.pretty_print()}"
 
     def __repr__(self) -> str:
         return "Assign(%s, %s)" % (self.name, self.value)
