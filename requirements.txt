@@ -38,7 +38,7 @@ pep8-naming==0.9.1
 flake8==3.7.9
 flake8-black==0.1.1
 flake8-copyright==0.2.2
-psutil==5.6.7
+psutil==5.7.0
 pyformance==0.4
 pydantic==1.4
 isort==4.3.21
