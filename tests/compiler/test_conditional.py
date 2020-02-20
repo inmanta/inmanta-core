@@ -383,3 +383,35 @@ end
         """,
         "Invalid value `some_string`: `not` expects a boolean (reported in If ({dir}/main.cf:3))",
     )
+
+
+def test_1808_non_boolean_if(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+str = "some_string"
+if str:
+end
+        """,
+        "Invalid value `some_string`: the condition for an if statement can only be a boolean expression"
+        " (reported in If ({dir}/main.cf:3))",
+    )
+
+
+def test_1808_non_boolean_when(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity A:
+end
+implement A using std::none
+
+str = "some_string"
+
+implementation i for A:
+end
+implement A using i when str
+
+A()
+        """,
+        "Invalid value `some_string`: the condition for a conditional implementation can only be a boolean expression"
+        " (reported in implement __config__::A using i when str ({dir}/main.cf:10:11))",
+    )
