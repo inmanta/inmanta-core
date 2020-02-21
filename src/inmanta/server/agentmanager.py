@@ -84,8 +84,9 @@ set_parameters
 
 async def wait_for_proc_bounded(procs: Iterable[process.Subprocess], timeout: float = const.SHUTDOWN_GRACE_HARD) -> None:
     try:
+        unfinished_processes = [proc for proc in procs if proc.returncode is None]
         await asyncio.wait_for(
-            asyncio.gather(*[asyncio.shield(proc.wait_for_exit(raise_error=False)) for proc in procs]), timeout
+            asyncio.gather(*[asyncio.shield(proc.wait_for_exit(raise_error=False)) for proc in unfinished_processes]), timeout
         )
     except asyncio.TimeoutError:
         LOGGER.warning("Agent processes did not close in time (%s)", procs)
@@ -497,7 +498,7 @@ class AgentManager(ServerSlice, SessionListener):
             os.mkdir(config_dir)
 
         config_path = os.path.join(config_dir, "agent.cfg")
-        with open(config_path, "w+") as fd:
+        with open(config_path, "w+", encoding="utf-8") as fd:
             fd.write(config)
 
         out: str = os.path.join(self._server_storage["logs"], "agent-%s.out" % env.id)

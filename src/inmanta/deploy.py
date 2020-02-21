@@ -133,7 +133,7 @@ port=%(server_port)s
                 config_file += f"\n[dashboard]\npath={dash_path}\n"
 
         server_config = os.path.join(self._data_path, "server.cfg")
-        with open(server_config, "w+") as fd:
+        with open(server_config, "w+", encoding="utf-8") as fd:
             fd.write(config_file)
 
         log_file = os.path.join(log_dir, "inmanta.log")

@@ -361,7 +361,7 @@ class Project(ModuleLike):
         if not os.path.exists(project_file):
             raise Exception("Project directory does not contain a project file")
 
-        with open(project_file, "r") as fd:
+        with open(project_file, "r", encoding="utf-8") as fd:
             self._meta = yaml.safe_load(fd)
 
         if "modulepath" not in self._meta:
@@ -474,8 +474,10 @@ class Project(ModuleLike):
         (statements, _) = self.get_ast()
         imports = [x for x in statements if isinstance(x, DefineImport)]
         if self.autostd:
-            std_locatable = LocatableString("std", Range("internal", 0, 0, 0, 0), 0, self.root_ns)
-            imports.insert(0, DefineImport(std_locatable, std_locatable))
+            std_locatable = LocatableString("std", Range("__internal__", 1, 1, 1, 1), -1, self.root_ns)
+            imp = DefineImport(std_locatable, std_locatable)
+            imp.location = std_locatable.location
+            imports.insert(0, imp)
         return imports
 
     @lru_cache()
@@ -655,10 +657,43 @@ class Project(ModuleLike):
         """
             Collect the list of all python requirements off all modules in this project
         """
-        pyreq = [x.strip() for x in [mod.get_python_requirements() for mod in self.modules.values()] if x is not None]
-        pyreqa = "\n".join(pyreq).split("\n")
-        pyreqb = [x for x in pyreqa if len(x.strip()) > 0]
-        return list(set(pyreqb))
+        req_files = [x.strip() for x in [mod.get_python_requirements() for mod in self.modules.values()] if x is not None]
+        req_lines = [x for x in "\n".join(req_files).split("\n") if len(x.strip()) > 0]
+        req_lines = self._remove_comments(req_lines)
+        req_lines = self._remove_line_continuations(req_lines)
+        return list(set(req_lines))
+
+    def _remove_comments(self, lines: List[str]) -> List[str]:
+        """
+            Remove comments from lines in requirements.txt file.
+        """
+        result = []
+        for line in lines:
+            if line.strip().startswith("#"):
+                continue
+            if " #" in line:
+                line_without_comment = line.split(" #", maxsplit=1)[0]
+                result.append(line_without_comment)
+            else:
+                result.append(line)
+        return result
+
+    def _remove_line_continuations(self, lines: List[str]) -> List[str]:
+        """
+            Remove line continuation from lines in requirements.txt file.
+        """
+        result = []
+        line_continuation_buffer = ""
+        for line in lines:
+            if line.endswith("\\"):
+                line_continuation_buffer = f"{line_continuation_buffer}{line[0:-1]}"
+            else:
+                if line_continuation_buffer:
+                    result.append(f"{line_continuation_buffer}{line}")
+                    line_continuation_buffer = ""
+                else:
+                    result.append(line)
+        return result
 
     def get_name(self) -> str:
         return "project.yml"
@@ -721,7 +756,7 @@ class Module(ModuleLike):
 
     def rewrite_version(self, new_version: str) -> None:
         new_version = str(new_version)  # make sure it is a string!
-        with open(self.get_config_file_name(), "r") as fd:
+        with open(self.get_config_file_name(), "r", encoding="utf-8") as fd:
             module_def = fd.read()
 
         module_info = yaml.safe_load(module_def)
@@ -746,7 +781,7 @@ class Module(ModuleLike):
                 "Unable to write module definition, should be %s got %s instead." % (new_version, new_info["version"])
             )
 
-        with open(self.get_config_file_name(), "w+") as fd:
+        with open(self.get_config_file_name(), "w+", encoding="utf-8") as fd:
             fd.write(new_module_def)
 
         self._meta = new_info
@@ -942,7 +977,7 @@ class Module(ModuleLike):
         """
             Load the module definition file
         """
-        with open(self.get_config_file_name(), "r") as fd:
+        with open(self.get_config_file_name(), "r", encoding="utf-8") as fd:
             mod_def = yaml.safe_load(fd)
 
             if mod_def is None or len(mod_def) < len(Module.requires_fields):
@@ -1152,7 +1187,7 @@ class Module(ModuleLike):
         """
         file = os.path.join(self._path, "requirements.txt")
         if os.path.exists(file):
-            with open(file, "r") as fd:
+            with open(file, "r", encoding="utf-8") as fd:
                 return fd.read()
         else:
             return None

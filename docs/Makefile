@@ -53,8 +53,8 @@ clean:
 	-rm -rf $(BUILDDIR)/*
 	-rm -rf $(PNGs)
 
-html:
-	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
+html: openapi
+	$(SPHINXBUILD) -b html -t include_redoc $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
 
@@ -163,6 +163,12 @@ doctest:
 	$(SPHINXBUILD) -b doctest $(ALLSPHINXOPTS) $(BUILDDIR)/doctest
 	@echo "Testing of doctests in the sources finished, look at the " \
 		  "results in $(BUILDDIR)/doctest/output.txt."
+
+.PHONY: openapi
+openapi:
+	pip install pytest-inmanta-extensions
+	pytest ./extract_openapi_json.py
+	mv openapi.json reference/openapi.json
 
 # Pattern rule for converting SVG to PDF
 %.pdf: %.svg

@@ -210,7 +210,7 @@ class VirtualEnv(object):
 
         try:
             fdnum, path = tempfile.mkstemp()
-            fd = os.fdopen(fdnum, "w+")
+            fd = os.fdopen(fdnum, "w+", encoding="utf-8")
             fd.write(requirements_file)
             fd.close()
 
@@ -243,7 +243,7 @@ class VirtualEnv(object):
         if not os.path.exists(path):
             return ""
 
-        with open(path, "r") as fd:
+        with open(path, "r", encoding="utf-8") as fd:
             return fd.read().strip()
 
     def _set_current_requirements_hash(self, new_hash):
@@ -251,21 +251,19 @@ class VirtualEnv(object):
             Set the current requirements hahs
         """
         path = os.path.join(self.env_path, "requirements.sha1sum")
-        with open(path, "w+") as fd:
+        with open(path, "w+", encoding="utf-8") as fd:
             fd.write(new_hash)
 
     def install_from_list(self, requirements_list: List[str], detailed_cache: bool = False, cache: bool = True) -> None:
         """
             Install requirements from a list of requirement strings
         """
-        requirements_list = sorted(requirements_list)
-
         if detailed_cache:
             requirements_list = sorted(list(set(requirements_list) - self.__cache_done))
             if len(requirements_list) == 0:
                 return
 
-        requirements_list = self._remove_requirements_present_in_parent_env(requirements_list)
+        requirements_list = sorted(self._remove_requirements_present_in_parent_env(requirements_list))
 
         # hash it
         sha1sum = hashlib.sha1()
@@ -286,6 +284,9 @@ class VirtualEnv(object):
         reqs_to_remove = []
         packages_installed_in_parent = self.get_package_installed_in_parent_env()
         for r in requirements_list:
+            # Always install url-based requirements
+            if "://" in r:
+                continue
             parsed_req = list(pkg_resources.parse_requirements(r))[0]
             # Package is installed and its version fits the constraint
             if (

@@ -46,6 +46,7 @@ Currently, the Inmanta project is mainly developed and maintained by `Inmanta nv
     model_developers
     platform_developers
     administrators
+    extensions
     faq
     glossary
     reference/index

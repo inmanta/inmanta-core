@@ -88,7 +88,7 @@ async def test_validate_rs256(jwks, tmp_path):
     """
     port = str(list(jwks._sockets.values())[0].getsockname()[1])
     config_file = os.path.join(tmp_path, "auth.cfg")
-    with open(config_file, "w+") as fd:
+    with open(config_file, "w+", encoding="utf-8") as fd:
         fd.write(
             """
 [auth_jwt_default]

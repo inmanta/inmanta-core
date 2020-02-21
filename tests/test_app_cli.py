@@ -204,10 +204,8 @@ std::ConfigFile(host=vm1, path="/test", content="")
     assert len(result.result["versions"]) == 1
 
     details_exported_version = result.result["versions"][0]
-    if push_method:
-        assert details_exported_version["result"] == VersionState.deploying.name
-    else:
-        assert details_exported_version["result"] == VersionState.pending.name
+
+    assert details_exported_version["result"] == VersionState.deploying.name
 
     shutil.rmtree(workspace)
 

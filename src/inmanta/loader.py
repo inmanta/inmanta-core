@@ -71,7 +71,7 @@ class SourceInfo(object):
         """ Get the content of the file
         """
         if self._content is None:
-            with open(self.path, "r") as fd:
+            with open(self.path, "r", encoding="utf-8") as fd:
                 self._content = fd.read()
         return self._content
 
@@ -181,7 +181,7 @@ class CodeLoader(object):
             else:
                 mod_name = py[:-3]
 
-            with open(py, "r") as fd:
+            with open(py, "r", encoding="utf-8") as fd:
                 source_code = fd.read().encode("utf-8")
 
             sha1sum = hashlib.new("sha1")
@@ -223,7 +223,7 @@ class CodeLoader(object):
             # write the new source
             source_file = os.path.join(self.__code_dir, MODULE_DIR, module_name + ".py")
 
-            fd = open(source_file, "w+")
+            fd = open(source_file, "w+", encoding="utf-8")
             fd.write(module_source)
             fd.close()
 

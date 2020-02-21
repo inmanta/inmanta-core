@@ -17,7 +17,7 @@
 """
 import datetime
 import uuid
-from typing import Dict, List, NewType, Optional, Union, Any
+from typing import Any, Dict, List, NewType, Optional, Union
 
 import pydantic
 

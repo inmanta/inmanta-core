@@ -37,7 +37,7 @@ from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.resources import Id
-from inmanta.types import JsonType, PrimitiveTypes, SimpleTypes
+from inmanta.types import JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ T = TypeVar("T")
 
 class BaseDocument(object, metaclass=DocumentMeta):
     """
-        A base document in the mongodb. Subclasses of this document determine collections names. This type is mainly used to
+        A base document in the database. Subclasses of this document determine collections names. This type is mainly used to
         bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
     """
 
@@ -381,7 +381,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     async def update(self, **kwargs: Any) -> None:
         """
-            Update this document in the database. It will update the fields in this object and send a full update to mongodb.
+            Update this document in the database. It will update the fields in this object and send a full update to database.
             Use update_fields to only update specific fields.
         """
         kwargs = self._convert_field_names_to_db_column_names(kwargs)
@@ -409,7 +409,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     async def update_fields(self, **kwargs: Any) -> None:
         """
             Update the given fields of this document in the database. It will update the fields in this object and do a specific
-            $set in the mongodb on this document.
+            $set in the database on this document.
         """
         if len(kwargs) == 0:
             return
@@ -755,7 +755,7 @@ class Environment(BaseDocument):
         AUTO_DEPLOY: Setting(
             name=AUTO_DEPLOY,
             typ="bool",
-            default=False,
+            default=True,
             doc="When this boolean is set to true, the orchestrator will automatically release a new version "
             "that was compiled by the orchestrator itself.",
             validator=convert_boolean,
@@ -763,14 +763,14 @@ class Environment(BaseDocument):
         PUSH_ON_AUTO_DEPLOY: Setting(
             name=PUSH_ON_AUTO_DEPLOY,
             typ="bool",
-            default=False,
+            default=True,
             doc="Push a new version when it has been autodeployed.",
             validator=convert_boolean,
         ),
         AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY: Setting(
             name=AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY,
             typ="enum",
-            default=const.AgentTriggerMethod.push_full_deploy.name,
+            default=const.AgentTriggerMethod.push_incremental_deploy.name,
             validator=convert_agent_trigger_method,
             doc="The agent trigger method to use when " + PUSH_ON_AUTO_DEPLOY + " is enabled",
             allowed_values=[opt.name for opt in const.AgentTriggerMethod],
@@ -957,7 +957,6 @@ class Environment(BaseDocument):
                 await model.delete_cascade()
 
             await Parameter.delete_all(environment=self.id)
-            await Form.delete_all(environment=self.id)
             await Resource.delete_all(environment=self.id)
             await ResourceAction.delete_all(environment=self.id)
         else:
@@ -979,7 +978,7 @@ RETURNING last_version;
         return version
 
 
-SOURCE = ("fact", "plugin", "user", "form", "report")
+SOURCE = ("fact", "plugin", "user", "report")
 
 
 class Parameter(BaseDocument):
@@ -1388,47 +1387,6 @@ class Compile(BaseDocument):
         )
 
 
-class Form(BaseDocument):
-    """
-        A form in the dashboard defined by the configuration model
-    """
-
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    form_type: str = Field(field_type=str, required=True, part_of_primary_key=True)
-    options: Dict[str, str] = Field(field_type=dict)
-    fields: Dict[str, str] = Field(field_type=dict)
-    defaults: Dict[str, SimpleTypes] = Field(field_type=dict)
-    field_options: Dict[str, Dict[str, str]] = Field(field_type=dict)
-
-    @classmethod
-    async def get_form(cls, environment: uuid.UUID, form_type: str) -> "Form":
-        """
-            Get a form based on its typed and environment
-        """
-        forms = await cls.get_list(environment=environment, form_type=form_type)
-        if len(forms) == 0:
-            return None
-        else:
-            return forms[0]
-
-    def to_dict(self) -> JsonType:
-        me = super(Form, self).to_dict()
-        me["id"] = self.form_type
-        return me
-
-
-class FormRecord(BaseDocument):
-    """
-        A form record
-    """
-
-    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
-    form: str = Field(field_type=str, required=True)
-    fields: Dict[str, SimpleTypes] = Field(field_type=dict)
-    changed: datetime.datetime = Field(field_type=datetime.datetime)
-
-
 class LogLine(DataDocument):
     @property
     def msg(self):
@@ -1453,19 +1411,14 @@ class LogLine(DataDocument):
         return cls(level=const.LogLevel(level), msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
 
 
-class ResourceVersionId(BaseDocument):
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    resource_version_id: m.ResourceVersionIdStr = Field(field_type=str, required=True, part_of_primary_key=True)
-    action_id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-
-
 class ResourceAction(BaseDocument):
     """
         Log related to actions performed on a specific resource version by Inmanta.
 
-        :param resource_version: The resource on which the actions are performed
         :param environment: The environment this action belongs to.
-        :param action_id: This is id distinguishes action from each other. Action ids have to be unique per environment.
+        :param version: The version of the configuration model this action belongs to.
+        :param resource_version_ids: The resource version ids of the resources this action relates to.
+        :param action_id: This id distinguishes the actions from each other. Action ids have to be unique per environment.
         :param action: The action performed on the resource
         :param started: When did the action start
         :param finished: When did the action finish
@@ -1477,7 +1430,9 @@ class ResourceAction(BaseDocument):
         :param change: The change result of an action
     """
 
-    resource_version_ids: List[m.ResourceVersionIdStr] = Field(field_type=list, required=True, reference=True, default=[])
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+    version: int = Field(field_type=int, required=True)
+    resource_version_ids: List[m.ResourceVersionIdStr] = Field(field_type=list, required=True)
 
     action_id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     action: const.ResourceAction = Field(field_type=const.ResourceAction, required=True)
@@ -1492,52 +1447,12 @@ class ResourceAction(BaseDocument):
     send_event = Field(field_type=bool)
 
     def __init__(self, from_postgres=False, **kwargs):
-        if not from_postgres:
-            if "environment" not in kwargs:
-                raise Exception("Environment is required attribute")
-            self._environment = kwargs["environment"]
-            del kwargs["environment"]
         super().__init__(from_postgres, **kwargs)
         self._updates = {}
 
-    async def insert(self):
-        async with self._connection_pool.acquire() as con:
-            records = (
-                (self._environment, resource_version_id, self.action_id) for resource_version_id in self.resource_version_ids
-            )
-            async with con.transaction():
-                await super(ResourceAction, self).insert(connection=con)
-                await con.copy_records_to_table(
-                    ResourceVersionId.table_name(), columns=["environment", "resource_version_id", "action_id"], records=records
-                )
-
     @classmethod
     async def get_by_id(cls, doc_id: uuid.UUID):
-        query = (
-            "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "
-            "as resource_version_ids, action_id, action, started, finished, messages, status, changes, change, "
-            "send_event from resourceaction r where r.action_id = $1;"
-        )
-        async with cls._connection_pool.acquire() as con:
-            result = await con.fetchrow(query, cls._get_value(doc_id))
-            if result is None:
-                return None
-            else:
-                return cls(**dict(result), from_postgres=True)
-
-    @classmethod
-    async def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
-        sql_query = (
-            "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "
-            "as resource_version_ids, action_id, action, started, finished, messages, status, changes, change, "
-            "send_event from resourceaction r"
-        )
-        (filter_statement, values) = cls._get_composed_filter(**query, col_name_prefix="r")
-        if filter_statement:
-            sql_query += " WHERE " + filter_statement
-        async with cls._connection_pool.acquire() as con:
-            async with con.transaction():
-                return [cls(**dict(record), from_postgres=True) async for record in con.cursor(sql_query, *values)]
+        return await cls.get_one(action_id=doc_id)
 
     @classmethod
     def _create_dict_wrapper(cls, from_postgres, kwargs):
@@ -1558,14 +1473,11 @@ class ResourceAction(BaseDocument):
     async def get_log(
         cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, action: Optional[str] = None, limit: int = 0
     ) -> List["ResourceAction"]:
-        query = (
-            "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "
-            "as resource_version_ids, r.action_id as action_id, action, started, finished, messages, status, changes,"
-            " change, send_event from resourceaction r "
-            "RIGHT OUTER JOIN resourceversionid rvid on (rvid.action_id=r.action_id) "
-            ""
-            "where rvid.environment=$1 and  rvid.resource_version_id=$2 "
-        )
+        # The @> operator is required to use the GIN index on the resource_version_ids column
+        query = f"""SELECT *
+                    FROM {cls.table_name()}
+                    WHERE environment=$1 AND resource_version_ids::varchar[] @> ARRAY[$2]::varchar[]
+                 """
         values = [cls._get_value(environment), cls._get_value(resource_version_id)]
         if action is not None:
             query += " AND action=$3"
@@ -1579,37 +1491,8 @@ class ResourceAction(BaseDocument):
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
     @classmethod
-    async def _get_resource_action_objects(cls, query, values):
-        result = {}
-        async with cls._connection_pool.acquire() as con:
-            async with con.transaction():
-                async for record in con.cursor(query, *values):
-                    action_id = record["action_id"]
-                    resource_version_id = record["resource_version_id"]
-                    if action_id in result:
-                        resource_action = result[action_id]
-                        if resource_version_id:
-                            resource_action.resource_version_ids.append(resource_version_id)
-                    else:
-                        resource_action_dct = dict(record)
-                        del resource_action_dct["resource_version_id"]
-                        resource_action_dct["resource_version_ids"] = [resource_version_id] if resource_version_id else []
-                        resource_action = cls(**resource_action_dct, from_postgres=True)
-                        result[action_id] = resource_action
-        return list(result.values())
-
-    @classmethod
-    def _get_resource_version_ids(cls, records):
-        result = []
-        for record in records:
-            resource_version_id = record["resource_version_id"]
-            result.append(resource_version_id)
-        return result
-
-    @classmethod
     async def get(cls, action_id):
-        resource = await cls.get_one(action_id=action_id)
-        return resource
+        return await cls.get_one(action_id=action_id)
 
     def set_field(self, name, value):
         self._updates[name] = value
@@ -1630,16 +1513,6 @@ class ResourceAction(BaseDocument):
                     self._updates["changes"][resource] = {}
                 self._updates["changes"][resource][field] = change
 
-    def _get_as_jsonb(self, obj):
-        """
-             A PostgreSQL jsonb type should be passed to AsyncPG as a string type.
-             As such this method should return a string type.
-        """
-        result = self._get_value(obj)
-        if not isinstance(result, str):
-            result = json.dumps(result)
-        return result
-
     async def save(self):
         """
             Save the changes
@@ -1658,17 +1531,6 @@ class ResourceAction(BaseDocument):
             query = "DELETE FROM " + cls.table_name() + " WHERE started < $1"
             value = cls._get_value(keep_logs_until)
             await cls._execute_query(query, value)
-
-    @classmethod
-    async def delete_all(cls, environment):
-        ra_table_name = cls.table_name()
-        rvid_table_name = ResourceVersionId.table_name()
-        subquery = "SELECT r.action_id FROM %s r LEFT OUTER JOIN %s i ON (r.action_id = i.action_id) WHERE i.environment=$1" % (
-            ra_table_name,
-            rvid_table_name,
-        )
-        query = "DELETE FROM %s WHERE action_id=ANY(%s)" % (ra_table_name, subquery)
-        await cls._execute_query(query, cls._get_value(environment))
 
 
 class Resource(BaseDocument):
@@ -1753,22 +1615,6 @@ class Resource(BaseDocument):
         )
         resources = await cls.select_query(query, values)
         return resources
-
-    async def delete_cascade(self) -> None:
-        ra_table_name = ResourceAction.table_name()
-        rvid_table_name = ResourceVersionId.table_name()
-
-        # Delete all resource actions of this resource
-        sub_query = (
-            f"SELECT r.action_id FROM {ra_table_name} r INNER JOIN {rvid_table_name} i ON (r.action_id=i.action_id) "
-            "WHERE i.environment=$1 AND i.resource_version_id=$2"
-        )
-        query = f"DELETE FROM {ra_table_name} WHERE action_id=ANY({sub_query})"
-
-        await self._execute_query(query, self.environment, self.resource_version_id)
-
-        # Delete the resource itself
-        await self.delete()
 
     @classmethod
     async def get_undeployable(cls, environment, version):
@@ -2555,13 +2401,10 @@ _classes = [
     Agent,
     Resource,
     ResourceAction,
-    ResourceVersionId,
     ConfigurationModel,
     Code,
     Parameter,
     DryRun,
-    Form,
-    FormRecord,
     Compile,
     Report,
 ]

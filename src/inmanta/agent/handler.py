@@ -96,6 +96,7 @@ def cache(
     for_version: bool = True,
     cache_none: bool = True,
     cacheNone: bool = True,  # noqa: N803
+    call_on_delete: Optional[Callable[[Any], None]] = None,
 ) -> Union[T_FUNC, Callable[[T_FUNC], T_FUNC]]:
     """
         decorator for methods in resource handlers to provide caching
@@ -115,6 +116,8 @@ def cache(
         :param for_version: if true, this value is evicted from the cache when this deploy is ready
         :param ignore: a list of argument names that should not be part of the cache key
         :param cache_none: cache returned none values
+        :param call_on_delete: A callback function that is called when the value is removed from the cache,
+                with the value as argument.
     """
 
     def actual(f) -> T_FUNC:
@@ -130,7 +133,9 @@ def cache(
                 return f(self, **kwds)
 
             cache_none = cacheNone
-            return self.cache.get_or_else(f.__name__, bound, for_version, timeout, myignore, cache_none, **kwds)
+            return self.cache.get_or_else(
+                f.__name__, bound, for_version, timeout, myignore, cache_none, **kwds, call_on_delete=call_on_delete
+            )
 
         # Too much magic to type statically
         return cast(T_FUNC, wrapper)
@@ -855,9 +860,9 @@ class CRUDHandler(ResourceHandler):
                         ctx.debug("Calling delete_resource")
                         self.delete_resource(ctx, desired)
 
-                elif len(changes) > 0:
+                elif not desired.purged and len(changes) > 0:
                     ctx.debug("Calling update_resource", changes=changes)
-                    self.update_resource(ctx, changes, desired)
+                    self.update_resource(ctx, dict(changes), desired)
 
                 ctx.set_status(const.ResourceState.deployed)
             else:

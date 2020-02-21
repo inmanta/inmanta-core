@@ -68,6 +68,14 @@ class Range(Location):
     __slots__ = ("start_char", "end_lnr", "end_char")
 
     def __init__(self, file: str, start_lnr: int, start_char: int, end_lnr: int, end_char: int) -> None:
+        """
+        Create a new Range instance.
+        :param file: the file this Range is in
+        :param start_lnr: the line number this Range starts on, 1-based
+        :param start_char: the start character number of the Range, 1-based
+        :param end_lnr: the line number this Range ends on, 1-based
+        :param end_char: the end character number of the Range, exclusive, 1-based
+        """
         Location.__init__(self, file, start_lnr)
         self.start_char = start_char
         self.end_lnr = end_lnr
@@ -178,8 +186,8 @@ class Anchor(object):
 
 
 class TypeReferenceAnchor(Anchor):
-    def __init__(self, range: Range, namespace: "Namespace", type: str) -> None:
-        Anchor.__init__(self, range=range)
+    def __init__(self, namespace: "Namespace", type: LocatableString) -> None:
+        Anchor.__init__(self, range=type.get_location())
         self.namespace = namespace
         self.type = type
 
@@ -189,7 +197,7 @@ class TypeReferenceAnchor(Anchor):
 
 
 class AttributeReferenceAnchor(Anchor):
-    def __init__(self, range: Range, namespace: "Namespace", type: str, attribute: str) -> None:
+    def __init__(self, range: Range, namespace: "Namespace", type: LocatableString, attribute: str) -> None:
         Anchor.__init__(self, range=range)
         self.namespace = namespace
         self.type = type
@@ -288,7 +296,8 @@ class Namespace(Namespaced):
 
         return self.visible_namespaces[parts[0]].target.get_scope().direct_lookup(parts[1])
 
-    def get_type(self, name: str) -> "Type":
+    def get_type(self, typ: LocatableString) -> "Type":
+        name: str = str(typ)
         assert self.primitives is not None
         if "::" in name:
             parts = name.rsplit("::", 1)
@@ -297,9 +306,9 @@ class Namespace(Namespaced):
                 if parts[1] in ns.defines_types:
                     return ns.defines_types[parts[1]]
                 else:
-                    raise TypeNotFoundException(name, ns)
+                    raise TypeNotFoundException(typ, ns)
             else:
-                raise TypeNotFoundException(name, self)
+                raise TypeNotFoundException(typ, self)
         elif name in self.primitives:
             return self.primitives[name]
         else:
@@ -308,7 +317,7 @@ class Namespace(Namespaced):
                 if name in cns.defines_types:
                     return cns.defines_types[name]
                 cns = cns.get_parent()
-            raise TypeNotFoundException(name, self)
+            raise TypeNotFoundException(typ, self)
 
     def get_name(self) -> str:
         """
@@ -537,10 +546,11 @@ class RuntimeException(CompilerException):
 class TypeNotFoundException(RuntimeException):
     """Exception raised when a type is referenced that does not exist"""
 
-    def __init__(self, type: str, ns: Namespace) -> None:
+    def __init__(self, type: LocatableString, ns: Namespace) -> None:
         RuntimeException.__init__(self, stmt=None, msg="could not find type %s in namespace %s" % (type, ns))
         self.type = type
         self.ns = ns
+        self.set_location(type.get_location())
 
     def importantance(self):
         return 20

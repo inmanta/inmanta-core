@@ -228,6 +228,16 @@ added to the access token.
 
    Add the ct claim to all access tokens for this client.
 
+Add a second mapper to add inmanta to the audience (only required for Keycloak 4.6 and higher). Click `add` again as in the
+previous step. Fill in the following values:
+
+* Name: inmanta-audience
+* Mapper type: Audience
+* Included Client Audience: inmanta
+* Add to access token: on
+
+Click save.
+
 Step 3: Configure inmanta server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

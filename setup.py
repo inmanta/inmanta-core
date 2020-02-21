@@ -17,10 +17,10 @@ requires = [
     "cryptography",
     "jinja2",
     "pyformance",
-    "pymongo",
     "pydantic",
     "typing_inspect",
     "importlib_metadata",
+    "docstring-parser",
 ]
 
 # Package a dummy extensions so that the namespace package for extensions is not empty
@@ -32,7 +32,7 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    version="2019.5",
+    version="2020.1",
     python_requires=">=3.6",  # also update classifiers
     # Meta data
     name="inmanta",
@@ -71,7 +71,6 @@ setup(
         "console_scripts": [
             "inmanta-cli = inmanta.main:main",
             "inmanta = inmanta.app:app",
-            "inmanta-migrate-db = inmanta.db.migrate_to_postgresql:main",
         ],
     },
 )

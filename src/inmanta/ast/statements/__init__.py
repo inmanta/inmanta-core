@@ -17,7 +17,7 @@
 """
 from typing import Any, Dict, List, Optional, Tuple  # noqa: F401
 
-from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced
+from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced, RuntimeException
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 
 try:
@@ -114,6 +114,12 @@ class ExpressionStatement(DynamicStatement):
     def requires_emit_gradual(self, resolver: Resolver, queue: QueueScheduler, resultcollector) -> Dict[object, ResultVariable]:
         return self.requires_emit(resolver, queue)
 
+    def as_constant(self) -> object:
+        """
+            Returns this expression as a constant value, if possible. Otherwise, raise a RuntimeException.
+        """
+        raise RuntimeException(None, "%s is not a constant")
+
 
 class Resumer(ExpressionStatement):
     def resume(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
@@ -191,6 +197,9 @@ class Literal(ExpressionStatement):
         return self.value
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
+        return self.value
+
+    def as_constant(self) -> object:
         return self.value
 
 
