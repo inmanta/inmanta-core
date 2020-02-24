@@ -26,7 +26,6 @@ from typing import Callable, Dict, List, Optional, cast
 
 import click
 import texttable
-from cookiecutter.main import cookiecutter
 
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
@@ -211,23 +210,9 @@ def project_show(client: Client, project: str) -> None:
 @click.option("--name", "-n", help="The name of the new project", required=True)
 @click.pass_obj
 def project_create(client: Client, name: str) -> None:
-    create_project(client, name)
-
-
-def create_project(client: Client, name: str) -> None:
+    """ Create a new project on the server """
     project = client.get_dict("create_project", "project", {"name": name})
     print_table(["Name", "Value"], [["ID", project["id"]], ["Name", project["name"]]])
-
-
-@project.command(name="generate")
-@click.option("--name", "-n", help="The name of the new project", required=True)
-@click.option("--output-dir", "-o", help="Output directory path")
-@click.pass_obj
-def project_generate(client: Client, name: str, output_dir: Optional[str]) -> None:
-    cookiecutter(
-        "https://github.com/inmanta/inmanta-project-template.git", output_dir=output_dir, extra_context={"project_name": name}
-    )
-    create_project(client, name)
 
 
 @project.command(name="modify")

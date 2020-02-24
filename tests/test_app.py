@@ -457,3 +457,15 @@ def test_version_argument_is_set(tmpdir, with_tty, version_should_be_shown, rege
         (stdout, _, _) = run_without_tty(args, killtime=15, termtime=10)
     assert len(stdout) != 0
     check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, False)
+
+
+def test_generate_project(tmpdir):
+    args = [sys.executable, "-m", "inmanta.app", "generate-project", "-n", "test-project", "-o", tmpdir, "--default"]
+    (stdout, stderr, return_code) = run_without_tty(args)
+    test_project_path = os.path.join(tmpdir, "test-project")
+    assert return_code == 0
+    assert os.path.exists(test_project_path)
+    (stdout, stderr, return_code) = run_without_tty(args)
+    assert return_code == 1
+    assert len(stderr) == 1
+    assert "already exists" in stderr[0]

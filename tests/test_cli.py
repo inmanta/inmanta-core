@@ -66,17 +66,6 @@ async def test_project(server, client, cli):
 
 
 @pytest.mark.asyncio
-async def test_project_generate_template(server, client, cli, tmpdir):
-    result = await cli.run("project", "generate", "-n", "test", "-o", tmpdir)
-
-    assert result.exit_code == 0
-    assert os.path.exists(os.path.join(tmpdir, "test"))
-
-    projects = await client.list_projects()
-    assert len(projects.result["projects"]) == 1
-
-
-@pytest.mark.asyncio
 async def test_environment(server, client, cli, tmpdir):
     project_name = "test_project"
     result = await client.create_project(project_name)
