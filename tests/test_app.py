@@ -463,9 +463,9 @@ def test_generate_project(tmpdir):
     args = [sys.executable, "-m", "inmanta.app", "generate-project", "-n", "test-project", "-o", tmpdir, "--default"]
     (stdout, stderr, return_code) = run_without_tty(args)
     test_project_path = os.path.join(tmpdir, "test-project")
-    assert return_code == 0
     assert os.path.exists(test_project_path)
+    assert return_code == 0
     (stdout, stderr, return_code) = run_without_tty(args)
-    assert return_code == 1
+    assert return_code != 0
     assert len(stderr) == 1
     assert "already exists" in stderr[0]
