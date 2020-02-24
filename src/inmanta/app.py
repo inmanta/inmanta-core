@@ -47,7 +47,6 @@ from typing import Any, Callable, Coroutine
 
 import colorlog
 import yaml
-from cookiecutter.main import cookiecutter
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
@@ -292,30 +291,6 @@ def help_command(options: argparse.Namespace):
 def modules(options: argparse.Namespace) -> None:
     tool = moduletool.ModuleTool()
     tool.execute(options.cmd, options)
-
-
-def generate_project_parser_config(parser: ArgumentParser) -> None:
-    parser.add_argument("--name", "-n", help="The name of the new project", required=True)
-    parser.add_argument("--output-dir", "-o", help="Output directory path", default="./")
-    parser.add_argument(
-        "--default", help="Use default parameters for the project generation", action="store_true", default=False
-    )
-
-
-@command(
-    name="generate-project", help_msg="Generate directory structure for a project", parser_config=generate_project_parser_config
-)
-def project_generate(options: argparse.Namespace) -> None:
-    os.makedirs(options.output_dir, exist_ok=True)
-    project_path = os.path.join(options.output_dir, options.name)
-    if os.path.exists(project_path):
-        raise Exception(f"Project directory {project_path} already exists")
-    cookiecutter(
-        "https://github.com/inmanta/inmanta-project-template.git",
-        output_dir=options.output_dir,
-        extra_context={"project_name": options.name},
-        no_input=options.default,
-    )
 
 
 @command("project", help_msg="Subcommand to manage the project", parser_config=moduletool.ProjectTool.parser_config)

@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Iterable, List, Mapping
 
 import texttable
 import yaml
+from cookiecutter.main import cookiecutter
 from pkg_resources import parse_version
 
 from inmanta.ast import RuntimeException
@@ -169,6 +170,12 @@ class ProjectTool(ModuleLikeTool):
             " project.yml is used which defaults to ~=",
             default=None,
         )
+        generate = subparser.add_parser("generate", help="Generate directory structure for a project")
+        generate.add_argument("--name", "-n", help="The name of the new project", required=True)
+        generate.add_argument("--output-dir", "-o", help="Output directory path", default="./")
+        generate.add_argument(
+            "--default", help="Use default parameters for the project generation", action="store_true", default=False
+        )
 
     def freeze(self, outfile, recursive, operator):
         """
@@ -214,6 +221,18 @@ class ProjectTool(ModuleLikeTool):
         finally:
             if close:
                 outfile.close()
+
+    def generate(self, output_dir, name, default):
+        os.makedirs(output_dir, exist_ok=True)
+        project_path = os.path.join(output_dir, name)
+        if os.path.exists(project_path):
+            raise Exception(f"Project directory {project_path} already exists")
+        cookiecutter(
+            "https://github.com/inmanta/inmanta-project-template.git",
+            output_dir=output_dir,
+            extra_context={"project_name": name},
+            no_input=default,
+        )
 
 
 class ModuleTool(ModuleLikeTool):
