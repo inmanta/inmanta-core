@@ -15,11 +15,11 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import datetime
 import logging
 import time
 import uuid
-from concurrent.futures._base import TimeoutError
 
 import asyncpg
 import pytest
@@ -46,7 +46,7 @@ async def test_connect_too_small_connection_pool(postgres_db, database_name: str
     assert pool is not None
     connection: Connection = await pool.acquire()
     try:
-        with pytest.raises(TimeoutError):
+        with pytest.raises(asyncio.TimeoutError):
             await pool.acquire(timeout=1.0)
     finally:
         await connection.close()
