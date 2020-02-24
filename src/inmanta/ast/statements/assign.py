@@ -275,9 +275,6 @@ class Assign(AssignStatement):
             return
         node: dataflow.AssignableNodeReference = graph.resolver.get_dataflow_node(self.name)
         node.assign(self.value.get_dataflow_node(graph), self, graph)
-        target: Typeorvalue = graph.resolver.lookup(self.name)
-        assert isinstance(target, ResultVariable)
-        target.set_dataflow_node(node)
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)

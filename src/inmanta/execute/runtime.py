@@ -818,6 +818,8 @@ class ExecutionContext(Resolver):
         self.dataflow_graph: Optional[DataflowGraph] = None
         if resolver.dataflow_graph is not None:
             self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
+            for name, var in self.slots.items():
+                var.set_dataflow_node(self.dataflow_graph.get_named_node(name))
 
     def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
         if "::" in name:
