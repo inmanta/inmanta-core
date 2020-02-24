@@ -460,11 +460,13 @@ def test_version_argument_is_set(tmpdir, with_tty, version_should_be_shown, rege
 
 
 def test_generate_project(tmpdir):
-    args = [sys.executable, "-m", "inmanta.app", "generate-project", "-n", "test-project", "-o", tmpdir, "--default"]
+    projects_dir = tmpdir.mkdir("projects")
+    args = [sys.executable, "-m", "inmanta.app", "generate-project", "-n", "test-project", "-o", projects_dir, "--default"]
     (stdout, stderr, return_code) = run_without_tty(args)
-    test_project_path = os.path.join(tmpdir, "test-project")
-    assert os.path.exists(test_project_path)
+    test_project_path = os.path.join(projects_dir, "test-project")
+    assert len(stderr) == 0
     assert return_code == 0
+    assert os.path.exists(test_project_path)
     (stdout, stderr, return_code) = run_without_tty(args)
     assert return_code != 0
     assert len(stderr) == 1
