@@ -265,7 +265,6 @@ class Constructor(ExpressionStatement):
 
         self._direct_attributes = {}  # type: Dict[str,ExpressionStatement]
         self._indirect_attributes = {}  # type: Dict[str,ExpressionStatement]
-        self._dataflow_nodes: Dict[DataflowGraph, dataflow.InstanceNode] = {}
 
     def pretty_print(self) -> str:
         return "%s(%s)" % (
@@ -336,10 +335,10 @@ class Constructor(ExpressionStatement):
 
         graph: Optional[DataflowGraph] = resolver.dataflow_graph
         if graph is not None:
-            graph.add_instance_node(self.get_dataflow_node(graph), self.type.get_entity())
+            node: dataflow.InstanceNodeReference = self._register_dataflow_node(graph)
             # TODO: also add wrapped_kwargs
             for (k, v) in self.__attributes.items():
-                self.get_dataflow_node(graph).assign_attribute(k, v.get_dataflow_node(graph), self, graph)
+                node.assign_attribute(k, v.get_dataflow_node(graph), self, graph)
 
         return direct_requires
 
@@ -460,13 +459,19 @@ class Constructor(ExpressionStatement):
     attributes = property(get_attributes)
     wrapped_kwargs = property(get_wrapped_kwargs)
 
-    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.InstanceNodeReference:
+    def _register_dataflow_node(self, graph: DataflowGraph) -> dataflow.InstanceNodeReference:
+        """
+            Registers the dataflow node for this constructor to the graph if it does not exist yet.
+            Returns the node.
+        """
         assert self.type is not None
-        if graph not in self._dataflow_nodes:
-            self._dataflow_nodes[graph] = dataflow.InstanceNode(
-                self.type.get_entity().get_all_attribute_names(), self.type.get_entity(), self, graph
-            )
-        return self._dataflow_nodes[graph].reference()
+        new_node: dataflow.InstanceNode = dataflow.InstanceNode(
+            self.type.get_entity().get_all_attribute_names(), self.type.get_entity(), self, graph
+        )
+        return graph.own_instance_node_for_responsible(self, new_node).reference()
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.InstanceNodeReference:
+        return self._register_dataflow_node(graph)
 
     def __repr__(self) -> str:
         """

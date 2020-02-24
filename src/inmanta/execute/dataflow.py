@@ -35,6 +35,7 @@ class DataflowGraph:
     def __init__(self, resolver: "Resolver", parent: Optional["DataflowGraph"] = None) -> None:
         self.resolver: "Resolver" = resolver
         self.parent: Optional[DataflowGraph] = parent if parent is not None else None
+        self.own_instances: Dict[Statement, InstanceNode] = {}
         # TODO: finish implementation
 
     def get_named_node(self, name: str) -> "AssignableNodeReference":
@@ -44,7 +45,18 @@ class DataflowGraph:
         # TODO: implement
         return AssignableNodeReference()
 
-    def add_instance_node(self, node: "InstanceNodeReference", entity: "Entity") -> None:
+    def own_instance_node_for_responsible(self, responsible: "Statement", default: "InstanceNode") -> "InstanceNode":
+        """
+            Returns this graph's instance node tied to responsible if it exists.
+            Otherwise, returns default and adds it to the graph.
+        """
+        if responsible not in self.own_instances:
+            assert default.responsible == responsible
+            self.own_instances[responsible] = default
+            self._add_global_instance_node(default.reference())
+        return self.own_instances[responsible]
+
+    def _add_global_instance_node(self, node: "InstanceNodeReference") -> None:
         # TODO: implement
         pass
 
@@ -313,16 +325,16 @@ class InstanceNode(Node):
     def __init__(
         self,
         attributes: Iterable[str],
-        entity: Optional["Entity"] = None,
-        responsible: Optional["Statement"] = None,
-        context: Optional["DataflowGraph"] = None,
+        entity: "Entity",
+        responsible: "Statement",
+        context: "DataflowGraph" = None,
     ) -> None:
         Node.__init__(self)
         self.attributes: Dict[str, AttributeNode] = {name: AttributeNode(self, name) for name in attributes}
-        self.entity: Optional["Entity"] = entity
+        self.entity: "Entity" = entity
         self.index_node: Optional[InstanceNode] = None
-        self.responsible: Optional["Statement"] = responsible
-        self.context: Optional["DataflowGraph"] = context
+        self.responsible: "Statement" = responsible
+        self.context: "DataflowGraph" = context
         # TODO: finish implementation
 
     def get_self(self) -> "InstanceNode":
