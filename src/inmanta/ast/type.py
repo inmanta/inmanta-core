@@ -21,7 +21,16 @@ from typing import Callable
 from typing import List as PythonList
 from typing import Optional, Sequence
 
-from inmanta.ast import DuplicateException, Locatable, Location, Named, Namespace, RuntimeException, TypeNotFoundException
+from inmanta.ast import (
+    DuplicateException,
+    Locatable,
+    Location,
+    Named,
+    Namespace,
+    NotFoundException,
+    RuntimeException,
+    TypeNotFoundException,
+)
 from inmanta.execute.util import AnyType, NoneValue
 
 try:
@@ -461,7 +470,7 @@ class ConstraintType(NamedType):
             compiled.
         """
         self.expression = expression
-        self._constraint = create_function(expression)
+        self._constraint = create_function(self, expression)
 
     def get_constraint(self):
         """
@@ -506,7 +515,7 @@ class ConstraintType(NamedType):
         return DuplicateException(self, other, "TypeConstraint %s is already defined" % (self.get_full_name()))
 
 
-def create_function(expression: "ExpressionStatement"):
+def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
     """
         Function that returns a function that evaluates the given expression.
         The generated function accepts the unbound variables in the expression
@@ -520,7 +529,11 @@ def create_function(expression: "ExpressionStatement"):
         if len(args) != 1:
             raise NotImplementedError()
 
-        return expression.execute_direct({"self": args[0]})
+        try:
+            return expression.execute_direct({"self": args[0]})
+        except NotFoundException as e:
+            e.msg = "Unable to resolve `%s`: a type constraint can not reference variables." % e.stmt.name
+            raise e
 
     return function
 

@@ -69,10 +69,9 @@ class OpenApiConverter:
 
     def _collect_server_information(self) -> List[Server]:
         bind_port = config.get_bind_port()
-        bind_addresses = config.server_bind_address.get()
+        server_address = config.server_address.get()
         return [
-            Server(url=AnyUrl(url=f"http://{bind_address}:{bind_port}/", scheme="http", host=bind_address, port=bind_port))
-            for bind_address in bind_addresses
+            Server(url=AnyUrl(url=f"http://{server_address}:{bind_port}/", scheme="http", host=server_address, port=bind_port))
         ]
 
     def generate_openapi_definition(self) -> OpenAPI:

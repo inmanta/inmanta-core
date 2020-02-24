@@ -45,6 +45,7 @@ from inmanta.protocol.common import (
 )
 from inmanta.protocol.rest import CallArguments
 from inmanta.server import config as opt
+from inmanta.server.config import server_bind_port
 from inmanta.server.protocol import Server, ServerSlice
 from inmanta.types import Apireturn
 from inmanta.util import hash_file
@@ -1441,3 +1442,60 @@ async def test_zip_content_type(unused_tcp_port, postgres_db, database_name, asy
     response = await client.test_method()
     assert response.code == 200
     assert response.result == zip_content
+
+
+@pytest.fixture
+async def options_server():
+    @protocol.typedmethod(path="/test", operation="OPTIONS", client_types=["api"])
+    def test_method() -> ReturnValue[str]:  # NOQA
+        pass
+
+    class TestServer(ServerSlice):
+        @protocol.handle(test_method)
+        async def test_methodY(self) -> ReturnValue[str]:  # NOQA
+            return ReturnValue(response="content")
+
+    return TestServer(name="testserver")
+
+
+@pytest.fixture
+def options_request(unused_tcp_port):
+    return HTTPRequest(
+        url=f"http://localhost:{unused_tcp_port}/api/v1/test",
+        method="OPTIONS",
+        connect_timeout=1.0,
+        request_timeout=1.0,
+        decompress_response=True,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("auth_enabled, auth_header_allowed", [(True, True), (False, False)])
+async def test_auth_enabled_options_method(
+    auth_enabled,
+    auth_header_allowed,
+    unused_tcp_port,
+    postgres_db,
+    database_name,
+    async_finalizer,
+    options_server,
+    options_request,
+):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+    config.Config.set("server", "auth", str(auth_enabled))
+    rs = Server()
+    rs.add_slice(options_server)
+    await rs.start()
+    async_finalizer.add(options_server.stop)
+    async_finalizer.add(rs.stop)
+    client = AsyncHTTPClient()
+    response = await client.fetch(options_request)
+    assert response.code == 200
+    assert ("Authorization" in response.headers.get("Access-Control-Allow-Headers")) == auth_header_allowed
+
+
+@pytest.mark.asyncio
+async def test_required_header_not_present(server):
+    client = AsyncHTTPClient()
+    response = await client.fetch(f"http://localhost:{server_bind_port.get()}/api/v2/environment_settings", raise_error=False)
+    assert response.code == 400
