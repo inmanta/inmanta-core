@@ -170,10 +170,10 @@ class ProjectTool(ModuleLikeTool):
             " project.yml is used which defaults to ~=",
             default=None,
         )
-        generate = subparser.add_parser("generate", help="Generate directory structure for a project")
-        generate.add_argument("--name", "-n", help="The name of the new project", required=True)
-        generate.add_argument("--output-dir", "-o", help="Output directory path", default="./")
-        generate.add_argument(
+        init = subparser.add_parser("init", help="Initialize directory structure for a project")
+        init.add_argument("--name", "-n", help="The name of the new project", required=True)
+        init.add_argument("--output-dir", "-o", help="Output directory path", default="./")
+        init.add_argument(
             "--default", help="Use default parameters for the project generation", action="store_true", default=False
         )
 
@@ -222,7 +222,7 @@ class ProjectTool(ModuleLikeTool):
             if close:
                 outfile.close()
 
-    def generate(self, output_dir, name, default):
+    def init(self, output_dir, name, default):
         os.makedirs(output_dir, exist_ok=True)
         project_path = os.path.join(output_dir, name)
         if os.path.exists(project_path):

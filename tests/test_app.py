@@ -459,8 +459,8 @@ def test_version_argument_is_set(tmpdir, with_tty, version_should_be_shown, rege
     check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, False)
 
 
-def test_generate_project(tmpdir):
-    args = [sys.executable, "-m", "inmanta.app", "project", "generate", "-n", "test-project", "-o", tmpdir, "--default"]
+def test_init_project(tmpdir):
+    args = [sys.executable, "-m", "inmanta.app", "project", "init", "-n", "test-project", "-o", tmpdir, "--default"]
     (stdout, stderr, return_code) = run_without_tty(args, killtime=15, termtime=10)
     test_project_path = os.path.join(tmpdir, "test-project")
     assert return_code == 0
