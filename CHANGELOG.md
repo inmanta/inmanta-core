@@ -3,6 +3,9 @@
 ## Breaking changes
 - Non-boolean arguments to boolean operators are no longer allowed, this was previously possible due to bug (#1808)
 
+## Fixed
+ - Various compiler error reporting improvements (#1810)
+
 # v 2020.1 (2020-02-19) Changes in this release:
 
 ## Fixed
