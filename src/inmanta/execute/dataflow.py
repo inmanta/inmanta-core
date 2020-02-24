@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from typing import TYPE_CHECKING, Dict, Iterable, Iterator, Optional
+from typing import TYPE_CHECKING, Callable, Dict, Iterable, Iterator, Optional
 
 if TYPE_CHECKING:
     from inmanta.execute.runtime import Resolver
@@ -45,15 +45,18 @@ class DataflowGraph:
         # TODO: implement
         return AssignableNodeReference()
 
-    def own_instance_node_for_responsible(self, responsible: "Statement", default: "InstanceNode") -> "InstanceNode":
+    def own_instance_node_for_responsible(
+        self, responsible: "Statement", get_new: Callable[[], "InstanceNode"]
+    ) -> "InstanceNode":
         """
             Returns this graph's instance node tied to responsible if it exists.
-            Otherwise, returns default and adds it to the graph.
+            Otherwise, creates a new one using get_new, returns it and adds it to the graph.
         """
         if responsible not in self._own_instances:
-            assert default.responsible == responsible
-            self._own_instances[responsible] = default
-            self._add_global_instance_node(default.reference())
+            new: InstanceNode = get_new()
+            assert new.responsible == responsible
+            self._own_instances[responsible] = new
+            self._add_global_instance_node(new.reference())
         return self._own_instances[responsible]
 
     def _add_global_instance_node(self, node: "InstanceNodeReference") -> None:

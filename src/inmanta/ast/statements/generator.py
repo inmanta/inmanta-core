@@ -20,7 +20,7 @@
 
 import logging
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Set, Tuple  # noqa: F401
+from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple  # noqa: F401
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -487,11 +487,12 @@ class Constructor(ExpressionStatement):
             Registers the dataflow node for this constructor to the graph if it does not exist yet.
             Returns the node.
         """
-        assert self.type is not None
-        new_node: dataflow.InstanceNode = dataflow.InstanceNode(
-            self.type.get_entity().get_all_attribute_names(), self.type.get_entity(), self, graph
-        )
-        return graph.own_instance_node_for_responsible(self, new_node).reference()
+
+        def get_new_node() -> dataflow.InstanceNode:
+            assert self.type is not None
+            return dataflow.InstanceNode(self.type.get_entity().get_all_attribute_names(), self.type.get_entity(), self, graph)
+
+        return graph.own_instance_node_for_responsible(self, get_new_node).reference()
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.InstanceNodeReference:
         return self._register_dataflow_node(graph)
