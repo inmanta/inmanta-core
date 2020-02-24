@@ -19,7 +19,7 @@
 import logging
 from typing import Dict, Generic, List, Optional, TypeVar
 
-from inmanta.ast import Locatable, LocatableString, Location, OptionalValueException, RuntimeException
+from inmanta.ast import Locatable, LocatableString, Location, NotFoundException, OptionalValueException, RuntimeException
 from inmanta.ast.statements import AssignStatement, ExpressionStatement
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.runtime import Instance, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
@@ -61,7 +61,7 @@ class Reference(ExpressionStatement):
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
         if self.name not in requires:
-            raise RuntimeException(self, "Could not resolve the value %s in this static context" % self.name)
+            raise NotFoundException(self, "Could not resolve the value %s in this static context" % self.name)
         return requires[self.name]
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:

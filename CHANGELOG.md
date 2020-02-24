@@ -1,5 +1,8 @@
 # v 2020.2 (?) Changes in this release:
 
+## Fixed
+ - Various compiler error reporting improvements (#1810)
+
 # v 2020.1 (2020-02-19) Changes in this release:
 
 ## Breaking changes
