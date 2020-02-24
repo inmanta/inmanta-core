@@ -43,7 +43,6 @@ from inmanta.execute.runtime import (
     ResultCollector,
     ResultVariable,
     TempListVariable,
-    Typeorvalue,
 )
 from inmanta.execute.util import Unknown
 

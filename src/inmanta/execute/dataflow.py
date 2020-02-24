@@ -323,11 +323,7 @@ class InstanceNode(Node):
     """
 
     def __init__(
-        self,
-        attributes: Iterable[str],
-        entity: "Entity",
-        responsible: "Statement",
-        context: "DataflowGraph" = None,
+        self, attributes: Iterable[str], entity: "Entity", responsible: "Statement", context: "DataflowGraph" = None,
     ) -> None:
         Node.__init__(self)
         self.attributes: Dict[str, AttributeNode] = {name: AttributeNode(self, name) for name in attributes}
