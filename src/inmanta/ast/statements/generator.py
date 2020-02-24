@@ -22,6 +22,7 @@ import logging
 from itertools import chain
 from typing import Dict, Iterator, List, Optional, Set, Tuple  # noqa: F401
 
+import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     AttributeReferenceAnchor,
@@ -37,7 +38,6 @@ from inmanta.ast import (
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DynamicStatement, ExpressionStatement
 from inmanta.ast.statements.assign import SetAttributeHelper
-from inmanta.ast.type import Type as InmantaType
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver, ResultCollector, ResultVariable
@@ -85,8 +85,17 @@ class SubConstructor(ExpressionStatement):
             Evaluate this statement
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing subconstructor for %s implement %s", self.type, self.implements.location)
-        expr = self.implements.constraint
-        if not expr.execute(requires, instance, queue):
+        condition = self.implements.constraint.execute(requires, instance, queue)
+        try:
+            inmanta_type.Bool().validate(condition)
+        except RuntimeException as e:
+            e.set_statement(self.implements)
+            e.msg = (
+                "Invalid value `%s`: the condition for a conditional implementation can only be a boolean expression"
+                % condition
+            )
+            raise e
+        if not condition:
             return None
 
         myqueue = queue.for_tracker(ImplementsTracker(self, instance))
@@ -100,6 +109,16 @@ class SubConstructor(ExpressionStatement):
                 xc.emit(myqueue)
 
         return None
+
+    def pretty_print(self) -> str:
+        return "implement %s using %s when %s" % (
+            self.type,
+            ",".join(i.name for i in self.implements.implementations),
+            self.implements.constraint.pretty_print(),
+        )
+
+    def __str__(self) -> str:
+        return self.pretty_print()
 
     def __repr__(self) -> str:
         return "SubConstructor(%s)" % self.type
@@ -227,8 +246,12 @@ class If(ExpressionStatement):
         cond: object = self.condition.execute(requires, resolver, queue)
         if isinstance(cond, Unknown):
             return None
-        if not isinstance(cond, bool):
-            raise TypingException(self, "The condition for an if statement can only be a boolean expression")
+        try:
+            inmanta_type.Bool().validate(cond)
+        except RuntimeException as e:
+            e.set_statement(self)
+            e.msg = "Invalid value `%s`: the condition for an if statement can only be a boolean expression" % cond
+            raise e
         branch: BasicBlock = self.if_branch if cond else self.else_branch
         xc = ExecutionContext(branch, resolver.for_namespace(branch.namespace))
         xc.emit(queue)
@@ -352,7 +375,7 @@ class Constructor(ExpressionStatement):
         type_class = self.type.get_entity()
 
         # kwargs
-        kwarg_attrs: Dict[str, InmantaType] = {}
+        kwarg_attrs: Dict[str, inmanta_type.Type] = {}
         for kwargs in self.wrapped_kwargs:
             for (k, v) in kwargs.execute(requires, resolver, queue):
                 if k in self.attributes or k in kwarg_attrs:
@@ -504,7 +527,7 @@ class WrappedKwargs(ExpressionStatement):
 
     def execute(
         self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler
-    ) -> List[Tuple[str, InmantaType]]:
+    ) -> List[Tuple[str, inmanta_type.Type]]:
         dct: object = self.dictionary.execute(requires, resolver, queue)
         if not isinstance(dct, Dict):
             raise TypingException(self, "The ** operator can only be applied to dictionaries")

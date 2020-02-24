@@ -2,6 +2,7 @@
 %define release 1
 %define version 2017.2
 %define buildid %{nil}
+%define buildid_egg %{nil}
 %define venv %{buildroot}/opt/inmanta
 %define _p3 %{venv}/bin/python3
 %define _unique_build_ids 0
@@ -12,6 +13,7 @@
 
 
 %define sourceversion %{version}%{?buildid}
+%define sourceversion_egg %{version}%{?buildid_egg}
 
 Name:           python3-inmanta
 Version:        %{version}
@@ -22,7 +24,7 @@ Summary:        Inmanta automation and orchestration tool
 Group:          Development/Languages
 License:        ASL 2
 URL:            http://inmanta.com
-Source0:        inmanta-%{sourceversion}.tar.gz
+Source0:        inmanta-%{sourceversion_egg}.tar.gz
 Source1:        dependencies.tar.gz
 Source2:        inmanta-inmanta-dashboard-%{dashboard_version}.tgz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
@@ -75,9 +77,9 @@ Requires:       python3-inmanta
 %description agent
 
 %prep
-%setup -q -n inmanta-%{sourceversion}
-%setup -T -D -a 1 -n inmanta-%{sourceversion}
-%setup -T -D -a 2 -n inmanta-%{sourceversion}
+%setup -q -n inmanta-%{sourceversion_egg}
+%setup -T -D -a 1 -n inmanta-%{sourceversion_egg}
+%setup -T -D -a 2 -n inmanta-%{sourceversion_egg}
 
 %build
 

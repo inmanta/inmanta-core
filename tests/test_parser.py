@@ -22,8 +22,8 @@ import pytest
 
 from inmanta.ast import LocatableString, Namespace
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.constraint.expression import And, Equals, GreaterThan, In, IsDefined, Not, Regex
-from inmanta.ast.statements import ExpressionStatement, Literal, define
+from inmanta.ast.constraint.expression import And, Equals, GreaterThan, In, IsDefined, Not, Or, Regex
+from inmanta.ast.statements import ExpressionStatement, Literal, ReferenceStatement, define
 from inmanta.ast.statements.assign import (
     Assign,
     CreateDict,
@@ -1701,3 +1701,50 @@ end
     )
     assert len(statements) == 2
     assert isinstance(statements[1], If)
+
+
+@pytest.mark.parametrize(
+    "expression,expected_tree",
+    [
+        ("42 == 42 and not false", (And, [(Equals, [(Literal, 42), (Literal, 42)]), (Not, [(Literal, False)])])),
+        (
+            "42 in [12, 42] or 'test' in []",
+            (
+                Or,
+                [
+                    (In, [(Literal, 42), (CreateList, [(Literal, 12), (Literal, 42)])]),
+                    (In, [(Literal, "test"), (CreateList, [])]),
+                ],
+            ),
+        ),
+        ("not (42 in x)", (Not, [(In, [(Literal, 42), (Reference, "x")])])),
+        ("not 42 in x", (Not, [(In, [(Literal, 42), (Reference, "x")])])),
+        ("x or y.u is defined", (Or, [(Reference, "x"), (IsDefined, [(Reference, "y")])])),
+    ],
+)
+def test_1815_conditional_expressions(expression, expected_tree):
+    statements = parse_code(
+        f"""
+__x__ = {expression}
+        """,
+    )
+    assert len(statements) == 1
+    assign_stmt = statements[0]
+    assert isinstance(assign_stmt, Assign)
+
+    def expression_asserter(expression: ExpressionStatement, expected_tree):
+        assert isinstance(expression, expected_tree[0])
+        if isinstance(expression, Literal):
+            assert expression.value == expected_tree[1]
+        elif isinstance(expression, Reference):
+            assert expression.name == expected_tree[1]
+        elif isinstance(expression, ReferenceStatement):
+            assert len(expression.children) == len(expected_tree[1])
+            for child, child_expected in zip(expression.children, expected_tree[1]):
+                if child_expected is None:
+                    continue
+                expression_asserter(child, child_expected)
+        else:
+            raise Exception("this test does not support %s" % type(expression))
+
+    expression_asserter(assign_stmt.rhs, expected_tree)
