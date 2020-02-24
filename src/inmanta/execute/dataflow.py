@@ -30,12 +30,12 @@ class DataflowGraph:
     """
 
     # TODO: other slots
-    __slots__ = ("resolver", "parent")
+    __slots__ = ("resolver", "parent", "_own_instances")
 
     def __init__(self, resolver: "Resolver", parent: Optional["DataflowGraph"] = None) -> None:
         self.resolver: "Resolver" = resolver
         self.parent: Optional[DataflowGraph] = parent if parent is not None else None
-        self.own_instances: Dict[Statement, InstanceNode] = {}
+        self._own_instances: Dict[Statement, InstanceNode] = {}
         # TODO: finish implementation
 
     def get_named_node(self, name: str) -> "AssignableNodeReference":
@@ -50,11 +50,11 @@ class DataflowGraph:
             Returns this graph's instance node tied to responsible if it exists.
             Otherwise, returns default and adds it to the graph.
         """
-        if responsible not in self.own_instances:
+        if responsible not in self._own_instances:
             assert default.responsible == responsible
-            self.own_instances[responsible] = default
+            self._own_instances[responsible] = default
             self._add_global_instance_node(default.reference())
-        return self.own_instances[responsible]
+        return self._own_instances[responsible]
 
     def _add_global_instance_node(self, node: "InstanceNodeReference") -> None:
         # TODO: implement
