@@ -1,9 +1,15 @@
 # v 2020.2 (?) Changes in this release:
 
+## Breaking changes
+- Non-boolean arguments to boolean operators are no longer allowed, this was previously possible due to bug (#1808)
+
 ## Fixed
  - Various compiler error reporting improvements (#1810)
 
 # v 2020.1 (2020-02-19) Changes in this release:
+
+## Fixed
+ - Added support for conditions as expressions and vice versa (#1815)
 
 ## Breaking changes
 - Entity instances are no longer allowed in list and dict attributes, this was previously possible due to bug (#1435)
