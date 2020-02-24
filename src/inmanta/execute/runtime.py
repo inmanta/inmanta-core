@@ -784,9 +784,9 @@ class NamespaceResolver(Resolver):
     def __init__(self, parent: Resolver, lecial_root: Namespace) -> None:
         self.parent = parent
         self.root = lecial_root
-        self.dataflow_graph: Optional[DataflowGraph] = DataflowGraph(
-            self, parent.dataflow_graph
-        ) if parent.dataflow_graph is not None else None
+        self.dataflow_graph: Optional[DataflowGraph] = None
+        if parent.dataflow_graph is not None:
+            self.dataflow_graph = DataflowGraph(self, parent.dataflow_graph)
 
     def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
         if root is not None:
@@ -815,9 +815,9 @@ class ExecutionContext(Resolver):
         self.block = block
         self.slots: Dict[str, ResultVariable] = {n: ResultVariable() for n in block.get_variables()}
         self.resolver = resolver
-        self.dataflow_graph: Optional[DataflowGraph] = DataflowGraph(
-            self, resolver.dataflow_graph
-        ) if resolver.dataflow_graph is not None else None
+        self.dataflow_graph: Optional[DataflowGraph] = None
+        if resolver.dataflow_graph is not None:
+            self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
 
     def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
         if "::" in name:
@@ -887,14 +887,15 @@ class Instance(ExecutionContext):
 
         # TODO: this is somewhat ugly. Is there a cleaner way to enforce this constraint
         assert (resolver.dataflow_graph is None) == (node is None)
-        self.dataflow_graph: Optional[DataflowGraph] = DataflowGraph(
-            self, resolver.dataflow_graph
-        ) if resolver.dataflow_graph is not None else None
+        self.dataflow_graph: Optional[DataflowGraph] = None
         self.instance_node: Optional[dataflow.InstanceNodeReference] = node
         self.self_var_node: Optional[dataflow.AssignableNodeReference] = None
-        if self.instance_node is not None:
+        if resolver.dataflow_graph is not None:
+            self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
             self.self_var_node = dataflow.AssignableNode("__self__").reference()
-            self.self_var_node.assign(self.instance_node, Statement(), cast(DataflowGraph, self.dataflow_graph))
+            self.self_var_node.assign(
+                cast(dataflow.InstanceNodeReference, self.instance_node), Statement(), cast(DataflowGraph, self.dataflow_graph)
+            )
 
         self.slots: Dict[str, ResultVariable] = {
             n: mytype.get_attribute(n).get_new_result_variable(self, queue) for n in mytype.get_all_attribute_names()

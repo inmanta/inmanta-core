@@ -92,7 +92,7 @@ class NodeReference:
         """
             Returns true iff this NodeReference refers to node.
         """
-        return any(n for n in self.nodes() if n == node)
+        return node in self.nodes()
 
 
 class AssignableNodeReference(NodeReference):
