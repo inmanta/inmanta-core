@@ -465,6 +465,7 @@ def test_generate_project(tmpdir):
     (stdout, stderr, return_code) = run_without_tty(args)
     test_project_path = os.path.join(projects_dir, "test-project")
     assert len(stderr) == 0
+    assert stdout is None
     assert return_code == 0
     assert os.path.exists(test_project_path)
     (stdout, stderr, return_code) = run_without_tty(args)
