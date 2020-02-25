@@ -20,9 +20,10 @@
 
 import logging
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Set, Tuple  # noqa: F401
+from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple  # noqa: F401
 
 import inmanta.ast.type as inmanta_type
+import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     AttributeReferenceAnchor,
     DuplicateException,
@@ -38,6 +39,7 @@ from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DynamicStatement, ExpressionStatement
 from inmanta.ast.statements.assign import SetAttributeHelper
 from inmanta.const import LOG_LEVEL_TRACE
+from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver, ResultCollector, ResultVariable
 from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
@@ -49,6 +51,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Default, Entity, Implement, EntityLike  # noqa: F401
+    from inmanta.execute.runtime import Instance
 
 LOGGER = logging.getLogger(__name__)
 
@@ -353,6 +356,13 @@ class Constructor(ExpressionStatement):
             LOG_LEVEL_TRACE, "emitting constructor for %s at %s with %s", self.class_type, self.location, direct_requires
         )
 
+        graph: Optional[DataflowGraph] = resolver.dataflow_graph
+        if graph is not None:
+            node: dataflow.InstanceNodeReference = self._register_dataflow_node(graph)
+            # TODO: also add wrapped_kwargs
+            for (k, v) in self.__attributes.items():
+                node.assign_attribute(k, v.get_dataflow_node(graph), self, graph)
+
         return direct_requires
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler):
@@ -388,20 +398,25 @@ class Constructor(ExpressionStatement):
         attributes.update(kwarg_attrs)
 
         # check if the instance already exists in the index (if there is one)
-        instances = []
+        instances: List[Instance] = []
         for index in type_class.get_indices():
             params = []
             for attr in index:
                 params.append((attr, attributes[attr]))
 
-            obj = type_class.lookup_index(params, self)
+            obj: Optional[Instance] = type_class.lookup_index(params, self)
 
             if obj is not None:
                 if obj.get_type().get_entity() != type_class:
                     raise DuplicateException(self, obj, "Type found in index is not an exact match")
                 instances.append(obj)
 
+        graph: Optional[DataflowGraph] = resolver.dataflow_graph
         if len(instances) > 0:
+            if graph is not None:
+                graph.add_index_match(
+                    chain([self.get_dataflow_node(graph)], (i.instance_node for i in instances if i.instance_node is not None),)
+                )
             # ensure that instances are all the same objects
             first = instances[0]
             for i in instances[1:]:
@@ -414,7 +429,9 @@ class Constructor(ExpressionStatement):
                 object_instance.set_attribute(k, v, self.location)
         else:
             # create the instance
-            object_instance = type_class.get_instance(attributes, resolver, queue, self.location)
+            object_instance = type_class.get_instance(
+                attributes, resolver, queue, self.location, self.get_dataflow_node(graph) if graph is not None else None
+            )
 
         # deferred execution for indirect attributes
         for attributename, valueexpression in self._indirect_attributes.items():
@@ -464,6 +481,21 @@ class Constructor(ExpressionStatement):
 
     attributes = property(get_attributes)
     wrapped_kwargs = property(get_wrapped_kwargs)
+
+    def _register_dataflow_node(self, graph: DataflowGraph) -> dataflow.InstanceNodeReference:
+        """
+            Registers the dataflow node for this constructor to the graph if it does not exist yet.
+            Returns the node.
+        """
+
+        def get_new_node() -> dataflow.InstanceNode:
+            assert self.type is not None
+            return dataflow.InstanceNode(self.type.get_entity().get_all_attribute_names(), self.type.get_entity(), self, graph)
+
+        return graph.own_instance_node_for_responsible(self, get_new_node).reference()
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.InstanceNodeReference:
+        return self._register_dataflow_node(graph)
 
     def __repr__(self) -> str:
         """

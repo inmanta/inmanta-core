@@ -17,7 +17,9 @@
 """
 from typing import Any, Dict, List, Optional, Tuple  # noqa: F401
 
+import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced, RuntimeException
+from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 
 try:
@@ -120,6 +122,14 @@ class ExpressionStatement(DynamicStatement):
         """
         raise RuntimeException(None, "%s is not a constant")
 
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        """
+            Return the node in the data flow graph this ExpressionStatement will evaluate to.
+        """
+        # TODO: NodeStub is used while the dataflow graph is not fully compatible with the language.
+        #   This should raise a NotImplementedError instead.
+        return dataflow.NodeStub("expressionStatement.get_node(Resolver) placeholder for %s" % type(self)).reference()
+
 
 class Resumer(ExpressionStatement):
     def resume(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
@@ -173,6 +183,12 @@ class AssignStatement(DynamicStatement):
         out.extend(self.rhs.requires())  # type : List[str]
         return out
 
+    def _add_to_dataflow_graph(self, graph: Optional[DataflowGraph]) -> None:
+        """
+            Adds this assignment to the resolver's data flow graph.
+        """
+        raise NotImplementedError()
+
 
 class Literal(ExpressionStatement):
     def __init__(self, value: object) -> None:
@@ -201,6 +217,9 @@ class Literal(ExpressionStatement):
 
     def as_constant(self) -> object:
         return self.value
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.ValueNodeReference:
+        return dataflow.ValueNode(self.value).reference()
 
 
 class DefinitionStatement(Statement):

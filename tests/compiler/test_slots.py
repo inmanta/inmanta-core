@@ -19,6 +19,7 @@ from inmanta.ast import Location, Range
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity, Namespace
 from inmanta.ast.statements import Literal, Resumer
+from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     AttributeVariable,
     DelegateQueueScheduler,
@@ -69,3 +70,7 @@ def test_slots_rt():
 def test_slots_ast():
     assert_slotted(Location("", 0))
     assert_slotted(Range("", 0, 0, 0, 0))
+
+
+def test_slots_dataflow():
+    assert_slotted(DataflowGraph(Resolver(Namespace("root", None))))
