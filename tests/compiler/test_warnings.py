@@ -21,6 +21,7 @@ from typing import Optional
 
 import pytest
 
+import inmanta.warnings as inmanta_warnings
 from inmanta.ast import CompilerRuntimeWarning
 from inmanta.warnings import WarningsManager
 
@@ -36,9 +37,9 @@ def test_warnings(option: Optional[str], expected_error: bool, expected_warning:
         WarningsManager.apply_config({"default": option} if option is not None else None)
         if expected_error:
             with pytest.raises(CompilerRuntimeWarning):
-                warnings.warn(warning)
+                inmanta_warnings.warn(warning)
         else:
-            warnings.warn(warning)
+            inmanta_warnings.warn(warning)
         if expected_warning:
             assert len(w) == 1
             assert issubclass(w[0].category, CompilerRuntimeWarning)

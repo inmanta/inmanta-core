@@ -93,3 +93,10 @@ class InmantaWarning(Warning):
 
     def __init__(self):
         Warning.__init__(self)
+
+
+def warn(warning: InmantaWarning):
+    """
+        Warn using the supplied InmantaWarning instance.
+    """
+    warnings.warn(warning)
