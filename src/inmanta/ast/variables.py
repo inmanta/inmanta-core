@@ -19,9 +19,11 @@
 import logging
 from typing import Dict, Generic, List, Optional, TypeVar
 
+import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Locatable, LocatableString, Location, NotFoundException, OptionalValueException, RuntimeException
 from inmanta.ast.statements import AssignStatement, ExpressionStatement
 from inmanta.ast.statements.assign import Assign, SetAttribute
+from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import Instance, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
@@ -78,6 +80,9 @@ class Reference(ExpressionStatement):
             attr_ref = AttributeReference(ref, self.name)
             self.copy_location(attr_ref)
             return attr_ref
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.AssignableNodeReference:
+        return graph.resolver.get_dataflow_node(self.name)
 
     def __str__(self) -> str:
         return self.name
@@ -250,6 +255,10 @@ class AttributeReference(Reference):
         out = AttributeReference(self.instance.root_in_self(), self.attribute)
         self.copy_location(out)
         return out
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.AttributeNodeReference:
+        assert self.instance is not None
+        return dataflow.AttributeNodeReference(self.instance.get_dataflow_node(graph), self.attribute)
 
     def __repr__(self, *args, **kwargs):
         return "%s.%s" % (repr(self.instance), self.attribute)
