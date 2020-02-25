@@ -17,8 +17,7 @@
 """
 
 import warnings
-from configparser import SectionProxy
-from typing import Dict, List, Optional, Type, Union
+from typing import Dict, List, Mapping, Optional, Type, Union
 
 
 class WarningRule:
@@ -76,7 +75,7 @@ class WarningsManager:
     ]
 
     @classmethod
-    def apply_config(cls, config: Optional[SectionProxy]) -> None:
+    def apply_config(cls, config: Optional[Mapping]) -> None:
         if config is None:
             return
         for option in cls.options:
