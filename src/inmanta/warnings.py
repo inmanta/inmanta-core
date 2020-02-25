@@ -1,5 +1,5 @@
 """
-    Copyright 2019 Inmanta
+    Copyright 2020 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -85,3 +85,12 @@ class WarningsManager:
                 option.apply(value)
             except KeyError:
                 pass
+
+
+class InmantaWarning(Warning):
+    """
+        Base class for Inmanta Warnings.
+    """
+
+    def __init__(self):
+        Warning.__init__(self)

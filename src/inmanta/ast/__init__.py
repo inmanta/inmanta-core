@@ -21,6 +21,8 @@ from abc import abstractmethod
 from functools import lru_cache
 from typing import Dict, List, Optional, Sequence, Union  # noqa: F401
 
+from inmanta.warnings import InmantaWarning
+
 try:
     from typing import TYPE_CHECKING
 except ImportError:
@@ -543,14 +545,19 @@ class RuntimeException(CompilerException):
         return super(RuntimeException, self).format()
 
 
-class CompilerWarning(RuntimeWarning, RuntimeException):
+class CompilerRuntimeWarning(InmantaWarning, RuntimeException):
     """
-        Baseclass for compiler warnings.
+        Baseclass for compiler warnings after parsing is complete.
     """
 
     def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
-        RuntimeWarning.__init__(self)
+        InmantaWarning.__init__(self)
         RuntimeException.__init__(self, stmt, msg)
+
+
+class CompilerDeprecationWarning(CompilerRuntimeWarning):
+    def __init__(self, stmt: Optional["Locatable"], msg: str) -> None:
+        CompilerRuntimeWarning.__init__(self, stmt, msg)
 
 
 class TypeNotFoundException(RuntimeException):
