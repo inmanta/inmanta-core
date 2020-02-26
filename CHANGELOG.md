@@ -6,6 +6,9 @@
 ## Fixed
  - Various compiler error reporting improvements (#1810)
 
+## Added
+ - Warning when shadowing variable (#1366)
+
 # v 2020.1 (2020-02-19) Changes in this release:
 
 ## Fixed
