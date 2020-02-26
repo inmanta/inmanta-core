@@ -89,23 +89,17 @@ class BasicBlock(object):
         """
         if surrounding_vars is None:
             surrounding_vars = {}
+        surrounding_vars = surrounding_vars.copy()
         if subblocks is None:
             subblocks = (block for stmt in self.__stmts for block in stmt.nested_blocks())
-        surrounding_vars = surrounding_vars.copy()
 
-        def merge_locatables(
-            tuples: Iterator[Tuple[str, Locatable]], acc: Optional[Dict[str, FrozenSet[Locatable]]] = None
-        ) -> Dict[str, FrozenSet[Locatable]]:
-            if acc is None:
-                acc = {}
-            try:
-                var, loc = next(tuples)
+        def merge_locatables(tuples: Iterator[Tuple[str, Locatable]]) -> Dict[str, FrozenSet[Locatable]]:
+            acc: Dict[str, FrozenSet[Locatable]] = {}
+            for var, loc in tuples:
                 if var not in acc:
                     acc[var] = frozenset(())
                 acc[var] = acc[var].union({loc})
-                return merge_locatables(tuples, acc)
-            except StopIteration:
-                return acc
+            return acc
 
         own_variables: Iterator[Tuple[str, Locatable]] = (
             (var, stmt) for stmt in self.__stmts for var in stmt.declared_variables()
