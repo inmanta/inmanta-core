@@ -189,6 +189,7 @@ class Scheduler(object):
         # normalize root blocks
         for block in blocks:
             block.normalize()
+            block.warn_shadowed_variables()
 
         self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 

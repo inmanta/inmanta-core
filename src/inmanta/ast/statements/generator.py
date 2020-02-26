@@ -213,6 +213,9 @@ class For(DynamicStatement):
 
         return None
 
+    def nested_blocks(self) -> Iterator["BasicBlock"]:
+        yield self.module
+
 
 class If(ExpressionStatement):
     """
@@ -256,6 +259,10 @@ class If(ExpressionStatement):
         xc = ExecutionContext(branch, resolver.for_namespace(branch.namespace))
         xc.emit(queue)
         return None
+
+    def nested_blocks(self) -> Iterator["BasicBlock"]:
+        yield self.if_branch
+        yield self.else_branch
 
 
 class Constructor(ExpressionStatement):

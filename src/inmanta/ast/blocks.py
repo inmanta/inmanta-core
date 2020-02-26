@@ -16,11 +16,11 @@
     Contact: code@inmanta.com
 """
 
-from typing import List
+from itertools import chain
+from typing import Dict, FrozenSet, Iterator, List, Optional, Tuple
 
-from inmanta.ast import Anchor, Namespace, RuntimeException, TypeNotFoundException
+from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException
 from inmanta.ast.statements import DynamicStatement
-from inmanta.ast.statements.assign import Assign
 from inmanta.execute.runtime import QueueScheduler, Resolver
 
 
@@ -49,8 +49,7 @@ class BasicBlock(object):
         self.variables.append(name)
 
     def normalize(self) -> None:
-        assigns = [s for s in self.__stmts if isinstance(s, Assign)]  # type: List[Assign]
-        self.variables = [s.name for s in assigns]
+        self.variables = list(chain.from_iterable(stmt.declared_variables() for stmt in self.__stmts))
 
         for s in self.__stmts:
             try:
@@ -75,3 +74,56 @@ class BasicBlock(object):
             except RuntimeException as e:
                 e.set_statement(s)
                 raise e
+
+    def warn_shadowed_variables(self) -> None:
+        """
+            Produces a warning for any shadowed variables in this block or it's subblocks.
+        """
+        for var, shadowed_locs, orig_locs in self.shadowed_variables():
+            # TODO: throw decent warning instead
+            print(
+                "Variable `%s` shadowed: originally declared at %s, shadowed at %s"
+                % (
+                    var,
+                    ",".join(str(loc.get_location()) for loc in orig_locs),
+                    ",".join(str(loc.get_location()) for loc in shadowed_locs),
+                ),
+            )
+
+    def shadowed_variables(
+        self, surrounding_vars: Optional[Dict[str, FrozenSet[Locatable]]] = None
+    ) -> Iterator[Tuple[str, FrozenSet[Locatable], FrozenSet[Locatable]]]:
+        """
+            Returns an iterator over variables shadowed in this block or it's subblocks.
+            The elements are tuples of the variable name, a set of the shadowed locations
+            and a set of the originally declared locations.
+            The surrounding_vars parameter is an accumulator for variables declared in surrounding blocks.
+        """
+        if surrounding_vars is None:
+            surrounding_vars = {}
+        surrounding_vars = surrounding_vars.copy()
+
+        def merge_locatables(
+            tuples: Iterator[Tuple[str, Locatable]], acc: Optional[Dict[str, FrozenSet[Locatable]]] = None
+        ) -> Dict[str, FrozenSet[Locatable]]:
+            if acc is None:
+                acc = {}
+            try:
+                var, loc = next(tuples)
+                if var not in acc:
+                    acc[var] = frozenset(())
+                acc[var] = acc[var].union({loc})
+                return merge_locatables(tuples, acc)
+            except StopIteration:
+                return acc
+
+        own_variables: Iterator[Tuple[str, Locatable]] = (
+            (var, stmt) for stmt in self.__stmts for var in stmt.declared_variables()
+        )
+        for var, locs in merge_locatables(own_variables).items():
+            if var in surrounding_vars:
+                yield (var, locs, surrounding_vars[var])
+            surrounding_vars[var] = locs
+        yield from chain.from_iterable(
+            block.shadowed_variables(surrounding_vars) for stmt in self.__stmts for block in stmt.nested_blocks()
+        )
