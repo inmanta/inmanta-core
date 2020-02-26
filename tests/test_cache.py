@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import unittest
 from threading import Lock, Thread
 from time import sleep
 
@@ -119,11 +118,27 @@ def test_version_close():
     assert value == cache.find("testx", resource=resource)
     cache.close_version(version)
     assert value, cache.find("testx", resource=resource)
-    try:
+    with pytest.raises(KeyError):
         assert value == cache.find("test", version=version)
         raise AssertionError("Should get exception")
-    except KeyError:
-        pass
+
+
+def test_context_manager():
+    cache = AgentCache()
+    value = "test too"
+    version = 200
+    with cache.manager(version):
+        cache.cache_value("test", value, version=version)
+        cache.cache_value("test0", value, version=version)
+        cache.cache_value("test4", value, version=version)
+        resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
+        cache.cache_value("testx", value, resource=resource)
+        assert value == cache.find("test", version=version)
+        assert value == cache.find("testx", resource=resource)
+
+    assert value, cache.find("testx", resource=resource)
+    with pytest.raises(KeyError):
+        assert value == cache.find("test", version=version)
 
 
 def test_multi_threaded():
