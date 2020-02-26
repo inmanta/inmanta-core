@@ -21,7 +21,7 @@ Setting up the tutorial
 _________________________
 
 To quickly get started with Inmanta, use Docker Compose to set up an environment to host the Inmanta server and some machines to be managed.
-Before starting this tutorial, first `install Docker on your machine <https://docs.docker.com/v17.09/engine/installation/>`_.
+Before starting this tutorial, first `install Docker on your machine <https://docs.docker.com/install/>`_.
 Next `install Docker Compose on your machine <https://docs.docker.com/compose/install/>`_.
 
 Then, grab the Docker quickstart from our Git repository.
