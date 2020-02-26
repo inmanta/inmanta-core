@@ -18,7 +18,7 @@
 # pylint: disable-msg=R0923,W0613
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 from inmanta.ast import (
     AttributeReferenceAnchor,
@@ -287,6 +287,12 @@ class DefineImplementation(TypeDefinitionStatement):
         except TypeNotFoundException as e:
             e.set_statement(self)
             raise e
+
+    def nested_blocks(self) -> Iterator["BasicBlock"]:
+        """
+            Returns an iterator over blocks contained within this statement.
+        """
+        yield self.block
 
 
 class DefineImplementInherits(DefinitionStatement):

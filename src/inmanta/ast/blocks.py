@@ -17,7 +17,7 @@
 """
 
 from itertools import chain
-from typing import Dict, FrozenSet, Iterator, List, Optional, Tuple
+from typing import Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple
 
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException
 from inmanta.ast.statements import DynamicStatement
@@ -75,32 +75,22 @@ class BasicBlock(object):
                 e.set_statement(s)
                 raise e
 
-    def warn_shadowed_variables(self) -> None:
-        """
-            Produces a warning for any shadowed variables in this block or it's subblocks.
-        """
-        for var, shadowed_locs, orig_locs in self.shadowed_variables():
-            # TODO: throw decent warning instead
-            print(
-                "Variable `%s` shadowed: originally declared at %s, shadowed at %s"
-                % (
-                    var,
-                    ",".join(str(loc.get_location()) for loc in orig_locs),
-                    ",".join(str(loc.get_location()) for loc in shadowed_locs),
-                ),
-            )
-
     def shadowed_variables(
-        self, surrounding_vars: Optional[Dict[str, FrozenSet[Locatable]]] = None
+        self,
+        surrounding_vars: Optional[Dict[str, FrozenSet[Locatable]]] = None,
+        subblocks: Optional[Iterable["BasicBlock"]] = None,
     ) -> Iterator[Tuple[str, FrozenSet[Locatable], FrozenSet[Locatable]]]:
         """
             Returns an iterator over variables shadowed in this block or it's subblocks.
             The elements are tuples of the variable name, a set of the shadowed locations
             and a set of the originally declared locations.
-            The surrounding_vars parameter is an accumulator for variables declared in surrounding blocks.
+            :param surrounding_vars: an accumulator for variables declared in surrounding blocks.
+            :param subblocks: subblocks to search for shadowed variables, defaults to this block's statement's nested blocks.
         """
         if surrounding_vars is None:
             surrounding_vars = {}
+        if subblocks is None:
+            subblocks = (block for stmt in self.__stmts for block in stmt.nested_blocks())
         surrounding_vars = surrounding_vars.copy()
 
         def merge_locatables(
@@ -124,6 +114,4 @@ class BasicBlock(object):
             if var in surrounding_vars:
                 yield (var, locs, surrounding_vars[var])
             surrounding_vars[var] = locs
-        yield from chain.from_iterable(
-            block.shadowed_variables(surrounding_vars) for stmt in self.__stmts for block in stmt.nested_blocks()
-        )
+        yield from chain.from_iterable(block.shadowed_variables(surrounding_vars) for block in subblocks)

@@ -21,10 +21,11 @@ import logging
 import os
 import time
 from collections import deque
-from typing import Dict, List, Set, Tuple
+from typing import Dict, Iterator, List, Set, Tuple
 
 from inmanta import plugins
 from inmanta.ast import CompilerException, CycleExcpetion, Location, MultiException, RuntimeException
+from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from inmanta.ast.statements.define import (
@@ -189,7 +190,6 @@ class Scheduler(object):
         # normalize root blocks
         for block in blocks:
             block.normalize()
-            block.warn_shadowed_variables()
 
         self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
@@ -233,6 +233,11 @@ class Scheduler(object):
             xc = ExecutionContext(block, res)
             block.context = xc
             block.namespace.scope = xc
+            block.namespace.warn_shadowed_variables()
+
+        subblocks: Iterator[BasicBlock] = (block for stmt in statements for block in stmt.nested_blocks())
+        for subblock in subblocks:
+            subblock.namespace.warn_shadowed_variables(subblock)
 
         # setup queues
         # queue for runnable items

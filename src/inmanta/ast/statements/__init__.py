@@ -62,6 +62,12 @@ class Statement(Namespaced):
     def get_anchors(self) -> List[Anchor]:
         return self.anchors
 
+    def nested_blocks(self) -> Iterator["BasicBlock"]:
+        """
+            Returns an iterator over blocks contained within this statement.
+        """
+        return iter(())
+
 
 class DynamicStatement(Statement):
     """
@@ -89,12 +95,6 @@ class DynamicStatement(Statement):
     def declared_variables(self) -> Iterator[str]:
         """
             Returns an iterator over this statement's own declared variables.
-        """
-        return iter(())
-
-    def nested_blocks(self) -> Iterator["BasicBlock"]:
-        """
-            Returns an iterator over blocks contained within this statement.
         """
         return iter(())
 

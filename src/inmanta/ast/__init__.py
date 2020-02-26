@@ -19,7 +19,7 @@
 import traceback
 from abc import abstractmethod
 from functools import lru_cache
-from typing import Dict, List, Optional, Sequence, Union  # noqa: F401
+from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple, Union  # noqa: F401
 
 try:
     from typing import TYPE_CHECKING
@@ -30,6 +30,7 @@ except ImportError:
 if TYPE_CHECKING:
     import inmanta.ast.statements  # noqa: F401
     from inmanta.ast.attribute import Attribute  # noqa: F401
+    from inmanta.ast.blocks import BasicBlock  # noqa: F401
     from inmanta.ast.type import Type, NamedType  # noqa: F401
     from inmanta.execute.runtime import ExecutionContext, Instance, DelayedResultVariable, ResultVariable  # noqa: F401
     from inmanta.ast.statements import Statement, AssignStatement  # noqa: F401
@@ -462,6 +463,27 @@ class Namespace(Namespaced):
 
     def get_location(self) -> Location:
         return self.location
+
+    def warn_shadowed_variables(self, subblock: Optional["BasicBlock"] = None) -> None:
+        """
+            Produces a warning for any shadowed variables in ocurring in this namespace. This namespace's scope's root block
+            is used as an entrypoint for the check. If subblock is provided, that block is interpreted as living in this scope
+            and only that block is searched for shadowing with respect to the scope.
+        """
+        assert self.scope is not None
+        shadowed_variables: Iterator[
+            Tuple[str, FrozenSet[Locatable], FrozenSet[Locatable]]
+        ] = self.scope.block.shadowed_variables(subblocks=[subblock] if subblock is not None else None)
+        for var, shadowed_locs, orig_locs in shadowed_variables:
+            # TODO: throw decent warning instead
+            print(
+                "Variable `%s` shadowed: originally declared at %s, shadowed at %s"
+                % (
+                    var,
+                    ",".join(str(loc.get_location()) for loc in orig_locs),
+                    ",".join(str(loc.get_location()) for loc in shadowed_locs),
+                ),
+            )
 
 
 class CompilerException(Exception):
