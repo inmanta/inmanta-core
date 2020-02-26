@@ -152,7 +152,6 @@ def test_module_corruption(modules_dir, modules_repo):
     with open(main, "w", encoding="utf-8") as fh:
         fh.write("import mod9::b")
 
-
     # clear cache
     Project._project = None
 

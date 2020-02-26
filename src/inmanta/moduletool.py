@@ -30,7 +30,7 @@ import yaml
 from cookiecutter.main import cookiecutter
 from pkg_resources import parse_version
 
-from inmanta.ast import RuntimeException, CompilerException
+from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
 from inmanta.module import INSTALL_MASTER, INSTALL_RELEASES, Module, Project, gitprovider
