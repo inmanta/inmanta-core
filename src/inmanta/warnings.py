@@ -17,60 +17,67 @@
 """
 
 import warnings
+from enum import Enum
 from typing import Dict, List, Mapping, Optional, Type, Union
+
+
+class WarningBehaviour(Enum):
+    WARN: str = "default"
+    IGNORE: str = "ignore"
+    ERROR: str = "error"
 
 
 class WarningRule:
     """
-        A single rule for warning handling.
+        A single rule for warning handling. Describes the desired behaviour when an error occurs.
+        When type is set, the rule is only applied to subclasses of the warning type.
     """
 
-    def __init__(
-        self,
-        action: str,
-        message: Optional[str] = None,
-        category: Optional[Type[Warning]] = None,
-        module: Optional[str] = None,
-        line: Optional[int] = None,
-    ) -> None:
-        self.action: str = action
-        self.message: Optional[str] = message
-        self.category: Optional[Type[Warning]] = category
-        self.module: Optional[str] = module
-        self.line: Optional[int] = line
+    def __init__(self, action: WarningBehaviour, tp: Optional[Type["InmantaWarning"]] = None) -> None:
+        self.action: WarningBehaviour = action
+        self.type: Optional[Type[Warning]] = tp
 
     def apply(self) -> None:
-        kwargs = dict(filter(lambda x: x[1] is not None, vars(self).items()))
-        warnings.filterwarnings(**kwargs)
+        if self.type is None:
+            warnings.filterwarnings(self.action.value)
+        else:
+            warnings.filterwarnings(self.action.value, category=self.type)
 
 
 class WarningOption:
     """
-        An option to manage warnings.
+        An option to manage warnings. Consists of a name and a range of possible values, each tied to a warning rule.
     """
 
-    def __init__(self, name: str, options: Dict[Union[str, bool], WarningRule], default: Optional[WarningRule] = None,) -> None:
+    def __init__(self, name: str, options: Dict[Union[str, bool], WarningRule]) -> None:
         self.name: str = name
         self.options: Dict[Union[str, bool], WarningRule] = options
-        self.default: Optional[WarningRule] = default
 
     def apply(self, option: Union[str, bool]) -> None:
+        """
+            Apply the warning rule tied to the given option.
+        """
         if option not in self.options:
-            if self.default is None:
-                raise Exception("Illegal option %s for %s" % (option, self.name))
-            self.default.apply()
+            raise Exception("Illegal option %s for %s" % (option, self.name))
         rule: WarningRule = self.options[option]
         rule.apply()
 
 
 class WarningsManager:
     """
-        Contains all WarningOptions.
+        Manages warning behaviour guided by a config file.
     """
 
+    # List of warning options with a rule tied to each possible option value.
+    # Options are applied left to right so general options should come before specific ones.
     options: List[WarningOption] = [
         WarningOption(
-            "default", {"warn": WarningRule("default"), "ignore": WarningRule("ignore"), "error": WarningRule("error")}
+            "default",
+            {
+                "warn": WarningRule(WarningBehaviour.WARN),
+                "ignore": WarningRule(WarningBehaviour.IGNORE),
+                "error": WarningRule(WarningBehaviour.ERROR),
+            },
         ),
     ]
 
@@ -78,6 +85,7 @@ class WarningsManager:
     def apply_config(cls, config: Optional[Mapping]) -> None:
         if config is None:
             return
+        # apply all options, given the corresponding values in the config
         for option in cls.options:
             try:
                 value: Union[str, bool] = config[option.name]
