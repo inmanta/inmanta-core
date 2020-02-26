@@ -42,6 +42,7 @@ import time
 import traceback
 from argparse import ArgumentParser
 from asyncio import ensure_future
+from configparser import ConfigParser
 from threading import Timer
 from typing import Any, Callable, Coroutine
 
@@ -60,6 +61,7 @@ from inmanta.const import EXIT_START_FAILED
 from inmanta.export import ModelExporter, cfg_env
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
+from inmanta.warnings import WarningsManager
 
 LOGGER = logging.getLogger("inmanta")
 
@@ -491,6 +493,13 @@ def cmd_parser() -> ArgumentParser:
         "-v warning, -vv info and -vvv debug and -vvvv trace",
     )
     parser.add_argument(
+        "--warnings",
+        dest="warnings",
+        choices=["warn", "ignore", "error"],
+        default="warn",
+        help="The warning behaviour of the compiler. Must be one of 'warn', 'ignore', 'error'",
+    )
+    parser.add_argument(
         "-X", "--extended-errors", dest="errors", help="Show stack traces for errors", action="store_true", default=False
     )
     parser.add_argument(
@@ -598,6 +607,13 @@ def app() -> None:
 
     # Load the configuration
     Config.load_config(options.config_file, options.config_dir)
+
+    if options.warnings is not None:
+        Config.set("warnings", "default", options.warnings)
+
+    config = Config.get()
+    assert isinstance(config, ConfigParser)
+    WarningsManager.apply_config(config["warnings"] if "warnings" in config else None)
 
     # start the command
     if not hasattr(options, "func"):

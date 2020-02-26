@@ -6,6 +6,9 @@
 ## Fixed
  - Various compiler error reporting improvements (#1810)
 
+## Added
+ - Added support for compiler warnings (#1779)
+
 # v 2020.1 (2020-02-19) Changes in this release:
 
 ## Fixed
