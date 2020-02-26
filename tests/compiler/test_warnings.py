@@ -21,8 +21,9 @@ from typing import Optional
 
 import pytest
 
+import inmanta.compiler as compiler
 import inmanta.warnings as inmanta_warnings
-from inmanta.ast import CompilerRuntimeWarning
+from inmanta.ast import CompilerDeprecationWarning, CompilerRuntimeWarning
 from inmanta.warnings import WarningsManager
 
 
@@ -46,3 +47,25 @@ def test_warnings(option: Optional[str], expected_error: bool, expected_warning:
             assert str(w[0].message) == message
         else:
             assert len(w) == 0
+
+
+def test_deprecation_warning_nullable(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    number? n
+end
+
+implement A using std::none
+
+A()
+A(n = null)
+        """
+    )
+    message: str = "No value for attribute __config__::A.n. Assign null instead of leaving unassigned. ({dir}/main.cf:8)"
+    message = message.format(dir=snippetcompiler.project_dir)
+    with warnings.catch_warnings(record=True) as w:
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
