@@ -5,6 +5,7 @@
 
 ## Fixed
  - Various compiler error reporting improvements (#1810)
+ - Fixed cache leak in agent when deployments are canceled (#1883)
 
 # v 2020.1 (2020-02-19) Changes in this release:
 
