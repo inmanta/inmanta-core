@@ -21,6 +21,7 @@ from abc import abstractmethod
 from functools import lru_cache
 from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple, Union  # noqa: F401
 
+import inmanta.warnings as inmanta_warnings
 from inmanta.warnings import InmantaWarning
 
 try:
@@ -477,14 +478,16 @@ class Namespace(Namespaced):
             Tuple[str, FrozenSet[Locatable], FrozenSet[Locatable]]
         ] = self.scope.block.shadowed_variables(subblocks=[subblock] if subblock is not None else None)
         for var, shadowed_locs, orig_locs in shadowed_variables:
-            # TODO: throw decent warning instead
-            print(
-                "Variable `%s` shadowed: originally declared at %s, shadowed at %s"
-                % (
-                    var,
-                    ",".join(str(loc.get_location()) for loc in orig_locs),
-                    ",".join(str(loc.get_location()) for loc in shadowed_locs),
-                ),
+            inmanta_warnings.warn(
+                VariableShadowWarning(
+                    None,
+                    "Variable `%s` shadowed: originally declared at %s, shadowed at %s"
+                    % (
+                        var,
+                        ",".join(str(loc.get_location()) for loc in orig_locs),
+                        ",".join(str(loc.get_location()) for loc in shadowed_locs),
+                    ),
+                )
             )
 
 
@@ -579,6 +582,11 @@ class CompilerRuntimeWarning(InmantaWarning, RuntimeException):
 
 class CompilerDeprecationWarning(CompilerRuntimeWarning):
     def __init__(self, stmt: Optional["Locatable"], msg: str) -> None:
+        CompilerRuntimeWarning.__init__(self, stmt, msg)
+
+
+class VariableShadowWarning(CompilerRuntimeWarning):
+    def __init__(self, stmt: Optional["Locatable"], msg: str):
         CompilerRuntimeWarning.__init__(self, stmt, msg)
 
 

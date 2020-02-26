@@ -21,8 +21,9 @@ from typing import Optional
 
 import pytest
 
+import inmanta.compiler as compiler
 import inmanta.warnings as inmanta_warnings
-from inmanta.ast import CompilerRuntimeWarning
+from inmanta.ast import CompilerRuntimeWarning, VariableShadowWarning
 from inmanta.warnings import WarningsManager
 
 
@@ -46,3 +47,55 @@ def test_warnings(option: Optional[str], expected_error: bool, expected_warning:
             assert str(w[0].message) == message
         else:
             assert len(w) == 0
+
+
+def test_shadow_warning(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+x = 0
+if true:
+    x = 1
+    if true:
+        if true:
+            x = 3
+        end
+    end
+end
+        """
+    )
+    message: str = "Variable `x` shadowed: originally declared at {dir}/main.cf:%d, shadowed at {dir}/main.cf:%d"
+    message = message.format(dir=snippetcompiler.project_dir)
+    with warnings.catch_warnings(record=True) as w:
+        compiler.do_compile()
+        assert len(w) == 2
+        w1 = w[0]
+        w3 = w[1]
+        assert issubclass(w1.category, VariableShadowWarning)
+        assert str(w1.message) == message % (2, 4)
+        assert issubclass(w3.category, VariableShadowWarning)
+        assert str(w3.message) == message % (4, 7)
+
+
+def test_shadow_warning_implementation(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+x = 0
+
+entity A:
+end
+
+implementation i for A:
+    x = 1
+end
+
+implement A using std::none
+        """
+    )
+    message: str = "Variable `x` shadowed: originally declared at {dir}/main.cf:%d, shadowed at {dir}/main.cf:%d"
+    message = message.format(dir=snippetcompiler.project_dir)
+    with warnings.catch_warnings(record=True) as w:
+        compiler.do_compile()
+        assert len(w) == 1
+        w1 = w[0]
+        assert issubclass(w1.category, VariableShadowWarning)
+        assert str(w1.message) == message % (2, 8)
