@@ -47,6 +47,12 @@ class WarningRule:
 class WarningOption:
     """
         An option to manage warnings. Consists of a name and a range of possible values, each tied to a warning rule.
+        For example, applying
+        WarningOption(
+            "disable-runtime-warnings",
+            {True: WarningRule(WarningBehaviour.IGNORE, CompilerRuntimeWarning)}
+        )
+        would add a rule to ignore CompilerRuntimeWarnings but leave other warning's behaviour as is.
     """
 
     def __init__(self, name: str, options: Dict[Union[str, bool], WarningRule]) -> None:
@@ -82,7 +88,10 @@ class WarningsManager:
     ]
 
     @classmethod
-    def apply_config(cls, config: Optional[Mapping]) -> None:
+    def apply_config(cls, config: Optional[Mapping[str, Union[str, bool]]]) -> None:
+        """
+            Sets all known options based on values in config.
+        """
         if config is None:
             return
         # apply all options, given the corresponding values in the config
