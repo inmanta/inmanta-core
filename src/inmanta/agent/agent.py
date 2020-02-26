@@ -148,13 +148,11 @@ class ResourceAction(object):
         try:
             provider = await self.scheduler.agent.get_provider(self.resource)
         except ChannelClosedException as e:
-            cache.close_version(self.resource.id.get_version())
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception(str(e))
             return False, False
 
         except Exception:
-            cache.close_version(self.resource.id.get_version())
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=self.resource.id.resource_version_str())
             return False, False
@@ -210,7 +208,6 @@ class ResourceAction(object):
                 )
 
         provider.close()
-        cache.close_version(self.resource_id.get_version())
 
         return success, send_event
 
@@ -223,107 +220,106 @@ class ResourceAction(object):
         self, dummy: "ResourceAction", generation: "Dict[ResourceIdStr, ResourceAction]", cache: AgentCache
     ) -> None:
         self.logger.log(const.LogLevel.TRACE.value, "Entering %s %s", self.gid, self.resource)
-        cache.open_version(self.resource.id.get_version())
+        with cache.manager(self.resource.id.get_version()):
+            self.dependencies = [generation[x.resource_str()] for x in self.resource.requires]
+            waiters = [x.future for x in self.dependencies]
+            waiters.append(dummy.future)
+            # Explicit cast is required because mypy has issues with * and generics
+            results: List[ResourceActionResult] = cast(List[ResourceActionResult], await asyncio.gather(*waiters))
 
-        self.dependencies = [generation[x.resource_str()] for x in self.resource.requires]
-        waiters = [x.future for x in self.dependencies]
-        waiters.append(dummy.future)
-        # Explicit cast is required because mypy has issues with * and generics
-        results: List[ResourceActionResult] = cast(List[ResourceActionResult], await asyncio.gather(*waiters))
+            with (await self.scheduler.ratelimiter.acquire()):
+                start = datetime.datetime.now()
+                ctx = handler.HandlerContext(self.resource, logger=self.logger)
 
-        with (await self.scheduler.ratelimiter.acquire()):
-            start = datetime.datetime.now()
-            ctx = handler.HandlerContext(self.resource, logger=self.logger)
-
-            ctx.debug(
-                "Start run for resource %(resource)s because %(reason)s",
-                resource=str(self.resource.id),
-                deploy_id=self.gid,
-                agent=self.scheduler.agent.name,
-                reason=self.reason,
-            )
-
-            self.running = True
-            if self.is_done():
-                # Action is cancelled
-                self.logger.log(const.LogLevel.TRACE.value, "%s %s is no longer active" % (self.gid, self.resource))
-                self.running = False
-                if self.undeployable is not None:
-                    # don't overwrite undeployable
-                    ctx.set_status(self.undeployable)
-                else:
-                    ctx.set_status(const.ResourceState.cancelled)
-                return
-
-            result = sum(results, ResourceActionResult(True, False, False))
-
-            if result.cancel:
-                # self.running will be set to false when self.cancel is called
-                # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                if self.undeployable is not None:
-                    # don't overwrite undeployable
-                    ctx.set_status(self.undeployable)
-                else:
-                    ctx.set_status(const.ResourceState.cancelled)
-                return
-
-            received_events: Dict[Id, Event]
-            if result.receive_events:
-                received_events = {
-                    x.resource_id: Event(
-                        status=x.status, change=x.change, changes=x.changes.get(x.resource_id.resource_version_str(), {})
-                    )
-                    for x in self.dependencies
-                }
-            else:
-                received_events = {}
-
-            if self.undeployable is not None:
-                ctx.set_status(self.undeployable)
-                success = False
-                send_event = False
-            elif not result.success:
-                ctx.set_status(const.ResourceState.skipped)
-                ctx.info(
-                    "Resource %(resource)s skipped due to failed dependency %(failed)s",
-                    resource=self.resource.id.resource_version_str(),
-                    failed=self.skipped_because(results),
+                ctx.debug(
+                    "Start run for resource %(resource)s because %(reason)s",
+                    resource=str(self.resource.id),
+                    deploy_id=self.gid,
+                    agent=self.scheduler.agent.name,
+                    reason=self.reason,
                 )
-                success = False
-                send_event = False
-                await self._execute(ctx=ctx, events=received_events, cache=cache, event_only=True, start=start)
-            else:
-                success, send_event = await self._execute(ctx=ctx, events=received_events, cache=cache, start=start)
 
-            ctx.debug(
-                "End run for resource %(resource)s in deploy %(deploy_id)s", resource=str(self.resource.id), deploy_id=self.gid
-            )
+                self.running = True
+                if self.is_done():
+                    # Action is cancelled
+                    self.logger.log(const.LogLevel.TRACE.value, "%s %s is no longer active" % (self.gid, self.resource))
+                    self.running = False
+                    if self.undeployable is not None:
+                        # don't overwrite undeployable
+                        ctx.set_status(self.undeployable)
+                    else:
+                        ctx.set_status(const.ResourceState.cancelled)
+                    return
 
-            end = datetime.datetime.now()
-            changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
-                self.resource.id.resource_version_str(): ctx.changes
-            }
-            response = await self.scheduler.get_client().resource_action_update(
-                tid=self.scheduler._env_id,
-                resource_ids=[self.resource.id.resource_version_str()],
-                action_id=ctx.action_id,
-                action=const.ResourceAction.deploy,
-                started=start,
-                finished=end,
-                status=ctx.status,
-                changes=changes,
-                messages=ctx.logs,
-                change=ctx.change,
-                send_events=send_event,
-            )
-            if response.code != 200:
-                LOGGER.error("Resource status update failed %s", response.result)
+                result = sum(results, ResourceActionResult(True, False, False))
 
-            self.status = ctx.status
-            self.change = ctx.change
-            self.changes = changes
-            self.future.set_result(ResourceActionResult(success, send_event, False))
-            self.running = False
+                if result.cancel:
+                    # self.running will be set to false when self.cancel is called
+                    # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
+                    if self.undeployable is not None:
+                        # don't overwrite undeployable
+                        ctx.set_status(self.undeployable)
+                    else:
+                        ctx.set_status(const.ResourceState.cancelled)
+                    return
+
+                received_events: Dict[Id, Event]
+                if result.receive_events:
+                    received_events = {
+                        x.resource_id: Event(
+                            status=x.status, change=x.change, changes=x.changes.get(x.resource_id.resource_version_str(), {})
+                        )
+                        for x in self.dependencies
+                    }
+                else:
+                    received_events = {}
+
+                if self.undeployable is not None:
+                    ctx.set_status(self.undeployable)
+                    success = False
+                    send_event = False
+                elif not result.success:
+                    ctx.set_status(const.ResourceState.skipped)
+                    ctx.info(
+                        "Resource %(resource)s skipped due to failed dependency %(failed)s",
+                        resource=self.resource.id.resource_version_str(),
+                        failed=self.skipped_because(results),
+                    )
+                    success = False
+                    send_event = False
+                    await self._execute(ctx=ctx, events=received_events, cache=cache, event_only=True, start=start)
+                else:
+                    success, send_event = await self._execute(ctx=ctx, events=received_events, cache=cache, start=start)
+
+                ctx.debug(
+                    "End run for resource %(resource)s in deploy %(deploy_id)s", resource=str(self.resource.id), deploy_id=self.gid
+                )
+
+                end = datetime.datetime.now()
+                changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
+                    self.resource.id.resource_version_str(): ctx.changes
+                }
+                response = await self.scheduler.get_client().resource_action_update(
+                    tid=self.scheduler._env_id,
+                    resource_ids=[self.resource.id.resource_version_str()],
+                    action_id=ctx.action_id,
+                    action=const.ResourceAction.deploy,
+                    started=start,
+                    finished=end,
+                    status=ctx.status,
+                    changes=changes,
+                    messages=ctx.logs,
+                    change=ctx.change,
+                    send_events=send_event,
+                )
+                if response.code != 200:
+                    LOGGER.error("Resource status update failed %s", response.result)
+
+                self.status = ctx.status
+                self.change = ctx.change
+                self.changes = changes
+                self.future.set_result(ResourceActionResult(success, send_event, False))
+                self.running = False
 
     def __str__(self) -> str:
         if self.resource is None:
