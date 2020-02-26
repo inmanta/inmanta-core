@@ -18,12 +18,14 @@
 import os
 import re
 
+import pytest
 import yaml
 from pkg_resources import parse_version
 
 from inmanta import module
 from inmanta.module import Project
 from inmanta.moduletool import ModuleTool
+from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
 from test_app_cli import app
 
@@ -98,33 +100,58 @@ def test_module_corruption(modules_dir, modules_repo):
 
     mod10 = make_module_simple(modules_repo, "mod10", [])
     add_file(mod10, "signal", "present", "a commit", version="3.3")
+    # syntax error
+    add_file(mod10, "model/_init.cf", "SomeInvalidThings", "a commit", version="3.5")
+    # fix it
+    add_file(mod10, "model/_init.cf", "", "a commit", version="3.6")
     add_file(mod10, "secondsignal", "import mod9", "b commit", version="4.0")
     add_file(mod10, "badsignal", "import mod9", "c commit", version="5.0")
 
-    p9 = makeproject(modules_repo, "proj9", [("mod9", "==3.3")], ["mod9"])
+    p9 = makeproject(modules_repo, "proj9", [("mod9", "==3.3"), ("mod10", "==3.3")], ["mod9"])
     commitmodule(p9, "first commit")
 
     # setup project
     proj = install_project(modules_dir, "proj9")
     app(["modules", "install"])
     print(os.listdir(proj))
-    # overwrite main to import unknown sub module
-    # unfreeze deps to allow update
-    main = os.path.join(proj, "main.cf")
-    projectyml = os.path.join(proj, "project.yml")
-    assert os.path.exists(main)
-    assert os.path.exists(projectyml)
 
-    with open(main, "w", encoding="utf-8") as fh:
-        fh.write("import mod9::b")
+    # unfreeze deps to allow update
+    projectyml = os.path.join(proj, "project.yml")
+    assert os.path.exists(projectyml)
 
     with open(projectyml, "r", encoding="utf-8") as fh:
         pyml = yaml.load(fh)
 
+    pyml["requires"] = ["mod10 == 3.5"]
+
+    with open(projectyml, "w", encoding="utf-8") as fh:
+        yaml.dump(pyml, fh)
+
+    # clear cache
+    Project._project = None
+
+    # attempt to update, mod10 is wrong, but only after the update
+    app(["modules", "update"])
+
+    with pytest.raises(ParserException):
+        # clear cache
+        Project._project = None
+        # attempt to update, mod10 is wrong, can not be fixed
+        app(["modules", "update"])
+
+    # unfreeze deps to allow update
     pyml["requires"] = ["mod10 == 4.0"]
 
     with open(projectyml, "w", encoding="utf-8") as fh:
         yaml.dump(pyml, fh)
+
+    # overwrite main to import unknown sub module
+    main = os.path.join(proj, "main.cf")
+    assert os.path.exists(main)
+
+    with open(main, "w", encoding="utf-8") as fh:
+        fh.write("import mod9::b")
+
 
     # clear cache
     Project._project = None
