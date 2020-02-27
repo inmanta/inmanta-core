@@ -20,7 +20,14 @@ from typing import List, Optional, Tuple
 
 from inmanta.ast import Locatable, RuntimeException, TypingException
 from inmanta.ast.type import NullableType, TypedList
-from inmanta.execute.runtime import AttributeVariable, ListVariable, OptionVariable, QueueScheduler, ResultVariable
+from inmanta.execute.runtime import (
+    AttributeVariable,
+    DeprecatedOptionVariable,
+    ListVariable,
+    OptionVariable,
+    QueueScheduler,
+    ResultVariable,
+)
 from inmanta.execute.util import Unknown
 
 try:
@@ -107,7 +114,7 @@ class Attribute(Locatable):
             self.end = None
             self.low = 0
             self.high = 1
-            out = OptionVariable(self, instance, queue)
+            out = DeprecatedOptionVariable(self, instance, queue)
             mytype = NullableType(mytype)
         else:
             out = ResultVariable()
