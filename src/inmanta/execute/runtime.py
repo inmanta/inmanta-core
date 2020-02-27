@@ -20,8 +20,10 @@ from abc import abstractmethod
 from typing import Dict, Generic, List, Optional, Set, TypeVar, Union, cast
 
 import inmanta.execute.dataflow as dataflow
+import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeException,
+    CompilerDeprecationWarning,
     CompilerException,
     DoubleSetException,
     Locatable,
@@ -501,6 +503,23 @@ class OptionVariable(DelayedResultVariable["Instance"]):
 
     def __str__(self) -> str:
         return "OptionVariable %s %s = %s" % (self.myself, self.attribute, self.value)
+
+
+class DeprecatedOptionVariable(OptionVariable):
+    """
+        Represents nullable attributes. In the future this class can be removed, and a standard
+        ResultVariable with nullable type should be used.
+    """
+
+    def freeze(self) -> None:
+        if self.value is None:
+            warning: CompilerDeprecationWarning = CompilerDeprecationWarning(
+                None,
+                "No value for attribute %s.%s. Assign null instead of leaving unassigned." % (self.myself.type, self.attribute),
+            )
+            warning.set_location(self.myself.get_location())
+            inmanta_warnings.warn(warning)
+        super().freeze()
 
 
 class QueueScheduler(object):

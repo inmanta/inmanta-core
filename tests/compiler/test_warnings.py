@@ -23,7 +23,7 @@ import pytest
 
 import inmanta.compiler as compiler
 import inmanta.warnings as inmanta_warnings
-from inmanta.ast import CompilerRuntimeWarning, VariableShadowWarning
+from inmanta.ast import CompilerDeprecationWarning, CompilerRuntimeWarning, VariableShadowWarning
 from inmanta.warnings import WarningsManager
 
 
@@ -99,3 +99,25 @@ implement A using std::none
         w1 = w[0]
         assert issubclass(w1.category, VariableShadowWarning)
         assert str(w1.message) == message % (2, 8)
+
+
+def test_deprecation_warning_nullable(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    number? n
+end
+
+implement A using std::none
+
+A()
+A(n = null)
+        """
+    )
+    message: str = "No value for attribute __config__::A.n. Assign null instead of leaving unassigned. ({dir}/main.cf:8)"
+    message = message.format(dir=snippetcompiler.project_dir)
+    with warnings.catch_warnings(record=True) as w:
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
