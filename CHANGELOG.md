@@ -8,6 +8,7 @@
 
 ## Fixed
  - Various compiler error reporting improvements (#1810)
+ - Improved robustness of modules update (#1885)
 
 ## Added
  - Added support for compiler warnings (#1779)

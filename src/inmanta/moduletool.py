@@ -30,7 +30,7 @@ import yaml
 from cookiecutter.main import cookiecutter
 from pkg_resources import parse_version
 
-from inmanta.ast import RuntimeException
+from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
 from inmanta.module import INSTALL_MASTER, INSTALL_RELEASES, Module, Project, gitprovider
@@ -455,7 +455,7 @@ version: 0.0.1dev0"""
                     modules = [module]
                 do_update(specs, modules)
                 done = True
-            except RuntimeException as e:
+            except CompilerException as e:
                 last_failure = e
                 # model is corrupt
                 LOGGER.info(
