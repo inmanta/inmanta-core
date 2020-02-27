@@ -467,16 +467,16 @@ class Namespace(Namespaced):
     def get_location(self) -> Location:
         return self.location
 
-    def warn_shadowed_variables(self, subblock: Optional["BasicBlock"] = None) -> None:
+    def warn_shadowed_variables(self, nested_block: Optional["BasicBlock"] = None) -> None:
         """
             Produces a warning for any shadowed variables in ocurring in this namespace. This namespace's scope's root block
-            is used as an entrypoint for the check. If subblock is provided, that block is interpreted as living in this scope
-            and only that block is searched for shadowing with respect to the scope.
+            is used as an entrypoint for the check. If nested_block is provided, that block is interpreted as living in this
+            scope and only that block is searched for shadowing with respect to the scope.
         """
         assert self.scope is not None
         shadowed_variables: Iterator[
             Tuple[str, FrozenSet[Locatable], FrozenSet[Locatable]]
-        ] = self.scope.block.shadowed_variables(subblocks=[subblock] if subblock is not None else None)
+        ] = self.scope.block.shadowed_variables(nested_blocks=[nested_block] if nested_block is not None else None)
         for var, shadowed_locs, orig_locs in shadowed_variables:
             inmanta_warnings.warn(
                 VariableShadowWarning(

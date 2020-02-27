@@ -78,20 +78,21 @@ class BasicBlock(object):
     def shadowed_variables(
         self,
         surrounding_vars: Optional[Dict[str, FrozenSet[Locatable]]] = None,
-        subblocks: Optional[Iterable["BasicBlock"]] = None,
+        nested_blocks: Optional[Iterable["BasicBlock"]] = None,
     ) -> Iterator[Tuple[str, FrozenSet[Locatable], FrozenSet[Locatable]]]:
         """
-            Returns an iterator over variables shadowed in this block or it's subblocks.
+            Returns an iterator over variables shadowed in this block or it's nested blocks.
             The elements are tuples of the variable name, a set of the shadowed locations
             and a set of the originally declared locations.
             :param surrounding_vars: an accumulator for variables declared in surrounding blocks.
-            :param subblocks: subblocks to search for shadowed variables, defaults to this block's statement's nested blocks.
+            :param nested_blocks: nested blocks to search for shadowed variables,
+                defaults to this block's statement's nested blocks.
         """
         if surrounding_vars is None:
             surrounding_vars = {}
         surrounding_vars = surrounding_vars.copy()
-        if subblocks is None:
-            subblocks = (block for stmt in self.__stmts for block in stmt.nested_blocks())
+        if nested_blocks is None:
+            nested_blocks = (block for stmt in self.__stmts for block in stmt.nested_blocks())
 
         def merge_locatables(tuples: Iterator[Tuple[str, Locatable]]) -> Dict[str, FrozenSet[Locatable]]:
             acc: Dict[str, FrozenSet[Locatable]] = {}
@@ -108,4 +109,4 @@ class BasicBlock(object):
             if var in surrounding_vars:
                 yield (var, locs, surrounding_vars[var])
             surrounding_vars[var] = locs
-        yield from chain.from_iterable(block.shadowed_variables(surrounding_vars) for block in subblocks)
+        yield from chain.from_iterable(block.shadowed_variables(surrounding_vars) for block in nested_blocks)

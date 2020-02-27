@@ -235,9 +235,10 @@ class Scheduler(object):
             block.namespace.scope = xc
             block.namespace.warn_shadowed_variables()
 
-        subblocks: Iterator[BasicBlock] = (block for stmt in statements for block in stmt.nested_blocks())
-        for subblock in subblocks:
-            subblock.namespace.warn_shadowed_variables(subblock)
+        # blocks contain only DynamicStatements. Search others for shadowed variables as well.
+        nested_blocks: Iterator[BasicBlock] = (block for stmt in statements for block in stmt.nested_blocks())
+        for block in nested_blocks:
+            block.namespace.warn_shadowed_variables(block)
 
         # setup queues
         # queue for runnable items
