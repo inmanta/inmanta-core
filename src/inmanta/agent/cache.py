@@ -17,6 +17,7 @@
 """
 
 import bisect
+import contextlib
 import logging
 import sys
 import time
@@ -53,6 +54,24 @@ class CacheItem(object):
         self.delete()
 
 
+class CacheVersionContext(contextlib.AbstractContextManager):
+    """
+    A context manager to ensure the cache version is properly closed
+    """
+
+    def __init__(self, cache: "AgentCache", version: int) -> None:
+        self.version = version
+        self.cache = cache
+
+    def __enter__(self):
+        self.cache.open_version(self.version)
+        return self.cache
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.cache.close_version(self.version)
+        return None
+
+
 class AgentCache(object):
     """
         Caching system for the agent:
@@ -79,6 +98,9 @@ class AgentCache(object):
             Is the given version open in the cache?
         """
         return version in self.counterforVersion
+
+    def manager(self, version: int) -> CacheVersionContext:
+        return CacheVersionContext(self, version)
 
     def open_version(self, version: int) -> None:
         """
