@@ -641,8 +641,8 @@ class DefineRelation(BiStatement):
         assert isinstance(left, Entity), "%s is not an entity" % left
         right: Type = self.namespace.get_type(self.right[0])
         assert isinstance(right, Entity), "%s is not an entity" % right
-        graph.add_bidirectional_attribute(left, str(self.right[1]), str(self.left[1]))
-        graph.add_bidirectional_attribute(right, str(self.left[1]), str(self.right[1]))
+        graph.register_bidirectional_attribute(left, str(self.right[1]), str(self.left[1]))
+        graph.register_bidirectional_attribute(right, str(self.left[1]), str(self.right[1]))
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)

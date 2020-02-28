@@ -773,7 +773,7 @@ class Resolver(object):
     def __init__(self, namespace: Namespace) -> None:
         self.namespace = namespace
         # TODO: check config
-        dataflow_enable: bool = False
+        dataflow_enable: bool = True
         self.dataflow_graph: Optional[DataflowGraph] = DataflowGraph(self) if dataflow_enable else None
 
     def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
@@ -916,7 +916,10 @@ class Instance(ExecutionContext):
             self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
             self.self_var_node = dataflow.AssignableNode("__self__").reference()
             self.self_var_node.assign(
-                cast(dataflow.InstanceNodeReference, self.instance_node), Statement(), cast(DataflowGraph, self.dataflow_graph)
+                # TODO: None is not an acceptable value. Find a way to fix this
+                cast(dataflow.InstanceNodeReference, self.instance_node),
+                None,
+                cast(DataflowGraph, self.dataflow_graph),
             )
 
         self.slots: Dict[str, ResultVariable] = {

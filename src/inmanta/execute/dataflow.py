@@ -16,7 +16,9 @@
     Contact: code@inmanta.com
 """
 
-from typing import TYPE_CHECKING, Callable, Dict, Iterable, Iterator, Optional
+from functools import reduce
+from itertools import chain, filterfalse
+from typing import TYPE_CHECKING, Callable, Dict, FrozenSet, Generic, Iterable, Iterator, List, Optional, Set, Tuple, TypeVar
 
 if TYPE_CHECKING:
     from inmanta.execute.runtime import Resolver
@@ -29,21 +31,44 @@ class DataflowGraph:
         Graph representation of the data flow and declarative control flow of an Inmanta model.
     """
 
-    # TODO: other slots
-    __slots__ = ("resolver", "parent", "_own_instances")
+    __slots__ = ("resolver", "parent", "named_nodes", "_instances", "_own_instances")
 
     def __init__(self, resolver: "Resolver", parent: Optional["DataflowGraph"] = None) -> None:
         self.resolver: "Resolver" = resolver
         self.parent: Optional[DataflowGraph] = parent if parent is not None else None
-        self._own_instances: Dict[Statement, InstanceNode] = {}
-        # TODO: finish implementation
+        self.named_nodes: Dict[str, AssignableNode] = {}
+        self._instances: Dict["Entity", EntityData] = {}
+        self._own_instances: Dict["Statement", InstanceNode] = {}
+
+    def instances(self) -> Dict["Entity", "EntityData"]:
+        """
+            Returns entity data for all registered entities.
+            EntityData objects are stored in the root dataflow graph.
+        """
+        if self.parent is not None:
+            return self.parent.instances()
+        return self._instances
+
+    def _entity_data(self, entity: "Entity") -> "EntityData":
+        """
+            Returns an EntityData object for an Entity. Registers the entity if it is not yet registered.
+        """
+        instances: Dict["Entity", "EntityData"] = self.instances()
+        if entity not in instances:
+            instances[entity] = EntityData(entity)
+        return instances[entity]
 
     def get_named_node(self, name: str) -> "AssignableNodeReference":
         """
             Returns a reference to a named node, by name.
         """
-        # TODO: implement
-        return AssignableNodeReference()
+        # TODO: temporary name lookup implementation. Will be replaced by #1879
+        parts: List[str] = name.split(".")
+        root: str = parts[0]
+        if root not in self.named_nodes:
+            self.named_nodes[root] = AssignableNode(root)
+        root_ref: AssignableNodeReference = VariableNodeReference(self.named_nodes[root])
+        return reduce(lambda acc, part: AttributeNodeReference(acc, part), parts[1:], root_ref)
 
     def own_instance_node_for_responsible(
         self, responsible: "Statement", get_new: Callable[[], "InstanceNode"]
@@ -60,18 +85,51 @@ class DataflowGraph:
         return self._own_instances[responsible]
 
     def _add_global_instance_node(self, node: "InstanceNodeReference") -> None:
-        # TODO: implement
-        pass
+        """
+            Registers an instance.
+        """
+        entity: "Entity" = node.top_node().entity
+        self._entity_data(entity).add_instance(node)
 
-    def add_bidirectional_attribute(self, entity: "Entity", this: str, other: str) -> None:
-        # TODO: implement
-        pass
+    def register_bidirectional_attribute(self, entity: "Entity", this: str, other: str) -> None:
+        """
+            Registers a pair of bidirectional attributes.
+        """
+        self._entity_data(entity).register_bidirectional_attribute(this, other)
 
     def add_index_match(self, instances: Iterable["InstanceNodeReference"]) -> None:
-        # TODO: implement
-        pass
+        """
+            Registers an index match between a set of instance nodes. Informs the nodes of the match.
+        """
+        iterator: Iterator[InstanceNodeReference] = iter(instances)
+        try:
+            first: InstanceNode = next(iter(iterator)).node()
+            for instance in iterator:
+                instance.node().index_match(first)
+        except StopIteration:
+            pass
 
-    # TODO: other methods
+
+class EntityData:
+    """
+        Data about an entity. Contains an entity's bidirectional attributes and a list of all instances.
+        Enforces bidirectionality for all instances.
+    """
+
+    def __init__(self, entity: "Entity") -> None:
+        self.entity: "Entity" = entity
+        self.bidirectional_attributes: Dict[str, str] = {}
+        self.instances: List[InstanceNodeReference] = []
+
+    def register_bidirectional_attribute(self, this: str, other: str) -> None:
+        self.bidirectional_attributes[this] = other
+        for instance in self.instances:
+            instance.node().register_bidirectional_attribute(this, other)
+
+    def add_instance(self, instance: "InstanceNodeReference") -> None:
+        self.instances.append(instance)
+        for this, other in self.bidirectional_attributes.items():
+            instance.node().register_bidirectional_attribute(this, other)
 
 
 class Node:
@@ -118,7 +176,26 @@ class AssignableNodeReference(NodeReference):
     def __init__(self) -> None:
         NodeReference.__init__(self)
 
-    # TODO: all methods
+    def nodes(self) -> Iterator["AssignableNode"]:
+        raise NotImplementedError()
+
+    def leaves(self) -> Iterator["AssignableNode"]:
+        """
+            Returns an iterator over this reference's leaves. A leaf is defined as a node
+            in the assignment tree which has either one or more value or instance assignments
+            or no assignments at all. This reference's leaves are the leaves of the assignment
+            subtrees originating from this reference's nodes.
+        """
+        return chain.from_iterable(n.leaves() for n in self.nodes())
+
+    def any_leaf(self) -> Optional["AssignableNode"]:
+        """
+        Returns a single leaf for this reference, if any exist.
+        """
+        try:
+            return next(self.leaves())
+        except StopIteration:
+            return None
 
     def assignment_node(self) -> "AssignableNode":
         """
@@ -130,7 +207,6 @@ class AssignableNodeReference(NodeReference):
         """
             Assign another node to this reference's assignment node.
         """
-        # TODO: implement
         self.assignment_node().assign(node_ref, responsible, context)
 
     def get_attribute(self, name: str) -> "AttributeNodeReference":
@@ -138,6 +214,9 @@ class AssignableNodeReference(NodeReference):
             Returns a reference to an attribute of this reference's node, by name.
         """
         return AttributeNodeReference(self, name)
+
+
+# TODO: dedicated exceptions?
 
 
 class AttributeNodeReference(AssignableNodeReference):
@@ -150,7 +229,22 @@ class AttributeNodeReference(AssignableNodeReference):
         self.instance_var_ref: AssignableNodeReference = instance_var_ref
         self.attribute: str = attribute
 
-    # TODO: all methods
+    def nodes(self) -> Iterator["AssignableNode"]:
+        # yield all attribute nodes on instances assigned to this reference's leaves
+        for node in self.instance_var_ref.leaves():
+            for assignment in node.instance_assignments:
+                yield assignment.rhs.node().register_attribute(self.attribute)
+
+    def assignment_node(self) -> "AssignableNode":
+        try:
+            return next(self.nodes())
+        except StopIteration:
+            # If no attribute node can be found, create a tentative one on a leaf of the instance_var_ref.
+            # Tentative attributes of a VariableNode will be propagated on assignment to that node.
+            instance_leaf: Optional["AssignableNode"] = self.instance_var_ref.any_leaf()
+            if instance_leaf is None:
+                instance_leaf = self.instance_var_ref.assignment_node()
+            return instance_leaf.tentative_attribute(self.attribute)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, AttributeNodeReference):
@@ -253,12 +347,26 @@ class InstanceNodeReference(NodeReference):
         return self._node == other._node
 
 
+RT = TypeVar("RT", bound=NodeReference, covariant=True)
+
+
+class Assignment(Generic[RT]):
+    """
+        Assignment of one node to another, caused by a responsible
+    """
+
+    def __init__(self, lhs: AssignableNodeReference, rhs: RT, responsible: "Statement", context: "DataflowGraph") -> None:
+        self.lhs: AssignableNodeReference = lhs
+        self.rhs: RT = rhs
+        self.responsible: "Statement" = responsible
+        self.context: "DataflowGraph" = context
+
+
 class ValueNode(Node):
     """
         Node representing a value in the configuration model.
     """
 
-    # TODO: this can be done more efficiently: make ValueNodes singletons
     def __init__(self, value: object) -> None:
         super().__init__()
         self.value: object = value
@@ -266,10 +374,15 @@ class ValueNode(Node):
     def reference(self) -> "ValueNodeReference":
         return ValueNodeReference(self)
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ValueNode):
+            return NotImplemented
+        return self.value == other.value
+
 
 class NodeStub(ValueNode):
     """
-        node that represents currently unsupported expressions.
+        Node that represents currently unsupported expressions.
     """
 
     def __init__(self, message: str) -> None:
@@ -288,19 +401,191 @@ class AssignableNode(Node):
     def __init__(self, name: str) -> None:
         Node.__init__(self)
         self.name: str = name
-        # TODO: implement
+        self.assignable_assignments: List[Assignment[AssignableNodeReference]] = []
+        self.value_assignments: List[Assignment[ValueNodeReference]] = []
+        self.instance_assignments: List[Assignment[InstanceNodeReference]] = []
+        self.equivalence: Equivalence = Equivalence(frozenset([self]))
+        self.tentative_instance: Optional[TentativeInstanceNode] = None
 
     def reference(self) -> AssignableNodeReference:
         return VariableNodeReference(self)
+
+    def leaves(self) -> Iterator["AssignableNode"]:
+        """
+            Returns an iterator over this node's leaves. A leaf is defined as a node
+            in the assignment tree which has either one or more value or instance assignments
+            or no assignments at all. This node's leaves are the leaves of the assignment
+            subtree originating from this node.
+        """
+        return chain.from_iterable(e.nodes for e in self.equivalence.leaves())
+
+    def assignments(self) -> Iterator[Assignment]:
+        """
+            Returns an iterator over assignments to this node.
+        """
+        return chain(self.assignable_assignments, self.value_assignments, self.instance_assignments)
 
     def assign(self, node_ref: "NodeReference", responsible: "Statement", context: "DataflowGraph") -> None:
         """
             Assigns another node to this one, by reference.
         """
-        # TODO: implement
-        pass
+        if isinstance(node_ref, ValueNodeReference):
+            self.assign_value(node_ref, responsible, context)
+        elif isinstance(node_ref, InstanceNodeReference):
+            self.assign_instance(node_ref, responsible, context)
+        elif isinstance(node_ref, AssignableNodeReference):
+            self.assign_assignable(node_ref, responsible, context)
+        else:
+            raise Exception("Unknown Node type %s" % type(node_ref))
 
-    # TODO: all methods
+    def assign_value(self, val_ref: ValueNodeReference, responsible: "Statement", context: "DataflowGraph") -> None:
+        """
+            Assigns a value node to this node, by reference.
+        """
+        self.value_assignments.append(Assignment(self.reference(), val_ref, responsible, context))
+
+    def assign_instance(self, instance_ref: InstanceNodeReference, responsible: "Statement", context: "DataflowGraph") -> None:
+        """
+            Assigns an instance node to this node, by reference.
+        """
+        self.instance_assignments.append(Assignment(self.reference(), instance_ref, responsible, context))
+        self.propagate_tentative_instance()
+
+    def assign_assignable(self, var_ref: AssignableNodeReference, responsible: "Statement", context: "DataflowGraph") -> None:
+        """
+            Assigns an assignable node to this node, by reference.
+        """
+        # Gather all equivalences on the path between the rhs's leaves and this node.
+        # The existence of such a trail indicates an assignment loop.
+        equivalence_trail: Set[Equivalence] = reduce(
+            set.union, (n.equivalence.equivalences_on_path(self) for n in var_ref.nodes()), set(),
+        )
+        # merge all equivalences on the trail
+        new_equivalence: Equivalence = reduce(
+            lambda acc, eq: acc.merge(eq), equivalence_trail, Equivalence(frozenset()),
+        )
+        self.assignable_assignments.append(Assignment(self.reference(), var_ref, responsible, context))
+        # apply new equivalence to all it's nodes
+        for node in new_equivalence.nodes:
+            node.equivalence = new_equivalence
+        # propagate this node's tentative instance to the new leaves, if it exists
+        self.propagate_tentative_instance()
+
+    def propagate_tentative_instance(self) -> None:
+        """
+            Propagates this node's tentative instance to one of it's leaves.
+        """
+        leaf: Optional[AssignableNode] = self.reference().any_leaf()
+        if leaf is None:
+            return
+
+        def propagate_tentative_assignments(source: AssignableNode, target: AssignableNodeReference) -> None:
+            if source.tentative_instance is None:
+                return
+            for tent_attr_name, tent_attr_node in source.tentative_instance.attributes.items():
+                attr_node: AttributeNodeReference = target.get_attribute(tent_attr_name)
+                for assignment in tent_attr_node.assignments():
+                    attr_node.assign(assignment.rhs, assignment.responsible, assignment.context)
+                propagate_tentative_assignments(tent_attr_node, target.get_attribute(tent_attr_name))
+            self.tentative_instance = None
+
+        propagate_tentative_assignments(self, leaf.reference())
+
+    def tentative_attribute(self, attr: str) -> "AttributeNode":
+        """
+            Returns an attribute on a tentative instance node connected to this node.
+            Creates it if it does not exist yet.
+        """
+        if self.tentative_instance is None:
+            self.tentative_instance = TentativeInstanceNode([])
+        attr_node: Optional[AttributeNode] = self.tentative_instance.get_attribute(attr)
+        if attr_node is None:
+            attr_node = self.tentative_instance.register_attribute(attr)
+        return attr_node
+
+
+class Equivalence:
+    """
+        Represents a collection of nodes that are equivalent because of one or more assignment loops.
+    """
+
+    def __init__(self, nodes: FrozenSet[AssignableNode] = frozenset()) -> None:
+        self.nodes: FrozenSet[AssignableNode] = nodes
+
+    def merge(self, other: "Equivalence") -> "Equivalence":
+        """
+            Returns the equivalence that is the union of this one and the one passed as an argument.
+        """
+        return Equivalence(self.nodes.union(other.nodes))
+
+    def is_leaf(self) -> bool:
+        """
+            Returns true iff this equivalence is a leaf. An equivalence is a leaf iff it has an instance
+            or value assignment, or doesn't have any assignments at all.
+        """
+        return any(self.instance_assignments()) or any(self.value_assignments()) or not any(self.assignable_assignments())
+
+    def leaves(self) -> Iterator["Equivalence"]:
+        """
+            Returns an iterator over all leaves on assignment paths originating from this equivalence.
+        """
+        if self.is_leaf():
+            yield self
+        for assignment in self.assignable_assignments():
+            yield from (n.equivalence for n in assignment.rhs.leaves())
+
+    def equivalences_on_path(self, node: AssignableNode) -> Set["Equivalence"]:
+        """
+            Returns the set of all equivalences on the assignment path originating from this equivalence
+            and terminating in the equivalence containing node.
+            Returns the empty set if there is no such path.
+        """
+        if node in self.nodes:
+            return {self}
+        child_paths: Set[Equivalence] = reduce(
+            set.union,
+            (
+                # TODO: improve by filtering out duplicate equivalences before calling recursively
+                n.equivalence.equivalences_on_path(node)
+                for n in chain.from_iterable(a.rhs.nodes() for a in self.assignable_assignments())
+            ),
+            set(),
+        )
+        return child_paths.union({self}) if len(child_paths) > 0 else set(())
+
+    def assignable_assignments(self) -> Iterator[Assignment[AssignableNodeReference]]:
+        """
+            Returns an iterator over external VariableNodes assigned to this Equivalence.
+        """
+
+        def is_internal(assignment: Assignment[AssignableNodeReference]) -> bool:
+            filtered: Iterator[AssignableNode] = filter(assignment.rhs.ref_to_node, self.nodes)
+            return any(filtered)
+
+        return filterfalse(is_internal, chain.from_iterable(n.assignable_assignments for n in self.nodes))
+
+    def instance_assignments(self) -> Iterator[Assignment[InstanceNodeReference]]:
+        """
+            Returns an iterator over InstanceNodes assigned to this Equivalence.
+        """
+        return chain.from_iterable(n.instance_assignments for n in self.nodes)
+
+    def value_assignments(self) -> Iterator[Assignment[ValueNodeReference]]:
+        """
+            Returns an iterator over ValueNodes assigned to this Equivalence.
+        """
+        return chain.from_iterable(n.value_assignments for n in self.nodes)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Equivalence):
+            return NotImplemented
+        return self.nodes == other.nodes
+
+    def __hash__(self) -> int:
+        return hash(self.nodes)
+
+
+# TODO: use slots in all classes
 
 
 class AttributeNode(AssignableNode):
@@ -311,13 +596,15 @@ class AttributeNode(AssignableNode):
     def __init__(self, instance: "InstanceNode", name: str) -> None:
         AssignableNode.__init__(self, name)
         self.instance: InstanceNode = instance
-        # TODO: implement
+        self.responsibles: Set[Tuple["Statement", DataflowGraph]] = set(())
 
     def assign(self, node_ref: NodeReference, responsible: "Statement", context: "DataflowGraph") -> None:
-        # TODO: implement
-        pass
-
-    # TODO: all methods
+        # only add assignment for each responsible once, this check is necessary for bidirectional attributes
+        if (responsible, context) in self.responsibles:
+            return
+        super().assign(node_ref, responsible, context)
+        self.responsibles.add((responsible, context))
+        self.instance.assign_other_direction(self.name, node_ref, responsible, context)
 
 
 class InstanceNode(Node):
@@ -326,15 +613,19 @@ class InstanceNode(Node):
     """
 
     def __init__(
-        self, attributes: Iterable[str], entity: "Entity", responsible: "Statement", context: "DataflowGraph" = None,
+        self, attributes: Iterable[str], entity: "Entity", responsible: "Statement", context: "DataflowGraph",
     ) -> None:
         Node.__init__(self)
         self.attributes: Dict[str, AttributeNode] = {name: AttributeNode(self, name) for name in attributes}
         self.entity: "Entity" = entity
-        self.index_node: Optional[InstanceNode] = None
         self.responsible: "Statement" = responsible
         self.context: "DataflowGraph" = context
-        # TODO: finish implementation
+        self.bidirectional_attributes: Dict[str, str] = {}
+        self.index_node: Optional[InstanceNode] = None
+        self._all_index_nodes: Set["InstanceNode"] = {self}
+
+    def reference(self) -> InstanceNodeReference:
+        return InstanceNodeReference(self)
 
     def get_self(self) -> "InstanceNode":
         """
@@ -343,8 +634,45 @@ class InstanceNode(Node):
         """
         return self if self.index_node is None else self.index_node.get_self()
 
-    def reference(self) -> InstanceNodeReference:
-        return InstanceNodeReference(self)
+    # TODO: not ideal. Think about doing magic in the class to proxy all calls
+    def assert_self_root(self) -> None:
+        """
+            Asserts that this node is the root instance node of the index tree.
+        """
+        if self.get_self() is not self:
+            raise Exception("This method should only be called on the root InstanceNode. Call get_self() first.")
+
+    def index_match(self, index_node: "InstanceNode") -> None:
+        """
+            Registers index_node as this node's index node. Propagates all attribute assignments.
+        """
+        if index_node is self:
+            return
+        if self.index_node is not None:
+            raise Exception("Trying to match index on node that already has an index match. Try calling get_self() first")
+        assert self.entity == index_node.get_self().entity
+        assert self.bidirectional_attributes == index_node.get_self().bidirectional_attributes
+        self.index_node = index_node
+        for name, attribute in self.attributes.items():
+            for assignment in attribute.assignments():
+                index_node.get_self().assign_attribute(name, assignment.rhs, assignment.responsible, assignment.context)
+        self.attributes = {}
+        index_node.get_self().update_all_index_nodes(self._all_index_nodes)
+        self._all_index_nodes = set(())
+
+    def update_all_index_nodes(self, index_nodes: Set["InstanceNode"]) -> None:
+        """
+            Adds a set of index nodes to this node's set of all index matches.
+        """
+        self.assert_self_root()
+        self._all_index_nodes.update(index_nodes)
+
+    def get_all_index_nodes(self) -> Set["InstanceNode"]:
+        """
+            Returns all index matches for this node.
+        """
+        self.assert_self_root()
+        return self._all_index_nodes
 
     def assign_attribute(
         self, attribute: str, node_ref: "NodeReference", responsible: "Statement", context: "DataflowGraph",
@@ -352,5 +680,71 @@ class InstanceNode(Node):
         """
             Assigns a node to one of this instance's attributes.
         """
+        self.assert_self_root()
+        attr_node: AttributeNode = self.register_attribute(attribute)
+        attr_node.assign(node_ref, responsible, context)
 
-    # TODO: all methods
+    def register_attribute(self, attribute: str) -> AttributeNode:
+        """
+            Registers an attribute to this instance node. Returns the attribute's node.
+        """
+        self.assert_self_root()
+        if attribute not in self.attributes:
+            self.attributes[attribute] = AttributeNode(self, attribute)
+        return self.attributes[attribute]
+
+    def get_attribute(self, attribute: str) -> Optional[AttributeNode]:
+        """
+            Returns one of this instance's attributes by name, if it exists.
+        """
+        self.assert_self_root()
+        try:
+            return self.attributes[attribute]
+        except KeyError:
+            return None
+
+    def register_bidirectional_attribute(self, this: str, other: str) -> None:
+        """
+            Registers a pair of bidirectional attributes. Adds assignments for the other direction where required.
+        """
+        self.assert_self_root()
+        self.bidirectional_attributes[this] = other
+        if this in self.attributes:
+            attr_node: AttributeNode = self.attributes[this]
+            for assignment in attr_node.assignments():
+                self.assign_other_direction(this, assignment.rhs, assignment.responsible, assignment.context)
+
+    def assign_other_direction(
+        self, attribute: str, node_ref: "NodeReference", responsible: "Statement", context: "DataflowGraph"
+    ) -> None:
+        """
+            If attribute is a bidirectional attribute, assign the other direction.
+            :param attribute: this node's attribute
+            :param node_ref: the node assigned to the attribute
+            :param responsible: the responsible for both assignments
+            :param context: the context for both assignments
+        """
+        self.assert_self_root()
+        if attribute in self.bidirectional_attributes:
+            assign_attr: str = self.bidirectional_attributes[attribute]
+            # TODO: this ain't pretty, would be nice if we could instantiate an AttributeNodeReference on an InstanceNode
+            if isinstance(node_ref, InstanceNodeReference):
+                node_ref.node().assign_attribute(assign_attr, self.reference(), responsible, context)
+            elif isinstance(node_ref, AssignableNodeReference):
+                AttributeNodeReference(node_ref, self.bidirectional_attributes[attribute]).assign(
+                    self.reference(), responsible, context
+                )
+            elif isinstance(node_ref, ValueNodeReference) and isinstance(node_ref.node, NodeStub):
+                pass
+            else:
+                raise Exception("Trying to assign attribute on non-instance node %s" % node_ref)
+
+
+# TODO: create super class for InstanceNode and TentativeInstanceNode that allows None values
+class TentativeInstanceNode(InstanceNode):
+    """
+        Node representing a tentative entity instance.
+    """
+
+    def __init__(self, attributes: Iterable[str]) -> None:
+        InstanceNode.__init__(self, attributes, None, None, None)
