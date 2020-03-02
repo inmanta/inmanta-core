@@ -122,10 +122,15 @@ class BashIO(IOBase):
         result = subprocess.Popen(self._run_as_args("sha1sum", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
         data = result.communicate()
 
-        if result.returncode > 0 or len(data[1]) > 0:
-            raise IOError()
+        if result.returncode > 0:
+            raise IOError("Failed to hash file")
 
-        return data[0].decode("utf-8").strip().split(" ")[0]
+        hash = data[0].decode("utf-8").strip().split(" ")[0]
+
+        if len(hash) != 40:
+            raise IOError("Invalid hash output")
+
+        return hash
 
     def read(self, path):
         # type: (str) -> str
