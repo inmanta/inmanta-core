@@ -3,8 +3,13 @@
 ## Breaking changes
 - Non-boolean arguments to boolean operators are no longer allowed, this was previously possible due to bug (#1808)
 
+## Deprecated
+ - Leaving a nullable attribute unassigned now produces a deprecation warning. Explicitly assign null instead. (#1775)
+
 ## Fixed
  - Various compiler error reporting improvements (#1810)
+ - Fixed cache leak in agent when deployments are canceled (#1883)
+ - Improved robustness of modules update (#1885)
 
 ## Added
  - Added support for compiler warnings (#1779)
