@@ -123,7 +123,7 @@ class BashIO(IOBase):
         data = result.communicate()
 
         if result.returncode > 0 or len(data[1]) > 0:
-            raise IOError()
+            raise IOError(data)
 
         return data[0].decode("utf-8").strip().split(" ")[0]
 
