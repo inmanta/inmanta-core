@@ -145,7 +145,7 @@ class BashIO(IOBase):
         result = subprocess.Popen(self._run_as_args("cat", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
         data = result.communicate()
 
-        if result.returncode > 0 or len(data[1]) > 0:
+        if result.returncode > 0:
             raise IOError()
 
         return data[0].decode("utf-8")
