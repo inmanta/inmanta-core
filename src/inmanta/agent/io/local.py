@@ -127,7 +127,7 @@ class BashIO(IOBase):
 
         hash = data[0].decode("utf-8").strip().split(" ")[0]
 
-        if len(hash) != 20:
+        if len(hash) != 40:
             raise IOError("Invalid hash output")
 
         return hash
