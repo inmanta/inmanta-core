@@ -16,14 +16,17 @@
     Contact: code@inmanta.com
 """
 
-from typing import Iterator, List, Optional, Set
+from itertools import chain
+from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple, Type, cast, Iterable
 
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import Namespace
+from inmanta.ast import DoubleSetException, Namespace, NotFoundException, RuntimeException
 from inmanta.ast.entity import Entity
-from inmanta.ast.statements import Statement
+from inmanta.ast.statements import Literal, Statement
+from inmanta.ast.statements.assign import Assign, SetAttribute
+from inmanta.ast.variables import Reference
 from inmanta.execute.dataflow import (
     AssignableNode,
     AssignableNodeReference,
@@ -420,6 +423,541 @@ def test_dataflow_index(graph: DataflowGraph) -> None:
     assert i2.reference().node() is i1
     assert i2.reference().top_node() is i2
     assert i1.get_self().get_all_index_nodes() == {i1, i2}
+
+
+class DataflowTestHelper:
+    def __init__(self, snippetcompiler) -> None:
+        self.snippetcompiler = snippetcompiler
+        self._namespace: Optional[Namespace] = None
+        self._instances: Dict[str, InstanceNode] = {}
+        self._tokens: List[str] = []
+
+    def get_namespace(self) -> Namespace:
+        assert self._namespace is not None, "Call compile before trying to access namespace"
+        return self._namespace
+
+    def get_graph(self) -> DataflowGraph:
+        graph: Optional[DataflowGraph] = self.get_namespace().get_scope().dataflow_graph
+        assert graph is not None
+        return graph
+
+    def compile(self, snippet: str, expected_error_type: Optional[Type[RuntimeException]] = None) -> None:
+        def compile():
+            print(snippet)
+            self.snippetcompiler.setup_for_snippet(snippet)
+            (_, root_ns) = compiler.do_compile()
+            self._namespace = root_ns.get_child("__config__")
+
+        if expected_error_type is None:
+            compile()
+        else:
+            try:
+                compile()
+                assert False, "Expected error: %s" % expected_error_type
+            except expected_error_type as e:
+                assert e.root_ns is not None
+                root_ns = e.root_ns
+                assert root_ns is not None
+                self._namespace = root_ns.get_child("__config__")
+            except Exception as e:
+                if isinstance(e, AssertionError):
+                    raise e
+                assert False, "Expected %s, got %s" % (expected_error_type, e)
+
+    def _consume_token_instance(self) -> Optional[str]:
+        if self._tokens[0] != "<instance>":
+            return None
+        self._tokens.pop(0)
+        instance_id: str = self._tokens.pop(0)
+        if not instance_id.isalnum():
+            raise Exception("Invalid syntax: expected instance identifier, got `%s`" % instance_id)
+        return instance_id
+
+    def _consume_token_attribute(self) -> Optional[str]:
+        if len(self._tokens) == 0 or self._tokens[0] != ".":
+            return None
+        self._tokens.pop(0)
+        attribute: str = self._tokens.pop(0)
+        if not attribute.isalnum():
+            raise Exception("Invalid syntax: expected attribute name, got `%s`" % attribute)
+        return attribute
+
+    def _consume_token_lhs(self) -> Callable[[List[NodeReference], Optional[str]], None]:
+        node: AssignableNode
+        instance_id: Optional[str] = self._consume_token_instance()
+        if instance_id is not None:
+            if instance_id not in self._instances:
+                raise Exception("Parse error: bind instance_id `%s` to a n instance first by using it as a rhs." % instance_id)
+            instance: InstanceNode = self._instances[instance_id]
+            attribute_name: Optional[str] = self._consume_token_attribute()
+            if attribute_name is None:
+                raise Exception("Parse error: expected `. attribute_name`, got %s." % attribute_name)
+            attribute: Optional[AttributeNode] = instance.get_attribute(attribute_name)
+            assert attribute is not None
+            node = attribute
+        else:
+            token: str = self._tokens.pop(0)
+            if not token.isalnum():
+                raise Exception("Invalid syntax: expected `variable_name` or `<instance> instance_id`, got `%s`" % token)
+            node_ref: AssignableNodeReference = self.get_graph().get_named_node(token)
+            assert isinstance(node_ref, VariableNodeReference)
+            node = node_ref.node
+        if self._consume_token_attribute() is not None:
+            raise Exception("Syntax error: this simple language only supports attributes directly on instances in the lhs.")
+
+        def continuation(rhs: List[NodeReference], instance_bind: Optional[str] = None) -> None:
+            if instance_bind is not None:
+                assert (
+                    len(node.instance_assignments) == 1
+                ), "This simple language only allows instance binding for a single instance in the rhs."
+                instance_node: InstanceNode = node.instance_assignments[0].rhs.top_node()
+                self._instances[instance_bind] = instance_node
+                rhs.append(instance_node.reference())
+            # test element equality: NodeReference does not define sort or hash so this is the only way
+            actual_rhs: List[NodeReference] = [assignment.rhs for assignment in node.assignments()]
+            for rhs_elem in rhs:
+                assert rhs_elem in actual_rhs
+                actual_rhs.remove(rhs_elem)
+            assert len(actual_rhs) == 0
+
+        return continuation
+
+    def _consume_token_edge(self) -> None:
+        token: str = self._tokens.pop(0)
+        if token != "->":
+            raise Exception("Invalid syntax: expected `->`, got `%s`" % token)
+
+    def _consume_token_rhs_element(self) -> Tuple[Optional[NodeReference], Optional[str]]:
+        instance_id: Optional[str] = self._consume_token_instance()
+        if instance_id is not None:
+            if self._consume_token_attribute() is not None:
+                raise Exception("Syntax error: this simple language only supports attributes directly on instances in the lhs.")
+            if instance_id not in self._instances:
+                return (None, instance_id)
+            return (self._instances[instance_id].reference(), None)
+        else:
+            token: str = self._tokens.pop(0)
+            if not token.isalnum():
+                raise Exception(
+                    "Invalid syntax: expected `variable_name [. attr [...]]` or `<instance> instance_id`, got `%s`" % token
+                )
+            try:
+                return (ValueNode(int(token)).reference(), None)
+            except ValueError:
+                node_ref: AssignableNodeReference = self.get_graph().get_named_node(token)
+                assert isinstance(node_ref, VariableNodeReference)
+                attribute_name: Optional[str] = self._consume_token_attribute()
+                while attribute_name is not None:
+                    node_ref = AttributeNodeReference(node_ref, attribute_name)
+                    attribute_name = self._consume_token_attribute()
+                return (node_ref, None)
+
+    def _consume_token_rhs(self, continuation: Callable[[List[NodeReference], Optional[str]], None]) -> None:
+        nodes: List[NodeReference] = []
+        instance_bind: Optional[str] = None
+
+        def consume_node(instance_bind: Optional[str] = None) -> Optional[str]:
+            (node, instance_id) = self._consume_token_rhs_element()
+            if instance_id is not None:
+                if instance_bind is not None:
+                    raise Exception("Parse error: this simple language only allows a single instance binding in the rhs.")
+                instance_bind = instance_id
+            if node is not None:
+                nodes.append(node)
+            return instance_bind
+
+        if self._tokens[0] == "[":
+            self._tokens.pop(0)
+            while self._tokens[0] != "]":
+                instance_bind = consume_node(instance_bind)
+            self._tokens.pop(0)
+        else:
+            instance_bind = consume_node(instance_bind)
+        continuation(nodes, instance_bind)
+
+    def verify_graphstring(self, graphstring: str) -> None:
+        """
+            Verifies that the graphstring corresponds with the graph. Syntax for the graphstring:
+                graph_string: empty
+                    | graphstring_rule graph_string
+                    ;
+                graphstring_rule : lhs `->` rhs ;
+                lhs : var_name
+                    | instance_ref
+                    | instance_ref `.` attr_name
+                    ;
+                rhs : rhs_element
+                    | `[` rhs_list `]`
+                    ;
+                rhs_list : empty
+                    | rhs_element rhs_list
+                    ;
+                rhs_element : var_name
+                    | int
+                    | var_attr
+                    | `<instance>` instance_id
+                    ;
+                var_attr : var_name `.` attr_name`
+                    | var_name `.` var_attr
+                    ;
+            Where instance_id is a string that is bound when it occurs in the right. Once bound the same id can be used to refer
+            to it in later rules.
+            Spaces are required between all subsequent tokens.
+        """
+        self._tokens = graphstring.split()
+        while len(self._tokens) > 0:
+            continuation: Callable[[List[NodeReference], Optional[str]], None] = self._consume_token_lhs()
+            self._consume_token_edge()
+            self._consume_token_rhs(continuation)
+
+    def verify_leaves(self, leaves: Dict[str, Set[str]]) -> None:
+        """
+            Verifies that the leaves correspond with the graph's leaves.
+            :param leaves: dict with variable names as keys and a set of leaves for each variable as values.
+                The variable and leaves are allowed to be attributes.
+        """
+        print(leaves)
+        for key, value in leaves.items():
+            lhs: AssignableNodeReference = self.get_graph().get_named_node(key)
+            rhs: Set[AssignableNode] = set(chain.from_iterable(self.get_graph().get_named_node(v).nodes() for v in value))
+            assert set(lhs.leaves()) == rhs
+
+
+@pytest.fixture(scope="function")
+def dataflow_test_helper(snippetcompiler):
+    return DataflowTestHelper(snippetcompiler)
+
+
+def test_dataflow_model_primitive_assignment_responsible(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+x = 42
+        """,
+    )
+    graph: DataflowGraph = dataflow_test_helper.get_graph()
+    x: AssignableNodeReference = graph.get_named_node("x")
+    assert isinstance(x, DirectNodeReference)
+    assert len(x.node.value_assignments) == 1
+    assignment: Assignment[ValueNodeReference] = x.node.value_assignments[0]
+    assert isinstance(assignment.responsible, Assign)
+    assert assignment.responsible.name == "x"
+    assert isinstance(assignment.responsible.value, Literal)
+    assert assignment.responsible.value.value == 42
+    assert assignment.context == graph
+
+
+def test_dataflow_model_primitive_double_assignment_responsible(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+x = 42
+x = 0
+        """,
+        DoubleSetException,
+    )
+    graph: DataflowGraph = dataflow_test_helper.get_graph()
+    x: AssignableNodeReference = graph.get_named_node("x")
+    assert isinstance(x, DirectNodeReference)
+    assignments: List[Assignment] = x.node.value_assignments
+    assert len(assignments) == 2
+    zero_index: int = [assignment.rhs for assignment in assignments].index(ValueNode(0).reference())
+    for i, assignment in enumerate(assignments):
+        value: int = 0 if i == zero_index else 42
+        assert assignment.context == graph
+        assert isinstance(assignment.responsible, Assign)
+        assert assignment.responsible.name == "x"
+        assert isinstance(assignment.responsible.value, Literal)
+        assert assignment.responsible.value.value == value
+
+
+def test_dataflow_model_variable_assignment_responsible(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+x = y
+y = 42
+        """,
+    )
+    graph: DataflowGraph = dataflow_test_helper.get_graph()
+    x: AssignableNodeReference = graph.get_named_node("x")
+    assert isinstance(x, DirectNodeReference)
+    assert len(x.node.assignable_assignments) == 1
+    assignment: Assignment[AssignableNodeReference] = x.node.assignable_assignments[0]
+    assert isinstance(assignment.responsible, Assign)
+    assert assignment.responsible.name == "x"
+    assert isinstance(assignment.responsible.value, Reference)
+    assert assignment.responsible.value.name == "y"
+    assert assignment.context == graph
+
+
+def test_dataflow_model_attribute_assignment_responsible(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+entity Test:
+    number n
+end
+implement Test using std::none
+
+x = Test()
+x.n = 42
+        """
+    )
+    graph: DataflowGraph = dataflow_test_helper.get_graph()
+    x: AssignableNodeReference = graph.get_named_node("x")
+    assert isinstance(x, VariableNodeReference)
+    assert len(x.node.instance_assignments) == 1
+    n: Optional[AttributeNode] = x.node.instance_assignments[0].rhs.node().get_attribute("n")
+    assert n is not None
+    assert len(n.value_assignments) == 1
+    assignment: Assignment[ValueNodeReference] = n.value_assignments[0]
+    assert isinstance(assignment.responsible, SetAttribute)
+    assert assignment.responsible.instance.name == "x"
+    assert assignment.responsible.attribute_name == "n"
+    assert isinstance(assignment.responsible.value, Literal)
+    assert assignment.responsible.value.value == 42
+    assert assignment.context == graph
+
+
+def test_dataflow_model_simple_assignment(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+x = 42
+        """,
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+x -> 42
+        """,
+    )
+    dataflow_test_helper.verify_leaves({"x": {"x"}})
+
+
+def test_dataflow_model_variable_assignment(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+x = y
+x = y
+y = 42
+        """,
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+x -> [ y y ]
+y -> 42
+        """,
+    )
+    dataflow_test_helper.verify_leaves({"x": {"y"}, "y": {"y"}})
+
+
+@pytest.mark.parametrize("same_value", [True, False])
+def test_dataflow_model_variable_assignment_double(dataflow_test_helper: DataflowTestHelper, same_value: bool) -> None:
+    x_value: int = 42 if same_value else 0
+    dataflow_test_helper.compile(
+        """
+x = y
+x = y
+y = 42
+x = %d
+        """
+        % x_value,
+        None if same_value else DoubleSetException,
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+x -> [ y y %s ]
+y -> 42
+        """
+        % x_value,
+    )
+    dataflow_test_helper.verify_leaves({"x": {"x", "y"}, "y": {"y"}})
+
+
+# TODO: fix this test. Fails because of faulty node lookup logic
+def test_dataflow_model_unassigned_dependency_error(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+x = y
+y = z
+        """,
+        NotFoundException,
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+x -> y
+y -> z
+        """,
+    )
+    dataflow_test_helper.verify_leaves({"x": {"z"}, "y": {"z"}})
+
+
+@pytest.mark.parametrize("assign", [True, False])
+def test_dataflow_model_dependency_loop(dataflow_test_helper: DataflowTestHelper, assign: bool) -> None:
+    dataflow_test_helper.compile(
+        """
+x = y
+y = z
+z = x
+%s
+        """
+        % ("y = 42" if assign else ""),
+        None if assign else RuntimeException,
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+x -> y
+y -> [ z %s ]
+z -> x
+        """
+        % ("42" if assign else ""),
+    )
+    all_vars: str = "xyz"
+    dataflow_test_helper.verify_leaves({var: set(iter(all_vars)) for var in all_vars})
+
+
+def test_dataflow_model_dependency_loop_with_var_assignment(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+x = y
+y = z
+z = x
+
+y = v
+v = w
+w = 42
+        """,
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+x -> y
+y -> [ z v ]
+z -> x
+
+v -> w
+w -> 42
+        """,
+    )
+    dataflow_test_helper.verify_leaves({var: {"w"} for var in "xyzvw"})
+
+
+def test_dataflow_model_double_dependency_loop(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+x = y
+y = z
+z = x
+
+x = v
+v = w
+w = x
+
+y = 42
+        """,
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+x -> [ y v ]
+y -> [ z 42 ]
+z -> x
+
+v -> w
+w -> x
+        """,
+    )
+    all_vars: str = "xyzvw"
+    dataflow_test_helper.verify_leaves({var: set(iter(all_vars)) for var in all_vars})
+
+
+@pytest.mark.parametrize("assign_loop0", [True, False])
+def test_dataflow_model_chained_dependency_loops(dataflow_test_helper: DataflowTestHelper, assign_loop0: bool) -> None:
+    dataflow_test_helper.compile(
+        """
+x = y
+y = z
+z = x
+
+u = v
+v = w
+w = u
+
+y = v
+
+u = 42
+%s
+        """ % ("z = 42" if assign_loop0 else ""),
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+x -> y
+y -> [ z v ]
+z -> [ x %s ]
+
+u -> [ v 42 ]
+v -> w
+w -> u
+        """ % ("42" if assign_loop0 else ""),
+    )
+    # TODO: fix inconsistency: leaves for u are actually just "uvw"
+    loop0_vars: str = "xyz"
+    loop1_vars: str = "uvw"
+    all_vars: str = loop0_vars + loop1_vars
+    leaf_vars: str = all_vars if assign_loop0 else loop1_vars
+    dataflow_test_helper.verify_leaves({var: set(iter(leaf_vars)) for var in all_vars})
+
+
+@pytest.mark.parametrize("attr_init", [True, False])
+def test_dataflow_model_assignment_from_attribute(dataflow_test_helper: DataflowTestHelper, attr_init: bool) -> None:
+    dataflow_test_helper.compile(
+        """
+entity A:
+    number n
+end
+implement A using std::none
+
+n = 42
+x = A(%s)
+
+nn = x.n
+        """ % ("n = n" if attr_init else ""),
+        None if attr_init else RuntimeException,
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+x -> <instance> 0
+n -> 42
+nn -> x . n
+%s
+        """ % ("<instance> 0 . n -> n" if attr_init else ""),
+    )
+    dataflow_test_helper.verify_leaves({"nn": {"n"}} if attr_init else {"nn": {"x.n"}})
+
+
+def test_dataflow_model_assignment_outside_constructor(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+entity A:
+    number n
+end
+implement A using std::none
+
+n = 42
+
+x = A()
+x.n = n
+        """,
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+n -> 42
+x -> <instance> 0
+<instance> 0 . n -> n
+        """,
+    )
+    dataflow_test_helper.verify_leaves({"x.n": {"n"}})
+
+
+# TODO tests:
+#   relations
+#   default attributes
+#   dynamic scoping
+#   FIX: dynamic scope referring to parent
 
 
 # TODO:

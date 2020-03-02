@@ -471,6 +471,8 @@ class AssignableNode(Node):
         # propagate this node's tentative instance to the new leaves, if it exists
         self.propagate_tentative_instance()
 
+    # TODO: also propagate from other nodes in equivalence. In that case, probably no need to propagate to
+    #   other nodes in equivalence
     def propagate_tentative_instance(self) -> None:
         """
             Propagates this node's tentative instance to one of it's leaves.
