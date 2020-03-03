@@ -443,7 +443,6 @@ class DataflowTestHelper:
 
     def compile(self, snippet: str, expected_error_type: Optional[Type[RuntimeException]] = None) -> None:
         def compile():
-            print(snippet)
             self.snippetcompiler.setup_for_snippet(snippet)
             (_, root_ns) = compiler.do_compile()
             self._namespace = root_ns.get_child("__config__")
@@ -492,7 +491,7 @@ class DataflowTestHelper:
             attribute_name: Optional[str] = self._consume_token_attribute()
             if attribute_name is None:
                 raise Exception("Parse error: expected `. attribute_name`, got %s." % attribute_name)
-            attribute: Optional[AttributeNode] = instance.get_attribute(attribute_name)
+            attribute: Optional[AttributeNode] = instance.get_self().get_attribute(attribute_name)
             assert attribute is not None
             node = attribute
         else:
@@ -616,7 +615,6 @@ class DataflowTestHelper:
             :param leaves: dict with variable names as keys and a set of leaves for each variable as values.
                 The variable and leaves are allowed to be attributes.
         """
-        print(leaves)
         for key, value in leaves.items():
             lhs: AssignableNodeReference = self.get_graph().get_named_node(key)
             rhs: Set[AssignableNode] = set(chain.from_iterable(self.get_graph().get_named_node(v).nodes() for v in value))
@@ -953,14 +951,173 @@ x -> <instance> 0
     dataflow_test_helper.verify_leaves({"x.n": {"n"}})
 
 
-# TODO tests:
-#   relations
-#   default attributes
-#   dynamic scoping
-#   FIX: dynamic scope referring to parent
+@pytest.mark.parametrize("bidirectional", [True, False])
+def test_dataflow_model_relation(dataflow_test_helper: DataflowTestHelper, bidirectional: bool) -> None:
+    dataflow_test_helper.compile(
+        """
+entity A:
+end
+implement A using std::none
+
+entity B:
+end
+implement B using std::none
+
+A.b [1] -- B%s
+
+a = A()
+b = B()
+
+a.b = b
+        """ % (".a [1]" if bidirectional else ""),
+    )
+    bidirectional_rule: str = "<instance> b . a -> <instance> a"
+    dataflow_test_helper.verify_graphstring(
+        """
+a -> <instance> a
+b -> <instance> b
+
+<instance> a . b -> b
+%s
+        """ % (bidirectional_rule if bidirectional else ""),
+    )
+    if not bidirectional:
+        with pytest.raises(AssertionError):
+            dataflow_test_helper.verify_graphstring(bidirectional_rule)
+    dataflow_test_helper.verify_leaves({"a": {"a"}, "b": {"b"}, "a.b": {"b"}, "b.a": {"b.a"}})
 
 
-# TODO:
-#   add model tests
-#   fix TODO's in inmanta.execute.dataflow
-#   add toggle option to inmanta.app
+def test_dataflow_model_assignment_to_relation(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+entity X:
+end
+
+entity U:
+end
+
+entity V:
+    number n
+end
+
+X.u [1] -- U
+U.v [1] -- V
+
+implement X using std::none
+implement U using std::none
+implement V using std::none
+
+n = 42
+
+x = X()
+x.u = U()
+x.u.v = V()
+x.u.v.n = n
+        """,
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+x -> <instance> x
+<instance> x . u -> <instance> u
+<instance> u . v -> <instance> v
+<instance> v . n -> n
+n -> 42
+        """,
+    )
+    dataflow_test_helper.verify_leaves({"x.u.v.n": {"n"}})
+
+
+def test_dataflow_model_assignment_from_relation(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+entity U:
+end
+
+entity V:
+    number n
+end
+
+U.v [1] -- V
+
+implement U using std::none
+implement V using std::none
+
+n = 42
+
+u = U(v = v)
+v = V(n = n)
+
+uvn = u.v.n
+        """,
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+n -> 42
+u -> <instance> u
+v -> <instance> v
+
+<instance> u . v -> v
+<instance> v . n -> n
+
+uvn -> u . v . n
+        """,
+    )
+    dataflow_test_helper.verify_leaves({"n": {"n"}, "u": {"u"}, "v": {"v"}, "u.v": {"v"}, "v.n": {"n"}, "uvn": {"n"}})
+
+
+def test_dataflow_model_index(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+entity A:
+    number n
+    number k
+    number l
+end
+
+index A(n)
+
+implement A using std::none
+
+x = A(n = 42, k = 0)
+y = A(n = 42, l = 1)
+        """,
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+x -> <instance> x
+y -> <instance> y
+
+<instance> x . n -> [ 42 42 ]
+<instance> y . n -> [ 42 42 ]
+
+<instance> x . k -> 0
+<instance> y . k -> 0
+
+<instance> x . l -> 1
+<instance> y . l -> 1
+        """,
+    )
+
+
+def test_dataflow_model_default_attribute(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+entity A:
+    number n = 42
+end
+
+implement A using std::none
+
+x = A()
+y = A(n = 0)
+        """,
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+x -> <instance> x
+y -> <instance> y
+
+<instance> x . n -> 42
+<instance> y . n -> 0
+        """,
+    )

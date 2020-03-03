@@ -360,7 +360,7 @@ class Constructor(ExpressionStatement):
         if graph is not None:
             node: dataflow.InstanceNodeReference = self._register_dataflow_node(graph)
             # TODO: also add wrapped_kwargs
-            for (k, v) in self.__attributes.items():
+            for (k, v) in chain(self._direct_attributes.items(), self._indirect_attributes.items()):
                 node.assign_attribute(k, v.get_dataflow_node(graph), self, graph)
 
         return direct_requires
