@@ -1155,7 +1155,8 @@ x -> <instance> x
     )
 
 
-def test_dataflow_model_implementation_assignment_from_self(dataflow_test_helper: DataflowTestHelper) -> None:
+@pytest.mark.parametrize("explicit", [True, False])
+def test_dataflow_model_implementation_assignment_from_self(dataflow_test_helper: DataflowTestHelper, explicit: bool) -> None:
     dataflow_test_helper.compile(
         """
 entity A:
@@ -1169,23 +1170,33 @@ end
 A.b [1] -- B
 
 implementation i for A:
-    self.b = B(n = self.n)
+    self.b = B(n = %s)
 end
 
 implement A using i
 implement B using std::none
 
+n = 0
+
 x = A(n = 42)
-        """,
+
+b = x.b
+        """ % ("self.n" if explicit else "n"),
     )
     dataflow_test_helper.verify_graphstring(
         """
+n -> 0
 x -> <instance> x
 <instance> x . n -> 42
 <instance> x . b -> <instance> b
+b -> x . b
         """,
     )
-    dataflow_test_helper.verify_leaves({"b.n": {"a.n"}})
+    dataflow_test_helper.verify_leaves({"b.n": {"x.n"}})
+    leaves: List[AssignableNode] = list(dataflow_test_helper.get_graph().resolver.get_dataflow_node("b.n").leaves())
+    assert len(leaves) == 1
+    assert len(leaves[0].value_assignments) == 1
+    assert leaves[0].value_assignments[0].rhs.node.value == 42
 
 
 def test_dataflow_model_unnamed_instance_in_implementation(dataflow_test_helper: DataflowTestHelper) -> None:

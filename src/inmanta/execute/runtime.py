@@ -793,8 +793,11 @@ class Resolver(object):
         return NamespaceResolver(self, namespace)
 
     def get_dataflow_node(self, name: str) -> "dataflow.AssignableNodeReference":
-        assert self.dataflow_graph is not None
-        return self.dataflow_graph.get_named_node(name)
+        graph: Optional[DataflowGraph] = self.dataflow_graph
+        if self.get_root_resolver() == self:
+            graph = self.namespace.get_scope().dataflow_graph
+        assert graph is not None
+        return graph.get_named_node(name)
 
 
 class NamespaceResolver(Resolver):
@@ -820,11 +823,7 @@ class NamespaceResolver(Resolver):
         return self.parent.get_root_resolver()
 
     def get_dataflow_node(self, name: str) -> "dataflow.AssignableNodeReference":
-        try:
-            self.root.lookup(name.split(".")[0])
-            return Resolver.get_dataflow_node(self, name)
-        except NotFoundException:
-            return self.parent.get_dataflow_node(name)
+        return self.parent.get_dataflow_node(name)
 
 
 class ExecutionContext(Resolver):
