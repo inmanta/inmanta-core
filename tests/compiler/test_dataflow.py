@@ -503,7 +503,7 @@ class DataflowTestHelper:
             token: str = self._tokens.pop(0)
             if not token.isalnum():
                 raise Exception("Invalid syntax: expected `variable_name` or `<instance> instance_id`, got `%s`" % token)
-            node_ref: AssignableNodeReference = self.get_graph().get_named_node(token)
+            node_ref: AssignableNodeReference = self.get_graph().resolver.get_dataflow_node(token)
             assert isinstance(node_ref, VariableNodeReference)
             node = node_ref.node
         if self._consume_token_attribute() is not None:
@@ -548,7 +548,7 @@ class DataflowTestHelper:
             try:
                 return (ValueNode(int(token)).reference(), None)
             except ValueError:
-                node_ref: AssignableNodeReference = self.get_graph().get_named_node(token)
+                node_ref: AssignableNodeReference = self.get_graph().resolver.get_dataflow_node(token)
                 assert isinstance(node_ref, VariableNodeReference)
                 attribute_name: Optional[str] = self._consume_token_attribute()
                 while attribute_name is not None:
@@ -621,8 +621,8 @@ class DataflowTestHelper:
                 The variable and leaves are allowed to be attributes.
         """
         for key, value in leaves.items():
-            lhs: AssignableNodeReference = self.get_graph().get_named_node(key)
-            rhs: Set[AssignableNode] = set(chain.from_iterable(self.get_graph().get_named_node(v).nodes() for v in value))
+            lhs: AssignableNodeReference = self.get_graph().resolver.get_dataflow_node(key)
+            rhs: Set[AssignableNode] = set(chain.from_iterable(self.get_graph().resolver.get_dataflow_node(v).nodes() for v in value))
             assert set(lhs.leaves()) == rhs
 
 
