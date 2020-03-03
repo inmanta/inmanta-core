@@ -21,6 +21,7 @@ from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple, Type, c
 
 import pytest
 
+import inmanta.ast.type as inmanta_type
 import inmanta.compiler as compiler
 from inmanta.ast import DoubleSetException, Namespace, NotFoundException, RuntimeException
 from inmanta.ast.entity import Entity
@@ -428,9 +429,13 @@ def test_dataflow_index(graph: DataflowGraph) -> None:
 class DataflowTestHelper:
     def __init__(self, snippetcompiler) -> None:
         self.snippetcompiler = snippetcompiler
+        self._types: Dict[str, inmanta_type.Type] = None
         self._namespace: Optional[Namespace] = None
         self._instances: Dict[str, InstanceNode] = {}
         self._tokens: List[str] = []
+
+    def get_types(self) -> Dict[str, inmanta_type.Type]:
+        return self._types
 
     def get_namespace(self) -> Namespace:
         assert self._namespace is not None, "Call compile before trying to access namespace"
@@ -444,7 +449,7 @@ class DataflowTestHelper:
     def compile(self, snippet: str, expected_error_type: Optional[Type[RuntimeException]] = None) -> None:
         def compile():
             self.snippetcompiler.setup_for_snippet(snippet)
-            (_, root_ns) = compiler.do_compile()
+            (self._types, root_ns) = compiler.do_compile()
             self._namespace = root_ns.get_child("__config__")
 
         if expected_error_type is None:
@@ -1121,3 +1126,87 @@ y -> <instance> y
 <instance> y . n -> 0
         """,
     )
+
+
+@pytest.mark.parametrize("refer_out", [True, False])
+def test_dataflow_model_implementation(dataflow_test_helper: DataflowTestHelper, refer_out: bool) -> None:
+    dataflow_test_helper.compile(
+        """
+entity A:
+    number n
+end
+
+implementation i for A:
+    self.n = %s
+end
+
+implement A using i
+
+nn = 42
+x = A()
+        """ % ("nn" if refer_out else 42),
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+nn -> 42
+x -> <instance> x
+<instance> x . n -> %s
+        """ % ("nn" if refer_out else 42),
+    )
+
+
+def test_dataflow_model_implementation_assignment_from_self(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+entity A:
+    number n
+end
+
+entity B:
+    number n
+end
+
+A.b [1] -- B
+
+implementation i for A:
+    self.b = B(n = self.n)
+end
+
+implement A using i
+implement B using std::none
+
+x = A(n = 42)
+        """,
+    )
+    dataflow_test_helper.verify_graphstring(
+        """
+x -> <instance> x
+<instance> x . n -> 42
+<instance> x . b -> <instance> b
+        """,
+    )
+    dataflow_test_helper.verify_leaves({"b.n": {"a.n"}})
+
+
+def test_dataflow_model_unnamed_instance_in_implementation(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+entity A:
+end
+
+entity B:
+end
+
+implementation i for A:
+    B()
+end
+
+implement A using i
+implement B using std::none
+
+x = A()
+        """,
+    )
+    entity_b: inmanta_type.Type = dataflow_test_helper.get_types()["__config__::B"]
+    assert isinstance(entity_b, Entity)
+    assert len(entity_b.get_all_instances()) == 1
