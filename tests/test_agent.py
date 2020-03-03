@@ -35,6 +35,7 @@ async def test_agent_get_status(server, environment, agent):
     status = status.get_result()
     for name in reporting.reports.keys():
         assert name in status and status[name] != "ERROR"
+    assert status.get("env") is None
 
 
 def test_context_changes():
