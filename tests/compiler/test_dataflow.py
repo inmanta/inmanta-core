@@ -320,6 +320,7 @@ def test_attribute_assignment(graph: DataflowGraph, instantiate: bool) -> None:
     assert n.value_assignments[0].rhs == ValueNode(42).reference()
 
 
+# TODO: assign another attribute at the end and assert it gets propagated
 def test_dataflow_tentative_attribute_propagation(graph: DataflowGraph) -> None:
     x: AssignableNodeReference = graph.get_named_node("x")
     y: AssignableNodeReference = graph.get_named_node("y")
@@ -356,6 +357,31 @@ def test_dataflow_tentative_attribute_propagation(graph: DataflowGraph) -> None:
     assert z.node.tentative_instance is None
     assert isinstance(v, VariableNodeReference)
     assert_tentative_a_n(v.node)
+
+
+def test_dataflow_tentative_attribute_propagation_on_equivalence(graph: DataflowGraph) -> None:
+    x: AssignableNodeReference = graph.get_named_node("x")
+    y: AssignableNodeReference = graph.get_named_node("y")
+    z: AssignableNodeReference = graph.get_named_node("z")
+
+    x.assign(y, Statement(), graph)
+    y.assign(z, Statement(), graph)
+    z.assign(x, Statement(), graph)
+
+    x_n: AssignableNodeReference = graph.get_named_node("x.n")
+    x_n.assign(ValueNode(42).reference(), Statement(), graph)
+
+    assert isinstance(y, VariableNodeReference)
+    assert len(y.node.instance_assignments) == 0
+
+    y.assign(instance_node().reference(), Statement(), graph)
+
+    assert len(y.node.instance_assignments) == 1
+    y_n: Optional[AttributeNode] = y.node.instance_assignments[0].rhs.node().get_attribute("n")
+    assert y_n is not None
+
+    assert len(y_n.value_assignments) == 1
+    assert y_n.value_assignments[0].rhs.node.value == 42
 
 
 @pytest.mark.parametrize("register_both_dirs", [True, False])

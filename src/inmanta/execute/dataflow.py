@@ -216,9 +216,6 @@ class AssignableNodeReference(NodeReference):
         return AttributeNodeReference(self, name)
 
 
-# TODO: dedicated exceptions?
-
-
 class AttributeNodeReference(AssignableNodeReference):
     """
         Reference to a node representing an attribute of another node.
@@ -478,7 +475,7 @@ class AssignableNode(Node):
             Propagates this node's tentative instance to one of it's leaves.
         """
         leaf: Optional[AssignableNode] = self.reference().any_leaf()
-        if leaf is None:
+        if leaf is None or leaf in self.equivalence.nodes:
             return
 
         def propagate_tentative_assignments(source: AssignableNode, target: AssignableNodeReference) -> None:
