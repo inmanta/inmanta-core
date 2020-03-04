@@ -29,7 +29,6 @@ from inmanta.execute.dataflow import (
     InstanceNode,
     InstanceNodeReference,
     NodeStub,
-    TentativeInstanceNode,
     ValueNode,
     ValueNodeReference,
     VariableNodeReference,
@@ -110,4 +109,3 @@ def test_slots_dataflow():
     assert_slotted(Assignment(assignable_node.reference(), value_node, Statement(), graph))
     assert_slotted(NodeStub("stub"))
     assert_slotted(AttributeNode(instance_node, "attr"))
-    assert_slotted(TentativeInstanceNode([]))

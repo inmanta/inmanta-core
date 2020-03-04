@@ -502,16 +502,16 @@ class Equivalence:
     __slots__ = ("nodes", "tentative_instance")
 
     def __init__(
-        self, nodes: FrozenSet[AssignableNode] = frozenset(), tentative_instance: Optional["TentativeInstanceNode"] = None
+        self, nodes: FrozenSet[AssignableNode] = frozenset(), tentative_instance: Optional["InstanceNode"] = None
     ) -> None:
         self.nodes: FrozenSet[AssignableNode] = nodes
-        self.tentative_instance: Optional[TentativeInstanceNode] = tentative_instance
+        self.tentative_instance: Optional[InstanceNode] = tentative_instance
 
     def merge(self, other: "Equivalence") -> "Equivalence":
         """
             Returns the equivalence that is the union of this one and the one passed as an argument.
         """
-        tentative_instance: Optional[TentativeInstanceNode] = self.tentative_instance
+        tentative_instance: Optional[InstanceNode] = self.tentative_instance
         if tentative_instance is not None:
             self.tentative_instance = None
             if other.tentative_instance is not None:
@@ -608,7 +608,7 @@ class Equivalence:
 
     def tentative_attribute(self, attr: str) -> "AttributeNode":
         if self.tentative_instance is None:
-            self.tentative_instance = TentativeInstanceNode([])
+            self.tentative_instance = InstanceNode([])
         attr_node: Optional[AttributeNode] = self.tentative_instance.get_attribute(attr)
         if attr_node is None:
             attr_node = self.tentative_instance.register_attribute(attr)
@@ -649,18 +649,30 @@ class InstanceNode(Node):
         Node representing an entity instance.
     """
 
-    __slots__ = ("attributes", "entity", "responsible", "context", "bidirectional_attributes", "index_node", "_all_index_nodes")
+    __slots__ = (
+        "attributes",
+        "entity",
+        "responsible",
+        "context",
+        "bidirectional_attributes",
+        "_index_node",
+        "_all_index_nodes",
+    )
 
     def __init__(
-        self, attributes: Iterable[str], entity: "Entity", responsible: "Statement", context: "DataflowGraph",
+        self,
+        attributes: Iterable[str],
+        entity: Optional["Entity"] = None,
+        responsible: Optional["Statement"] = None,
+        context: Optional["DataflowGraph"] = None,
     ) -> None:
         Node.__init__(self)
         self.attributes: Dict[str, AttributeNode] = {name: AttributeNode(self, name) for name in attributes}
-        self.entity: "Entity" = entity
-        self.responsible: "Statement" = responsible
-        self.context: "DataflowGraph" = context
+        self.entity: Optional["Entity"] = entity
+        self.responsible: Optional["Statement"] = responsible
+        self.context: Optional["DataflowGraph"] = context
         self.bidirectional_attributes: Dict[str, str] = {}
-        self.index_node: Optional[InstanceNode] = None
+        self._index_node: Optional[InstanceNode] = None
         self._all_index_nodes: Set["InstanceNode"] = {self}
 
     def reference(self) -> InstanceNodeReference:
@@ -671,7 +683,7 @@ class InstanceNode(Node):
             Returns the main instance node if this node acts as a proxy due to an index match.
             Otherwise returns itself.
         """
-        return self if self.index_node is None else self.index_node.get_self()
+        return self if self._index_node is None else self._index_node.get_self()
 
     # TODO: not ideal. Think about doing magic in the class to proxy all calls
     def assert_self_root(self) -> None:
@@ -681,20 +693,27 @@ class InstanceNode(Node):
         if self.get_self() is not self:
             raise Exception("This method should only be called on the root InstanceNode. Call get_self() first.")
 
+    def merge(self, other: "InstanceNode") -> None:
+        """
+            Merge another instance into this one.
+        """
+        self.assert_self_root()
+        for attr_name, attr_node in other.get_self().attributes.items():
+            for assignment in attr_node.assignments():
+                self.assign_attribute(attr_name, assignment.rhs, assignment.responsible, assignment.context)
+
     def index_match(self, index_node: "InstanceNode") -> None:
         """
             Registers index_node as this node's index node. Propagates all attribute assignments.
         """
         if index_node is self:
             return
-        if self.index_node is not None:
+        if self._index_node is not None:
             raise Exception("Trying to match index on node that already has an index match. Try calling get_self() first")
         assert self.entity == index_node.get_self().entity
         assert self.bidirectional_attributes == index_node.get_self().bidirectional_attributes
-        self.index_node = index_node
-        for name, attribute in self.attributes.items():
-            for assignment in attribute.assignments():
-                index_node.get_self().assign_attribute(name, assignment.rhs, assignment.responsible, assignment.context)
+        index_node.get_self().merge(self)
+        self._index_node = index_node
         self.attributes = {}
         index_node.get_self().update_all_index_nodes(self._all_index_nodes)
         self._all_index_nodes = set(())
@@ -777,20 +796,3 @@ class InstanceNode(Node):
                 pass
             else:
                 raise Exception("Trying to assign attribute on non-instance node %s" % node_ref)
-
-
-# TODO: create super class for InstanceNode and TentativeInstanceNode that allows None values
-class TentativeInstanceNode(InstanceNode):
-    """
-        Node representing a tentative entity instance.
-    """
-
-    __slots__ = ()
-
-    def __init__(self, attributes: Iterable[str]) -> None:
-        InstanceNode.__init__(self, attributes, None, None, None)
-
-    def merge(self, other: "TentativeInstanceNode") -> None:
-        for attr_name, attr_node in other.attributes.items():
-            for assignment in attr_node.assignments():
-                self.assign_attribute(attr_name, assignment.rhs, assignment.responsible, assignment.context)

@@ -458,7 +458,7 @@ def test_dataflow_index(graph: DataflowGraph) -> None:
 class DataflowTestHelper:
     def __init__(self, snippetcompiler) -> None:
         self.snippetcompiler = snippetcompiler
-        self._types: Dict[str, inmanta_type.Type] = None
+        self._types: Dict[str, inmanta_type.Type] = {}
         self._namespace: Optional[Namespace] = None
         self._instances: Dict[str, InstanceNode] = {}
         self._tokens: List[str] = []
