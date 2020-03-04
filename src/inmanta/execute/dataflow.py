@@ -88,8 +88,9 @@ class DataflowGraph:
         """
             Registers an instance.
         """
-        entity: "Entity" = node.top_node().entity
-        self._entity_data(entity).add_instance(node)
+        entity: Optional["Entity"] = node.top_node().entity
+        if entity is not None:
+            self._entity_data(entity).add_instance(node)
 
     def register_bidirectional_attribute(self, entity: "Entity", this: str, other: str) -> None:
         """
