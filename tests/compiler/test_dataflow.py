@@ -23,6 +23,7 @@ import pytest
 
 import inmanta.ast.type as inmanta_type
 import inmanta.compiler as compiler
+from inmanta.config import Config
 from inmanta.ast import DoubleSetException, Namespace, NotFoundException, RuntimeException
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements import Literal, Statement
@@ -478,6 +479,7 @@ class DataflowTestHelper:
     def compile(self, snippet: str, expected_error_type: Optional[Type[RuntimeException]] = None) -> None:
         def compile():
             self.snippetcompiler.setup_for_snippet(snippet)
+            Config.set("compiler_datatrace", "enabled", "true")
             (self._types, root_ns) = compiler.do_compile()
             self._namespace = root_ns.get_child("__config__")
 

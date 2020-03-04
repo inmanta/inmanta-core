@@ -218,6 +218,7 @@ def compiler_config(parser: ArgumentParser) -> None:
     parser.add_argument("--password", dest="password", help="The password of the server")
     parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
+    parser.add_argument("--experimental-data-trace", dest="datatrace", help="Experimental data trace tool useful for debugging", action="store_true", default=False)
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
 
 
@@ -245,6 +246,9 @@ def compile_project(options: argparse.Namespace):
 
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
+
+    if options.datatrace is True:
+        Config.set("compiler_datatrace", "enabled", "true")
 
     module.Project.get(options.main_file)
 

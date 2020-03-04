@@ -35,6 +35,7 @@ from inmanta.ast.statements.define import (
     DefineTypeConstraint,
     DefineTypeDefault,
 )
+from inmanta.config import Config
 from inmanta.ast.type import TYPES, Type
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.proxy import UnsetException
@@ -227,8 +228,9 @@ class Scheduler(object):
         # give all loose blocks an empty XC
         # register the XC's as scopes
         # All named scopes are now present
+        enable_dataflow: bool = Config.get("compiler_datatrace", "enabled", "false") == "true"
         for block in blocks:
-            res = Resolver(block.namespace)
+            res = Resolver(block.namespace, enable_dataflow)
             xc = ExecutionContext(block, res)
             block.context = xc
             block.namespace.scope = xc

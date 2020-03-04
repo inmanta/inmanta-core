@@ -770,11 +770,9 @@ class Resolver(object):
 
     __slots__ = ("namespace", "dataflow_graph")
 
-    def __init__(self, namespace: Namespace) -> None:
+    def __init__(self, namespace: Namespace, enable_dataflow_graph: bool = False) -> None:
         self.namespace = namespace
-        # TODO: check config
-        dataflow_enable: bool = True
-        self.dataflow_graph: Optional[DataflowGraph] = DataflowGraph(self) if dataflow_enable else None
+        self.dataflow_graph: Optional[DataflowGraph] = DataflowGraph(self) if enable_dataflow_graph else None
 
     def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
         # override lexial root
