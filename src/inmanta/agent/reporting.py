@@ -102,13 +102,6 @@ def report_pid(agent: "Agent") -> str:
 reports["pid"] = report_pid
 
 
-def report_env(agent: "Agent") -> Dict[str, str]:
-    return {k: v for k, v in os.environ.items()}
-
-
-reports["env"] = report_env
-
-
 def report_resources(agent: "Agent") -> Dict[str, float]:
     if resource is None:
         return {}

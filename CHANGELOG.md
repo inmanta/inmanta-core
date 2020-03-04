@@ -10,6 +10,7 @@
  - Various compiler error reporting improvements (#1810)
  - Fixed cache leak in agent when deployments are canceled (#1883)
  - Improved robustness of modules update (#1885)
+ - Removed environmental variables from agent report (#1891)
 
 ## Added
  - Added support for compiler warnings (#1779)
