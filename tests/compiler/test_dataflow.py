@@ -319,7 +319,6 @@ def test_attribute_assignment(graph: DataflowGraph, instantiate: bool) -> None:
     assert n.value_assignments[0].rhs == ValueNode(42).reference()
 
 
-# TODO: assign another attribute at the end and assert it gets propagated
 def test_dataflow_tentative_attribute_propagation(graph: DataflowGraph) -> None:
     x: AssignableNodeReference = graph.get_named_node("x")
     y: AssignableNodeReference = graph.get_named_node("y")
@@ -331,7 +330,9 @@ def test_dataflow_tentative_attribute_propagation(graph: DataflowGraph) -> None:
     x_a_n: AssignableNodeReference = graph.get_named_node("x.a.n")
     x_a_n.assign(ValueNode(42).reference(), Statement(), graph)
 
-    def assert_tentative_a_n(var: AssignableNode) -> None:
+    def assert_tentative_a_n(var: AssignableNode, values: Optional[Set[int]] = None) -> None:
+        if values is None:
+            values = {42}
         instance: Optional[InstanceNode] = var.equivalence.tentative_instance
         assert instance is not None
         a: Optional[AttributeNode] = instance.get_attribute("a")
@@ -340,8 +341,8 @@ def test_dataflow_tentative_attribute_propagation(graph: DataflowGraph) -> None:
         assert instance2 is not None
         n: Optional[AttributeNode] = instance2.get_attribute("n")
         assert n is not None
-        assert len(n.value_assignments) == 1
-        assert n.value_assignments[0].rhs.node == ValueNode(42)
+        assert len(n.value_assignments) == len(values)
+        assert {assignment.rhs.node.value for assignment in n.value_assignments} == values
 
     assert isinstance(z, VariableNodeReference)
     assert_tentative_a_n(z.node)
@@ -356,6 +357,9 @@ def test_dataflow_tentative_attribute_propagation(graph: DataflowGraph) -> None:
     assert z.node.equivalence.tentative_instance is None
     assert isinstance(v, VariableNodeReference)
     assert_tentative_a_n(v.node)
+
+    x_a_n.assign(ValueNode(0).reference(), Statement(), graph)
+    assert_tentative_a_n(v.node, {0, 42})
 
 
 def test_dataflow_tentative_attribute_propagation_on_equivalence(graph: DataflowGraph) -> None:
@@ -800,7 +804,6 @@ y -> 42
     dataflow_test_helper.verify_leaves({"x": {"x", "y"}, "y": {"y"}})
 
 
-# TODO: fix this test. Fails because of faulty node lookup logic
 def test_dataflow_model_unassigned_dependency_error(dataflow_test_helper: DataflowTestHelper) -> None:
     dataflow_test_helper.compile(
         """
