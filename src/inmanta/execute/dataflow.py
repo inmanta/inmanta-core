@@ -241,7 +241,7 @@ class AttributeNodeReference(AssignableNodeReference):
             instance_leaf: Optional["AssignableNode"] = self.instance_var_ref.any_leaf()
             if instance_leaf is None:
                 instance_leaf = self.instance_var_ref.assignment_node()
-            return instance_leaf.tentative_attribute(self.attribute)
+            return instance_leaf.equivalence.tentative_attribute(self.attribute)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, AttributeNodeReference):
@@ -402,7 +402,6 @@ class AssignableNode(Node):
         self.value_assignments: List[Assignment[ValueNodeReference]] = []
         self.instance_assignments: List[Assignment[InstanceNodeReference]] = []
         self.equivalence: Equivalence = Equivalence(frozenset([self]))
-        self.tentative_instance: Optional[TentativeInstanceNode] = None
 
     def reference(self) -> AssignableNodeReference:
         return VariableNodeReference(self)
@@ -446,7 +445,7 @@ class AssignableNode(Node):
             Assigns an instance node to this node, by reference.
         """
         self.instance_assignments.append(Assignment(self.reference(), instance_ref, responsible, context))
-        self.propagate_tentative_instance()
+        self.equivalence.propagate_tentative_instance()
 
     def assign_assignable(self, var_ref: AssignableNodeReference, responsible: "Statement", context: "DataflowGraph") -> None:
         """
@@ -466,41 +465,7 @@ class AssignableNode(Node):
         for node in new_equivalence.nodes:
             node.equivalence = new_equivalence
         # propagate this node's tentative instance to the new leaves, if it exists
-        self.propagate_tentative_instance()
-
-    # TODO: also propagate from other nodes in equivalence. In that case, probably no need to propagate to
-    #   other nodes in equivalence
-    def propagate_tentative_instance(self) -> None:
-        """
-            Propagates this node's tentative instance to one of it's leaves.
-        """
-        leaf: Optional[AssignableNode] = self.reference().any_leaf()
-        if leaf is None or leaf in self.equivalence.nodes:
-            return
-
-        def propagate_tentative_assignments(source: AssignableNode, target: AssignableNodeReference) -> None:
-            if source.tentative_instance is None:
-                return
-            for tent_attr_name, tent_attr_node in source.tentative_instance.attributes.items():
-                attr_node: AttributeNodeReference = target.get_attribute(tent_attr_name)
-                for assignment in tent_attr_node.assignments():
-                    attr_node.assign(assignment.rhs, assignment.responsible, assignment.context)
-                propagate_tentative_assignments(tent_attr_node, target.get_attribute(tent_attr_name))
-            self.tentative_instance = None
-
-        propagate_tentative_assignments(self, leaf.reference())
-
-    def tentative_attribute(self, attr: str) -> "AttributeNode":
-        """
-            Returns an attribute on a tentative instance node connected to this node.
-            Creates it if it does not exist yet.
-        """
-        if self.tentative_instance is None:
-            self.tentative_instance = TentativeInstanceNode([])
-        attr_node: Optional[AttributeNode] = self.tentative_instance.get_attribute(attr)
-        if attr_node is None:
-            attr_node = self.tentative_instance.register_attribute(attr)
-        return attr_node
+        self.equivalence.propagate_tentative_instance()
 
 
 class Equivalence:
@@ -508,14 +473,20 @@ class Equivalence:
         Represents a collection of nodes that are equivalent because of one or more assignment loops.
     """
 
-    def __init__(self, nodes: FrozenSet[AssignableNode] = frozenset()) -> None:
+    def __init__(self, nodes: FrozenSet[AssignableNode] = frozenset(), tentative_instance: Optional["TentativeInstanceNode"] = None) -> None:
         self.nodes: FrozenSet[AssignableNode] = nodes
+        self.tentative_instance: Optional[TentativeInstanceNode] = tentative_instance
 
     def merge(self, other: "Equivalence") -> "Equivalence":
         """
             Returns the equivalence that is the union of this one and the one passed as an argument.
         """
-        return Equivalence(self.nodes.union(other.nodes))
+        tentative_instance: Optional[TentativeInstanceNode] = self.tentative_instance
+        if tentative_instance is not None:
+            self.tentative_instance = None
+            if other.tentative_instance is not None:
+                tentative_instance.merge(other.tentative_instance)
+        return Equivalence(self.nodes.union(other.nodes), tentative_instance)
 
     def is_leaf(self) -> bool:
         """
@@ -580,10 +551,41 @@ class Equivalence:
         """
         return chain.from_iterable(n.value_assignments for n in self.nodes)
 
+    def propagate_tentative_instance(self) -> None:
+        """
+            Propagates this equivalence's tentative instance to one of it's leaves.
+        """
+        def propagate_tentative_assignments(source: Equivalence, target: AssignableNodeReference) -> None:
+            """
+                Recursively propagate tentative assignments.
+                Makes sure tentative assignments over a relation get propageted as well.
+            """
+            if source.tentative_instance is None:
+                return
+            for tent_attr_name, tent_attr_node in source.tentative_instance.attributes.items():
+                attr_node: AttributeNodeReference = target.get_attribute(tent_attr_name)
+                for assignment in tent_attr_node.assignments():
+                    attr_node.assign(assignment.rhs, assignment.responsible, assignment.context)
+                propagate_tentative_assignments(tent_attr_node.equivalence, target.get_attribute(tent_attr_name))
+            self.tentative_instance = None
+        try:
+            leaf: AssignableNode = next(self.leaves())
+            propagate_tentative_assignments(self, leaf.reference())
+        except StopIteration:
+            raise Exception("Inconsistent state: an equivalence should always have at least one leaf")
+
+    def tentative_attribute(self, attr: str) -> "AttributeNode":
+        if self.tentative_instance is None:
+            self.tentative_instance = TentativeInstanceNode([])
+        attr_node: Optional[AttributeNode] = self.tentative_instance.get_attribute(attr)
+        if attr_node is None:
+            attr_node = self.tentative_instance.register_attribute(attr)
+        return attr_node
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Equivalence):
             return NotImplemented
-        return self.nodes == other.nodes
+        return self.nodes == other.nodes and self.tentative_instance == other.tentative_instance
 
     def __hash__(self) -> int:
         return hash(self.nodes)
@@ -752,3 +754,8 @@ class TentativeInstanceNode(InstanceNode):
 
     def __init__(self, attributes: Iterable[str]) -> None:
         InstanceNode.__init__(self, attributes, None, None, None)
+
+    def merge(self, other: "TentativeInstanceNode") -> None:
+        for attr_name, attr_node in other.attributes.items():
+            for assignment in attr_node.assignments():
+                self.assign_attribute(attr_name, assignment.rhs, assignment.responsible, assignment.context)
