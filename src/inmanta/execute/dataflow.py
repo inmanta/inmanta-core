@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Callable, Dict, FrozenSet, Generic, Iterable, 
 
 if TYPE_CHECKING:
     from inmanta.execute.runtime import Resolver
-    from inmanta.ast.statements import Statement
+    from inmanta.ast import Locatable
     from inmanta.ast.entity import Entity
 
 
@@ -38,7 +38,7 @@ class DataflowGraph:
         self.parent: Optional[DataflowGraph] = parent if parent is not None else None
         self.named_nodes: Dict[str, AssignableNode] = {}
         self._instances: Dict["Entity", EntityData] = {}
-        self._own_instances: Dict["Statement", InstanceNode] = {}
+        self._own_instances: Dict["Locatable", InstanceNode] = {}
 
     def instances(self) -> Dict["Entity", "EntityData"]:
         """
@@ -71,7 +71,7 @@ class DataflowGraph:
         return reduce(lambda acc, part: AttributeNodeReference(acc, part), parts[1:], root_ref)
 
     def own_instance_node_for_responsible(
-        self, responsible: "Statement", get_new: Callable[[], "InstanceNode"]
+        self, responsible: "Locatable", get_new: Callable[[], "InstanceNode"]
     ) -> "InstanceNode":
         """
             Returns this graph's instance node tied to responsible if it exists.
@@ -211,7 +211,7 @@ class AssignableNodeReference(NodeReference):
         """
         raise NotImplementedError()
 
-    def assign(self, node_ref: "NodeReference", responsible: "Statement", context: "DataflowGraph") -> None:
+    def assign(self, node_ref: "NodeReference", responsible: "Locatable", context: "DataflowGraph") -> None:
         """
             Assign another node to this reference's assignment node.
         """
@@ -346,7 +346,7 @@ class InstanceNodeReference(NodeReference):
         yield self.node()
 
     def assign_attribute(
-        self, attribute: str, node_ref: "NodeReference", responsible: "Statement", context: "DataflowGraph"
+        self, attribute: str, node_ref: "NodeReference", responsible: "Locatable", context: "DataflowGraph"
     ) -> None:
         """
             Assigns a node to an attribute of the instance this reference refers to.
@@ -372,10 +372,10 @@ class Assignment(Generic[RT]):
 
     __slots__ = ("lhs", "rhs", "responsible", "context")
 
-    def __init__(self, lhs: AssignableNodeReference, rhs: RT, responsible: "Statement", context: "DataflowGraph") -> None:
+    def __init__(self, lhs: AssignableNodeReference, rhs: RT, responsible: "Locatable", context: "DataflowGraph") -> None:
         self.lhs: AssignableNodeReference = lhs
         self.rhs: RT = rhs
-        self.responsible: "Statement" = responsible
+        self.responsible: "Locatable" = responsible
         self.context: "DataflowGraph" = context
 
 
@@ -447,7 +447,7 @@ class AssignableNode(Node):
         """
         return chain(self.assignable_assignments, self.value_assignments, self.instance_assignments)
 
-    def assign(self, node_ref: "NodeReference", responsible: "Statement", context: "DataflowGraph") -> None:
+    def assign(self, node_ref: "NodeReference", responsible: "Locatable", context: "DataflowGraph") -> None:
         """
             Assigns another node to this one, by reference.
         """
@@ -460,20 +460,20 @@ class AssignableNode(Node):
         else:
             raise Exception("Unknown Node type %s" % type(node_ref))
 
-    def assign_value(self, val_ref: ValueNodeReference, responsible: "Statement", context: "DataflowGraph") -> None:
+    def assign_value(self, val_ref: ValueNodeReference, responsible: "Locatable", context: "DataflowGraph") -> None:
         """
             Assigns a value node to this node, by reference.
         """
         self.value_assignments.append(Assignment(self.reference(), val_ref, responsible, context))
 
-    def assign_instance(self, instance_ref: InstanceNodeReference, responsible: "Statement", context: "DataflowGraph") -> None:
+    def assign_instance(self, instance_ref: InstanceNodeReference, responsible: "Locatable", context: "DataflowGraph") -> None:
         """
             Assigns an instance node to this node, by reference.
         """
         self.instance_assignments.append(Assignment(self.reference(), instance_ref, responsible, context))
         self.equivalence.propagate_tentative_instance()
 
-    def assign_assignable(self, var_ref: AssignableNodeReference, responsible: "Statement", context: "DataflowGraph") -> None:
+    def assign_assignable(self, var_ref: AssignableNodeReference, responsible: "Locatable", context: "DataflowGraph") -> None:
         """
             Assigns an assignable node to this node, by reference.
         """
@@ -633,9 +633,9 @@ class AttributeNode(AssignableNode):
     def __init__(self, instance: "InstanceNode", name: str) -> None:
         AssignableNode.__init__(self, name)
         self.instance: InstanceNode = instance
-        self.responsibles: Set[Tuple["Statement", DataflowGraph]] = set(())
+        self.responsibles: Set[Tuple["Locatable", DataflowGraph]] = set(())
 
-    def assign(self, node_ref: NodeReference, responsible: "Statement", context: "DataflowGraph") -> None:
+    def assign(self, node_ref: NodeReference, responsible: "Locatable", context: "DataflowGraph") -> None:
         # only add assignment for each responsible once, this check is necessary for bidirectional attributes
         if (responsible, context) in self.responsibles:
             return
@@ -663,13 +663,13 @@ class InstanceNode(Node):
         self,
         attributes: Iterable[str],
         entity: Optional["Entity"] = None,
-        responsible: Optional["Statement"] = None,
+        responsible: Optional["Locatable"] = None,
         context: Optional["DataflowGraph"] = None,
     ) -> None:
         Node.__init__(self)
         self.attributes: Dict[str, AttributeNode] = {name: AttributeNode(self, name) for name in attributes}
         self.entity: Optional["Entity"] = entity
-        self.responsible: Optional["Statement"] = responsible
+        self.responsible: Optional["Locatable"] = responsible
         self.context: Optional["DataflowGraph"] = context
         self.bidirectional_attributes: Dict[str, str] = {}
         self._index_node: Optional[InstanceNode] = None
@@ -685,19 +685,12 @@ class InstanceNode(Node):
         """
         return self if self._index_node is None else self._index_node.get_self()
 
-    # TODO: not ideal. Think about doing magic in the class to proxy all calls
-    def assert_self_root(self) -> None:
-        """
-            Asserts that this node is the root instance node of the index tree.
-        """
-        if self.get_self() is not self:
-            raise Exception("This method should only be called on the root InstanceNode. Call get_self() first.")
-
     def merge(self, other: "InstanceNode") -> None:
         """
             Merge another instance into this one.
         """
-        self.assert_self_root()
+        if self.get_self() is not self:
+            return self.get_self().merge(other)
         for attr_name, attr_node in other.get_self().attributes.items():
             for assignment in attr_node.assignments():
                 self.assign_attribute(attr_name, assignment.rhs, assignment.responsible, assignment.context)
@@ -722,23 +715,26 @@ class InstanceNode(Node):
         """
             Adds a set of index nodes to this node's set of all index matches.
         """
-        self.assert_self_root()
+        if self.get_self() is not self:
+            return self.get_self().update_all_index_nodes(index_nodes)
         self._all_index_nodes.update(index_nodes)
 
     def get_all_index_nodes(self) -> Set["InstanceNode"]:
         """
             Returns all index matches for this node.
         """
-        self.assert_self_root()
+        if self.get_self() is not self:
+            return self.get_self().get_all_index_nodes()
         return self._all_index_nodes
 
     def assign_attribute(
-        self, attribute: str, node_ref: "NodeReference", responsible: "Statement", context: "DataflowGraph",
+        self, attribute: str, node_ref: "NodeReference", responsible: "Locatable", context: "DataflowGraph",
     ) -> None:
         """
             Assigns a node to one of this instance's attributes.
         """
-        self.assert_self_root()
+        if self.get_self() is not self:
+            return self.get_self().assign_attribute(attribute, node_ref, responsible, context)
         attr_node: AttributeNode = self.register_attribute(attribute)
         attr_node.assign(node_ref, responsible, context)
 
@@ -746,7 +742,8 @@ class InstanceNode(Node):
         """
             Registers an attribute to this instance node. Returns the attribute's node.
         """
-        self.assert_self_root()
+        if self.get_self() is not self:
+            return self.get_self().register_attribute(attribute)
         if attribute not in self.attributes:
             self.attributes[attribute] = AttributeNode(self, attribute)
         return self.attributes[attribute]
@@ -755,7 +752,8 @@ class InstanceNode(Node):
         """
             Returns one of this instance's attributes by name, if it exists.
         """
-        self.assert_self_root()
+        if self.get_self() is not self:
+            return self.get_self().get_attribute(attribute)
         try:
             return self.attributes[attribute]
         except KeyError:
@@ -765,7 +763,8 @@ class InstanceNode(Node):
         """
             Registers a pair of bidirectional attributes. Adds assignments for the other direction where required.
         """
-        self.assert_self_root()
+        if self.get_self() is not self:
+            return self.get_self().register_bidirectional_attribute(this, other)
         self.bidirectional_attributes[this] = other
         if this in self.attributes:
             attr_node: AttributeNode = self.attributes[this]
@@ -773,7 +772,7 @@ class InstanceNode(Node):
                 self.assign_other_direction(this, assignment.rhs, assignment.responsible, assignment.context)
 
     def assign_other_direction(
-        self, attribute: str, node_ref: "NodeReference", responsible: "Statement", context: "DataflowGraph"
+        self, attribute: str, node_ref: "NodeReference", responsible: "Locatable", context: "DataflowGraph"
     ) -> None:
         """
             If attribute is a bidirectional attribute, assign the other direction.
@@ -782,10 +781,10 @@ class InstanceNode(Node):
             :param responsible: the responsible for both assignments
             :param context: the context for both assignments
         """
-        self.assert_self_root()
+        if self.get_self() is not self:
+            return self.get_self().assign_other_direction(attribute, node_ref, responsible, context)
         if attribute in self.bidirectional_attributes:
             assign_attr: str = self.bidirectional_attributes[attribute]
-            # TODO: this ain't pretty, would be nice if we could instantiate an AttributeNodeReference on an InstanceNode
             if isinstance(node_ref, InstanceNodeReference):
                 node_ref.node().assign_attribute(assign_attr, self.reference(), responsible, context)
             elif isinstance(node_ref, AssignableNodeReference):

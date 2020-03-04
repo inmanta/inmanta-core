@@ -452,7 +452,7 @@ def test_dataflow_index(graph: DataflowGraph) -> None:
     assert i2.get_self() is i1
     assert i2.reference().node() is i1
     assert i2.reference().top_node() is i2
-    assert i1.get_self().get_all_index_nodes() == {i1, i2}
+    assert i1.get_all_index_nodes() == {i1, i2}
 
 
 class DataflowTestHelper:
@@ -525,7 +525,7 @@ class DataflowTestHelper:
             attribute_name: Optional[str] = self._consume_token_attribute()
             if attribute_name is None:
                 raise Exception("Parse error: expected `. attribute_name`, got %s." % attribute_name)
-            attribute: Optional[AttributeNode] = instance.get_self().get_attribute(attribute_name)
+            attribute: Optional[AttributeNode] = instance.get_attribute(attribute_name)
             assert attribute is not None
             node = attribute
         else:

@@ -915,9 +915,8 @@ class Instance(ExecutionContext):
             self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
             self.self_var_node = dataflow.AssignableNode("__self__").reference()
             self.self_var_node.assign(
-                # TODO: None is not an acceptable value. Find a way to fix this
                 cast(dataflow.InstanceNodeReference, self.instance_node),
-                None,
+                self,
                 cast(DataflowGraph, self.dataflow_graph),
             )
 
