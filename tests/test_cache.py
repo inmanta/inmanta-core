@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import unittest
 from threading import Lock, Thread
 from time import sleep
 
@@ -27,7 +26,7 @@ from inmanta.agent.handler import cache
 from inmanta.resources import Id, Resource, resource
 
 
-@fixture(autouse=True)
+@fixture()
 def my_resource():
     @resource("test::Resource", agent="agent", id_attribute="key")
     class MyResource(Resource):
@@ -38,72 +37,97 @@ def my_resource():
         fields = ("key", "value", "purged")
 
 
-class CacheTests(unittest.TestCase):
-    def test_base(self):
-        cache = AgentCache()
-        value = "test too"
-        cache.cache_value("test", value)
+def test_base():
+    cache = AgentCache()
+    value = "test too"
+    cache.cache_value("test", value)
+    assert value == cache.find("test")
+
+
+def test_timout():
+    cache = AgentCache()
+    value = "test too"
+    cache.cache_value("test", value, timeout=0.1)
+    cache.cache_value("test2", value)
+
+    assert value == cache.find("test")
+    sleep(0.2)
+    try:
+        assert value == cache.find("test")
+        raise AssertionError("Should get exception")
+    except KeyError:
+        pass
+
+    assert value == cache.find("test2")
+
+
+def test_base_fail():
+    cache = AgentCache()
+    value = "test too"
+    with pytest.raises(KeyError):
         assert value == cache.find("test")
 
-    def test_timout(self):
-        cache = AgentCache()
-        value = "test too"
-        cache.cache_value("test", value, timeout=0.1)
-        cache.cache_value("test2", value)
 
+def test_resource():
+    cache = AgentCache()
+    value = "test too"
+    resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
+    cache.cache_value("test", value, resource=resource)
+    assert value == cache.find("test", resource=resource)
+
+
+def test_resource_fail(my_resource):
+    cache = AgentCache()
+    value = "test too"
+    resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
+    cache.cache_value("test", value, resource=resource)
+
+    with pytest.raises(KeyError):
         assert value == cache.find("test")
-        sleep(0.2)
-        try:
-            assert value == cache.find("test")
-            raise AssertionError("Should get exception")
-        except KeyError:
-            pass
 
-        assert value == cache.find("test2")
 
-    def test_base_fail(self):
-        cache = AgentCache()
-        value = "test too"
-        with pytest.raises(KeyError):
-            assert value == cache.find("test")
-
-    def test_resource(self):
-        cache = AgentCache()
-        value = "test too"
-        resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
-        cache.cache_value("test", value, resource=resource)
-        assert value == cache.find("test", resource=resource)
-
-    def test_resource_fail(self):
-        cache = AgentCache()
-        value = "test too"
-        resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
-        cache.cache_value("test", value, resource=resource)
-
-        with pytest.raises(KeyError):
-            assert value == cache.find("test")
-
-    def test_version_closed(self):
-        cache = AgentCache()
-        value = "test too"
-        version = 200
-        with pytest.raises(Exception):
-            cache.cache_value("test", value, version=version)
-            assert value == cache.find("test", version=version)
-
-    def test_version(self):
-        cache = AgentCache()
-        value = "test too"
-        version = 200
-        cache.open_version(version)
+def test_version_closed():
+    cache = AgentCache()
+    value = "test too"
+    version = 200
+    with pytest.raises(Exception):
         cache.cache_value("test", value, version=version)
         assert value == cache.find("test", version=version)
 
-    def test_version_close(self):
-        cache = AgentCache()
-        value = "test too"
-        version = 200
-        cache.open_version(version)
+
+def test_version():
+    cache = AgentCache()
+    value = "test too"
+    version = 200
+    cache.open_version(version)
+    cache.cache_value("test", value, version=version)
+    assert value == cache.find("test", version=version)
+
+
+def test_version_close():
+    cache = AgentCache()
+    value = "test too"
+    version = 200
+    cache.open_version(version)
+    cache.cache_value("test", value, version=version)
+    cache.cache_value("test0", value, version=version)
+    cache.cache_value("test4", value, version=version)
+    resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
+    cache.cache_value("testx", value, resource=resource)
+    assert value == cache.find("test", version=version)
+    assert value == cache.find("testx", resource=resource)
+    cache.close_version(version)
+    assert value, cache.find("testx", resource=resource)
+    with pytest.raises(KeyError):
+        assert value == cache.find("test", version=version)
+        raise AssertionError("Should get exception")
+
+
+def test_context_manager():
+    cache = AgentCache()
+    value = "test too"
+    version = 200
+    with cache.manager(version):
         cache.cache_value("test", value, version=version)
         cache.cache_value("test0", value, version=version)
         cache.cache_value("test4", value, version=version)
@@ -111,267 +135,272 @@ class CacheTests(unittest.TestCase):
         cache.cache_value("testx", value, resource=resource)
         assert value == cache.find("test", version=version)
         assert value == cache.find("testx", resource=resource)
-        cache.close_version(version)
-        assert value, cache.find("testx", resource=resource)
-        try:
-            assert value == cache.find("test", version=version)
-            raise AssertionError("Should get exception")
-        except KeyError:
-            pass
 
-    def test_multi_threaded(self):
-        class Spy(object):
-            def __init__(self):
-                self.created = 0
-                self.deleted = 0
-                self.lock = Lock()
-
-            def create(self):
-                with self.lock:
-                    self.created += 1
-                return self
-
-            def delete(self):
-                self.deleted += 1
-
-        cache = AgentCache()
-        version = 200
-
-        cache.open_version(version)
-
-        alpha = Spy()
-        beta = Spy()
-        alpha.lock.acquire()
-
-        t1 = Thread(
-            target=lambda: cache.get_or_else(
-                "test", lambda version: alpha.create(), version=version, call_on_delete=lambda x: x.delete()
-            )
-        )
-        t2 = Thread(
-            target=lambda: cache.get_or_else(
-                "test", lambda version: beta.create(), version=version, call_on_delete=lambda x: x.delete()
-            )
-        )
-
-        t1.start()
-        t2.start()
-
-        alpha.lock.release()
-
-        t1.join()
-        t2.join()
-
-        assert alpha.created + beta.created == 1
-        assert alpha.deleted == 0
-        assert beta.deleted == 0
-
-        cache.close_version(version)
-
-        assert alpha.created + beta.created == 1
-        assert alpha.deleted == alpha.created
-        assert beta.deleted == beta.created
-
-    def test_timout_and_version(self):
-        cache = AgentCache()
-        version = 200
-
-        cache.open_version(version)
-        value = "test too"
-        cache.cache_value("test", value, version=version, timeout=0.1)
-        cache.cache_value("testx", value)
-
+    assert value, cache.find("testx", resource=resource)
+    with pytest.raises(KeyError):
         assert value == cache.find("test", version=version)
-        assert value == cache.find("testx")
 
-        sleep(0.2)
-        assert value == cache.find("testx")
 
-        cache.close_version(version)
-        assert value == cache.find("testx")
+def test_multi_threaded():
+    class Spy(object):
+        def __init__(self):
+            self.created = 0
+            self.deleted = 0
+            self.lock = Lock()
 
-        with pytest.raises(KeyError):
-            cache.find("test", version=version)
-        assert value == cache.find("testx")
+        def create(self):
+            with self.lock:
+                self.created += 1
+            return self
 
-    def test_version_and_timout(self):
-        cache = AgentCache()
-        version = 200
+        def delete(self):
+            self.deleted += 1
 
-        cache.open_version(version)
-        value = "test too"
-        cache.cache_value("test", value, version=version, timeout=0.1)
-        cache.cache_value("testx", value)
+    cache = AgentCache()
+    version = 200
 
-        assert value == cache.find("test", version=version)
-        assert value == cache.find("testx")
+    cache.open_version(version)
 
-        cache.close_version(version)
-        assert value == cache.find("testx")
+    alpha = Spy()
+    beta = Spy()
+    alpha.lock.acquire()
 
-        sleep(0.2)
-        assert value == cache.find("testx")
+    t1 = Thread(
+        target=lambda: cache.get_or_else(
+            "test", lambda version: alpha.create(), version=version, call_on_delete=lambda x: x.delete()
+        )
+    )
+    t2 = Thread(
+        target=lambda: cache.get_or_else(
+            "test", lambda version: beta.create(), version=version, call_on_delete=lambda x: x.delete()
+        )
+    )
 
-        with pytest.raises(KeyError):
-            cache.find("test", version=version)
+    t1.start()
+    t2.start()
 
-    def test_version_fail(self):
-        cache = AgentCache()
-        value = "test too"
-        version = 200
-        cache.open_version(version)
-        cache.cache_value("test", value, version=version)
+    alpha.lock.release()
 
-        with pytest.raises(KeyError):
-            assert value == cache.find("test")
+    t1.join()
+    t2.join()
 
-    def test_resource_and_version(self):
-        cache = AgentCache()
-        value = "test too"
-        resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
-        version = 200
-        cache.open_version(version)
-        cache.cache_value("test", value, resource=resource, version=version)
-        assert value == cache.find("test", resource=resource, version=version)
+    assert alpha.created + beta.created == 1
+    assert alpha.deleted == 0
+    assert beta.deleted == 0
 
-    def test_get_or_else(self):
-        called = []
+    cache.close_version(version)
 
-        def creator(param, resource, version):
+    assert alpha.created + beta.created == 1
+    assert alpha.deleted == alpha.created
+    assert beta.deleted == beta.created
 
-            called.append("x")
-            return param
 
-        cache = AgentCache()
-        value = "test too"
-        value2 = "test too x"
-        resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
-        resourcev2 = Id("test::Resource", "test", "key", "test", 200).get_instance()
-        assert 200 == resourcev2.id.version
-        version = 200
-        cache.open_version(version)
-        assert value == cache.get_or_else("test", creator, resource=resource, version=version, param=value)
-        assert value == cache.get_or_else("test", creator, resource=resource, version=version, param=value)
-        assert len(called) == 1
-        assert value == cache.get_or_else("test", creator, resource=resourcev2, version=version, param=value)
-        assert len(called) == 1
-        assert value2 == cache.get_or_else("test", creator, resource=resource, version=version, param=value2)
+def test_timout_and_version():
+    cache = AgentCache()
+    version = 200
 
-    def test_get_or_else_none(self):
-        called = []
+    cache.open_version(version)
+    value = "test too"
+    cache.cache_value("test", value, version=version, timeout=0.1)
+    cache.cache_value("testx", value)
 
-        def creator(param, resource, version):
-            called.append("x")
-            return param
+    assert value == cache.find("test", version=version)
+    assert value == cache.find("testx")
 
-        class Sequencer(object):
-            def __init__(self, sequence):
-                self.seq = sequence
-                self.count = 0
+    sleep(0.2)
+    assert value == cache.find("testx")
 
-            def __call__(self, **kwargs):
-                out = self.seq[self.count]
-                self.count += 1
-                return out
+    cache.close_version(version)
+    assert value == cache.find("testx")
 
-        cache = AgentCache()
-        value = "test too"
-        resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
-        version = 100
-        cache.open_version(version)
-        assert None is cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=None)
-        assert len(called) == 1
-        assert None is cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=None)
-        assert len(called) == 2
-        assert value == cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=value)
-        assert value == cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=value)
-        assert len(called) == 3
+    with pytest.raises(KeyError):
+        cache.find("test", version=version)
+    assert value == cache.find("testx")
 
-        seq = Sequencer([None, None, "A"])
-        assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
-        assert seq.count == 1
-        assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
-        assert seq.count == 2
-        assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
-        assert seq.count == 3
-        assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
-        assert seq.count == 3
-        assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
-        assert seq.count == 3
 
-    def test_decorator(self):
-        class Closeable:
-            def __init__(self):
-                self.closed = False
+def test_version_and_timout():
+    cache = AgentCache()
+    version = 200
 
-            def close(self):
-                self.closed = True
+    cache.open_version(version)
+    value = "test too"
+    cache.cache_value("test", value, version=version, timeout=0.1)
+    cache.cache_value("testx", value)
 
-        my_closable = Closeable()
+    assert value == cache.find("test", version=version)
+    assert value == cache.find("testx")
 
-        xcache = AgentCache()
+    cache.close_version(version)
+    assert value == cache.find("testx")
 
-        class DT(object):
-            def __init__(self, cache):
-                self.cache = cache
-                self.count = 0
-                self.c2 = 0
+    sleep(0.2)
+    assert value == cache.find("testx")
 
-            @cache()
-            def test_method(self):
-                self.count += 1
-                return "x"
+    with pytest.raises(KeyError):
+        cache.find("test", version=version)
 
-            @cache
-            def test_method_2(self, version):
-                self.count += 1
-                return "x2"
 
-            @cache(cacheNone=False)
-            def test_method_3(self):
-                self.c2 += 1
-                if self.c2 < 2:
-                    return None
-                else:
-                    return "X"
+def test_version_fail():
+    cache = AgentCache()
+    value = "test too"
+    version = 200
+    cache.open_version(version)
+    cache.cache_value("test", value, version=version)
 
-            @cache(call_on_delete=lambda x: x.close())
-            def test_close(self, version):
-                self.count += 1
-                return my_closable
+    with pytest.raises(KeyError):
+        assert value == cache.find("test")
 
-        test = DT(xcache)
-        assert "x" == test.test_method()
-        assert "x" == test.test_method()
-        assert "x" == test.test_method()
-        assert 1 == test.count
 
-        xcache.open_version(1)
-        xcache.open_version(2)
-        assert "x2" == test.test_method_2(version=1)
-        assert "x2" == test.test_method_2(version=1)
-        assert 2 == test.count
-        assert "x2" == test.test_method_2(version=2)
-        assert 3 == test.count
-        xcache.close_version(1)
-        xcache.open_version(1)
-        assert "x2" == test.test_method_2(version=1)
-        assert "x2" == test.test_method_2(version=1)
-        assert 4 == test.count
+def test_resource_and_version():
+    cache = AgentCache()
+    value = "test too"
+    resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
+    version = 200
+    cache.open_version(version)
+    cache.cache_value("test", value, resource=resource, version=version)
+    assert value == cache.find("test", resource=resource, version=version)
 
-        assert None is test.test_method_3()
-        assert 1 == test.c2
-        assert "X" == test.test_method_3()
-        assert 2 == test.c2
-        assert "X" == test.test_method_3()
-        assert 2 == test.c2
 
-        test.count = 0
-        xcache.open_version(3)
-        test.test_close(version=3)
-        assert test.count == 1
-        test.test_close(version=3)
-        assert test.count == 1
-        assert not my_closable.closed
-        xcache.close_version(3)
-        assert my_closable.closed
+def test_get_or_else(my_resource):
+    called = []
+
+    def creator(param, resource, version):
+
+        called.append("x")
+        return param
+
+    cache = AgentCache()
+    value = "test too"
+    value2 = "test too x"
+    resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
+    resourcev2 = Id("test::Resource", "test", "key", "test", 200).get_instance()
+    assert 200 == resourcev2.id.version
+    version = 200
+    cache.open_version(version)
+    assert value == cache.get_or_else("test", creator, resource=resource, version=version, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resource, version=version, param=value)
+    assert len(called) == 1
+    assert value == cache.get_or_else("test", creator, resource=resourcev2, version=version, param=value)
+    assert len(called) == 1
+    assert value2 == cache.get_or_else("test", creator, resource=resource, version=version, param=value2)
+
+
+def test_get_or_else_none():
+    called = []
+
+    def creator(param, resource, version):
+        called.append("x")
+        return param
+
+    class Sequencer(object):
+        def __init__(self, sequence):
+            self.seq = sequence
+            self.count = 0
+
+        def __call__(self, **kwargs):
+            out = self.seq[self.count]
+            self.count += 1
+            return out
+
+    cache = AgentCache()
+    value = "test too"
+    resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
+    version = 100
+    cache.open_version(version)
+    assert None is cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=None)
+    assert len(called) == 1
+    assert None is cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=None)
+    assert len(called) == 2
+    assert value == cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=value)
+    assert len(called) == 3
+
+    seq = Sequencer([None, None, "A"])
+    assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert seq.count == 1
+    assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert seq.count == 2
+    assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert seq.count == 3
+    assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert seq.count == 3
+    assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert seq.count == 3
+
+
+def test_decorator():
+    class Closeable:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    my_closable = Closeable()
+
+    xcache = AgentCache()
+
+    class DT(object):
+        def __init__(self, cache):
+            self.cache = cache
+            self.count = 0
+            self.c2 = 0
+
+        @cache()
+        def test_method(self):
+            self.count += 1
+            return "x"
+
+        @cache
+        def test_method_2(self, version):
+            self.count += 1
+            return "x2"
+
+        @cache(cacheNone=False)
+        def test_method_3(self):
+            self.c2 += 1
+            if self.c2 < 2:
+                return None
+            else:
+                return "X"
+
+        @cache(call_on_delete=lambda x: x.close())
+        def test_close(self, version):
+            self.count += 1
+            return my_closable
+
+    test = DT(xcache)
+    assert "x" == test.test_method()
+    assert "x" == test.test_method()
+    assert "x" == test.test_method()
+    assert 1 == test.count
+
+    xcache.open_version(1)
+    xcache.open_version(2)
+    assert "x2" == test.test_method_2(version=1)
+    assert "x2" == test.test_method_2(version=1)
+    assert 2 == test.count
+    assert "x2" == test.test_method_2(version=2)
+    assert 3 == test.count
+    xcache.close_version(1)
+    xcache.open_version(1)
+    assert "x2" == test.test_method_2(version=1)
+    assert "x2" == test.test_method_2(version=1)
+    assert 4 == test.count
+
+    assert None is test.test_method_3()
+    assert 1 == test.c2
+    assert "X" == test.test_method_3()
+    assert 2 == test.c2
+    assert "X" == test.test_method_3()
+    assert 2 == test.c2
+
+    test.count = 0
+    xcache.open_version(3)
+    test.test_close(version=3)
+    assert test.count == 1
+    test.test_close(version=3)
+    assert test.count == 1
+    assert not my_closable.closed
+    xcache.close_version(3)
+    assert my_closable.closed

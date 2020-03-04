@@ -2395,12 +2395,19 @@ async def test_s_full_deploy_interrupts_incremental_deploy(
     while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
         await asyncio.sleep(0.1)
 
+    # cache has 1 version in flight
+    assert len(myagent_instance._cache.counterforVersion) == 1
+
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
     await myagent_instance.get_latest_version_for_agent(reason="Second Deploy", incremental_deploy=False, is_repair_run=False)
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
+
+    # cache has no versions in flight
+    # for issue #1883
+    assert not myagent_instance._cache.counterforVersion
 
     # Incremental deploy:
     #   * test::Resource[agent1,key=key1] is deployed successfully;

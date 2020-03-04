@@ -207,8 +207,13 @@ Each module can define plugins. Plugins can contribute functions to the module's
 .. code-block:: antlr
 
     functioncall : moduleref '.' ID '(' arglist? ')';
-    arglist : value
-            | arglist ',' value
+    arglist : arg
+            | arglist ',' arg
+            ;
+    arg : value
+        | key '=' value
+        | '**' value
+        ;
 
 For example
 
@@ -216,6 +221,14 @@ For example
 
     std::familyof(host.os, "rhel")
     a = param::one("region", "demo::forms::AWSForm")
+
+    hello_world = "Hello World!"
+    hi_world = std::replace(hello_world, new = "Hi", old = "Hello")
+    dct = {
+        "new": "Hi",
+        "old": "Hello",
+    }
+    hi_world = std::replace(hello_world, **dct)
 
 .. _lang-entity:
 
