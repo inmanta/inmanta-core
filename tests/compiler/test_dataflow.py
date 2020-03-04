@@ -23,12 +23,12 @@ import pytest
 
 import inmanta.ast.type as inmanta_type
 import inmanta.compiler as compiler
-from inmanta.config import Config
 from inmanta.ast import DoubleSetException, Namespace, NotFoundException, RuntimeException
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements import Literal, Statement
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.ast.variables import Reference
+from inmanta.config import Config
 from inmanta.execute.dataflow import (
     AssignableNode,
     AssignableNodeReference,
