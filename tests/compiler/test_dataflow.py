@@ -17,7 +17,7 @@
 """
 
 from itertools import chain
-from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple, Type, cast, Iterable
+from typing import Callable, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Type, cast
 
 import pytest
 
@@ -221,8 +221,7 @@ def test_dataflow_variable_loop_with_value_assignment_leaves(graph: DataflowGrap
     assert isinstance(x, DirectNodeReference)
     assert isinstance(y, DirectNodeReference)
     assert isinstance(z, DirectNodeReference)
-    # TODO: is this the desired result? Shouldn't only y.node be in the set?
-    assert leaves == {x.node, y.node, z.node}
+    assert leaves == {y.node}
 
 
 def test_dataflow_assignment_node_simple(graph: DataflowGraph) -> None:
@@ -648,7 +647,9 @@ class DataflowTestHelper:
         """
         for key, value in leaves.items():
             lhs: AssignableNodeReference = self.get_graph().resolver.get_dataflow_node(key)
-            rhs: Set[AssignableNode] = set(chain.from_iterable(self.get_graph().resolver.get_dataflow_node(v).nodes() for v in value))
+            rhs: Set[AssignableNode] = set(
+                chain.from_iterable(self.get_graph().resolver.get_dataflow_node(v).nodes() for v in value)
+            )
             assert set(lhs.leaves()) == rhs
 
 
@@ -838,7 +839,8 @@ z -> x
         % ("42" if assign else ""),
     )
     all_vars: str = "xyz"
-    dataflow_test_helper.verify_leaves({var: set(iter(all_vars)) for var in all_vars})
+    leaves: Set[str] = {"y"} if assign else set(iter(all_vars))
+    dataflow_test_helper.verify_leaves({var: leaves for var in all_vars})
 
 
 def test_dataflow_model_dependency_loop_with_var_assignment(dataflow_test_helper: DataflowTestHelper) -> None:
@@ -891,7 +893,7 @@ w -> x
         """,
     )
     all_vars: str = "xyzvw"
-    dataflow_test_helper.verify_leaves({var: set(iter(all_vars)) for var in all_vars})
+    dataflow_test_helper.verify_leaves({var: {"y"} for var in all_vars})
 
 
 @pytest.mark.parametrize("assign_loop0", [True, False])
@@ -910,7 +912,8 @@ y = v
 
 u = 42
 %s
-        """ % ("z = 42" if assign_loop0 else ""),
+        """
+        % ("z = 42" if assign_loop0 else ""),
     )
     dataflow_test_helper.verify_graphstring(
         """
@@ -921,14 +924,13 @@ z -> [ x %s ]
 u -> [ v 42 ]
 v -> w
 w -> u
-        """ % ("42" if assign_loop0 else ""),
+        """
+        % ("42" if assign_loop0 else ""),
     )
-    # TODO: fix inconsistency: leaves for u are actually just "uvw"
     loop0_vars: str = "xyz"
     loop1_vars: str = "uvw"
-    all_vars: str = loop0_vars + loop1_vars
-    leaf_vars: str = all_vars if assign_loop0 else loop1_vars
-    dataflow_test_helper.verify_leaves({var: set(iter(leaf_vars)) for var in all_vars})
+    dataflow_test_helper.verify_leaves({var: {"z", "u"} if assign_loop0 else {"u"} for var in loop0_vars})
+    dataflow_test_helper.verify_leaves({var: {"u"} for var in loop1_vars})
 
 
 @pytest.mark.parametrize("attr_init", [True, False])
@@ -944,7 +946,8 @@ n = 42
 x = A(%s)
 
 nn = x.n
-        """ % ("n = n" if attr_init else ""),
+        """
+        % ("n = n" if attr_init else ""),
         None if attr_init else RuntimeException,
     )
     dataflow_test_helper.verify_graphstring(
@@ -953,7 +956,8 @@ x -> <instance> 0
 n -> 42
 nn -> x . n
 %s
-        """ % ("<instance> 0 . n -> n" if attr_init else ""),
+        """
+        % ("<instance> 0 . n -> n" if attr_init else ""),
     )
     dataflow_test_helper.verify_leaves({"nn": {"n"}} if attr_init else {"nn": {"x.n"}})
 
@@ -1000,7 +1004,8 @@ a = A()
 b = B()
 
 a.b = b
-        """ % (".a [1]" if bidirectional else ""),
+        """
+        % (".a [1]" if bidirectional else ""),
     )
     bidirectional_rule: str = "<instance> b . a -> <instance> a"
     dataflow_test_helper.verify_graphstring(
@@ -1010,7 +1015,8 @@ b -> <instance> b
 
 <instance> a . b -> b
 %s
-        """ % (bidirectional_rule if bidirectional else ""),
+        """
+        % (bidirectional_rule if bidirectional else ""),
     )
     if not bidirectional:
         with pytest.raises(AssertionError):
@@ -1170,14 +1176,16 @@ implement A using i
 
 nn = 42
 x = A()
-        """ % ("nn" if refer_out else 42),
+        """
+        % ("nn" if refer_out else 42),
     )
     dataflow_test_helper.verify_graphstring(
         """
 nn -> 42
 x -> <instance> x
 <instance> x . n -> %s
-        """ % ("nn" if refer_out else 42),
+        """
+        % ("nn" if refer_out else 42),
     )
 
 
@@ -1207,7 +1215,8 @@ n = 0
 x = A(n = 42)
 
 b = x.b
-        """ % ("self.n" if explicit else "n"),
+        """
+        % ("self.n" if explicit else "n"),
     )
     dataflow_test_helper.verify_graphstring(
         """

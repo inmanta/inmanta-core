@@ -414,7 +414,7 @@ class AssignableNode(Node):
             or no assignments at all. This node's leaves are the leaves of the assignment
             subtree originating from this node.
         """
-        return chain.from_iterable(e.nodes for e in self.equivalence.leaves())
+        return self.equivalence.leaves()
 
     def assignments(self) -> Iterator[Assignment]:
         """
@@ -524,14 +524,20 @@ class Equivalence:
         """
         return any(self.instance_assignments()) or any(self.value_assignments()) or not any(self.assignable_assignments())
 
-    def leaves(self) -> Iterator["Equivalence"]:
+    def leaves(self) -> Iterator[AssignableNode]:
         """
             Returns an iterator over all leaves on assignment paths originating from this equivalence.
         """
         if self.is_leaf():
-            yield self
-        for assignment in self.assignable_assignments():
-            yield from (n.equivalence for n in assignment.rhs.leaves())
+            explicit_leaves: Iterator[AssignableNode] = (
+                node for node in self.nodes if len(node.value_assignments) > 0 or len(node.instance_assignments) > 0
+            )
+            try:
+                yield next(explicit_leaves)
+                yield from explicit_leaves
+            except StopIteration:
+                yield from self.nodes
+        yield from (node for assignment in self.assignable_assignments() for node in assignment.rhs.leaves())
 
     def equivalences_on_path(self, node: AssignableNode) -> Set["Equivalence"]:
         """
@@ -544,9 +550,8 @@ class Equivalence:
         child_paths: Set[Equivalence] = reduce(
             set.union,
             (
-                # TODO: improve by filtering out duplicate equivalences before calling recursively
                 n.equivalence.equivalences_on_path(node)
-                for n in chain.from_iterable(a.rhs.nodes() for a in self.assignable_assignments())
+                for n in set(chain.from_iterable(a.rhs.nodes() for a in self.assignable_assignments()))
             ),
             set(),
         )
