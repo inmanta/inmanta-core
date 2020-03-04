@@ -116,6 +116,8 @@ class EntityData:
         Enforces bidirectionality for all instances.
     """
 
+    __slots__ = ("entity", "bidirectional_attributes", "instances")
+
     def __init__(self, entity: "Entity") -> None:
         self.entity: "Entity" = entity
         self.bidirectional_attributes: Dict[str, str] = {}
@@ -137,6 +139,8 @@ class Node:
         A node in the data flow graph. Represents an attribute, variable, value or instance in the configuration model.
     """
 
+    __slots__ = ()
+
     def __init__(self) -> None:
         pass
 
@@ -151,6 +155,8 @@ class NodeReference:
     """
         Reference to a node.
     """
+
+    __slots__ = ()
 
     def __init__(self) -> None:
         pass
@@ -172,6 +178,8 @@ class AssignableNodeReference(NodeReference):
     """
         Reference to a node that can have values assigned to it.
     """
+
+    __slots__ = ()
 
     def __init__(self) -> None:
         NodeReference.__init__(self)
@@ -221,6 +229,8 @@ class AttributeNodeReference(AssignableNodeReference):
         Reference to a node representing an attribute of another node.
     """
 
+    __slots__ = ("instance_var_ref", "attribute")
+
     def __init__(self, instance_var_ref: AssignableNodeReference, attribute: str) -> None:
         AssignableNodeReference.__init__(self)
         self.instance_var_ref: AssignableNodeReference = instance_var_ref
@@ -257,6 +267,8 @@ class DirectNodeReference(NodeReference):
         Direct reference to a Node.
     """
 
+    __slots__ = "node"
+
     def __init__(self, node: "Node") -> None:
         NodeReference.__init__(self)
         self.node: Node = node
@@ -274,6 +286,8 @@ class VariableNodeReference(AssignableNodeReference, DirectNodeReference):
     """
         Reference to a node representing a variable in the configuration model.
     """
+
+    __slots__ = ()
 
     def __init__(self, node: "AssignableNode") -> None:
         AssignableNodeReference.__init__(self)
@@ -295,6 +309,8 @@ class ValueNodeReference(DirectNodeReference):
         Reference to a node representing a value in the configuration model.
     """
 
+    __slots__ = ()
+
     def __init__(self, node: "ValueNode") -> None:
         DirectNodeReference.__init__(self, node)
         self.node: ValueNode
@@ -307,6 +323,8 @@ class InstanceNodeReference(NodeReference):
     """
         Reference to a node representing an entity instance in the configuration model.
     """
+
+    __slots__ = "_node"
 
     def __init__(self, node: "InstanceNode") -> None:
         NodeReference.__init__(self)
@@ -352,6 +370,8 @@ class Assignment(Generic[RT]):
         Assignment of one node to another, caused by a responsible
     """
 
+    __slots__ = ("lhs", "rhs", "responsible", "context")
+
     def __init__(self, lhs: AssignableNodeReference, rhs: RT, responsible: "Statement", context: "DataflowGraph") -> None:
         self.lhs: AssignableNodeReference = lhs
         self.rhs: RT = rhs
@@ -363,6 +383,8 @@ class ValueNode(Node):
     """
         Node representing a value in the configuration model.
     """
+
+    __slots__ = "value"
 
     def __init__(self, value: object) -> None:
         super().__init__()
@@ -382,6 +404,8 @@ class NodeStub(ValueNode):
         Node that represents currently unsupported expressions.
     """
 
+    __slots__ = "message"
+
     def __init__(self, message: str) -> None:
         ValueNode.__init__(self, message)
         self.message = message
@@ -394,6 +418,8 @@ class AssignableNode(Node):
     """
         Node representing a variable or an attribute in the assignment graph model.
     """
+
+    __slots__ = ("name", "assignable_assignments", "value_assignments", "instance_assignments", "equivalence")
 
     def __init__(self, name: str) -> None:
         Node.__init__(self)
@@ -473,7 +499,11 @@ class Equivalence:
         Represents a collection of nodes that are equivalent because of one or more assignment loops.
     """
 
-    def __init__(self, nodes: FrozenSet[AssignableNode] = frozenset(), tentative_instance: Optional["TentativeInstanceNode"] = None) -> None:
+    __slots__ = ("nodes", "tentative_instance")
+
+    def __init__(
+        self, nodes: FrozenSet[AssignableNode] = frozenset(), tentative_instance: Optional["TentativeInstanceNode"] = None
+    ) -> None:
         self.nodes: FrozenSet[AssignableNode] = nodes
         self.tentative_instance: Optional[TentativeInstanceNode] = tentative_instance
 
@@ -555,6 +585,7 @@ class Equivalence:
         """
             Propagates this equivalence's tentative instance to one of it's leaves.
         """
+
         def propagate_tentative_assignments(source: Equivalence, target: AssignableNodeReference) -> None:
             """
                 Recursively propagate tentative assignments.
@@ -568,6 +599,7 @@ class Equivalence:
                     attr_node.assign(assignment.rhs, assignment.responsible, assignment.context)
                 propagate_tentative_assignments(tent_attr_node.equivalence, target.get_attribute(tent_attr_name))
             self.tentative_instance = None
+
         try:
             leaf: AssignableNode = next(self.leaves())
             propagate_tentative_assignments(self, leaf.reference())
@@ -591,13 +623,12 @@ class Equivalence:
         return hash(self.nodes)
 
 
-# TODO: use slots in all classes
-
-
 class AttributeNode(AssignableNode):
     """
         Node representing an entity's attribute.
     """
+
+    __slots__ = ("instance", "responsibles")
 
     def __init__(self, instance: "InstanceNode", name: str) -> None:
         AssignableNode.__init__(self, name)
@@ -617,6 +648,8 @@ class InstanceNode(Node):
     """
         Node representing an entity instance.
     """
+
+    __slots__ = ("attributes", "entity", "responsible", "context", "bidirectional_attributes", "index_node", "_all_index_nodes")
 
     def __init__(
         self, attributes: Iterable[str], entity: "Entity", responsible: "Statement", context: "DataflowGraph",
@@ -751,6 +784,8 @@ class TentativeInstanceNode(InstanceNode):
     """
         Node representing a tentative entity instance.
     """
+
+    __slots__ = ()
 
     def __init__(self, attributes: Iterable[str]) -> None:
         InstanceNode.__init__(self, attributes, None, None, None)

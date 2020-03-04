@@ -17,7 +17,7 @@
 """
 
 from itertools import chain
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Type, cast
+from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple, Type
 
 import pytest
 
