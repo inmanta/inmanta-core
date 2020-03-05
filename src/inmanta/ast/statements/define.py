@@ -20,8 +20,10 @@
 import logging
 from typing import Dict, List, Optional, Tuple
 
+import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeReferenceAnchor,
+    CompilerDeprecationWarning,
     DuplicateException,
     Import,
     IndexException,
@@ -501,11 +503,14 @@ class DefineTypeDefault(TypeDefinitionStatement):
         self.type.location = name.get_location()
         self.anchors.extend(class_ctor.get_anchors())
 
+    def pretty_print(self) -> str:
+        return "typedef %s as %s" % (self.name, self.ctor.pretty_print())
+
     def __repr__(self) -> str:
         """
             Get a representation of this default
         """
-        return "Constructor(%s, %s)" % (self.name, self.ctor)
+        return self.pretty_print()
 
     def evaluate(self) -> None:
         """
@@ -518,6 +523,7 @@ class DefineTypeDefault(TypeDefinitionStatement):
             raise TypingException(
                 self, "Default can only be define for an Entity, but %s is a %s" % (self.ctor.class_type, self.ctor.class_type)
             )
+        inmanta_warnings.warn(CompilerDeprecationWarning(self, "Default constructors are deprecated. Use inheritance instead."))
 
         self.type.comment = self.comment
 
