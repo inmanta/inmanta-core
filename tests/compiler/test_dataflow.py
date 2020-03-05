@@ -140,7 +140,7 @@ def test_dataflow_attribute_reference_nodes(graph: DataflowGraph) -> None:
 
 def test_dataflow_simple_leaf(graph) -> None:
     x: AssignableNodeReference = graph.get_named_node("x")
-    leaves: List[AssignableNode] = list(x.leaves())
+    leaves: List[AssignableNode] = list(x.leaf_nodes())
     assert isinstance(x, DirectNodeReference)
     assert leaves == [x.node]
 
@@ -153,7 +153,7 @@ def test_dataflow_variable_chain_leaf(graph: DataflowGraph) -> None:
     x.assign(y, Statement(), graph)
     y.assign(z, Statement(), graph)
 
-    leaves: Set[AssignableNode] = set(x.leaves())
+    leaves: Set[AssignableNode] = set(x.leaf_nodes())
     assert isinstance(z, DirectNodeReference)
     assert leaves == {z.node}
 
@@ -168,7 +168,7 @@ def test_dataflow_variable_tree_leaves(graph: DataflowGraph, value_node: Node) -
     y.assign(z, Statement(), graph)
     y.assign(value_node.reference(), Statement(), graph)
 
-    leaves: Set[AssignableNode] = set(x.leaves())
+    leaves: Set[AssignableNode] = set(x.leaf_nodes())
     assert isinstance(y, DirectNodeReference)
     assert isinstance(z, DirectNodeReference)
     assert leaves == {y.node, z.node}
@@ -183,7 +183,7 @@ def test_dataflow_variable_loop_leaves(graph: DataflowGraph) -> None:
     y.assign(z, Statement(), graph)
     z.assign(x, Statement(), graph)
 
-    leaves: Set[AssignableNode] = set(x.leaves())
+    leaves: Set[AssignableNode] = set(x.leaf_nodes())
     assert isinstance(x, DirectNodeReference)
     assert isinstance(y, DirectNodeReference)
     assert isinstance(z, DirectNodeReference)
@@ -202,7 +202,7 @@ def test_dataflow_variable_loop_with_external_assignment_leaves(graph: DataflowG
     u: AssignableNodeReference = graph.get_named_node("u")
     y.assign(u, Statement(), graph)
 
-    leaves: Set[AssignableNode] = set(x.leaves())
+    leaves: Set[AssignableNode] = set(x.leaf_nodes())
     assert isinstance(u, DirectNodeReference)
     assert leaves == {u.node}
 
@@ -218,7 +218,7 @@ def test_dataflow_variable_loop_with_value_assignment_leaves(graph: DataflowGrap
 
     y.assign(ValueNode(42).reference(), Statement(), graph)
 
-    leaves: Set[AssignableNode] = set(x.leaves())
+    leaves: Set[AssignableNode] = set(x.leaf_nodes())
     assert isinstance(x, DirectNodeReference)
     assert isinstance(y, DirectNodeReference)
     assert isinstance(z, DirectNodeReference)
@@ -387,6 +387,27 @@ def test_dataflow_tentative_attribute_propagation_on_equivalence(graph: Dataflow
     assert len(y_n.value_assignments) == 1
     assert y_n.value_assignments[0].rhs.node.value == 42
 
+
+def test_dataflow_tentative_attribute_propagation_to_uninitialized_attribute(graph: DataflowGraph) -> None:
+    x_u: AssignableNodeReference = graph.get_named_node("x.u")
+    u: AssignableNodeReference = graph.get_named_node("u")
+    u_n: AssignableNodeReference = graph.get_named_node("u.n")
+
+    u_n.assign(ValueNode(42).reference(), Statement(), graph)
+    u.assign(x_u, Statement(), graph)
+
+    x: AssignableNodeReference = graph.get_named_node("x")
+    assert isinstance(x, VariableNodeReference)
+    instance: Optional[InstanceNode] = x.node.equivalence.tentative_instance
+    assert instance is not None
+    u_node: Optional[AttributeNode] = instance.get_attribute("u")
+    assert u_node is not None
+    instance2: Optional[InstanceNode] = u_node.equivalence.tentative_instance
+    assert instance2 is not None
+    n: Optional[AttributeNode] = instance2.get_attribute("n")
+    assert n is not None
+    assert len(n.value_assignments) == 1
+    assert n.value_assignments[0].rhs.node.value == 42
 
 @pytest.mark.parametrize("register_both_dirs", [True, False])
 @pytest.mark.parametrize("assign_first", [True, False])
@@ -656,7 +677,7 @@ class DataflowTestHelper:
             rhs: Set[AssignableNode] = set(
                 chain.from_iterable(self.get_graph().resolver.get_dataflow_node(v).nodes() for v in value)
             )
-            assert set(lhs.leaves()) == rhs
+            assert set(lhs.leaf_nodes()) == rhs
 
 
 @pytest.fixture(scope="function")
@@ -1233,7 +1254,7 @@ b -> x . b
         """,
     )
     dataflow_test_helper.verify_leaves({"b.n": {"x.n"}})
-    leaves: List[AssignableNode] = list(dataflow_test_helper.get_graph().resolver.get_dataflow_node("b.n").leaves())
+    leaves: List[AssignableNode] = list(dataflow_test_helper.get_graph().resolver.get_dataflow_node("b.n").leaf_nodes())
     assert len(leaves) == 1
     assert len(leaves[0].value_assignments) == 1
     assert leaves[0].value_assignments[0].rhs.node.value == 42
@@ -1281,4 +1302,13 @@ a = A()
 # Lists are not supported yet. Mustn't crash on trying to model the other side of the bidirectional relation
 a.b = [B(), B()]
         """,
+    )
+
+
+def test_dataflow_model_no_leaf_error(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+n = x.n
+        """,
+        RuntimeException,
     )

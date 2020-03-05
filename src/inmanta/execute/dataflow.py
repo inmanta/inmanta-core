@@ -199,21 +199,32 @@ class AssignableNodeReference(NodeReference):
     def nodes(self) -> Iterator["AssignableNode"]:
         raise NotImplementedError()
 
-    def leaves(self) -> Iterator["AssignableNode"]:
+    def leaves(self) -> Iterator["AssignableNodeReference"]:
         """
-            Returns an iterator over this reference's leaves. A leaf is defined as a node
+            Returns an iterator over this reference's leaves. A leaf is defined as a node reference
             in the assignment tree which has either one or more value or instance assignments
             or no assignments at all. This reference's leaves are the leaves of the assignment
             subtrees originating from this reference's nodes.
         """
-        return chain.from_iterable(n.leaves() for n in self.nodes())
+        child_leaves: Iterator["AssignableNodeReference"] = chain.from_iterable(n.leaves() for n in self.nodes())
+        try:
+            yield next(child_leaves)
+            yield from child_leaves
+        except StopIteration:
+            yield self
 
-    def any_leaf(self) -> Optional["AssignableNode"]:
+    def leaf_nodes(self) -> Iterator["AssignableNode"]:
         """
-        Returns a single leaf for this reference, if any exist.
+            Returns an iterator over the nodes this reference's leaves refer to.
+        """
+        return chain.from_iterable(leaf.nodes() for leaf in self.leaves())
+
+    def any_leaf_node(self) -> Optional["AssignableNode"]:
+        """
+            Returns a single leaf for this reference, if any exist.
         """
         try:
-            return next(self.leaves())
+            return next(self.leaf_nodes())
         except StopIteration:
             return None
 
@@ -258,7 +269,7 @@ class AttributeNodeReference(AssignableNodeReference):
 
     def nodes(self) -> Iterator["AssignableNode"]:
         # yield all attribute nodes on instances assigned to this reference's leaves
-        for node in self.instance_var_ref.leaves():
+        for node in self.instance_var_ref.leaf_nodes():
             for assignment in node.instance_assignments:
                 yield assignment.rhs.node().register_attribute(self.attribute)
 
@@ -268,7 +279,7 @@ class AttributeNodeReference(AssignableNodeReference):
         except StopIteration:
             # If no attribute node can be found, create a tentative one on a leaf of the instance_var_ref.
             # Tentative attributes of a VariableNode will be propagated on assignment to that node.
-            instance_leaf: Optional["AssignableNode"] = self.instance_var_ref.any_leaf()
+            instance_leaf: Optional["AssignableNode"] = self.instance_var_ref.any_leaf_node()
             if instance_leaf is None:
                 instance_leaf = self.instance_var_ref.assignment_node()
             return instance_leaf.equivalence.tentative_attribute(self.attribute)
@@ -465,7 +476,7 @@ class AssignableNode(Node):
     def reference(self) -> AssignableNodeReference:
         return VariableNodeReference(self)
 
-    def leaves(self) -> Iterator["AssignableNode"]:
+    def leaves(self) -> Iterator["AssignableNodeReference"]:
         """
             Returns an iterator over this node's leaves. A leaf is defined as a node
             in the assignment tree which has either one or more value or instance assignments
@@ -551,19 +562,19 @@ class Equivalence:
         """
         return any(self.instance_assignments()) or any(self.value_assignments()) or not any(self.assignable_assignments())
 
-    def leaves(self) -> Iterator[AssignableNode]:
+    def leaves(self) -> Iterator[AssignableNodeReference]:
         """
             Returns an iterator over all leaves on assignment paths originating from this equivalence.
         """
         if self.is_leaf():
-            explicit_leaves: Iterator[AssignableNode] = (
-                node for node in self.nodes if len(node.value_assignments) > 0 or len(node.instance_assignments) > 0
+            explicit_leaves: Iterator[AssignableNodeReference] = (
+                node.reference() for node in self.nodes if len(node.value_assignments) > 0 or len(node.instance_assignments) > 0
             )
             try:
                 yield next(explicit_leaves)
                 yield from explicit_leaves
             except StopIteration:
-                yield from self.nodes
+                yield from (node.reference() for node in self.nodes)
         yield from (node for assignment in self.assignable_assignments() for node in assignment.rhs.leaves())
 
     def equivalences_on_path(self, node: AssignableNode) -> Set["Equivalence"]:
@@ -627,8 +638,8 @@ class Equivalence:
             self.tentative_instance = None
 
         try:
-            leaf: AssignableNode = next(self.leaves())
-            propagate_tentative_assignments(self, leaf.reference())
+            leaf: AssignableNodeReference = next(self.leaves())
+            propagate_tentative_assignments(self, leaf)
         except StopIteration:
             raise Exception("Inconsistent state: an equivalence should always have at least one leaf")
 
