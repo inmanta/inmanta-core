@@ -270,8 +270,11 @@ class AttributeNodeReference(AssignableNodeReference):
     def nodes(self) -> Iterator["AssignableNode"]:
         # yield all attribute nodes on instances assigned to this reference's leaves
         for node in self.instance_var_ref.leaf_nodes():
-            for assignment in node.instance_assignments:
-                yield assignment.rhs.node().register_attribute(self.attribute)
+            for instance_node in chain(
+                (assignment.rhs.node() for assignment in node.instance_assignments),
+                [node.equivalence.tentative_instance] if node.equivalence.tentative_instance is not None else [],
+            ):
+                yield instance_node.register_attribute(self.attribute)
 
     def assignment_node(self) -> "AssignableNode":
         try:
@@ -416,8 +419,8 @@ class Assignment(Generic[RT]):
 
     __slots__ = ("lhs", "rhs", "responsible", "context")
 
-    def __init__(self, lhs: AssignableNodeReference, rhs: RT, responsible: "Locatable", context: "DataflowGraph") -> None:
-        self.lhs: AssignableNodeReference = lhs
+    def __init__(self, lhs: "AssignableNode", rhs: RT, responsible: "Locatable", context: "DataflowGraph") -> None:
+        self.lhs: "AssignableNode" = lhs
         self.rhs: RT = rhs
         self.responsible: "Locatable" = responsible
         self.context: "DataflowGraph" = context
@@ -501,13 +504,13 @@ class AssignableNode(Node):
         """
             Assigns a value node to this node, by reference.
         """
-        self.value_assignments.append(Assignment(self.reference(), val_ref, responsible, context))
+        self.value_assignments.append(Assignment(self, val_ref, responsible, context))
 
     def assign_instance(self, instance_ref: InstanceNodeReference, responsible: "Locatable", context: "DataflowGraph") -> None:
         """
             Assigns an instance node to this node, by reference.
         """
-        self.instance_assignments.append(Assignment(self.reference(), instance_ref, responsible, context))
+        self.instance_assignments.append(Assignment(self, instance_ref, responsible, context))
         self.equivalence.propagate_tentative_instance()
 
     def assign_assignable(self, var_ref: AssignableNodeReference, responsible: "Locatable", context: "DataflowGraph") -> None:
@@ -523,7 +526,7 @@ class AssignableNode(Node):
         new_equivalence: Equivalence = reduce(
             lambda acc, eq: acc.merge(eq), equivalence_trail, Equivalence(frozenset()),
         )
-        self.assignable_assignments.append(Assignment(self.reference(), var_ref, responsible, context))
+        self.assignable_assignments.append(Assignment(self, var_ref, responsible, context))
         # apply new equivalence to all it's nodes
         for node in new_equivalence.nodes:
             node.equivalence = new_equivalence
