@@ -102,10 +102,10 @@ def test_slots_dataflow():
     assert_slotted(instance_node)
 
     assert_slotted(EntityData(entity))
-    assert_slotted(AttributeNodeReference(assignable_node.reference(), "attr"))
+    assert_slotted(AttributeNodeReference(assignable_node.reference, "attr"))
     assert_slotted(VariableNodeReference(assignable_node))
     assert_slotted(ValueNodeReference(value_node))
     assert_slotted(InstanceNodeReference(instance_node))
-    assert_slotted(Assignment(assignable_node.reference(), value_node, Statement(), graph))
+    assert_slotted(Assignment(assignable_node.reference, value_node, Statement(), graph))
     assert_slotted(NodeStub("stub"))
     assert_slotted(AttributeNode(instance_node, "attr"))
