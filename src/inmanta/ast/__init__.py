@@ -474,6 +474,7 @@ class CompilerException(Exception):
         Exception.__init__(self, msg)
         self.location = None  # type: Optional[Location]
         self.msg = msg
+        # store root namespace so error reporters can inspect the failed state
         self.root_ns: Optional[Namespace] = None
 
     def set_location(self, location: Location) -> None:
