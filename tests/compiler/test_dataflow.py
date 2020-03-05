@@ -1261,3 +1261,24 @@ x = A()
     entity_b: inmanta_type.Type = dataflow_test_helper.get_types()["__config__::B"]
     assert isinstance(entity_b, Entity)
     assert len(entity_b.get_all_instances()) == 1
+
+
+def test_dataflow_model_unsupported_bidirectional_doesnt_crash(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+entity A:
+end
+
+entity B:
+end
+
+implement A using std::none
+implement B using std::none
+
+A.b [0:] -- B.a [0:]
+
+a = A()
+# Lists are not supported yet. Mustn't crash on trying to model the other side of the bidirectional relation
+a.b = [B(), B()]
+        """,
+    )

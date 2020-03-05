@@ -174,6 +174,17 @@ class NodeReference:
         """
         return node in self.nodes()
 
+    def assign_to(self, lhs: "AssignableNode", responsible: "Locatable", context: "DataflowGraph") -> None:
+        """
+            Assigns this node to the left hand side node.
+        """
+        raise NotImplementedError()
+
+    def assign_attribute(
+        self, attribute: str, rhs: "NodeReference", responsible: "Locatable", context: "DataflowGraph"
+    ) -> None:
+        raise NotImplementedError()
+
 
 class AssignableNodeReference(NodeReference):
     """
@@ -218,11 +229,19 @@ class AssignableNodeReference(NodeReference):
         """
         self.assignment_node().assign(node_ref, responsible, context)
 
+    def assign_to(self, lhs: "AssignableNode", responsible: "Locatable", context: "DataflowGraph") -> None:
+        lhs.assign_assignable(self, responsible, context)
+
     def get_attribute(self, name: str) -> "AttributeNodeReference":
         """
             Returns a reference to an attribute of this reference's node, by name.
         """
         return AttributeNodeReference(self, name)
+
+    def assign_attribute(
+        self, attribute: str, rhs: "NodeReference", responsible: "Locatable", context: "DataflowGraph"
+    ) -> None:
+        self.get_attribute(attribute).assign(rhs, responsible, context)
 
 
 class AttributeNodeReference(AssignableNodeReference):
@@ -316,6 +335,16 @@ class ValueNodeReference(DirectNodeReference):
         DirectNodeReference.__init__(self, node)
         self.node: ValueNode
 
+    def assign_to(self, lhs: "AssignableNode", responsible: "Locatable", context: "DataflowGraph") -> None:
+        lhs.assign_value(self, responsible, context)
+
+    def assign_attribute(
+        self, attribute: str, rhs: "NodeReference", responsible: "Locatable", context: "DataflowGraph"
+    ) -> None:
+        if isinstance(self.node, NodeStub):
+            return
+        raise Exception("Can not assign attribute on a value node")
+
     def __repr__(self) -> str:
         return repr(self.node.value)
 
@@ -347,12 +376,12 @@ class InstanceNodeReference(NodeReference):
         yield self.node()
 
     def assign_attribute(
-        self, attribute: str, node_ref: "NodeReference", responsible: "Locatable", context: "DataflowGraph"
+        self, attribute: str, rhs: "NodeReference", responsible: "Locatable", context: "DataflowGraph"
     ) -> None:
         """
             Assigns a node to an attribute of the instance this reference refers to.
         """
-        self.node().assign_attribute(attribute, node_ref, responsible, context)
+        self.node().assign_attribute(attribute, rhs, responsible, context)
 
     def __repr__(self) -> str:
         return "%s instance" % self.top_node().entity
@@ -361,6 +390,9 @@ class InstanceNodeReference(NodeReference):
         if not isinstance(other, InstanceNodeReference):
             return NotImplemented
         return self._node == other._node
+
+    def assign_to(self, lhs: "AssignableNode", responsible: "Locatable", context: "DataflowGraph") -> None:
+        lhs.assign_instance(self, responsible, context)
 
 
 RT = TypeVar("RT", bound=NodeReference, covariant=True)
@@ -452,14 +484,7 @@ class AssignableNode(Node):
         """
             Assigns another node to this one, by reference.
         """
-        if isinstance(node_ref, ValueNodeReference):
-            self.assign_value(node_ref, responsible, context)
-        elif isinstance(node_ref, InstanceNodeReference):
-            self.assign_instance(node_ref, responsible, context)
-        elif isinstance(node_ref, AssignableNodeReference):
-            self.assign_assignable(node_ref, responsible, context)
-        else:
-            raise Exception("Unknown Node type %s" % type(node_ref))
+        node_ref.assign_to(self, responsible, context)
 
     def assign_value(self, val_ref: ValueNodeReference, responsible: "Locatable", context: "DataflowGraph") -> None:
         """
@@ -785,14 +810,4 @@ class InstanceNode(Node):
         if self.get_self() is not self:
             return self.get_self().assign_other_direction(attribute, node_ref, responsible, context)
         if attribute in self.bidirectional_attributes:
-            assign_attr: str = self.bidirectional_attributes[attribute]
-            if isinstance(node_ref, InstanceNodeReference):
-                node_ref.node().assign_attribute(assign_attr, self.reference(), responsible, context)
-            elif isinstance(node_ref, AssignableNodeReference):
-                AttributeNodeReference(node_ref, self.bidirectional_attributes[attribute]).assign(
-                    self.reference(), responsible, context
-                )
-            elif isinstance(node_ref, ValueNodeReference) and isinstance(node_ref.node, NodeStub):
-                pass
-            else:
-                raise Exception("Trying to assign attribute on non-instance node %s" % node_ref)
+            node_ref.assign_attribute(self.bidirectional_attributes[attribute], self.reference(), responsible, context)
