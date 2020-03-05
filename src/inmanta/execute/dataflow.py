@@ -26,6 +26,134 @@ if TYPE_CHECKING:
     from inmanta.ast.entity import Entity
 
 
+"""
+This module contains a formal representation of the data flow modelled in the configuration model. The key elements of this
+representation are detailed below.
+
+DataflowGraph:
+    The graph itself. An instance contains named nodes, which represent variables in the configuration model. DataflowGraph
+    instances are nested. Each corresponds to a dynamic execution context (inmanta.execute.runtime.Resolver).
+
+    The root DataflowGraph stores information about entity instances. It keeps track of all instance nodes for each entity and
+    informs them of bidirectional relations and index matches. The graph needs to be informed in each of the following cases:
+        - a new instance is created
+        - a pair of bidirectional attributes is declared
+        - an index match is detected
+
+Node:
+    A node in the graph represents a value, block variable or instance attribute in the configuration model. Nodes are
+    connected by Assignment instances, the directed edges of the graph. There are five types of nodes:
+
+    ValueNode:
+        Represents a value.
+    AssignableNode:
+        Represents something that can be assigned to like a variable or an attribute. Contains assignments to values, instances
+        and other assignables. An AssignableNode is part of an Equivalence, more on that below.
+    AttributeNode:
+        Special case of AssignableNode. Does some additional work on assignment to support bidirectional relations.
+    InstanceNode:
+        Represents an instance in the configuration model (or a tentative instance that hasn't been explicitly initialized yet,
+        more on this in the Key methods section). Contains AttributeNodes.
+        InstanceNode provides an index_match() method which registers another InstanceNode as an index match of the first one.
+        From then on, all attribute-related calls to the first will be proxied to the second.
+    NodeStub:
+        Represents currently unsupported language elements so we can work around them without crashing.
+
+NodeReference:
+    A reference to a node. Since attributes are part of an instance but we usually refer to them indirectly on a variable, a
+    level of indirection is required in the graph as well. For example, consider the following statements:
+        n = x.n
+        x = A(n = 42)
+    In this case x.n refers to the attribute n of the instance of A.
+
+    Types of NodeReference:
+
+    ValueNodeReference:
+        Refers to a ValueNode directly.
+    AssignableNodeReference:
+        Represents NodeReferences that can be assigned to. Parent for VariableNodeReference and AttributeNodeReference.
+    VariableNodeReference:
+        Refers to an AssignableNode directly.
+    AttributeNodeReference:
+        Refers to an AssignableNode indirectly by specifying an attribute on another AssignableNodeReference i. Points to an
+        AttributeNode of an InstanceNode on the end of the assignment chain starting in i.
+    InstanceNodeReference:
+        Refers to an InstanceNode directly.
+
+Assignment:
+    Represents assignment, possibly indirect, in the configuration model. Constructors for example are also modelled as
+    assignment of the individual attributes to their values. An Assignment instance consists of a lhs (AssignableNode) and a
+    rhs (NodeReference), a responsible (the Locatable responsible for the creation of this edge) and a context (the
+    DataflowGraph this assignment was created in).
+
+    A note on indirection in the rhs and direction in the lhs:
+        The primary goal of the dataflow graph is to be able to reason about the values of a variable and how it received those
+        values. Therefore it makes sense to centralize outgoing value assignments (the lhs) directly on the node, while keeping
+        indirection in the rhs. For example, in the model
+            x = y
+            x.n = u.n
+            y.n = 42
+        the assignment to x.n would be modelled by resolving the node reference x.n to a specific node (a more detailed
+        explanation about this resolution can be found in the Key methods section). The right hand side u.n however would be
+        modelled by keeping the indirection and just storing the node reference u.n. By resolving the left hand side to a node
+        we make sure that the assignment to `x.n` and that to `y.n`, which are two references to the same variable, are modelled
+        in the same location, namely the attribute node on y.
+
+Equivalence:
+    The Equivalence class is introduced to efficiently handle assignment loops. Consider the model
+        x = y
+        y = z
+        z = x
+        x = 42
+    This is a valid configuration model where each of the variables receives the value 42. An equivalence is defined as a
+    collection of nodes that are fully equivalent to another as a result of one or more assignment loops. This means that
+    assignment to one of them, has effect on all of them. Because leaf finding is such an important part of the modelling
+    process it makes sense to make abstraction of loop detection. Loop detection is only performed when a new edge is
+    introduced, based on existing equivalences. If a loop is found, it is cached as the Equivalence of each of it's nodes.
+
+    Apart from that, an Equivalence is where tentative instances are stored. Tentative instances are explained in the Key
+    methods section.
+
+    Invariants:
+        n.equivalence == e <=> n in e.nodes
+        n.equivalence == e <=> n' in e.nodes for n' in loop_detect(n)
+
+Key methods:
+    leaves() in AssignableNodeReference, AssignableNode, Equivalence:
+        The DataflowGraph is a directed graph where edges represent assignment. As a result a variable's value, or cause for the
+        lack thereof, can be found by following the edges until a value assignment is reached, or until a node is reached that
+        has no outgoing edges. The term used to refer to these nodes (with either at least one outgoing edge to a value or
+        instance node or no outgoing edges at all) throughout this module is leaf.
+        In practice, it's slightly more complicated. Because of indirection in the edges (Assignment's rhs is a NodeReference,
+        not a Node), at some point in time a NodeReference might exist that can not be reduced to any Node. For example `x.n` if
+        no instance has been assigned to x. In that case the reference itself is a leaf.
+
+    AssignableNodeReference.assignment_node():
+        Because of indirection, an AssignableNodeReference might point to multiple AssignableNodes. For a simple VariableNode
+        this is never the case, but for a AttributeNodeReference this might be relevant. Consider the following statements:
+            x = y
+            x = z
+        In this case it's not clear what node x.n would refer to. So how should we handle an assignment `x.n = 42`? That's
+        exactly what this method is for: it returns the AssignableNode to which an assignment to the reference should be
+        forwarded. An important consideration here is that if the assignments branch out, they will either come back together
+        later (for example because of `y = z` or an index match), or a double assignment error will occur on x. Which node
+        should we model the assignment `x.n = 42` on in both cases?
+            Assignment tree comes back together:
+                We can pick any node that is currently a leaf of the tree originating from x.n. Since they come back together
+                it has no effect which node we pick.
+            Double assignment error occurs on x:
+                There is a double assignment on x so the exact behavior of x.n is not that pressing. With that in mind, there is
+                no reason to prefer one leaf node over another.
+        Conclusion: we can pick any leaf node to model the assignment on. In case of divergence, either it will fix itself by
+        converging again, or there are more pressing problems in the model.
+        If no leaf node currently exists, we create a tentative InstanceNode on the leaf node of the tree originating in x
+        (not x.n) and return the attribute n of that InstanceNode as the assignment node. On later assignments to x the
+        tentative instance will get propagated so that it always exists on a leaf until it finally merges with an actual
+        instance, instantiated somewhere in the assignment tree originating from x. If it doesn't merge that means x is not an
+        instance and a compilation error will occur.
+"""
+
+
 class DataflowGraph:
     """
         Graph representation of the data flow and declarative control flow of an Inmanta model.
