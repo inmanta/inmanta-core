@@ -15,12 +15,14 @@
 
     Contact: code@inmanta.com
 """
+import logging
 import os
 
 import pytest
 
 from inmanta import data
 from inmanta.util import get_compiler_version
+from utils import log_contains
 
 
 @pytest.mark.asyncio
@@ -259,3 +261,11 @@ async def test_create_environment(tmpdir, server, client, cli):
 
     assert file_content_0 != file_content_2
     assert ctime_0 != ctime_2
+
+
+@pytest.mark.asyncio
+async def test_inmanta_cli_http_version(server, client, cli, caplog):
+    with caplog.at_level(logging.DEBUG):
+        result = await cli.run("project", "create", "-n", "test_project")
+        assert result.exit_code == 0
+        log_contains(caplog, "inmanta.protocol.rest.server", logging.DEBUG, "HTTP version of request: HTTP/1.1")

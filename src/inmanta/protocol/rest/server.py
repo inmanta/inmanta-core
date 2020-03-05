@@ -116,6 +116,7 @@ class RESTHandler(tornado.web.RequestHandler):
             self._transport.start_request()
             try:
                 message = self._transport._decode(self.request.body)
+                LOGGER.debug(f"HTTP version of request: {self.request.version}")
                 if message is None:
                     message = {}
 
