@@ -69,3 +69,28 @@ A(n = null)
         assert len(w) == 1
         assert issubclass(w[0].category, CompilerDeprecationWarning)
         assert str(w[0].message) == message
+
+
+def test_deprecation_warning_default_constructors(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+typedef MyType as A(n = 42)
+
+entity A:
+    number n
+    number m
+end
+
+implement A using std::none
+        """
+    )
+    message: str = (
+        "Default constructors are deprecated."
+        " Use inheritance instead. (reported in typedef MyType as A(n=42) ({dir}/main.cf:2))"
+    )
+    message = message.format(dir=snippetcompiler.project_dir)
+    with warnings.catch_warnings(record=True) as w:
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
