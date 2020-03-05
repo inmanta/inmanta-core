@@ -409,6 +409,7 @@ def test_dataflow_tentative_attribute_propagation_to_uninitialized_attribute(gra
     assert len(n.value_assignments) == 1
     assert n.value_assignments[0].rhs.node.value == 42
 
+
 @pytest.mark.parametrize("register_both_dirs", [True, False])
 @pytest.mark.parametrize("assign_first", [True, False])
 def test_dataflow_bidirectional_attribute(graph: DataflowGraph, register_both_dirs: bool, assign_first: bool) -> None:
