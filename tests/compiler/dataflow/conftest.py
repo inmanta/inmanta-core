@@ -45,12 +45,10 @@ def create_instance(
     graph: Optional[DataflowGraph] = None, entity: Optional[Entity] = None, statement: Optional[Statement] = None
 ) -> InstanceNode:
     responsible: Statement = statement if statement is not None else Statement()
-    instance: InstanceNode = InstanceNode(
-        [], entity if entity is not None else Entity("DummyEntity", Namespace("dummy_namespace")), responsible, graph
-    )
+    instance: InstanceNode = InstanceNode([])
     if graph is None:
         return instance
-    return graph.own_instance_node_for_responsible(responsible, lambda: instance,)
+    return graph.own_instance_node_for_responsible(entity if entity is not None else Entity("DummyEntity", Namespace("dummy_namespace")), responsible, lambda: instance,)
 
 
 @pytest.fixture(scope="function")

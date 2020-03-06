@@ -165,25 +165,25 @@ class DataflowGraph:
         self.resolver: "Resolver" = resolver
         self.parent: Optional[DataflowGraph] = parent if parent is not None else None
         self.named_nodes: Dict[str, AssignableNode] = {}
-        self._instances: Dict["Entity", EntityData] = {}
+        self._instances: Dict["Entity", GraphEntity] = {}
         self._own_instances: Dict["Locatable", InstanceNode] = {}
 
-    def instances(self) -> Dict["Entity", "EntityData"]:
+    def instances(self) -> Dict["Entity", "GraphEntity"]:
         """
             Returns entity data for all registered entities.
-            EntityData objects are stored in the root dataflow graph.
+            GraphEntity objects are stored in the root dataflow graph.
         """
         if self.parent is not None:
             return self.parent.instances()
         return self._instances
 
-    def _entity_data(self, entity: "Entity") -> "EntityData":
+    def _graph_entity(self, entity: "Entity") -> "GraphEntity":
         """
-            Returns an EntityData object for an Entity. Registers the entity if it is not yet registered.
+            Returns an GraphEntity object for an Entity. Registers the entity if it is not yet registered.
         """
-        instances: Dict["Entity", "EntityData"] = self.instances()
+        instances: Dict["Entity", "GraphEntity"] = self.instances()
         if entity not in instances:
-            instances[entity] = EntityData(entity)
+            instances[entity] = GraphEntity(entity)
         return instances[entity]
 
     def get_named_node(self, name: str) -> "AssignableNodeReference":
@@ -199,7 +199,7 @@ class DataflowGraph:
         return reduce(lambda acc, part: AttributeNodeReference(acc, part), parts[1:], root_ref)
 
     def own_instance_node_for_responsible(
-        self, responsible: "Locatable", get_new: Callable[[], "InstanceNode"]
+        self, entity: "Entity", responsible: "Locatable", get_new: Callable[[], "InstanceNode"]
     ) -> "InstanceNode":
         """
             Returns this graph's instance node tied to responsible if it exists.
@@ -207,7 +207,9 @@ class DataflowGraph:
         """
         if responsible not in self._own_instances:
             new: InstanceNode = get_new()
-            assert new.responsible == responsible
+            new.entity = self._graph_entity(entity)
+            new.responsible = responsible
+            new.context = self
             self._own_instances[responsible] = new
             self._add_global_instance_node(new.reference())
         return self._own_instances[responsible]
@@ -216,15 +218,15 @@ class DataflowGraph:
         """
             Registers an instance.
         """
-        entity: Optional["Entity"] = node.top_node().entity
+        entity: Optional["GraphEntity"] = node.top_node().entity
         if entity is not None:
-            self._entity_data(entity).add_instance(node)
+            entity.add_instance(node)
 
     def register_bidirectional_attribute(self, entity: "Entity", this: str, other: str) -> None:
         """
             Registers a pair of bidirectional attributes.
         """
-        self._entity_data(entity).register_bidirectional_attribute(this, other)
+        self._graph_entity(entity).register_bidirectional_attribute(this, other)
 
     def add_index_match(self, instances: Iterable["InstanceNodeReference"]) -> None:
         """
@@ -239,10 +241,10 @@ class DataflowGraph:
             pass
 
 
-class EntityData:
+class GraphEntity:
     """
-        Data about an entity. Contains an entity's bidirectional attributes and a list of all instances.
-        Enforces bidirectionality for all instances.
+        Persistent entity data. Tied 1 on 1 to an Entity instance.
+        Keeps track of all InstanceNodes for an entity and the entity's bidirectional attributes.
     """
 
     __slots__ = ("entity", "bidirectional_attributes", "instances")
@@ -253,14 +255,14 @@ class EntityData:
         self.instances: List[InstanceNodeReference] = []
 
     def register_bidirectional_attribute(self, this: str, other: str) -> None:
+        if this in self.bidirectional_attributes and self.bidirectional_attributes[this] != other:
+            raise Exception("Can't assign two pairs of bidirectional attributes on the same attribute name. Old: %s, new: %s" % (self.bidirectional_attributes[this], other))
         self.bidirectional_attributes[this] = other
         for instance in self.instances:
             instance.node().register_bidirectional_attribute(this, other)
 
     def add_instance(self, instance: "InstanceNodeReference") -> None:
         self.instances.append(instance)
-        for this, other in self.bidirectional_attributes.items():
-            instance.node().register_bidirectional_attribute(this, other)
 
 
 class Node:
@@ -830,16 +832,12 @@ class InstanceNode(Node):
     def __init__(
         self,
         attributes: Iterable[str],
-        entity: Optional["Entity"] = None,
-        responsible: Optional["Locatable"] = None,
-        context: Optional["DataflowGraph"] = None,
     ) -> None:
         Node.__init__(self)
         self.attributes: Dict[str, AttributeNode] = {name: AttributeNode(self, name) for name in attributes}
-        self.entity: Optional["Entity"] = entity
-        self.responsible: Optional["Locatable"] = responsible
-        self.context: Optional["DataflowGraph"] = context
-        self.bidirectional_attributes: Dict[str, str] = {}
+        self.entity: Optional["GraphEntity"] = None
+        self.responsible: Optional["Locatable"] = None
+        self.context: Optional["DataflowGraph"] = None
         self._index_node: Optional[InstanceNode] = None
         self._all_index_nodes: Set["InstanceNode"] = {self}
 
@@ -872,7 +870,6 @@ class InstanceNode(Node):
         if self._index_node is not None:
             raise Exception("Trying to match index on node that already has an index match. Try calling get_self() first")
         assert self.entity == index_node.get_self().entity
-        assert self.bidirectional_attributes == index_node.get_self().bidirectional_attributes
         index_node.get_self().merge(self)
         self._index_node = index_node
         self.attributes = {}
@@ -933,7 +930,6 @@ class InstanceNode(Node):
         """
         if self.get_self() is not self:
             return self.get_self().register_bidirectional_attribute(this, other)
-        self.bidirectional_attributes[this] = other
         if this in self.attributes:
             attr_node: AttributeNode = self.attributes[this]
             for assignment in attr_node.assignments():
@@ -951,5 +947,7 @@ class InstanceNode(Node):
         """
         if self.get_self() is not self:
             return self.get_self().assign_other_direction(attribute, node_ref, responsible, context)
-        if attribute in self.bidirectional_attributes:
-            node_ref.assign_attribute(self.bidirectional_attributes[attribute], self.reference(), responsible, context)
+        if self.entity is None:
+            return
+        if attribute in self.entity.bidirectional_attributes:
+            node_ref.assign_attribute(self.entity.bidirectional_attributes[attribute], self.reference(), responsible, context)

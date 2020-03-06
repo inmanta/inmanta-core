@@ -637,6 +637,8 @@ class DefineRelation(BiStatement):
     def _add_to_dataflow_graph(self, graph: Optional[DataflowGraph]) -> None:
         if graph is None:
             return
+        if self.left[1] is None or self.right[1] is None:
+            return
         left: Type = self.namespace.get_type(self.left[0])
         assert isinstance(left, Entity), "%s is not an entity" % left
         right: Type = self.namespace.get_type(self.right[0])
