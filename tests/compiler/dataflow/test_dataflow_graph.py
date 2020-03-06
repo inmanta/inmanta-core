@@ -35,18 +35,18 @@ def test_dataflow_hierarchy(graph: DataflowGraph) -> None:
     entity: Entity = Entity("DummyEntity", Namespace("dummy_namespace"))
     dummy_resolver: Resolver = Resolver(Namespace("dummy_namespace"))
     child: DataflowGraph = DataflowGraph(dummy_resolver, graph)
-    assert child.instances() == {}
-    assert graph.instances() == {}
+    assert child.entities() == {}
+    assert graph.entities() == {}
     statement1: Statement = Statement()
     statement2: Statement = Statement()
 
     node1: InstanceNode = create_instance(child, entity, statement1)
     child.register_bidirectional_attribute(entity, "this", "other")
 
-    assert child.instances() == graph.instances()
-    assert entity in child.instances()
-    assert child.instances()[entity].instances == [node1.reference()]
-    assert child.instances()[entity].bidirectional_attributes == {"this": "other"}
+    assert child.entities() == graph.entities()
+    assert entity in child.entities()
+    assert child.entities()[entity].instances == [node1.reference()]
+    assert child.entities()[entity].bidirectional_attributes == {"this": "other"}
 
     node2: InstanceNode = create_instance(child, entity, statement1)
     node3: InstanceNode = create_instance(child, entity, statement2)

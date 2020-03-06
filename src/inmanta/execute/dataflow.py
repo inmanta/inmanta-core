@@ -159,32 +159,32 @@ class DataflowGraph:
         Graph representation of the data flow and declarative control flow of an Inmanta model.
     """
 
-    __slots__ = ("resolver", "parent", "named_nodes", "_instances", "_own_instances")
+    __slots__ = ("resolver", "parent", "named_nodes", "_entities", "_own_instances")
 
     def __init__(self, resolver: "Resolver", parent: Optional["DataflowGraph"] = None) -> None:
         self.resolver: "Resolver" = resolver
         self.parent: Optional[DataflowGraph] = parent if parent is not None else None
         self.named_nodes: Dict[str, AssignableNode] = {}
-        self._instances: Dict["Entity", GraphEntity] = {}
+        self._entities: Dict["Entity", GraphEntity] = {}
         self._own_instances: Dict["Locatable", InstanceNode] = {}
 
-    def instances(self) -> Dict["Entity", "GraphEntity"]:
+    def entities(self) -> Dict["Entity", "GraphEntity"]:
         """
             Returns entity data for all registered entities.
             GraphEntity objects are stored in the root dataflow graph.
         """
         if self.parent is not None:
-            return self.parent.instances()
-        return self._instances
+            return self.parent.entities()
+        return self._entities
 
     def _graph_entity(self, entity: "Entity") -> "GraphEntity":
         """
             Returns an GraphEntity object for an Entity. Registers the entity if it is not yet registered.
         """
-        instances: Dict["Entity", "GraphEntity"] = self.instances()
-        if entity not in instances:
-            instances[entity] = GraphEntity(entity)
-        return instances[entity]
+        entities: Dict["Entity", "GraphEntity"] = self.entities()
+        if entity not in entities:
+            entities[entity] = GraphEntity(entity)
+        return entities[entity]
 
     def get_named_node(self, name: str) -> "AssignableNodeReference":
         """
