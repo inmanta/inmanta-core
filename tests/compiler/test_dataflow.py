@@ -84,7 +84,7 @@ def test_dataflow_hierarchy(graph: DataflowGraph) -> None:
 
     assert child.instances() == graph.instances()
     assert entity in child.instances()
-    assert child.instances()[entity].instances == [node1.reference]
+    assert child.instances()[entity].instances == [node1.reference()]
     assert child.instances()[entity].bidirectional_attributes == {"this": "other"}
 
     node2: InstanceNode = register_instance(child, entity, statement1)
@@ -124,13 +124,13 @@ def test_dataflow_attribute_reference_nodes(graph: DataflowGraph) -> None:
     x: AssignableNodeReference = graph.get_named_node("x")
     y: AssignableNodeReference = graph.get_named_node("y")
     x.assign(y, Statement(), graph)
-    y.assign(instance_node(["n"]).reference, Statement(), graph)
+    y.assign(instance_node(["n"]).reference(), Statement(), graph)
 
     assert isinstance(y, VariableNodeReference)
     assert len(y.node.instance_assignments) == 1
 
     y_n: AssignableNodeReference = graph.get_named_node("y.n")
-    y_n.assign(ValueNode(42).reference, Statement(), graph)
+    y_n.assign(ValueNode(42).reference(), Statement(), graph)
 
     x_n: AssignableNodeReference = graph.get_named_node("x.n")
     x_n_nodes: List[AssignableNode] = list(x_n.nodes())
@@ -166,7 +166,7 @@ def test_dataflow_variable_tree_leaves(graph: DataflowGraph, value_node: Node) -
 
     x.assign(y, Statement(), graph)
     y.assign(z, Statement(), graph)
-    y.assign(value_node.reference, Statement(), graph)
+    y.assign(value_node.reference(), Statement(), graph)
 
     leaves: Set[AssignableNode] = set(x.leaf_nodes())
     assert isinstance(y, DirectNodeReference)
@@ -216,7 +216,7 @@ def test_dataflow_variable_loop_with_value_assignment_leaves(graph: DataflowGrap
     y.assign(z, Statement(), graph)
     z.assign(x, Statement(), graph)
 
-    y.assign(ValueNode(42).reference, Statement(), graph)
+    y.assign(ValueNode(42).reference(), Statement(), graph)
 
     leaves: Set[AssignableNode] = set(x.leaf_nodes())
     assert isinstance(x, DirectNodeReference)
@@ -244,7 +244,7 @@ def test_dataflow_assignment_node_attribute(graph: DataflowGraph, instantiate: b
     x.assign(y, Statement(), graph)
     y.assign(z, Statement(), graph)
     if instantiate:
-        y.assign(instance_node().reference, Statement(), graph)
+        y.assign(instance_node().reference(), Statement(), graph)
 
     x_n: AssignableNodeReference = graph.get_named_node("x.n")
 
@@ -285,7 +285,7 @@ def test_dataflow_assignment_node_nested_tentative(graph: DataflowGraph) -> None
 def test_dataflow_primitive_assignment(graph: DataflowGraph) -> None:
     x: AssignableNodeReference = graph.get_named_node("x")
     statement: Statement = Statement()
-    x.assign(ValueNode(42).reference, statement, graph)
+    x.assign(ValueNode(42).reference(), statement, graph)
     assert isinstance(x, DirectNodeReference)
     assert len(x.node.value_assignments) == 1
     assignment: Assignment[ValueNodeReference] = x.node.value_assignments[0]
@@ -301,8 +301,8 @@ def test_attribute_assignment(graph: DataflowGraph, instantiate: bool) -> None:
     x_n: AssignableNodeReference = graph.get_named_node("x.n")
 
     if instantiate:
-        x.assign(instance_node().reference, Statement(), graph)
-    x_n.assign(ValueNode(42).reference, Statement(), graph)
+        x.assign(instance_node().reference(), Statement(), graph)
+    x_n.assign(ValueNode(42).reference(), Statement(), graph)
 
     assert isinstance(x, VariableNodeReference)
     instance: InstanceNode
@@ -317,7 +317,7 @@ def test_attribute_assignment(graph: DataflowGraph, instantiate: bool) -> None:
     n: Optional[AttributeNode] = instance.get_attribute("n")
     assert n is not None
     assert len(n.value_assignments) == 1
-    assert n.value_assignments[0].rhs == ValueNode(42).reference
+    assert n.value_assignments[0].rhs == ValueNode(42).reference()
 
 
 def test_dataflow_tentative_attribute_propagation(graph: DataflowGraph) -> None:
@@ -329,7 +329,7 @@ def test_dataflow_tentative_attribute_propagation(graph: DataflowGraph) -> None:
     y.assign(z, Statement(), graph)
 
     x_a_n: AssignableNodeReference = graph.get_named_node("x.a.n")
-    x_a_n.assign(ValueNode(42).reference, Statement(), graph)
+    x_a_n.assign(ValueNode(42).reference(), Statement(), graph)
 
     def assert_tentative_a_n(var: AssignableNode, values: Optional[Set[int]] = None) -> None:
         if values is None:
@@ -359,7 +359,7 @@ def test_dataflow_tentative_attribute_propagation(graph: DataflowGraph) -> None:
     assert isinstance(v, VariableNodeReference)
     assert_tentative_a_n(v.node)
 
-    x_a_n.assign(ValueNode(0).reference, Statement(), graph)
+    x_a_n.assign(ValueNode(0).reference(), Statement(), graph)
     assert_tentative_a_n(v.node, {0, 42})
 
 
@@ -373,12 +373,12 @@ def test_dataflow_tentative_attribute_propagation_on_equivalence(graph: Dataflow
     z.assign(x, Statement(), graph)
 
     x_n: AssignableNodeReference = graph.get_named_node("x.n")
-    x_n.assign(ValueNode(42).reference, Statement(), graph)
+    x_n.assign(ValueNode(42).reference(), Statement(), graph)
 
     assert isinstance(y, VariableNodeReference)
     assert len(y.node.instance_assignments) == 0
 
-    y.assign(instance_node().reference, Statement(), graph)
+    y.assign(instance_node().reference(), Statement(), graph)
 
     assert len(y.node.instance_assignments) == 1
     y_n: Optional[AttributeNode] = y.node.instance_assignments[0].rhs.node().get_attribute("n")
@@ -393,7 +393,7 @@ def test_dataflow_tentative_attribute_propagation_to_uninitialized_attribute(gra
     u: AssignableNodeReference = graph.get_named_node("u")
     u_n: AssignableNodeReference = graph.get_named_node("u.n")
 
-    u_n.assign(ValueNode(42).reference, Statement(), graph)
+    u_n.assign(ValueNode(42).reference(), Statement(), graph)
     u.assign(x_u, Statement(), graph)
 
     x: AssignableNodeReference = graph.get_named_node("x")
@@ -416,7 +416,7 @@ def test_dataflow_tentative_attribute_propagation_over_uninitialized_attribute(g
     y: AssignableNodeReference = graph.get_named_node("y")
     u: AssignableNodeReference = graph.get_named_node("u")
 
-    u_n.assign(ValueNode(42).reference, Statement(), graph)
+    u_n.assign(ValueNode(42).reference(), Statement(), graph)
     x_y.assign(y, Statement(), graph)
     u.assign(x_y, Statement(), graph)
 
@@ -448,17 +448,17 @@ def test_dataflow_bidirectional_attribute(graph: DataflowGraph, register_both_di
     right = register_instance(graph, right_entity)
     right_indirect = register_instance(graph, right_entity)
     x: AssignableNodeReference = graph.get_named_node("x")
-    x.assign(right_indirect.reference, Statement(), graph)
+    x.assign(right_indirect.reference(), Statement(), graph)
     assert isinstance(x, VariableNodeReference)
     assert len(x.node.instance_assignments) == 1
 
     if assign_first:
-        assign_attribute(left, right.reference)
+        assign_attribute(left, right.reference())
         assign_attribute(left, x)
         register_attributes()
     else:
         register_attributes()
-        assign_attribute(left, right.reference)
+        assign_attribute(left, right.reference())
         assign_attribute(left, x)
 
     left_right: Optional[AttributeNode] = left.get_attribute("right")
@@ -486,14 +486,14 @@ def test_dataflow_index(graph: DataflowGraph) -> None:
     assert i2.get_self() is i2
     assert i1 is not i2
 
-    graph.add_index_match([i.reference for i in [i1, i2]])
+    graph.add_index_match([i.reference() for i in [i1, i2]])
     # make sure adding them again in another order does not cause issues
-    graph.add_index_match([i.reference for i in [i2, i1]])
+    graph.add_index_match([i.reference() for i in [i2, i1]])
 
     assert i1.get_self() is i1
     assert i2.get_self() is i1
-    assert i2.reference.node() is i1
-    assert i2.reference.top_node() is i2
+    assert i2.reference().node() is i1
+    assert i2.reference().top_node() is i2
     assert i1.get_all_index_nodes() == {i1, i2}
 
 
@@ -588,7 +588,7 @@ class DataflowTestHelper:
                 ), "This simple language only allows instance binding for a single instance in the rhs."
                 instance_node: InstanceNode = node.instance_assignments[0].rhs.top_node()
                 self._instances[instance_bind] = instance_node
-                rhs.append(instance_node.reference)
+                rhs.append(instance_node.reference())
             # test element equality: NodeReference does not define sort or hash so this is the only way
             actual_rhs: List[NodeReference] = [assignment.rhs for assignment in node.assignments()]
             for rhs_elem in rhs:
@@ -610,7 +610,7 @@ class DataflowTestHelper:
                 raise Exception("Syntax error: this simple language only supports attributes directly on instances in the lhs.")
             if instance_id not in self._instances:
                 return (None, instance_id)
-            return (self._instances[instance_id].reference, None)
+            return (self._instances[instance_id].reference(), None)
         else:
             token: str = self._tokens.pop(0)
             if not token.isalnum():
@@ -618,7 +618,7 @@ class DataflowTestHelper:
                     "Invalid syntax: expected `variable_name [. attr [...]]` or `<instance> instance_id`, got `%s`" % token
                 )
             try:
-                return (ValueNode(int(token)).reference, None)
+                return (ValueNode(int(token)).reference(), None)
             except ValueError:
                 node_ref: AssignableNodeReference = self.get_graph().resolver.get_dataflow_node(token)
                 assert isinstance(node_ref, VariableNodeReference)
@@ -736,7 +736,7 @@ x = 0
     assert isinstance(x, DirectNodeReference)
     assignments: List[Assignment] = x.node.value_assignments
     assert len(assignments) == 2
-    zero_index: int = [assignment.rhs for assignment in assignments].index(ValueNode(0).reference)
+    zero_index: int = [assignment.rhs for assignment in assignments].index(ValueNode(0).reference())
     for i, assignment in enumerate(assignments):
         value: int = 0 if i == zero_index else 42
         assert assignment.context == graph

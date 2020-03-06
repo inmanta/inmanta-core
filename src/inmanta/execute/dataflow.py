@@ -209,7 +209,7 @@ class DataflowGraph:
             new: InstanceNode = get_new()
             assert new.responsible == responsible
             self._own_instances[responsible] = new
-            self._add_global_instance_node(new.reference)
+            self._add_global_instance_node(new.reference())
         return self._own_instances[responsible]
 
     def _add_global_instance_node(self, node: "InstanceNodeReference") -> None:
@@ -268,10 +268,16 @@ class Node:
         A node in the data flow graph. Represents an attribute, variable, value or instance in the configuration model.
     """
 
-    __slots__ = "reference"
+    __slots__ = ()
 
     def __init__(self) -> None:
-        self.reference: NodeReference = DirectNodeReference(self)
+        pass
+
+    def reference(self) -> "NodeReference":
+        """
+            Returns a reference to this node.
+        """
+        raise NotImplementedError()
 
 
 class NodeReference:
@@ -557,8 +563,10 @@ class ValueNode(Node):
 
     def __init__(self, value: object) -> None:
         super().__init__()
-        self.reference: ValueNodeReference = ValueNodeReference(self)
         self.value: object = value
+
+    def reference(self) -> "ValueNodeReference":
+        return ValueNodeReference(self)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ValueNode):
@@ -575,8 +583,10 @@ class NodeStub(ValueNode):
 
     def __init__(self, message: str) -> None:
         ValueNode.__init__(self, message)
-        self.reference: ValueNodeReference = ValueNodeReference(self)
         self.message = message
+
+    def reference(self) -> "ValueNodeReference":
+        return ValueNodeReference(self)
 
 
 class AssignableNode(Node):
@@ -588,12 +598,14 @@ class AssignableNode(Node):
 
     def __init__(self, name: str) -> None:
         Node.__init__(self)
-        self.reference: VariableNodeReference = VariableNodeReference(self)
         self.name: str = name
         self.assignable_assignments: List[Assignment[AssignableNodeReference]] = []
         self.value_assignments: List[Assignment[ValueNodeReference]] = []
         self.instance_assignments: List[Assignment[InstanceNodeReference]] = []
         self.equivalence: Equivalence = Equivalence(frozenset([self]))
+
+    def reference(self) -> AssignableNodeReference:
+        return VariableNodeReference(self)
 
     def leaves(self) -> Iterator["AssignableNodeReference"]:
         """
@@ -687,13 +699,13 @@ class Equivalence:
         """
         if self.is_leaf():
             explicit_leaves: Iterator[AssignableNodeReference] = (
-                node.reference for node in self.nodes if len(node.value_assignments) > 0 or len(node.instance_assignments) > 0
+                node.reference() for node in self.nodes if len(node.value_assignments) > 0 or len(node.instance_assignments) > 0
             )
             try:
                 yield next(explicit_leaves)
                 yield from explicit_leaves
             except StopIteration:
-                yield from (node.reference for node in self.nodes)
+                yield from (node.reference() for node in self.nodes)
         yield from (node for assignment in self.assignable_assignments() for node in assignment.rhs.leaves())
 
     def equivalences_on_path(self, node: AssignableNode) -> Set["Equivalence"]:
@@ -823,7 +835,6 @@ class InstanceNode(Node):
         context: Optional["DataflowGraph"] = None,
     ) -> None:
         Node.__init__(self)
-        self.reference: InstanceNodeReference = InstanceNodeReference(self)
         self.attributes: Dict[str, AttributeNode] = {name: AttributeNode(self, name) for name in attributes}
         self.entity: Optional["Entity"] = entity
         self.responsible: Optional["Locatable"] = responsible
@@ -831,6 +842,9 @@ class InstanceNode(Node):
         self.bidirectional_attributes: Dict[str, str] = {}
         self._index_node: Optional[InstanceNode] = None
         self._all_index_nodes: Set["InstanceNode"] = {self}
+
+    def reference(self) -> InstanceNodeReference:
+        return InstanceNodeReference(self)
 
     def get_self(self) -> "InstanceNode":
         """
@@ -938,4 +952,4 @@ class InstanceNode(Node):
         if self.get_self() is not self:
             return self.get_self().assign_other_direction(attribute, node_ref, responsible, context)
         if attribute in self.bidirectional_attributes:
-            node_ref.assign_attribute(self.bidirectional_attributes[attribute], self.reference, responsible, context)
+            node_ref.assign_attribute(self.bidirectional_attributes[attribute], self.reference(), responsible, context)

@@ -128,7 +128,7 @@ class ExpressionStatement(DynamicStatement):
         """
         # TODO: NodeStub is used while the dataflow graph is not fully compatible with the language.
         #   This should raise a NotImplementedError instead.
-        return dataflow.NodeStub("expressionStatement.get_node(Resolver) placeholder for %s" % type(self)).reference
+        return dataflow.NodeStub("expressionStatement.get_node(Resolver) placeholder for %s" % type(self)).reference()
 
 
 class Resumer(ExpressionStatement):
@@ -219,7 +219,7 @@ class Literal(ExpressionStatement):
         return self.value
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.ValueNodeReference:
-        return dataflow.ValueNode(self.value).reference
+        return dataflow.ValueNode(self.value).reference()
 
 
 class DefinitionStatement(Statement):

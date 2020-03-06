@@ -492,7 +492,7 @@ class Constructor(ExpressionStatement):
             assert self.type is not None
             return dataflow.InstanceNode(self.type.get_entity().get_all_attribute_names(), self.type.get_entity(), self, graph)
 
-        return graph.own_instance_node_for_responsible(self, get_new_node).reference
+        return graph.own_instance_node_for_responsible(self, get_new_node).reference()
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.InstanceNodeReference:
         return self._register_dataflow_node(graph)
