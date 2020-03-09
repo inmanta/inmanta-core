@@ -21,7 +21,6 @@ from abc import abstractmethod
 from functools import lru_cache
 from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple, Union  # noqa: F401
 
-import inmanta.warnings as inmanta_warnings
 from inmanta.warnings import InmantaWarning
 
 try:
@@ -466,29 +465,6 @@ class Namespace(Namespaced):
 
     def get_location(self) -> Location:
         return self.location
-
-    def warn_shadowed_variables(self, nested_block: Optional["BasicBlock"] = None) -> None:
-        """
-            Produces a warning for any shadowed variables in ocurring in this namespace. This namespace's scope's root block
-            is used as an entrypoint for the check. If nested_block is provided, that block is interpreted as living in this
-            scope and only that block is searched for shadowing with respect to the scope.
-        """
-        assert self.scope is not None
-        shadowed_variables: Iterator[
-            Tuple[str, FrozenSet[Locatable], FrozenSet[Locatable]]
-        ] = self.scope.block.shadowed_variables(nested_blocks=[nested_block] if nested_block is not None else None)
-        for var, shadowed_locs, orig_locs in shadowed_variables:
-            inmanta_warnings.warn(
-                VariableShadowWarning(
-                    None,
-                    "Variable `%s` shadowed: originally declared at %s, shadowed at %s"
-                    % (
-                        var,
-                        ",".join(str(loc.get_location()) for loc in orig_locs),
-                        ",".join(str(loc.get_location()) for loc in shadowed_locs),
-                    ),
-                )
-            )
 
 
 class CompilerException(Exception):
