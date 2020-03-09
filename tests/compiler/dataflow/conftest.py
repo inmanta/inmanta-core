@@ -48,7 +48,9 @@ def create_instance(
     instance: InstanceNode = InstanceNode([])
     if graph is None:
         return instance
-    return graph.own_instance_node_for_responsible(entity if entity is not None else Entity("DummyEntity", Namespace("dummy_namespace")), responsible, lambda: instance,)
+    return graph.own_instance_node_for_responsible(
+        entity if entity is not None else Entity("DummyEntity", Namespace("dummy_namespace")), responsible, lambda: instance,
+    )
 
 
 @pytest.fixture(scope="function")

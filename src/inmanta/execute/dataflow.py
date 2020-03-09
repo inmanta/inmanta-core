@@ -259,7 +259,10 @@ class GraphEntity:
 
     def register_bidirectional_attribute(self, this: str, other: str) -> None:
         if this in self.bidirectional_attributes and self.bidirectional_attributes[this] != other:
-            raise Exception("Can't assign two pairs of bidirectional attributes on the same attribute name. Old: %s, new: %s" % (self.bidirectional_attributes[this], other))
+            raise Exception(
+                "Can't assign two pairs of bidirectional attributes on the same attribute name. Old: %s, new: %s"
+                % (self.bidirectional_attributes[this], other)
+            )
         self.bidirectional_attributes[this] = other
         for instance in self.instances:
             instance.register_bidirectional_attribute(this, other)
@@ -832,10 +835,7 @@ class InstanceNode(Node):
         "_all_index_nodes",
     )
 
-    def __init__(
-        self,
-        attributes: Iterable[str],
-    ) -> None:
+    def __init__(self, attributes: Iterable[str],) -> None:
         Node.__init__(self)
         self.attributes: Dict[str, AttributeNode] = {name: AttributeNode(self, name) for name in attributes}
         self.entity: Optional["GraphEntity"] = None
