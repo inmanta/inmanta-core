@@ -34,45 +34,6 @@ from inmanta.execute.dataflow import (
 )
 
 
-@pytest.mark.parametrize("register_both_dirs", [True, False])
-def test_dataflow_bidirectional_attribute(graph: DataflowGraph, register_both_dirs: bool) -> None:
-    namespace: Namespace = Namespace("dummy_namespace")
-    left_entity: Entity = Entity("Left", namespace)
-    right_entity: Entity = Entity("Right", namespace)
-
-    left = create_instance(graph, left_entity)
-    right = create_instance(graph, right_entity)
-    right_indirect = create_instance(graph, right_entity)
-    x: AssignableNodeReference = graph.get_named_node("x")
-    x.assign(right_indirect.reference(), Statement(), graph)
-    assert isinstance(x, VariableNodeReference)
-    assert len(x.node.instance_assignments) == 1
-
-    def assign_attribute(left: InstanceNode, right: NodeReference) -> None:
-        left.assign_attribute("right", right, Statement(), graph)
-
-    graph.register_bidirectional_attribute(left_entity, "right", "left")
-    if register_both_dirs:
-        graph.register_bidirectional_attribute(right_entity, "left", "right")
-    assign_attribute(left, right.reference())
-    assign_attribute(left, x)
-
-    left_right: Optional[AttributeNode] = left.get_attribute("right")
-    right_left: Optional[AttributeNode] = right.get_attribute("left")
-    x_left: Optional[AttributeNode] = x.node.instance_assignments[0].rhs.node().get_attribute("left")
-    assert left_right is not None
-    assert right_left is not None
-    assert x_left is not None
-    assert len(left_right.instance_assignments) == 1
-    assert len(left_right.assignable_assignments) == 1
-    assert len(right_left.instance_assignments) == 1
-    assert len(x_left.instance_assignments) == 1
-    assert left_right.instance_assignments[0].rhs.node() == right
-    assert left_right.assignable_assignments[0].rhs == x
-    assert right_left.instance_assignments[0].rhs.node() == left
-    assert x_left.instance_assignments[0].rhs.node() == left
-
-
 def test_dataflow_index(graph: DataflowGraph) -> None:
     entity: Entity = Entity("DummyEntity", Namespace("dummy_namespace"))
     i1: InstanceNode = create_instance(graph, entity)

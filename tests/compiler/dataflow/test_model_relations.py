@@ -22,10 +22,19 @@ import pytest
 
 
 @pytest.mark.parametrize("bidirectional", [True, False])
-def test_dataflow_model_relation(dataflow_test_helper: DataflowTestHelper, bidirectional: bool) -> None:
+@pytest.mark.parametrize("inherit_relation", [True, False])
+@pytest.mark.parametrize("assign_first", [True, False])
+def test_dataflow_model_relation(
+    dataflow_test_helper: DataflowTestHelper, bidirectional: bool, inherit_relation: bool, assign_first: bool
+) -> None:
+    relation_stmt: str = "%s.b [1] -- B%s" % ("AParent" if inherit_relation else "A", ".a [1]" if bidirectional else "")
     dataflow_test_helper.compile(
         """
-entity A:
+entity AParent:
+end
+implement AParent using std::none
+
+entity A extends AParent:
 end
 implement A using std::none
 
@@ -33,14 +42,16 @@ entity B:
 end
 implement B using std::none
 
-A.b [1] -- B%s
+%s
 
 a = A()
 b = B()
 
 a.b = b
+
+%s
         """
-        % (".a [1]" if bidirectional else ""),
+        % ("" if assign_first else relation_stmt, relation_stmt if assign_first else "")
     )
     bidirectional_rule: str = "<instance> b . a -> <instance> a"
     dataflow_test_helper.verify_graphstring(
