@@ -35,19 +35,10 @@ from inmanta.execute.dataflow import (
 
 
 @pytest.mark.parametrize("register_both_dirs", [True, False])
-@pytest.mark.parametrize("assign_first", [True, False])
-def test_dataflow_bidirectional_attribute(graph: DataflowGraph, register_both_dirs: bool, assign_first: bool) -> None:
+def test_dataflow_bidirectional_attribute(graph: DataflowGraph, register_both_dirs: bool) -> None:
     namespace: Namespace = Namespace("dummy_namespace")
     left_entity: Entity = Entity("Left", namespace)
     right_entity: Entity = Entity("Right", namespace)
-
-    def register_attributes() -> None:
-        graph.register_bidirectional_attribute(left_entity, "right", "left")
-        if register_both_dirs:
-            graph.register_bidirectional_attribute(right_entity, "left", "right")
-
-    def assign_attribute(left: InstanceNode, right: NodeReference) -> None:
-        left.assign_attribute("right", right, Statement(), graph)
 
     left = create_instance(graph, left_entity)
     right = create_instance(graph, right_entity)
@@ -57,14 +48,14 @@ def test_dataflow_bidirectional_attribute(graph: DataflowGraph, register_both_di
     assert isinstance(x, VariableNodeReference)
     assert len(x.node.instance_assignments) == 1
 
-    if assign_first:
-        assign_attribute(left, right.reference())
-        assign_attribute(left, x)
-        register_attributes()
-    else:
-        register_attributes()
-        assign_attribute(left, right.reference())
-        assign_attribute(left, x)
+    def assign_attribute(left: InstanceNode, right: NodeReference) -> None:
+        left.assign_attribute("right", right, Statement(), graph)
+
+    graph.register_bidirectional_attribute(left_entity, "right", "left")
+    if register_both_dirs:
+        graph.register_bidirectional_attribute(right_entity, "left", "right")
+    assign_attribute(left, right.reference())
+    assign_attribute(left, x)
 
     left_right: Optional[AttributeNode] = left.get_attribute("right")
     right_left: Optional[AttributeNode] = right.get_attribute("left")

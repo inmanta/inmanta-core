@@ -264,8 +264,6 @@ class GraphEntity:
                 % (self.bidirectional_attributes[this], other)
             )
         self.bidirectional_attributes[this] = other
-        for instance in self.instances:
-            instance.register_bidirectional_attribute(this, other)
 
     def add_instance(self, instance: "InstanceNode") -> None:
         self.instances.append(instance)
@@ -926,17 +924,6 @@ class InstanceNode(Node):
             return self.attributes[attribute]
         except KeyError:
             return None
-
-    def register_bidirectional_attribute(self, this: str, other: str) -> None:
-        """
-            Registers a pair of bidirectional attributes. Adds assignments for the other direction where required.
-        """
-        if self.get_self() is not self:
-            return self.get_self().register_bidirectional_attribute(this, other)
-        if this in self.attributes:
-            attr_node: AttributeNode = self.attributes[this]
-            for assignment in attr_node.assignments():
-                self.assign_other_direction(this, assignment.rhs, assignment.responsible, assignment.context)
 
     def assign_other_direction(
         self, attribute: str, node_ref: "NodeReference", responsible: "Locatable", context: "DataflowGraph"
