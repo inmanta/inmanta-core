@@ -45,7 +45,7 @@ def test_dataflow_hierarchy(graph: DataflowGraph) -> None:
 
     assert child.entities() == graph.entities()
     assert entity in child.entities()
-    assert child.entities()[entity].instances == [node1.reference()]
+    assert child.entities()[entity].instances == [node1]
     assert child.entities()[entity].bidirectional_attributes == {"this": "other"}
 
     node2: InstanceNode = create_instance(child, entity, statement1)

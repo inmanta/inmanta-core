@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from inmanta.execute.runtime import Resolver
     from inmanta.ast import Locatable
     from inmanta.ast.entity import Entity
+    from inmanta.ast.statements.generator import Constructor
 
 
 """
@@ -165,8 +166,10 @@ class DataflowGraph:
         self.resolver: "Resolver" = resolver
         self.parent: Optional[DataflowGraph] = parent if parent is not None else None
         self.named_nodes: Dict[str, AssignableNode] = {}
+        # empty except in the root graph
         self._entities: Dict["Entity", GraphEntity] = {}
-        self._own_instances: Dict["Locatable", InstanceNode] = {}
+        # keeps track of instance nodes and their responsible
+        self._own_instances: Dict["Constructor", InstanceNode] = {}
 
     def entities(self) -> Dict["Entity", "GraphEntity"]:
         """
@@ -199,7 +202,7 @@ class DataflowGraph:
         return reduce(lambda acc, part: AttributeNodeReference(acc, part), parts[1:], root_ref)
 
     def own_instance_node_for_responsible(
-        self, entity: "Entity", responsible: "Locatable", get_new: Callable[[], "InstanceNode"]
+        self, entity: "Entity", responsible: "Constructor", get_new: Callable[[], "InstanceNode"]
     ) -> "InstanceNode":
         """
             Returns this graph's instance node tied to responsible if it exists.
@@ -211,14 +214,14 @@ class DataflowGraph:
             new.responsible = responsible
             new.context = self
             self._own_instances[responsible] = new
-            self._add_global_instance_node(new.reference())
+            self._add_global_instance_node(new)
         return self._own_instances[responsible]
 
-    def _add_global_instance_node(self, node: "InstanceNodeReference") -> None:
+    def _add_global_instance_node(self, node: "InstanceNode") -> None:
         """
             Registers an instance.
         """
-        entity: Optional["GraphEntity"] = node.top_node().entity
+        entity: Optional["GraphEntity"] = node.entity
         if entity is not None:
             entity.add_instance(node)
 
@@ -252,16 +255,16 @@ class GraphEntity:
     def __init__(self, entity: "Entity") -> None:
         self.entity: "Entity" = entity
         self.bidirectional_attributes: Dict[str, str] = {}
-        self.instances: List[InstanceNodeReference] = []
+        self.instances: List[InstanceNode] = []
 
     def register_bidirectional_attribute(self, this: str, other: str) -> None:
         if this in self.bidirectional_attributes and self.bidirectional_attributes[this] != other:
             raise Exception("Can't assign two pairs of bidirectional attributes on the same attribute name. Old: %s, new: %s" % (self.bidirectional_attributes[this], other))
         self.bidirectional_attributes[this] = other
         for instance in self.instances:
-            instance.node().register_bidirectional_attribute(this, other)
+            instance.register_bidirectional_attribute(this, other)
 
-    def add_instance(self, instance: "InstanceNodeReference") -> None:
+    def add_instance(self, instance: "InstanceNode") -> None:
         self.instances.append(instance)
 
 
