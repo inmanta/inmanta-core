@@ -19,7 +19,7 @@
 import traceback
 from abc import abstractmethod
 from functools import lru_cache
-from typing import Dict, List, Optional, Sequence, Union  # noqa: F401
+from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple, Union  # noqa: F401
 
 from inmanta.warnings import InmantaWarning
 
@@ -32,6 +32,7 @@ except ImportError:
 if TYPE_CHECKING:
     import inmanta.ast.statements  # noqa: F401
     from inmanta.ast.attribute import Attribute  # noqa: F401
+    from inmanta.ast.blocks import BasicBlock  # noqa: F401
     from inmanta.ast.type import Type, NamedType  # noqa: F401
     from inmanta.execute.runtime import ExecutionContext, Instance, DelayedResultVariable, ResultVariable  # noqa: F401
     from inmanta.ast.statements import Statement, AssignStatement  # noqa: F401
@@ -557,6 +558,11 @@ class CompilerRuntimeWarning(InmantaWarning, RuntimeException):
 
 class CompilerDeprecationWarning(CompilerRuntimeWarning):
     def __init__(self, stmt: Optional["Locatable"], msg: str) -> None:
+        CompilerRuntimeWarning.__init__(self, stmt, msg)
+
+
+class VariableShadowWarning(CompilerRuntimeWarning):
+    def __init__(self, stmt: Optional["Locatable"], msg: str):
         CompilerRuntimeWarning.__init__(self, stmt, msg)
 
 

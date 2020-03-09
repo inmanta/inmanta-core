@@ -282,6 +282,9 @@ class Assign(AssignStatement):
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self.value, owner=self)
 
+    def declared_variables(self) -> typing.Iterator[str]:
+        yield self.name
+
     def pretty_print(self) -> str:
         return f"{self.name} = {self.value.pretty_print()}"
 

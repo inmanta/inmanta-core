@@ -291,6 +291,7 @@ class ModuleLike(object):
                 block.add(s)
             elif isinstance(s, DefinitionStatement):
                 statements.append(s)
+                block.add_definition(s)
             elif isinstance(s, str) or isinstance(s, LocatableString):
                 pass
             else:

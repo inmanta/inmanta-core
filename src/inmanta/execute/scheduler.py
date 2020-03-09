@@ -232,6 +232,7 @@ class Scheduler(object):
             xc = ExecutionContext(block, res)
             block.context = xc
             block.namespace.scope = xc
+            block.warn_shadowed_variables()
 
         # setup queues
         # queue for runnable items

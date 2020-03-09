@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from typing import Any, Dict, List, Optional, Tuple  # noqa: F401
+from typing import Any, Dict, Iterator, List, Optional, Tuple  # noqa: F401
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced, RuntimeException
@@ -29,6 +29,7 @@ except ImportError:
 
 
 if TYPE_CHECKING:
+    from inmanta.ast.blocks import BasicBlock  # noqa: F401
     from inmanta.ast.variables import Reference  # noqa: F401
     from inmanta.ast.type import Type, NamedType  # noqa: F401
 
@@ -61,6 +62,12 @@ class Statement(Namespaced):
     def get_anchors(self) -> List[Anchor]:
         return self.anchors
 
+    def nested_blocks(self) -> Iterator["BasicBlock"]:
+        """
+            Returns an iterator over blocks contained within this statement.
+        """
+        return iter(())
+
 
 class DynamicStatement(Statement):
     """
@@ -84,6 +91,12 @@ class DynamicStatement(Statement):
 
     def execute_direct(self, requires):
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
+
+    def declared_variables(self) -> Iterator[str]:
+        """
+            Returns an iterator over this statement's own declared variables.
+        """
+        return iter(())
 
 
 class ExpressionStatement(DynamicStatement):
