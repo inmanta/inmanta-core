@@ -367,7 +367,7 @@ class Constructor(ExpressionStatement):
         if graph is not None:
             node: dataflow.InstanceNodeReference = self._register_dataflow_node(graph)
             # TODO: also add wrapped_kwargs
-            for (k, v) in self.__attributes.items():
+            for (k, v) in chain(self._direct_attributes.items(), self._indirect_attributes.items()):
                 node.assign_attribute(k, v.get_dataflow_node(graph), self, graph)
 
         return direct_requires
@@ -497,9 +497,10 @@ class Constructor(ExpressionStatement):
 
         def get_new_node() -> dataflow.InstanceNode:
             assert self.type is not None
-            return dataflow.InstanceNode(self.type.get_entity().get_all_attribute_names(), self.type.get_entity(), self, graph)
+            return dataflow.InstanceNode(self.type.get_entity().get_all_attribute_names())
 
-        return graph.own_instance_node_for_responsible(self, get_new_node).reference()
+        assert self.type is not None
+        return graph.own_instance_node_for_responsible(self.type.get_entity(), self, get_new_node).reference()
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.InstanceNodeReference:
         return self._register_dataflow_node(graph)

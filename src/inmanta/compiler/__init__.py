@@ -23,7 +23,7 @@ import os
 import sys
 
 from inmanta import const
-from inmanta.ast import LocatableString, Namespace, Range
+from inmanta.ast import CompilerException, LocatableString, Namespace, Range
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.execute import scheduler
 from inmanta.module import Project
@@ -43,7 +43,11 @@ def do_compile(refs={}):
 
     (statements, blocks) = compiler.compile()
     sched = scheduler.Scheduler()
-    success = sched.run(compiler, statements, blocks)
+    try:
+        success = sched.run(compiler, statements, blocks)
+    except CompilerException as e:
+        e.attach_compile_info(compiler)
+        raise e
 
     LOGGER.debug("Compile done")
 

@@ -770,11 +770,9 @@ class Resolver(object):
 
     __slots__ = ("namespace", "dataflow_graph")
 
-    def __init__(self, namespace: Namespace) -> None:
+    def __init__(self, namespace: Namespace, enable_dataflow_graph: bool = False) -> None:
         self.namespace = namespace
-        # TODO: check config
-        dataflow_enable: bool = False
-        self.dataflow_graph: Optional[DataflowGraph] = DataflowGraph(self) if dataflow_enable else None
+        self.dataflow_graph: Optional[DataflowGraph] = DataflowGraph(self) if enable_dataflow_graph else None
 
     def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
         # override lexial root
@@ -793,8 +791,11 @@ class Resolver(object):
         return NamespaceResolver(self, namespace)
 
     def get_dataflow_node(self, name: str) -> "dataflow.AssignableNodeReference":
-        assert self.dataflow_graph is not None
-        return self.dataflow_graph.get_named_node(name)
+        graph: Optional[DataflowGraph] = self.dataflow_graph
+        if self.get_root_resolver() == self:
+            graph = self.namespace.get_scope().dataflow_graph
+        assert graph is not None
+        return graph.get_named_node(name)
 
 
 class NamespaceResolver(Resolver):
@@ -820,11 +821,7 @@ class NamespaceResolver(Resolver):
         return self.parent.get_root_resolver()
 
     def get_dataflow_node(self, name: str) -> "dataflow.AssignableNodeReference":
-        try:
-            self.root.lookup(name.split(".")[0])
-            return Resolver.get_dataflow_node(self, name)
-        except NotFoundException:
-            return self.parent.get_dataflow_node(name)
+        return self.parent.get_dataflow_node(name)
 
 
 class ExecutionContext(Resolver):
@@ -916,7 +913,7 @@ class Instance(ExecutionContext):
             self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
             self.self_var_node = dataflow.AssignableNode("__self__").reference()
             self.self_var_node.assign(
-                cast(dataflow.InstanceNodeReference, self.instance_node), Statement(), cast(DataflowGraph, self.dataflow_graph)
+                cast(dataflow.InstanceNodeReference, self.instance_node), self, cast(DataflowGraph, self.dataflow_graph),
             )
 
         self.slots: Dict[str, ResultVariable] = {

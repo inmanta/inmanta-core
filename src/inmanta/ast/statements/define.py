@@ -42,7 +42,6 @@ from inmanta.ast.entity import Default, Entity, EntityLike, Implement, Implement
 from inmanta.ast.statements import BiStatement, ExpressionStatement, Literal, Statement, TypeDefinitionStatement
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.type import ConstraintType, NullableType, Type, TypedList
-from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 
 from . import DefinitionStatement
@@ -646,18 +645,7 @@ class DefineRelation(BiStatement):
             left_end.end = right_end
             right_end.end = left_end
 
-    def _add_to_dataflow_graph(self, graph: Optional[DataflowGraph]) -> None:
-        if graph is None:
-            return
-        left: Type = self.namespace.get_type(self.left[0])
-        assert isinstance(left, Entity), "%s is not an entity" % left
-        right: Type = self.namespace.get_type(self.right[0])
-        assert isinstance(right, Entity), "%s is not an entity" % right
-        graph.add_bidirectional_attribute(left, str(self.right[1]), str(self.left[1]))
-        graph.add_bidirectional_attribute(right, str(self.left[1]), str(self.right[1]))
-
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
-        self._add_to_dataflow_graph(resolver.dataflow_graph)
         for rv, exp in self.annotation_expression:
             reqs = exp.requires_emit(resolver, queue)
             ExecutionUnit(queue, resolver, rv, reqs, exp)

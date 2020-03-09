@@ -18,8 +18,20 @@
 from inmanta.ast import Location, Range
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity, Namespace
-from inmanta.ast.statements import Literal, Resumer
-from inmanta.execute.dataflow import DataflowGraph
+from inmanta.ast.statements import Literal, Resumer, Statement
+from inmanta.execute.dataflow import (
+    AssignableNode,
+    Assignment,
+    AttributeNode,
+    AttributeNodeReference,
+    DataflowGraph,
+    InstanceNode,
+    InstanceNodeReference,
+    NodeStub,
+    ValueNode,
+    ValueNodeReference,
+    VariableNodeReference,
+)
 from inmanta.execute.runtime import (
     AttributeVariable,
     DelegateQueueScheduler,
@@ -73,4 +85,24 @@ def test_slots_ast():
 
 
 def test_slots_dataflow():
-    assert_slotted(DataflowGraph(Resolver(Namespace("root", None))))
+    namespace: Namespace = Namespace("root", None)
+    resolver: Resolver = Resolver(namespace)
+
+    graph: DataflowGraph = DataflowGraph(resolver)
+    assignable_node: AssignableNode = AssignableNode("node")
+    value_node: ValueNode = ValueNode(42)
+    instance_node: InstanceNode = InstanceNode([])
+
+    assert_slotted(graph)
+    assert_slotted(assignable_node)
+    assert_slotted(assignable_node.equivalence)
+    assert_slotted(value_node)
+    assert_slotted(instance_node)
+
+    assert_slotted(AttributeNodeReference(assignable_node.reference(), "attr"))
+    assert_slotted(VariableNodeReference(assignable_node))
+    assert_slotted(ValueNodeReference(value_node))
+    assert_slotted(InstanceNodeReference(instance_node))
+    assert_slotted(Assignment(assignable_node.reference(), value_node, Statement(), graph))
+    assert_slotted(NodeStub("stub"))
+    assert_slotted(AttributeNode(instance_node, "attr"))

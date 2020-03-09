@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from inmanta.ast.statements import Statement, AssignStatement  # noqa: F401
     from inmanta.ast.entity import Entity  # noqa: F401
     from inmanta.ast.statements.define import DefineImport, DefineEntity  # noqa: F401
+    from inmanta.compiler import Compiler
 
 
 class Location(object):
@@ -474,6 +475,8 @@ class CompilerException(Exception):
         Exception.__init__(self, msg)
         self.location = None  # type: Optional[Location]
         self.msg = msg
+        # store root namespace so error reporters can inspect the compiler state
+        self.root_ns: Optional[Namespace] = None
 
     def set_location(self, location: Location) -> None:
         if self.location is None:
@@ -515,6 +518,9 @@ class CompilerException(Exception):
         below 50 is for pure compiler errors (type, syntax)
         """
         return 100
+
+    def attach_compile_info(self, compiler: "Compiler") -> None:
+        self.root_ns = compiler.get_ns()
 
     def __str__(self) -> str:
         return self.format()
