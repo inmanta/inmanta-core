@@ -40,7 +40,6 @@ from inmanta.ast.entity import Default, Entity, EntityLike, Implement, Implement
 from inmanta.ast.statements import BiStatement, ExpressionStatement, Literal, Statement, TypeDefinitionStatement
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.type import ConstraintType, NullableType, Type, TypedList
-from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 
 from . import DefinitionStatement

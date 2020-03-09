@@ -17,21 +17,10 @@
 """
 
 from compiler.dataflow.conftest import create_instance
-from typing import Optional
-
-import pytest
 
 from inmanta.ast import Namespace
 from inmanta.ast.entity import Entity
-from inmanta.ast.statements import Statement
-from inmanta.execute.dataflow import (
-    AssignableNodeReference,
-    AttributeNode,
-    DataflowGraph,
-    InstanceNode,
-    NodeReference,
-    VariableNodeReference,
-)
+from inmanta.execute.dataflow import DataflowGraph, InstanceNode
 
 
 def test_dataflow_index(graph: DataflowGraph) -> None:
