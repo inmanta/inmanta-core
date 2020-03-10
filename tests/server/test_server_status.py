@@ -17,6 +17,8 @@
 """
 import pytest
 
+from inmanta.data import Environment
+
 
 @pytest.mark.asyncio
 async def test_server_status(server, client):
@@ -36,3 +38,10 @@ async def test_server_status(server, client):
 
     assert "features" in status
     assert len(status["features"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_server_status_database_down(server, client):
+    await Environment.close_connection_pool()
+    result = await client.get_server_status()
+    assert result.code == 503
