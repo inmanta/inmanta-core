@@ -206,7 +206,7 @@ async def hard_clean_db_post(postgresql_client):
 
 
 @pytest.fixture(scope="function")
-async def clean_db(postgresql_client, create_db):
+async def clean_db(postgresql_pool, create_db, postgres_db):
     """
         1) Truncated tables: All tables which are part of the inmanta schema, except for the schemaversion table. The version
                              number stored in the schemaversion table is read by the Inmanta server during startup.
@@ -214,18 +214,21 @@ async def clean_db(postgresql_client, create_db):
                            not part of the Inmanta schema. These should be cleaned-up before running a new test.
     """
     yield
-    tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-    tables_in_db = [x["table_name"] for x in tables_in_db]
-    tables_to_preserve = TABLES_TO_KEEP
-    tables_to_preserve.append(SCHEMA_VERSION_TABLE)
-    tables_to_truncate = [x for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE]
-    tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
-    if tables_to_drop:
-        drop_query = "DROP TABLE %s CASCADE" % ", ".join(tables_to_drop)
-        await postgresql_client.execute(drop_query)
-    if tables_to_truncate:
-        truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
-        await postgresql_client.execute(truncate_query)
+    async with postgresql_pool.acquire() as postgresql_client:
+        tables_in_db = await postgresql_client.fetch(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+        )
+        tables_in_db = [x["table_name"] for x in tables_in_db]
+        tables_to_preserve = TABLES_TO_KEEP
+        tables_to_preserve.append(SCHEMA_VERSION_TABLE)
+        tables_to_truncate = [x for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE]
+        tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
+        if tables_to_drop:
+            drop_query = "DROP TABLE %s CASCADE" % ", ".join(tables_to_drop)
+            await postgresql_client.execute(drop_query)
+        if tables_to_truncate:
+            truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
+            await postgresql_client.execute(truncate_query)
 
 
 @pytest.fixture(scope="function")

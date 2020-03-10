@@ -79,8 +79,11 @@ class DatabaseService(protocol.ServerSlice):
     async def get_status(self) -> Dict[str, ArgumentTypes]:
         """ Get the status of the database connection
         """
-        status = {"connected": self._pool is not None, "database": opt.db_name.get(), "host": opt.db_host.get()}
-
+        status = {
+            "connected": self._pool is not None and not self._pool._closed,
+            "database": opt.db_name.get(),
+            "host": opt.db_host.get(),
+        }
         if self._pool is not None:
             status["max_pool"] = self._pool._maxsize
             status["open_connections"] = (

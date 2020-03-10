@@ -17,6 +17,7 @@
 """
 import pytest
 
+from inmanta import data
 from inmanta.data import Environment
 
 
@@ -41,7 +42,22 @@ async def test_server_status(server, client):
 
 
 @pytest.mark.asyncio
-async def test_server_status_database_down(server, client):
+async def test_server_status_database_unreachable(server, client):
     await Environment.close_connection_pool()
     result = await client.get_server_status()
-    assert result.code == 503
+    assert result.code == 200
+    for slice in result.result["data"]["slices"]:
+        if slice["name"] == "core.database":
+            assert not slice["status"]["connected"]
+
+
+@pytest.mark.asyncio
+async def test_server_status_database_down(server, client, postgres_db):
+    await data.disconnect()
+    postgres_db.stop()
+    result = await client.get_server_status()
+    postgres_db.start()
+    assert result.code == 200
+    for slice in result.result["data"]["slices"]:
+        if slice["name"] == "core.database":
+            assert not slice["status"]["connected"]

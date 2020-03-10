@@ -22,13 +22,11 @@ import uuid
 from typing import TYPE_CHECKING, Dict, List, Optional, Union, cast
 
 import importlib_metadata
-from asyncpg import InterfaceError, PostgresError
 
 from inmanta import data
 from inmanta.data.model import ExtensionStatus, FeatureStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, methods, methods_v2
 from inmanta.protocol.common import HTML_CONTENT_WITH_UTF8_CHARSET, ReturnValue, attach_warnings
-from inmanta.protocol.exceptions import ServiceUnavailable
 from inmanta.protocol.openapi.converter import OpenApiConverter
 from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
@@ -177,14 +175,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         for slice_name, slice in self._server.get_slices().items():
             try:
                 slices.append(SliceStatus(name=slice_name, status=await slice.get_status()))
-            except (PostgresError, InterfaceError) as e:
-                LOGGER.warning(
-                    f"The following error occured with the database,"
-                    f" while trying to determine the status of slice {slice_name}",
-                    e,
-                    exc_info=True,
+            except Exception:
+                LOGGER.error(
+                    f"The following error occured while trying to determine the status of slice {slice_name}", exc_info=True,
                 )
-                raise ServiceUnavailable(str(e))
 
             ext_name = slice_name.split(".")[0]
             package_name = slice.__class__.__module__.split(".")[0]
