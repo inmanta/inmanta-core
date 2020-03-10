@@ -93,7 +93,7 @@ class Config(object):
     @classmethod
     def _get_instance(cls) -> ConfigParser:
         if cls.__instance is None:
-            raise Exception("Load the configuration first")
+            cls.load_config()
 
         return cls.__instance
 
