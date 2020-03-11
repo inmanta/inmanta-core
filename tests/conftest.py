@@ -89,6 +89,13 @@ def postgres_db(postgresql_proc):
     yield postgresql_proc
 
 
+@pytest.fixture
+def ensure_running_postgres_db_post(postgres_db):
+    yield
+    if not postgres_db.running():
+        postgres_db.start()
+
+
 @pytest.fixture(scope="function")
 async def create_db(postgres_db, database_name_internal):
     """
@@ -214,6 +221,7 @@ async def clean_db(postgresql_pool, create_db, postgres_db):
                            not part of the Inmanta schema. These should be cleaned-up before running a new test.
     """
     yield
+    # By using the connection pool, we can make sure that the connection we use is alive
     async with postgresql_pool.acquire() as postgresql_client:
         tables_in_db = await postgresql_client.fetch(
             "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"

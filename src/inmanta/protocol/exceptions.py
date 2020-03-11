@@ -142,16 +142,3 @@ class ShutdownInProgress(BaseHttpException):
             msg += ": " + message
 
         super().__init__(503, msg, details)
-
-
-class ServiceUnavailable(BaseHttpException):
-    """
-        The server is unable to process the request
-    """
-
-    def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
-        msg = "An error occurred in the server while processing the request"
-        if message is not None:
-            msg += ": " + message
-
-        super().__init__(503, msg, details)
