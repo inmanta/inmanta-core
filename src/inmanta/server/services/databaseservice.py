@@ -79,8 +79,12 @@ class DatabaseService(protocol.ServerSlice):
     async def get_status(self) -> Dict[str, ArgumentTypes]:
         """ Get the status of the database connection
         """
-        status = {"connected": self._pool is not None, "database": opt.db_name.get(), "host": opt.db_host.get()}
-
+        connected = await self.get_connection_status()
+        status = {
+            "connected": connected,
+            "database": opt.db_name.get(),
+            "host": opt.db_host.get(),
+        }
         if self._pool is not None:
             status["max_pool"] = self._pool._maxsize
             status["open_connections"] = (
@@ -88,3 +92,12 @@ class DatabaseService(protocol.ServerSlice):
             )
 
         return status
+
+    async def get_connection_status(self) -> bool:
+        if self._pool is not None and not self._pool._closing and not self._pool._closed:
+            try:
+                async with self._pool.acquire(timeout=10):
+                    return True
+            except Exception:
+                LOGGER.exception("Connection to PostgreSQL failed")
+        return False
