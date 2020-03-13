@@ -25,8 +25,10 @@ from inmanta.ast import DoubleSetException, NotFoundException, RuntimeException
 from inmanta.ast.statements import Literal
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.ast.variables import Reference
+from inmanta.execute.dataflow.datatrace import DataTraceRenderer
 from inmanta.execute.dataflow import (
     AssignableNodeReference,
+    AssignableNode,
     Assignment,
     AttributeNode,
     DataflowGraph,
@@ -259,3 +261,38 @@ n = x.n
         """,
         RuntimeException,
     )
+
+
+# TODO: replace placeholder test with actual tests
+def test_placeholder(dataflow_test_helper) -> None:
+    dataflow_test_helper.compile(
+        """
+entity A:
+    number n
+end
+
+entity B:
+    number n
+end
+
+implementation ia for A:
+    b = B()
+    self.n = b.n
+end
+implement A using ia
+
+implementation ib for B:
+    self.n = 42
+end
+implement B using ib
+
+x.n = 42
+x = A()
+n = x.n
+n = 42
+        """,
+    )
+    n = dataflow_test_helper.get_graph().resolver.get_dataflow_node("n")
+    assert isinstance(n, VariableNodeReference)
+    print(DataTraceRenderer(n.node).render())
+    assert False

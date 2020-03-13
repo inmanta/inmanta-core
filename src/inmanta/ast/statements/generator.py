@@ -509,7 +509,7 @@ class Constructor(ExpressionStatement):
         """
             The representation of the this statement
         """
-        return "Construct(%s)" % (self.class_type)
+        return self.pretty_print()
 
 
 class WrappedKwargs(ExpressionStatement):
