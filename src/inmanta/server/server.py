@@ -173,7 +173,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         slices = []
         extension_names = set()
         for slice_name, slice in self._server.get_slices().items():
-            slices.append(SliceStatus(name=slice_name, status=await slice.get_status()))
+            try:
+                slices.append(SliceStatus(name=slice_name, status=await slice.get_status()))
+            except Exception:
+                LOGGER.error(
+                    f"The following error occured while trying to determine the status of slice {slice_name}", exc_info=True,
+                )
+
             ext_name = slice_name.split(".")[0]
             package_name = slice.__class__.__module__.split(".")[0]
 
