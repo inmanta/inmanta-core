@@ -42,6 +42,7 @@ def entity_instance(entity: str) -> InstanceNode:
 
 @pytest.mark.parametrize("instance,expected_repr", [
     (ValueNode(42), "42"),
+    (ValueNode("42"), "'42'"),
     (ValueNode(42).reference(), "42"),
     (ValueNode("Hello World!"), repr("Hello World!")),
     (AssignableNode("x"), "x"),
