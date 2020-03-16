@@ -148,7 +148,7 @@ class DataTraceRenderer:
         responsible: "Locatable" = assignment.responsible
         return [
             "%s" % assignment.rhs,
-            "SET BY `%s`" % responsible.pretty_print() if isinstance(responsible, Statement) else responsible,
+            "SET BY `%s`" % (responsible.pretty_print() if isinstance(responsible, Statement) else responsible),
             "AT %s" % responsible.get_location(),
         ]
 

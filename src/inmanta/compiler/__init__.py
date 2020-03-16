@@ -21,11 +21,16 @@ import imp
 import logging
 import os
 import sys
+from typing import List, Optional
 
+import inmanta.execute.dataflow as dataflow
 from inmanta import const
-from inmanta.ast import CompilerException, LocatableString, Namespace, Range
+from inmanta.ast import AttributeException, CompilerException, DoubleSetException, LocatableString, Namespace, Range
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
+from inmanta.config import Config
 from inmanta.execute import scheduler
+from inmanta.execute.dataflow.datatrace import DataTraceRenderer
+from inmanta.execute.runtime import ResultVariable
 from inmanta.module import Project
 from inmanta.plugins import PluginMeta
 
@@ -46,8 +51,7 @@ def do_compile(refs={}):
     try:
         success = sched.run(compiler, statements, blocks)
     except CompilerException as e:
-        e.attach_compile_info(compiler)
-        raise e
+        compiler.handle_exception(e)
 
     LOGGER.debug("Compile done")
 
@@ -193,3 +197,28 @@ class Compiler(object):
         statements.append(entity)
         statements.append(requires_rel)
         return (statements, blocks)
+
+    def handle_exception(self, exception: CompilerException) -> None:
+        show_datatrace: bool = Config.get("compiler_datatrace", "enabled", "false") == "true"
+        if not show_datatrace:
+            raise exception
+
+        causes: List[CompilerException] = exception.get_causes()
+        for cause in causes:
+            try:
+                self.handle_exception(cause)
+            except CompilerException:
+                pass
+        if not causes:
+            trace: Optional[str] = None
+            if isinstance(exception, DoubleSetException):
+                variable: ResultVariable = exception.variable
+                trace = DataTraceRenderer.render(variable.get_dataflow_node())
+            elif isinstance(exception, AttributeException):
+                node_ref: Optional[dataflow.InstanceNodeReference] = exception.instance.instance_node
+                assert node_ref is not None
+                trace = DataTraceRenderer.render(node_ref.top_node().register_attribute(exception.attribute))
+            if trace is not None:
+                exception.msg += "\ndata trace:\n%s" % trace
+        exception.attach_compile_info(self)
+        raise exception
