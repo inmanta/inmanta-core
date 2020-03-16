@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING, List, Iterable, Optional
 from inmanta.execute.dataflow import (
     Assignment,
     AssignableNode,
+    AttributeNode,
+    AttributeNodeReference,
     AssignableNodeReference,
     VariableNodeReference,
     DataflowGraph,
@@ -34,10 +36,13 @@ from inmanta.execute.runtime import Instance
 if TYPE_CHECKING:
     pass
 
+
+# TODO: make all methods static-/classmethods?
+# TODO: document methods
+# TODO: write tests
 class DataTraceRenderer:
     def __init__(self, node: AssignableNode, render_self: bool = True) -> None:
         self.node: AssignableNode = node
-        self.render_self: bool = render_self
 
     def _prefix_line(self, prefix: str, line: str) -> str:
         return prefix + line
@@ -67,47 +72,39 @@ class DataTraceRenderer:
                     and len(var_node.node.instance_assignments) == 1 \
                     and isinstance(var_node.node.instance_assignments[0].responsible, Instance):
                 instance_node: "InstanceNode" = var_node.node.instance_assignments[0].rhs.top_node()
-                assert instance_node.responsible is not None
-                # TODO: don't pass reference but node itself
-                result += [
-                    "IN IMPLEMENTATION WITH self = %s" % instance_node,
-                    *self._shift([
-                        "CONSTRUCTED BY %s" % instance_node.responsible,
-                        "AT %s" % instance_node.responsible.get_location(),
-                    ]),
-                ]
-                assert instance_node.context is not None
-                result += self._shift(self._render_implementation_context(instance_node.context))
+                result.append("IN IMPLEMENTATION WITH self = %s" % instance_node)
+                result += self._shift(self._render_constructor(instance_node))
+                if instance_node.context is not None:
+                    result += self._shift(self._render_implementation_context(instance_node.context))
             return result
         except NotFoundException:
             return []
 
-    def _render_instance(self, instance: InstanceNode) -> List[str]:
-        result: List[str] = []
-        # TODO: pretty_print, str, repr, implicit?
-        # TODO: handle Optionals
-        result += [
-            "CONSTRUCTED BY %s" % instance.responsible.pretty_print(),
+    def _render_constructor(self, instance: InstanceNode) -> List[str]:
+        if instance.responsible is None:
+            return []
+        return [
+            "CONSTRUCTED BY `%s`" % instance.responsible.pretty_print(),
             "AT %s" % instance.responsible.get_location(),
         ]
-        assert instance.context is not None
-        result += self._render_implementation_context(instance.context)
+
+    def _render_instance(self, instance: InstanceNode) -> List[str]:
+        result: List[str] = []
+        result += self._render_constructor(instance)
+        if instance.context is not None:
+            result += self._render_implementation_context(instance.context)
         for index_node in instance.get_all_index_nodes():
             if index_node is instance:
                 continue
-            assert index_node.responsible is not None
-            assert index_node.context is not None
             result += [
                 "",
-                "INDEX MATCH: %s" % index_node,
+                "INDEX MATCH: `%s`" % index_node,
             ]
 
             subblock: List[str] = []
-            subblock += [
-                "CONSTRUCTED BY %s" % index_node.responsible,
-                "AT %s" % index_node.responsible.get_location(),
-            ]
-            subblock += self._render_implementation_context(index_node.context)
+            subblock += self._render_constructor(index_node)
+            if index_node.context is not None:
+                subblock += self._render_implementation_context(index_node.context)
 
             result += self._shift(subblock)
         return result
@@ -116,16 +113,27 @@ class DataTraceRenderer:
         responsible: "Locatable" = assignment.responsible
         return [
             "%s" % assignment.rhs,
-            "SET BY %s" % responsible,
+            "SET BY `%s`" % responsible,
             "AT %s" % responsible.get_location(),
         ]
 
-    def render(self) -> str:
-        # TODO: SUBTREE for instance if self.node is AttributeNode
+    def _render_reference(self, node_ref: AssignableNodeReference) -> List[str]:
+        result: List[str] = []
+        if isinstance(node_ref, AttributeNodeReference):
+            result.append("SUBTREE for %s:" % node_ref.instance_var_ref)
+            result += self._shift(self._render_reference(node_ref.instance_var_ref))
+        for node in node_ref.nodes():
+            result += DataTraceRenderer(node).render(tree_root=False).split("\n")
+        return result
+
+    def render(self, tree_root: bool = True) -> str:
         # TODO: show Equivalences instead of individual nodes. Also show internal assignments
         result: List[str] = []
-        if self.render_self:
+        if tree_root:
             result.append(repr(self.node))
+            if isinstance(self.node, AttributeNode):
+                result.append("SUBTREE for %s:" % self.node.instance)
+                result += self._shift(self._render_instance(self.node.instance))
         assignments: List[Assignment] = list(self.node.assignments())
         nb_assignments: int = len(assignments)
         for i, assignment in enumerate(assignments):
@@ -138,8 +146,7 @@ class DataTraceRenderer:
             if isinstance(assignment.rhs, InstanceNodeReference):
                 subblock += self._render_instance(assignment.rhs.top_node())
             if isinstance(assignment.rhs, AssignableNodeReference):
-                for node in assignment.rhs.nodes():
-                    subblock += DataTraceRenderer(node, render_self=False).render().split("\n")
+                subblock += self._render_reference(assignment.rhs)
 
             result += self._branch(subblock, last)
         return "\n".join(result)

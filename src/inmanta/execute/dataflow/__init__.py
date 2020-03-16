@@ -764,6 +764,9 @@ class AttributeNode(AssignableNode):
         self.responsibles.add((responsible, context))
         self.instance.assign_other_direction(self.name, node_ref, responsible, context)
 
+    def __repr__(self) -> str:
+        return "attribute %s on %s" % (super().__repr__(), repr(self.instance))
+
 
 class InstanceNode(Node):
     """
@@ -784,7 +787,7 @@ class InstanceNode(Node):
         Node.__init__(self)
         self.attributes: Dict[str, AttributeNode] = {name: AttributeNode(self, name) for name in attributes}
         self.entity: Optional["Entity"] = None
-        self.responsible: Optional["Locatable"] = None
+        self.responsible: Optional["Constructor"] = None
         self.context: Optional["DataflowGraph"] = None
         self._index_node: Optional[InstanceNode] = None
         self._all_index_nodes: Set["InstanceNode"] = {self}

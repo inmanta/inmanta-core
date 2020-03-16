@@ -23,6 +23,7 @@ from compiler.dataflow.conftest import create_instance
 from inmanta.ast import Namespace
 from inmanta.ast.entity import Entity
 from inmanta.execute.dataflow import (
+    AttributeNode,
     AttributeNodeReference,
     AssignableNode,
     DataflowGraph,
@@ -48,6 +49,7 @@ def entity_instance(entity: str) -> InstanceNode:
     (AttributeNodeReference(AttributeNodeReference(AssignableNode("x").reference(), "y"), "z"), "x.y.z"),
     (entity_instance("MyEntity"), "__config__::MyEntity instance"),
     (entity_instance("MyEntity").reference(), "__config__::MyEntity instance"),
+    (AttributeNode(entity_instance("MyEntity").reference(), "n"), "attribute n on __config__::MyEntity instance"),
 ])
 def test_dataflow_repr(instance: Union[Node, NodeReference], expected_repr: str) -> None:
     assert repr(instance) == expected_repr
