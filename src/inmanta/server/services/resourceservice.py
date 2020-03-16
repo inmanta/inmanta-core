@@ -15,14 +15,13 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import datetime
 import logging
 import os
 import uuid
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
-
-from tornado import locks
 
 from inmanta import const, data
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
@@ -84,7 +83,7 @@ class ResourceService(protocol.ServerSlice):
 
         self._increment_cache: Dict[uuid.UUID, Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]] = {}
         # lock to ensure only one inflight request
-        self._increment_cache_locks: Dict[uuid.UUID, locks.Lock] = defaultdict(lambda: locks.Lock())
+        self._increment_cache_locks: Dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_DATABASE, SLICE_AGENT_MANAGER]
@@ -287,7 +286,7 @@ class ResourceService(protocol.ServerSlice):
         increment = self._increment_cache.get(env.id, None)
         if increment is None:
             lock = self._increment_cache_locks[env.id]
-            with (await lock.acquire()):
+            async with lock:
                 increment = self._increment_cache.get(env.id, None)
                 if increment is None:
                     increment = await data.ConfigurationModel.get_increment(env.id, version)

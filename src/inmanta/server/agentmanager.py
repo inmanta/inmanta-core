@@ -26,8 +26,6 @@ from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Tuple
 from uuid import UUID
 
-from tornado import locks
-
 from inmanta import const, data
 from inmanta.config import Config
 from inmanta.protocol import encode_token, methods
@@ -46,7 +44,7 @@ from . import config as server_config
 LOGGER = logging.getLogger(__name__)
 
 
-agent_lock = locks.Lock()
+agent_lock = asyncio.Lock()
 
 
 """
@@ -109,7 +107,7 @@ class AgentManager(ServerSlice, SessionListener):
         self._fact_resource_block_set: Dict[str, float] = {}
 
         # session lock
-        self.session_lock = locks.Lock()
+        self.session_lock = asyncio.Lock()
         # all sessions
         self.sessions: Dict[UUID, protocol.Session] = {}
         # live sessions
@@ -184,7 +182,7 @@ class AgentManager(ServerSlice, SessionListener):
         """
             Make sure that an agent has been created in the database
         """
-        with (await self.session_lock.acquire()):
+        async with self.session_lock:
             agent = await data.Agent.get(env.id, nodename)
             if agent is not None:
                 return agent
@@ -199,7 +197,7 @@ class AgentManager(ServerSlice, SessionListener):
         return saved
 
     async def _register_session(self, session: protocol.Session, now: datetime) -> None:
-        with (await self.session_lock.acquire()):
+        async with self.session_lock:
             tid = session.tid
             sid = session.get_id()
             nodename = session.nodename
@@ -229,7 +227,7 @@ class AgentManager(ServerSlice, SessionListener):
     async def _expire_session(self, session: protocol.Session, now: datetime) -> None:
         if not self.is_running() or self.is_stopping():
             return
-        with (await self.session_lock.acquire()):
+        async with self.session_lock:
             tid = session.tid
             sid = session.get_id()
 
@@ -336,7 +334,7 @@ class AgentManager(ServerSlice, SessionListener):
         return prim.get_id() == sid
 
     async def _clean_db(self) -> None:
-        with (await self.session_lock.acquire()):
+        async with self.session_lock:
             LOGGER.debug("Cleaning server session DB")
 
             # TODO: do as one query
@@ -472,10 +470,10 @@ class AgentManager(ServerSlice, SessionListener):
         if len(agents) == 0:
             return False
 
-        with (await agent_lock.acquire()):
+        async with agent_lock:
             LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
             for agent in agents:
-                with (await self.session_lock.acquire()):
+                async with self.session_lock:
                     myagent = self.get_agent_client(env.id, agent)
                     if myagent is None:
                         needsstart = True

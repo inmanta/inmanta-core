@@ -15,11 +15,10 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import logging
 import uuid
 from typing import List, Optional, cast
-
-from tornado import locks
 
 from inmanta import data
 from inmanta.data.model import ResourceVersionIdStr
@@ -40,7 +39,7 @@ class DyrunService(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super(DyrunService, self).__init__(SLICE_DRYRUN)
-        self.dryrun_lock = locks.Lock()
+        self.dryrun_lock = asyncio.Lock()
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_DATABASE, SLICE_AGENT_MANAGER]
@@ -75,7 +74,7 @@ class DyrunService(protocol.ServerSlice):
                 LOGGER.warning("Agent %s from model %s in env %s is not available for a dryrun", agent, version_id, env.id)
 
         # Mark the resources in an undeployable state as done
-        with (await self.dryrun_lock.acquire()):
+        async with self.dryrun_lock:
             undeployable_ids = await model.get_undeployable()
             undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undeployable_ids]
             undeployable = await data.Resource.get_resources(environment=env.id, resource_version_ids=undeployable_version_ids)
@@ -144,7 +143,7 @@ class DyrunService(protocol.ServerSlice):
 
     @protocol.handle(methods.dryrun_update, dryrun_id="id", env="tid")
     async def dryrun_update(self, env: data.Environment, dryrun_id: uuid.UUID, resource: str, changes: JsonType) -> Apireturn:
-        with (await self.dryrun_lock.acquire()):
+        async with self.dryrun_lock:
             payload = {"changes": changes, "id_fields": Id.parse_id(resource).to_dict(), "id": resource}
             await data.DryRun.update_resource(dryrun_id, resource, payload)
 
