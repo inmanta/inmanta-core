@@ -46,6 +46,8 @@ class DataTraceRenderer:
         """
             Prefixes a line.
         """
+        if line == "":
+            return prefix.rstrip()
         return prefix + line
 
     @classmethod
@@ -150,17 +152,29 @@ class DataTraceRenderer:
         ]
 
     @classmethod
+    def debug(cls, arg):
+        print(arg)
+        return arg
+
+    @classmethod
     def _render_equivalence(cls, equivalence: Equivalence) -> List[str]:
         """
             Renders information about an equivalence unless trivial. Shows the equivalence's members and the responsible
             assignments.
         """
         if len(equivalence.nodes) > 1:
+            # sort output for consistency
             return [
-                "EQUIVALENT TO %s DUE TO STATEMENTS:" % set(equivalence.nodes),
+                "EQUIVALENT TO {%s} DUE TO STATEMENTS:" % ", ".join(sorted(repr(n) for n in equivalence.nodes)),
                 *cls._indent([
-                    "`%s` AT %s" % (assignment.responsible, assignment.responsible.get_location())
-                    for assignment in equivalence.interal_assignments()
+                    "`%s` AT %s" % resp_loc
+                    for resp_loc in sorted(
+                        (
+                            (assignment.responsible, assignment.responsible.get_location())
+                            for assignment in equivalence.interal_assignments()
+                        ),
+                        key=lambda t: cls.debug(tuple(map(str, reversed(t))))
+                    )
                 ]),
             ]
         return []
