@@ -303,5 +303,5 @@ l = 42
     )
     n = dataflow_test_helper.get_graph().resolver.get_dataflow_node("n")
     assert isinstance(n, VariableNodeReference)
-    print(DataTraceRenderer(n.node).render())
+    print(DataTraceRenderer.render(n.node))
     assert False
