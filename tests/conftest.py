@@ -44,7 +44,7 @@ import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
 from pyformance.registry import MetricsRegistry
-from tornado import netutil, process
+from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 import inmanta.agent
@@ -283,7 +283,6 @@ async def clean_reset(create_db, clean_db):
 
 def reset_all_objects():
     resources.resource.reset()
-    process.Subprocess.uninitialize()
     asyncio.set_child_watcher(None)
     reset_metrics()
     # No dynamic loading of commands at the moment, so no need to reset/reload
