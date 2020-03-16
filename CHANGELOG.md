@@ -14,6 +14,7 @@
  - Removed environmental variables from agent report (#1891)
 
 ## Added
+ - Experimental data trace tool (#1820, #1831)
  - Warning when shadowing variable (#1366)
  - Added support for compiler warnings (#1779)
 
