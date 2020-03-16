@@ -25,10 +25,8 @@ from inmanta.ast import DoubleSetException, NotFoundException, RuntimeException
 from inmanta.ast.statements import Literal
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.ast.variables import Reference
-from inmanta.execute.dataflow.datatrace import DataTraceRenderer
 from inmanta.execute.dataflow import (
     AssignableNodeReference,
-    AssignableNode,
     Assignment,
     AttributeNode,
     DataflowGraph,

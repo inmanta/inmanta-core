@@ -16,17 +16,16 @@
     Contact: code@inmanta.com
 """
 
-import pytest
 from typing import Union
 
-from compiler.dataflow.conftest import create_instance
+import pytest
+
 from inmanta.ast import Namespace
 from inmanta.ast.entity import Entity
 from inmanta.execute.dataflow import (
+    AssignableNode,
     AttributeNode,
     AttributeNodeReference,
-    AssignableNode,
-    DataflowGraph,
     InstanceNode,
     Node,
     NodeReference,
@@ -40,18 +39,21 @@ def entity_instance(entity: str) -> InstanceNode:
     return node
 
 
-@pytest.mark.parametrize("instance,expected_repr", [
-    (ValueNode(42), "42"),
-    (ValueNode("42"), "'42'"),
-    (ValueNode(42).reference(), "42"),
-    (ValueNode("Hello World!"), repr("Hello World!")),
-    (AssignableNode("x"), "x"),
-    (AssignableNode("x").reference(), "x"),
-    (AttributeNodeReference(AttributeNodeReference(AssignableNode("x").reference(), "y"), "z"), "x.y.z"),
-    (entity_instance("MyEntity"), "__config__::MyEntity instance"),
-    (entity_instance("MyEntity").reference(), "__config__::MyEntity instance"),
-    (AttributeNode(entity_instance("MyEntity").reference(), "n"), "attribute n on __config__::MyEntity instance"),
-])
+@pytest.mark.parametrize(
+    "instance,expected_repr",
+    [
+        (ValueNode(42), "42"),
+        (ValueNode("42"), "'42'"),
+        (ValueNode(42).reference(), "42"),
+        (ValueNode("Hello World!"), repr("Hello World!")),
+        (AssignableNode("x"), "x"),
+        (AssignableNode("x").reference(), "x"),
+        (AttributeNodeReference(AttributeNodeReference(AssignableNode("x").reference(), "y"), "z"), "x.y.z"),
+        (entity_instance("MyEntity"), "__config__::MyEntity instance"),
+        (entity_instance("MyEntity").reference(), "__config__::MyEntity instance"),
+        (AttributeNode(entity_instance("MyEntity").reference(), "n"), "attribute n on __config__::MyEntity instance"),
+    ],
+)
 def test_dataflow_repr(instance: Union[Node, NodeReference], expected_repr: str) -> None:
     assert repr(instance) == expected_repr
     assert str(instance) == expected_repr

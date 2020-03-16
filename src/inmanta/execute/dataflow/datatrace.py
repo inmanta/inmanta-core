@@ -17,22 +17,22 @@
 """
 
 from itertools import chain
-from functools import reduce
-from typing import TYPE_CHECKING, List, Iterable, Optional
+from typing import TYPE_CHECKING, Iterable, List, Optional
 
+from inmanta.ast import Locatable, NotFoundException
+from inmanta.ast.statements import Statement
 from inmanta.execute.dataflow import (
-    Assignment,
     AssignableNode,
+    AssignableNodeReference,
+    Assignment,
     AttributeNode,
     AttributeNodeReference,
-    AssignableNodeReference,
-    Equivalence,
-    VariableNodeReference,
     DataflowGraph,
+    Equivalence,
     InstanceNode,
     InstanceNodeReference,
+    VariableNodeReference,
 )
-from inmanta.ast import NotFoundException, Locatable
 from inmanta.execute.runtime import Instance
 
 if TYPE_CHECKING:
@@ -40,7 +40,6 @@ if TYPE_CHECKING:
 
 
 class DataTraceRenderer:
-
     @classmethod
     def _prefix_line(cls, prefix: str, line: str) -> str:
         """
@@ -66,8 +65,8 @@ class DataTraceRenderer:
         """
         if len(lines) == 0:
             return []
-        branch_prefix: str = ('└' if last else '├') + "── "
-        block_prefix: str = (' ' if last else '│') + ' ' * 3
+        branch_prefix: str = ("└" if last else "├") + "── "
+        block_prefix: str = (" " if last else "│") + " " * 3
         result: List[str] = cls._prefix(branch_prefix, lines[0:1])
         result += cls._prefix(block_prefix, lines[1:])
         return result
@@ -77,7 +76,7 @@ class DataTraceRenderer:
         """
             Indents lines.
         """
-        return cls._prefix(' ' * 4, lines)
+        return cls._prefix(" " * 4, lines)
 
     @classmethod
     def _render_implementation_context(cls, context: DataflowGraph) -> List[str]:
@@ -90,9 +89,11 @@ class DataTraceRenderer:
             return []
         result: List[str] = []
         var_node: AssignableNodeReference = context.resolver.get_dataflow_node("self")
-        if isinstance(var_node, VariableNodeReference) \
-                and len(var_node.node.instance_assignments) == 1 \
-                and isinstance(var_node.node.instance_assignments[0].responsible, Instance):
+        if (
+            isinstance(var_node, VariableNodeReference)
+            and len(var_node.node.instance_assignments) == 1
+            and isinstance(var_node.node.instance_assignments[0].responsible, Instance)
+        ):
             instance_node: InstanceNode = var_node.node.instance_assignments[0].rhs.top_node()
             result.append("IN IMPLEMENTATION WITH self = %s" % instance_node)
             result += cls._indent(cls._render_constructor(instance_node))
@@ -147,14 +148,9 @@ class DataTraceRenderer:
         responsible: "Locatable" = assignment.responsible
         return [
             "%s" % assignment.rhs,
-            "SET BY `%s`" % responsible,
+            "SET BY `%s`" % responsible.pretty_print() if isinstance(responsible, Statement) else responsible,
             "AT %s" % responsible.get_location(),
         ]
-
-    @classmethod
-    def debug(cls, arg):
-        print(arg)
-        return arg
 
     @classmethod
     def _render_equivalence(cls, equivalence: Equivalence) -> List[str]:
@@ -166,16 +162,23 @@ class DataTraceRenderer:
             # sort output for consistency
             return [
                 "EQUIVALENT TO {%s} DUE TO STATEMENTS:" % ", ".join(sorted(repr(n) for n in equivalence.nodes)),
-                *cls._indent([
-                    "`%s` AT %s" % resp_loc
-                    for resp_loc in sorted(
-                        (
-                            (assignment.responsible, assignment.responsible.get_location())
-                            for assignment in equivalence.interal_assignments()
-                        ),
-                        key=lambda t: cls.debug(tuple(map(str, reversed(t))))
-                    )
-                ]),
+                *cls._indent(
+                    [
+                        "`%s` AT %s" % resp_loc
+                        for resp_loc in sorted(
+                            (
+                                (
+                                    assignment.responsible.pretty_print()
+                                    if isinstance(assignment.responsible, Statement)
+                                    else str(assignment.responsible),
+                                    str(assignment.responsible.get_location()),
+                                )
+                                for assignment in equivalence.interal_assignments()
+                            ),
+                            key=lambda t: tuple(reversed(t)),
+                        )
+                    ]
+                ),
             ]
         return []
 
@@ -214,11 +217,13 @@ class DataTraceRenderer:
                 result.append("SUBTREE for %s:" % node.instance)
                 result += cls._indent(cls._render_instance(node.instance))
         result += cls._render_equivalence(node.equivalence)
-        assignments: List[Assignment] = list(chain(
-            node.equivalence.external_assignable_assignments(),
-            node.equivalence.instance_assignments(),
-            node.equivalence.value_assignments(),
-        ))
+        assignments: List[Assignment] = list(
+            chain(
+                node.equivalence.external_assignable_assignments(),
+                node.equivalence.instance_assignments(),
+                node.equivalence.value_assignments(),
+            )
+        )
         nb_assignments: int = len(assignments)
         for i, assignment in enumerate(assignments):
             last: bool = i == nb_assignments - 1

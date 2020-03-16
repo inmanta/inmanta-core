@@ -644,7 +644,9 @@ class Equivalence:
             Returns true iff this equivalence is a leaf. An equivalence is a leaf iff it has an instance
             or value assignment, or doesn't have any assignments at all.
         """
-        return any(self.instance_assignments()) or any(self.value_assignments()) or not any(self.external_assignable_assignments())
+        return (
+            any(self.instance_assignments()) or any(self.value_assignments()) or not any(self.external_assignable_assignments())
+        )
 
     def leaves(self) -> Iterator[AssignableNodeReference]:
         """

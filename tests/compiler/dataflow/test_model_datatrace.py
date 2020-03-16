@@ -16,16 +16,15 @@
     Contact: code@inmanta.com
 """
 
+from compiler.dataflow.conftest import DataflowTestHelper
+from typing import Optional, Type
+
 import pytest
 
-from typing import Type, Optional
-
-from inmanta.ast import CompilerException, NotFoundException, DoubleSetException, AttributeException
-from inmanta.execute.proxy import UnsetException
+from inmanta.ast import AttributeException, CompilerException, DoubleSetException, NotFoundException
 from inmanta.execute.dataflow import VariableNodeReference
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
-
-from compiler.dataflow.conftest import DataflowTestHelper
+from inmanta.execute.proxy import UnsetException
 
 
 @pytest.mark.parametrize(
@@ -45,7 +44,6 @@ x
             "x",
             None,
         ),
-
         (
             "uninitialized rhs",
             """
@@ -60,7 +58,6 @@ x
             "x",
             NotFoundException,
         ),
-
         (
             "assignment chain",
             """
@@ -83,7 +80,6 @@ x
             "x",
             NotFoundException,
         ),
-
         (
             "assignment chain with branching",
             """
@@ -121,7 +117,6 @@ x
             "x",
             NotFoundException,
         ),
-
         (
             "equivalence",
             """
@@ -144,7 +139,6 @@ EQUIVALENT TO {{x, y, z}} DUE TO STATEMENTS:
             "x",
             NotFoundException,
         ),
-
         (
             "equivalence with attribute",
             """
@@ -169,7 +163,6 @@ EQUIVALENT TO {{attribute n on __config__::A instance, x, y}} DUE TO STATEMENTS:
             "x",
             UnsetException,
         ),
-
         (
             "double set exception with tail",
             """
@@ -196,7 +189,6 @@ x
             "x",
             DoubleSetException,
         ),
-
         (
             "implementation",
             """
@@ -265,7 +257,6 @@ x_n
             "x_n",
             None,
         ),
-
         (
             "index match double assignment",
             """
@@ -335,4 +326,6 @@ def test_dataflow_trace(
     root = dataflow_test_helper.get_graph().resolver.get_dataflow_node(trace_root)
     assert isinstance(root, VariableNodeReference)
     print(DataTraceRenderer.render(root.node))
-    assert DataTraceRenderer.render(root.node).rstrip() == trace.strip().format(dir=dataflow_test_helper.snippetcompiler.project_dir)
+    assert DataTraceRenderer.render(root.node).rstrip() == trace.strip().format(
+        dir=dataflow_test_helper.snippetcompiler.project_dir
+    )
