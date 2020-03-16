@@ -644,7 +644,7 @@ class Equivalence:
             Returns true iff this equivalence is a leaf. An equivalence is a leaf iff it has an instance
             or value assignment, or doesn't have any assignments at all.
         """
-        return any(self.instance_assignments()) or any(self.value_assignments()) or not any(self.assignable_assignments())
+        return any(self.instance_assignments()) or any(self.value_assignments()) or not any(self.external_assignable_assignments())
 
     def leaves(self) -> Iterator[AssignableNodeReference]:
         """
@@ -659,7 +659,7 @@ class Equivalence:
                 yield from explicit_leaves
             except StopIteration:
                 yield from (node.reference() for node in self.nodes)
-        yield from (node for assignment in self.assignable_assignments() for node in assignment.rhs.leaves())
+        yield from (node for assignment in self.external_assignable_assignments() for node in assignment.rhs.leaves())
 
     def equivalences_on_path(self, node: AssignableNode) -> Set["Equivalence"]:
         """
@@ -673,22 +673,27 @@ class Equivalence:
             set.union,
             (
                 n.equivalence.equivalences_on_path(node)
-                for n in set(chain.from_iterable(a.rhs.nodes() for a in self.assignable_assignments()))
+                for n in set(chain.from_iterable(a.rhs.nodes() for a in self.external_assignable_assignments()))
             ),
             set(),
         )
         return child_paths.union({self}) if len(child_paths) > 0 else set(())
 
-    def assignable_assignments(self) -> Iterator[Assignment[AssignableNodeReference]]:
+    def _is_internal_assignment(self, assignment: Assignment[AssignableNodeReference]) -> bool:
+        filtered: Iterator[AssignableNode] = filter(assignment.rhs.ref_to_node, self.nodes)
+        return any(filtered)
+
+    def interal_assignments(self) -> Iterator[Assignment[AssignableNodeReference]]:
+        """
+            Returns an iterator over internal AssignableNodes assigned to this Equivalence.
+        """
+        return filter(self._is_internal_assignment, chain.from_iterable(n.assignable_assignments for n in self.nodes))
+
+    def external_assignable_assignments(self) -> Iterator[Assignment[AssignableNodeReference]]:
         """
             Returns an iterator over external AssignableNodes assigned to this Equivalence.
         """
-
-        def is_internal(assignment: Assignment[AssignableNodeReference]) -> bool:
-            filtered: Iterator[AssignableNode] = filter(assignment.rhs.ref_to_node, self.nodes)
-            return any(filtered)
-
-        return filterfalse(is_internal, chain.from_iterable(n.assignable_assignments for n in self.nodes))
+        return filterfalse(self._is_internal_assignment, chain.from_iterable(n.assignable_assignments for n in self.nodes))
 
     def instance_assignments(self) -> Iterator[Assignment[InstanceNodeReference]]:
         """

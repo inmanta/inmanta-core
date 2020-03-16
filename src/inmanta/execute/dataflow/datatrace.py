@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+from itertools import chain
 from functools import reduce
 from typing import TYPE_CHECKING, List, Iterable, Optional
 
@@ -25,6 +26,7 @@ from inmanta.execute.dataflow import (
     AttributeNode,
     AttributeNodeReference,
     AssignableNodeReference,
+    Equivalence,
     VariableNodeReference,
     DataflowGraph,
     InstanceNode,
@@ -64,21 +66,20 @@ class DataTraceRenderer:
 
     def _render_implementation_context(self, context: DataflowGraph) -> List[str]:
         try:
-            result: List[str] = []
-            # TODO: better detection of implementation -> based on __self__ node?
             context.resolver.lookup("self")
-            var_node: AssignableNodeReference = context.resolver.get_dataflow_node("self")
-            if isinstance(var_node, VariableNodeReference) \
-                    and len(var_node.node.instance_assignments) == 1 \
-                    and isinstance(var_node.node.instance_assignments[0].responsible, Instance):
-                instance_node: "InstanceNode" = var_node.node.instance_assignments[0].rhs.top_node()
-                result.append("IN IMPLEMENTATION WITH self = %s" % instance_node)
-                result += self._shift(self._render_constructor(instance_node))
-                if instance_node.context is not None:
-                    result += self._shift(self._render_implementation_context(instance_node.context))
-            return result
         except NotFoundException:
             return []
+        result: List[str] = []
+        var_node: AssignableNodeReference = context.resolver.get_dataflow_node("self")
+        if isinstance(var_node, VariableNodeReference) \
+                and len(var_node.node.instance_assignments) == 1 \
+                and isinstance(var_node.node.instance_assignments[0].responsible, Instance):
+            instance_node: InstanceNode = var_node.node.instance_assignments[0].rhs.top_node()
+            result.append("IN IMPLEMENTATION WITH self = %s" % instance_node)
+            result += self._shift(self._render_constructor(instance_node))
+            if instance_node.context is not None:
+                result += self._shift(self._render_implementation_context(instance_node.context))
+        return result
 
     def _render_constructor(self, instance: InstanceNode) -> List[str]:
         if instance.responsible is None:
@@ -126,15 +127,30 @@ class DataTraceRenderer:
             result += DataTraceRenderer(node).render(tree_root=False).split("\n")
         return result
 
+    def _render_equivalence(self, equivalence: Equivalence) -> List[str]:
+        if len(equivalence.nodes) > 1:
+            return [
+                "EQUIVALENT TO %s DUE TO STATEMENTS:" % set(equivalence.nodes),
+                *self._shift([
+                    "`%s` AT %s" % (assignment.responsible, assignment.responsible.get_location())
+                    for assignment in equivalence.interal_assignments()
+                ]),
+            ]
+        return []
+
     def render(self, tree_root: bool = True) -> str:
-        # TODO: show Equivalences instead of individual nodes. Also show internal assignments
         result: List[str] = []
         if tree_root:
             result.append(repr(self.node))
             if isinstance(self.node, AttributeNode):
                 result.append("SUBTREE for %s:" % self.node.instance)
                 result += self._shift(self._render_instance(self.node.instance))
-        assignments: List[Assignment] = list(self.node.assignments())
+        result += self._render_equivalence(self.node.equivalence)
+        assignments: List[Assignment] = list(chain(
+            self.node.equivalence.external_assignable_assignments(),
+            self.node.equivalence.instance_assignments(),
+            self.node.equivalence.value_assignments(),
+        ))
         nb_assignments: int = len(assignments)
         for i, assignment in enumerate(assignments):
             last: bool = i == nb_assignments - 1

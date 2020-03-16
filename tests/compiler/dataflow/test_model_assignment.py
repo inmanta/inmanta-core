@@ -290,6 +290,15 @@ x.n = 42
 x = A()
 n = x.n
 n = 42
+
+o = B()
+
+n = m
+m = o.n
+o.n = n
+
+m = l
+l = 42
         """,
     )
     n = dataflow_test_helper.get_graph().resolver.get_dataflow_node("n")
