@@ -70,7 +70,7 @@ class DataTraceRenderer:
                 assert instance_node.responsible is not None
                 # TODO: don't pass reference but node itself
                 result += [
-                    "IN IMPLEMENTATION WITH self = %s" % instance_node.reference(),
+                    "IN IMPLEMENTATION WITH self = %s" % instance_node,
                     *self._shift([
                         "CONSTRUCTED BY %s" % instance_node.responsible,
                         "AT %s" % instance_node.responsible.get_location(),
@@ -88,7 +88,7 @@ class DataTraceRenderer:
         # TODO: handle Optionals
         result += [
             "CONSTRUCTED BY %s" % instance.responsible.pretty_print(),
-            "AT %s" % str(instance.responsible.get_location()),
+            "AT %s" % instance.responsible.get_location(),
         ]
         assert instance.context is not None
         result += self._render_implementation_context(instance.context)
@@ -99,7 +99,7 @@ class DataTraceRenderer:
             assert index_node.context is not None
             result += [
                 "",
-                "INDEX MATCH: %s" % index_node.reference()
+                "INDEX MATCH: %s" % index_node,
             ]
 
             subblock: List[str] = []
@@ -124,9 +124,8 @@ class DataTraceRenderer:
         # TODO: SUBTREE for instance if self.node is AttributeNode
         # TODO: show Equivalences instead of individual nodes. Also show internal assignments
         result: List[str] = []
-        # TODO: don't pass reference but node itself
         if self.render_self:
-            result.append(repr(self.node.reference()))
+            result.append(repr(self.node))
         assignments: List[Assignment] = list(self.node.assignments())
         nb_assignments: int = len(assignments)
         for i, assignment in enumerate(assignments):

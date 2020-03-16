@@ -410,7 +410,7 @@ class VariableNodeReference(AssignableNodeReference, DirectNodeReference):
         return self.node
 
     def __repr__(self) -> str:
-        return self.node.name
+        return repr(self.node)
 
 
 class ValueNodeReference(DirectNodeReference):
@@ -435,7 +435,7 @@ class ValueNodeReference(DirectNodeReference):
         raise Exception("Can not assign attribute on a value node")
 
     def __repr__(self) -> str:
-        return repr(self.node.value)
+        return repr(self.node)
 
 
 class InstanceNodeReference(NodeReference):
@@ -472,16 +472,16 @@ class InstanceNodeReference(NodeReference):
         """
         self.node().assign_attribute(attribute, rhs, responsible, context)
 
-    def __repr__(self) -> str:
-        return "%s instance" % self.top_node().entity
+    def assign_to(self, lhs: "AssignableNode", responsible: "Locatable", context: "DataflowGraph") -> None:
+        lhs.assign_instance(self, responsible, context)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, InstanceNodeReference):
             return NotImplemented
         return self._node == other._node
 
-    def assign_to(self, lhs: "AssignableNode", responsible: "Locatable", context: "DataflowGraph") -> None:
-        lhs.assign_instance(self, responsible, context)
+    def __repr__(self) -> str:
+        return repr(self.top_node())
 
 
 RT = TypeVar("RT", bound=NodeReference, covariant=True)
@@ -519,6 +519,9 @@ class ValueNode(Node):
         if not isinstance(other, ValueNode):
             return NotImplemented
         return self.value == other.value
+
+    def __repr__(self) -> str:
+        return repr(self.value)
 
 
 class NodeStub(ValueNode):
@@ -607,6 +610,9 @@ class AssignableNode(Node):
             node.equivalence = new_equivalence
         # propagate this node's tentative instance to the new leaves, if it exists
         self.equivalence.propagate_tentative_instance()
+
+    def __repr__(self) -> str:
+        return self.name
 
 
 class Equivalence:
@@ -885,3 +891,6 @@ class InstanceNode(Node):
             return
         if ast_attribute.end is not None:
             node_ref.assign_attribute(ast_attribute.end.get_name(), self.reference(), responsible, context)
+
+    def __repr__(self) -> str:
+        return "%s instance" % self.entity
