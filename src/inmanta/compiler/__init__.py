@@ -27,7 +27,7 @@ import inmanta.execute.dataflow as dataflow
 from inmanta import const
 from inmanta.ast import AttributeException, CompilerException, DoubleSetException, LocatableString, Namespace, Range
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
-from inmanta.config import Config
+from inmanta.compiler import config as compiler_config
 from inmanta.execute import scheduler
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
 from inmanta.execute.runtime import ResultVariable
@@ -47,7 +47,7 @@ def do_compile(refs={}):
     LOGGER.debug("Starting compile")
 
     (statements, blocks) = compiler.compile()
-    sched = scheduler.Scheduler()
+    sched = scheduler.Scheduler(compiler_config.datatrace_enable.get())
     try:
         success = sched.run(compiler, statements, blocks)
     except CompilerException as e:
@@ -199,8 +199,7 @@ class Compiler(object):
         return (statements, blocks)
 
     def handle_exception(self, exception: CompilerException) -> None:
-        show_datatrace: bool = Config.get("compiler_datatrace", "enabled", "false") == "true"
-        if not show_datatrace:
+        if not compiler_config.datatrace_enable.get():
             raise exception
 
         causes: List[CompilerException] = exception.get_causes()

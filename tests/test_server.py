@@ -65,8 +65,8 @@ async def test_autostart(server, client, environment, caplog):
     assert len(sessionendpoint._sessions) == 1
 
     LOGGER.warning("Killing agent")
-    agentmanager._agent_procs[env.id].proc.terminate()
-    await agentmanager._agent_procs[env.id].wait_for_exit(raise_error=False)
+    agentmanager._agent_procs[env.id].terminate()
+    await agentmanager._agent_procs[env.id].wait()
     await retry_limited(lambda: len(sessionendpoint._sessions) == 0, 20)
     # Prevent race condition
     await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 20)
@@ -157,8 +157,8 @@ async def test_autostart_batched(client, server, environment):
     assert len(sessionendpoint._sessions) == 1
 
     LOGGER.warning("Killing agent")
-    agentmanager._agent_procs[env.id].proc.terminate()
-    await agentmanager._agent_procs[env.id].wait_for_exit(raise_error=False)
+    agentmanager._agent_procs[env.id].terminate()
+    await agentmanager._agent_procs[env.id].wait()
     await retry_limited(lambda: len(sessionendpoint._sessions) == 0, 20)
     # Prevent race condition
     await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 20)

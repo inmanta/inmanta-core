@@ -24,23 +24,28 @@ import pytest
 import inmanta.compiler as compiler
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import CompilerDeprecationWarning, CompilerRuntimeWarning, VariableShadowWarning
-from inmanta.warnings import WarningsManager
+from inmanta.warnings import InmantaWarning, WarningsManager
 
 
 @pytest.mark.parametrize(
     "option,expected_error,expected_warning",
     [(None, False, True), ("warn", False, True), ("ignore", False, False), ("error", True, False)],
 )
-def test_warnings(option: Optional[str], expected_error: bool, expected_warning: bool):
+@pytest.mark.parametrize("raise_external_warning", [True, False])
+def test_warnings(option: Optional[str], expected_error: bool, expected_warning: bool, raise_external_warning: bool):
     message: str = "Some compiler runtime warning"
-    warning: Warning = CompilerRuntimeWarning(None, message)
+    internal_warning: InmantaWarning = CompilerRuntimeWarning(None, message)
+    external_warning: Warning = Warning(None, "Some external warning")
     with warnings.catch_warnings(record=True) as w:
         WarningsManager.apply_config({"default": option} if option is not None else None)
         if expected_error:
             with pytest.raises(CompilerRuntimeWarning):
-                inmanta_warnings.warn(warning)
+                if raise_external_warning:
+                    # make sure external warnings are ignored (#1905)
+                    warnings.warn(external_warning)
+                inmanta_warnings.warn(internal_warning)
         else:
-            inmanta_warnings.warn(warning)
+            inmanta_warnings.warn(internal_warning)
         if expected_warning:
             assert len(w) == 1
             assert issubclass(w[0].category, CompilerRuntimeWarning)

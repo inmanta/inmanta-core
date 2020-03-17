@@ -21,6 +21,15 @@ from enum import Enum
 from typing import Dict, List, Mapping, Optional, Type, Union
 
 
+class InmantaWarning(Warning):
+    """
+        Base class for Inmanta Warnings.
+    """
+
+    def __init__(self):
+        Warning.__init__(self)
+
+
 class WarningBehaviour(Enum):
     WARN: str = "default"
     IGNORE: str = "ignore"
@@ -33,15 +42,12 @@ class WarningRule:
         When type is set, the rule is only applied to subclasses of the warning type.
     """
 
-    def __init__(self, action: WarningBehaviour, tp: Optional[Type["InmantaWarning"]] = None) -> None:
+    def __init__(self, action: WarningBehaviour, tp: Optional[Type[InmantaWarning]] = None) -> None:
         self.action: WarningBehaviour = action
-        self.type: Optional[Type[Warning]] = tp
+        self.type: Type[Warning] = tp if tp is not None else InmantaWarning
 
     def apply(self) -> None:
-        if self.type is None:
-            warnings.filterwarnings(self.action.value)
-        else:
-            warnings.filterwarnings(self.action.value, category=self.type)
+        warnings.filterwarnings(self.action.value, category=self.type)
 
 
 class WarningOption:
@@ -92,6 +98,10 @@ class WarningsManager:
         """
             Sets all known options based on values in config.
         """
+        # Ignore all external warnings.
+        warnings.filterwarnings(WarningBehaviour.IGNORE.value, category=Warning)
+        # Warn all InmantaWarnings by default. Behaviour can be controlled using the config.
+        warnings.filterwarnings(WarningBehaviour.WARN.value, category=InmantaWarning)
         if config is None:
             return
         # apply all options, given the corresponding values in the config
@@ -101,15 +111,6 @@ class WarningsManager:
                 option.apply(value)
             except KeyError:
                 pass
-
-
-class InmantaWarning(Warning):
-    """
-        Base class for Inmanta Warnings.
-    """
-
-    def __init__(self):
-        Warning.__init__(self)
 
 
 def warn(warning: InmantaWarning):

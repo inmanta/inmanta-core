@@ -27,7 +27,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
 
-from tornado import ioloop, locks
+from tornado import ioloop
 from tornado.concurrent import Future
 
 from inmanta import const, data, env, protocol
@@ -227,7 +227,7 @@ class ResourceAction(object):
             # Explicit cast is required because mypy has issues with * and generics
             results: List[ResourceActionResult] = cast(List[ResourceActionResult], await asyncio.gather(*waiters))
 
-            with (await self.scheduler.ratelimiter.acquire()):
+            async with self.scheduler.ratelimiter:
                 start = datetime.datetime.now()
                 ctx = handler.HandlerContext(self.resource, logger=self.logger)
 
@@ -416,7 +416,7 @@ class ResourceScheduler(object):
     """
 
     def __init__(
-        self, agent: "AgentInstance", env_id: uuid.UUID, name: str, cache: AgentCache, ratelimiter: locks.Semaphore
+        self, agent: "AgentInstance", env_id: uuid.UUID, name: str, cache: AgentCache, ratelimiter: asyncio.Semaphore
     ) -> None:
         self.generation: Dict[str, ResourceAction] = {}
         self.cad: Dict[str, RemoteResourceAction] = {}
@@ -529,7 +529,7 @@ class ResourceScheduler(object):
 
     async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceAction]) -> None:
         await asyncio.gather(*[resource_action.future for resource_action in resource_actions])
-        with (await self.agent.critical_ratelimiter.acquire()):
+        async with self.agent.critical_ratelimiter:
             if not self.finished():
                 return
             if self._resume_reason is not None:
@@ -575,16 +575,16 @@ class AgentInstance(object):
         self.logger: Logger = LOGGER.getChild(self.name)
 
         # the lock for changing the current ongoing deployment
-        self.critical_ratelimiter = locks.Semaphore(1)
+        self.critical_ratelimiter = asyncio.Semaphore(1)
         # lock for dryrun tasks
-        self.dryrunlock = locks.Semaphore(1)
+        self.dryrunlock = asyncio.Semaphore(1)
 
         # multi threading control
         # threads to setup connections
         self.provider_thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="ProviderPool_%s" % name)
         # threads to work
         self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(process.poolsize, thread_name_prefix="Pool_%s" % name)
-        self.ratelimiter = locks.Semaphore(process.poolsize)
+        self.ratelimiter = asyncio.Semaphore(process.poolsize)
 
         if process.environment is None:
             raise Exception("Agent instance started without a valid environment id set.")
@@ -735,7 +735,7 @@ class AgentInstance(object):
             self.logger.warning("%s aborted by rate limiter", reason)
             return
 
-        with (await self.critical_ratelimiter.acquire()):
+        async with self.critical_ratelimiter:
             if not self._can_get_resources():
                 self.logger.warning("%s aborted by rate limiter", reason)
                 return
@@ -773,8 +773,8 @@ class AgentInstance(object):
         return 200
 
     async def do_run_dryrun(self, version: int, dry_run_id: uuid.UUID) -> None:
-        with (await self.dryrunlock.acquire()):
-            with (await self.ratelimiter.acquire()):
+        async with self.dryrunlock:
+            async with self.ratelimiter:
                 response = await self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
                 if response.code == 404:
                     self.logger.warning("Version %s does not exist, can not run dryrun", version)
@@ -875,7 +875,7 @@ class AgentInstance(object):
                 self._cache.close_version(version)
 
     async def get_facts(self, resource: JsonType) -> Apireturn:
-        with (await self.ratelimiter.acquire()):
+        async with self.ratelimiter:
             undeployable, resources = await self.load_resources(resource["model"], const.ResourceAction.getfact, [resource])
 
             if undeployable or not resources:
@@ -1003,8 +1003,8 @@ class Agent(SessionEndpoint):
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.poolsize = poolsize
-        self.ratelimiter = locks.Semaphore(poolsize)
-        self.critical_ratelimiter = locks.Semaphore(cricital_pool_size)
+        self.ratelimiter = asyncio.Semaphore(poolsize)
+        self.critical_ratelimiter = asyncio.Semaphore(cricital_pool_size)
         self.thread_pool = ThreadPoolExecutor(poolsize, thread_name_prefix="mainpool")
 
         if agent_map is None:

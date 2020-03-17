@@ -254,7 +254,7 @@ def compile_project(options: argparse.Namespace):
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
 
     if options.datatrace is True:
-        Config.set("compiler_datatrace", "enabled", "true")
+        Config.set("compiler", "datatrace_enable", "true")
 
     module.Project.get(options.main_file)
 
