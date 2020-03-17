@@ -22,10 +22,10 @@ import logging
 import os
 import sys
 
-import inmanta.compiler.config as compiler_config
 from inmanta import const
 from inmanta.ast import CompilerException, LocatableString, Namespace, Range
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
+from inmanta.compiler import config as compiler_config
 from inmanta.execute import scheduler
 from inmanta.module import Project
 from inmanta.plugins import PluginMeta
