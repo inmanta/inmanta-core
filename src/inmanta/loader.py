@@ -22,6 +22,7 @@ import inspect
 import logging
 import os
 import types
+from importlib.abc import FileLoader, Finder
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import pkg_resources
@@ -231,3 +232,57 @@ class CodeLoader(object):
             self._load_module(module_name, source_file, hash_value)
 
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+
+
+class PluginModuleLoader(FileLoader):
+    """
+        A custom module loader which imports the modules in the inmanta_plugins package.
+    """
+
+    def __init__(self, modulepath: str, fullname: str) -> None:
+        self._modulepath = modulepath
+        path = self._get_path(fullname)
+        # No __init__.py exists for top level package
+        if path != "" and not os.path.exists(path):
+            raise ImportError(f"File {path} doesn't exist")
+        super(PluginModuleLoader, self).__init__(fullname, path)
+
+    def get_source(self, fullname: str) -> bytes:
+        # No __init__.py exists for top level package
+        if self._loading_top_level_package():
+            return "".encode("ascii")
+        with open(self.path, "r", encoding="ascii") as fd:
+            return fd.read().encode("ascii")
+
+    def is_package(self, fullname: str) -> bool:
+        if self._loading_top_level_package():
+            return True
+        return os.path.basename(self.path) == "__init__.py"
+
+    def _get_path(self, fullname: str):
+        module_parts = fullname.split(".")[1:]
+        # No __init__.py exists for top level package
+        if len(module_parts) == 0:
+            return ""
+        module_parts.insert(1, "plugins")
+        path = os.path.join(self._modulepath, *module_parts)
+        if os.path.isdir(path):
+            path = os.path.join(path, "__init__.py")
+        return path
+
+    def _loading_top_level_package(self):
+        return self.path == ""
+
+
+class PluginModuleFinder(Finder):
+    """
+        Custom module finder which handles all the imports for the package inmanta_plugins.
+    """
+
+    def __init__(self, modulepath) -> None:
+        self._modulepath = modulepath
+
+    def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[PluginModuleLoader]:
+        if fullname == const.PLUGINS_PACKAGE or fullname.startswith(f"{const.PLUGINS_PACKAGE}."):
+            return PluginModuleLoader(self._modulepath, fullname)
+        return None

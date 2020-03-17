@@ -17,8 +17,12 @@
 """
 import hashlib
 import inspect
+import os
+import shutil
+import sys
 
 import pytest
+from pytest import fixture
 
 from inmanta import loader
 
@@ -117,3 +121,26 @@ def test():
     cl.deploy_version(hv, "inmanta_bad_unit_test", code)
 
     assert "ModuleNotFoundError: No module named 'badimmport'" in caplog.text
+
+
+@fixture
+def module_path(tmpdir):
+    module_finder = loader.PluginModuleFinder(tmpdir)
+    sys.meta_path.append(module_finder)
+    yield tmpdir
+    sys.meta_path.pop()
+
+
+def test_module_loader(module_path):
+    origin_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "tests")
+    mod_dir = os.path.join(module_path, os.path.basename(origin_mod_dir))
+    shutil.copytree(origin_mod_dir, mod_dir)
+
+    from inmanta_plugins.tests import length
+    assert length("test") == 4
+
+    import inmanta_plugins.tests
+    assert not inmanta_plugins.tests.empty("test")
+
+    with pytest.raises(ImportError):
+        from inmanta_plugins.tests import doesnotexist  # NOQA
