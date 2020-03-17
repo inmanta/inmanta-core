@@ -37,7 +37,6 @@ from inmanta.ast.statements.define import (
     DefineTypeDefault,
 )
 from inmanta.ast.type import TYPES, Type
-from inmanta.config import Config
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver
