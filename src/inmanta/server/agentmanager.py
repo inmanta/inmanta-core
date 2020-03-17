@@ -21,11 +21,10 @@ import os
 import sys
 import time
 import uuid
+from asyncio import subprocess
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Tuple
 from uuid import UUID
-
-from tornado import locks, process
 
 from inmanta import const, data
 from inmanta.config import Config
@@ -45,7 +44,7 @@ from . import config as server_config
 LOGGER = logging.getLogger(__name__)
 
 
-agent_lock = locks.Lock()
+agent_lock = asyncio.Lock()
 
 
 """
@@ -82,12 +81,10 @@ set_parameters
 """
 
 
-async def wait_for_proc_bounded(procs: Iterable[process.Subprocess], timeout: float = const.SHUTDOWN_GRACE_HARD) -> None:
+async def wait_for_proc_bounded(procs: Iterable[subprocess.Process], timeout: float = const.SHUTDOWN_GRACE_HARD) -> None:
     try:
         unfinished_processes = [proc for proc in procs if proc.returncode is None]
-        await asyncio.wait_for(
-            asyncio.gather(*[asyncio.shield(proc.wait_for_exit(raise_error=False)) for proc in unfinished_processes]), timeout
-        )
+        await asyncio.wait_for(asyncio.gather(*[asyncio.shield(proc.wait()) for proc in unfinished_processes]), timeout)
     except asyncio.TimeoutError:
         LOGGER.warning("Agent processes did not close in time (%s)", procs)
 
@@ -102,7 +99,7 @@ class AgentManager(ServerSlice, SessionListener):
         if fact_back_off is None:
             fact_back_off = opt.server_fact_resource_block.get()
 
-        self._agent_procs: Dict[UUID, process.Subprocess] = {}  # env uuid -> process.SubProcess
+        self._agent_procs: Dict[UUID, subprocess.Process] = {}  # env uuid -> subprocess.Process
 
         # back-off timer for fact requests
         self._fact_resource_block: int = fact_back_off
@@ -110,7 +107,7 @@ class AgentManager(ServerSlice, SessionListener):
         self._fact_resource_block_set: Dict[str, float] = {}
 
         # session lock
-        self.session_lock = locks.Lock()
+        self.session_lock = asyncio.Lock()
         # all sessions
         self.sessions: Dict[UUID, protocol.Session] = {}
         # live sessions
@@ -185,7 +182,7 @@ class AgentManager(ServerSlice, SessionListener):
         """
             Make sure that an agent has been created in the database
         """
-        with (await self.session_lock.acquire()):
+        async with self.session_lock:
             agent = await data.Agent.get(env.id, nodename)
             if agent is not None:
                 return agent
@@ -200,7 +197,7 @@ class AgentManager(ServerSlice, SessionListener):
         return saved
 
     async def _register_session(self, session: protocol.Session, now: datetime) -> None:
-        with (await self.session_lock.acquire()):
+        async with self.session_lock:
             tid = session.tid
             sid = session.get_id()
             nodename = session.nodename
@@ -230,7 +227,7 @@ class AgentManager(ServerSlice, SessionListener):
     async def _expire_session(self, session: protocol.Session, now: datetime) -> None:
         if not self.is_running() or self.is_stopping():
             return
-        with (await self.session_lock.acquire()):
+        async with self.session_lock:
             tid = session.tid
             sid = session.get_id()
 
@@ -337,7 +334,7 @@ class AgentManager(ServerSlice, SessionListener):
         return prim.get_id() == sid
 
     async def _clean_db(self) -> None:
-        with (await self.session_lock.acquire()):
+        async with self.session_lock:
             LOGGER.debug("Cleaning server session DB")
 
             # TODO: do as one query
@@ -354,13 +351,13 @@ class AgentManager(ServerSlice, SessionListener):
                 await agent.update_fields(primary=None)
 
     # utils
-    def _fork_inmanta(
+    async def _fork_inmanta(
         self, args: List[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
-    ) -> process.Subprocess:
+    ) -> subprocess.Process:
         """
             Fork an inmanta process from the same code base as the current code
         """
-        inmanta_path = [sys.executable, "-m", "inmanta.app"]
+        full_args = ["-m", "inmanta.app", *args]
         # handles can be closed, owned by child process,...
         outhandle = None
         errhandle = None
@@ -371,7 +368,9 @@ class AgentManager(ServerSlice, SessionListener):
                 errhandle = open(errfile, "wb+")
 
             # TODO: perhaps show in dashboard?
-            return process.Subprocess(inmanta_path + args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle)
+            return await asyncio.create_subprocess_exec(
+                sys.executable, *full_args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle
+            )
         finally:
             if outhandle is not None:
                 outhandle.close()
@@ -471,10 +470,10 @@ class AgentManager(ServerSlice, SessionListener):
         if len(agents) == 0:
             return False
 
-        with (await agent_lock.acquire()):
+        async with agent_lock:
             LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
             for agent in agents:
-                with (await self.session_lock.acquire()):
+                async with self.session_lock:
                     myagent = self.get_agent_client(env.id, agent)
                     if myagent is None:
                         needsstart = True
@@ -505,14 +504,16 @@ class AgentManager(ServerSlice, SessionListener):
         err: str = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
 
         agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
-        proc = self._fork_inmanta(
+        proc = await self._fork_inmanta(
             ["-vvvv", "--timed-logs", "--config", config_path, "--log-file", agent_log, "agent"], out, err
         )
 
         if env.id in self._agent_procs and self._agent_procs[env.id] is not None:
-            LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].proc.pid)
-            self._agent_procs[env.id].proc.terminate()
-            await wait_for_proc_bounded([self._agent_procs[env.id]])
+            # If the return code is not None the process is already terminated
+            if self._agent_procs[env.id].returncode is None:
+                LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].pid)
+                self._agent_procs[env.id].terminate()
+                await wait_for_proc_bounded([self._agent_procs[env.id]])
 
         self._agent_procs[env.id] = proc
 
@@ -520,7 +521,7 @@ class AgentManager(ServerSlice, SessionListener):
         await retry_limited(lambda: self.get_agent_client(env.id, agents[0]) is not None, 5)
         # await sleep(2)
 
-        LOGGER.debug("Started new agent with PID %s", proc.proc.pid)
+        LOGGER.debug("Started new agent with PID %s", proc.pid)
         return True
 
     async def _make_agent_config(self, env: data.Environment, agent_names: List[str], agent_map: Dict[str, str]) -> str:
@@ -674,7 +675,7 @@ ssl=True
         LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
         if env.id in self._agent_procs:
             subproc = self._agent_procs[env.id]
-            subproc.proc.terminate()
+            subproc.terminate()
             await wait_for_proc_bounded([subproc])
             del self._agent_procs[env.id]
 
@@ -688,7 +689,7 @@ ssl=True
     async def _terminate_agents(self) -> None:
         LOGGER.debug("Stopping all autostarted agents")
         for proc in self._agent_procs.values():
-            proc.proc.terminate()
+            proc.terminate()
         await wait_for_proc_bounded(self._agent_procs.values())
 
         LOGGER.debug("Expiring all sessions")
