@@ -687,13 +687,14 @@ class Equivalence:
 
     def interal_assignments(self) -> Iterator[Assignment[AssignableNodeReference]]:
         """
-            Returns an iterator over internal AssignableNodes assigned to this Equivalence.
+            Returns an iterator over internal (rhs is part of this equivalence) AssignableNodes assigned to this Equivalence.
         """
         return filter(self._is_internal_assignment, chain.from_iterable(n.assignable_assignments for n in self.nodes))
 
     def external_assignable_assignments(self) -> Iterator[Assignment[AssignableNodeReference]]:
         """
-            Returns an iterator over external AssignableNodes assigned to this Equivalence.
+            Returns an iterator over external (rhs is not part of this equivalence) AssignableNodes assigned to this
+            Equivalence.
         """
         return filterfalse(self._is_internal_assignment, chain.from_iterable(n.assignable_assignments for n in self.nodes))
 

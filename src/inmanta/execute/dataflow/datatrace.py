@@ -17,7 +17,7 @@
 """
 
 from itertools import chain
-from typing import TYPE_CHECKING, Iterable, List, Optional
+from typing import Iterable, List, Optional
 
 from inmanta.ast import Locatable, NotFoundException
 from inmanta.ast.statements import Statement
@@ -35,11 +35,58 @@ from inmanta.execute.dataflow import (
 )
 from inmanta.execute.runtime import Instance
 
-if TYPE_CHECKING:
-    pass
-
 
 class DataTraceRenderer:
+    """
+        Renderer for the data trace of an assignable node. The data trace shows all data paths to the node as well as dynamic
+        context (such as implementations) where applicable. The main entrypoint is the render() method.
+    """
+
+    @classmethod
+    def render(cls, node: AssignableNode, tree_root: bool = True) -> str:
+        """
+            Renders the data trace for an assignable node. Shows information about:
+                - the node's parent instance, if it is an attribute node
+                - the node's equivalence
+                - assignments to the node:
+                    - right hand side
+                    - responsible
+                    - the dynamic context it lives in, if any
+            Recurses on the assignment's right hand side.
+
+            :param tree_root: indicates whether this node is the root of the data trace tree. Behaviour for non-root nodes is
+                slightly different in order to prevent output duplication.
+        """
+        result: List[str] = []
+        if tree_root:
+            result.append(repr(node))
+            if isinstance(node, AttributeNode):
+                result.append("SUBTREE for %s:" % node.instance)
+                result += cls._indent(cls._render_instance(node.instance))
+        result += cls._render_equivalence(node.equivalence)
+        assignments: List[Assignment] = list(
+            chain(
+                node.equivalence.external_assignable_assignments(),
+                node.equivalence.instance_assignments(),
+                node.equivalence.value_assignments(),
+            )
+        )
+        nb_assignments: int = len(assignments)
+        for i, assignment in enumerate(assignments):
+            last: bool = i == nb_assignments - 1
+            subblock: List[str] = []
+
+            subblock += cls._render_assignment(assignment)
+            subblock += cls._render_implementation_context(assignment.context)
+
+            if isinstance(assignment.rhs, InstanceNodeReference):
+                subblock += cls._render_instance(assignment.rhs.top_node())
+            if isinstance(assignment.rhs, AssignableNodeReference):
+                subblock += cls._render_reference(assignment.rhs)
+
+            result += cls._branch(subblock, last)
+        return "\n".join(result)
+
     @classmethod
     def _prefix_line(cls, prefix: str, line: str) -> str:
         """
@@ -194,48 +241,3 @@ class DataTraceRenderer:
         for node in node_ref.nodes():
             result += cls.render(node, tree_root=False).split("\n")
         return result
-
-    @classmethod
-    def render(cls, node: AssignableNode, tree_root: bool = True) -> str:
-        """
-            Renders the data trace for an assignable node. Shows information about:
-                - the node's parent instance, if it is an attribute node
-                - the node's equivalence
-                - assignments to the node:
-                    - right hand side
-                    - responsible
-                    - the dynamic context it lives in, if any
-            Recurses on the assignment's right hand side.
-
-            :param tree_root: indicates whether this node is the root of the data trace tree. Behaviour for non-root nodes is
-                slightly different in order to prevent output duplication.
-        """
-        result: List[str] = []
-        if tree_root:
-            result.append(repr(node))
-            if isinstance(node, AttributeNode):
-                result.append("SUBTREE for %s:" % node.instance)
-                result += cls._indent(cls._render_instance(node.instance))
-        result += cls._render_equivalence(node.equivalence)
-        assignments: List[Assignment] = list(
-            chain(
-                node.equivalence.external_assignable_assignments(),
-                node.equivalence.instance_assignments(),
-                node.equivalence.value_assignments(),
-            )
-        )
-        nb_assignments: int = len(assignments)
-        for i, assignment in enumerate(assignments):
-            last: bool = i == nb_assignments - 1
-            subblock: List[str] = []
-
-            subblock += cls._render_assignment(assignment)
-            subblock += cls._render_implementation_context(assignment.context)
-
-            if isinstance(assignment.rhs, InstanceNodeReference):
-                subblock += cls._render_instance(assignment.rhs.top_node())
-            if isinstance(assignment.rhs, AssignableNodeReference):
-                subblock += cls._render_reference(assignment.rhs)
-
-            result += cls._branch(subblock, last)
-        return "\n".join(result)
