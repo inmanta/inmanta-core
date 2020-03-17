@@ -23,6 +23,7 @@ import time
 from collections import deque
 from typing import Dict, List, Set, Tuple
 
+import inmanta.compiler.config as compiler_config
 from inmanta import plugins
 from inmanta.ast import CompilerException, CycleExcpetion, Location, MultiException, RuntimeException
 from inmanta.ast.entity import Entity
@@ -228,7 +229,8 @@ class Scheduler(object):
         # give all loose blocks an empty XC
         # register the XC's as scopes
         # All named scopes are now present
-        enable_dataflow: bool = Config.get("compiler_datatrace", "enabled", "false") == "true"
+
+        enable_dataflow: bool = compiler_config.datatrace_enabled()
         for block in blocks:
             res = Resolver(block.namespace, enable_dataflow)
             xc = ExecutionContext(block, res)
