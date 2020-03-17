@@ -24,7 +24,7 @@ import pytest
 import inmanta.compiler as compiler
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import CompilerDeprecationWarning, CompilerRuntimeWarning, VariableShadowWarning
-from inmanta.warnings import WarningsManager, InmantaWarning
+from inmanta.warnings import InmantaWarning, WarningsManager
 
 
 @pytest.mark.parametrize(
