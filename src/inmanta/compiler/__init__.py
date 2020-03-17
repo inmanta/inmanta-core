@@ -22,6 +22,7 @@ import logging
 import os
 import sys
 
+import inmanta.compiler.config as compiler_config
 from inmanta import const
 from inmanta.ast import CompilerException, LocatableString, Namespace, Range
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
@@ -42,7 +43,7 @@ def do_compile(refs={}):
     LOGGER.debug("Starting compile")
 
     (statements, blocks) = compiler.compile()
-    sched = scheduler.Scheduler()
+    sched = scheduler.Scheduler(compiler_config.datatrace_enable.get())
     try:
         success = sched.run(compiler, statements, blocks)
     except CompilerException as e:

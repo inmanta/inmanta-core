@@ -23,7 +23,6 @@ import time
 from collections import deque
 from typing import Dict, List, Set, Tuple
 
-import inmanta.compiler.config as compiler_config
 from inmanta import plugins
 from inmanta.ast import CompilerException, CycleExcpetion, Location, MultiException, RuntimeException
 from inmanta.ast.entity import Entity
@@ -54,8 +53,8 @@ class Scheduler(object):
         This class schedules statements for execution
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, track_dataflow: bool = False):
+        self.track_dataflow: bool = track_dataflow
 
     def freeze_all(self, exns):
         for t in [t for t in self.types.values() if isinstance(t, Entity)]:
@@ -229,9 +228,8 @@ class Scheduler(object):
         # register the XC's as scopes
         # All named scopes are now present
 
-        enable_dataflow: bool = compiler_config.datatrace_enabled()
         for block in blocks:
-            res = Resolver(block.namespace, enable_dataflow)
+            res = Resolver(block.namespace, self.track_dataflow)
             xc = ExecutionContext(block, res)
             block.context = xc
             block.namespace.scope = xc

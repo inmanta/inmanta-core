@@ -19,7 +19,7 @@
 
 from inmanta.config import Option, is_bool
 
-enable_datatrace: Option[bool] = Option(
+datatrace_enable: Option[bool] = Option(
     "compiler",
     "datatrace_enable",
     False,
@@ -28,7 +28,3 @@ enable_datatrace: Option[bool] = Option(
     " during the development process.",
     is_bool,
 )
-
-
-def datatrace_enabled() -> bool:
-    return enable_datatrace.get()
