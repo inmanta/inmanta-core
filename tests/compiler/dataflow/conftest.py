@@ -82,7 +82,7 @@ class DataflowTestHelper:
     def compile(self, snippet: str, expected_error_type: Optional[Type[RuntimeException]] = None) -> None:
         def compile():
             self.snippetcompiler.setup_for_snippet(snippet)
-            Config.set("compiler_datatrace", "enabled", "true")
+            Config.set("compiler", "datatrace_enable", "true")
             (self._types, root_ns) = compiler.do_compile()
             self._namespace = root_ns.get_child("__config__")
 
