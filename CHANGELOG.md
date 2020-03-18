@@ -8,7 +8,7 @@
  - Default constructors (typedef MyType as SomeEntityType(some_field = "some_value")). Use inheritance instead. (#402)
 
 ## Fixed
- - Various compiler error reporting improvements (#1810)
+ - Various compiler error reporting improvements (#1810, #1920)
  - Fixed cache leak in agent when deployments are canceled (#1883)
  - Improved robustness of modules update (#1885)
  - Removed environmental variables from agent report (#1891)
