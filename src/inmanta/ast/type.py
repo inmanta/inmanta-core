@@ -109,9 +109,11 @@ class Type(Locatable):
 
 
 class NamedType(Type, Named):
-    def get_double_defined_exception(self, other: "NamedType") -> DuplicateException:
-        """produce a customized error message for this type"""
-        raise NotImplementedError()
+    def get_double_defined_exception(self, other: "NamedType") -> "DuplicateException":
+        """produce an error message for this type"""
+        raise DuplicateException(
+            self, other, "Type %s is already defined" % (self.get_full_name())
+        )
 
 
 class NullableType(Type):

@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional
 import inmanta.ast.type as InmantaType
 from inmanta import const, protocol
 from inmanta.ast import CompilerException, LocatableString, Namespace, Range, RuntimeException, TypeNotFoundException
+from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
@@ -173,7 +174,7 @@ class PluginMeta(type):
         cls.__functions = {}
 
 
-class Plugin(object, metaclass=PluginMeta):
+class Plugin(NamedType, metaclass=PluginMeta):
     """
         This class models a plugin that can be called from the language.
     """
@@ -190,6 +191,11 @@ class Plugin(object, metaclass=PluginMeta):
             self.arguments = []
 
         self.new_statement = None
+
+        filename: Optional[str] = inspect.getsourcefile(self.__class__.__function__)
+        assert filename is not None
+        line: int = inspect.getsourcelines(self.__class__.__function__)[1] + 1
+        self.location: Range = Range(filename, line, 1, line, 2)
 
     def normalize(self) -> None:
         self.resolver = self.namespace
@@ -282,12 +288,7 @@ class Plugin(object, metaclass=PluginMeta):
         if arg_type == "dict":
             return InmantaType.TypedDict(allowed_element_type)
 
-        filename: Optional[str] = inspect.getsourcefile(self.__class__.__function__)
-        location: Range
-        assert filename is not None
-        line: int = inspect.getsourcelines(self.__class__.__function__)[1] + 1
-        location = Range(filename, line, 1, line, 2)
-        locatable_type: LocatableString = LocatableString(arg_type, location, 0, None)
+        locatable_type: LocatableString = LocatableString(arg_type, self.location, 0, None)
 
         # stack of transformations to be applied to the base InmantaType.Type
         # transformations will be applied right to left
@@ -445,6 +446,12 @@ class Plugin(object, metaclass=PluginMeta):
                 )
 
         return value
+
+    def get_full_name(self) -> str:
+        return "%s::%s" % (self.ns.get_full_name(), self.__class__.__function_name__)
+
+    def type_string(self) -> str:
+        return self.get_full_name()
 
 
 def plugin(
