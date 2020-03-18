@@ -33,7 +33,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple, Uni
 import yaml
 from pkg_resources import parse_requirements, parse_version
 
-from inmanta import const, env, plugins
+from inmanta import const, env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, ModuleNotFoundException, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
@@ -577,8 +577,25 @@ class Project(ModuleLike):
         """
         if not self.loaded:
             LOGGER.warning("loading plugins on project that has not been loaded completely")
+
         for module in self.modules.values():
             module.load_plugins()
+
+        self._configure_module_finder()
+
+    def _configure_module_finder(self):
+        """
+            Setup a custom module loader to handle imports in .py files of the modules.
+        """
+        for finder in sys.meta_path:
+            # PluginModuleFinder already present in sys.meta_path.
+            if isinstance(finder, loader.PluginModuleFinder):
+                finder.add_module_paths(self.modulepath)
+                return
+
+        # PluginModuleFinder not yet present in sys.meta_path.
+        module_finder = loader.PluginModuleFinder(self.modulepath)
+        sys.meta_path.insert(0, module_finder)
 
     def verify(self) -> None:
         # verify module dependencies

@@ -28,7 +28,6 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple
 import pkg_resources
 
 from inmanta import const
-from inmanta.module import Project
 
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
@@ -92,6 +91,8 @@ class SourceInfo(object):
     def requires(self) -> List[str]:
         """ List of python requirements associated with this source file
         """
+        from inmanta.module import Project
+
         if self._requires is None:
             self._requires = Project.get().modules[self._get_module_name()].get_python_requirements_as_list()
         return self._requires
@@ -239,13 +240,10 @@ class PluginModuleLoader(FileLoader):
         A custom module loader which imports the modules in the inmanta_plugins package.
     """
 
-    def __init__(self, modulepath: str, fullname: str) -> None:
-        self._modulepath = modulepath
-        path = self._get_path(fullname)
-        # No __init__.py exists for top level package
-        if path != "" and not os.path.exists(path):
-            raise ImportError(f"File {path} doesn't exist")
-        super(PluginModuleLoader, self).__init__(fullname, path)
+    def __init__(self, modulepaths: List[str], fullname: str) -> None:
+        self._modulepaths = modulepaths
+        path_to_module = self._get_path_to_module(fullname)
+        super(PluginModuleLoader, self).__init__(fullname, path_to_module)
 
     def get_source(self, fullname: str) -> bytes:
         # No __init__.py exists for top level package
@@ -259,16 +257,22 @@ class PluginModuleLoader(FileLoader):
             return True
         return os.path.basename(self.path) == "__init__.py"
 
-    def _get_path(self, fullname: str):
+    def _get_path_to_module(self, fullname: str):
         module_parts = fullname.split(".")[1:]
         # No __init__.py exists for top level package
         if len(module_parts) == 0:
             return ""
         module_parts.insert(1, "plugins")
-        path = os.path.join(self._modulepath, *module_parts)
-        if os.path.isdir(path):
-            path = os.path.join(path, "__init__.py")
-        return path
+        for module_path in self._modulepaths:
+            path_to_module = os.path.join(module_path, *module_parts)
+            if os.path.exists(f"{path_to_module}.py"):
+                return f"{path_to_module}.py"
+            if os.path.isdir(path_to_module):
+                path_to_module = os.path.join(path_to_module, "__init__.py")
+                if os.path.exists(path_to_module):
+                    return path_to_module
+
+        raise ImportError(f"Cannot find module {fullname} in {self._modulepaths}")
 
     def _loading_top_level_package(self):
         return self.path == ""
@@ -279,10 +283,15 @@ class PluginModuleFinder(Finder):
         Custom module finder which handles all the imports for the package inmanta_plugins.
     """
 
-    def __init__(self, modulepath) -> None:
-        self._modulepath = modulepath
+    def __init__(self, modulepaths: List[str]) -> None:
+        self._modulepaths = modulepaths
+
+    def add_module_paths(self, paths: List[str]) -> None:
+        for p in paths:
+            if p not in self._modulepaths:
+                self._modulepaths.append(p)
 
     def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[PluginModuleLoader]:
         if fullname == const.PLUGINS_PACKAGE or fullname.startswith(f"{const.PLUGINS_PACKAGE}."):
-            return PluginModuleLoader(self._modulepath, fullname)
+            return PluginModuleLoader(self._modulepaths, fullname)
         return None

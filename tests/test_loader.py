@@ -125,24 +125,32 @@ def test():
 
 @fixture(scope="function")
 def module_path(tmpdir):
-    module_finder = loader.PluginModuleFinder(tmpdir)
-    sys.meta_path.append(module_finder)
-    yield tmpdir
-    sys.meta_path.pop()
+    module_finder = loader.PluginModuleFinder([str(tmpdir)])
+    sys.meta_path.insert(0, module_finder)
+    yield str(tmpdir)
+    sys.meta_path.remove(module_finder)
 
 
 def test_module_loader(module_path):
-    origin_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "tests")
+    origin_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "submodule")
     mod_dir = os.path.join(module_path, os.path.basename(origin_mod_dir))
     shutil.copytree(origin_mod_dir, mod_dir)
 
-    from inmanta_plugins.tests import length
+    from inmanta_plugins.submodule import test
 
-    assert length("test") == 4
+    assert test() == "test"
 
-    import inmanta_plugins.tests
+    from inmanta_plugins.submodule.submod import test_submod
 
-    assert not inmanta_plugins.tests.empty("test")
+    assert test_submod() == "test_submod"
+
+    from inmanta_plugins.submodule.pkg import test_pkg
+
+    assert test_pkg() == "test_pkg"
+
+    from inmanta_plugins.submodule.pkg.submod2 import test_submod2
+
+    assert test_submod2() == "test_submod2"
 
     with pytest.raises(ImportError):
         from inmanta_plugins.tests import doesnotexist  # NOQA
