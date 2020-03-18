@@ -490,6 +490,11 @@ RT = TypeVar("RT", bound=NodeReference, covariant=True)
 class Assignment(Generic[RT]):
     """
         Assignment of one node to another, caused by a responsible
+
+        :param lhs: The left hand side of the assignment, a node.
+        :param rhs: The right hand side of the assignment, a reference to a node.
+        :param responsible: The responsible (statement) for this assignment.
+        :param context: The dynamic context (e.g. implementation) this assignment lives in.
     """
 
     __slots__ = ("lhs", "rhs", "responsible", "context")
