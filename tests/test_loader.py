@@ -137,9 +137,11 @@ def test_module_loader(module_path):
     shutil.copytree(origin_mod_dir, mod_dir)
 
     from inmanta_plugins.tests import length
+
     assert length("test") == 4
 
     import inmanta_plugins.tests
+
     assert not inmanta_plugins.tests.empty("test")
 
     with pytest.raises(ImportError):
