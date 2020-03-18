@@ -123,7 +123,7 @@ def test():
     assert "ModuleNotFoundError: No module named 'badimmport'" in caplog.text
 
 
-@fixture
+@fixture(scope="function")
 def module_path(tmpdir):
     module_finder = loader.PluginModuleFinder(tmpdir)
     sys.meta_path.append(module_finder)
