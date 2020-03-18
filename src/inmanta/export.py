@@ -222,7 +222,22 @@ class Exporter(object):
             except UnknownException:
                 LOGGER.debug("Dependency manager %s caused an unknown exception", fnc)
 
-        # TODO: check for cycles
+        def cleanup(requires: Union[str, Resource, Id]) -> Id:
+            if isinstance(requires, str):
+                return Id.parse_id(requires)
+            if isinstance(requires, Resource):
+                return requires.id
+            if isinstance(requires, Id):
+                return requires
+            raise Exception(
+                f"A dependency manager inserted the object {repr(requires)} of type {type(requires)} "
+                "into a requires relation. However, only string, Resource or Id are allowable types "
+            )
+
+        # Clean up requires and resource_requires
+        for res in self._resources.values():
+            res.requires = set((cleanup(r) for r in res.requires))
+            res.resource_requires = set(self._resources[r] for r in res.requires)
 
     def _validate_graph(self) -> None:
         """
