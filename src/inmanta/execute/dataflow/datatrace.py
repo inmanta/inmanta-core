@@ -130,6 +130,7 @@ class DataTraceRenderer:
         """
             Renders information about the dynamic implementation context, if it exists.
         """
+        # roundabout way to detect encapsulating context, may lead to false positives, see #1937
         try:
             context.resolver.lookup("self")
         except NotFoundException:
