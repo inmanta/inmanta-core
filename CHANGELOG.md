@@ -15,7 +15,7 @@
  - Use asyncio subprocess instead of tornado subprocess (#1792)
 
 ## Added
- - Warning when shadowing variable (#1366)
+ - Warning when shadowing variable (#1366, #1918)
  - Added support for compiler warnings (#1779, #1905)
 
 # v 2020.1 (2020-02-19) Changes in this release:

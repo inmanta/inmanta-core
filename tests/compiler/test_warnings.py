@@ -106,6 +106,25 @@ implement A using std::none
         assert str(w1.message) == message % (2, 8)
 
 
+def test_1918_shadow_warning_for_loop(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+i = 0
+
+for i in std::sequence(10):
+end
+        """
+    )
+    message: str = "Variable `i` shadowed: originally declared at {dir}/main.cf:%d, shadowed at {dir}/main.cf:%d"
+    message = message.format(dir=snippetcompiler.project_dir)
+    with warnings.catch_warnings(record=True) as w:
+        compiler.do_compile()
+        assert len(w) == 1
+        w1 = w[0]
+        assert issubclass(w1.category, VariableShadowWarning)
+        assert str(w1.message) == message % (2, 4)
+
+
 def test_deprecation_warning_nullable(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
