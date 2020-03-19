@@ -222,9 +222,25 @@ class Exporter(object):
             except UnknownException:
                 LOGGER.debug("Dependency manager %s caused an unknown exception", fnc)
 
+        # Because dependency managers are only semi-trusted code, we can not assume they respect the proper typing
+        # There are already many dependency manager who are somewhat liberal in what they put into the requires set
+
         def cleanup(requires: Union[str, Resource, Id]) -> Id:
+            """
+            Main type cleanup
+
+            :param requires: a requirement, can be a string, resource, Id
+            :return: the same requirement, but as an Id
+            :raises Exception: the requirement can not be converted
+            """
+
             if isinstance(requires, str):
-                return Id.parse_id(requires)
+                myid = Id.parse_id(requires)
+                if myid.version == 0:
+                    raise Exception(
+                        f"A dependency manager inserted a resource id without version this is not allowed {requires}"
+                    )
+                return myid
             if isinstance(requires, Resource):
                 return requires.id
             if isinstance(requires, Id):

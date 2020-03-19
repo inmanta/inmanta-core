@@ -282,3 +282,18 @@ a = exp::RequiresTest(do_break=2)
         "into a requires relation. However, only string, Resource or Id are allowable types",
     ):
         snippetcompiler.do_export()
+
+
+def test_bad_value_in_dep_mgmr_3(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import exp
+
+a = exp::RequiresTest(do_break=3)
+"""
+    )
+    with pytest.raises(
+        Exception,
+        match="A dependency manager inserted a resource id without version this is not allowed aa::Bbbb[agent,name=agent]",
+    ):
+        snippetcompiler.do_export()
