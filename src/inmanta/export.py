@@ -33,6 +33,7 @@ from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_str, is_uuid_opt
 from inmanta.const import ResourceState
+from inmanta.data.model import ResourceVersionIdStr
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
@@ -225,7 +226,7 @@ class Exporter(object):
         # Because dependency managers are only semi-trusted code, we can not assume they respect the proper typing
         # There are already many dependency manager who are somewhat liberal in what they put into the requires set
 
-        def cleanup(requires: Union[str, Resource, Id]) -> Id:
+        def cleanup(requires: Union[ResourceVersionIdStr, Resource, Id]) -> Id:
             """
             Main type cleanup
 

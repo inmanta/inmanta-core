@@ -294,6 +294,6 @@ a = exp::RequiresTest(do_break=3)
     )
     with pytest.raises(
         Exception,
-        match="A dependency manager inserted a resource id without version this is not allowed aa::Bbbb[agent,name=agent]",
+        match="A dependency manager inserted a resource id without version this is not allowed aa::Bbbb\[agent,name=agent\]",
     ):
         snippetcompiler.do_export()
