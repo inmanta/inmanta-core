@@ -16,9 +16,10 @@
     Contact: code@inmanta.com
 """
 
+import sys
 import warnings
 from enum import Enum
-from typing import Dict, List, Mapping, Optional, Type, Union
+from typing import Dict, List, Mapping, Optional, TextIO, Type, Union
 
 
 class InmantaWarning(Warning):
@@ -98,10 +99,7 @@ class WarningsManager:
         """
             Sets all known options based on values in config.
         """
-        # Ignore all external warnings.
-        warnings.filterwarnings(WarningBehaviour.IGNORE.value, category=Warning)
-        # Warn all InmantaWarnings by default. Behaviour can be controlled using the config.
-        warnings.filterwarnings(WarningBehaviour.WARN.value, category=InmantaWarning)
+        cls._apply_default()
         if config is None:
             return
         # apply all options, given the corresponding values in the config
@@ -111,6 +109,49 @@ class WarningsManager:
                 option.apply(value)
             except KeyError:
                 pass
+
+    @classmethod
+    def _apply_default(cls) -> None:
+        """
+            Applies the default warning behaviour.
+        """
+        # Control how warnings are shown
+        warnings.showwarning = cls._showwarning
+        # Ignore all external warnings.
+        warnings.filterwarnings(WarningBehaviour.IGNORE.value, category=Warning)
+        # Warn all InmantaWarnings by default. Behaviour can be controlled using the config.
+        warnings.filterwarnings(WarningBehaviour.WARN.value, category=InmantaWarning)
+
+    @classmethod
+    def _showwarning(
+        cls,
+        message: Union[str, Warning],
+        category: Type[Warning],
+        filename: str,
+        lineno: int,
+        file: Optional[TextIO] = None,
+        line: Optional[str] = None,
+    ) -> None:
+        """
+            Shows a warning.
+
+            :param message: The warning to show.
+            :param category: The type of the warning.
+            :param filename: Required for compatibility but will be ignored.
+            :param lineno: Required for compatibility but will be ignored.
+            :param file: The file to write the warning to. Defaults to stderr.
+            :param line: Required for compatibility but will be ignored.
+        """
+        # implementation based on warnings._showwarnmsg_impl
+        if file is None:
+            file = sys.stderr
+            if file is None:
+                return
+        text: str = "WARNING %s: %s\n" % (category.__name__, message)
+        try:
+            file.write(text)
+        except OSError:
+            pass
 
 
 def warn(warning: InmantaWarning):
