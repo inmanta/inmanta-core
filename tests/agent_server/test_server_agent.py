@@ -3083,7 +3083,24 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
 
     await clienthelper.put_version_simple(resources, version)
 
+    async def all_logs_are_available():
+        """
+            The state of a resource and its logs are not set atomically. As such there is a small window
+            when the deployment is marked as finished, but the logs are not available yet. This check
+            prevents that race condition.
+
+            Expected logs:
+                * Deploy action: Start run/End run
+                * Deploy action: Failed to load handler code or install handler code
+                * Pull action
+                * Store action
+        """
+        response = await client.get_resource(environment, resource_id, logs=True)
+        assert response.code == 200
+        return len(response.result["logs"]) >= 4
+
     await _wait_until_deployment_finishes(client, environment, version)
+    await retry_limited(all_logs_are_available, 10)
 
     response = await client.get_resource(environment, resource_id, logs=True)
     assert response.code == 200
