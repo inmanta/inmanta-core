@@ -166,7 +166,7 @@ class For(DynamicStatement):
         self.base.normalize()
         # self.loop_var.normalize(resolver)
         self.module.normalize()
-        self.module.add_var(self.loop_var)
+        self.module.add_var(self.loop_var, self)
 
     def requires(self) -> List[str]:
         base = self.base.requires()
