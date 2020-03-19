@@ -8,7 +8,7 @@
  - Default constructors (typedef MyType as SomeEntityType(some_field = "some_value")). Use inheritance instead. (#402)
 
 ## Fixed
- - Various compiler error reporting improvements (#1810)
+ - Various compiler error reporting improvements (#1810, #1920)
  - Fixed cache leak in agent when deployments are canceled (#1883)
  - Improved robustness of modules update (#1885)
  - Removed environmental variables from agent report (#1891)
@@ -16,8 +16,8 @@
 
 ## Added
  - Experimental data trace application (#1820, #1831)
- - Warning when shadowing variable (#1366)
- - Added support for compiler warnings (#1779, #1905)
+ - Warning when shadowing variable (#1366, #1918)
+ - Added support for compiler warnings (#1779, #1905, #1906)
 
 # v 2020.1 (2020-02-19) Changes in this release:
 
