@@ -743,9 +743,11 @@ class SnippetCompilationTest(KeepOnFail):
     def setup_for_snippet(self, snippet, autostd=True):
         self.setup_for_snippet_external(snippet)
         Project.set(Project(self.project_dir, autostd=autostd))
+        unload_inmanta_plugins()
 
     def reset(self):
         Project.set(Project(self.project_dir, autostd=Project.get().autostd))
+        unload_inmanta_plugins()
 
     def setup_for_snippet_external(self, snippet):
         if self.modules_dir:

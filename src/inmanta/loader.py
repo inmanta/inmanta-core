@@ -248,9 +248,9 @@ class PluginModuleLoader(FileLoader):
     def get_source(self, fullname: str) -> bytes:
         # No __init__.py exists for top level package
         if self._loading_top_level_package():
-            return "".encode("ascii")
-        with open(self.path, "r", encoding="ascii") as fd:
-            return fd.read().encode("ascii")
+            return "".encode("utf-8")
+        with open(self.path, "r", encoding="utf-8") as fd:
+            return fd.read().encode("utf-8")
 
     def is_package(self, fullname: str) -> bool:
         if self._loading_top_level_package():
@@ -293,5 +293,6 @@ class PluginModuleFinder(Finder):
 
     def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[PluginModuleLoader]:
         if fullname == const.PLUGINS_PACKAGE or fullname.startswith(f"{const.PLUGINS_PACKAGE}."):
+            LOGGER.debug("Loading module: %s", fullname)
             return PluginModuleLoader(self._modulepaths, fullname)
         return None

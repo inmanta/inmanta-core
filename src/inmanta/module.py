@@ -578,10 +578,10 @@ class Project(ModuleLike):
         if not self.loaded:
             LOGGER.warning("loading plugins on project that has not been loaded completely")
 
+        self._configure_module_finder()
+
         for module in self.modules.values():
             module.load_plugins()
-
-        self._configure_module_finder()
 
     def _configure_module_finder(self):
         """
@@ -758,7 +758,6 @@ class Module(ModuleLike):
         super().__init__(path)
         self._project = project
         self._meta = kwmeta
-        self._plugin_namespaces = []  # type: List[str]
 
         if not Module.is_valid_module(self._path):
             raise InvalidModuleException(
@@ -1131,21 +1130,41 @@ class Module(ModuleLike):
 
         try:
             mod_name = self._meta["name"]
-            imp.load_package(const.PLUGINS_PACKAGE + "." + mod_name, plugin_dir)
+            for py_file in glob.glob(os.path.join(plugin_dir, "**", "*.py"), recursive=True):
+                fq_mod_name = self._get_mod_name_for_py_file(py_file, plugin_dir, mod_name)
+                # Already loaded
+                if fq_mod_name in sys.modules.keys():
+                    continue
 
-            self._plugin_namespaces.append(mod_name)
-
-            for py_file in glob.glob(os.path.join(plugin_dir, "*.py")):
-                if not py_file.endswith("__init__.py"):
-                    # name of the python module
-                    sub_mod = const.PLUGINS_PACKAGE + "." + mod_name + "." + os.path.basename(py_file).split(".")[0]
-                    self._plugin_namespaces.append(sub_mod)
-
-                    # load the python file
-                    imp.load_source(sub_mod, py_file)
+                LOGGER.debug("Loading module %s", fq_mod_name)
+                if py_file.endswith("__init__.py"):
+                    imp.load_package(fq_mod_name, os.path.dirname(py_file))
+                else:
+                    imp.load_source(fq_mod_name, py_file)
 
         except ImportError as e:
             raise CompilerException("Unable to load all plug-ins for module %s" % self._meta["name"]) from e
+
+    def _get_mod_name_for_py_file(self, py_file: str, plugin_dir: str, mod_name: str) -> str:
+        rel_py_file = os.path.relpath(py_file, start=plugin_dir)
+
+        def add_prefix(prefix: str, item: str) -> str:
+            if item == "":
+                return prefix
+            else:
+                return f"{prefix}.{item}"
+
+        (head, tail) = os.path.split(rel_py_file)
+        if tail == "__init__.py":
+            result = ""
+        else:
+            result = tail[0:-3]  # Remove .py
+
+        while head != "":
+            (head, tail) = os.path.split(head)
+            result = add_prefix(tail, result)
+
+        return add_prefix(f"{const.PLUGINS_PACKAGE}.{mod_name}", result)
 
     def versions(self):
         """
