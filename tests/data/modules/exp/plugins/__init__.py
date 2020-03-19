@@ -50,11 +50,9 @@ class RequiresTest(resources.PurgeableResource):
 
 @dependency_manager
 def bad_loops(_, all_resources):
-    my_resources = {}
-
-    for resource in all_resources.values():
-        if resource.id.get_entity_type() == "exp::RequiresTest":
-            my_resources[resource.id] = resource
+    my_resources = {
+        resource.id: resource for resource in all_resources.values() if resource.id.get_entity_type() == "exp::RequiresTest"
+    }
 
     for resource in my_resources.values():
         # wire into loop
