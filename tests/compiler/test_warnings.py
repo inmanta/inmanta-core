@@ -36,8 +36,8 @@ def test_warnings(option: Optional[str], expected_error: bool, expected_warning:
     message: str = "Some compiler runtime warning"
     internal_warning: InmantaWarning = CompilerRuntimeWarning(None, message)
     external_warning: Warning = Warning(None, "Some external warning")
+    WarningsManager.apply_config({"default": option} if option is not None else None)
     with warnings.catch_warnings(record=True) as w:
-        WarningsManager.apply_config({"default": option} if option is not None else None)
         if expected_error:
             with pytest.raises(CompilerRuntimeWarning):
                 if raise_external_warning:
