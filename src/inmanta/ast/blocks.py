@@ -17,11 +17,11 @@
 """
 
 from itertools import chain
-from typing import Dict, FrozenSet, Iterator, List, Optional, Tuple
+from typing import Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple
 
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException, VariableShadowWarning
-from inmanta.ast.statements import DefinitionStatement, DynamicStatement
+from inmanta.ast.statements import DefinitionStatement, DynamicStatement, Statement
 from inmanta.execute.runtime import QueueScheduler, Resolver
 
 
@@ -29,7 +29,7 @@ class BasicBlock(object):
     def __init__(self, namespace: Namespace, stmts: List[DynamicStatement] = []) -> None:
         self.__stmts = []  # type: List[DynamicStatement]
         self.__definition_stmts = []  # type: List[DefinitionStatement]
-        self.variables = []  # type: List[str]
+        self.__variables = []  # type: List[Tuple[str, Statement]]
         self.namespace = namespace
 
         for st in stmts:
@@ -48,13 +48,16 @@ class BasicBlock(object):
         self.__definition_stmts.append(stmt)
 
     def get_variables(self) -> List[str]:
-        return self.variables
+        return [var for var, _ in self.__variables]
 
-    def add_var(self, name: str) -> None:
-        self.variables.append(name)
+    def add_var(self, name: str, stmt: Statement) -> None:
+        """
+            Adds a variable to this block, paired with the statement that put it here.
+        """
+        self.__variables.append((name, stmt))
 
     def normalize(self) -> None:
-        self.variables = list(chain.from_iterable(stmt.declared_variables() for stmt in self.__stmts))
+        self.__variables = [(var, stmt) for stmt in self.__stmts for var in stmt.declared_variables()]
 
         for s in self.__stmts:
             try:
@@ -65,7 +68,7 @@ class BasicBlock(object):
         # not used yet
         # self.requires = set([require for s in self.__stmts for require in s.requires()])
 
-        # self.external = self.requires - set(self.variables)
+        # self.external = self.requires - set(self.__variables)
 
         # self.external_not_global = [x for x in self.external if "::" not in x]
 
@@ -107,14 +110,12 @@ class BasicBlock(object):
             The elements are tuples of the variable name, a set of the shadowed locations
             and a set of the originally declared locations.
             :param surrounding_vars: an accumulator for variables declared in surrounding blocks.
-            :param nested_blocks: nested blocks to search for shadowed variables,
-                defaults to this block's statement's nested blocks.
         """
         if surrounding_vars is None:
             surrounding_vars = {}
         surrounding_vars = surrounding_vars.copy()
 
-        def merge_locatables(tuples: Iterator[Tuple[str, Locatable]]) -> Dict[str, FrozenSet[Locatable]]:
+        def merge_locatables(tuples: Iterable[Tuple[str, Locatable]]) -> Dict[str, FrozenSet[Locatable]]:
             acc: Dict[str, FrozenSet[Locatable]] = {}
             for var, loc in tuples:
                 if var not in acc:
@@ -122,10 +123,7 @@ class BasicBlock(object):
                 acc[var] = acc[var].union({loc})
             return acc
 
-        own_variables: Iterator[Tuple[str, Locatable]] = (
-            (var, stmt) for stmt in self.__stmts for var in stmt.declared_variables()
-        )
-        for var, locs in merge_locatables(own_variables).items():
+        for var, locs in merge_locatables(self.__variables).items():
             if var in surrounding_vars:
                 yield (var, locs, surrounding_vars[var])
             surrounding_vars[var] = locs

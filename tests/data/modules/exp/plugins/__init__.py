@@ -17,6 +17,7 @@
 """
 
 from inmanta import resources
+from inmanta.export import dependency_manager
 
 
 @resources.resource("exp::Test", agent="agent", id_attribute="test")
@@ -39,3 +40,29 @@ class Test2(resources.PurgeableResource):
     """
 
     fields = ("name", "agent", "mydict", "mylist")
+
+
+@resources.resource("exp::RequiresTest", agent="agent", id_attribute="name")
+class RequiresTest(resources.PurgeableResource):
+
+    fields = ("name", "agent", "do_break")
+
+
+@dependency_manager
+def bad_loops(_, all_resources):
+    my_resources = {
+        resource.id: resource for resource in all_resources.values() if resource.id.get_entity_type() == "exp::RequiresTest"
+    }
+
+    for resource in my_resources.values():
+        # wire into loop
+        for require_id in resource.requires:
+            if require_id in my_resources:
+                required = my_resources[require_id]
+                required.requires.add(resource.id)
+        if resource.do_break == 1:
+            resource.requires.add("xyz")
+        if resource.do_break == 2:
+            resource.requires.add(object())
+        if resource.do_break == 3:
+            resource.requires.add("aa::Bbbb[agent,name=agent]")
