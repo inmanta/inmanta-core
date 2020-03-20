@@ -264,8 +264,8 @@ And finally, an index:
 
     implement A using std::none
 
-    x = A(n = 42, m = 0)
-    x = A(n = 42, m = 1)
+    A(n = 42, m = 0)
+    A(n = 42, m = 1)
 
 .. code-block::
     :caption: data trace for index.cf
@@ -279,6 +279,9 @@ And finally, an index:
         INDEX MATCH: `__config__::A instance`
             CONSTRUCTED BY `A(n=42,m=1)`
             AT ./index.cf:11
+    ├── 1
+    │   SET BY `A(n=42,m=1)`
+    │   AT ./index.cf:11
     └── 0
         SET BY `A(n=42,m=0)`
         AT ./index.cf:10
