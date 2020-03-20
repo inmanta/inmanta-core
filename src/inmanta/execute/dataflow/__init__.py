@@ -371,6 +371,33 @@ class AttributeNodeReference(AssignableNodeReference):
         return "%s.%s" % (repr(self.instance_var_ref), self.attribute)
 
 
+class InstanceAttributeNodeReference(AssignableNodeReference):
+    """
+        Reference to a node representing an attribute of an instance.
+    """
+
+    __slots__ = ("instance", "attribute")
+
+    def __init__(self, instance: "InstanceNode", attribute: str) -> None:
+        AssignableNodeReference.__init__(self)
+        self.instance: InstanceNode = instance
+        self.attribute: str = attribute
+
+    def nodes(self) -> Iterator["AttributeNode"]:
+        yield self.instance.register_attribute(self.attribute)
+
+    def assignment_node(self) -> "AttributeNode":
+        return next(self.nodes())
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, InstanceAttributeNodeReference):
+            return NotImplemented
+        return self.assignment_node() == other.assignment_node()
+
+    def __repr__(self) -> str:
+        return repr(self.assignment_node())
+
+
 class DirectNodeReference(NodeReference):
     """
         Direct reference to a Node.
@@ -410,7 +437,7 @@ class VariableNodeReference(AssignableNodeReference, DirectNodeReference):
         return self.node
 
     def __repr__(self) -> str:
-        return self.node.name
+        return repr(self.node)
 
 
 class ValueNodeReference(DirectNodeReference):
@@ -435,7 +462,7 @@ class ValueNodeReference(DirectNodeReference):
         raise Exception("Can not assign attribute on a value node")
 
     def __repr__(self) -> str:
-        return repr(self.node.value)
+        return repr(self.node)
 
 
 class InstanceNodeReference(NodeReference):
@@ -472,16 +499,16 @@ class InstanceNodeReference(NodeReference):
         """
         self.node().assign_attribute(attribute, rhs, responsible, context)
 
-    def __repr__(self) -> str:
-        return "%s instance" % self.top_node().entity
+    def assign_to(self, lhs: "AssignableNode", responsible: "Locatable", context: "DataflowGraph") -> None:
+        lhs.assign_instance(self, responsible, context)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, InstanceNodeReference):
             return NotImplemented
         return self._node == other._node
 
-    def assign_to(self, lhs: "AssignableNode", responsible: "Locatable", context: "DataflowGraph") -> None:
-        lhs.assign_instance(self, responsible, context)
+    def __repr__(self) -> str:
+        return repr(self.top_node())
 
 
 RT = TypeVar("RT", bound=NodeReference, covariant=True)
@@ -490,6 +517,11 @@ RT = TypeVar("RT", bound=NodeReference, covariant=True)
 class Assignment(Generic[RT]):
     """
         Assignment of one node to another, caused by a responsible
+
+        :param lhs: The left hand side of the assignment, a node.
+        :param rhs: The right hand side of the assignment, a reference to a node.
+        :param responsible: The responsible (statement) for this assignment.
+        :param context: The dynamic context (e.g. implementation) this assignment lives in.
     """
 
     __slots__ = ("lhs", "rhs", "responsible", "context")
@@ -519,6 +551,9 @@ class ValueNode(Node):
         if not isinstance(other, ValueNode):
             return NotImplemented
         return self.value == other.value
+
+    def __repr__(self) -> str:
+        return repr(self.value)
 
 
 class NodeStub(ValueNode):
@@ -608,6 +643,9 @@ class AssignableNode(Node):
         # propagate this node's tentative instance to the new leaves, if it exists
         self.equivalence.propagate_tentative_instance()
 
+    def __repr__(self) -> str:
+        return self.name
+
 
 class Equivalence:
     """
@@ -638,7 +676,9 @@ class Equivalence:
             Returns true iff this equivalence is a leaf. An equivalence is a leaf iff it has an instance
             or value assignment, or doesn't have any assignments at all.
         """
-        return any(self.instance_assignments()) or any(self.value_assignments()) or not any(self.assignable_assignments())
+        return (
+            any(self.instance_assignments()) or any(self.value_assignments()) or not any(self.external_assignable_assignments())
+        )
 
     def leaves(self) -> Iterator[AssignableNodeReference]:
         """
@@ -653,7 +693,7 @@ class Equivalence:
                 yield from explicit_leaves
             except StopIteration:
                 yield from (node.reference() for node in self.nodes)
-        yield from (node for assignment in self.assignable_assignments() for node in assignment.rhs.leaves())
+        yield from (node for assignment in self.external_assignable_assignments() for node in assignment.rhs.leaves())
 
     def equivalences_on_path(self, node: AssignableNode) -> Set["Equivalence"]:
         """
@@ -667,22 +707,28 @@ class Equivalence:
             set.union,
             (
                 n.equivalence.equivalences_on_path(node)
-                for n in set(chain.from_iterable(a.rhs.nodes() for a in self.assignable_assignments()))
+                for n in set(chain.from_iterable(a.rhs.nodes() for a in self.external_assignable_assignments()))
             ),
             set(),
         )
         return child_paths.union({self}) if len(child_paths) > 0 else set(())
 
-    def assignable_assignments(self) -> Iterator[Assignment[AssignableNodeReference]]:
-        """
-            Returns an iterator over external AssignableNodes assigned to this Equivalence.
-        """
+    def _is_internal_assignment(self, assignment: Assignment[AssignableNodeReference]) -> bool:
+        filtered: Iterator[AssignableNode] = filter(assignment.rhs.ref_to_node, self.nodes)
+        return any(filtered)
 
-        def is_internal(assignment: Assignment[AssignableNodeReference]) -> bool:
-            filtered: Iterator[AssignableNode] = filter(assignment.rhs.ref_to_node, self.nodes)
-            return any(filtered)
+    def interal_assignments(self) -> Iterator[Assignment[AssignableNodeReference]]:
+        """
+            Returns an iterator over internal (rhs is part of this equivalence) AssignableNodes assigned to this Equivalence.
+        """
+        return filter(self._is_internal_assignment, chain.from_iterable(n.assignable_assignments for n in self.nodes))
 
-        return filterfalse(is_internal, chain.from_iterable(n.assignable_assignments for n in self.nodes))
+    def external_assignable_assignments(self) -> Iterator[Assignment[AssignableNodeReference]]:
+        """
+            Returns an iterator over external (rhs is not part of this equivalence) AssignableNodes assigned to this
+            Equivalence.
+        """
+        return filterfalse(self._is_internal_assignment, chain.from_iterable(n.assignable_assignments for n in self.nodes))
 
     def instance_assignments(self) -> Iterator[Assignment[InstanceNodeReference]]:
         """
@@ -758,6 +804,9 @@ class AttributeNode(AssignableNode):
         self.responsibles.add((responsible, context))
         self.instance.assign_other_direction(self.name, node_ref, responsible, context)
 
+    def __repr__(self) -> str:
+        return "attribute %s on %s" % (super().__repr__(), repr(self.instance))
+
 
 class InstanceNode(Node):
     """
@@ -778,7 +827,7 @@ class InstanceNode(Node):
         Node.__init__(self)
         self.attributes: Dict[str, AttributeNode] = {name: AttributeNode(self, name) for name in attributes}
         self.entity: Optional["Entity"] = None
-        self.responsible: Optional["Locatable"] = None
+        self.responsible: Optional["Constructor"] = None
         self.context: Optional["DataflowGraph"] = None
         self._index_node: Optional[InstanceNode] = None
         self._all_index_nodes: Set["InstanceNode"] = {self}
@@ -885,3 +934,6 @@ class InstanceNode(Node):
             return
         if ast_attribute.end is not None:
             node_ref.assign_attribute(ast_attribute.end.get_name(), self.reference(), responsible, context)
+
+    def __repr__(self) -> str:
+        return "%s instance" % self.entity

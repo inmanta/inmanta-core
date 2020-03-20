@@ -18,6 +18,7 @@
 
 from typing import List, Optional, Tuple
 
+import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Locatable, RuntimeException, TypingException
 from inmanta.ast.type import NullableType, TypedList
 from inmanta.execute.runtime import (
@@ -119,6 +120,9 @@ class Attribute(Locatable):
         else:
             out = ResultVariable()
 
+        node_ref: Optional[dataflow.InstanceNodeReference] = instance.instance_node
+        if node_ref is not None:
+            out.set_dataflow_node(dataflow.InstanceAttributeNodeReference(node_ref.top_node(), self.name))
         out.set_type(mytype)
         return out
 
@@ -166,6 +170,9 @@ class RelationAttribute(Attribute):
             out = OptionVariable(self, instance, queue)  # type: ResultVariable
         else:
             out = ListVariable(self, instance, queue)  # type: ResultVariable
+        node_ref: Optional[dataflow.InstanceNodeReference] = instance.instance_node
+        if node_ref is not None:
+            out.set_dataflow_node(dataflow.InstanceAttributeNodeReference(node_ref.top_node(), self.name))
         out.set_type(self.get_type())
         return out
 
