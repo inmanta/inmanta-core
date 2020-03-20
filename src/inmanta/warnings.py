@@ -17,7 +17,9 @@
 """
 
 import sys
+import logging
 import warnings
+
 from enum import Enum
 from typing import Dict, List, Mapping, Optional, TextIO, Type, Union
 
@@ -142,16 +144,18 @@ class WarningsManager:
             :param file: The file to write the warning to. Defaults to stderr.
             :param line: Required for compatibility but will be ignored.
         """
-        # implementation based on warnings._showwarnmsg_impl
-        if file is None:
-            file = sys.stderr
-            if file is None:
-                return
-        text: str = "WARNING %s: %s\n" % (category.__name__, message)
-        try:
-            file.write(text)
-        except OSError:
-            pass
+        # implementation based on warnings._showwarnmsg_impl and logging._showwarning
+        text: str = "%s: %s\n" % (category.__name__, message)
+        if file is not None:
+            try:
+                file.write(text)
+            except OSError:
+                pass
+        else:
+            logger = logging.getLogger("inmanta.warnings")
+            if not logger.handlers:
+                logger.addHandler(logging.NullHandler())
+            logger.warning("%s", text)
 
 
 def warn(warning: InmantaWarning):
