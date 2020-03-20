@@ -47,6 +47,7 @@ async def wait_until_logs_are_available(client: Client, environment: str, resour
         when the deployment is marked as finished, but the logs are not available yet. This check
         prevents that race condition.
     """
+
     async def all_logs_are_available():
         response = await client.get_resource(environment, resource_id, logs=True)
         assert response.code == 200

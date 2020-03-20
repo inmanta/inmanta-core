@@ -34,8 +34,16 @@ from inmanta.config import Config
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
-from utils import UNKWN, ClientHelper, _wait_until_deployment_finishes, assert_equal_ish, log_contains, log_index, \
-    retry_limited, wait_until_logs_are_available
+from utils import (
+    UNKWN,
+    ClientHelper,
+    _wait_until_deployment_finishes,
+    assert_equal_ish,
+    log_contains,
+    log_index,
+    retry_limited,
+    wait_until_logs_are_available,
+)
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
