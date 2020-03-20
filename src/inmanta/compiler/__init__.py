@@ -22,7 +22,7 @@ from typing import List, Optional
 
 import inmanta.execute.dataflow as dataflow
 from inmanta import const
-from inmanta.ast import AttributeException, DoubleSetException, CompilerException, LocatableString, Range
+from inmanta.ast import AttributeException, CompilerException, DoubleSetException, LocatableString, Range
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.compiler import config as compiler_config
 from inmanta.execute import scheduler
