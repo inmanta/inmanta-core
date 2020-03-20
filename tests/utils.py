@@ -41,6 +41,20 @@ async def retry_limited(fun, timeout):
         raise AssertionError("Bounded wait failed")
 
 
+async def wait_until_logs_are_available(client: Client, environment: str, resource_id: str, expect_nr_of_logs: int) -> None:
+    """
+        The state of a resource and its logs are not set atomically. As such there is a small window
+        when the deployment is marked as finished, but the logs are not available yet. This check
+        prevents that race condition.
+    """
+    async def all_logs_are_available():
+        response = await client.get_resource(environment, resource_id, logs=True)
+        assert response.code == 200
+        return len(response.result["logs"]) >= expect_nr_of_logs
+
+    await retry_limited(all_logs_are_available, 10)
+
+
 UNKWN = object()
 
 
