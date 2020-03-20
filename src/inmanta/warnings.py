@@ -16,10 +16,8 @@
     Contact: code@inmanta.com
 """
 
-import sys
 import logging
 import warnings
-
 from enum import Enum
 from typing import Dict, List, Mapping, Optional, TextIO, Type, Union
 
