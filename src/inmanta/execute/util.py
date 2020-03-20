@@ -48,4 +48,3 @@ class NoneValue(object):
 
     def __repr__(self):
         return "null"
-

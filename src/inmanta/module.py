@@ -17,7 +17,7 @@
 """
 
 import glob
-import imp
+import importlib
 import logging
 import os
 import re
@@ -578,24 +578,10 @@ class Project(ModuleLike):
         if not self.loaded:
             LOGGER.warning("loading plugins on project that has not been loaded completely")
 
-        self._configure_module_finder()
+        loader.configure_module_finder(self.modulepath)
 
         for module in self.modules.values():
             module.load_plugins()
-
-    def _configure_module_finder(self):
-        """
-            Setup a custom module loader to handle imports in .py files of the modules.
-        """
-        for finder in sys.meta_path:
-            # PluginModuleFinder already present in sys.meta_path.
-            if isinstance(finder, loader.PluginModuleFinder):
-                finder.add_module_paths(self.modulepath)
-                return
-
-        # PluginModuleFinder not yet present in sys.meta_path.
-        module_finder = loader.PluginModuleFinder(self.modulepath)
-        sys.meta_path.insert(0, module_finder)
 
     def verify(self) -> None:
         # verify module dependencies
@@ -1132,15 +1118,9 @@ class Module(ModuleLike):
             mod_name = self._meta["name"]
             for py_file in glob.glob(os.path.join(plugin_dir, "**", "*.py"), recursive=True):
                 fq_mod_name = self._get_mod_name_for_py_file(py_file, plugin_dir, mod_name)
-                # Already loaded
-                if fq_mod_name in sys.modules.keys():
-                    continue
 
                 LOGGER.debug("Loading module %s", fq_mod_name)
-                if py_file.endswith("__init__.py"):
-                    imp.load_package(fq_mod_name, os.path.dirname(py_file))
-                else:
-                    imp.load_source(fq_mod_name, py_file)
+                importlib.import_module(fq_mod_name)
 
         except ImportError as e:
             raise CompilerException("Unable to load all plug-ins for module %s" % self._meta["name"]) from e

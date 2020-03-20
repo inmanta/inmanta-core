@@ -21,6 +21,7 @@ import imp
 import inspect
 import logging
 import os
+import sys
 import types
 from importlib.abc import FileLoader, Finder
 from typing import Dict, Iterable, List, Optional, Set, Tuple
@@ -296,3 +297,18 @@ class PluginModuleFinder(Finder):
             LOGGER.debug("Loading module: %s", fullname)
             return PluginModuleLoader(self._modulepaths, fullname)
         return None
+
+
+def configure_module_finder(modulepaths: List[str]) -> None:
+    """
+        Setup a custom module loader to handle imports in .py files of the modules.
+    """
+    for finder in sys.meta_path:
+        # PluginModuleFinder already present in sys.meta_path.
+        if isinstance(finder, PluginModuleFinder):
+            finder.add_module_paths(modulepaths)
+            return
+
+    # PluginModuleFinder not yet present in sys.meta_path.
+    module_finder = PluginModuleFinder(modulepaths)
+    sys.meta_path.insert(0, module_finder)
