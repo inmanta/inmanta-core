@@ -16,6 +16,9 @@
     Contact: code@inmanta.com
 """
 
+import imp
+import sys
+
 
 class AnyType(object):
     """
@@ -48,3 +51,13 @@ class NoneValue(object):
 
     def __repr__(self):
         return "null"
+
+
+def ensure_module(name):
+    """
+        Ensure that the module with the given name is available
+    """
+    if name not in sys.modules:
+        parts = name.split(".")
+        mod = imp.new_module(parts[-1])
+        sys.modules[name] = mod

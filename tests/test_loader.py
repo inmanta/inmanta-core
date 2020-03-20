@@ -17,15 +17,10 @@
 """
 import hashlib
 import inspect
-import os
-import shutil
-import sys
 
 import pytest
-from pytest import fixture
 
 from inmanta import loader
-from inmanta.module import Project
 
 
 def test_code_manager():
@@ -122,104 +117,3 @@ def test():
     cl.deploy_version(hv, "inmanta_bad_unit_test", code)
 
     assert "ModuleNotFoundError: No module named 'badimmport'" in caplog.text
-
-
-@fixture(scope="function")
-def module_path(tmpdir):
-    module_finder = loader.PluginModuleFinder([str(tmpdir)])
-    sys.meta_path.insert(0, module_finder)
-    yield str(tmpdir)
-    sys.meta_path.remove(module_finder)
-
-
-def test_module_loader(module_path, tmpdir, capsys):
-    """
-        Verify that the loader.PluginModuleFinder and loader.PluginModuleLoader load modules correctly.
-    """
-    origin_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "submodule")
-    mod_dir = tmpdir.join(os.path.basename(origin_mod_dir))
-    shutil.copytree(origin_mod_dir, mod_dir)
-
-    capsys.readouterr()  # Clear buffers
-
-    from inmanta_plugins.submodule import test
-
-    assert test() == "test"
-    (stdout, stderr) = capsys.readouterr()
-    assert stdout.count("#loading inmanta_plugins.submodule#") == 1
-    assert stdout.count("#loading inmanta_plugins.submodule.submod#") == 0
-    assert stdout.count("#loading inmanta_plugins.submodule.pkg#") == 0
-    assert stdout.count("#loading inmanta_plugins.submodule.pkg.submod2#") == 0
-
-    from inmanta_plugins.submodule.submod import test_submod
-
-    assert test_submod() == "test_submod"
-    (stdout, stderr) = capsys.readouterr()
-    assert stdout.count("#loading inmanta_plugins.submodule#") == 0
-    assert stdout.count("#loading inmanta_plugins.submodule.submod#") == 1
-    assert stdout.count("#loading inmanta_plugins.submodule.pkg#") == 0
-    assert stdout.count("#loading inmanta_plugins.submodule.pkg.submod2#") == 0
-
-    from inmanta_plugins.submodule.pkg import test_pkg
-
-    assert test_pkg() == "test_pkg -- test_submod2"
-    (stdout, stderr) = capsys.readouterr()
-    assert stdout.count("#loading inmanta_plugins.submodule#") == 0
-    assert stdout.count("#loading inmanta_plugins.submodule.submod#") == 0
-    assert stdout.count("#loading inmanta_plugins.submodule.pkg#") == 1
-    assert stdout.count("#loading inmanta_plugins.submodule.pkg.submod2#") == 1
-
-    with pytest.raises(ImportError):
-        from inmanta_plugins.tests import doesnotexist  # NOQA
-
-
-def test_plugin_loading_on_project_load(tmpdir, capsys):
-    """
-        Load all plugins via the Project.load() method call and verify that no
-        module is loaded twice when an import statement is used.
-    """
-    main_cf = tmpdir.join("main.cf")
-    main_cf.write("import submodule")
-
-    project_yml = tmpdir.join("project.yml")
-    project_yml.write(
-        """
-name: test
-modulepath: libs
-downloadpath: libs
-repo: https://github.com/inmanta/inmanta.git
-install_mode: master
-    """
-    )
-
-    tmpdir.mkdir("libs")
-    origin_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "submodule")
-    mod_dir = tmpdir.join("libs", os.path.basename(origin_mod_dir))
-    shutil.copytree(origin_mod_dir, mod_dir)
-
-    project = Project(tmpdir, autostd=False)
-    project.load()
-
-    (stdout, stderr) = capsys.readouterr()
-    assert stdout.count("#loading inmanta_plugins.submodule#") == 1
-    assert stdout.count("#loading inmanta_plugins.submodule.submod#") == 1
-    assert stdout.count("#loading inmanta_plugins.submodule.pkg#") == 1
-    assert stdout.count("#loading inmanta_plugins.submodule.pkg.submod2#") == 1
-
-    from inmanta_plugins.submodule import test
-
-    assert test() == "test"
-    (stdout, stderr) = capsys.readouterr()
-    assert "#loading" not in stdout
-
-    from inmanta_plugins.submodule.submod import test_submod
-
-    assert test_submod() == "test_submod"
-    (stdout, stderr) = capsys.readouterr()
-    assert "#loading" not in stdout
-
-    from inmanta_plugins.submodule.pkg import test_pkg
-
-    assert test_pkg() == "test_pkg -- test_submod2"
-    (stdout, stderr) = capsys.readouterr()
-    assert "#loading" not in stdout

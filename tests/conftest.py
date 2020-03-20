@@ -275,12 +275,10 @@ async def clean_reset(create_db, clean_db):
     reset_all_objects()
     config.Config._reset()
     methods = inmanta.protocol.common.MethodProperties.methods.copy()
-    unload_inmanta_plugins()
     yield
     inmanta.protocol.common.MethodProperties.methods = methods
     config.Config._reset()
     reset_all_objects()
-    unload_inmanta_plugins()
 
 
 def reset_all_objects():
@@ -292,16 +290,6 @@ def reset_all_objects():
     handler.Commander.reset()
     Project._project = None
     unknown_parameters.clear()
-
-
-def unload_inmanta_plugins():
-    """
-        Unload the inmanta_plugins package.
-    """
-    loaded_modules = sys.modules.keys()
-    modules_to_unload = [k for k in loaded_modules if k == const.PLUGINS_PACKAGE or k.startswith(f"{const.PLUGINS_PACKAGE}.")]
-    for k in modules_to_unload:
-        del sys.modules[k]
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -743,11 +731,9 @@ class SnippetCompilationTest(KeepOnFail):
     def setup_for_snippet(self, snippet, autostd=True):
         self.setup_for_snippet_external(snippet)
         Project.set(Project(self.project_dir, autostd=autostd))
-        unload_inmanta_plugins()
 
     def reset(self):
         Project.set(Project(self.project_dir, autostd=Project.get().autostd))
-        unload_inmanta_plugins()
 
     def setup_for_snippet_external(self, snippet):
         if self.modules_dir:
