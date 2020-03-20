@@ -312,3 +312,13 @@ def configure_module_finder(modulepaths: List[str]) -> None:
     # PluginModuleFinder not yet present in sys.meta_path.
     module_finder = PluginModuleFinder(modulepaths)
     sys.meta_path.insert(0, module_finder)
+
+
+def unload_inmanta_plugins():
+    """
+        Unload the inmanta_plugins package.
+    """
+    loaded_modules = sys.modules.keys()
+    modules_to_unload = [k for k in loaded_modules if k == const.PLUGINS_PACKAGE or k.startswith(f"{const.PLUGINS_PACKAGE}.")]
+    for k in modules_to_unload:
+        del sys.modules[k]

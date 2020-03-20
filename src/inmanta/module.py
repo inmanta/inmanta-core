@@ -442,6 +442,7 @@ class Project(ModuleLike):
         cls._project = project
         os.chdir(project._path)
         plugins.PluginMeta.clear()
+        loader.unload_inmanta_plugins()
 
     def load(self) -> None:
         if not self.loaded:
