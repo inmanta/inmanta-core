@@ -16,3 +16,17 @@ entity Test2 extends std::PurgeableResource:
 end
 
 implement Test2 using std::none
+
+
+entity RequiresTest extends std::PurgeableResource:
+"""
+Used to test dependency cycles introduced by dependency manager
+"""
+	string agent ="agenta"
+	string name = "ida"
+	number do_break = 0
+end
+
+implement RequiresTest using std::none
+
+
