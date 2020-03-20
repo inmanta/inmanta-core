@@ -21,14 +21,13 @@ import imp
 import inspect
 import logging
 import os
-import sys
 import types
-from importlib.abc import FileLoader, Finder
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import pkg_resources
 
 from inmanta import const
+from inmanta.module import Project
 
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
@@ -92,8 +91,6 @@ class SourceInfo(object):
     def requires(self) -> List[str]:
         """ List of python requirements associated with this source file
         """
-        from inmanta.module import Project
-
         if self._requires is None:
             self._requires = Project.get().modules[self._get_module_name()].get_python_requirements_as_list()
         return self._requires
@@ -234,81 +231,3 @@ class CodeLoader(object):
             self._load_module(module_name, source_file, hash_value)
 
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
-
-
-class PluginModuleLoader(FileLoader):
-    """
-        A custom module loader which imports the modules in the inmanta_plugins package.
-    """
-
-    def __init__(self, modulepaths: List[str], fullname: str) -> None:
-        self._modulepaths = modulepaths
-        path_to_module = self._get_path_to_module(fullname)
-        super(PluginModuleLoader, self).__init__(fullname, path_to_module)
-
-    def get_source(self, fullname: str) -> bytes:
-        # No __init__.py exists for top level package
-        if self._loading_top_level_package():
-            return "".encode("utf-8")
-        with open(self.path, "r", encoding="utf-8") as fd:
-            return fd.read().encode("utf-8")
-
-    def is_package(self, fullname: str) -> bool:
-        if self._loading_top_level_package():
-            return True
-        return os.path.basename(self.path) == "__init__.py"
-
-    def _get_path_to_module(self, fullname: str):
-        module_parts = fullname.split(".")[1:]
-        # No __init__.py exists for top level package
-        if len(module_parts) == 0:
-            return ""
-        module_parts.insert(1, "plugins")
-        for module_path in self._modulepaths:
-            path_to_module = os.path.join(module_path, *module_parts)
-            if os.path.exists(f"{path_to_module}.py"):
-                return f"{path_to_module}.py"
-            if os.path.isdir(path_to_module):
-                path_to_module = os.path.join(path_to_module, "__init__.py")
-                if os.path.exists(path_to_module):
-                    return path_to_module
-
-        raise ImportError(f"Cannot find module {fullname} in {self._modulepaths}")
-
-    def _loading_top_level_package(self):
-        return self.path == ""
-
-
-class PluginModuleFinder(Finder):
-    """
-        Custom module finder which handles all the imports for the package inmanta_plugins.
-    """
-
-    def __init__(self, modulepaths: List[str]) -> None:
-        self._modulepaths = modulepaths
-
-    def add_module_paths(self, paths: List[str]) -> None:
-        for p in paths:
-            if p not in self._modulepaths:
-                self._modulepaths.append(p)
-
-    def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[PluginModuleLoader]:
-        if fullname == const.PLUGINS_PACKAGE or fullname.startswith(f"{const.PLUGINS_PACKAGE}."):
-            LOGGER.debug("Loading module: %s", fullname)
-            return PluginModuleLoader(self._modulepaths, fullname)
-        return None
-
-
-def configure_module_finder(modulepaths: List[str]) -> None:
-    """
-        Setup a custom module loader to handle imports in .py files of the modules.
-    """
-    for finder in sys.meta_path:
-        # PluginModuleFinder already present in sys.meta_path.
-        if isinstance(finder, PluginModuleFinder):
-            finder.add_module_paths(modulepaths)
-            return
-
-    # PluginModuleFinder not yet present in sys.meta_path.
-    module_finder = PluginModuleFinder(modulepaths)
-    sys.meta_path.insert(0, module_finder)
