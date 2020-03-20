@@ -288,6 +288,112 @@ This data trace highlights the index match between the two constructors at lines
 Usage examples
 --------------
 
-TODO: some more complicated examples where the usefulness of the trace becomes clear.
+Let's have a look at the model below:
 
-TODO: note the performance overhead
+.. code-block:: inmanta
+    :caption: service.cf
+    :linenos:
+
+    entity Port:
+        string host
+        number portn
+    end
+
+    index Port(host, portn)
+
+    entity Service:
+        string name
+        string host
+        number portn
+    end
+
+    Service.port [0:1] -- Port.service [0:1]
+
+
+    implement Port using std::none
+    implement Service using bind_port
+
+
+    implementation bind_port for Service:
+        self.port = Port(host = self.host, portn = self.portn)
+    end
+
+
+    sshd = Service(
+        name = "opensshd",
+        host = "my_host",
+        portn = 22,
+    )
+
+
+    custom_service = Service(
+        name = "some_custom_service",
+        host = "my_host",
+        portn = 22,
+    )
+
+Compiling this with data trace disabled outputs the following error:
+
+.. code-block::
+    :caption: compilation output for service.cf with data trace disabled
+
+    Could not set attribute `port` on instance `__config__::Service (instantiated at ./service.cf:33)` (reported in self.port = Construct(Port) (./service.cf:22))
+    caused by:
+      Could not set attribute `service` on instance `__config__::Port (instantiated at ./service.cf:22,./service.cf:22)` (reported in __config__::Port (instantiated at ./service.cf:22,./service.cf:22) (./service.cf:22))
+      caused by:
+        value set twice:
+        old value: __config__::Service (instantiated at ./service.cf:26)
+            set at ./service.cf:22
+        new value: __config__::Service (instantiated at ./service.cf:33)
+            set at ./service.cf:22
+     (reported in self.port = Construct(Port) (./service.cf:22))
+
+The error message refers to ``service.cf:22`` which is part of an implementation. It is not clear
+which ``Service`` instance is being refined, which makes finding the cause of the error challenging.
+Enabling data trace results in the trace below:
+
+.. code-block::
+    :caption: data trace for service.cf
+    :linenos:
+
+    attribute service on __config__::Port instance
+    SUBTREE for __config__::Port instance:
+        CONSTRUCTED BY `Port(host=self.host,portn=self.portn)`
+        AT ./service.cf:22
+        IN IMPLEMENTATION WITH self = __config__::Service instance
+            CONSTRUCTED BY `Service(name='opensshd',host='my_host',portn=22)`
+            AT ./service.cf:26
+
+        INDEX MATCH: `__config__::Port instance`
+            CONSTRUCTED BY `Port(host=self.host,portn=self.portn)`
+            AT ./service.cf:22
+            IN IMPLEMENTATION WITH self = __config__::Service instance
+                CONSTRUCTED BY `Service(name='some_custom_service',host='my_host',portn=22)`
+                AT ./service.cf:33
+    ├── __config__::Service instance
+    │   SET BY `self.port = Port(host=self.host,portn=self.portn)`
+    │   AT ./service.cf:22
+    │   IN IMPLEMENTATION WITH self = __config__::Service instance
+    │       CONSTRUCTED BY `Service(name='some_custom_service',host='my_host',portn=22)`
+    │       AT ./service.cf:33
+    │   CONSTRUCTED BY `Service(name='some_custom_service',host='my_host',portn=22)`
+    │   AT ./service.cf:33
+    └── __config__::Service instance
+        SET BY `self.port = Port(host=self.host,portn=self.portn)`
+        AT ./service.cf:22
+        IN IMPLEMENTATION WITH self = __config__::Service instance
+            CONSTRUCTED BY `Service(name='opensshd',host='my_host',portn=22)`
+            AT ./service.cf:26
+        CONSTRUCTED BY `Service(name='opensshd',host='my_host',portn=22)`
+        AT ./service.cf:26
+
+At lines 15 and 23 it shows the two ``Service`` instances that are also mentioned in the original error
+message. This time, the dynamic implementation context is mentioned and it's clear that these instances
+have been assigned in a refinement for the ``Service`` instances constructed at lines 26 and 33 in the
+configuration model respectively.
+
+Lines 2--14 in the trace give some additional information about the
+``Port`` instance. It indicates there is an index match between the ``Port`` instances constructed in the
+implementations for both ``Service`` instances. This illustrates the existence of the two branches at lines
+15 and 23, and why the assignment in this implementation
+resulted in the exceeding of the relation arity: the right hand side is the same instance in both cases.
