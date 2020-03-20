@@ -51,7 +51,7 @@ import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.main
-from inmanta import config, const, data, protocol, resources
+from inmanta import config, const, data, loader, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
@@ -64,7 +64,6 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
-from inmanta import loader
 
 # Import the utils module differently when conftest is put into the inmanta_tests package
 if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
