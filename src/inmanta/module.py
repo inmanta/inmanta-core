@@ -1117,7 +1117,7 @@ class Module(ModuleLike):
         try:
             mod_name = self._meta["name"]
             for py_file in glob.glob(os.path.join(plugin_dir, "**", "*.py"), recursive=True):
-                fq_mod_name = self._get_mod_name_for_py_file(py_file, plugin_dir, mod_name)
+                fq_mod_name = self._get_fq_mod_name_for_py_file(py_file, plugin_dir, mod_name)
 
                 LOGGER.debug("Loading module %s", fq_mod_name)
                 importlib.import_module(fq_mod_name)
@@ -1125,7 +1125,7 @@ class Module(ModuleLike):
         except ImportError as e:
             raise CompilerException("Unable to load all plug-ins for module %s" % self._meta["name"]) from e
 
-    def _get_mod_name_for_py_file(self, py_file: str, plugin_dir: str, mod_name: str) -> str:
+    def _get_fq_mod_name_for_py_file(self, py_file: str, plugin_dir: str, mod_name: str) -> str:
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)
 
         def add_prefix(prefix: str, item: str) -> str:
