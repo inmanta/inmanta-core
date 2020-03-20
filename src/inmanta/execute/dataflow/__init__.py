@@ -371,6 +371,33 @@ class AttributeNodeReference(AssignableNodeReference):
         return "%s.%s" % (repr(self.instance_var_ref), self.attribute)
 
 
+class InstanceAttributeNodeReference(AssignableNodeReference):
+    """
+        Reference to a node representing an attribute of an instance.
+    """
+
+    __slots__ = ("instance", "attribute")
+
+    def __init__(self, instance: "InstanceNode", attribute: str) -> None:
+        AssignableNodeReference.__init__(self)
+        self.instance: InstanceNode = instance
+        self.attribute: str = attribute
+
+    def nodes(self) -> Iterator["AttributeNode"]:
+        yield self.instance.register_attribute(self.attribute)
+
+    def assignment_node(self) -> "AttributeNode":
+        return next(self.nodes())
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, InstanceAttributeNodeReference):
+            return NotImplemented
+        return self.assignment_node() == other.assignment_node()
+
+    def __repr__(self) -> str:
+        return repr(self.assignment_node())
+
+
 class DirectNodeReference(NodeReference):
     """
         Direct reference to a Node.

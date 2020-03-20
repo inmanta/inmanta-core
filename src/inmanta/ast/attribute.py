@@ -122,7 +122,7 @@ class Attribute(Locatable):
 
         node_ref: Optional[dataflow.InstanceNodeReference] = instance.instance_node
         if node_ref is not None:
-            out.set_dataflow_node(node_ref.top_node().register_attribute(self.name))
+            out.set_dataflow_node(dataflow.InstanceAttributeNodeReference(node_ref.top_node(), self.name))
         out.set_type(mytype)
         return out
 
@@ -172,7 +172,7 @@ class RelationAttribute(Attribute):
             out = ListVariable(self, instance, queue)  # type: ResultVariable
         node_ref: Optional[dataflow.InstanceNodeReference] = instance.instance_node
         if node_ref is not None:
-            out.set_dataflow_node(node_ref.top_node().register_attribute(self.name))
+            out.set_dataflow_node(dataflow.InstanceAttributeNodeReference(node_ref.top_node(), self.name))
         out.set_type(self.get_type())
         return out
 

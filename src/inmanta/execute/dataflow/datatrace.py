@@ -25,10 +25,10 @@ from inmanta.execute.dataflow import (
     AssignableNode,
     AssignableNodeReference,
     Assignment,
-    AttributeNode,
     AttributeNodeReference,
     DataflowGraph,
     Equivalence,
+    InstanceAttributeNodeReference,
     InstanceNode,
     InstanceNodeReference,
     VariableNodeReference,
@@ -43,7 +43,29 @@ class DataTraceRenderer:
     """
 
     @classmethod
-    def render(cls, node: AssignableNode, tree_root: bool = True) -> str:
+    def render(cls, node_ref: AssignableNodeReference) -> str:
+        return "\n".join(cls._render_reference(node_ref, tree_root=True)) + "\n"
+
+    @classmethod
+    def _render_reference(cls, node_ref: AssignableNodeReference, tree_root: bool = False) -> List[str]:
+        """
+            Renders the data trace for all nodes a reference refers to.
+        """
+        result: List[str] = []
+        if tree_root:
+            result.append(repr(node_ref))
+        if isinstance(node_ref, AttributeNodeReference):
+            result.append("SUBTREE for %s:" % node_ref.instance_var_ref)
+            result += cls._indent(cls._render_reference(node_ref.instance_var_ref))
+        if isinstance(node_ref, InstanceAttributeNodeReference):
+            result.append("SUBTREE for %s:" % node_ref.instance)
+            result += cls._indent(cls._render_instance(node_ref.instance))
+        for node in node_ref.nodes():
+            result += cls._render_node(node)
+        return result
+
+    @classmethod
+    def _render_node(cls, node: AssignableNode) -> List[str]:
         """
             Renders the data trace for an assignable node. Shows information about:
                 - the node's parent instance, if it is an attribute node
@@ -58,11 +80,6 @@ class DataTraceRenderer:
                 slightly different in order to prevent output duplication.
         """
         result: List[str] = []
-        if tree_root:
-            result.append(repr(node))
-            if isinstance(node, AttributeNode):
-                result.append("SUBTREE for %s:" % node.instance)
-                result += cls._indent(cls._render_instance(node.instance))
         result += cls._render_equivalence(node.equivalence)
         assignments: List[Assignment] = list(
             chain(
@@ -85,7 +102,7 @@ class DataTraceRenderer:
                 subblock += cls._render_reference(assignment.rhs)
 
             result += cls._branch(subblock, last)
-        return "\n".join(result)
+        return result
 
     @classmethod
     def _prefix_line(cls, prefix: str, line: str) -> str:
@@ -229,16 +246,3 @@ class DataTraceRenderer:
                 ),
             ]
         return []
-
-    @classmethod
-    def _render_reference(cls, node_ref: AssignableNodeReference) -> List[str]:
-        """
-            Renders the data trace for all nodes a reference refers to.
-        """
-        result: List[str] = []
-        if isinstance(node_ref, AttributeNodeReference):
-            result.append("SUBTREE for %s:" % node_ref.instance_var_ref)
-            result += cls._indent(cls._render_reference(node_ref.instance_var_ref))
-        for node in node_ref.nodes():
-            result += cls.render(node, tree_root=False).split("\n")
-        return result

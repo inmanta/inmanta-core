@@ -103,7 +103,6 @@ x
     │   └── u
     │       SET BY `z = u`
     │       AT {dir}/main.cf:9
-    │
     └── k
         SET BY `y = k`
         AT {dir}/main.cf:5
@@ -325,7 +324,6 @@ def test_dataflow_trace(
     dataflow_test_helper.compile(model, exception)
     root = dataflow_test_helper.get_graph().resolver.get_dataflow_node(trace_root)
     assert isinstance(root, VariableNodeReference)
-    print(DataTraceRenderer.render(root.node))
-    assert DataTraceRenderer.render(root.node).rstrip() == trace.strip().format(
+    assert DataTraceRenderer.render(root.node.reference()).rstrip() == trace.strip().format(
         dir=dataflow_test_helper.snippetcompiler.project_dir
     )

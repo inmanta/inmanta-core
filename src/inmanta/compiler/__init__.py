@@ -208,16 +208,15 @@ class Compiler(object):
                 self.handle_exception(cause)
             except CompilerException:
                 pass
-        if not causes:
-            trace: Optional[str] = None
-            if isinstance(exception, DoubleSetException):
-                variable: ResultVariable = exception.variable
-                trace = DataTraceRenderer.render(variable.get_dataflow_node())
-            elif isinstance(exception, AttributeException):
-                node_ref: Optional[dataflow.InstanceNodeReference] = exception.instance.instance_node
-                assert node_ref is not None
-                trace = DataTraceRenderer.render(node_ref.top_node().register_attribute(exception.attribute))
-            if trace is not None:
-                exception.msg += "\ndata trace:\n%s" % trace
+        trace: Optional[str] = None
+        if isinstance(exception, DoubleSetException):
+            variable: ResultVariable = exception.variable
+            trace = DataTraceRenderer.render(variable.get_dataflow_node())
+        elif isinstance(exception, AttributeException):
+            node_ref: Optional[dataflow.InstanceNodeReference] = exception.instance.instance_node
+            assert node_ref is not None
+            trace = DataTraceRenderer.render(dataflow.InstanceAttributeNodeReference(node_ref.top_node(), exception.attribute))
+        if trace is not None:
+            exception.msg += "\ndata trace:\n%s" % trace
         exception.attach_compile_info(self)
         raise exception
