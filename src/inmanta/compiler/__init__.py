@@ -202,21 +202,31 @@ class Compiler(object):
         if not compiler_config.datatrace_enable.get():
             raise exception
 
-        causes: List[CompilerException] = exception.get_causes()
-        for cause in causes:
-            try:
-                self.handle_exception(cause)
-            except CompilerException:
-                pass
-        trace: Optional[str] = None
-        if isinstance(exception, DoubleSetException):
-            variable: ResultVariable = exception.variable
-            trace = DataTraceRenderer.render(variable.get_dataflow_node())
-        elif isinstance(exception, AttributeException):
-            node_ref: Optional[dataflow.InstanceNodeReference] = exception.instance.instance_node
-            assert node_ref is not None
-            trace = DataTraceRenderer.render(dataflow.InstanceAttributeNodeReference(node_ref.top_node(), exception.attribute))
-        if trace is not None:
-            exception.msg += "\ndata trace:\n%s" % trace
+        def add_trace(exception: CompilerException) -> bool:
+            """
+                Add the trace to the deepest possible causes.
+            """
+            causes: List[CompilerException] = exception.get_causes()
+            handled: bool = False
+            for cause in causes:
+                if add_trace(cause):
+                    handled = True
+            if not handled:
+                trace: Optional[str] = None
+                if isinstance(exception, DoubleSetException):
+                    variable: ResultVariable = exception.variable
+                    trace = DataTraceRenderer.render(variable.get_dataflow_node())
+                elif isinstance(exception, AttributeException):
+                    node_ref: Optional[dataflow.InstanceNodeReference] = exception.instance.instance_node
+                    assert node_ref is not None
+                    trace = DataTraceRenderer.render(
+                        dataflow.InstanceAttributeNodeReference(node_ref.top_node(), exception.attribute)
+                    )
+                if trace is not None:
+                    exception.msg += "\ndata trace:\n%s" % trace
+                    handled = True
+            return handled
+
+        add_trace(exception)
         exception.attach_compile_info(self)
         raise exception
