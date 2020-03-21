@@ -4,8 +4,6 @@
 
 closes *Add ticket reference here*
 
-
-
 # Self Check:
 
 - [ ] Attached issue to pull request
