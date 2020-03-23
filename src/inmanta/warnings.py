@@ -147,7 +147,14 @@ class WarningsManager:
         if issubclass(category, InmantaWarning):
             text = "%s: %s\n" % (category.__name__, message)
         else:
-            text = warnings.formatwarning(message, category, filename, lineno, line)
+            text = warnings.formatwarning(
+                # ignore type check because warnings.formatwarning accepts Warning instance but it's type definition doesn't
+                message,  # type: ignore
+                category,
+                filename,
+                lineno,
+                line,
+            )
         if file is not None:
             try:
                 file.write(text)
