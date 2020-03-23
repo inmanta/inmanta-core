@@ -8,10 +8,12 @@ closes *Add ticket reference here*
 
 - [ ] Attached issue to pull request
 - [ ] Changelog entry
-- [ ] Sufficient test cases (reproduces the bug/tests the requested feature)
+- [ ] Type annotations are present
 - [ ] Code is clear and sufficiently documented
-- [ ] End user documentation is included or an issue is created for end-user documentation (add ref to issue here: )
+- [ ] No (preventable) type errors (check using make mypy or make mypy-diff)
+- [ ] Sufficient test cases (reproduces the bug/tests the requested feature)
 - [ ] Correct, in line with design
+- [ ] End user documentation is included or an issue is created for end-user documentation (add ref to issue here: )
 
 # Reviewer Checklist:
 
