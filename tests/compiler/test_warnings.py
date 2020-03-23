@@ -16,8 +16,9 @@
     Contact: code@inmanta.com
 """
 
+import logging
 import warnings
-from typing import Optional
+from typing import Optional, Type, Union
 
 import pytest
 
@@ -52,6 +53,33 @@ def test_warnings(option: Optional[str], expected_error: bool, expected_warning:
             assert str(w[0].message) == message
         else:
             assert len(w) == 0
+
+
+@pytest.mark.parametrize(
+    "warning,category,filename,lineno,expected_msg",
+    [
+        ("my non-inmanta warning", UserWarning, "/path/to/filename", 42),
+        (CompilerRuntimeWarning(None, "my inmanta warning"), CompilerRuntimeWarning, "/path/to/filename", 42),
+    ],
+)
+def test_warning_format(
+    caplog, warning: Union[str, Warning], category: Type[Warning], filename: str, lineno: int, expected_msg: str
+):
+    caplog.set_level(logging.WARNING)
+    WarningsManager.apply_config({})
+    warnings.resetwarnings()
+    warnings.filterwarnings("default", category=Warning)
+    warnings.warn_explicit(warning, category, filename, lineno)
+    if isinstance(warning, InmantaWarning):
+        assert caplog.record_tuples == [("inmanta.warnings", logging.WARNING, "%s: %s\n" % (category.__name__, warning))]
+    else:
+        assert caplog.record_tuples == [
+            (
+                "py.warnings",
+                logging.WARNING,
+                warnings.formatwarning(warning, category, filename, lineno),  # type: ignore
+            )
+        ]
 
 
 def test_shadow_warning(snippetcompiler):
