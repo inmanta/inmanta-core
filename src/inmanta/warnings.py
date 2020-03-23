@@ -143,17 +143,18 @@ class WarningsManager:
             :param line: Required for compatibility but will be ignored.
         """
         # implementation based on warnings._showwarnmsg_impl and logging._showwarning
-        text: str = "%s: %s\n" % (category.__name__, message)
+        text: str
+        if issubclass(category, InmantaWarning):
+            text = "%s: %s\n" % (category.__name__, message)
+        else:
+            text = warnings.formatwarning(message, category, filename, lineno, line)
         if file is not None:
             try:
                 file.write(text)
             except OSError:
                 pass
         else:
-            logger = logging.getLogger("inmanta.warnings")
-            if not logger.handlers:
-                logger.addHandler(logging.NullHandler())
-            logger.warning("%s", text)
+            logging.getLogger("inmanta.warnings").warning("%s", text)
 
 
 def warn(warning: InmantaWarning):
