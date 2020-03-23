@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-import sys
+import logging
 import warnings
 from enum import Enum
 from typing import Dict, List, Mapping, Optional, TextIO, Type, Union
@@ -142,16 +142,29 @@ class WarningsManager:
             :param file: The file to write the warning to. Defaults to stderr.
             :param line: Required for compatibility but will be ignored.
         """
-        # implementation based on warnings._showwarnmsg_impl
-        if file is None:
-            file = sys.stderr
-            if file is None:
-                return
-        text: str = "WARNING %s: %s\n" % (category.__name__, message)
-        try:
-            file.write(text)
-        except OSError:
-            pass
+        # implementation based on warnings._showwarnmsg_impl and logging._showwarning
+        text: str
+        logger: logging.Logger
+        if issubclass(category, InmantaWarning):
+            text = "%s: %s\n" % (category.__name__, message)
+            logger = logging.getLogger("inmanta.warnings")
+        else:
+            text = warnings.formatwarning(
+                # ignore type check because warnings.formatwarning accepts Warning instance but it's type definition doesn't
+                message,  # type: ignore
+                category,
+                filename,
+                lineno,
+                line,
+            )
+            logger = logging.getLogger("py.warnings")
+        if file is not None:
+            try:
+                file.write(text)
+            except OSError:
+                pass
+        else:
+            logger.warning("%s", text)
 
 
 def warn(warning: InmantaWarning):
