@@ -24,56 +24,61 @@ from inmanta.execute.dataflow import AssignableNodeReference, AttributeNode, Att
 
 class RootCauseAnalyzer:
     """
-        Analyzes the root causes among a collection of attribute nodes. An attribute node c
-        is defined as the cause for an other attribute node n iff c being unset leads to n
-        being unset.
-        Formally, is_cause(c, x) is defined by three rules:
-            1. is_cause(c, x) <- c in x.leaves()
-            2. is_cause(c, x) <- exists i: is_index_attr(x, i) and is_cause(c, x.i)
-            3. is_cause(c, x) <- exists a [AttributeNode]: refers_to(x, a) and is_cause(c, a.instance)
-                where
-                    refers_to(x, y) <- `x = y` in graph
-                    refers_to(x, z) <- exists y: refers_to(x, y) and refers_to(y, z)
-                    refers_to(x, u) <- refers_to(x, u.v)
-
-                    example: x = u.v.w.n
-                        -> refers_to(x, u.v.w.n)
-                            and refers_to(x, u.v.w)
-                            and refers_to(x, u.v)
-                            and refers_to(x, u)
-
-            example (entity definitions omitted for clarity):
-                model:
-                    index V(i)
-
-                    c = C()
-                    u = U()
-                    x = X()
-
-                    u.v = V(n = 42, i = c.i)
-                    x.n = u.v.n
-
-                root_cause_analysis (capital letters refer to the single instance of that entity, not the entity itself):
-                    is_cause(c.i, x.n)
-                        <-(3)- refers_to(x.n, V.n) and is_cause(c.i, V)
-                        <-(2)- is_index_attr(V, i) and is_cause(c.i, V.i)
-                        <-(1)- c.i in V.i.leaves()
-                        <- true
-        These three rules are implemented by _is_cause_leaves, _is_cause_any_attribute and _is_cause_instance respectively.
-        # TODO: move this formal definition to is_cause docstring and refer to it
-        # TODO: main entrypoint?
+        Analyzes the root causes among a collection of attribute nodes. The main entrypoint for this class is the
+        root_causes method.
     """
 
     def __init__(self, nodes: Iterable[AttributeNode]) -> None:
         self.nodes: Set[AttributeNode] = set(nodes)
 
     def root_causes(self) -> Set[AttributeNode]:
+        """
+            Returns the root causes from this instances' set of attribute nodes. An attribute node c
+            is defined as the cause for an other attribute node n iff c being unset leads to n
+            being unset. For a formal definition, see is_cause.
+        """
         def caused_by(node: AttributeNode, others: Set[AttributeNode]) -> bool:
             return any(self.is_cause(other, node) for other in others)
 
         return set(node for node in self.nodes if not caused_by(node, self.nodes.difference({node})))
 
     def is_cause(self, cause: AttributeNode, node: AttributeNode) -> bool:
+        """
+            Returns True iff cause is a cause for node.
+            Formally, is_cause(c, x) is defined by three rules:
+                1. is_cause(c, x) <- c in x.leaves()
+                2. is_cause(c, x) <- exists i: is_index_attr(x, i) and is_cause(c, x.i)
+                3. is_cause(c, x) <- exists a [AttributeNode]: refers_to(x, a) and is_cause(c, a.instance)
+                    where
+                        refers_to(x, y) <- `x = y` in graph
+                        refers_to(x, z) <- exists y: refers_to(x, y) and refers_to(y, z)
+                        refers_to(x, u) <- refers_to(x, u.v)
+
+                        example: x = u.v.w.n
+                            -> refers_to(x, u.v.w.n)
+                                and refers_to(x, u.v.w)
+                                and refers_to(x, u.v)
+                                and refers_to(x, u)
+
+                example (entity definitions omitted for clarity):
+                    model:
+                        index V(i)
+
+                        c = C()
+                        u = U()
+                        x = X()
+
+                        u.v = V(n = 42, i = c.i)
+                        x.n = u.v.n
+
+                    root_cause_analysis (capital letters refer to the single instance of that entity, not the entity itself):
+                        is_cause(c.i, x.n)
+                            <-(3)- refers_to(x.n, V.n) and is_cause(c.i, V)
+                            <-(2)- is_index_attr(V, i) and is_cause(c.i, V.i)
+                            <-(1)- c.i in V.i.leaves()
+                            <- true
+            These three rules are implemented by _is_cause_leaves, _is_cause_any_attribute and _is_cause_instance respectively.
+        """
         return self._is_cause_acc(set(()), cause, node)
 
     def _is_cause_acc(self, acc: Set[InstanceNode], cause: AttributeNode, node: AttributeNode) -> bool:
