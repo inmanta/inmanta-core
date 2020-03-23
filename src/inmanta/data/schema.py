@@ -19,7 +19,7 @@
 import logging
 import pkgutil
 from types import ModuleType
-from typing import Any, Callable, Coroutine, List, Optional
+from typing import Any, Callable, Coroutine, List, Optional, Tuple
 
 from asyncpg import Connection, UndefinedTableError
 from asyncpg.transaction import Transaction
@@ -228,12 +228,21 @@ class DBSchema(object):
     async def _get_update_functions(self) -> List[Version]:
         module_names = [modname for _, modname, ispkg in pkgutil.iter_modules(self.package.__path__) if not ispkg]
 
-        def make_version(mod_name: str) -> Version:
+        def get_modules(mod_name: str) -> Tuple[str, ModuleType]:
             fq_module_name = self.package.__name__ + "." + mod_name
-            module = __import__(fq_module_name, fromlist=["update"])
+            return mod_name, __import__(fq_module_name, fromlist=["update"])
+
+        def make_version(mod_name: str, module: ModuleType) -> Version:
             update_function = module.update
             return Version(mod_name, update_function)
 
-        version = [make_version(v) for v in module_names]
+        modules_with_names = [get_modules(mod_name) for mod_name in module_names]
+        filtered_modules = [
+            (module_name, module)
+            for module_name, module in modules_with_names
+            if not (hasattr(module, "DISABLED") and module.DISABLED)
+        ]
+
+        version = [make_version(name, mod) for name, mod in filtered_modules]
 
         return sorted(version, key=lambda x: x.version)

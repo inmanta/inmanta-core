@@ -29,6 +29,7 @@ import pytest
 from asyncpg import PostgresSyntaxError
 
 import inmanta.db.versions
+from data.db import versions
 from inmanta import data
 from inmanta.data import CORE_SCHEMA_NAME, schema
 from inmanta.data.schema import TableNotFound, Version
@@ -340,3 +341,15 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
             ) is not None
 
             await assert_core_untouched(postgresql_client, corev)
+
+
+@pytest.mark.asyncio
+async def test_dbschema_get_dct_filter_disabled():
+    db_schema = schema.DBSchema(CORE_SCHEMA_NAME, versions, None)
+    update_function_map = await db_schema._get_update_functions()
+    assert 2 not in [v.version for v in update_function_map]
+    for version in update_function_map:
+        assert version.version >= 0
+        assert isinstance(version.function, types.FunctionType)
+        assert version.function.__name__ == "update"
+        assert inspect.getfullargspec(version.function)[0] == ["connection"]
