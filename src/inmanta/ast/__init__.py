@@ -738,15 +738,14 @@ class NotFoundException(RuntimeException):
 
 class DoubleSetException(RuntimeException):
     def __init__(
-        self, stmt: "Optional[Statement]", value: object, location: Location, newvalue: object, newlocation: Location
+        self, variable: "ResultVariable", stmt: "Optional[Statement]", newvalue: object, newlocation: Location
     ) -> None:
-        self.value = value  # type: object
-        self.location = location
+        self.variable: "ResultVariable" = variable
         self.newvalue = newvalue  # type: object
         self.newlocation = newlocation
         msg = "value set twice:\n\told value: %s\n\t\tset at %s\n\tnew value: %s\n\t\tset at %s\n" % (
-            self.value,
-            self.location,
+            self.variable.value,
+            self.variable.location,
             self.newvalue,
             self.newlocation,
         )

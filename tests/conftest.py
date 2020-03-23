@@ -51,7 +51,7 @@ import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.main
-from inmanta import config, const, data, protocol, resources
+from inmanta import config, const, data, loader, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
@@ -275,10 +275,12 @@ async def clean_reset(create_db, clean_db):
     reset_all_objects()
     config.Config._reset()
     methods = inmanta.protocol.common.MethodProperties.methods.copy()
+    loader.unload_inmanta_plugins()
     yield
     inmanta.protocol.common.MethodProperties.methods = methods
     config.Config._reset()
     reset_all_objects()
+    loader.unload_inmanta_plugins()
 
 
 def reset_all_objects():
@@ -731,9 +733,11 @@ class SnippetCompilationTest(KeepOnFail):
     def setup_for_snippet(self, snippet, autostd=True):
         self.setup_for_snippet_external(snippet)
         Project.set(Project(self.project_dir, autostd=autostd))
+        loader.unload_inmanta_plugins()
 
     def reset(self):
         Project.set(Project(self.project_dir, autostd=Project.get().autostd))
+        loader.unload_inmanta_plugins()
 
     def setup_for_snippet_external(self, snippet):
         if self.modules_dir:

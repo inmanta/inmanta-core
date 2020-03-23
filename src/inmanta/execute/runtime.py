@@ -128,7 +128,7 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
     def set_value(self, value: T, location: Location, recur: bool = True) -> None:
         if self.hasValue:
             if self.value != value:
-                raise DoubleSetException(None, self.value, self.location, value, location)
+                raise DoubleSetException(self, None, value, location)
             else:
                 return
         if not isinstance(value, Unknown) and self.type is not None:
@@ -191,7 +191,7 @@ class AttributeVariable(ResultVariable["Instance"]):
     def set_value(self, value: "Instance", location: Location, recur: bool = True) -> None:
         if self.hasValue:
             if self.value != value:
-                raise DoubleSetException(None, self.value, self.location, value, location)
+                raise DoubleSetException(self, None, value, location)
             else:
                 return
         if not isinstance(value, Unknown) and self.type is not None:
@@ -206,9 +206,6 @@ class AttributeVariable(ResultVariable["Instance"]):
         for waiter in self.waiters:
             waiter.ready(self)
         self.waiters = None
-
-    def get_dataflow_node(self) -> dataflow.AssignableNodeReference:
-        return self.myself.get_dataflow_node(self.attribute.name)
 
 
 class DelayedResultVariable(ResultVariable[T]):
@@ -471,7 +468,7 @@ class OptionVariable(DelayedResultVariable["Instance"]):
                     self, instance=self.myself, attribute=self.attribute, value=value, location=location, reverse=not recur
                 )
             if self.value != value:
-                raise DoubleSetException(None, self.value, self.location, value, location)
+                raise DoubleSetException(self, None, value, location)
 
         if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
@@ -836,7 +833,8 @@ class ExecutionContext(Resolver):
         if resolver.dataflow_graph is not None:
             self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
             for name, var in self.slots.items():
-                var.set_dataflow_node(self.dataflow_graph.get_named_node(name))
+                node_ref: dataflow.AssignableNodeReference = self.dataflow_graph.get_named_node(name)
+                var.set_dataflow_node(node_ref)
 
     def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
         if "::" in name:
