@@ -23,6 +23,14 @@ from typing import Any, Union
 from inmanta.ast import RuntimeException
 from inmanta.execute.util import NoneValue, Unknown
 
+try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
+
+if TYPE_CHECKING:
+    from inmanta.ast.attribute import Attribute
+
 
 class UnsetException(RuntimeException):
     """
@@ -30,10 +38,10 @@ class UnsetException(RuntimeException):
         available (i.e. it has not been frozen yet).
     """
 
-    def __init__(self, msg, instance=None, attribute=None):
+    def __init__(self, msg, instance=None, attribute: "Attribute" = None):
         RuntimeException.__init__(self, None, msg)
         self.instance = instance
-        self.attribute = attribute
+        self.attribute: "Attribute" = attribute
         self.msg = msg
 
     def get_result_variable(self):

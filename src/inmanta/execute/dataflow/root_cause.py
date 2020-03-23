@@ -16,9 +16,10 @@
     Contact: code@inmanta.com
 """
 
-from typing import Iterable, Set
+from itertools import chain
+from typing import Iterable, Iterator, List, Optional, Set
 
-from inmanta.execute.dataflow import AttributeNode, InstanceNode
+from inmanta.execute.dataflow import AssignableNodeReference, AttributeNode, AttributeNodeReference, InstanceNode
 
 
 class RootCauseAnalyzer:
@@ -59,22 +60,69 @@ class RootCauseAnalyzer:
                         <-(1)- c.i in V.i.leaves()
                         <- true
         These three rules are implemented by _is_cause_leaves, _is_cause_any_attribute and _is_cause_instance respectively.
+        # TODO: move this formal definition to is_cause docstring and refer to it
+        # TODO: main entrypoint?
     """
 
     def __init__(self, nodes: Iterable[AttributeNode]) -> None:
         self.nodes: Set[AttributeNode] = set(nodes)
 
     def root_causes(self) -> Set[AttributeNode]:
-        raise NotImplementedError()
+        def caused_by(node: AttributeNode, others: Set[AttributeNode]) -> bool:
+            return any(self.is_cause(other, node) for other in others)
 
-    def is_cause(self, cause: AttributeNode, node: AttributeNode) -> None:
-        raise NotImplementedError()
+        return set(node for node in self.nodes if not caused_by(node, self.nodes.difference({node})))
 
-    def _is_cause_leaves(self, cause: AttributeNode, node: AttributeNode) -> None:
-        raise NotImplementedError()
+    def is_cause(self, cause: AttributeNode, node: AttributeNode) -> bool:
+        return self._is_cause_acc(set(()), cause, node)
 
-    def _is_cause_any_attribute(self, cause: AttributeNode, instance: InstanceNode) -> None:
-        raise NotImplementedError()
+    def _is_cause_acc(self, acc: Set[InstanceNode], cause: AttributeNode, node: AttributeNode) -> bool:
+        return (
+            self._is_cause_leaves(cause, node)
+            or self._is_cause_any_attribute(acc, cause, self._instance_node(node))
+            or self._is_cause_instance(acc, cause, node)
+        )
 
-    def _is_cause_instance(self, cause: AttributeNode, node: AttributeNode) -> None:
-        raise NotImplementedError()
+    def _is_cause_leaves(self, cause: AttributeNode, node: AttributeNode) -> bool:
+        """
+            rule 1: is_cause(c, x) <- c in x.leaves()
+        """
+        return cause in chain.from_iterable(leaf.nodes() for leaf in node.leaves())
+
+    def _is_cause_any_attribute(self, acc: Set[InstanceNode], cause: AttributeNode, instance: Optional[InstanceNode]) -> bool:
+        """
+            rule 2: is_cause(c, x) <- exists i: is_index_attr(x, i) and is_cause(c, x.i)
+        """
+        if instance is None or instance in acc:
+            return False
+        return any(
+            self._is_cause_acc(acc.union({instance}), cause, index_attr) for index_attr in self._index_attributes(instance)
+        )
+
+    def _is_cause_instance(self, acc: Set[InstanceNode], cause: AttributeNode, node: AttributeNode) -> bool:
+        """
+            rule 3: is_cause(c, x) <- exists a [AttributeNode]: refers_to(x, a) and is_cause(c, a.instance)
+        """
+        return any(self._is_cause_any_attribute(acc, cause, attr.instance) for attr in self._referred_attrs(set(()), node))
+
+    def _instance_node(self, node: AttributeNode) -> Optional[InstanceNode]:
+        for leaf in node.leaves():
+            for leaf_node in leaf.nodes():
+                if len(leaf_node.instance_assignments) > 0:
+                    return leaf_node.instance_assignments[0].rhs.top_node()
+        return None
+
+    def _index_attributes(self, instance: InstanceNode) -> List[AttributeNode]:
+        # TODO: return only index attributes. Investigating any attribute works just as well but is less efficient.
+        return list(instance.attributes.values())
+
+    def _referred_attrs(self, acc: Set[AttributeNode], node: AttributeNode) -> Iterator[AttributeNode]:
+        if node in acc:
+            return iter(())
+        for assignment in node.assignable_assignments:
+            loop_ref: AssignableNodeReference = assignment.rhs
+            while isinstance(loop_ref, AttributeNodeReference):
+                for n in loop_ref.nodes():
+                    yield n
+                    yield from self._referred_attrs(acc.union({node}), n)
+                loop_ref = loop_ref.instance_var_ref

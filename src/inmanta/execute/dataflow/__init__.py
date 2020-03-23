@@ -342,7 +342,7 @@ class AttributeNodeReference(AssignableNodeReference):
         self.instance_var_ref: AssignableNodeReference = instance_var_ref
         self.attribute: str = attribute
 
-    def nodes(self) -> Iterator["AssignableNode"]:
+    def nodes(self) -> Iterator["AttributeNode"]:
         # yield all attribute nodes on instances assigned to this reference's leaves
         for node in self.instance_var_ref.leaf_nodes():
             for instance_node in chain(

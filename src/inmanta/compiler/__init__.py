@@ -18,15 +18,17 @@
 import logging
 import os
 import sys
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 
 import inmanta.execute.dataflow as dataflow
 from inmanta import const
-from inmanta.ast import AttributeException, CompilerException, DoubleSetException, LocatableString, Range
+from inmanta.ast import AttributeException, CompilerException, DoubleSetException, LocatableString, MultiException, Range
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.compiler import config as compiler_config
 from inmanta.execute import scheduler
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
+from inmanta.execute.dataflow.root_cause import RootCauseAnalyzer
+from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ResultVariable
 from inmanta.module import Project
 from inmanta.plugins import PluginMeta
@@ -186,6 +188,17 @@ class Compiler(object):
                 if add_trace(cause):
                     handled = True
             if not handled:
+                if isinstance(exception, MultiException):
+                    unset_attrs: Dict[dataflow.AttributeNode, UnsetException] = {
+                        cause.instance.instance_node.node().register_attribute(cause.attribute.name): cause
+                        for cause in exception.get_causes()
+                        if isinstance(cause, UnsetException)
+                    }
+                    root_causes: Set[dataflow.AttributeNode] = RootCauseAnalyzer(unset_attrs.keys()).root_causes()
+                    for attr, e in unset_attrs.items():
+                        if attr not in root_causes:
+                            exception.others.remove(e)
+                    handled = True
                 trace: Optional[str] = None
                 if isinstance(exception, DoubleSetException):
                     variable: ResultVariable = exception.variable
