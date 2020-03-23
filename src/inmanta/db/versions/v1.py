@@ -18,6 +18,8 @@
 
 import asyncpg
 
+DISABLED = False
+
 
 async def update(connection: asyncpg.connection) -> None:
     schema = """
