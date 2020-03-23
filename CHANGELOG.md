@@ -15,7 +15,7 @@
  - Use asyncio subprocess instead of tornado subprocess (#1792)
 
 ## Added
- - Experimental data trace application (#1820, #1831)
+ - Experimental data trace and root cause application (#1820, #1831, #1821)
  - Warning when shadowing variable (#1366, #1918)
  - Added support for compiler warnings (#1779, #1905, #1906)
 
