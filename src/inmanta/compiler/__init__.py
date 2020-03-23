@@ -193,6 +193,9 @@ class Compiler(object):
                         cause.instance.instance_node.node().register_attribute(cause.attribute.name): cause
                         for cause in exception.get_causes()
                         if isinstance(cause, UnsetException)
+                        if cause.instance is not None
+                        if cause.instance.instance_node is not None
+                        if cause.attribute is not None
                     }
                     root_causes: Set[dataflow.AttributeNode] = RootCauseAnalyzer(unset_attrs.keys()).root_causes()
                     for attr, e in unset_attrs.items():

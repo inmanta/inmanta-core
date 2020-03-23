@@ -37,6 +37,7 @@ class RootCauseAnalyzer:
             is defined as the cause for an other attribute node n iff c being unset leads to n
             being unset. For a formal definition, see is_cause.
         """
+
         def caused_by(node: AttributeNode, others: Set[AttributeNode]) -> bool:
             return any(self.is_cause(other, node) for other in others)
 

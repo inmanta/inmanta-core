@@ -18,7 +18,7 @@
 
 from collections import Mapping
 from copy import copy
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 from inmanta.ast import RuntimeException
 from inmanta.execute.util import NoneValue, Unknown
@@ -30,6 +30,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute
+    from inmanta.execute.runtime import Instance
 
 
 class UnsetException(RuntimeException):
@@ -38,10 +39,10 @@ class UnsetException(RuntimeException):
         available (i.e. it has not been frozen yet).
     """
 
-    def __init__(self, msg, instance=None, attribute: "Attribute" = None):
+    def __init__(self, msg, instance: Optional["Instance"] = None, attribute: Optional["Attribute"] = None) -> None:
         RuntimeException.__init__(self, None, msg)
-        self.instance = instance
-        self.attribute: "Attribute" = attribute
+        self.instance: Optional[Instance] = instance
+        self.attribute: Optional[Attribute] = attribute
         self.msg = msg
 
     def get_result_variable(self):
