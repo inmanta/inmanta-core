@@ -24,7 +24,7 @@ import pytest
 from inmanta import const, data, resources
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version
-from utils import LogSequence, _wait_until_deployment_finishes, no_error_in_logs
+from utils import LogSequence, _wait_until_deployment_finishes, no_error_in_logs, wait_until_logs_are_available
 
 
 @pytest.mark.asyncio
@@ -403,19 +403,14 @@ async def test_get_fact_no_code(resource_container, client, clienthelper, enviro
     response = await client.get_param(env_id, "length", resource_id_wov)
     assert response.code == 503
 
-    count = 0
-    while count < 10:
-        count += 1
-        response = await client.get_resource(environment, resource_id, logs=True)
-        assert response.code == 200
-        result = response.result
-        assert result["resource"]["status"] == "deployed"
-        if len(result["logs"]) == 4:
-            log_entry = result["logs"][0]
-            continue
+    # The resource state and its logs are not set atomically. This call prevents a race condition.
+    await wait_until_logs_are_available(client, environment, resource_id, expect_nr_of_logs=4)
 
-        await asyncio.sleep(0.1)
-
+    response = await client.get_resource(environment, resource_id, logs=True)
+    assert response.code == 200
+    result = response.result
+    assert result["resource"]["status"] == "deployed"
+    log_entry = result["logs"][0]
     assert log_entry["action"] == "getfact"
     assert log_entry["status"] == "unavailable"
     assert "Failed to load" in log_entry["messages"][0]["msg"]

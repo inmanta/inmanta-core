@@ -34,7 +34,16 @@ from inmanta.config import Config
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
-from utils import UNKWN, ClientHelper, _wait_until_deployment_finishes, assert_equal_ish, log_contains, log_index, retry_limited
+from utils import (
+    UNKWN,
+    ClientHelper,
+    _wait_until_deployment_finishes,
+    assert_equal_ish,
+    log_contains,
+    log_index,
+    retry_limited,
+    wait_until_logs_are_available,
+)
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -3069,7 +3078,13 @@ async def test_agent_lockout(resource_container, environment, server, client, cl
 async def test_deploy_no_code(resource_container, client, clienthelper, environment, autostarted_agent):
     """
         Test retrieving facts from the agent when there is no handler code available. We use an autostarted agent, these
-        do not have access to the handler code for the resource_container
+        do not have access to the handler code for the resource_container.
+
+        Expected logs:
+            * Deploy action: Start run/End run
+            * Deploy action: Failed to load handler code or install handler code
+            * Pull action
+            * Store action
     """
     resource_container.Provider.reset()
     resource_container.Provider.set("agent1", "key", "value")
@@ -3084,10 +3099,13 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     await clienthelper.put_version_simple(resources, version)
 
     await _wait_until_deployment_finishes(client, environment, version)
+    # The resource state and its logs are not set atomically. This call prevents a race condition.
+    await wait_until_logs_are_available(client, environment, resource_id, expect_nr_of_logs=4)
 
     response = await client.get_resource(environment, resource_id, logs=True)
     assert response.code == 200
     result = response.result
+
     assert result["resource"]["status"] == "unavailable"
 
     assert result["logs"][0]["action"] == "deploy"
