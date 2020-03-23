@@ -56,14 +56,14 @@ def test_warnings(option: Optional[str], expected_error: bool, expected_warning:
 
 
 @pytest.mark.parametrize(
-    "warning,category,filename,lineno,expected_msg",
+    "warning,category,filename,lineno",
     [
         ("my non-inmanta warning", UserWarning, "/path/to/filename", 42),
         (CompilerRuntimeWarning(None, "my inmanta warning"), CompilerRuntimeWarning, "/path/to/filename", 42),
     ],
 )
 def test_warning_format(
-    caplog, warning: Union[str, Warning], category: Type[Warning], filename: str, lineno: int, expected_msg: str
+    caplog, warning: Union[str, Warning], category: Type[Warning], filename: str, lineno: int
 ):
     caplog.set_level(logging.WARNING)
     WarningsManager.apply_config({})
