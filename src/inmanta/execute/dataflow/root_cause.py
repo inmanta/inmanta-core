@@ -30,7 +30,7 @@ class RootCauseAnalyzer:
     def __init__(self, nodes: Iterable[AttributeNode]) -> None:
         self.nodes: FrozenSet[AttributeNode] = frozenset(nodes)
 
-    def root_causes(self) -> FrozenSet[AttributeNode]:
+    def root_causes(self) -> Set[AttributeNode]:
         """
             Returns the root causes from this instances' set of attribute nodes. An attribute node c
             is defined as the cause for an other attribute node n iff c being unset leads to n
@@ -74,11 +74,11 @@ class RootCauseAnalyzer:
         causes: Set[AttributeNode] = set(())
         for node in self.nodes:
             to_do.remove(node)
-            if not self._caused_by(node, frozenset(causes.union(to_do))):
+            if not self._caused_by(node, causes.union(to_do)):
                 causes.add(node)
-        return frozenset(causes)
+        return causes
 
-    def _caused_by(self, node: AttributeNode, pos_causes: FrozenSet[AttributeNode]) -> bool:
+    def _caused_by(self, node: AttributeNode, pos_causes: Set[AttributeNode]) -> bool:
         """
             Returns True iff node being unset is caused by any of pos_causes being unset.
         """
