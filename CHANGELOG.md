@@ -2,6 +2,7 @@
 
 ## Breaking changes
 - Non-boolean arguments to boolean operators are no longer allowed, this was previously possible due to bug (#1808)
+- Server will no longer start if the database schema is for a newer version (#1878)
 
 ## Deprecated
  - Leaving a nullable attribute unassigned now produces a deprecation warning. Explicitly assign null instead. (#1775)

@@ -45,6 +45,10 @@ class TableNotFound(Exception):
     pass
 
 
+class InvalidSchemaVersion(Exception):
+    pass
+
+
 class Version(object):
     """ Internal representation of a version """
 
@@ -81,8 +85,14 @@ class DBSchema(object):
     async def ensure_db_schema(self) -> None:
         current_version_db_schema = await self.ensure_self_update()
         update_functions = await self._get_update_functions()
-        if update_functions[-1].version > current_version_db_schema:
+        desired_version = update_functions[-1].version
+        if desired_version > current_version_db_schema:
             await self._update_db_schema(update_functions)
+        elif desired_version < current_version_db_schema:
+            raise InvalidSchemaVersion(
+                f"Desired database version {desired_version} is lower "
+                f"than the current version {current_version_db_schema}, downgrading is not supported"
+            )
 
     async def ensure_self_update(self) -> int:
         try:
