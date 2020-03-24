@@ -29,6 +29,9 @@ Extending this idea to the inmanta DSL leads to the concept of a data trace. Sin
 the language is data flow oriented, a trace of the flow to some erroneous part of the configuration
 model gives the developer insight in the cause of the error.
 
+Additionally, a root cause analysis will be done on any incomplete instances and only those root
+causes will be reported.
+
 
 Enabling the  data trace
 ------------------------
