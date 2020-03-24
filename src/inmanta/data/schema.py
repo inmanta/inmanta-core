@@ -237,11 +237,7 @@ class DBSchema(object):
             return Version(mod_name, update_function)
 
         modules_with_names = [get_modules(mod_name) for mod_name in module_names]
-        filtered_modules = [
-            (module_name, module)
-            for module_name, module in modules_with_names
-            if not (hasattr(module, "DISABLED") and module.DISABLED)
-        ]
+        filtered_modules = [(module_name, module) for module_name, module in modules_with_names if not module.DISABLED]
 
         version = [make_version(name, mod) for name, mod in filtered_modules]
 

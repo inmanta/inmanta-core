@@ -260,6 +260,10 @@ async def test_dbschema_partial_update_db_schema_failure(postgresql_client, get_
 @pytest.mark.asyncio
 async def test_dbschema_get_dct_with_update_functions():
     module_names = [modname for _, modname, ispkg in pkgutil.iter_modules(data.PACKAGE_WITH_UPDATE_FILES.__path__) if not ispkg]
+    for module_name in module_names:
+        module = __import__(data.PACKAGE_WITH_UPDATE_FILES.__name__ + "." + module_name, fromlist=["update"])
+        if module.DISABLED:
+            module_names.remove(module_name)
     all_versions = [int(mod_name[1:]) for mod_name in module_names]
 
     db_schema = schema.DBSchema(CORE_SCHEMA_NAME, data.PACKAGE_WITH_UPDATE_FILES, None)
