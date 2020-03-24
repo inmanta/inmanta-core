@@ -11,7 +11,7 @@
  - Various compiler error reporting improvements (#1810, #1920)
  - Fixed cache leak in agent when deployments are canceled (#1883)
  - Improved robustness of modules update (#1885)
- - Removed environmental variables from agent report (#1891)
+ - Removed environmental variables from agent report (#1891)tests/db/test_db_schema.py
  - Use asyncio subprocess instead of tornado subprocess (#1792)
 
 ## Added
@@ -20,6 +20,7 @@
  - Added support for compiler warnings (#1779, #1905, #1906)
  - Added support for DISABLED flag for database migration scripts (#1913)
  - Added v5 database migration script (#1914)
+ - Check to fail if DB Schema downgrade would be necessary (#1878)
 
 # v 2020.1 (2020-02-19) Changes in this release:
 
