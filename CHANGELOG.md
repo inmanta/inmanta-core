@@ -12,7 +12,7 @@
  - Various compiler error reporting improvements (#1810, #1920)
  - Fixed cache leak in agent when deployments are canceled (#1883)
  - Improved robustness of modules update (#1885)
- - Removed environmental variables from agent report (#1891)tests/db/test_db_schema.py
+ - Removed environmental variables from agent report (#1891)
  - Use asyncio subprocess instead of tornado subprocess (#1792)
 
 ## Added
