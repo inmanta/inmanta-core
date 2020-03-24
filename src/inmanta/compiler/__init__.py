@@ -209,7 +209,9 @@ class Compiler(object):
                         and exception.instance.instance_node is not None
                         and exception.attribute is not None
                     ):
-                        attribute: dataflow.AttributeNode = exception.instance.instance_node.node().register_attribute(exception.attribute.name)
+                        attribute: dataflow.AttributeNode = exception.instance.instance_node.node().register_attribute(
+                            exception.attribute.name
+                        )
                         if len(list(attribute.assignments())) > 0:
                             trace = DataTraceRenderer.render(
                                 dataflow.InstanceAttributeNodeReference(attribute.instance, attribute.name)
