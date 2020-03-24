@@ -96,7 +96,8 @@ class UnsetRootCauseAnalyzer:
             n: AssignableNode = nodes.pop()
             if isinstance(n, AttributeNode) and n in pos_causes:
                 return True
-            # TODO: skip node if it has a bound ResultVariable with a value
+            if node.result_variable is not None and node.result_variable.hasValue:
+                continue
             process_step(self._assignment_step(n))
             process_step(self._parent_instance_step(n))
             process_step(self._child_attribute_step(n))

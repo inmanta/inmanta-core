@@ -168,6 +168,7 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
     def set_dataflow_node(self, node: dataflow.AssignableNodeReference) -> None:
         assert self._node is None or self._node == node
         self._node = node
+        self._node.set_result_variable(self)
 
     def get_dataflow_node(self) -> dataflow.AssignableNodeReference:
         assert self._node is not None, "assertion error at %s.get_dataflow_node() in ResultVariable" % self

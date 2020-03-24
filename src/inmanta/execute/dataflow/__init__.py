@@ -21,7 +21,7 @@ from itertools import chain, filterfalse
 from typing import TYPE_CHECKING, Callable, Dict, FrozenSet, Generic, Iterable, Iterator, List, Optional, Set, Tuple, TypeVar
 
 if TYPE_CHECKING:
-    from inmanta.execute.runtime import Resolver
+    from inmanta.execute.runtime import Resolver, ResultVariable
     from inmanta.ast import Locatable
     from inmanta.ast.attribute import Attribute
     from inmanta.ast.entity import Entity
@@ -329,6 +329,10 @@ class AssignableNodeReference(NodeReference):
     ) -> None:
         self.get_attribute(attribute).assign(rhs, responsible, context)
 
+    def set_result_variable(self, result_variable: "ResultVariable") -> None:
+        for node in self.nodes():
+            node.set_result_variable(result_variable)
+
 
 class AttributeNodeReference(AssignableNodeReference):
     """
@@ -576,7 +580,14 @@ class AssignableNode(Node):
         Node representing a variable or an attribute in the assignment graph model.
     """
 
-    __slots__ = ("name", "assignable_assignments", "value_assignments", "instance_assignments", "equivalence")
+    __slots__ = (
+        "name",
+        "assignable_assignments",
+        "value_assignments",
+        "instance_assignments",
+        "equivalence",
+        "result_variable",
+    )
 
     def __init__(self, name: str) -> None:
         Node.__init__(self)
@@ -585,6 +596,7 @@ class AssignableNode(Node):
         self.value_assignments: List[Assignment[ValueNodeReference]] = []
         self.instance_assignments: List[Assignment[InstanceNodeReference]] = []
         self.equivalence: Equivalence = Equivalence(frozenset([self]))
+        self.result_variable: Optional[ResultVariable] = None
 
     def reference(self) -> AssignableNodeReference:
         return VariableNodeReference(self)
@@ -642,6 +654,10 @@ class AssignableNode(Node):
             node.equivalence = new_equivalence
         # propagate this node's tentative instance to the new leaves, if it exists
         self.equivalence.propagate_tentative_instance()
+
+    def set_result_variable(self, result_variable: "ResultVariable") -> None:
+        assert self.result_variable is None or self.result_variable is result_variable
+        self.result_variable = result_variable
 
     def __repr__(self) -> str:
         return self.name
