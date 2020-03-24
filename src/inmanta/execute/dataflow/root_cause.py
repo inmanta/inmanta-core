@@ -18,7 +18,7 @@
 
 from typing import FrozenSet, Iterable, List, Set
 
-from inmanta.execute.dataflow import AssignableNode, AttributeNode, AttributeNodeReference, InstanceNode
+from inmanta.execute.dataflow import AssignableNode, AttributeNode, AttributeNodeReference
 
 
 class UnsetRootCauseAnalyzer:
@@ -116,11 +116,7 @@ class UnsetRootCauseAnalyzer:
 
     def _child_attribute_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
         return frozenset(
-            node
+            index_attribute
             for instance_assignment in node.instance_assignments
-            for node in self._index_attributes(instance_assignment.rhs.node())
+            for index_attribute in instance_assignment.rhs.top_node().get_index_attributes()
         )
-
-    def _index_attributes(self, instance: InstanceNode) -> List[AttributeNode]:
-        # TODO: return only index attributes. Investigating any attribute works just as well but is less efficient.
-        return list(instance.attributes.values())

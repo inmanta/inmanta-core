@@ -931,6 +931,12 @@ class InstanceNode(Node):
         except KeyError:
             return None
 
+    def get_index_attributes(self) -> Iterator[AttributeNode]:
+        if self.get_self() is not self:
+            return self.get_self().get_index_attributes()
+        assert self.entity is not None
+        yield from (self.register_attribute(i) for i in chain.from_iterable(self.entity.get_indices()))
+
     def assign_other_direction(
         self, attribute: str, node_ref: "NodeReference", responsible: "Locatable", context: "DataflowGraph"
     ) -> None:
