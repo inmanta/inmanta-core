@@ -27,7 +27,7 @@ from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginSt
 from inmanta.compiler import config as compiler_config
 from inmanta.execute import scheduler
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
-from inmanta.execute.dataflow.root_cause import RootCauseAnalyzer
+from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ResultVariable
 from inmanta.module import Project
@@ -192,7 +192,7 @@ class Compiler(object):
                     if cause.instance.instance_node is not None
                     if cause.attribute is not None
                 }
-                root_causes: Set[dataflow.AttributeNode] = RootCauseAnalyzer(unset_attrs.keys()).root_causes()
+                root_causes: Set[dataflow.AttributeNode] = UnsetRootCauseAnalyzer(unset_attrs.keys()).root_causes()
                 for attr, e in unset_attrs.items():
                     if attr not in root_causes:
                         exception.others.remove(e)

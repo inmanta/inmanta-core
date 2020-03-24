@@ -20,7 +20,7 @@ from compiler.dataflow.conftest import DataflowTestHelper
 
 from inmanta.ast import MultiException
 from inmanta.execute.dataflow import AssignableNode, AssignableNodeReference, AttributeNode, DataflowGraph
-from inmanta.execute.dataflow.root_cause import RootCauseAnalyzer
+from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
 
 
 def get_attribute_node(graph: DataflowGraph, attr: str) -> AttributeNode:
@@ -78,4 +78,4 @@ x.n = u.v.n
     c_i: AttributeNode = get_attribute_node(graph, "c.i")
     u_v: AttributeNode = get_attribute_node(graph, "u.v")
 
-    assert RootCauseAnalyzer([x_n, c_i, u_v]).root_causes() == {c_i}
+    assert UnsetRootCauseAnalyzer([x_n, c_i, u_v]).root_causes() == {c_i}
