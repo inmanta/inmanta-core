@@ -2,6 +2,7 @@
 
 ## Breaking changes
 - Non-boolean arguments to boolean operators are no longer allowed, this was previously possible due to bug (#1808)
+- Server will no longer start if the database schema is for a newer version (#1878)
 
 ## Deprecated
  - Leaving a nullable attribute unassigned now produces a deprecation warning. Explicitly assign null instead. (#1775)
@@ -20,7 +21,6 @@
  - Added support for compiler warnings (#1779, #1905, #1906)
  - Added support for DISABLED flag for database migration scripts (#1913)
  - Added v5 database migration script (#1914)
- - Check to fail if DB Schema downgrade would be necessary (#1878)
 
 # v 2020.1 (2020-02-19) Changes in this release:
 
