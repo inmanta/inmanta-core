@@ -98,20 +98,37 @@ class UnsetRootCauseAnalyzer:
                 causes.add(node)
         return causes
 
+    def _assignment_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
+        """
+            Performs one propagation step according to rule 2:
+                is_cause(c, x) <- exists y: is_cause(c, y) and is_cause(y, x)
+                (Cause is transitive)
+        """
+        return frozenset(node for assignment in node.assignable_assignments for node in assignment.rhs.nodes())
+
+    def _child_attribute_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
+        """
+            Performs one propagation step according to rule 3:
+                is_cause(c, x) <- exists i : is_index_attr(x, i) and is_cause(c, x.i)
+                (If an index attribute of x is unset this blocks execution. If c is the cause for the index
+                    value being unset, it is the cause for x being unset)
+        """
+        return frozenset(
+            index_attribute
+            for instance_assignment in node.instance_assignments
+            for index_attribute in instance_assignment.rhs.top_node().get_index_attributes()
+        )
+
     def _parent_instance_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
+        """
+            Performs one propagation step according to rule 4:
+                is_cause(c, x) <- exists y, z : `x = y.z` in graph and is_cause(c, y)
+                (If x refers to y.z but y is unset, this blocks execution. If c is the cause for y being unset,
+                    it is the cause for x being unset)
+        """
         return frozenset(
             node
             for assignment in node.assignable_assignments
             if isinstance(assignment.rhs, AttributeNodeReference)
             for node in assignment.rhs.instance_var_ref.nodes()
-        )
-
-    def _assignment_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
-        return frozenset(node for assignment in node.assignable_assignments for node in assignment.rhs.nodes())
-
-    def _child_attribute_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
-        return frozenset(
-            index_attribute
-            for instance_assignment in node.instance_assignments
-            for index_attribute in instance_assignment.rhs.top_node().get_index_attributes()
         )
