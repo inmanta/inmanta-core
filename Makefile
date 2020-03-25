@@ -13,6 +13,7 @@ install:
 install-tests:
 	pip install -U setuptools pip
 	python3 tests_common/copy_files_from_core.py
+	isort -rc tests_common/
 	pip install -e ./tests_common
 
 .PHONY: format
