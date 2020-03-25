@@ -30,7 +30,6 @@ from inmanta.execute.dataflow import (
     Assignment,
     AttributeNode,
     DataflowGraph,
-    DirectNodeReference,
     ValueNode,
     ValueNodeReference,
     VariableNodeReference,
@@ -45,7 +44,7 @@ x = 42
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
     x: AssignableNodeReference = graph.get_named_node("x")
-    assert isinstance(x, DirectNodeReference)
+    assert isinstance(x, VariableNodeReference)
     assert len(x.node.value_assignments) == 1
     assignment: Assignment[ValueNodeReference] = x.node.value_assignments[0]
     assert isinstance(assignment.responsible, Assign)
@@ -65,7 +64,7 @@ x = 0
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
     x: AssignableNodeReference = graph.get_named_node("x")
-    assert isinstance(x, DirectNodeReference)
+    assert isinstance(x, VariableNodeReference)
     assignments: List[Assignment] = x.node.value_assignments
     assert len(assignments) == 2
     zero_index: int = [assignment.rhs for assignment in assignments].index(ValueNode(0).reference())
@@ -87,7 +86,7 @@ y = 42
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
     x: AssignableNodeReference = graph.get_named_node("x")
-    assert isinstance(x, DirectNodeReference)
+    assert isinstance(x, VariableNodeReference)
     assert len(x.node.assignable_assignments) == 1
     assignment: Assignment[AssignableNodeReference] = x.node.assignable_assignments[0]
     assert isinstance(assignment.responsible, Assign)
