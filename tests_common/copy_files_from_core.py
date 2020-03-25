@@ -79,7 +79,6 @@ shutil.copy(dump_tool_py, dest_dump_tool_py)
 shutil.copytree(simple_project_dir, dest_simple_project_dir)
 
 # Fix import
-contents = []
 with fileinput.input(dest_dump_tool_py, inplace=True) as f:
     for line in f:
         if line.startswith("from utils"):
