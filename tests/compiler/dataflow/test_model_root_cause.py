@@ -17,6 +17,9 @@
 """
 
 from compiler.dataflow.conftest import DataflowTestHelper
+from typing import List, Set
+
+import pytest
 
 from inmanta.ast import MultiException
 from inmanta.execute.dataflow import AssignableNode, AssignableNodeReference, AttributeNode, DataflowGraph
@@ -30,7 +33,8 @@ def get_attribute_node(graph: DataflowGraph, attr: str) -> AttributeNode:
     return node
 
 
-def test_dataflow_model_root_cause(dataflow_test_helper: DataflowTestHelper) -> None:
+@pytest.mark.parametrize("equivalence", [True, False])
+def test_dataflow_model_root_cause(dataflow_test_helper: DataflowTestHelper, equivalence: bool) -> None:
     dataflow_test_helper.compile(
         """
 entity C:
@@ -65,11 +69,21 @@ implement X using std::none
 
 
 c = C()
+%s
+
 u = U()
 x = X()
 u.v = V(n = 42, i = c.i)
 x.n = u.v.n
-        """,
+        """
+        % (
+            """
+c.i = cc.i
+cc = C(i = c.i)
+            """
+            if equivalence
+            else ""
+        ),
         MultiException,
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
@@ -78,4 +92,12 @@ x.n = u.v.n
     c_i: AttributeNode = get_attribute_node(graph, "c.i")
     u_v: AttributeNode = get_attribute_node(graph, "u.v")
 
-    assert UnsetRootCauseAnalyzer([x_n, c_i, u_v]).root_causes() == {c_i}
+    attributes: List[AttributeNode] = [x_n, c_i, u_v]
+    root_causes: Set[AttributeNode] = {c_i}
+
+    if equivalence:
+        cc_i: AttributeNode = get_attribute_node(graph, "cc.i")
+        attributes.append(cc_i)
+        root_causes.add(cc_i)
+
+    assert UnsetRootCauseAnalyzer(attributes).root_causes() == root_causes

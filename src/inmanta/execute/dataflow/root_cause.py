@@ -86,7 +86,7 @@ class UnsetRootCauseAnalyzer:
             is_root_cause: bool = True
             while to_check:
                 n: AssignableNode = to_check.pop()
-                if n in others:
+                if n in others and n not in node.equivalence.nodes:
                     is_root_cause = False
                     break
                 if n.result_variable is not None and n.result_variable.hasValue:
