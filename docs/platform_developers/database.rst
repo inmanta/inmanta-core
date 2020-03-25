@@ -17,9 +17,15 @@ as an argument. This function should execute all database queries required to up
 database schema (<version> - 1) to the new version of the database schema (<version>). **All changes done by the update
 function should be executed in the transaction.** An example is given in the code snippet below.
 
+Each each of these Python modules must also contain the fields ``DISABLED`` set to false to make the changes effective.
+
 .. code-block:: python
 
     # File: src/inmanta/db/versions/v1.py
+    from asyncpg import Connection
+
+    DISABLED = False
+
     async def update(connection: Connection) -> None:
         schema = """
         ALTER TABLE public.test
