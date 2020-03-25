@@ -12,7 +12,8 @@ Model debugging
     - conditionals not supported
     - for loops not supported
     - boolean operations not supported
-    - only double assignment and exceeding relation arity errors are supported
+    - explicit index lookups not supported
+    - only double assignment, exceeding relation arity and incomplete instance errors are supported
 
     Support for the listed language features will be added gradually.
 
@@ -32,8 +33,15 @@ model gives the developer insight in the cause of the error.
 Additionally, a root cause analysis will be done on any incomplete instances and only those root
 causes will be reported.
 
+The first section, :ref:`Enabling the data trace<enable-data-trace>` describes how to enable these two
+tools. The tools themselves are described in the sections
+:ref:`Interpreting the data trace<datatrace>` and :ref:`Root cause analysis<rootcause>`
+respectively. The final section, :ref:`Usage example<data-trace-usage>` shows an example use case.
 
-Enabling the  data trace
+
+.. _enable-data-trace:
+
+Enabling the data trace
 ------------------------
 
 To show a data trace when an error occurs, compile the model with the ``--experimental-data-trace``
@@ -66,6 +74,8 @@ Compiling with ``inmanta compile --experimental-data-trace`` results in
         AT ./main.cf:2
      (reported in x = 2 (./main.cf:2))
 
+
+.. _datatrace:
 
 Interpreting the data trace
 ---------------------------
@@ -291,7 +301,61 @@ And finally, an index:
 
 This data trace highlights the index match between the two constructors at lines 6--8.
 
-Usage examples
+
+.. _rootcause:
+
+Root cause analysis
+-------------------
+
+Enabling the data trace also enables a root cause analysis when multiple attributes have not received a value.
+For example, compiling the model below results in three errors, one for each of the instances.
+
+.. code-block:: inmanta
+    :linenos:
+
+    entity A:
+        number n
+    end
+
+    implement A using std::none
+
+    x = A()
+    y = A()
+    z = A()
+
+    x.n = y.n
+    y.n = z.n
+
+.. code-block::
+    :caption: compile output
+    :linenos:
+
+    Reported 3 errors
+    error 0:
+      The object __config__::A (instantiated at ./main.cf:7) is not complete: attribute n (./main.cf:2) is not set
+    error 1:
+      The object __config__::A (instantiated at ./main.cf:9) is not complete: attribute n (./main.cf:2) is not set
+    error 2:
+      The object __config__::A (instantiated at ./main.cf:8) is not complete: attribute n (./main.cf:2) is not set
+
+Compiling with data trace enabled will do a root cause analysis on these errors. In this case it will infer that ``x.n``
+and ``y.n`` are only unset because ``z.n`` is unset. Compiling then shows:
+
+.. code-block::
+    :caption: compile output with --experimental-data-trace
+    :linenos:
+
+    Reported 1 errors
+    error 0:
+      The object __config__::A (instantiated at ./main.cf:9) is not complete: attribute n (./main.cf:2) is not set
+
+In cases where a single error leads to errors for a collection of related attributes, this can greatly simplify the
+debugging process.
+
+
+.. _data-trace-usage:
+
+Usage example
 --------------
 
 Let's have a look at the model below:
