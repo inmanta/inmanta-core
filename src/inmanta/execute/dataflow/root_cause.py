@@ -38,7 +38,7 @@ class UnsetRootCauseAnalyzer:
             Formally, the relation is_cause(c, x) is defined by three rules:
                 1. is_cause(c, x) <- c in `x = c` in graph
                     (If `x = c` then c is responsible for x receiving a value)
-                2. is_cause(c, x) <- exists y: is_cause(c, y) and is_cause(y, x) 
+                2. is_cause(c, x) <- exists y: is_cause(c, y) and is_cause(y, x)
                     (Cause is transitive)
                 3. is_cause(c, x) <- exists i : is_index_attr(x, i) and is_cause(c, x.i)
                     (If an index attribute of x is unset this blocks execution. If c is the cause for the index
@@ -72,36 +72,31 @@ class UnsetRootCauseAnalyzer:
             Rules 2 to 4 are implemented as propagation steps by
             _assignment_step, _child_attribute_step and _parent_instance_step respectively.
         """
-        to_do: Set[AttributeNode] = set(self.nodes)
         causes: Set[AttributeNode] = set(())
         for node in self.nodes:
-            to_do.remove(node)
-            if not self._caused_by(node, causes.union(to_do)):
+            others: FrozenSet[AttributeNode] = self.nodes.difference({node})
+            seen: Set[AssignableNode] = set(())
+            to_check: List[AssignableNode] = [node]
+
+            def process_step(step_result: FrozenSet[AssignableNode]) -> None:
+                new: Set[AssignableNode] = set(step_result).difference(seen)
+                to_check.extend(new)
+                seen.update(new)
+
+            is_root_cause: bool = True
+            while to_check:
+                n: AssignableNode = to_check.pop()
+                if n in others:
+                    is_root_cause = False
+                    break
+                if node.result_variable is not None and node.result_variable.hasValue:
+                    continue
+                process_step(self._assignment_step(n))
+                process_step(self._parent_instance_step(n))
+                process_step(self._child_attribute_step(n))
+            if is_root_cause:
                 causes.add(node)
         return causes
-
-    def _caused_by(self, node: AttributeNode, pos_causes: Set[AttributeNode]) -> bool:
-        """
-            Returns True iff node being unset is caused by any of pos_causes being unset.
-        """
-        checked: Set[AssignableNode] = set(())
-        nodes: List[AssignableNode] = [node]
-
-        def process_step(step_result: FrozenSet[AssignableNode]) -> None:
-            new: Set[AssignableNode] = step_result - checked
-            nodes.extend(new)
-            checked.update(new)
-
-        while nodes:
-            n: AssignableNode = nodes.pop()
-            if isinstance(n, AttributeNode) and n in pos_causes:
-                return True
-            if node.result_variable is not None and node.result_variable.hasValue:
-                continue
-            process_step(self._assignment_step(n))
-            process_step(self._parent_instance_step(n))
-            process_step(self._child_attribute_step(n))
-        return False
 
     def _parent_instance_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
         return frozenset(
