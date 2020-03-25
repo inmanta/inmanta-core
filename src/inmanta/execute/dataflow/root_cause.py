@@ -88,7 +88,7 @@ class UnsetRootCauseAnalyzer:
         nodes: List[AssignableNode] = [node]
 
         def process_step(step_result: FrozenSet[AssignableNode]) -> None:
-            new: Set[AssignableNode] = {n for n in step_result if n not in checked}
+            new: Set[AssignableNode] = step_result - checked
             nodes.extend(new)
             checked.update(new)
 
