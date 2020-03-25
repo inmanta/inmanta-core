@@ -18,6 +18,7 @@
 
 import logging
 import pkgutil
+import re
 from types import ModuleType
 from typing import Any, Callable, Coroutine, List, Optional, Tuple
 
@@ -246,7 +247,19 @@ class DBSchema(object):
             update_function = module.update
             return Version(mod_name, update_function)
 
-        modules_with_names = [get_modules(mod_name) for mod_name in module_names]
+        pattern = re.compile("^v[0-9]+$")
+
+        filtered_module_names = []
+        for module_name in module_names:
+            if not pattern.match(module_name):
+                LOGGER.warning(
+                    f"Database schema version file name {module_name} "
+                    f"doesn't match the expected pattern: v<version_number>.py, skipping it"
+                )
+            else:
+                filtered_module_names.append(module_name)
+
+        modules_with_names = [get_modules(mod_name) for mod_name in filtered_module_names]
         filtered_modules = [(module_name, module) for module_name, module in modules_with_names if not module.DISABLED]
 
         version = [make_version(name, mod) for name, mod in filtered_modules]

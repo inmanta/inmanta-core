@@ -14,6 +14,7 @@
  - Improved robustness of modules update (#1885)
  - Removed environmental variables from agent report (#1891)
  - Use asyncio subprocess instead of tornado subprocess (#1792)
+ - Added warning for incorrect database migration script names (#1912)
 
 ## Added
  - Experimental data trace application (#1820, #1831)

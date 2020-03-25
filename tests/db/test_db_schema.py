@@ -30,6 +30,7 @@ from asyncpg import PostgresSyntaxError
 
 import inmanta.db.versions
 from data.db import versions
+from data.db_with_invalid_versions import invalid_versions
 from inmanta import data
 from inmanta.data import CORE_SCHEMA_NAME, schema
 from inmanta.data.schema import InvalidSchemaVersion, TableNotFound, Version, create_schemamanager
@@ -375,3 +376,15 @@ async def test_dbschema_update_db_downgrade(postgresql_client):
         await db_schema.ensure_db_schema()
     current_db_version = await db_schema.get_current_version()
     assert original_version == current_db_version
+
+
+@pytest.mark.asyncio
+async def test_dbschema_get_dct_filter_invalid_names(caplog):
+    db_schema = schema.DBSchema(CORE_SCHEMA_NAME, invalid_versions, None)
+    update_function_map = await db_schema._get_update_functions()
+    assert len(update_function_map) == 0
+    log_contains(caplog, "inmanta.data.schema", logging.WARNING, "V2 doesn't match the expected pattern")
+    log_contains(caplog, "inmanta.data.schema", logging.WARNING, "ver1 doesn't match the expected pattern")
+    log_contains(caplog, "inmanta.data.schema", logging.WARNING, "ver1a doesn't match the expected pattern")
+    log_contains(caplog, "inmanta.data.schema", logging.WARNING, "version3 doesn't match the expected pattern")
+    log_contains(caplog, "inmanta.data.schema", logging.WARNING, "v1b doesn't match the expected pattern")
