@@ -89,7 +89,7 @@ class UnsetRootCauseAnalyzer:
                 if n in others:
                     is_root_cause = False
                     break
-                if node.result_variable is not None and node.result_variable.hasValue:
+                if n.result_variable is not None and n.result_variable.hasValue:
                     continue
                 process_step(self._assignment_step(n))
                 process_step(self._parent_instance_step(n))
