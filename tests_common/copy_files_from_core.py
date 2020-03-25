@@ -83,6 +83,6 @@ contents = []
 with fileinput.input(dest_dump_tool_py, inplace=True) as f:
     for line in f:
         if line.startswith("from utils"):
-            print("from inmanta_tests.utils" + line[len("from utils"):], end="")
+            print("from inmanta_tests.utils" + line[len("from utils") :], end="")
         else:
             print(line, end="")
