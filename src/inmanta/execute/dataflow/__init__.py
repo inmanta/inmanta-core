@@ -330,6 +330,13 @@ class AssignableNodeReference(NodeReference):
         self.get_attribute(attribute).assign(rhs, responsible, context)
 
     def set_result_variable(self, result_variable: "ResultVariable") -> None:
+        """
+            Sets this nodes' result variable. It is sufficient to set it once
+            because at the point a ResultVariable gets created, the corresponding
+            node exists and should not change except when explicitly replaced by this
+            module. In that case it's the responsibility of the actor to propagate
+            the result variable.
+        """
         for node in self.nodes():
             node.set_result_variable(result_variable)
 
@@ -867,6 +874,8 @@ class InstanceNode(Node):
         for attr_name, attr_node in other.get_self().attributes.items():
             for assignment in attr_node.assignments():
                 self.assign_attribute(attr_name, assignment.rhs, assignment.responsible, assignment.context)
+            if attr_node.result_variable is not None:
+                self.register_attribute(attr_name).set_result_variable(attr_node.result_variable)
 
     def index_match(self, index_node: "InstanceNode") -> None:
         """

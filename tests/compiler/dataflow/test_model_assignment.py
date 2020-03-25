@@ -271,6 +271,8 @@ entity A:
     number n
 end
 
+index A(n)
+
 A.other [0:1] -- B
 
 entity B:
@@ -279,9 +281,10 @@ end
 implement A using std::none
 implement B using std::none
 
-x = A()
-x.n = 4
+x = A(n = 4)
 x.other = B()
+
+y = A(n = 4)
         """,
     )
 
