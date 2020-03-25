@@ -38,7 +38,7 @@ class UnsetRootCauseAnalyzer:
             Formally, the relation is_cause(c, x) is defined by three rules:
                 1. is_cause(c, x) <- c in `x = c` in graph
                     (If `x = c` then c is responsible for x receiving a value)
-                2. is_cause(c, x) <- exists y: is_cause(y, x) and is_cause(c, y)
+                2. is_cause(c, x) <- exists y: is_cause(c, y) and is_cause(y, x) 
                     (Cause is transitive)
                 3. is_cause(c, x) <- exists i : is_index_attr(x, i) and is_cause(c, x.i)
                     (If an index attribute of x is unset this blocks execution. If c is the cause for the index
