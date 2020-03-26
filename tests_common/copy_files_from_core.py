@@ -77,11 +77,3 @@ shutil.copytree(enduser_certs_dir, os.path.join(dest_data_dir, "ca", "enduser-ce
 shutil.copy(db_common_py, dest_db_common_py)
 shutil.copy(dump_tool_py, dest_dump_tool_py)
 shutil.copytree(simple_project_dir, dest_simple_project_dir)
-
-# Fix import
-with fileinput.input(dest_dump_tool_py, inplace=True) as f:
-    for line in f:
-        if line.startswith("from utils"):
-            print("from inmanta_tests.utils" + line[len("from utils") :], end="")
-        else:
-            print(line, end="")
