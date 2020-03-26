@@ -78,10 +78,14 @@ class UnsetRootCauseAnalyzer:
         ignore_roots: Set[AttributeNode] = set(())
         # Any node of which the roots are already in the roots set
         seen: Set[AssignableNode] = set(())
-        # Worklist
-        to_check: FrozenSet[AttributeNode] = self.nodes
 
         def has_root(node: AssignableNode) -> bool:
+            """
+            Add underlying roots to roots
+
+            :return: is there a valid root below this node
+            """
+
             if node in seen:
                 # Already processed, roots are already in roots
                 # Unless is is an ignored_root
@@ -124,7 +128,7 @@ class UnsetRootCauseAnalyzer:
             # We are a root or have seen an underlying root
             return True
 
-        for node in to_check:
+        for node in self.nodes:
             has_root(node)
 
         return roots
