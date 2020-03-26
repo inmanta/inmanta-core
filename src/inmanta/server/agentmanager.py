@@ -214,7 +214,7 @@ class AgentManager(ServerSlice, SessionListener):
                 proc = data.AgentProcess(hostname=nodename, environment=tid, first_seen=now, last_seen=now, sid=sid)
                 await proc.insert()
             else:
-                await proc.update_fields(last_seen=now)
+                await proc.update_fields(last_seen=now, expired=None)
 
             for nh in session.endpoint_names:
                 LOGGER.debug("New session for agent %s on %s", nh, nodename)

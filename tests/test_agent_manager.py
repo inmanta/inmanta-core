@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import datetime
 from unittest.mock import Mock
 from uuid import UUID, uuid4
 
@@ -23,7 +24,8 @@ import pytest
 
 from inmanta import data
 from inmanta.protocol import Result
-from inmanta.server.agentmanager import AgentManager
+from inmanta.server.agentmanager import AgentManager, SessionManager
+from inmanta.server.protocol import Session
 from utils import UNKWN, assert_equal_ish
 
 
@@ -424,3 +426,49 @@ async def test_db_clean(init_dataclasses_and_load_schema):
     await futures.proccess()
     assert len(am.sessions) == 0
     await assert_agents("paused", "down", "down")
+
+
+@pytest.mark.asyncio
+async def test_session_renewal(init_dataclasses_and_load_schema):
+    """
+        Agent got timeout but agent process was still running (e.g, network connectivity was disrupted).
+        So the same agent process connects to the server with the same session id. This test verifies
+        that the database state is updated correctly when an expired session is renewed.
+    """
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="testenv", project=project.id)
+    await env.insert()
+
+    agent_manager = AgentManager()
+    agent_manager._stopped = False
+    agent_manager._stopping = False
+
+    session_manager = SessionManager()
+    sid = uuid4()
+    tid = env.id
+    endpoint = "vm1"
+    session = Session(
+        sessionstore=session_manager, sid=sid, hang_interval=1, timout=1, tid=tid, endpoint_names=[endpoint], nodename="test"
+    )
+
+    async def assert_db_state(
+        nr_agent_processes: int, nr_live_processes: int, nr_agent_instances: int, nr_life_instances: int
+    ) -> None:
+        result = await data.AgentProcess.get_list(sid=sid)
+        assert len(result) == nr_agent_processes
+        result = await data.AgentProcess.get_live(environment=tid)
+        assert len(result) == nr_live_processes
+        result = await data.AgentInstance.get_list(tid=tid)
+        assert len(result) == nr_agent_instances
+        result = await data.AgentInstance.active_for(tid=tid, endpoint=endpoint)
+        assert len(result) == nr_life_instances
+
+    await assert_db_state(nr_agent_processes=0, nr_live_processes=0, nr_agent_instances=0, nr_life_instances=0)
+    await agent_manager._register_session(session=session, now=datetime.datetime.now())
+    await assert_db_state(nr_agent_processes=1, nr_live_processes=1, nr_agent_instances=1, nr_life_instances=1)
+    await agent_manager._expire_session(session=session, now=datetime.datetime.now())
+    await assert_db_state(nr_agent_processes=1, nr_live_processes=0, nr_agent_instances=1, nr_life_instances=0)
+    await agent_manager._register_session(session=session, now=datetime.datetime.now())
+    await assert_db_state(nr_agent_processes=1, nr_live_processes=1, nr_agent_instances=2, nr_life_instances=1)
