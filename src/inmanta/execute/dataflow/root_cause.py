@@ -72,47 +72,56 @@ class UnsetRootCauseAnalyzer:
             Rules 2 to 4 are implemented as propagation steps by
             _assignment_step, _child_attribute_step and _parent_instance_step respectively.
         """
+        # Actual found roots
         roots: Set[AttributeNode] = set(())
+        # Actual roots that we have to filter out
+        ignore_roots: Set[AttributeNode] = set(())
+        # Any node of which the roots are already in the roots set
         seen: Set[AssignableNode] = set(())
-        to_be_ignored: Set[AssignableNode] = set(())
+        # Worklist
         to_check: FrozenSet[AttributeNode] = self.nodes
 
-        def has_root(node: AssignableNode, cycledetect: FrozenSet = frozenset()) -> bool:
+        def has_root(node: AssignableNode) -> bool:
             if node in seen:
                 # Already processed, roots are already in roots
-                return node not in to_be_ignored
+                # Unless is is an ignored_root
+                return node not in ignore_roots
 
             if node.value_assignments:
                 # Has a value, never has a root cause
                 return False
 
-            if node in cycledetect:
-                # part of a cycle, cycle in itself doesn't provide a root
-                return False
-
-            sub_cycle = cycledetect.union({node})
-
+            # Find any root for this equivalence
             n_has_root = any(
                 (
-                    has_root(subnode, sub_cycle)
+                    has_root(subnode)
+                    for peernode in node.equivalence.nodes
                     for subnode in chain(
-                        self._assignment_step(node), self._parent_instance_step(node), self._child_attribute_step(node)
+                        self._assignment_step(peernode),
+                        self._parent_instance_step(peernode),
+                        self._child_attribute_step(peernode),
                     )
+                    if subnode not in node.equivalence.nodes
                 )
             )
 
+            # This equivalence is done
             seen.update(node.equivalence.nodes)
 
             n_is_root = not n_has_root
 
             if n_is_root:
-                if node not in self.nodes:
+                # See if any of the equivalent nodes are a valid root
+                anyroots = self.nodes.intersection(node.equivalence.nodes)
+                if not anyroots:
                     # it is root, but not one we are looking for, ignore it
-                    to_be_ignored.update(node.equivalence.nodes)
+                    ignore_roots.update(node.equivalence.nodes)
                     return False
                 else:
-                    roots.update(self.nodes.intersection(node.equivalence.nodes))
+                    # Add valid roots
+                    roots.update(anyroots)
 
+            # We are a root or have seen an underlying root
             return True
 
         for node in to_check:
