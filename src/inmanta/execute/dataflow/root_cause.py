@@ -73,19 +73,20 @@ class UnsetRootCauseAnalyzer:
             _assignment_step, _child_attribute_step and _parent_instance_step respectively.
         """
         roots: Set[AttributeNode] = set(())
-        non_roots: Set[AttributeNode] = set(())
+        seen: Set[AttributeNode] = set(())
         to_check: List[AssignableNode] = self.nodes
 
         def has_root(node: AssignableNode, cycledetect=set()) -> bool:
-            if node in roots:
-                return True
-            if node in non_roots:
+            if node in seen:
+                # Already processed, roots are already in roots
                 return True
 
             if node.value_assignments or (node.result_variable is not None and node.result_variable.hasValue):
+                # Has a value, never has a root cause
                 return False
 
             if node in cycledetect:
+                # part of a cycle, cycle in itself doesn't provide a root
                 return False
 
             sub_cycle = cycledetect.union(node.equivalence.nodes)
@@ -99,17 +100,16 @@ class UnsetRootCauseAnalyzer:
                 )
             )
 
+            seen.update(node.equivalence.nodes)
+
             n_is_root = not n_has_root
 
             if n_is_root:
                 if not node in self.nodes:
                     # it is root, but not one we are looking for, ignore it
-                    non_roots.update(node.equivalence.nodes)
                     return False
                 else:
                     roots.update(node.equivalence.nodes)
-            else:
-                non_roots.update(node.equivalence.nodes)
 
             return True
 
