@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+from itertools import chain
 from typing import FrozenSet, Iterable, List, Set
 
 from inmanta.execute.dataflow import AssignableNode, AttributeNode, AttributeNodeReference
@@ -72,31 +72,51 @@ class UnsetRootCauseAnalyzer:
             Rules 2 to 4 are implemented as propagation steps by
             _assignment_step, _child_attribute_step and _parent_instance_step respectively.
         """
-        causes: Set[AttributeNode] = set(())
-        for node in self.nodes:
-            others: FrozenSet[AttributeNode] = self.nodes.difference({node})
-            seen: Set[AssignableNode] = set(())
-            to_check: List[AssignableNode] = [node]
+        roots: Set[AttributeNode] = set(())
+        non_roots: Set[AttributeNode] = set(())
+        to_check: List[AssignableNode] = self.nodes
 
-            def process_step(step_result: FrozenSet[AssignableNode]) -> None:
-                new: Set[AssignableNode] = set(step_result).difference(seen)
-                to_check.extend(new)
-                seen.update(new)
+        def has_root(node: AssignableNode, cycledetect=set()) -> bool:
+            if node in roots:
+                return True
+            if node in non_roots:
+                return True
 
-            is_root_cause: bool = True
-            while to_check:
-                n: AssignableNode = to_check.pop()
-                if n in others and n not in node.equivalence.nodes:
-                    is_root_cause = False
-                    break
-                if n.result_variable is not None and n.result_variable.hasValue:
-                    continue
-                process_step(self._assignment_step(n))
-                process_step(self._parent_instance_step(n))
-                process_step(self._child_attribute_step(n))
-            if is_root_cause:
-                causes.add(node)
-        return causes
+            if node.value_assignments or (node.result_variable is not None and node.result_variable.hasValue):
+                return False
+
+            if node in cycledetect:
+                return False
+
+            sub_cycle = cycledetect.union(node.equivalence.nodes)
+
+            n_has_root = any(
+                (
+                    has_root(subnode, sub_cycle)
+                    for subnode in chain(
+                        self._assignment_step(node), self._parent_instance_step(node), self._child_attribute_step(node)
+                    )
+                )
+            )
+
+            n_is_root = not n_has_root
+
+            if n_is_root:
+                if not node in self.nodes:
+                    # it is root, but not one we are looking for, ignore it
+                    non_roots.update(node.equivalence.nodes)
+                    return False
+                else:
+                    roots.update(node.equivalence.nodes)
+            else:
+                non_roots.update(node.equivalence.nodes)
+
+            return True
+
+        for node in to_check:
+            has_root(node)
+
+        return roots
 
     def _assignment_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
         """
