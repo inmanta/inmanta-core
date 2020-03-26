@@ -34,7 +34,6 @@ else:
     from utils import _wait_until_deployment_finishes, wait_for_version
 
 
-
 def check_result(result):
     assert result.code == 200
 

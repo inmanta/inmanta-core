@@ -16,7 +16,6 @@
 
     Contact: code@inmanta.com
 """
-import fileinput
 import os
 import shutil
 
