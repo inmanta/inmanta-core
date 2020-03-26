@@ -74,12 +74,13 @@ class UnsetRootCauseAnalyzer:
         """
         roots: Set[AttributeNode] = set(())
         seen: Set[AssignableNode] = set(())
+        to_be_ignored: Set[AssignableNode] = set(())
         to_check: FrozenSet[AttributeNode] = self.nodes
 
         def has_root(node: AssignableNode, cycledetect: FrozenSet = frozenset()) -> bool:
             if node in seen:
                 # Already processed, roots are already in roots
-                return True
+                return node not in to_be_ignored
 
             if node.value_assignments:
                 # Has a value, never has a root cause
@@ -89,7 +90,7 @@ class UnsetRootCauseAnalyzer:
                 # part of a cycle, cycle in itself doesn't provide a root
                 return False
 
-            sub_cycle = cycledetect.union(node.equivalence.nodes)
+            sub_cycle = cycledetect.union({node})
 
             n_has_root = any(
                 (
@@ -107,6 +108,7 @@ class UnsetRootCauseAnalyzer:
             if n_is_root:
                 if node not in self.nodes:
                     # it is root, but not one we are looking for, ignore it
+                    to_be_ignored.update(node.equivalence.nodes)
                     return False
                 else:
                     roots.update(self.nodes.intersection(node.equivalence.nodes))
