@@ -21,10 +21,12 @@ from itertools import chain
 from typing import Dict, List, Optional, Tuple
 
 import inmanta.ast.type as InmantaType
+import inmanta.execute.dataflow as dataflow
 from inmanta import plugins
 from inmanta.ast import ExternalException, LocatableString, Location, Namespace, RuntimeException, WrappingRuntimeException
 from inmanta.ast.statements import ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
+from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.proxy import UnknownException, UnsetException
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, Waiter
 from inmanta.execute.util import NoneValue, Unknown
@@ -109,6 +111,9 @@ class FunctionCall(ReferenceStatement):
                     raise RuntimeException(self, "Keyword argument %s repeated in function call" % k)
                 kwargs[k] = v
         self.function.call_in_context(arguments, kwargs, resolver, queue, result)
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("FunctionCall.get_node() placeholder for %s" % self).reference()
 
     def __repr__(self):
         return "%s(%s)" % (
