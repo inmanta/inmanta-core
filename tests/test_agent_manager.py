@@ -19,6 +19,7 @@ import asyncio
 import datetime
 from unittest.mock import Mock
 from uuid import UUID, uuid4
+import typing
 
 import pytest
 
@@ -26,7 +27,7 @@ from inmanta import data
 from inmanta.protocol import Result
 from inmanta.server.agentmanager import AgentManager, SessionManager
 from inmanta.server.protocol import Session
-from utils import UNKWN, assert_equal_ish
+from utils import UNKWN, assert_equal_ish, retry_limited
 
 
 class Collector(object):
@@ -313,7 +314,7 @@ async def test_api(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_db_clean(init_dataclasses_and_load_schema):
+async def test_expire_all_session_in_db(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -387,7 +388,7 @@ async def test_db_clean(init_dataclasses_and_load_schema):
     am = AgentManager(server, False)
     am.add_background_task = futures
     am.running = True
-    await am._clean_db()
+    await am._expire_all_session_in_db()
 
     # one session
     ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
@@ -453,22 +454,33 @@ async def test_session_renewal(init_dataclasses_and_load_schema):
         sessionstore=session_manager, sid=sid, hang_interval=1, timout=1, tid=tid, endpoint_names=[endpoint], nodename="test"
     )
 
-    async def assert_db_state(
-        nr_agent_processes: int, nr_live_processes: int, nr_agent_instances: int, nr_life_instances: int
-    ) -> None:
-        result = await data.AgentProcess.get_list(sid=sid)
-        assert len(result) == nr_agent_processes
-        result = await data.AgentProcess.get_live(environment=tid)
-        assert len(result) == nr_live_processes
-        result = await data.AgentInstance.get_list(tid=tid)
-        assert len(result) == nr_agent_instances
-        result = await data.AgentInstance.active_for(tid=tid, endpoint=endpoint)
-        assert len(result) == nr_life_instances
+    def wait_for_db_state(
+        nr_agent_procs: int, nr_live_procs: int, nr_agent_instances: int, nr_life_instances: int
+    ) -> typing.Callable:
+        async def func():
+            result = await data.AgentProcess.get_list(sid=sid)
+            if len(result) != nr_agent_procs:
+                return False
+            result = await data.AgentProcess.get_live(environment=tid)
+            if len(result) != nr_live_procs:
+                return False
+            result = await data.AgentInstance.get_list(tid=tid)
+            if len(result) != nr_agent_instances:
+                return False
+            result = await data.AgentInstance.active_for(tid=tid, endpoint=endpoint)
+            if len(result) != nr_life_instances:
+                return False
+            return True
+        return func
 
-    await assert_db_state(nr_agent_processes=0, nr_live_processes=0, nr_agent_instances=0, nr_life_instances=0)
+    db_state_ok = wait_for_db_state(nr_agent_procs=0, nr_live_procs=0, nr_agent_instances=0, nr_life_instances=0)
+    await retry_limited(db_state_ok, timeout=10)
     await agent_manager._register_session(session=session, now=datetime.datetime.now())
-    await assert_db_state(nr_agent_processes=1, nr_live_processes=1, nr_agent_instances=1, nr_life_instances=1)
+    db_state_ok = wait_for_db_state(nr_agent_procs=1, nr_live_procs=1, nr_agent_instances=1, nr_life_instances=1)
+    await retry_limited(db_state_ok, timeout=10)
     await agent_manager._expire_session(session=session, now=datetime.datetime.now())
-    await assert_db_state(nr_agent_processes=1, nr_live_processes=0, nr_agent_instances=1, nr_life_instances=0)
+    db_state_ok = wait_for_db_state(nr_agent_procs=1, nr_live_procs=0, nr_agent_instances=1, nr_life_instances=0)
+    await retry_limited(db_state_ok, timeout=10)
     await agent_manager._register_session(session=session, now=datetime.datetime.now())
-    await assert_db_state(nr_agent_processes=1, nr_live_processes=1, nr_agent_instances=2, nr_life_instances=1)
+    db_state_ok = wait_for_db_state(nr_agent_procs=1, nr_live_procs=1, nr_agent_instances=2, nr_life_instances=1)
+    await retry_limited(db_state_ok, timeout=10)

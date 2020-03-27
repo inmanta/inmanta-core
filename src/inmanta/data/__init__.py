@@ -1116,8 +1116,11 @@ class AgentInstance(BaseDocument):
     tid = Field(field_type=uuid.UUID, required=True)
 
     @classmethod
-    async def active_for(cls, tid, endpoint):
-        objects = await cls.get_list(expired=None, tid=tid, name=endpoint)
+    async def active_for(cls, tid, endpoint, process: uuid.UUID = None):
+        if process is not None:
+            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, process=process)
+        else:
+            objects = await cls.get_list(expired=None, tid=tid, name=endpoint)
         return objects
 
     @classmethod
@@ -1153,6 +1156,17 @@ class Agent(BaseDocument):
         del self.id_primary
 
     primary = property(get_primary, set_primary, del_primary)
+
+    @classmethod
+    async def get_statuses(cls, env_id: uuid.UUID, agent_names: List[str]) -> Dict[str, Optional[str]]:
+        result = {}
+        for agent_name in agent_names:
+            agent = await cls.get_one(environment=env_id, name=agent_name)
+            if agent:
+                result[agent_name] = agent.get_status()
+            else:
+                result[agent_name] = None
+        return result
 
     def get_status(self) -> str:
         if self.paused:
