@@ -75,7 +75,7 @@ class UnsetRootCauseAnalyzer:
         # Actual found roots
         roots: Set[AttributeNode] = set(())
         # Actual roots that we have to filter out
-        ignore_roots: Set[AttributeNode] = set(())
+        ignore_roots: Set[AssignableNode] = set(())
         # Any node of which the roots are already in the roots set
         seen: Set[AssignableNode] = set(())
 
