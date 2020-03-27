@@ -140,8 +140,8 @@ class AgentManager(ServerSlice, SessionListener):
         assert isinstance(presession, SessionManager)
         presession.add_listener(self)
 
-    def new_session(self, session: protocol.Session) -> None:
-        self.add_background_task(self._register_session(session, datetime.now()))
+    async def new_session(self, session: protocol.Session) -> None:
+        await self._register_session(session, datetime.now())
 
     def expire(self, session: protocol.Session, timeout: float) -> None:
         self.add_background_task(self._expire_session(session, datetime.now()))
@@ -220,11 +220,13 @@ class AgentManager(ServerSlice, SessionListener):
 
             self.add_background_task(self._log_session_creation_to_db(tid, endpoints_with_new_primary, session, now))
 
-    async def _log_session_creation_to_db(self,
-                                          tid: uuid.UUID,
-                                          endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]],
-                                          session: protocol.Session,
-                                          now: datetime) -> None:
+    async def _log_session_creation_to_db(
+        self,
+        tid: uuid.UUID,
+        endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]],
+        session: protocol.Session,
+        now: datetime,
+    ) -> None:
         sid = session.get_id()
         nodename = session.nodename
 
@@ -283,11 +285,13 @@ class AgentManager(ServerSlice, SessionListener):
 
             self.add_background_task(self._log_session_expiry_to_db(tid, endpoints_with_new_primary, session, now))
 
-    async def _log_session_expiry_to_db(self,
-                                        tid: uuid.UUID,
-                                        endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]],
-                                        session: protocol.Session,
-                                        now: datetime) -> None:
+    async def _log_session_expiry_to_db(
+        self,
+        tid: uuid.UUID,
+        endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]],
+        session: protocol.Session,
+        now: datetime,
+    ) -> None:
         sid = session.get_id()
         env = await data.Environment.get_by_id(tid)
         if env is None:
@@ -335,10 +339,9 @@ class AgentManager(ServerSlice, SessionListener):
 
         await aps.update_fields(last_seen=now)
 
-    async def _set_primary(self,
-                           env: data.Environment,
-                           endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]],
-                           now: datetime) -> None:
+    async def _set_primary(
+        self, env: data.Environment, endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]], now: datetime
+    ) -> None:
         for (endpoint, session) in endpoints_with_new_primary:
             agent = await data.Agent.get(env.id, endpoint)
             if agent is None:

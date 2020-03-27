@@ -17,14 +17,16 @@
 """
 import asyncio
 import datetime
+import typing
 from unittest.mock import Mock
 from uuid import UUID, uuid4
-import typing
 
 import pytest
 
 from inmanta import data
+from inmanta.agent import Agent
 from inmanta.protocol import Result
+from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.agentmanager import AgentManager, SessionManager
 from inmanta.server.protocol import Session
 from utils import UNKWN, assert_equal_ish, retry_limited
@@ -113,7 +115,7 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
 
     # one session
     ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
-    am.new_session(ts1)
+    await am.new_session(ts1)
     await futures.proccess()
     assert len(am.sessions) == 1
     ts1.get_client().set_state.assert_called_with("agent2", True)
@@ -133,7 +135,7 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
 
     # second session
     ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
-    am.new_session(ts2)
+    await am.new_session(ts2)
     await futures.proccess()
     assert len(am.sessions) == 2
     ts2.get_client().set_state.assert_called_with("agent3", True)
@@ -190,13 +192,13 @@ async def test_api(init_dataclasses_and_load_schema):
 
     # one session
     ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
-    am.new_session(ts1)
+    await am.new_session(ts1)
     # second session
     ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
-    am.new_session(ts2)
+    await am.new_session(ts2)
     # third session
     ts3 = MockSession(uuid4(), env3.id, ["agentx"], "ts3")
-    am.new_session(ts3)
+    await am.new_session(ts3)
 
     await futures.proccess()
     assert len(am.sessions) == 3
@@ -354,7 +356,7 @@ async def test_expire_all_session_in_db(init_dataclasses_and_load_schema):
 
     # one session
     ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
-    am.new_session(ts1)
+    await am.new_session(ts1)
     await futures.proccess()
     assert len(am.sessions) == 1
     ts1.get_client().set_state.assert_called_with("agent2", True)
@@ -369,7 +371,7 @@ async def test_expire_all_session_in_db(init_dataclasses_and_load_schema):
 
     # second session
     ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
-    am.new_session(ts2)
+    await am.new_session(ts2)
     await futures.proccess()
     assert len(am.sessions) == 2
     ts2.get_client().set_state.assert_called_with("agent3", True)
@@ -392,7 +394,7 @@ async def test_expire_all_session_in_db(init_dataclasses_and_load_schema):
 
     # one session
     ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
-    am.new_session(ts1)
+    await am.new_session(ts1)
     await futures.proccess()
     assert len(am.sessions) == 1
     ts1.get_client().set_state.assert_called_with("agent2", True)
@@ -407,7 +409,7 @@ async def test_expire_all_session_in_db(init_dataclasses_and_load_schema):
 
     # second session
     ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
-    am.new_session(ts2)
+    await am.new_session(ts2)
     await futures.proccess()
     assert len(am.sessions) == 2
     ts2.get_client().set_state.assert_called_with("agent3", True)
@@ -471,6 +473,7 @@ async def test_session_renewal(init_dataclasses_and_load_schema):
             if len(result) != nr_life_instances:
                 return False
             return True
+
         return func
 
     db_state_ok = wait_for_db_state(nr_agent_procs=0, nr_live_procs=0, nr_agent_instances=0, nr_life_instances=0)
@@ -484,3 +487,55 @@ async def test_session_renewal(init_dataclasses_and_load_schema):
     await agent_manager._register_session(session=session, now=datetime.datetime.now())
     db_state_ok = wait_for_db_state(nr_agent_procs=1, nr_live_procs=1, nr_agent_instances=2, nr_life_instances=1)
     await retry_limited(db_state_ok, timeout=10)
+
+
+@pytest.mark.asyncio
+async def test_session_creation_fails(server, environment, caplog):
+    """
+        Verify that:
+         * Session creation works correctly when the connectivity to the database works.
+         * Session creation is refused correctly when the connectivity to the database doesn't work
+           and the server state stays consistent.
+    """
+    env_id = UUID(environment)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    a.add_end_point_name("agent1")
+    await a.start()
+
+    # Wait until session is created
+    await retry_limited(lambda: (env_id, "agent1") in agentmanager.tid_endpoint_to_session, 10)
+
+    # Verify that the session is created correctly
+    session = agentmanager.tid_endpoint_to_session[(env_id, "agent1")]
+    session_manager = session._sessionstore
+    assert len(agentmanager.sessions) == 1
+    assert session in agentmanager.sessions.values()
+    assert len(session_manager._sessions) == 1
+    assert session in session_manager._sessions.values()
+    assert "Heartbeat failed" not in caplog.text
+
+    await a.stop()
+    session.expire(0)
+
+    # Wait until session expired
+    await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 10)
+
+    # Verify session expiration
+    assert len(agentmanager.sessions) == 0
+    assert len(agentmanager.tid_endpoint_to_session) == 0
+    assert len(session_manager._sessions) == 0
+
+    # Remove connectivity to the databse
+    await data.disconnect()
+    caplog.clear()
+
+    a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    a.add_end_point_name("agent1")
+    await a.start()
+
+    # Verify that session creation fails and server state is stays consistent
+    await retry_limited(lambda: "Heartbeat failed" in caplog.text, 10)
+    assert len(agentmanager.sessions) == 0
+    assert len(agentmanager.tid_endpoint_to_session) == 0
+    assert len(session_manager._sessions) == 0
