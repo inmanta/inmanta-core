@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 from itertools import chain
-from typing import FrozenSet, Iterable, List, Set
+from typing import FrozenSet, Iterable, Set
 
 from inmanta.execute.dataflow import AssignableNode, AttributeNode, AttributeNodeReference
 

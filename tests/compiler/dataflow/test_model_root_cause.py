@@ -160,7 +160,7 @@ def test_cyclic_model_b(dataflow_test_helper: DataflowTestHelper):
         """
 entity A:
     number n
-end 
+end
 
 implement A using std::none
 
