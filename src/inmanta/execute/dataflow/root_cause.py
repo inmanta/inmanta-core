@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+from itertools import chain
 from typing import FrozenSet, Iterable, List, Set
 
 from inmanta.execute.dataflow import AssignableNode, AttributeNode, AttributeNodeReference
@@ -72,31 +72,66 @@ class UnsetRootCauseAnalyzer:
             Rules 2 to 4 are implemented as propagation steps by
             _assignment_step, _child_attribute_step and _parent_instance_step respectively.
         """
-        causes: Set[AttributeNode] = set(())
+        # Actual found roots
+        roots: Set[AttributeNode] = set(())
+        # Actual roots that we have to filter out
+        ignore_roots: Set[AssignableNode] = set(())
+        # Any node of which the roots are already in the roots set
+        seen: Set[AssignableNode] = set(())
+
+        def has_root(node: AssignableNode) -> bool:
+            """
+            Add underlying roots to roots
+
+            :return: is there a valid root below this node
+            """
+
+            if node in seen:
+                # Already processed, roots are already in roots
+                # Unless is is an ignored_root
+                return node not in ignore_roots
+
+            if node.value_assignments:
+                # Has a value, never has a root cause
+                return False
+
+            # Find any root for this equivalence
+            n_has_root = any(
+                (
+                    has_root(subnode)
+                    for peernode in node.equivalence.nodes
+                    for subnode in chain(
+                        self._assignment_step(peernode),
+                        self._parent_instance_step(peernode),
+                        self._child_attribute_step(peernode),
+                    )
+                    if subnode not in node.equivalence.nodes
+                )
+            )
+
+            # This equivalence is done
+            seen.update(node.equivalence.nodes)
+
+            n_is_root = not n_has_root
+
+            if n_is_root:
+                # See if any of the equivalent nodes are a valid root
+                anyroots = self.nodes.intersection(node.equivalence.nodes)
+                if not anyroots:
+                    # it is root, but not one we are looking for, ignore it
+                    ignore_roots.update(node.equivalence.nodes)
+                    return False
+                else:
+                    # Add valid roots
+                    roots.update(anyroots)
+
+            # We are a root or have seen an underlying root
+            return True
+
         for node in self.nodes:
-            others: FrozenSet[AttributeNode] = self.nodes.difference({node})
-            seen: Set[AssignableNode] = set(())
-            to_check: List[AssignableNode] = [node]
+            has_root(node)
 
-            def process_step(step_result: FrozenSet[AssignableNode]) -> None:
-                new: Set[AssignableNode] = set(step_result).difference(seen)
-                to_check.extend(new)
-                seen.update(new)
-
-            is_root_cause: bool = True
-            while to_check:
-                n: AssignableNode = to_check.pop()
-                if n in others and n not in node.equivalence.nodes:
-                    is_root_cause = False
-                    break
-                if n.result_variable is not None and n.result_variable.hasValue:
-                    continue
-                process_step(self._assignment_step(n))
-                process_step(self._parent_instance_step(n))
-                process_step(self._child_attribute_step(n))
-            if is_root_cause:
-                causes.add(node)
-        return causes
+        return roots
 
     def _assignment_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
         """

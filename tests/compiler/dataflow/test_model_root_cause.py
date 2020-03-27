@@ -112,3 +112,79 @@ i = c.i
         root_causes.add(cc_i)
 
     assert UnsetRootCauseAnalyzer(attributes).root_causes() == root_causes
+
+
+def test_cyclic_model_a(dataflow_test_helper: DataflowTestHelper):
+    dataflow_test_helper.compile(
+        """
+entity A:
+    number n
+end
+
+implement A using std::none
+
+
+x = A()
+y = A()
+z = A()
+
+
+x.n = y.n
+y.n = x.n
+x.n = z.n
+""",
+        MultiException,
+    )
+
+    graph: DataflowGraph = dataflow_test_helper.get_graph()
+
+    x_n: AttributeNode = get_attribute_node(graph, "x.n")
+    y_n: AttributeNode = get_attribute_node(graph, "y.n")
+    z_n: AttributeNode = get_attribute_node(graph, "z.n")
+
+    attributes: List[AttributeNode] = [x_n, y_n, z_n]
+    root_causes: Set[AttributeNode] = {z_n}
+
+    assert UnsetRootCauseAnalyzer(attributes).root_causes() == root_causes
+
+
+def test_cyclic_model_b(dataflow_test_helper: DataflowTestHelper):
+    """
+
+    This model has an equivalence that
+    1. is to be ignored as a root
+    2. cause two things (that now become roots)
+
+    """
+    dataflow_test_helper.compile(
+        """
+entity A:
+    number n
+end 
+
+implement A using std::none
+
+
+x = A()
+y = A()
+
+
+y.n = n
+x.n = n
+
+
+n = m
+m = n
+""",
+        MultiException,
+    )
+
+    graph: DataflowGraph = dataflow_test_helper.get_graph()
+
+    x_n: AttributeNode = get_attribute_node(graph, "x.n")
+    y_n: AttributeNode = get_attribute_node(graph, "y.n")
+
+    attributes: List[AttributeNode] = [x_n, y_n]
+    root_causes: Set[AttributeNode] = {x_n, y_n}
+
+    assert UnsetRootCauseAnalyzer(attributes).root_causes() == root_causes
