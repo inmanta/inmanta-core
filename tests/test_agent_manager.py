@@ -432,8 +432,7 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
 
 
 async def assert_agent_db_state(
-    tid: UUID, sid: UUID, endpoint: str, nr_procs: int, nr_live_procs: int, nr_agent_instances: int, nr_live_instances:
-    int
+    tid: UUID, sid: UUID, endpoint: str, nr_procs: int, nr_live_procs: int, nr_agent_instances: int, nr_live_instances: int
 ) -> typing.Callable:
     result = await data.AgentProcess.get_list(sid=sid)
     assert len(result) == nr_procs
