@@ -914,7 +914,7 @@ class Instance(ExecutionContext):
         self.dataflow_graph: Optional[DataflowGraph] = None
         self.instance_node: Optional[dataflow.InstanceNodeReference] = node
         self.self_var_node: Optional[dataflow.AssignableNodeReference] = None
-        if resolver.dataflow_graph is not None:
+        if self.instance_node is not None:
             self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
             self.self_var_node = dataflow.AssignableNode("__self__").reference()
             self.self_var_node.assign(
