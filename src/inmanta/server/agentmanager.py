@@ -167,9 +167,9 @@ class AgentManager(ServerSlice, SessionListener):
 
     async def start(self) -> None:
         await super().start()
-        self.add_background_task(self._start_agents())
         if self.closesessionsonstart:
-            self.add_background_task(self._expire_all_sessions_in_db())
+            await self._expire_all_sessions_in_db()
+        self.add_background_task(self._start_agents())
 
     async def prestop(self) -> None:
         await super().prestop()
