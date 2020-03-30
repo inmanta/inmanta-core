@@ -1167,7 +1167,7 @@ class Agent(BaseDocument):
 
     @classmethod
     async def get_statuses(cls, env_id: uuid.UUID, agent_names: List[str]) -> Dict[str, Optional[str]]:
-        result = {}
+        result: Dict[str, Optional[str]] = {}
         for agent_name in agent_names:
             agent = await cls.get_one(environment=env_id, name=agent_name)
             if agent:
