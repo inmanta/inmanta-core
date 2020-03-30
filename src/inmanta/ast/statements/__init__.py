@@ -139,9 +139,7 @@ class ExpressionStatement(DynamicStatement):
         """
             Return the node in the data flow graph this ExpressionStatement will evaluate to.
         """
-        # TODO: NodeStub is used while the dataflow graph is not fully compatible with the language.
-        #   This should raise a NotImplementedError instead.
-        return dataflow.NodeStub("expressionStatement.get_node(Resolver) placeholder for %s" % type(self)).reference()
+        raise NotImplementedError()
 
 
 class Resumer(ExpressionStatement):

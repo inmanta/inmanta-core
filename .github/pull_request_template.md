@@ -6,6 +6,8 @@ closes *Add ticket reference here*
 
 # Self Check:
 
+Strike through any lines that are not applicable (`~~line~~`) then check the box
+
 - [ ] Attached issue to pull request
 - [ ] Changelog entry
 - [ ] Type annotations are present

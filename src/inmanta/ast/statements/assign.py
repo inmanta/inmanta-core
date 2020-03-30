@@ -128,6 +128,9 @@ class CreateList(ReferenceStatement):
     def as_constant(self) -> typing.List[object]:
         return [item.as_constant() for item in self.items]
 
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("CreateList.get_node() placeholder for %s" % self).reference()
+
     def pretty_print(self) -> str:
         return "[%s]" % ",".join(item.pretty_print() for item in self.items)
 
@@ -168,6 +171,9 @@ class CreateDict(ReferenceStatement):
 
     def as_constant(self) -> typing.Dict[str, object]:
         return {k: v.as_constant() for k, v in self.items}
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("CreateDict.get_node() placeholder for %s" % self).reference()
 
     def __repr__(self) -> str:
         return "Dict()"
@@ -320,6 +326,9 @@ class MapLookup(ReferenceStatement):
 
         return mapv[keyv]
 
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("MapLookup.get_node() placeholder for %s" % self).reference()
+
     def __repr__(self) -> str:
         return "%s[%s]" % (repr(self.themap), repr(self.key))
 
@@ -369,6 +378,9 @@ class IndexLookup(ReferenceStatement, Resumer):
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("IndexLookup.get_node() placeholder for %s" % self).reference()
 
     def __repr__(self) -> str:
         """
@@ -469,6 +481,9 @@ class StringFormat(ReferenceStatement):
             result_string = result_string.replace(str_id, str(value))
 
         return result_string
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("StringFormat.get_node() placeholder for %s" % self).reference()
 
     def __repr__(self) -> str:
         return "Format(%s)" % self._format_string

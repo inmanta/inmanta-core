@@ -21,7 +21,7 @@ from itertools import chain, filterfalse
 from typing import TYPE_CHECKING, Callable, Dict, FrozenSet, Generic, Iterable, Iterator, List, Optional, Set, Tuple, TypeVar
 
 if TYPE_CHECKING:
-    from inmanta.execute.runtime import Resolver
+    from inmanta.execute.runtime import Resolver, ResultVariable
     from inmanta.ast import Locatable
     from inmanta.ast.attribute import Attribute
     from inmanta.ast.entity import Entity
@@ -329,6 +329,17 @@ class AssignableNodeReference(NodeReference):
     ) -> None:
         self.get_attribute(attribute).assign(rhs, responsible, context)
 
+    def set_result_variable(self, result_variable: "ResultVariable") -> None:
+        """
+            Sets this nodes' result variable. It is sufficient to set it once
+            because at the point a ResultVariable gets created, the corresponding
+            node exists and should not change except when explicitly replaced by this
+            module. In that case it's the responsibility of the actor to propagate
+            the result variable.
+        """
+        for node in self.nodes():
+            node.set_result_variable(result_variable)
+
 
 class AttributeNodeReference(AssignableNodeReference):
     """
@@ -342,7 +353,7 @@ class AttributeNodeReference(AssignableNodeReference):
         self.instance_var_ref: AssignableNodeReference = instance_var_ref
         self.attribute: str = attribute
 
-    def nodes(self) -> Iterator["AssignableNode"]:
+    def nodes(self) -> Iterator["AttributeNode"]:
         # yield all attribute nodes on instances assigned to this reference's leaves
         for node in self.instance_var_ref.leaf_nodes():
             for instance_node in chain(
@@ -576,7 +587,14 @@ class AssignableNode(Node):
         Node representing a variable or an attribute in the assignment graph model.
     """
 
-    __slots__ = ("name", "assignable_assignments", "value_assignments", "instance_assignments", "equivalence")
+    __slots__ = (
+        "name",
+        "assignable_assignments",
+        "value_assignments",
+        "instance_assignments",
+        "equivalence",
+        "result_variable",
+    )
 
     def __init__(self, name: str) -> None:
         Node.__init__(self)
@@ -585,6 +603,7 @@ class AssignableNode(Node):
         self.value_assignments: List[Assignment[ValueNodeReference]] = []
         self.instance_assignments: List[Assignment[InstanceNodeReference]] = []
         self.equivalence: Equivalence = Equivalence(frozenset([self]))
+        self.result_variable: Optional[ResultVariable] = None
 
     def reference(self) -> AssignableNodeReference:
         return VariableNodeReference(self)
@@ -642,6 +661,10 @@ class AssignableNode(Node):
             node.equivalence = new_equivalence
         # propagate this node's tentative instance to the new leaves, if it exists
         self.equivalence.propagate_tentative_instance()
+
+    def set_result_variable(self, result_variable: "ResultVariable") -> None:
+        assert self.result_variable is None or self.result_variable is result_variable
+        self.result_variable = result_variable
 
     def __repr__(self) -> str:
         return self.name
@@ -851,6 +874,8 @@ class InstanceNode(Node):
         for attr_name, attr_node in other.get_self().attributes.items():
             for assignment in attr_node.assignments():
                 self.assign_attribute(attr_name, assignment.rhs, assignment.responsible, assignment.context)
+            if attr_node.result_variable is not None:
+                self.register_attribute(attr_name).set_result_variable(attr_node.result_variable)
 
     def index_match(self, index_node: "InstanceNode") -> None:
         """
@@ -914,6 +939,12 @@ class InstanceNode(Node):
             return self.attributes[attribute]
         except KeyError:
             return None
+
+    def get_index_attributes(self) -> Iterator[AttributeNode]:
+        if self.get_self() is not self:
+            return self.get_self().get_index_attributes()
+        assert self.entity is not None
+        yield from (self.register_attribute(i) for i in chain.from_iterable(self.entity.get_indices()))
 
     def assign_other_direction(
         self, attribute: str, node_ref: "NodeReference", responsible: "Locatable", context: "DataflowGraph"

@@ -20,10 +20,12 @@ import re
 from abc import ABCMeta, abstractmethod
 from typing import Dict, Optional
 
+import inmanta.execute.dataflow as dataflow
 from inmanta.ast import LocatableString, RuntimeException, TypingException
 from inmanta.ast.statements import Literal, ReferenceStatement
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedReferenceHelper, Reference
+from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, RawUnit, Resolver, ResultVariable
 
 
@@ -89,6 +91,9 @@ class IsDefined(ReferenceStatement):
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("IsDefined.get_node() placeholder for %s" % self).reference()
 
     def pretty_print(self) -> str:
         if self.attr is not None:
@@ -164,6 +169,9 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
             Returns a function that represents this expression
         """
         return create_function(self)
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("Operator.get_node() placeholder for %s" % self).reference()
 
     def pretty_print(self):
         return repr(self)

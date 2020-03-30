@@ -17,6 +17,10 @@
 """
 import os
 
+import inmanta.compiler as compiler
+from inmanta.ast import DoubleSetException, MultiException
+from inmanta.config import Config
+
 
 def test_multi_excn(snippetcompiler):
     snippetcompiler.setup_for_error(
@@ -103,3 +107,81 @@ Test()
         "Optional variable accessed that has no value (attribute `n` of `__config__::Test (instantiated at {dir}/main.cf:13)`)"
         " (reported in self.n ({dir}/main.cf:8))",
     )
+
+
+def test_dataflow_exception(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+x = 0
+x = 1
+        """,
+    )
+    Config.set("compiler", "datatrace_enable", "true")
+    try:
+        compiler.do_compile()
+    except DoubleSetException as e:
+        assert e.msg.strip() == (
+            """
+value set twice:
+	old value: 0
+		set at {dir}/main.cf:2
+	new value: 1
+		set at {dir}/main.cf:3
+
+data trace:
+x
+├── 0
+│   SET BY `x = 0`
+│   AT {dir}/main.cf:2
+└── 1
+    SET BY `x = 1`
+    AT {dir}/main.cf:3
+            """.strip().format(  # noqa: W191, E101
+                dir=snippetcompiler.project_dir
+            )
+        )
+
+
+def test_dataflow_multi_exception(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    number n
+end
+
+implement A using std::none
+
+x = A()
+y = A()
+
+x.n = y.n
+y.n = nn
+
+nn = mm
+mm = nn
+        """,
+    )
+    Config.set("compiler", "datatrace_enable", "true")
+    try:
+        compiler.do_compile()
+    except MultiException as e:
+        assert e.format_trace(indent="  ").strip() == (
+            """
+Reported 1 errors
+error 0:
+  The object __config__::A (instantiated at {dir}/main.cf:9) is not complete: attribute n ({dir}/main.cf:3) is not set
+data trace:
+attribute n on __config__::A instance
+SUBTREE for __config__::A instance:
+    CONSTRUCTED BY `A()`
+    AT {dir}/main.cf:9
+└── nn
+    SET BY `y.n = nn`
+    AT {dir}/main.cf:12
+    EQUIVALENT TO {{mm, nn}} DUE TO STATEMENTS:
+        `nn = mm` AT {dir}/main.cf:14
+        `mm = nn` AT {dir}/main.cf:15
+            """.strip().format(
+                dir=snippetcompiler.project_dir
+            )
+        )

@@ -14,10 +14,11 @@
  - Improved robustness of modules update (#1885)
  - Removed environmental variables from agent report (#1891)
  - Use asyncio subprocess instead of tornado subprocess (#1792)
+ - Added warning for incorrect database migration script names (#1912)
  - Agent manager remains consistent when the database connection is lost (#1893)
 
 ## Added
- - Experimental data trace application (#1820, #1831)
+ - Experimental data trace and root cause application (#1820, #1831, #1821)
  - Warning when shadowing variable (#1366, #1918)
  - Added support for compiler warnings (#1779, #1905, #1906)
  - Added support for DISABLED flag for database migration scripts (#1913)

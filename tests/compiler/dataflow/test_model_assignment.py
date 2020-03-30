@@ -17,24 +17,27 @@
 """
 
 from compiler.dataflow.conftest import DataflowTestHelper
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import pytest
 
+import inmanta.ast.type as inmanta_type
 from inmanta.ast import DoubleSetException, NotFoundException, RuntimeException
+from inmanta.ast.entity import Entity
 from inmanta.ast.statements import Literal
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.ast.variables import Reference
 from inmanta.execute.dataflow import (
+    AssignableNode,
     AssignableNodeReference,
     Assignment,
     AttributeNode,
     DataflowGraph,
-    DirectNodeReference,
     ValueNode,
     ValueNodeReference,
     VariableNodeReference,
 )
+from inmanta.execute.runtime import Instance, ResultVariable, Typeorvalue
 
 
 def test_dataflow_model_primitive_assignment_responsible(dataflow_test_helper: DataflowTestHelper) -> None:
@@ -45,7 +48,7 @@ x = 42
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
     x: AssignableNodeReference = graph.get_named_node("x")
-    assert isinstance(x, DirectNodeReference)
+    assert isinstance(x, VariableNodeReference)
     assert len(x.node.value_assignments) == 1
     assignment: Assignment[ValueNodeReference] = x.node.value_assignments[0]
     assert isinstance(assignment.responsible, Assign)
@@ -65,7 +68,7 @@ x = 0
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
     x: AssignableNodeReference = graph.get_named_node("x")
-    assert isinstance(x, DirectNodeReference)
+    assert isinstance(x, VariableNodeReference)
     assignments: List[Assignment] = x.node.value_assignments
     assert len(assignments) == 2
     zero_index: int = [assignment.rhs for assignment in assignments].index(ValueNode(0).reference())
@@ -87,7 +90,7 @@ y = 42
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
     x: AssignableNodeReference = graph.get_named_node("x")
-    assert isinstance(x, DirectNodeReference)
+    assert isinstance(x, VariableNodeReference)
     assert len(x.node.assignable_assignments) == 1
     assignment: Assignment[AssignableNodeReference] = x.node.assignable_assignments[0]
     assert isinstance(assignment.responsible, Assign)
@@ -259,3 +262,49 @@ n = x.n
         """,
         RuntimeException,
     )
+
+
+def test_dataflow_model_result_variable(dataflow_test_helper: DataflowTestHelper) -> None:
+    dataflow_test_helper.compile(
+        """
+entity A:
+    number n
+end
+
+index A(n)
+
+A.other [0:1] -- B
+
+entity B:
+end
+
+implement A using std::none
+implement B using std::none
+
+x = A(n = 4)
+x.other = B()
+
+y = A(n = 4)
+        """,
+    )
+
+    def assert_rv(result_variable: ResultVariable) -> None:
+        node_ref: Optional[AssignableNodeReference] = result_variable.get_dataflow_node()
+        assert node_ref is not None
+        nodes: List[AssignableNode] = list(node_ref.nodes())
+        assert len(nodes) == 1
+        assert nodes[0].result_variable is result_variable
+
+    x: Typeorvalue = dataflow_test_helper.get_namespace().lookup("x")
+    assert isinstance(x, ResultVariable)
+    assert_rv(x)
+
+    types: Dict[str, inmanta_type.Type] = dataflow_test_helper.get_types()
+    a_entity_str: str = "__config__::A"
+    assert a_entity_str in types
+    a_entity: inmanta_type.Type = types[a_entity_str]
+    assert isinstance(a_entity, Entity)
+    a_instances: List[Instance] = a_entity.get_all_instances()
+    assert len(a_instances) == 1
+    for attr in ["n", "other"]:
+        assert_rv(a_instances[0].get_attribute(attr))

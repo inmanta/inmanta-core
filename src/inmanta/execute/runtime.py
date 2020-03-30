@@ -168,6 +168,7 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
     def set_dataflow_node(self, node: dataflow.AssignableNodeReference) -> None:
         assert self._node is None or self._node == node
         self._node = node
+        self._node.set_result_variable(self)
 
     def get_dataflow_node(self) -> dataflow.AssignableNodeReference:
         assert self._node is not None, "assertion error at %s.get_dataflow_node() in ResultVariable" % self
@@ -902,23 +903,26 @@ class Instance(ExecutionContext):
         self.resolver = resolver.get_root_resolver()
         self.type = mytype
 
-        # TODO: this is somewhat ugly. Is there a cleaner way to enforce this constraint
-        assert (resolver.dataflow_graph is None) == (node is None)
-        self.dataflow_graph: Optional[DataflowGraph] = None
-        self.instance_node: Optional[dataflow.InstanceNodeReference] = node
-        self.self_var_node: Optional[dataflow.AssignableNodeReference] = None
-        if resolver.dataflow_graph is not None:
-            self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
-            self.self_var_node = dataflow.AssignableNode("__self__").reference()
-            self.self_var_node.assign(
-                cast(dataflow.InstanceNodeReference, self.instance_node), self, cast(DataflowGraph, self.dataflow_graph),
-            )
-
         self.slots: Dict[str, ResultVariable] = {
             n: mytype.get_attribute(n).get_new_result_variable(self, queue) for n in mytype.get_all_attribute_names()
         }
         self.slots["self"] = ResultVariable()
         self.slots["self"].set_value(self, None)
+
+        # TODO: this is somewhat ugly. Is there a cleaner way to enforce this constraint
+        assert (resolver.dataflow_graph is None) == (node is None)
+        self.dataflow_graph: Optional[DataflowGraph] = None
+        self.instance_node: Optional[dataflow.InstanceNodeReference] = node
+        self.self_var_node: Optional[dataflow.AssignableNodeReference] = None
+        if self.instance_node is not None:
+            self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
+            self.self_var_node = dataflow.AssignableNode("__self__").reference()
+            self.self_var_node.assign(
+                cast(dataflow.InstanceNodeReference, self.instance_node), self, cast(DataflowGraph, self.dataflow_graph),
+            )
+            for name, var in self.slots.items():
+                var.set_dataflow_node(dataflow.InstanceAttributeNodeReference(self.instance_node.top_node(), name))
+
         self.sid = id(self)
         self.implementations: "Set[Implementation]" = set()
 

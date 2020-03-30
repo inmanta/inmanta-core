@@ -18,15 +18,17 @@
 import logging
 import os
 import sys
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 
 import inmanta.execute.dataflow as dataflow
 from inmanta import const
-from inmanta.ast import AttributeException, CompilerException, DoubleSetException, LocatableString, Range
+from inmanta.ast import AttributeException, CompilerException, DoubleSetException, LocatableString, MultiException, Range
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.compiler import config as compiler_config
 from inmanta.execute import scheduler
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
+from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
+from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ResultVariable
 from inmanta.module import Project
 from inmanta.plugins import PluginMeta
@@ -180,13 +182,40 @@ class Compiler(object):
             """
                 Add the trace to the deepest possible causes.
             """
-            causes: List[CompilerException] = exception.get_causes()
             handled: bool = False
+            if isinstance(exception, MultiException):
+                unset_attrs: Dict[dataflow.AttributeNode, UnsetException] = {
+                    cause.instance.instance_node.node().register_attribute(cause.attribute.name): cause
+                    for cause in exception.get_causes()
+                    if isinstance(cause, UnsetException)
+                    if cause.instance is not None
+                    if cause.instance.instance_node is not None
+                    if cause.attribute is not None
+                }
+                root_causes: Set[dataflow.AttributeNode] = UnsetRootCauseAnalyzer(unset_attrs.keys()).root_causes()
+                for attr, e in unset_attrs.items():
+                    if attr not in root_causes:
+                        exception.others.remove(e)
+                handled = True
+            causes: List[CompilerException] = exception.get_causes()
             for cause in causes:
                 if add_trace(cause):
                     handled = True
             if not handled:
                 trace: Optional[str] = None
+                if isinstance(exception, UnsetException):
+                    if (
+                        exception.instance is not None
+                        and exception.instance.instance_node is not None
+                        and exception.attribute is not None
+                    ):
+                        attribute: dataflow.AttributeNode = exception.instance.instance_node.node().register_attribute(
+                            exception.attribute.name
+                        )
+                        if len(list(attribute.assignments())) > 0:
+                            trace = DataTraceRenderer.render(
+                                dataflow.InstanceAttributeNodeReference(attribute.instance, attribute.name)
+                            )
                 if isinstance(exception, DoubleSetException):
                     variable: ResultVariable = exception.variable
                     trace = DataTraceRenderer.render(variable.get_dataflow_node())
