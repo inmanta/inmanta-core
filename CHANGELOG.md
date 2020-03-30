@@ -14,6 +14,7 @@
  - Improved robustness of modules update (#1885)
  - Removed environmental variables from agent report (#1891)
  - Use asyncio subprocess instead of tornado subprocess (#1792)
+ - Agent manager remains consistent when the database connection is lost (#1893)
 
 ## Added
  - Experimental data trace application (#1820, #1831)
