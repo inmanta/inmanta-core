@@ -316,7 +316,7 @@ async def test_api(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_expire_all_session_in_db(init_dataclasses_and_load_schema):
+async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -390,7 +390,7 @@ async def test_expire_all_session_in_db(init_dataclasses_and_load_schema):
     am = AgentManager(server, False)
     am.add_background_task = futures
     am.running = True
-    await am._expire_all_session_in_db()
+    await am._expire_all_sessions_in_db()
 
     # one session
     ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
@@ -431,6 +431,20 @@ async def test_expire_all_session_in_db(init_dataclasses_and_load_schema):
     await assert_agents("paused", "down", "down")
 
 
+async def assert_agent_db_state(
+    tid: UUID, sid: UUID, endpoint: str, nr_procs: int, nr_live_procs: int, nr_agent_instances: int, nr_live_instances:
+    int
+) -> typing.Callable:
+    result = await data.AgentProcess.get_list(sid=sid)
+    assert len(result) == nr_procs
+    result = await data.AgentProcess.get_live(environment=tid)
+    assert len(result) == nr_live_procs
+    result = await data.AgentInstance.get_list(tid=tid)
+    assert len(result) == nr_agent_instances
+    result = await data.AgentInstance.active_for(tid=tid, endpoint=endpoint)
+    assert len(result) == nr_live_instances
+
+
 @pytest.mark.asyncio
 async def test_session_renewal(init_dataclasses_and_load_schema):
     """
@@ -456,37 +470,59 @@ async def test_session_renewal(init_dataclasses_and_load_schema):
         sessionstore=session_manager, sid=sid, hang_interval=1, timout=1, tid=tid, endpoint_names=[endpoint], nodename="test"
     )
 
-    def wait_for_db_state(
-        nr_agent_procs: int, nr_live_procs: int, nr_agent_instances: int, nr_life_instances: int
-    ) -> typing.Callable:
-        async def func():
-            result = await data.AgentProcess.get_list(sid=sid)
-            if len(result) != nr_agent_procs:
-                return False
-            result = await data.AgentProcess.get_live(environment=tid)
-            if len(result) != nr_live_procs:
-                return False
-            result = await data.AgentInstance.get_list(tid=tid)
-            if len(result) != nr_agent_instances:
-                return False
-            result = await data.AgentInstance.active_for(tid=tid, endpoint=endpoint)
-            if len(result) != nr_life_instances:
-                return False
-            return True
-
-        return func
-
-    db_state_ok = wait_for_db_state(nr_agent_procs=0, nr_live_procs=0, nr_agent_instances=0, nr_life_instances=0)
-    await retry_limited(db_state_ok, timeout=10)
+    await assert_agent_db_state(tid, sid, endpoint, nr_procs=0, nr_live_procs=0, nr_agent_instances=0, nr_live_instances=0)
     await agent_manager._register_session(session=session, now=datetime.datetime.now())
-    db_state_ok = wait_for_db_state(nr_agent_procs=1, nr_live_procs=1, nr_agent_instances=1, nr_life_instances=1)
-    await retry_limited(db_state_ok, timeout=10)
+    await assert_agent_db_state(tid, sid, endpoint, nr_procs=1, nr_live_procs=1, nr_agent_instances=1, nr_live_instances=1)
     await agent_manager._expire_session(session=session, now=datetime.datetime.now())
-    db_state_ok = wait_for_db_state(nr_agent_procs=1, nr_live_procs=0, nr_agent_instances=1, nr_life_instances=0)
-    await retry_limited(db_state_ok, timeout=10)
+    await assert_agent_db_state(tid, sid, endpoint, nr_procs=1, nr_live_procs=0, nr_agent_instances=1, nr_live_instances=0)
     await agent_manager._register_session(session=session, now=datetime.datetime.now())
-    db_state_ok = wait_for_db_state(nr_agent_procs=1, nr_live_procs=1, nr_agent_instances=2, nr_life_instances=1)
-    await retry_limited(db_state_ok, timeout=10)
+    await assert_agent_db_state(tid, sid, endpoint, nr_procs=1, nr_live_procs=1, nr_agent_instances=2, nr_live_instances=1)
+
+
+@pytest.mark.asyncio
+async def test_fix_corrupted_database(init_dataclasses_and_load_schema):
+    """
+        When the database connection is lost, the agent session information might get
+        corrupted. This inconsistency should be fixed when a new session is registered.
+        This test case verifies this behavior.
+    """
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="testenv", project=project.id)
+    await env.insert()
+
+    agent_manager = AgentManager()
+    agent_manager._stopped = False
+    agent_manager._stopping = False
+
+    session_manager = SessionManager()
+    sid = uuid4()
+    tid = env.id
+    endpoint = "vm1"
+    session = Session(
+        sessionstore=session_manager, sid=sid, hang_interval=1, timout=1, tid=tid, endpoint_names=[endpoint], nodename="test"
+    )
+
+    await assert_agent_db_state(tid, sid, endpoint, nr_procs=0, nr_live_procs=0, nr_agent_instances=0, nr_live_instances=0)
+    await agent_manager._register_session(session=session, now=datetime.datetime.now())
+    await assert_agent_db_state(tid, sid, endpoint, nr_procs=1, nr_live_procs=1, nr_agent_instances=1, nr_live_instances=1)
+    await agent_manager._expire_session(session=session, now=datetime.datetime.now())
+    await assert_agent_db_state(tid, sid, endpoint, nr_procs=1, nr_live_procs=0, nr_agent_instances=1, nr_live_instances=0)
+
+    # Make database corrupt
+    instances = await data.AgentInstance.get_list(tid=tid, process=sid)
+    assert len(instances) == 1
+    instance = instances[0]
+    await instance.update(expired=None)
+    # Assert corruption
+    await assert_agent_db_state(tid, sid, endpoint, nr_procs=1, nr_live_procs=0, nr_agent_instances=1, nr_live_instances=1)
+
+    # Session registration should fix the inconsistency
+    await agent_manager._register_session(session=session, now=datetime.datetime.now())
+    await assert_agent_db_state(tid, sid, endpoint, nr_procs=1, nr_live_procs=1, nr_agent_instances=2, nr_live_instances=1)
+    instance = await data.AgentInstance.get_by_id(instance.id)
+    assert instance.expired is not None
 
 
 @pytest.mark.asyncio
@@ -494,8 +530,8 @@ async def test_session_creation_fails(server, environment, caplog):
     """
         Verify that:
          * Session creation works correctly when the connectivity to the database works.
-         * Session creation is refused correctly when the connectivity to the database doesn't work
-           and the server state stays consistent.
+         * Session creation is refused when the connectivity to the database doesn't work.
+           In that case the server state should stay consistent.
     """
     env_id = UUID(environment)
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
@@ -526,7 +562,7 @@ async def test_session_creation_fails(server, environment, caplog):
     assert len(agentmanager.tid_endpoint_to_session) == 0
     assert len(session_manager._sessions) == 0
 
-    # Remove connectivity to the databse
+    # Remove connectivity to the database
     await data.disconnect()
     caplog.clear()
 

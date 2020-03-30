@@ -169,7 +169,7 @@ class AgentManager(ServerSlice, SessionListener):
         await super().start()
         self.add_background_task(self._start_agents())
         if self.closesessionsonstart:
-            self.add_background_task(self._expire_all_session_in_db())
+            self.add_background_task(self._expire_all_sessions_in_db())
 
     async def prestop(self) -> None:
         await super().prestop()
@@ -218,7 +218,7 @@ class AgentManager(ServerSlice, SessionListener):
                     self.add_background_task(session.get_client().set_state(endpoint, True))
                     endpoints_with_new_primary.append((endpoint, session))
 
-            self.add_background_task(self._log_session_creation_to_db(tid, endpoints_with_new_primary, session, now))
+            await self._log_session_creation_to_db(tid, endpoints_with_new_primary, session, now)
 
     async def _log_session_creation_to_db(
         self,
@@ -242,6 +242,8 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             await proc.update_fields(last_seen=now, expired=None)
 
+        # Fix database corruption when database was down
+        await data.AgentInstance.expire_all_for_process(tid, proc.sid, now)
         for nh in session.endpoint_names:
             LOGGER.debug("New session for agent %s on %s", nh, nodename)
             await data.AgentInstance(tid=tid, process=proc.sid, name=nh).insert()
@@ -283,7 +285,7 @@ class AgentManager(ServerSlice, SessionListener):
                         del self.tid_endpoint_to_session[key]
                         endpoints_with_new_primary.append((endpoint, None))
 
-            self.add_background_task(self._log_session_expiry_to_db(tid, endpoints_with_new_primary, session, now))
+            await self._log_session_expiry_to_db(tid, endpoints_with_new_primary, session, now)
 
     async def _log_session_expiry_to_db(
         self,
@@ -362,7 +364,7 @@ class AgentManager(ServerSlice, SessionListener):
             return False
         return prim.get_id() == sid
 
-    async def _expire_all_session_in_db(self) -> None:
+    async def _expire_all_sessions_in_db(self) -> None:
         async with self.session_lock:
             LOGGER.debug("Cleaning server session DB")
 
