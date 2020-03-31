@@ -128,7 +128,7 @@ class ResourceService(protocol.ServerSlice):
 
         file_handler = logging.handlers.WatchedFileHandler(filename=resource_action_log, mode="a+")
         # Most logs will come from agents. We need to use their level and timestamp and their formatted message
-        file_handler.setFormatter(logging.Formatter(fmt="%(message)s"))
+        file_handler.setFormatter(logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s"))
         file_handler.setLevel(logging.DEBUG)
 
         resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER).getChild(str(environment))
