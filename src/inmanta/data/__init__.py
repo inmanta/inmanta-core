@@ -1480,7 +1480,7 @@ class ResourceAction(BaseDocument):
     def _create_dict_wrapper(cls, from_postgres, kwargs):
         result = cls._create_dict(from_postgres, kwargs)
         new_messages = []
-        if from_postgres and result.get("messages", None) is not None:
+        if from_postgres and result.get("messages"):
             for message in result["messages"]:
                 message = json.loads(message)
                 if "timestamp" in message:
