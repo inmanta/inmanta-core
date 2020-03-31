@@ -17,6 +17,7 @@
 """
 import os
 import re
+import subprocess
 
 import pytest
 import yaml
@@ -169,3 +170,10 @@ def test_module_corruption(modules_dir, modules_repo):
     assert os.path.exists(os.path.join(m10dir, "secondsignal"))
     # should not be lastest version
     assert not os.path.exists(os.path.join(m10dir, "badsignal"))
+
+
+def test_commit_no_tags(modules_dir, modules_repo):
+    mod_no_tag = make_module_simple(modules_repo, "mod-no-tag")
+    add_file(mod_no_tag, "dummyfile", "Content", "Commit without tags", version="5.0", no_tag=True)
+    output = subprocess.check_output(["git", "tag", "-l"], cwd=mod_no_tag, stderr=subprocess.STDOUT)
+    assert "5.0" not in str(output)

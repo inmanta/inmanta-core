@@ -276,6 +276,7 @@ class ModuleTool(ModuleLikeTool):
         commit.add_argument("--patch", dest="patch", help="make a major release", action="store_true")
         commit.add_argument("-v", "--version", help="Version to use on tag")
         commit.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
+        commit.add_argument("-n", "--no-tag", help="Don't create a tag for the commit", action="store_true")
 
         create = subparser.add_parser("create", help="Create a new module")
         create.add_argument("name", help="The name of the module")
@@ -513,7 +514,18 @@ version: 0.0.1dev0"""
         LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
         return module
 
-    def commit(self, message, module=None, version=None, dev=False, major=False, minor=False, patch=False, commit_all=False):
+    def commit(
+        self,
+        message,
+        module=None,
+        version=None,
+        dev=False,
+        major=False,
+        minor=False,
+        patch=False,
+        commit_all=False,
+        no_tag=False,
+    ):
         """
             Commit all current changes.
         """
@@ -531,7 +543,8 @@ version: 0.0.1dev0"""
         # commit
         gitprovider.commit(module._path, message, commit_all, [module.get_config_file_name()])
         # tag
-        gitprovider.tag(module._path, str(outversion))
+        if not no_tag:
+            gitprovider.tag(module._path, str(outversion))
 
     def freeze(self, outfile, recursive, operator, module=None):
         """
