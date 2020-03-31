@@ -269,3 +269,32 @@ async def test_inmanta_cli_http_version(server, client, cli, caplog):
         result = await cli.run("project", "create", "-n", "test_project")
         assert result.exit_code == 0
         log_contains(caplog, "inmanta.protocol.rest.server", logging.DEBUG, "HTTP version of request: HTTP/1.1")
+
+
+@pytest.mark.asyncio
+async def test_pause_agent(server, cli):
+    project = data.Project(name="test")
+    await project.insert()
+    env = data.Environment(name="dev", project=project.id)
+    await env.insert()
+
+    await data.Agent(environment=env.id, name="agent1", paused=False).insert()
+
+    async def assert_agent_paused(paused: bool) -> None:
+        result = await cli.run("agent", "list", "-e", str(env.id))
+        assert result.exit_code == 0
+        output = result.stdout.replace(" ", "")
+        assert f"Agent|Environment|paused" in output
+        assert f"agent1|{env.id}|{paused}" in output
+
+    await assert_agent_paused(paused=False)
+
+    # Pause
+    result = await cli.run("agent", "pause", "-e", str(env.id), "--agent", "agent1")
+    assert result.exit_code == 0
+    await assert_agent_paused(paused=True)
+
+    # Unpause
+    result = await cli.run("agent", "unpause", "-e", str(env.id), "--agent", "agent1")
+    assert result.exit_code == 0
+    await assert_agent_paused(paused=False)

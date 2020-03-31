@@ -446,9 +446,25 @@ def agent_list(client: Client, environment: str) -> None:
     agents = client.get_list("list_agents", key_name="agents", arguments=dict(tid=env_id))
     data = []
     for agent in agents:
-        data.append([agent["name"], agent["environment"], agent["last_failover"]])
+        data.append([agent["name"], agent["environment"], str(agent["paused"]), agent["last_failover"]])
 
-    print_table(["Agent", "Environment", "Last fail over"], data)
+    print_table(["Agent", "Environment", "paused", "Last fail over"], data)
+
+
+@agent.command(name="pause", help="Pause an agent")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--agent", help="The name of the agent", required=True)
+@click.pass_obj
+def pause_agent(client: Client, environment: str, agent: str) -> None:
+    client.do_request(method_name="pause_agent", arguments=dict(tid=environment, name=agent, paused=True))
+
+
+@agent.command(name="unpause", help="Unpause an agent")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--agent", help="The name of the agent", required=True)
+@click.pass_obj
+def unpause_agent(client: Client, environment: str, agent: str) -> None:
+    client.do_request(method_name="pause_agent", arguments=dict(tid=environment, name=agent, paused=False))
 
 
 @cmd.group("version")
