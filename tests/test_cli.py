@@ -298,3 +298,11 @@ async def test_pause_agent(server, cli):
     result = await cli.run("agent", "unpause", "-e", str(env.id), "--agent", "agent1")
     assert result.exit_code == 0
     await assert_agent_paused(paused=False)
+
+    # Mandatory option -e not specified
+    result = await cli.run("agent", "pause", "--agent", "agent1")
+    assert result.exit_code != 0
+
+    # Mandatory option --agent not specified
+    result = await cli.run("agent", "pause", "-e", str(env.id))
+    assert result.exit_code != 0
