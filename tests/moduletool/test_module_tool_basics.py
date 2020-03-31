@@ -17,6 +17,7 @@
 """
 import os
 import re
+import shutil
 import subprocess
 
 import pytest
@@ -172,8 +173,17 @@ def test_module_corruption(modules_dir, modules_repo):
     assert not os.path.exists(os.path.join(m10dir, "badsignal"))
 
 
-def test_commit_no_tags(modules_dir, modules_repo):
+@pytest.fixture(scope="function")
+def module_without_tags(modules_repo):
     mod_no_tag = make_module_simple(modules_repo, "mod-no-tag")
-    add_file(mod_no_tag, "dummyfile", "Content", "Commit without tags", version="5.0", no_tag=True)
-    output = subprocess.check_output(["git", "tag", "-l"], cwd=mod_no_tag, stderr=subprocess.STDOUT)
-    assert "5.0" not in str(output)
+    yield mod_no_tag
+    shutil.rmtree(mod_no_tag)
+
+
+@pytest.mark.parametrize(
+    "dev, tag, version_tag_in_output", [(True, True, True), (True, False, False), (False, True, True), (False, False, True)],
+)
+def test_commit_no_tags(modules_dir, module_without_tags, dev, tag, version_tag_in_output):
+    add_file(module_without_tags, "dummyfile", "Content", "Commit without tags", version="5.0", dev=dev, tag=tag)
+    output = subprocess.check_output(["git", "tag", "-l"], cwd=module_without_tags, stderr=subprocess.STDOUT)
+    assert ("5.0" in str(output)) is version_tag_in_output
