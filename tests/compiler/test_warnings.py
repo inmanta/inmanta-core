@@ -174,7 +174,7 @@ A(n = null)
 
 
 @pytest.mark.parametrize("assign", [True, False])
-def test_deprecation_warning_nullable_diamond_inheritance(snippetcompiler, assign: bool):
+def test_1950_deprecation_warning_nullable_diamond_inheritance(snippetcompiler, assign: bool):
     snippetcompiler.setup_for_snippet(
         """
 entity A:
