@@ -31,6 +31,7 @@ from inmanta.ast import (
     Namespace,
     NotFoundException,
     Range,
+    RuntimeException,
     TypeNotFoundException,
     TypeReferenceAnchor,
     TypingException,
@@ -296,50 +297,14 @@ class DefineImplementation(TypeDefinitionStatement):
         yield self.block
 
 
-class DefineImplementInherits(DefinitionStatement):
-    comment: Optional[str]
-
-    def __init__(self, entity_name: LocatableString, comment: LocatableString = None):
-        DefinitionStatement.__init__(self)
-        self.entity = entity_name
-        if comment is not None:
-            self.comment = str(comment)
-        else:
-            self.comment = None
-        self.location = entity_name.get_location()
-        self.anchors.append(TypeReferenceAnchor(entity_name.namespace, entity_name))
-
-    def __repr__(self) -> str:
-        """
-            Returns a representation of this class
-        """
-        return "ImplementParent(%s)" % (self.entity)
-
-    def evaluate(self) -> None:
-        """
-            Evaluate this statement.
-        """
-        try:
-            entity_type = self.namespace.get_type(self.entity)
-
-            if not isinstance(entity_type, Entity):
-                raise TypingException(
-                    self, "Implementation can only be define for an Entity, but %s is a %s" % (self.entity, entity_type)
-                )
-
-            entity_type.implements_inherits = True
-        except TypeNotFoundException as e:
-            e.set_statement(self)
-            raise e
-
-
 class DefineImplement(DefinitionStatement):
     """
         Define a new implementation for a given entity
 
         :param entity: The name of the entity that is implemented
         :param implementations: A list of implementations
-        :param whem: A clause that determines when this implementation is "active"
+        :param select: A clause that determines when this implementation is "active"
+        :param inherit: True iff the entity should inherit all implementations from its parents
     """
 
     comment: Optional[str]
@@ -349,6 +314,7 @@ class DefineImplement(DefinitionStatement):
         entity_name: LocatableString,
         implementations: List[LocatableString],
         select: ExpressionStatement,
+        inherit: bool = False,
         comment: LocatableString = None,
     ) -> None:
         DefinitionStatement.__init__(self)
@@ -358,7 +324,11 @@ class DefineImplement(DefinitionStatement):
         self.anchors = [TypeReferenceAnchor(x.namespace, x) for x in implementations]
         self.anchors.append(TypeReferenceAnchor(entity_name.namespace, entity_name))
         self.anchors.extend(select.get_anchors())
+        self.location = entity_name.get_location()
+        if inherit and (not isinstance(select, Literal) or select.value is not True):
+            raise RuntimeException(self, "Conditional implementation with parents not allowed")
         self.select = select
+        self.inherit: bool = inherit
         if comment is not None:
             self.comment = str(comment)
         else:
@@ -384,6 +354,8 @@ class DefineImplement(DefinitionStatement):
 
             entity_type = entity_type.get_entity()
 
+            entity_type.implements_inherits = self.inherit
+
             implement = Implement()
             implement.comment = self.comment
             implement.constraint = self.select
@@ -395,7 +367,7 @@ class DefineImplement(DefinitionStatement):
 
                 # check if the implementation has the correct type
                 impl_obj = self.namespace.get_type(_impl)
-                assert isinstance(impl_obj, Implementation), "%s is not and implementation" % (_impl)
+                assert isinstance(impl_obj, Implementation), "%s is not an implementation" % (_impl)
 
                 if impl_obj.entity is not None and not (
                     entity_type is impl_obj.entity or entity_type.is_parent(impl_obj.entity)
