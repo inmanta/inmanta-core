@@ -23,6 +23,7 @@ import uuid
 from datetime import datetime
 
 import pytest
+from dateutil import parser
 
 from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
@@ -643,6 +644,11 @@ async def test_resource_action_log(server, client, environment):
     resource_action_log = server.get_slice(SLICE_RESOURCE).get_resource_action_log_file(environment)
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
+    with open(resource_action_log, "r") as f:
+        contents = f.read()
+        parts = contents.split(" ")
+        # Date and time
+        parser.parse(f"{parts[0]} {parts[1]}")
 
 
 @pytest.mark.asyncio(timeout=30)
