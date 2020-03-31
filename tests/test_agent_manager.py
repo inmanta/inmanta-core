@@ -16,15 +16,18 @@
     Contact: code@inmanta.com
 """
 import asyncio
+from typing import Dict, List, Tuple
 from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import pytest
 
-from inmanta import data
+from inmanta import config, data
+from inmanta.agent import agent
 from inmanta.protocol import Result
+from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.agentmanager import AgentManager
-from utils import UNKWN, assert_equal_ish
+from utils import UNKWN, assert_equal_ish, retry_limited
 
 
 class Collector(object):
@@ -424,3 +427,77 @@ async def test_db_clean(init_dataclasses_and_load_schema):
     await futures.proccess()
     assert len(am.sessions) == 0
     await assert_agents("paused", "down", "down")
+
+
+@pytest.mark.asyncio
+async def test_pause_agent(server, client, async_finalizer):
+    """
+        Test the pause_agent() API call.
+    """
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    result = await client.create_project("test")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    result = await client.create_environment(project_id=project_id, name="test1")
+    env1_id = UUID(result.result["environment"]["id"])
+    result = await client.create_environment(project_id=project_id, name="test2")
+    env2_id = UUID(result.result["environment"]["id"])
+
+    env_to_agent_map: Dict[UUID, agent.Agent] = {}
+
+    async def start_agent(env_id: UUID, agent_names: List[str]) -> None:
+        for agent_name in agent_names:
+            await data.Agent(environment=env_id, name=agent_name, paused=False).insert()
+
+        agent_map = {agent_name: "localhost" for agent_name in agent_names}
+        a = agent.Agent(hostname="node1", environment=env_id, agent_map=agent_map, code_loader=False)
+        for agent_name in agent_names:
+            a.add_end_point_name(agent_name)
+        await a.start()
+        async_finalizer(a.stop)
+        env_to_agent_map[env_id] = a
+
+    await start_agent(env1_id, ["agent1", "agent2"])
+    await start_agent(env2_id, ["agent1"])
+
+    await retry_limited(lambda: len(agent_manager.sessions) == 2, 10)
+
+    async def assert_agents_paused(expected_statuses: Dict[Tuple[UUID, str], bool]) -> None:
+        for (env_id, agent_name), paused in expected_statuses.items():
+            live_session_found = (env_id, agent_name) in agent_manager.tid_endpoint_to_session
+            assert live_session_found != paused
+            agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
+            assert agent_from_db.paused == paused
+            assert env_to_agent_map[env_id]._instances[agent_name].is_enabled() != paused
+
+    await assert_agents_paused(
+        expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
+    )
+    # Unpause agent
+    result = await client.pause_agent(tid=env1_id, name="agent1", paused=True)
+    assert result.code == 200
+    await assert_agents_paused(
+        expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
+    )
+    # Unpause an already paused agent
+    await client.pause_agent(tid=env1_id, name="agent1", paused=True)
+    assert result.code == 200
+    await assert_agents_paused(
+        expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
+    )
+    # Pause agent
+    await client.pause_agent(tid=env1_id, name="agent1", paused=False)
+    assert result.code == 200
+    await assert_agents_paused(
+        expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
+    )
+    # Pause an already paused agent
+    await client.pause_agent(tid=env1_id, name="agent1", paused=False)
+    assert result.code == 200
+    await assert_agents_paused(
+        expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
+    )

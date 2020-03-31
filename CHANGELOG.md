@@ -22,6 +22,7 @@
  - Added support for compiler warnings (#1779, #1905, #1906)
  - Added support for DISABLED flag for database migration scripts (#1913)
  - Added v5 database migration script (#1914)
+ - Added support to pause an agent (#1128)
 
 # v 2020.1 (2020-02-19) Changes in this release:
 

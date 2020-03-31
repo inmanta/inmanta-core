@@ -244,3 +244,14 @@ def get_api_docs(format: Optional[str] = None) -> ReturnValue[Union[OpenAPI, str
        Get the OpenAPI definition of the API
        :param format: Use 'openapi' to get the schema in json format
     """
+
+
+@typedmethod(path="/agent/{name}/pause", operation="PUT", arg_options=methods.ENV_OPTS, client_types=["api"], api_version=2)
+def pause_agent(tid: uuid.UUID, name: str, paused: bool) -> None:
+    """
+        Pause or unpause an agent.
+
+        :param tid: The environment this agent is defined in.
+        :param name: The name of the agent.
+        :param paused: Indicates whether the agent should be paused or unpaused.
+    """

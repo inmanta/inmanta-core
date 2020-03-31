@@ -1193,6 +1193,12 @@ class Agent(BaseDocument):
         obj = await cls.get_one(environment=env, name=endpoint)
         return obj
 
+    @classmethod
+    async def pause(cls, env: uuid.UUID, endpoint: str, paused: bool) -> None:
+        query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 AND name=$3"
+        values = [cls._get_value(paused), cls._get_value(env), cls._get_value(endpoint)]
+        await cls._execute_query(query, *values)
+
 
 class Report(BaseDocument):
     """

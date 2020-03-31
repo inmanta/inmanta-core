@@ -539,6 +539,31 @@ async def test_agent(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
+async def test_pause_agent(environment):
+    """
+        Test the pause() method in the Agent class
+    """
+    env_id = uuid.UUID(environment)
+    agent_name = "test"
+    agent = data.Agent(environment=env_id, name=agent_name, last_failover=datetime.datetime.now(), paused=False)
+    await agent.insert()
+
+    # Verify not paused
+    agent = await data.Agent.get_one(environment=env_id, name=agent_name)
+    assert not agent.paused
+
+    # Pause
+    await data.Agent.pause(env=env_id, endpoint=agent_name, paused=True)
+    agent = await data.Agent.get_one(environment=env_id, name=agent_name)
+    assert agent.paused
+
+    # Unpause
+    await data.Agent.pause(env=env_id, endpoint=agent_name, paused=False)
+    agent = await data.Agent.get_one(environment=env_id, name=agent_name)
+    assert not agent.paused
+
+
+@pytest.mark.asyncio
 async def test_config_model(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()

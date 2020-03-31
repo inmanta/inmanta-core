@@ -28,7 +28,7 @@ from uuid import UUID
 
 from inmanta import const, data
 from inmanta.config import Config
-from inmanta.protocol import encode_token, methods
+from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound, ShutdownInProgress
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT
@@ -176,6 +176,37 @@ class AgentManager(ServerSlice, SessionListener):
 
     async def stop(self) -> None:
         await super().stop()
+
+    @protocol.handle(methods_v2.pause_agent, env="tid")
+    async def pause_agent(self, env: data.Environment, name: str, paused: bool) -> None:
+        if paused:
+            await self._pause_agent(env, name)
+        else:
+            await self._unpause_agent(env, name)
+
+    async def _pause_agent(self, env: data.Environment, endpoint: str) -> None:
+        key = (env.id, endpoint)
+        async with self.session_lock:
+            await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True)
+            live_session = self.tid_endpoint_to_session.get(key)
+            if live_session is not None:
+                del self.tid_endpoint_to_session[key]
+                await live_session.get_client().set_state(endpoint, False)
+
+    async def _unpause_agent(self, env: data.Environment, endpoint: str) -> None:
+        key = (env.id, endpoint)
+        async with self.session_lock:
+            await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False)
+            live_session = self.tid_endpoint_to_session.get(key)
+            if live_session:
+                await live_session.get_client().set_state(endpoint, True)
+            else:
+                # TODO: Replace with find session for
+                # TODO: Replace with more efficient datastructure
+                for session in self.sessions.values():
+                    if session.tid == env.id and endpoint in session.endpoint_names:
+                        self.tid_endpoint_to_session[key] = session
+                        await session.get_client().set_state(endpoint, True)
 
     # Agent Management
     async def ensure_agent_registered(self, env: data.Environment, nodename: str) -> data.Agent:
