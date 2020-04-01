@@ -16,9 +16,9 @@
     Contact: code@inmanta.com
 """
 
-from itertools import chain
-from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple, Type, List
 from functools import reduce
+from itertools import chain
+from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple, Type
 
 import pytest
 
@@ -40,7 +40,7 @@ from inmanta.execute.dataflow import (
     ValueNode,
     VariableNodeReference,
 )
-from inmanta.execute.runtime import Resolver, ExecutionContext
+from inmanta.execute.runtime import ExecutionContext, Resolver
 
 
 def create_instance(
