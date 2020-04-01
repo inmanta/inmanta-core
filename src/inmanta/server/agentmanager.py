@@ -202,12 +202,10 @@ class AgentManager(ServerSlice, SessionListener):
             if live_session:
                 await live_session.get_client().set_state(endpoint, True)
             else:
-                # TODO: Replace with find session for
-                # TODO: Replace with more efficient datastructure
-                for session in self.sessions.values():
-                    if session.tid == env.id and endpoint in session.endpoint_names:
-                        self.tid_endpoint_to_session[key] = session
-                        await session.get_client().set_state(endpoint, True)
+                session = self._get_session_for(tid=env.id, endpoint=endpoint)
+                if session:
+                    self.tid_endpoint_to_session[key] = session
+                    await session.get_client().set_state(endpoint, True)
 
     # Agent Management
     async def ensure_agent_registered(self, env: data.Environment, nodename: str) -> data.Agent:

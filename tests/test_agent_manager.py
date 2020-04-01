@@ -17,6 +17,7 @@
 """
 import asyncio
 import datetime
+import typing
 from typing import Dict, List, Tuple
 from unittest.mock import Mock
 from uuid import UUID, uuid4
@@ -24,14 +25,12 @@ from uuid import UUID, uuid4
 import pytest
 
 from inmanta import config, data
-from inmanta.agent import agent, Agent
+from inmanta.agent import Agent, agent
 from inmanta.protocol import Result
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.agentmanager import AgentManager, SessionManager
-from utils import UNKWN, assert_equal_ish, retry_limited
-
 from inmanta.server.protocol import Session
-
+from utils import UNKWN, assert_equal_ish, retry_limited
 
 
 class Collector(object):
