@@ -24,7 +24,7 @@ import pytest
 from inmanta import const, data, resources
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version
-from utils import LogSequence, _wait_until_deployment_finishes, no_error_in_logs, wait_until_logs_are_available
+from utils import LogSequence, _wait_until_deployment_finishes, no_error_in_logs, retry_limited, wait_until_logs_are_available
 
 
 @pytest.mark.asyncio
@@ -314,6 +314,8 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
+    await _wait_until_deployment_finishes(client, environment, version)
+
     # Make sure we get facts
     result = await client.get_param(environment, "length", res1)
     assert result.code == 503
@@ -322,10 +324,12 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     assert result.code == 503
 
     env_uuid = uuid.UUID(environment)
-    params = await data.Parameter.get_list(environment=env_uuid)
-    while len(params) < 6:
+
+    async def params_are_available() -> bool:
         params = await data.Parameter.get_list(environment=env_uuid)
-        await asyncio.sleep(0.1)
+        return len(params) >= 6
+
+    await retry_limited(params_are_available, 10)
 
     result = await client.get_param(environment, "key1", res1)
     assert result.code == 200

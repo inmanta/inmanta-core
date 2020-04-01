@@ -15,6 +15,7 @@
  - Removed environmental variables from agent report (#1891)
  - Use asyncio subprocess instead of tornado subprocess (#1792)
  - Added warning for incorrect database migration script names (#1912)
+ - Agent manager remains consistent when the database connection is lost (#1893)
 
 ## Added
  - Experimental data trace and root cause application (#1820, #1831, #1821)
@@ -22,6 +23,8 @@
  - Added support for compiler warnings (#1779, #1905, #1906)
  - Added support for DISABLED flag for database migration scripts (#1913)
  - Added v5 database migration script (#1914)
+ - Added support for declaring implement using parents together with normal implement declaration list (#1971)
+ - Resource Action Log now includes timestamps (#1496)
  - Added --no-tag option to module tool (#1939)
 
 # v 2020.1 (2020-02-19) Changes in this release:
