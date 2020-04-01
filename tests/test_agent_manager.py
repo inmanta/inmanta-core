@@ -434,14 +434,27 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
 async def assert_agent_db_state(
     tid: UUID, sid: UUID, endpoint: str, nr_procs: int, nr_live_procs: int, nr_agent_instances: int, nr_live_instances: int
 ) -> typing.Callable:
-    result = await data.AgentProcess.get_list(sid=sid)
-    assert len(result) == nr_procs
-    result = await data.AgentProcess.get_live(environment=tid)
-    assert len(result) == nr_live_procs
-    result = await data.AgentInstance.get_list(tid=tid)
-    assert len(result) == nr_agent_instances
-    result = await data.AgentInstance.active_for(tid=tid, endpoint=endpoint)
-    assert len(result) == nr_live_instances
+    """
+        The database log is updated asynchronously. This method waits until
+        the desired database state is reached.
+    """
+
+    async def is_db_state_reached():
+        result = await data.AgentProcess.get_list(sid=sid)
+        if len(result) != nr_procs:
+            return False
+        result = await data.AgentProcess.get_live(environment=tid)
+        if len(result) != nr_live_procs:
+            return False
+        result = await data.AgentInstance.get_list(tid=tid)
+        if len(result) != nr_agent_instances:
+            return False
+        result = await data.AgentInstance.active_for(tid=tid, endpoint=endpoint)
+        if len(result) != nr_live_instances:
+            return False
+        return True
+
+    await retry_limited(is_db_state_reached, 10)
 
 
 @pytest.mark.asyncio

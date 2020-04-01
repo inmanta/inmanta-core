@@ -569,6 +569,10 @@ class SessionManager(ServerSlice):
             self._sessions[sid] = session
             try:
                 for listener in self.listeners:
+                    # This blocking wait is required to propagate exceptions when session creation fails
+                    # in one of the listeners. This implies that all session create operations queue up
+                    # on the session lock in the agent manager. The performance impact is limited due to
+                    # the usage of long poll sessions.
                     await listener.new_session(session)
             except Exception as e:
                 self.expire(session, 0)
