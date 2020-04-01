@@ -99,9 +99,10 @@ implementation test for Test:
 end
 
 
-
-implement Test using test
 implement TestC using parents
+implement TestC using std::none, parents
+implement TestC using std::none
+implement Test using test
 
 a = TestC()
 """

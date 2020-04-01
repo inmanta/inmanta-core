@@ -17,6 +17,7 @@
 """
 
 import re
+from typing import List
 
 import pytest
 
@@ -38,7 +39,6 @@ from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.define import (
     DefineEntity,
     DefineImplement,
-    DefineImplementInherits,
     DefineIndex,
     DefineTypeConstraint,
     DefineTypeDefault,
@@ -424,8 +424,29 @@ implement Test using parents  \""" testc \"""
 
     assert len(statements) == 1
     stmt = statements[0]
-    assert isinstance(stmt, DefineImplementInherits)
+    assert isinstance(stmt, DefineImplement)
     assert str(stmt.entity) == "Test"
+    assert stmt.inherit is True
+
+
+@pytest.mark.parametrize(
+    "implementations",
+    [["parents", "std::none"], ["std::none", "parents"], ["i1", "parents", "i2"], ["std::none"], ["i1", "i2"]],
+)
+def test_implements_parent_in_list(implementations: List[str]):
+    statements = parse_code(
+        """
+implement Test using %s
+        """
+        % ", ".join(implementations)
+    )
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, DefineImplement)
+    assert str(stmt.entity) == "Test"
+    assert stmt.inherit is ("parents" in implementations)
+    assert [str(i) for i in stmt.implementations] == [i for i in implementations if i != "parents"]
 
 
 def test_implements_selector():

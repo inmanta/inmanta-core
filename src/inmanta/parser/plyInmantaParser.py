@@ -36,7 +36,6 @@ from inmanta.ast.statements.define import (
     DefineEntity,
     DefineImplement,
     DefineImplementation,
-    DefineImplementInherits,
     DefineImport,
     DefineIndex,
     DefineRelation,
@@ -59,6 +58,7 @@ file = "NOFILE"
 namespace = None
 
 precedence = (
+    ("right", ","),
     ("left", "OR"),
     ("left", "AND"),
     ("left", "CMP_OP"),
@@ -358,39 +358,34 @@ def p_attr_list_dict_null(p: YaccProduction) -> None:
 
 
 # IMPLEMENT
-def p_implement_inh(p: YaccProduction) -> None:
-    "implement_def : IMPLEMENT class_ref USING PARENTS"
-    p[0] = DefineImplementInherits(p[2])
-    attach_lnr(p)
+def p_implement_ns_list_ref(p: YaccProduction) -> None:
+    "implement_ns_list : ns_ref"
+    p[0] = (False, [p[1]])
+
+
+def p_implement_ns_list_parents(p: YaccProduction) -> None:
+    "implement_ns_list : PARENTS"
+    p[0] = (True, [])
+
+
+def p_implement_ns_list_collect(p: YaccProduction) -> None:
+    "implement_ns_list : implement_ns_list ',' implement_ns_list"
+    p[0] = (p[1][0] or p[3][0], p[1][1] + p[3][1])
 
 
 def p_implement(p: YaccProduction) -> None:
-    "implement_def : IMPLEMENT class_ref USING ns_list"
-    p[0] = DefineImplement(p[2], p[4], Literal(True))
+    """implement_def : IMPLEMENT class_ref USING implement_ns_list empty
+        | IMPLEMENT class_ref USING implement_ns_list mls"""
+    (inherit, implementations) = p[4]
+    p[0] = DefineImplement(p[2], implementations, Literal(True), inherit=inherit, comment=p[5])
     attach_lnr(p)
 
 
 def p_implement_when(p: YaccProduction) -> None:
-    "implement_def : IMPLEMENT class_ref USING ns_list WHEN expression"
-    p[0] = DefineImplement(p[2], p[4], p[6])
-    attach_lnr(p)
-
-
-def p_implement_comment(p: YaccProduction) -> None:
-    "implement_def : IMPLEMENT class_ref USING ns_list mls"
-    p[0] = DefineImplement(p[2], p[4], Literal(True), comment=p[5])
-    attach_lnr(p)
-
-
-def p_implement_inh_comment(p: YaccProduction) -> None:
-    "implement_def : IMPLEMENT class_ref USING PARENTS mls"
-    p[0] = DefineImplementInherits(p[2], comment=p[5])
-    attach_lnr(p)
-
-
-def p_implement_when_comment(p: YaccProduction) -> None:
-    "implement_def : IMPLEMENT class_ref USING ns_list WHEN expression mls"
-    p[0] = DefineImplement(p[2], p[4], p[6], comment=p[7])
+    """implement_def : IMPLEMENT class_ref USING implement_ns_list WHEN expression empty
+        | IMPLEMENT class_ref USING implement_ns_list WHEN expression mls"""
+    (inherit, implementations) = p[4]
+    p[0] = DefineImplement(p[2], implementations, p[6], inherit=inherit, comment=p[7])
     attach_lnr(p)
 
 
