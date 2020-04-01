@@ -19,8 +19,7 @@
 from functools import reduce
 from typing import Iterable, Iterator, Optional, Set, cast
 
-from graphviz import Digraph
-
+from inmanta.ast import RuntimeException
 from inmanta.execute.dataflow import (
     AssignableNode,
     AssignableNodeReference,
@@ -36,6 +35,12 @@ from inmanta.execute.dataflow import (
     VariableNodeReference,
 )
 from inmanta.execute.runtime import Instance
+
+try:
+    import graphviz
+    from graphviz import Digraph
+except ModuleNotFoundError:
+    raise RuntimeException(None, "Graphically visualizing the data flow graph requires the graphviz python package.")
 
 
 class GraphicRenderer:
@@ -97,7 +102,14 @@ class GraphicGraph:
         self._assignments: Set[Assignment] = set(())
 
     def view(self) -> None:
-        self.digraph.view()
+        try:
+            self.digraph.view()
+        except graphviz.ExecutableNotFound:
+            raise RuntimeException(
+                None,
+                "Graphically visualizing the data flow graph requires the fdp command"
+                " from your distribution's graphviz package.",
+            )
 
     def node_key(self, node: Node) -> str:
         """

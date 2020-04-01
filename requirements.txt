@@ -5,8 +5,8 @@ colorlog==4.1.0
 cookiecutter==1.7.0
 cryptography==2.8
 execnet==1.7.1
-inmanta-sphinx>=1.0.0
 graphviz==0.13.2
+inmanta-sphinx>=1.0.0
 netifaces==0.10.9
 ply==3.11
 pytest-cover==3.0.0
