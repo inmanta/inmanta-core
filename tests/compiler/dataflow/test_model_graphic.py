@@ -18,15 +18,17 @@
 
 import re
 from compiler.dataflow.conftest import DataflowTestHelper
+from functools import total_ordering
 from itertools import chain
-from typing import Callable, List
+from typing import Callable, List, Optional, Tuple
 
 import pytest
 
-from inmanta.ast import Namespace
+from inmanta.ast import Locatable, Namespace
 from inmanta.ast.entity import Entity
 from inmanta.execute.dataflow import AssignableNode, AttributeNode, DataflowGraph, InstanceNode, Node, ValueNode
 from inmanta.execute.dataflow.graphic import GraphicGraph
+from inmanta.execute.runtime import Instance
 
 
 def fdp_stringify(obj: object) -> str:
@@ -49,14 +51,67 @@ class LocationBasedGraphicGraph(GraphicGraph):
             )
         elif isinstance(node, AssignableNode):
             assert node.result_variable is not None
-            assert node.result_variable.location is not None
-            return "assignable_%s_%s" % (fdp_stringify(node.name), fdp_stringify(node.result_variable.location))
+            locatable: Locatable
+            if node.result_variable.location is not None:
+                locatable = node.result_variable
+            else:
+                # __self__ node
+                value: object = node.result_variable.get_value()
+                assert isinstance(value, Instance)
+                locatable = value
+            assert locatable.location is not None
+            return "assignable_%s_%s" % (fdp_stringify(node.name), fdp_stringify(locatable.location))
         assert False
+
+
+GraphicAsserter = Callable[[str, str], None]
+
+
+@total_ordering
+class DotSource:
+    """
+        Represents DOT source semi-structurally. Sorts the lines before comparing to deal with nondeterministism
+        during construction.
+    """
+
+    def __init__(self, lines: List[str], subgraphs: List[Tuple[str, "DotSource"]]) -> None:
+        self.lines: List[str] = sorted(lines)
+        self.subgraphs: List[Tuple[str, DotSource]] = sorted(subgraphs)
+
+    @classmethod
+    def parse(cls, source: str) -> "DotSource":
+        (lines, subgraphs, rest) = cls._get_lines_and_subgraphs(source.split("\n"))
+        assert len(rest) == 0
+        return DotSource(lines, subgraphs)
+
+    @classmethod
+    def _get_lines_and_subgraphs(cls, lines: List[str]) -> Tuple[List[str], List[Tuple[str, "DotSource"]], List[str]]:
+        if len(lines) == 0:
+            return ([], [], [])
+        (head, tail) = (lines[0], lines[1:])
+        if head.endswith("{"):
+            (sublines, subsubs, rest) = cls._get_lines_and_subgraphs(tail)
+            (rlines, rsubs, rrest) = cls._get_lines_and_subgraphs(rest)
+            return (rlines, [(head, DotSource(sublines, subsubs)), *rsubs], rrest)
+        if head.endswith("}"):
+            return ([head], [], tail)
+        (tail_lines, tail_subs, tail_rest) = cls._get_lines_and_subgraphs(tail)
+        return ([head, *tail_lines], tail_subs, tail_rest)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, DotSource):
+            return NotImplemented
+        return self.lines == other.lines and self.subgraphs == other.subgraphs
+
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, DotSource):
+            return NotImplemented
+        return (self.lines, self.subgraphs) < (other.lines, other.subgraphs)
 
 
 @pytest.fixture(scope="function")
 def graphic_asserter(dataflow_test_helper: DataflowTestHelper) -> Callable[[str, str], None]:
-    def asserter(model: str, expected: str) -> None:
+    def asserter(model: str, expected: str, view: Optional[bool] = False) -> None:
         dataflow_test_helper.compile(model)
         graph: DataflowGraph = dataflow_test_helper.get_graph()
         namespace: Namespace = dataflow_test_helper.get_namespace()
@@ -69,23 +124,304 @@ def graphic_asserter(dataflow_test_helper: DataflowTestHelper) -> Callable[[str,
             graphic.add_node(instance.instance_node.top_node())
         for named_node in graph.named_nodes.values():
             graphic.add_node(named_node)
-        assert graphic.digraph.source.strip() == expected.strip().format(
-            dir=fdp_stringify(dataflow_test_helper.snippetcompiler.project_dir)
+        if view:
+            graphic.view()
+        print(graphic.digraph.source.strip())
+        assert DotSource.parse(graphic.digraph.source.strip()) == DotSource.parse(
+            expected.strip().format(dir=fdp_stringify(dataflow_test_helper.snippetcompiler.project_dir))
         )
 
     return asserter
 
 
-def test_dataflow_graphic_simple_assignment(graphic_asserter: Callable[[str, str], None]) -> None:
+def test_dataflow_graphic_simple_assignment(graphic_asserter: GraphicAsserter) -> None:
     graphic_asserter(
         """
 x = 0
         """,
         """
 digraph {{
-	assignable_x_{dir}maincf2 [label=x shape=ellipse]
-	value_0 [label=0 shape=diamond]
-	assignable_x_{dir}maincf2 -> value_0
+\tassignable_x_{dir}maincf2 [label=x shape=ellipse]
+\tvalue_0 [label=0 shape=diamond]
+\tassignable_x_{dir}maincf2 -> value_0
 }}
-        """,  # noqa: E101, W191
+        """,
+    )
+
+
+def test_dataflow_graphic_assignment_loop(graphic_asserter: GraphicAsserter) -> None:
+    graphic_asserter(
+        """
+x = y
+y = z
+z = x
+
+y = 42
+        """,
+        """
+digraph {{
+\tassignable_x_{dir}maincf25 [label=x shape=ellipse]
+\tassignable_y_{dir}maincf6 [label=y shape=ellipse]
+\tassignable_z_{dir}maincf45 [label=z shape=ellipse]
+\tassignable_z_{dir}maincf45 -> assignable_x_{dir}maincf25
+\tassignable_y_{dir}maincf6 -> assignable_z_{dir}maincf45
+\tvalue_42 [label=42 shape=diamond]
+\tassignable_y_{dir}maincf6 -> value_42
+\tassignable_x_{dir}maincf25 -> assignable_y_{dir}maincf6
+}}
+
+        """,
+    )
+
+
+def test_dataflow_graphic_instance(graphic_asserter: GraphicAsserter) -> None:
+    graphic_asserter(
+        """
+entity A:
+    number l
+    number m
+    number n
+end
+
+implement A using std::none
+
+
+x = A(n = 42)
+x.m = 0
+
+y = x
+y.l = 1
+
+
+u = A(l = y.l, m = x.m, n = 2)
+        """,
+        """
+digraph {{
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf11 {{
+\t\tlabel=A
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf11 {{
+\t\tattribute_l_on___config__Ainstance_{dir}maincf11 [label=l shape=ellipse]
+\t}}
+\tvalue_1 [label=1 shape=diamond]
+\tattribute_l_on___config__Ainstance_{dir}maincf11 -> value_1
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf11 {{
+\t\tattribute_m_on___config__Ainstance_{dir}maincf11 [label=m shape=ellipse]
+\t}}
+\tvalue_0 [label=0 shape=diamond]
+\tattribute_m_on___config__Ainstance_{dir}maincf11 -> value_0
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf11 {{
+\t\tattribute_n_on___config__Ainstance_{dir}maincf11 [label=n shape=ellipse]
+\t}}
+\tvalue_42 [label=42 shape=diamond]
+\tattribute_n_on___config__Ainstance_{dir}maincf11 -> value_42
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf11 {{
+\t\tattribute_requires_on___config__Ainstance_{dir}maincf11 [label=requires shape=ellipse]
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf11 {{
+\t\tattribute_provides_on___config__Ainstance_{dir}maincf11 [label=provides shape=ellipse]
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf18 {{
+\t\tlabel=A
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf18 {{
+\t\tattribute_l_on___config__Ainstance_{dir}maincf18 [label=l shape=ellipse]
+\t}}
+\tassignable_y_{dir}maincf145 [label=y shape=ellipse]
+\tassignable_x_{dir}maincf11 [label=x shape=ellipse]
+\tassignable_x_{dir}maincf11 -> cluster_instance___config__Ainstance_{dir}maincf11
+\tassignable_y_{dir}maincf145 -> assignable_x_{dir}maincf11
+\tattribute_l_on___config__Ainstance_{dir}maincf18 -> assignable_y_{dir}maincf145 [label=".l"]
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf18 {{
+\t\tattribute_m_on___config__Ainstance_{dir}maincf18 [label=m shape=ellipse]
+\t}}
+\tattribute_m_on___config__Ainstance_{dir}maincf18 -> assignable_x_{dir}maincf11 [label=".m"]
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf18 {{
+\t\tattribute_n_on___config__Ainstance_{dir}maincf18 [label=n shape=ellipse]
+\t}}
+\tvalue_2 [label=2 shape=diamond]
+\tattribute_n_on___config__Ainstance_{dir}maincf18 -> value_2
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf18 {{
+\t\tattribute_requires_on___config__Ainstance_{dir}maincf18 [label=requires shape=ellipse]
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf18 {{
+\t\tattribute_provides_on___config__Ainstance_{dir}maincf18 [label=provides shape=ellipse]
+\t}}
+\tassignable_u_{dir}maincf18 [label=u shape=ellipse]
+\tassignable_u_{dir}maincf18 -> cluster_instance___config__Ainstance_{dir}maincf18
+}}
+        """,
+    )
+
+
+def test_dataflow_graphic_relation(graphic_asserter: GraphicAsserter) -> None:
+    graphic_asserter(
+        """
+entity A:
+end
+
+entity B:
+end
+
+implement A using std::none
+implement B using std::none
+
+A.b [0:] -- B.a [0:]
+
+a = A()
+b = B()
+
+a.b = b
+        """,
+        """
+digraph {{
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf13 {{
+\t\tlabel=A
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf13 {{
+\t\tattribute_b_on___config__Ainstance_{dir}maincf13 [label=b shape=ellipse]
+\t}}
+\tassignable_b_{dir}maincf14 [label=b shape=ellipse]
+\tsubgraph cluster_instance___config__Binstance_{dir}maincf14 {{
+\t\tlabel=B
+\t}}
+\tsubgraph cluster_instance___config__Binstance_{dir}maincf14 {{
+\t\tattribute_a_on___config__Binstance_{dir}maincf14 [label=a shape=ellipse]
+\t}}
+\tattribute_a_on___config__Binstance_{dir}maincf14 -> cluster_instance___config__Ainstance_{dir}maincf13
+\tsubgraph cluster_instance___config__Binstance_{dir}maincf14 {{
+\t\tattribute_requires_on___config__Binstance_{dir}maincf14 [label=requires shape=ellipse]
+\t}}
+\tsubgraph cluster_instance___config__Binstance_{dir}maincf14 {{
+\t\tattribute_provides_on___config__Binstance_{dir}maincf14 [label=provides shape=ellipse]
+\t}}
+\tassignable_b_{dir}maincf14 -> cluster_instance___config__Binstance_{dir}maincf14
+\tattribute_b_on___config__Ainstance_{dir}maincf13 -> assignable_b_{dir}maincf14
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf13 {{
+\t\tattribute_requires_on___config__Ainstance_{dir}maincf13 [label=requires shape=ellipse]
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf13 {{
+\t\tattribute_provides_on___config__Ainstance_{dir}maincf13 [label=provides shape=ellipse]
+\t}}
+\tassignable_a_{dir}maincf13 [label=a shape=ellipse]
+\tassignable_a_{dir}maincf13 -> cluster_instance___config__Ainstance_{dir}maincf13
+}}
+        """,
+    )
+
+
+def test_dataflow_graphic_implementation(graphic_asserter: GraphicAsserter) -> None:
+    graphic_asserter(
+        """
+entity A:
+    number m
+    number n
+end
+
+implement A using i
+
+implementation i for A:
+    self.m = self.n
+end
+
+
+A(n = 42)
+A(n = 42)
+        """,
+        """
+digraph {{
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf15 {{
+\t\tlabel=A
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf15 {{
+\t\tattribute_m_on___config__Ainstance_{dir}maincf15 [label=m shape=ellipse]
+\t}}
+\tassignable___self___{dir}maincf15 [label=__self__ shape=ellipse]
+\tassignable___self___{dir}maincf15 -> cluster_instance___config__Ainstance_{dir}maincf15
+\tattribute_m_on___config__Ainstance_{dir}maincf15 -> assignable___self___{dir}maincf15 [label=".n"]
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf15 {{
+\t\tattribute_n_on___config__Ainstance_{dir}maincf15 [label=n shape=ellipse]
+\t}}
+\tvalue_42 [label=42 shape=diamond]
+\tattribute_n_on___config__Ainstance_{dir}maincf15 -> value_42
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf15 {{
+\t\tattribute_requires_on___config__Ainstance_{dir}maincf15 [label=requires shape=ellipse]
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf15 {{
+\t\tattribute_provides_on___config__Ainstance_{dir}maincf15 [label=provides shape=ellipse]
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf14 {{
+\t\tlabel=A
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf14 {{
+\t\tattribute_m_on___config__Ainstance_{dir}maincf14 [label=m shape=ellipse]
+\t}}
+\tassignable___self___{dir}maincf14 [label=__self__ shape=ellipse]
+\tassignable___self___{dir}maincf14 -> cluster_instance___config__Ainstance_{dir}maincf14
+\tattribute_m_on___config__Ainstance_{dir}maincf14 -> assignable___self___{dir}maincf14 [label=".n"]
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf14 {{
+\t\tattribute_n_on___config__Ainstance_{dir}maincf14 [label=n shape=ellipse]
+\t}}
+\tattribute_n_on___config__Ainstance_{dir}maincf14 -> value_42
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf14 {{
+\t\tattribute_requires_on___config__Ainstance_{dir}maincf14 [label=requires shape=ellipse]
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf14 {{
+\t\tattribute_provides_on___config__Ainstance_{dir}maincf14 [label=provides shape=ellipse]
+\t}}
+}}
+        """,
+    )
+
+
+def test_dataflow_graphic_index(graphic_asserter: GraphicAsserter) -> None:
+    graphic_asserter(
+        """
+entity A:
+    number m
+    number n
+end
+
+index A(n)
+
+implement A using std::none
+
+
+x = A(n = 42)
+y = A(n = 42)
+
+x.m = 0
+        """,
+        """
+digraph {{
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf12 {{
+\t\tlabel=A
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf13 {{
+\t\tlabel=A
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf13 {{
+\t\tattribute_m_on___config__Ainstance_{dir}maincf13 [label=m shape=ellipse]
+\t}}
+\tvalue_0 [label=0 shape=diamond]
+\tattribute_m_on___config__Ainstance_{dir}maincf13 -> value_0
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf13 {{
+\t\tattribute_n_on___config__Ainstance_{dir}maincf13 [label=n shape=ellipse]
+\t}}
+\tvalue_42 [label=42 shape=diamond]
+\tattribute_n_on___config__Ainstance_{dir}maincf13 -> value_42
+\tattribute_n_on___config__Ainstance_{dir}maincf13 -> value_42
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf13 {{
+\t\tattribute_requires_on___config__Ainstance_{dir}maincf13 [label=requires shape=ellipse]
+\t}}
+\tsubgraph cluster_instance___config__Ainstance_{dir}maincf13 {{
+\t\tattribute_provides_on___config__Ainstance_{dir}maincf13 [label=provides shape=ellipse]
+\t}}
+\tcluster_instance___config__Ainstance_{dir}maincf12 -> cluster_instance___config__Ainstance_{dir}maincf13 [label=index]
+\tassignable_x_{dir}maincf12 [label=x shape=ellipse]
+\tassignable_x_{dir}maincf12 -> cluster_instance___config__Ainstance_{dir}maincf12
+\tassignable_y_{dir}maincf13 [label=y shape=ellipse]
+\tassignable_y_{dir}maincf13 -> cluster_instance___config__Ainstance_{dir}maincf13
+}}
+        """,
     )

@@ -920,6 +920,8 @@ class Instance(ExecutionContext):
         }
         self.slots["self"] = ResultVariable()
         self.slots["self"].set_value(self, None)
+        # temporary fix, will get removed by merging #1879
+        self.slots["self"].set_dataflow_node(self.get_dataflow_node("self"))
         self.sid = id(self)
         self.implementations: "Set[Implementation]" = set()
 
