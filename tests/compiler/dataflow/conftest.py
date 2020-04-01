@@ -24,6 +24,7 @@ import pytest
 import inmanta.ast.type as inmanta_type
 import inmanta.compiler as compiler
 from inmanta.ast import Namespace, RuntimeException
+from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements import Statement
 from inmanta.config import Config
@@ -38,7 +39,7 @@ from inmanta.execute.dataflow import (
     ValueNode,
     VariableNodeReference,
 )
-from inmanta.execute.runtime import Resolver
+from inmanta.execute.runtime import Resolver, ExecutionContext
 
 
 def create_instance(
@@ -55,8 +56,13 @@ def create_instance(
 
 @pytest.fixture(scope="function")
 def graph() -> Iterator[DataflowGraph]:
-    dummy_resolver: Resolver = Resolver(Namespace("dummy_namespace"))
-    yield DataflowGraph(dummy_resolver)
+    namespace: Namespace = Namespace("dummy_namespace")
+    resolver: Resolver = Resolver(namespace, enable_dataflow_graph=True)
+    block: BasicBlock = BasicBlock(namespace, [])
+    xc: ExecutionContext = ExecutionContext(block, resolver)
+    block.namespace.scope = xc
+
+    yield DataflowGraph(resolver)
 
 
 class DataflowTestHelper:
@@ -137,7 +143,7 @@ class DataflowTestHelper:
             token: str = self._tokens.pop(0)
             if not token.isalnum():
                 raise Exception("Invalid syntax: expected `variable_name` or `<instance> instance_id`, got `%s`" % token)
-            node_ref: AssignableNodeReference = self.get_graph().resolver.get_dataflow_node(token)
+            node_ref: AssignableNodeReference = self.get_graph().get_named_node(token)
             assert isinstance(node_ref, VariableNodeReference)
             node = node_ref.node
         if self._consume_token_attribute() is not None:
@@ -182,7 +188,7 @@ class DataflowTestHelper:
             try:
                 return (ValueNode(int(token)).reference(), None)
             except ValueError:
-                node_ref: AssignableNodeReference = self.get_graph().resolver.get_dataflow_node(token)
+                node_ref: AssignableNodeReference = self.get_graph().get_named_node(token)
                 assert isinstance(node_ref, VariableNodeReference)
                 attribute_name: Optional[str] = self._consume_token_attribute()
                 while attribute_name is not None:
@@ -255,9 +261,9 @@ class DataflowTestHelper:
                 The variable and leaves are allowed to be attributes.
         """
         for key, value in leaves.items():
-            lhs: AssignableNodeReference = self.get_graph().resolver.get_dataflow_node(key)
+            lhs: AssignableNodeReference = self.get_graph().get_named_node(key)
             rhs: Set[AssignableNode] = set(
-                chain.from_iterable(self.get_graph().resolver.get_dataflow_node(v).nodes() for v in value)
+                chain.from_iterable(self.get_graph().get_named_node(v).nodes() for v in value)
             )
             assert set(lhs.leaf_nodes()) == rhs
 

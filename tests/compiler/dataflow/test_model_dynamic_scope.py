@@ -65,7 +65,7 @@ b -> x . b
         """,
     )
     dataflow_test_helper.verify_leaves({"b.n": {"x.n"}})
-    leaves: List[AssignableNode] = list(dataflow_test_helper.get_graph().resolver.get_dataflow_node("b.n").leaf_nodes())
+    leaves: List[AssignableNode] = list(dataflow_test_helper.get_graph().get_named_node("b.n").leaf_nodes())
     assert len(leaves) == 1
     assert len(leaves[0].value_assignments) == 1
     assert leaves[0].value_assignments[0].rhs.node.value == 42
