@@ -904,7 +904,9 @@ class Instance(ExecutionContext):
         self.type = mytype
 
         self.slots: Dict[str, ResultVariable] = {
-            n: mytype.get_attribute(n).get_new_result_variable(self, queue) for n in mytype.get_all_attribute_names()
+            n: mytype.get_attribute(n).get_new_result_variable(self, queue)
+            # prune duplicates first because get_new_result_variable() has side effects
+            for n in set(mytype.get_all_attribute_names())
         }
         self.slots["self"] = ResultVariable()
         self.slots["self"].set_value(self, None)

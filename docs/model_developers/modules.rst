@@ -110,13 +110,21 @@ When done, first use git to add files::
 
     git add *
 
-To commit, use the module tool. It will autmatically set the right tags on the module::
+To commit, use the module tool. This will create a new dev release.::
 
     inmanta module commit -m "First commit"
 
-This will create a new dev release. To make an actual release::
+For the dev releases, no tags are created by default. If a tag is required for a dev release, use the --tag option.::
+
+    inmanta module commit -m "First commit" --tag
+
+To make an actual release. It will automatically set the right tags on the module::
 
     inmanta module commit -r -m "First Release"
+
+If a release shouldn't be tagged, the --no-tag option should be specified::
+
+    inmanta module commit -r -m "First Release" --no-tag
 
 To set a specific version::
 
