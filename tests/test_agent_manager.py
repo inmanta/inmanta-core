@@ -16,17 +16,16 @@
     Contact: code@inmanta.com
 """
 import asyncio
-from typing import Dict, List, Tuple
 import datetime
 import typing
+from typing import Dict, List, Tuple
 from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import pytest
 
 from inmanta import config, data
-from inmanta.agent import agent, Agent
-from inmanta import data
+from inmanta.agent import Agent, agent
 from inmanta.protocol import Result
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.agentmanager import AgentManager, SessionManager
