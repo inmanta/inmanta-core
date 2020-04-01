@@ -28,3 +28,15 @@ datatrace_enable: Option[bool] = Option(
     " during the development process.",
     is_bool,
 )
+
+dataflow_graphic_enable: Option[bool] = Option(
+    "compiler",
+    "dataflow_graphic_enable",
+    False,
+    "Enables graphic visualization of the data flow in the model. Requires the datatrace_enable option. Requires graphviz.",
+    is_bool,
+)
+
+
+def track_dataflow() -> bool:
+    return datatrace_enable.get() or dataflow_graphic_enable.get()

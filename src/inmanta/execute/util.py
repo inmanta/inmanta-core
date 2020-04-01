@@ -43,6 +43,9 @@ class NoneValue(object):
     def __eq__(self, other):
         return isinstance(other, NoneValue)
 
+    def __hash__(self):
+        return hash(None)
+
     def __str__(self):
         return "null"
 

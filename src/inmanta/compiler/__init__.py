@@ -18,15 +18,27 @@
 import logging
 import os
 import sys
+from itertools import chain
 from typing import Dict, List, Optional, Set
 
+import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
 from inmanta import const
-from inmanta.ast import AttributeException, CompilerException, DoubleSetException, LocatableString, MultiException, Range
+from inmanta.ast import (
+    AttributeException,
+    CompilerException,
+    DoubleSetException,
+    LocatableString,
+    MultiException,
+    Namespace,
+    Range,
+)
+from inmanta.ast.entity import Entity
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.compiler import config as compiler_config
 from inmanta.execute import scheduler
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
+from inmanta.execute.dataflow.graphic import GraphicRenderer
 from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ResultVariable
@@ -46,17 +58,35 @@ def do_compile(refs={}):
     LOGGER.debug("Starting compile")
 
     (statements, blocks) = compiler.compile()
-    sched = scheduler.Scheduler(compiler_config.datatrace_enable.get())
+    sched = scheduler.Scheduler(compiler_config.track_dataflow())
     try:
         success = sched.run(compiler, statements, blocks)
     except CompilerException as e:
+        if compiler_config.dataflow_graphic_enable.get():
+            show_dataflow_graphic(sched, compiler)
         compiler.handle_exception(e)
 
     LOGGER.debug("Compile done")
 
     if not success:
         sys.stderr.write("Unable to execute all statements.\n")
+    if compiler_config.dataflow_graphic_enable.get():
+        show_dataflow_graphic(sched, compiler)
     return (sched.get_types(), compiler.get_ns())
+
+
+def show_dataflow_graphic(scheduler, compiler):
+    types: Dict[str, inmanta_type.Type] = scheduler.get_types()
+    ns: Namespace = compiler.get_ns()
+    config_ns: Namespace = ns.get_child("__config__")
+    GraphicRenderer.view_graph(
+        config_ns.get_scope().dataflow_graph,
+        list(
+            chain.from_iterable(
+                tp.get_all_instances() for tp in types.values() if isinstance(tp, Entity) and tp.namespace is config_ns
+            )
+        ),
+    )
 
 
 def anchormap(refs={}):
