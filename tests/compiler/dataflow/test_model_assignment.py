@@ -260,7 +260,7 @@ def test_dataflow_model_no_leaf_error(dataflow_test_helper: DataflowTestHelper) 
         """
 n = x.n
         """,
-        RuntimeException,
+        NotFoundException,
     )
 
 
