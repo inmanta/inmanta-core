@@ -2217,3 +2217,24 @@ async def test_resources_json(init_dataclasses_and_load_schema):
     res = await data.Resource.get_one(environment=res1.environment, resource_version_id=res1.resource_version_id)
 
     assert res1.attributes == res.attributes
+
+
+@pytest.mark.asyncio
+async def test_update_to_none_value(init_dataclasses_and_load_schema):
+    """
+        Verify that a field with a default value can be set to None if that field is nullable.
+    """
+    project = data.Project(name="test")
+    await project.insert()
+    env = data.Environment(name="dev", project=project.id)
+    await env.insert()
+
+    # Default value is empty string
+    assert env.repo_url is not None
+    assert env.repo_url == ""
+    # Set value to None
+    await env.update(repo_url=None)
+    # Assert None value
+    assert env.repo_url is None
+    env = await data.Environment.get_by_id(env.id)
+    assert env.repo_url is None
