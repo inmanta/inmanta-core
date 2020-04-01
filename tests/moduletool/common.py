@@ -84,7 +84,7 @@ repo: %s"""
     return path
 
 
-def add_file(modpath, file, content, msg, version=None):
+def add_file(modpath, file, content, msg, version=None, dev=False, tag=True):
     with open(os.path.join(modpath, file), "w", encoding="utf-8") as projectfile:
         projectfile.write(content)
 
@@ -94,7 +94,7 @@ def add_file(modpath, file, content, msg, version=None):
         ocd = os.curdir
         os.curdir = modpath
         subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
-        ModuleTool().commit(msg, version=version, dev=False, commit_all=True)
+        ModuleTool().commit(msg, version=version, dev=dev, commit_all=True, tag=tag)
         os.curdir = ocd
 
 
