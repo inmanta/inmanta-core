@@ -166,7 +166,9 @@ class DataflowGraph:
     def __init__(self, resolver: "Resolver", parent: Optional["DataflowGraph"] = None) -> None:
         self.resolver: "Resolver" = resolver
         self.parent: Optional[DataflowGraph] = parent if parent is not None else None
-        # keeps track of variables that have not been declared in the resolver's scope
+        # keeps track of variables that have not been declared in the resolver's scope. This should only be populated
+        # if the model refers to a variable in the rhs that has no declaration in the left hand side.
+        # For example `n = y.n` in a scope that does not contain a `y = ...` statement.
         self._own_variables: Dict[str, AssignableNode] = {}
         # keeps track of instance nodes and their responsible
         self._own_instances: Dict["Constructor", InstanceNode] = {}
