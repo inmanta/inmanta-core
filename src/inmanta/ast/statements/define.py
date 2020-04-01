@@ -354,7 +354,8 @@ class DefineImplement(DefinitionStatement):
 
             entity_type = entity_type.get_entity()
 
-            entity_type.implements_inherits = self.inherit
+            # If one implements statement has parent declared, set to true
+            entity_type.implements_inherits |= self.inherit
 
             implement = Implement()
             implement.comment = self.comment
