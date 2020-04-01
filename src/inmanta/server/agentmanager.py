@@ -27,6 +27,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from uuid import UUID
 
 from inmanta import const, data
+from inmanta.const import AgentAction
 from inmanta.config import Config
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound, ShutdownInProgress
@@ -110,7 +111,7 @@ class AgentManager(ServerSlice, SessionListener):
         self.session_lock = asyncio.Lock()
         # all sessions
         self.sessions: Dict[UUID, protocol.Session] = {}
-        # live sessions
+        # live sessions: Sessions to agents which are primary and unpaused
         self.tid_endpoint_to_session: Dict[Tuple[UUID, str], protocol.Session] = {}
 
         self.closesessionsonstart: bool = closesessionsonstart
@@ -178,9 +179,9 @@ class AgentManager(ServerSlice, SessionListener):
     async def stop(self) -> None:
         await super().stop()
 
-    @protocol.handle(methods_v2.pause_agent, env="tid")
-    async def pause_agent(self, env: data.Environment, name: str, paused: bool) -> None:
-        if paused:
+    @protocol.handle(methods_v2.agent_action, env="tid")
+    async def agent_action(self, env: data.Environment, name: str, action: AgentAction) -> None:
+        if action is AgentAction.pause:
             await self._pause_agent(env, name)
         else:
             await self._unpause_agent(env, name)
@@ -191,21 +192,21 @@ class AgentManager(ServerSlice, SessionListener):
             await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True)
             live_session = self.tid_endpoint_to_session.get(key)
             if live_session is not None:
+                # The agent has an active agent instance that has to be paused
                 del self.tid_endpoint_to_session[key]
-                await live_session.get_client().set_state(endpoint, False)
+                await live_session.get_client().set_state(endpoint, enabled=False)
 
     async def _unpause_agent(self, env: data.Environment, endpoint: str) -> None:
         key = (env.id, endpoint)
         async with self.session_lock:
             await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False)
             live_session = self.tid_endpoint_to_session.get(key)
-            if live_session:
-                await live_session.get_client().set_state(endpoint, True)
-            else:
+            # If the agent has a live_session, the agent wasn't paused
+            if not live_session:
                 session = self._get_session_for(tid=env.id, endpoint=endpoint)
                 if session:
                     self.tid_endpoint_to_session[key] = session
-                    await session.get_client().set_state(endpoint, True)
+                    await session.get_client().set_state(endpoint, enabled=True)
 
     # Agent Management
     async def ensure_agent_registered(self, env: data.Environment, nodename: str) -> data.Agent:
@@ -256,7 +257,7 @@ class AgentManager(ServerSlice, SessionListener):
                 if (tid, endpoint) not in self.tid_endpoint_to_session and agent_statuses[endpoint] != "paused":
                     LOGGER.debug("set session %s as primary for agent %s in env %s", sid, endpoint, tid)
                     self.tid_endpoint_to_session[(tid, endpoint)] = session
-                    self.add_background_task(session.get_client().set_state(endpoint, True))
+                    self.add_background_task(session.get_client().set_state(endpoint, enabled=True))
                     endpoints_with_new_primary.append((endpoint, session))
 
         self.add_background_task(self._log_session_creation_to_db(tid, endpoints_with_new_primary, session, now))
@@ -328,7 +329,7 @@ class AgentManager(ServerSlice, SessionListener):
                     new_active_session = self._get_session_for(tid, endpoint)
                     if new_active_session is not None:
                         self.tid_endpoint_to_session[key] = new_active_session
-                        self.add_background_task(new_active_session.get_client().set_state(endpoint, True))
+                        self.add_background_task(new_active_session.get_client().set_state(endpoint, enabled=True))
                         endpoints_with_new_primary.append((endpoint, new_active_session))
                     else:
                         del self.tid_endpoint_to_session[key]

@@ -25,6 +25,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from inmanta import config, data
+from inmanta.const import AgentAction
 from inmanta.agent import Agent, agent
 from inmanta.protocol import Result
 from inmanta.server import SLICE_AGENT_MANAGER
@@ -119,7 +120,7 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
     await am.new_session(ts1)
     await futures.proccess()
     assert len(am.sessions) == 1
-    ts1.get_client().set_state.assert_called_with("agent2", True)
+    ts1.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts1.get_client().reset_mock()
     await assert_agents("paused", "up", "down", sid2=ts1.id)
 
@@ -139,7 +140,7 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
     await am.new_session(ts2)
     await futures.proccess()
     assert len(am.sessions) == 2
-    ts2.get_client().set_state.assert_called_with("agent3", True)
+    ts2.get_client().set_state.assert_called_with("agent3", enabled=True)
     ts2.get_client().reset_mock()
     await assert_agents("paused", "up", "up", sid2=ts1.id, sid3=ts2.id)
 
@@ -153,7 +154,7 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
     am.expire(ts1, 100)
     await futures.proccess()
     assert len(am.sessions) == 1
-    ts2.get_client().set_state.assert_called_with("agent2", True)
+    ts2.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts2.get_client().reset_mock()
     await assert_agents("paused", "up", "up", sid2=ts2.id, sid3=ts2.id)
 
@@ -360,7 +361,7 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     await am.new_session(ts1)
     await futures.proccess()
     assert len(am.sessions) == 1
-    ts1.get_client().set_state.assert_called_with("agent2", True)
+    ts1.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts1.get_client().reset_mock()
     await assert_agents("paused", "up", "down", sid2=ts1.id)
 
@@ -375,7 +376,7 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     await am.new_session(ts2)
     await futures.proccess()
     assert len(am.sessions) == 2
-    ts2.get_client().set_state.assert_called_with("agent3", True)
+    ts2.get_client().set_state.assert_called_with("agent3", enabled=True)
     ts2.get_client().reset_mock()
     await assert_agents("paused", "up", "up", sid2=ts1.id, sid3=ts2.id)
 
@@ -383,7 +384,7 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     am.expire(ts1, 100)
     await futures.proccess()
     assert len(am.sessions) == 1
-    ts2.get_client().set_state.assert_called_with("agent2", True)
+    ts2.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts2.get_client().reset_mock()
     await assert_agents("paused", "up", "up", sid2=ts2.id, sid3=ts2.id)
 
@@ -398,7 +399,7 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     await am.new_session(ts1)
     await futures.proccess()
     assert len(am.sessions) == 1
-    ts1.get_client().set_state.assert_called_with("agent2", True)
+    ts1.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts1.get_client().reset_mock()
     await assert_agents("paused", "up", "down", sid2=ts1.id)
 
@@ -413,7 +414,7 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     await am.new_session(ts2)
     await futures.proccess()
     assert len(am.sessions) == 2
-    ts2.get_client().set_state.assert_called_with("agent3", True)
+    ts2.get_client().set_state.assert_called_with("agent3", enabled=True)
     ts2.get_client().reset_mock()
     await assert_agents("paused", "up", "up", sid2=ts1.id, sid3=ts2.id)
 
@@ -421,7 +422,7 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     am.expire(ts1, 100)
     await futures.proccess()
     assert len(am.sessions) == 1
-    ts2.get_client().set_state.assert_called_with("agent2", True)
+    ts2.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts2.get_client().reset_mock()
     await assert_agents("paused", "up", "up", sid2=ts2.id, sid3=ts2.id)
 
@@ -591,9 +592,9 @@ async def test_session_creation_fails(server, environment, caplog):
 
 
 @pytest.mark.asyncio
-async def test_pause_agent(server, client, async_finalizer):
+async def test_agent_action(server, client, async_finalizer):
     """
-        Test the pause_agent() API call.
+        Test the agent_action() API call.
     """
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
@@ -639,25 +640,25 @@ async def test_pause_agent(server, client, async_finalizer):
         expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
     )
     # Unpause agent
-    result = await client.pause_agent(tid=env1_id, name="agent1", paused=True)
+    result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.pause)
     assert result.code == 200
     await assert_agents_paused(
         expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
     )
     # Unpause an already paused agent
-    await client.pause_agent(tid=env1_id, name="agent1", paused=True)
+    await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.pause)
     assert result.code == 200
     await assert_agents_paused(
         expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
     )
     # Pause agent
-    await client.pause_agent(tid=env1_id, name="agent1", paused=False)
+    await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.unpause)
     assert result.code == 200
     await assert_agents_paused(
         expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
     )
     # Pause an already paused agent
-    await client.pause_agent(tid=env1_id, name="agent1", paused=False)
+    await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.unpause)
     assert result.code == 200
     await assert_agents_paused(
         expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}

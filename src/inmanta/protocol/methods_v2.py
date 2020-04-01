@@ -20,6 +20,7 @@ from typing import List, Optional, Union
 
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
+from inmanta.const import AgentAction
 
 from . import methods
 from .decorators import typedmethod
@@ -246,12 +247,14 @@ def get_api_docs(format: Optional[str] = None) -> ReturnValue[Union[OpenAPI, str
     """
 
 
-@typedmethod(path="/agent/{name}/pause", operation="PUT", arg_options=methods.ENV_OPTS, client_types=["api"], api_version=2)
-def pause_agent(tid: uuid.UUID, name: str, paused: bool) -> None:
+@typedmethod(path="/agent/{name}/{action}", operation="POST", arg_options=methods.ENV_OPTS, client_types=["api"], api_version=2)
+def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
     """
-        Pause or unpause an agent.
+        Execute an action on an agent
 
         :param tid: The environment this agent is defined in.
         :param name: The name of the agent.
-        :param paused: Indicates whether the agent should be paused or unpaused.
+        :param action: The type of action that should be executed on an agent.
+                        * pause: Pause an agent.
+                        * unpause: unpause an agent.
     """
