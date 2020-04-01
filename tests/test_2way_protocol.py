@@ -51,7 +51,7 @@ class SessionSpy(SessionListener, ServerSlice):
         self.expires = 0
         self.__sessions = []
 
-    def new_session(self, session):
+    async def new_session(self, session):
         self.__sessions.append(session)
 
     @protocol.handle(get_status_x)
