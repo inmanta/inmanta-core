@@ -25,8 +25,8 @@ from uuid import UUID, uuid4
 import pytest
 
 from inmanta import config, data
-from inmanta.const import AgentAction
 from inmanta.agent import Agent, agent
+from inmanta.const import AgentAction
 from inmanta.protocol import Result
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.agentmanager import AgentManager, SessionManager

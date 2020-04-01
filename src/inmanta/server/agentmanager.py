@@ -27,8 +27,8 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from uuid import UUID
 
 from inmanta import const, data
-from inmanta.const import AgentAction
 from inmanta.config import Config
+from inmanta.const import AgentAction
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound, ShutdownInProgress
 from inmanta.resources import Id

@@ -18,9 +18,9 @@
 import uuid
 from typing import List, Optional, Union
 
+from inmanta.const import AgentAction
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
-from inmanta.const import AgentAction
 
 from . import methods
 from .decorators import typedmethod
