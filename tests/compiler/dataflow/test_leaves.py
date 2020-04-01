@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from compiler.dataflow.conftest import create_instance
+from compiler.dataflow.conftest import create_instance, get_dataflow_node
 from typing import List, Set
 
 import pytest
@@ -34,7 +34,7 @@ from inmanta.execute.dataflow import (
 
 
 def test_dataflow_reference_nodes(graph: DataflowGraph) -> None:
-    x: AssignableNodeReference = graph.get_named_node("x")
+    x: AssignableNodeReference = get_dataflow_node(graph, "x")
     x_nodes: List[AssignableNode] = list(x.nodes())
     assert len(x_nodes) == 1
     assert isinstance(x, DirectNodeReference)
@@ -42,34 +42,34 @@ def test_dataflow_reference_nodes(graph: DataflowGraph) -> None:
 
 
 def test_dataflow_attribute_reference_nodes(graph: DataflowGraph) -> None:
-    x: AssignableNodeReference = graph.get_named_node("x")
-    y: AssignableNodeReference = graph.get_named_node("y")
+    x: AssignableNodeReference = get_dataflow_node(graph, "x")
+    y: AssignableNodeReference = get_dataflow_node(graph, "y")
     x.assign(y, Statement(), graph)
     y.assign(create_instance().reference(), Statement(), graph)
 
     assert isinstance(y, VariableNodeReference)
     assert len(y.node.instance_assignments) == 1
 
-    y_n: AssignableNodeReference = graph.get_named_node("y.n")
+    y_n: AssignableNodeReference = get_dataflow_node(graph, "y.n")
     y_n.assign(ValueNode(42).reference(), Statement(), graph)
 
-    x_n: AssignableNodeReference = graph.get_named_node("x.n")
+    x_n: AssignableNodeReference = get_dataflow_node(graph, "x.n")
     x_n_nodes: List[AssignableNode] = list(x_n.nodes())
     assert len(x_n_nodes) == 1
     assert x_n_nodes[0] == y.node.instance_assignments[0].rhs.node().get_attribute("n")
 
 
 def test_dataflow_simple_leaf(graph) -> None:
-    x: AssignableNodeReference = graph.get_named_node("x")
+    x: AssignableNodeReference = get_dataflow_node(graph, "x")
     leaves: List[AssignableNode] = list(x.leaf_nodes())
     assert isinstance(x, DirectNodeReference)
     assert leaves == [x.node]
 
 
 def test_dataflow_variable_chain_leaf(graph: DataflowGraph) -> None:
-    x: AssignableNodeReference = graph.get_named_node("x")
-    y: AssignableNodeReference = graph.get_named_node("y")
-    z: AssignableNodeReference = graph.get_named_node("z")
+    x: AssignableNodeReference = get_dataflow_node(graph, "x")
+    y: AssignableNodeReference = get_dataflow_node(graph, "y")
+    z: AssignableNodeReference = get_dataflow_node(graph, "z")
 
     x.assign(y, Statement(), graph)
     y.assign(z, Statement(), graph)
@@ -81,9 +81,9 @@ def test_dataflow_variable_chain_leaf(graph: DataflowGraph) -> None:
 
 @pytest.mark.parametrize("value_node", [ValueNode(42), create_instance()])
 def test_dataflow_variable_tree_leaves(graph: DataflowGraph, value_node: Node) -> None:
-    x: AssignableNodeReference = graph.get_named_node("x")
-    y: AssignableNodeReference = graph.get_named_node("y")
-    z: AssignableNodeReference = graph.get_named_node("z")
+    x: AssignableNodeReference = get_dataflow_node(graph, "x")
+    y: AssignableNodeReference = get_dataflow_node(graph, "y")
+    z: AssignableNodeReference = get_dataflow_node(graph, "z")
 
     x.assign(y, Statement(), graph)
     y.assign(z, Statement(), graph)
@@ -96,9 +96,9 @@ def test_dataflow_variable_tree_leaves(graph: DataflowGraph, value_node: Node) -
 
 
 def test_dataflow_variable_loop_leaves(graph: DataflowGraph) -> None:
-    x: AssignableNodeReference = graph.get_named_node("x")
-    y: AssignableNodeReference = graph.get_named_node("y")
-    z: AssignableNodeReference = graph.get_named_node("z")
+    x: AssignableNodeReference = get_dataflow_node(graph, "x")
+    y: AssignableNodeReference = get_dataflow_node(graph, "y")
+    z: AssignableNodeReference = get_dataflow_node(graph, "z")
 
     x.assign(y, Statement(), graph)
     y.assign(z, Statement(), graph)
@@ -112,15 +112,15 @@ def test_dataflow_variable_loop_leaves(graph: DataflowGraph) -> None:
 
 
 def test_dataflow_variable_loop_with_external_assignment_leaves(graph: DataflowGraph) -> None:
-    x: AssignableNodeReference = graph.get_named_node("x")
-    y: AssignableNodeReference = graph.get_named_node("y")
-    z: AssignableNodeReference = graph.get_named_node("z")
+    x: AssignableNodeReference = get_dataflow_node(graph, "x")
+    y: AssignableNodeReference = get_dataflow_node(graph, "y")
+    z: AssignableNodeReference = get_dataflow_node(graph, "z")
 
     x.assign(y, Statement(), graph)
     y.assign(z, Statement(), graph)
     z.assign(x, Statement(), graph)
 
-    u: AssignableNodeReference = graph.get_named_node("u")
+    u: AssignableNodeReference = get_dataflow_node(graph, "u")
     y.assign(u, Statement(), graph)
 
     leaves: Set[AssignableNode] = set(x.leaf_nodes())
@@ -129,9 +129,9 @@ def test_dataflow_variable_loop_with_external_assignment_leaves(graph: DataflowG
 
 
 def test_dataflow_variable_loop_with_value_assignment_leaves(graph: DataflowGraph) -> None:
-    x: AssignableNodeReference = graph.get_named_node("x")
-    y: AssignableNodeReference = graph.get_named_node("y")
-    z: AssignableNodeReference = graph.get_named_node("z")
+    x: AssignableNodeReference = get_dataflow_node(graph, "x")
+    y: AssignableNodeReference = get_dataflow_node(graph, "y")
+    z: AssignableNodeReference = get_dataflow_node(graph, "z")
 
     x.assign(y, Statement(), graph)
     y.assign(z, Statement(), graph)

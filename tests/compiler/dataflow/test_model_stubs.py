@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from compiler.dataflow.conftest import DataflowTestHelper
+from compiler.dataflow.conftest import DataflowTestHelper, get_dataflow_node
 from typing import Dict, List
 
 import pytest
@@ -78,7 +78,7 @@ x = %s
         % (value_string, "\n".join(other_stmts)),
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
-    x: AssignableNodeReference = graph.get_named_node("x")
+    x: AssignableNodeReference = get_dataflow_node(graph, "x")
     assert isinstance(x, VariableNodeReference)
     assignments: List[Assignment] = list(x.node.assignments())
     assert len(assignments) == 1

@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from compiler.dataflow.conftest import DataflowTestHelper
+from compiler.dataflow.conftest import DataflowTestHelper, get_dataflow_node
 from typing import Dict, List, Optional
 
 import pytest
@@ -47,7 +47,7 @@ x = 42
         """,
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
-    x: AssignableNodeReference = graph.get_named_node("x")
+    x: AssignableNodeReference = get_dataflow_node(graph, "x")
     assert isinstance(x, VariableNodeReference)
     assert len(x.node.value_assignments) == 1
     assignment: Assignment[ValueNodeReference] = x.node.value_assignments[0]
@@ -67,7 +67,7 @@ x = 0
         DoubleSetException,
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
-    x: AssignableNodeReference = graph.get_named_node("x")
+    x: AssignableNodeReference = get_dataflow_node(graph, "x")
     assert isinstance(x, VariableNodeReference)
     assignments: List[Assignment] = x.node.value_assignments
     assert len(assignments) == 2
@@ -89,7 +89,7 @@ y = 42
         """,
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
-    x: AssignableNodeReference = graph.get_named_node("x")
+    x: AssignableNodeReference = get_dataflow_node(graph, "x")
     assert isinstance(x, VariableNodeReference)
     assert len(x.node.assignable_assignments) == 1
     assignment: Assignment[AssignableNodeReference] = x.node.assignable_assignments[0]
@@ -113,7 +113,7 @@ x.n = 42
         """
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
-    x: AssignableNodeReference = graph.get_named_node("x")
+    x: AssignableNodeReference = get_dataflow_node(graph, "x")
     assert isinstance(x, VariableNodeReference)
     assert len(x.node.instance_assignments) == 1
     n: Optional[AttributeNode] = x.node.instance_assignments[0].rhs.node().get_attribute("n")

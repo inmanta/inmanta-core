@@ -17,7 +17,8 @@
 """
 
 from itertools import chain
-from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple, Type
+from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple, Type, List
+from functools import reduce
 
 import pytest
 
@@ -63,6 +64,14 @@ def graph() -> Iterator[DataflowGraph]:
     block.namespace.scope = xc
 
     yield DataflowGraph(resolver)
+
+
+def get_dataflow_node(graph: DataflowGraph, name: str) -> AssignableNodeReference:
+    """
+        Returns a dataflow node for a graph by name. Name is allowed to have '.' for attribute nodes.
+    """
+    parts: List[str] = name.split(".")
+    return reduce(lambda acc, part: AttributeNodeReference(acc, part), parts[1:], graph.resolver.get_dataflow_node(parts[0]))
 
 
 class DataflowTestHelper:
@@ -143,7 +152,7 @@ class DataflowTestHelper:
             token: str = self._tokens.pop(0)
             if not token.isalnum():
                 raise Exception("Invalid syntax: expected `variable_name` or `<instance> instance_id`, got `%s`" % token)
-            node_ref: AssignableNodeReference = self.get_graph().get_named_node(token)
+            node_ref: AssignableNodeReference = get_dataflow_node(self.get_graph(), token)
             assert isinstance(node_ref, VariableNodeReference)
             node = node_ref.node
         if self._consume_token_attribute() is not None:
@@ -188,7 +197,7 @@ class DataflowTestHelper:
             try:
                 return (ValueNode(int(token)).reference(), None)
             except ValueError:
-                node_ref: AssignableNodeReference = self.get_graph().get_named_node(token)
+                node_ref: AssignableNodeReference = get_dataflow_node(self.get_graph(), token)
                 assert isinstance(node_ref, VariableNodeReference)
                 attribute_name: Optional[str] = self._consume_token_attribute()
                 while attribute_name is not None:
@@ -261,10 +270,8 @@ class DataflowTestHelper:
                 The variable and leaves are allowed to be attributes.
         """
         for key, value in leaves.items():
-            lhs: AssignableNodeReference = self.get_graph().get_named_node(key)
-            rhs: Set[AssignableNode] = set(
-                chain.from_iterable(self.get_graph().get_named_node(v).nodes() for v in value)
-            )
+            lhs: AssignableNodeReference = get_dataflow_node(self.get_graph(), key)
+            rhs: Set[AssignableNode] = set(chain.from_iterable(get_dataflow_node(self.get_graph(), v).nodes() for v in value))
             assert set(lhs.leaf_nodes()) == rhs
 
 

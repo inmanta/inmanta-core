@@ -171,14 +171,6 @@ class DataflowGraph:
         # keeps track of instance nodes and their responsible
         self._own_instances: Dict["Constructor", InstanceNode] = {}
 
-    # TODO: should this be removed? It's useful in testing.
-    def get_named_node(self, name: str) -> "AssignableNodeReference":
-        """
-            Returns a reference to a named node, by name.
-        """
-        parts: List[str] = name.split(".")
-        return reduce(lambda acc, part: AttributeNodeReference(acc, part), parts[1:], self.resolver.get_dataflow_node(parts[0]))
-
     def get_own_variable(self, name: str) -> "AssignableNodeReference":
         """
             Returns a reference to one of this graph's own variable nodes.
