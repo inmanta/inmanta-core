@@ -453,7 +453,7 @@ def agent_list(client: Client, environment: str) -> None:
 
 @agent.command(
     name="pause",
-    help="Pause a specific agent or all agents in a specific environment. A paused agent cannot execute any deploy operations.",
+    help="Pause a specific agent or all agents in a given environment. A paused agent cannot execute deploy operations.",
 )
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option(
@@ -471,7 +471,7 @@ def pause_agent(client: Client, environment: str, agent: Optional[str]) -> None:
 
 @agent.command(
     name="unpause",
-    help="Unpause a specific agent or all agents in a specific environment. A unpaused agent will be able to execute "
+    help="Unpause a specific agent or all agents in a given environment. A unpaused agent will be able to execute "
     "deploy operations.",
 )
 @click.option("--environment", "-e", help="The environment to use", required=True)
