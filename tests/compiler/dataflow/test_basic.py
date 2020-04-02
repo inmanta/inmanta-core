@@ -51,7 +51,7 @@ def entity_instance(entity: str) -> InstanceNode:
         (AttributeNodeReference(AttributeNodeReference(AssignableNode("x").reference(), "y"), "z"), "x.y.z"),
         (entity_instance("MyEntity"), "__config__::MyEntity instance"),
         (entity_instance("MyEntity").reference(), "__config__::MyEntity instance"),
-        (AttributeNode(entity_instance("MyEntity").reference(), "n"), "attribute n on __config__::MyEntity instance"),
+        (AttributeNode(entity_instance("MyEntity"), "n"), "attribute n on __config__::MyEntity instance"),
     ],
 )
 def test_dataflow_repr(instance: Union[Node, NodeReference], expected_repr: str) -> None:

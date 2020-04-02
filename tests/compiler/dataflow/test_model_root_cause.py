@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from compiler.dataflow.conftest import DataflowTestHelper
+from compiler.dataflow.conftest import DataflowTestHelper, get_dataflow_node
 from typing import List, Set
 
 import pytest
@@ -27,7 +27,7 @@ from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
 
 
 def get_attribute_node(graph: DataflowGraph, attr: str) -> AttributeNode:
-    node_ref: AssignableNodeReference = graph.get_named_node(attr)
+    node_ref: AssignableNodeReference = get_dataflow_node(graph, attr)
     node: AssignableNode = next(node_ref.nodes())
     assert isinstance(node, AttributeNode)
     return node
