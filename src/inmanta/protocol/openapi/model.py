@@ -147,6 +147,7 @@ class Operation(BaseModel):
     requestBody: Optional[Union[RequestBody, Reference]] = None
     responses: Dict[str, Response]
     deprecated: Optional[bool] = None
+    tags: Optional[List[str]] = None
 
 
 class PathItem(BaseModel):
