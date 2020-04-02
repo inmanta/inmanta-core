@@ -16,6 +16,7 @@
  - Use asyncio subprocess instead of tornado subprocess (#1792)
  - Added warning for incorrect database migration script names (#1912)
  - Agent manager remains consistent when the database connection is lost (#1893)
+ - Ensure correct version is used in api docs (#1994)
 
 ## Added
  - Experimental data trace and root cause application (#1820, #1831, #1821)
