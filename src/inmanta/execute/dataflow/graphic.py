@@ -26,7 +26,6 @@ from inmanta.execute.dataflow import (
     Assignment,
     AttributeNode,
     AttributeNodeReference,
-    DataflowGraph,
     DirectNodeReference,
     InstanceNode,
     InstanceNodeReference,

@@ -38,7 +38,6 @@ from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginSt
 from inmanta.compiler import config as compiler_config
 from inmanta.execute import scheduler
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
-from inmanta.execute.dataflow.graphic import GraphicRenderer
 from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ResultVariable
@@ -76,6 +75,8 @@ def do_compile(refs={}):
 
 
 def show_dataflow_graphic(scheduler, compiler):
+    from inmanta.execute.dataflow.graphic import GraphicRenderer
+
     types: Dict[str, inmanta_type.Type] = scheduler.get_types()
     ns: Namespace = compiler.get_ns()
     config_ns: Namespace = ns.get_child("__config__")

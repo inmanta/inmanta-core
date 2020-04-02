@@ -17,6 +17,7 @@
 """
 
 import re
+import shutil
 from compiler.dataflow.conftest import DataflowTestHelper
 from functools import total_ordering
 from itertools import chain
@@ -26,12 +27,26 @@ import pytest
 
 from inmanta.ast import Locatable, Namespace
 from inmanta.ast.entity import Entity
-from inmanta.execute.dataflow import AssignableNode, AttributeNode, DataflowGraph, InstanceNode, Node, ValueNode
-from inmanta.execute.dataflow.graphic import GraphicGraph
+from inmanta.execute.dataflow import AssignableNode, AttributeNode, InstanceNode, Node, ValueNode
 from inmanta.execute.runtime import Instance
 
+try:
+    from inmanta.execute.dataflow.graphic import GraphicGraph
+except Exception:
+    pytest.skip(
+        "skipping graphic tests because graphviz package not installed. Run `pip install graphviz` to resolve this.",
+        allow_module_level=True,
+    )
 
-def fdp_stringify(obj: object) -> str:
+if shutil.which("fdp") is None:
+    pytest.skip(
+        "skipping graphic tests because graphviz fdp executable was not found in your $PATH."
+        " Install your distribution's graphviz package to resolve this.",
+        allow_module_level=True,
+    )
+
+
+def dot_stringify(obj: object) -> str:
     return re.sub(r"\W+", "", str(obj))
 
 
@@ -39,15 +54,15 @@ class LocationBasedGraphicGraph(GraphicGraph):
     def node_key(self, node: Node) -> str:
         if isinstance(node, InstanceNode):
             assert node.responsible is not None
-            return "cluster_instance_%s_%s" % (fdp_stringify(node), fdp_stringify(node.responsible.location))
+            return "cluster_instance_%s_%s" % (dot_stringify(node), dot_stringify(node.responsible.location))
         elif isinstance(node, ValueNode):
-            return "value_%s" % fdp_stringify(node.value)
+            return "value_%s" % dot_stringify(node.value)
         elif isinstance(node, AttributeNode):
             assert node.instance.responsible is not None
             return "attribute_%s_on_%s_%s" % (
-                fdp_stringify(node.name),
-                fdp_stringify(node.instance),
-                fdp_stringify(node.instance.responsible.location),
+                dot_stringify(node.name),
+                dot_stringify(node.instance),
+                dot_stringify(node.instance.responsible.location),
             )
         elif isinstance(node, AssignableNode):
             assert node.result_variable is not None
@@ -60,7 +75,7 @@ class LocationBasedGraphicGraph(GraphicGraph):
                 assert isinstance(value, Instance)
                 locatable = value
             assert locatable.location is not None
-            return "assignable_%s_%s" % (fdp_stringify(node.name), fdp_stringify(locatable.location))
+            return "assignable_%s_%s" % (dot_stringify(node.name), dot_stringify(locatable.location))
         assert False
 
 
@@ -128,7 +143,7 @@ def graphic_asserter(dataflow_test_helper: DataflowTestHelper) -> Callable[[str,
             graphic.view()
         print(graphic.digraph.source.strip())
         assert DotSource.parse(graphic.digraph.source.strip()) == DotSource.parse(
-            expected.strip().format(dir=fdp_stringify(dataflow_test_helper.snippetcompiler.project_dir))
+            expected.strip().format(dir=dot_stringify(dataflow_test_helper.snippetcompiler.project_dir))
         )
 
     return asserter
