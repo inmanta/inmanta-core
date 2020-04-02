@@ -405,6 +405,7 @@ class OperationHandler:
             parameters=(parameters if len(parameters) else None),
             summary=url_method.short_method_description,
             description=url_method.long_method_description,
+            tags=[url_method.endpoint.__class__.__name__],
             **extra_params,
         )
 

@@ -26,6 +26,7 @@
  - Added support for declaring implement using parents together with normal implement declaration list (#1971)
  - Resource Action Log now includes timestamps (#1496)
  - Added --no-tag option to module tool (#1939)
+ - Added tags to openapi definition (#1751)
 
 # v 2020.1 (2020-02-19) Changes in this release:
 

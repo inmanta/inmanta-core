@@ -615,3 +615,15 @@ async def test_openapi_endpoint(client):
 async def test_swagger_endpoint(client):
     result = await client.get_api_docs()
     assert result.code == 200
+
+
+@pytest.mark.asyncio
+async def test_tags(server):
+    global_url_map = server._transport.get_global_url_map(server.get_slices().values())
+    openapi = OpenApiConverter(global_url_map)
+    openapi_json = openapi.generate_openapi_json()
+    openapi_parsed = json.loads(openapi_json)
+    for path in openapi_parsed["paths"].values():
+        for operation in path.values():
+            assert len(operation["tags"]) > 0
+    assert "ProjectService" in openapi_parsed["paths"]["/api/v1/project"]["get"]["tags"]
