@@ -27,7 +27,7 @@ from asyncpg import Connection
 from asyncpg.pool import Pool
 
 from inmanta import const, data
-from inmanta.const import LogLevel
+from inmanta.const import AgentStatus, LogLevel
 
 
 @pytest.mark.asyncio
@@ -517,25 +517,50 @@ async def test_agent(init_dataclasses_and_load_schema):
         assert retrieved_agent.environment == agent.environment
         assert retrieved_agent.name == agent.name
 
-    assert agent1.get_status() == "up"
-    assert agent2.get_status() == "down"
-    assert agent3.get_status() == "paused"
+    assert agent1.get_status() == AgentStatus.up
+    assert agent2.get_status() == AgentStatus.down
+    assert agent3.get_status() == AgentStatus.paused
 
     for agent in [agent1, agent2, agent3]:
-        assert agent.to_dict()["state"] == agent.get_status()
+        assert AgentStatus(agent.to_dict()["state"]) == agent.get_status()
 
     await agent1.update_fields(paused=True)
-    assert agent1.get_status() == "paused"
+    assert agent1.get_status() == AgentStatus.paused
 
     await agent2.update_fields(primary=agi1.id)
-    assert agent2.get_status() == "up"
+    assert agent2.get_status() == AgentStatus.up
 
     await agent3.update_fields(paused=False)
-    assert agent3.get_status() == "down"
+    assert agent3.get_status() == AgentStatus.down
 
     primary_instance = await data.AgentInstance.get_by_id(agent1.primary)
     primary_process = await data.AgentProcess.get_one(sid=primary_instance.process)
     assert primary_process.sid == agent_proc.sid
+
+
+@pytest.mark.asyncio
+async def test_pause_agent(environment):
+    """
+        Test the pause() method in the Agent class
+    """
+    env_id = uuid.UUID(environment)
+    agent_name = "test"
+    agent = data.Agent(environment=env_id, name=agent_name, last_failover=datetime.datetime.now(), paused=False)
+    await agent.insert()
+
+    # Verify not paused
+    agent = await data.Agent.get_one(environment=env_id, name=agent_name)
+    assert not agent.paused
+
+    # Pause
+    await data.Agent.pause(env=env_id, endpoint=agent_name, paused=True)
+    agent = await data.Agent.get_one(environment=env_id, name=agent_name)
+    assert agent.paused
+
+    # Unpause
+    await data.Agent.pause(env=env_id, endpoint=agent_name, paused=False)
+    agent = await data.Agent.get_one(environment=env_id, name=agent_name)
+    assert not agent.paused
 
 
 @pytest.mark.asyncio
