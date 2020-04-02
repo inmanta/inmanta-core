@@ -33,7 +33,7 @@ from asyncpg.protocol import Record
 
 import inmanta.db.versions
 from inmanta import const, util
-from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
+from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.resources import Id
@@ -1166,8 +1166,8 @@ class Agent(BaseDocument):
     primary = property(get_primary, set_primary, del_primary)
 
     @classmethod
-    async def get_statuses(cls, env_id: uuid.UUID, agent_names: List[str]) -> Dict[str, Optional[str]]:
-        result: Dict[str, Optional[str]] = {}
+    async def get_statuses(cls, env_id: uuid.UUID, agent_names: List[str]) -> Dict[str, Optional[AgentStatus]]:
+        result: Dict[str, Optional[AgentStatus]] = {}
         for agent_name in agent_names:
             agent = await cls.get_one(environment=env_id, name=agent_name)
             if agent:
@@ -1176,12 +1176,12 @@ class Agent(BaseDocument):
                 result[agent_name] = None
         return result
 
-    def get_status(self) -> str:
+    def get_status(self) -> AgentStatus:
         if self.paused:
-            return "paused"
+            return AgentStatus.paused
         if self.primary is not None:
-            return "up"
-        return "down"
+            return AgentStatus.up
+        return AgentStatus.down
 
     def to_dict(self) -> JsonType:
         base = BaseDocument.to_dict(self)
@@ -1194,7 +1194,7 @@ class Agent(BaseDocument):
             base["primary"] = base["id_primary"]
             del base["id_primary"]
 
-        base["state"] = self.get_status()
+        base["state"] = self.get_status().value
 
         return base
 

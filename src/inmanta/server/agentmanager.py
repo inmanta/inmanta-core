@@ -28,7 +28,7 @@ from uuid import UUID
 
 from inmanta import const, data
 from inmanta.config import Config
-from inmanta.const import AgentAction
+from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound, ShutdownInProgress
 from inmanta.resources import Id
@@ -254,7 +254,7 @@ class AgentManager(ServerSlice, SessionListener):
 
             endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]] = []
             for endpoint in session.endpoint_names:
-                if (tid, endpoint) not in self.tid_endpoint_to_session and agent_statuses[endpoint] != "paused":
+                if (tid, endpoint) not in self.tid_endpoint_to_session and agent_statuses[endpoint] != AgentStatus.paused:
                     LOGGER.debug("set session %s as primary for agent %s in env %s", sid, endpoint, tid)
                     self.tid_endpoint_to_session[(tid, endpoint)] = session
                     self.add_background_task(session.get_client().set_state(endpoint, enabled=True))

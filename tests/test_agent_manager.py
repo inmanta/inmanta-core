@@ -18,7 +18,7 @@
 import asyncio
 import datetime
 import typing
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 from unittest.mock import Mock
 from uuid import UUID, uuid4
 
@@ -26,7 +26,7 @@ import pytest
 
 from inmanta import config, data
 from inmanta.agent import Agent, agent
-from inmanta.const import AgentAction
+from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.agentmanager import AgentManager, SessionManager
@@ -74,6 +74,38 @@ class MockSession(object):
         return self.client
 
 
+async def assert_agent(env_id: UUID, name: str, state: AgentStatus, sid: Optional[UUID]) -> None:
+    agent = await data.Agent.get(env_id, name)
+
+    assert agent.get_status() == state
+    if state == AgentStatus.paused:
+        assert agent.primary is None
+        assert agent.paused
+    elif state == AgentStatus.down:
+        assert agent.primary is None
+        assert not agent.paused
+    elif state == AgentStatus.up:
+        assert agent.primary is not None
+        agent_instance = await data.AgentInstance.get_by_id(agent.primary)
+        agent_proc = await data.AgentProcess.get_one(sid=agent_instance.process)
+        assert agent_proc.sid == sid
+        assert agent.get_status() == AgentStatus.up
+
+
+async def assert_agents(
+    env_id: UUID,
+    s1: AgentStatus,
+    s2: AgentStatus,
+    s3: AgentStatus,
+    sid1: Optional[UUID] = None,
+    sid2: Optional[UUID] = None,
+    sid3: Optional[UUID] = None,
+) -> None:
+    await assert_agent(env_id, "agent1", s1, sid1)
+    await assert_agent(env_id, "agent2", s2, sid2)
+    await assert_agent(env_id, "agent3", s3, sid3)
+
+
 @pytest.mark.asyncio(timeout=30)
 async def test_primary_selection(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
@@ -93,28 +125,6 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
     am.add_background_task = futures
     am.running = True
 
-    async def assert_agent(name: str, state: str, sid: UUID):
-        agent = await data.Agent.get(env.id, name)
-
-        assert agent.get_status() == state
-        if state == "paused":
-            assert agent.primary is None
-            assert agent.paused
-        elif state == "down":
-            assert agent.primary is None
-            assert not agent.paused
-        elif state == "up":
-            assert agent.primary is not None
-            agent_instance = await data.AgentInstance.get_by_id(agent.primary)
-            agent_proc = await data.AgentProcess.get_one(sid=agent_instance.process)
-            assert agent_proc.sid == sid
-            assert agent.get_status() == "up"
-
-    async def assert_agents(s1, s2, s3, sid1=None, sid2=None, sid3=None):
-        await assert_agent("agent1", s1, sid1)
-        await assert_agent("agent2", s2, sid2)
-        await assert_agent("agent3", s3, sid3)
-
     # one session
     ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
     await am.new_session(ts1)
@@ -122,7 +132,7 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
     assert len(am.sessions) == 1
     ts1.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts1.get_client().reset_mock()
-    await assert_agents("paused", "up", "down", sid2=ts1.id)
+    await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
 
     # test is_primary
     assert am.is_primary(env, ts1.id, "agent2")
@@ -133,7 +143,7 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
     am.seen(ts1, ["agent1", "agent2"])
     await futures.proccess()
     assert len(am.sessions) == 1
-    await assert_agents("paused", "up", "down", sid2=ts1.id)
+    await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
 
     # second session
     ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
@@ -142,7 +152,7 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
     assert len(am.sessions) == 2
     ts2.get_client().set_state.assert_called_with("agent3", enabled=True)
     ts2.get_client().reset_mock()
-    await assert_agents("paused", "up", "up", sid2=ts1.id, sid3=ts2.id)
+    await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.up, sid2=ts1.id, sid3=ts2.id)
 
     # test is_primary
     assert not am.is_primary(env, ts2.id, "agent1")
@@ -156,13 +166,13 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
     assert len(am.sessions) == 1
     ts2.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts2.get_client().reset_mock()
-    await assert_agents("paused", "up", "up", sid2=ts2.id, sid3=ts2.id)
+    await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.up, sid2=ts2.id, sid3=ts2.id)
 
     # expire second
     am.expire(ts2, 100)
     await futures.proccess()
     assert len(am.sessions) == 0
-    await assert_agents("paused", "down", "down")
+    await assert_agents(env.id, AgentStatus.paused, AgentStatus.down, AgentStatus.down)
 
     # test is_primary
     assert not am.is_primary(env, ts1.id, "agent2")
@@ -335,27 +345,6 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     am.add_background_task = futures
     am.running = True
 
-    async def assert_agent(name: str, state: str, sid: UUID):
-        agent = await data.Agent.get(env.id, name)
-        assert agent.get_status() == state
-        if state == "paused":
-            assert agent.primary is None
-            assert agent.paused
-        elif state == "down":
-            assert agent.primary is None
-            assert not agent.paused
-        elif state == "up":
-            assert agent.primary is not None
-            agent_instance = await data.AgentInstance.get_by_id(agent.primary)
-            agent_proc = await data.AgentProcess.get_one(sid=agent_instance.process)
-            assert agent_proc.sid == sid
-            assert agent.get_status() == "up"
-
-    async def assert_agents(s1, s2, s3, sid1=None, sid2=None, sid3=None):
-        await assert_agent("agent1", s1, sid1)
-        await assert_agent("agent2", s2, sid2)
-        await assert_agent("agent3", s3, sid3)
-
     # one session
     ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
     await am.new_session(ts1)
@@ -363,13 +352,13 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     assert len(am.sessions) == 1
     ts1.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts1.get_client().reset_mock()
-    await assert_agents("paused", "up", "down", sid2=ts1.id)
+    await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
 
     # alive
     am.seen(ts1, ["agent1", "agent2"])
     await futures.proccess()
     assert len(am.sessions) == 1
-    await assert_agents("paused", "up", "down", sid2=ts1.id)
+    await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
 
     # second session
     ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
@@ -378,7 +367,7 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     assert len(am.sessions) == 2
     ts2.get_client().set_state.assert_called_with("agent3", enabled=True)
     ts2.get_client().reset_mock()
-    await assert_agents("paused", "up", "up", sid2=ts1.id, sid3=ts2.id)
+    await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.up, sid2=ts1.id, sid3=ts2.id)
 
     # expire first
     am.expire(ts1, 100)
@@ -386,7 +375,7 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     assert len(am.sessions) == 1
     ts2.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts2.get_client().reset_mock()
-    await assert_agents("paused", "up", "up", sid2=ts2.id, sid3=ts2.id)
+    await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.up, sid2=ts2.id, sid3=ts2.id)
 
     # failover
     am = AgentManager(server, False)
@@ -401,13 +390,13 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     assert len(am.sessions) == 1
     ts1.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts1.get_client().reset_mock()
-    await assert_agents("paused", "up", "down", sid2=ts1.id)
+    await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
 
     # alive
     am.seen(ts1, ["agent1", "agent2"])
     await futures.proccess()
     assert len(am.sessions) == 1
-    await assert_agents("paused", "up", "down", sid2=ts1.id)
+    await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
 
     # second session
     ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
@@ -416,7 +405,7 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     assert len(am.sessions) == 2
     ts2.get_client().set_state.assert_called_with("agent3", enabled=True)
     ts2.get_client().reset_mock()
-    await assert_agents("paused", "up", "up", sid2=ts1.id, sid3=ts2.id)
+    await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.up, sid2=ts1.id, sid3=ts2.id)
 
     # expire first
     am.expire(ts1, 100)
@@ -424,13 +413,13 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     assert len(am.sessions) == 1
     ts2.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts2.get_client().reset_mock()
-    await assert_agents("paused", "up", "up", sid2=ts2.id, sid3=ts2.id)
+    await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.up, sid2=ts2.id, sid3=ts2.id)
 
     # expire second
     am.expire(ts2, 100)
     await futures.proccess()
     assert len(am.sessions) == 0
-    await assert_agents("paused", "down", "down")
+    await assert_agents(env.id, AgentStatus.paused, AgentStatus.down, AgentStatus.down)
 
 
 async def assert_agent_db_state(
