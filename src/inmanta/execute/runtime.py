@@ -794,6 +794,8 @@ class Resolver(object):
             assert isinstance(result_variable, ResultVariable)
             return result_variable.get_dataflow_node()
         except NotFoundException:
+            # This block is only executed if the model contains a reference to an undefined variable.
+            # Since we don't know in which scope it should be defined, we assume top scope.
             root_graph: Optional[DataflowGraph] = self.get_root_resolver().dataflow_graph
             assert root_graph is not None
             return root_graph.get_own_variable(name)
