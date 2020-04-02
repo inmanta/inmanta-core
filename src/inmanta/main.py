@@ -29,7 +29,7 @@ import texttable
 
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
-from inmanta.const import TIME_ISOFMT, AgentTriggerMethod
+from inmanta.const import TIME_ISOFMT, AgentAction, AgentTriggerMethod
 from inmanta.resources import Id
 from inmanta.types import JsonType
 
@@ -448,7 +448,7 @@ def agent_list(client: Client, environment: str) -> None:
     for agent in agents:
         data.append([agent["name"], agent["environment"], str(agent["paused"]), agent["last_failover"]])
 
-    print_table(["Agent", "Environment", "paused", "Last fail over"], data)
+    print_table(["Agent", "Environment", "Paused", "Last fail over"], data)
 
 
 @agent.command(name="pause", help="Pause an agent")
@@ -456,7 +456,7 @@ def agent_list(client: Client, environment: str) -> None:
 @click.option("--agent", help="The name of the agent", required=True)
 @click.pass_obj
 def pause_agent(client: Client, environment: str, agent: str) -> None:
-    client.do_request(method_name="pause_agent", arguments=dict(tid=environment, name=agent, paused=True))
+    client.do_request(method_name="agent_action", arguments=dict(tid=environment, name=agent, action=AgentAction.pause))
 
 
 @agent.command(name="unpause", help="Unpause an agent")
@@ -464,7 +464,7 @@ def pause_agent(client: Client, environment: str, agent: str) -> None:
 @click.option("--agent", help="The name of the agent", required=True)
 @click.pass_obj
 def unpause_agent(client: Client, environment: str, agent: str) -> None:
-    client.do_request(method_name="pause_agent", arguments=dict(tid=environment, name=agent, paused=False))
+    client.do_request(method_name="agent_action", arguments=dict(tid=environment, name=agent, action=AgentAction.unpause))
 
 
 @cmd.group("version")

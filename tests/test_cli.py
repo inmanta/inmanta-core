@@ -284,7 +284,7 @@ async def test_pause_agent(server, cli):
         result = await cli.run("agent", "list", "-e", str(env.id))
         assert result.exit_code == 0
         output = result.stdout.replace(" ", "")
-        assert f"Agent|Environment|paused" in output
+        assert f"Agent|Environment|Paused" in output
         assert f"agent1|{env.id}|{paused}" in output
 
     await assert_agent_paused(paused=False)
