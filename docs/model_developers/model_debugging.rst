@@ -36,7 +36,8 @@ causes will be reported.
 The first section, :ref:`Enabling the data trace<enable-data-trace>` describes how to enable these two
 tools. The tools themselves are described in the sections
 :ref:`Interpreting the data trace<datatrace>` and :ref:`Root cause analysis<rootcause>`
-respectively. The final section, :ref:`Usage example<data-trace-usage>` shows an example use case.
+respectively. An example use case is shown in :ref:`Usage example<data-trace-usage>`, and the final section,
+:ref:`Graphic visualization<data-flow-graphic>`, shortly describes a graphic representation of the data flow.
 
 
 .. _enable-data-trace:
@@ -360,6 +361,8 @@ Usage example
 
 Let's have a look at the model below:
 
+.. _data-trace-model-service:
+
 .. code-block:: inmanta
     :caption: service.cf
     :linenos:
@@ -467,3 +470,32 @@ Lines 2--14 in the trace give some additional information about the
 implementations for both ``Service`` instances. This illustrates the existence of the two branches at lines
 15 and 23, and why the assignment in this implementation
 resulted in the exceeding of the relation arity: the right hand side is the same instance in both cases.
+
+
+.. _data-flow-graphic:
+
+Graphic visualization
+---------------------
+
+.. warning::
+    This representation is not as complete as the data trace explained above. It does not show information
+    about statements responsible for each assignment. It was primarily developed as an aid in developing
+    the data flow framework on which the data trace and the root cause analysis tools are built. It's described
+    here because it's closely related to the two tools described above. Its actual use in model debugging
+    might be limited.
+
+.. note::
+    Using this feature requires one of inmanta's optional dependencies to be installed: ``pip install inmanta[dataflow_graphic]``.
+    It also requires the ``fdp`` command to be available on your system. This is most likely packaged in your distribution's
+    ``graphviz`` package.
+
+Let's compile the model in :ref:`service.cf<data-trace-model-service>` again, this time with ``--experimental-dataflow-graphic``.
+The compile results in an error, as usual, but this time it's accompanied by a graphic visualization of the data flow.
+
+
+.. image:: ./images/dataflow_graphic_service.*
+
+
+It shows all assignments, as well as the index match between the two ``Port`` constructions. An assignment where the right hand side is an
+attribute ``x.y`` is shown by an arrow to ``x``, labeled with ``.y``. Variables are represented by ellipses, values by diamonds and instances
+by rectangular containers.
