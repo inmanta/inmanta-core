@@ -453,7 +453,6 @@ def agent_list(client: Client, environment: str) -> None:
 
 @agent.command(
     name="pause",
-    help="Pause a specific agent or all agents in a given environment. A paused agent cannot execute deploy operations.",
 )
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option(
@@ -463,6 +462,9 @@ def agent_list(client: Client, environment: str) -> None:
 )
 @click.pass_obj
 def pause_agent(client: Client, environment: str, agent: Optional[str]) -> None:
+    """
+        Pause a specific agent or all agents in a given environment. A paused agent cannot execute deploy operations.
+    """
     if agent is not None:
         client.do_request(method_name="agent_action", arguments=dict(tid=environment, name=agent, action=AgentAction.pause))
     else:
@@ -471,8 +473,6 @@ def pause_agent(client: Client, environment: str, agent: Optional[str]) -> None:
 
 @agent.command(
     name="unpause",
-    help="Unpause a specific agent or all agents in a given environment. A unpaused agent will be able to execute "
-    "deploy operations.",
 )
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option(
@@ -483,6 +483,10 @@ def pause_agent(client: Client, environment: str, agent: Optional[str]) -> None:
 )
 @click.pass_obj
 def unpause_agent(client: Client, environment: str, agent: Optional[str]) -> None:
+    """
+        Unpause a specific agent or all agents in a given environment. A unpaused agent will be able to execute
+        deploy operations.
+    """
     if agent is not None:
         client.do_request(method_name="agent_action", arguments=dict(tid=environment, name=agent, action=AgentAction.unpause))
     else:
