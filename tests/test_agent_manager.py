@@ -581,9 +581,9 @@ async def test_session_creation_fails(server, environment, caplog):
 
 
 @pytest.mark.asyncio
-async def test_agent_action(server, client, async_finalizer):
+async def test_agent_actions(server, client, async_finalizer):
     """
-        Test the agent_action() API call.
+        Test the agent_action() and the all_agents_action() API call.
     """
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
@@ -628,27 +628,34 @@ async def test_agent_action(server, client, async_finalizer):
     await assert_agents_paused(
         expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
     )
-    # Unpause agent
-    result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.pause)
-    assert result.code == 200
-    await assert_agents_paused(
-        expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
-    )
-    # Unpause an already paused agent
-    await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.pause)
-    assert result.code == 200
-    await assert_agents_paused(
-        expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
-    )
-    # Pause agent
-    await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.unpause)
-    assert result.code == 200
-    await assert_agents_paused(
-        expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
-    )
-    # Pause an already paused agent
-    await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.unpause)
-    assert result.code == 200
-    await assert_agents_paused(
-        expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
-    )
+    # Pause agent1 and pause again
+    for _ in range(2):
+        result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.pause)
+        assert result.code == 200
+        await assert_agents_paused(
+            expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
+        )
+
+    # Unpause agent1 and unpause again
+    for _ in range(2):
+        result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.unpause)
+        assert result.code == 200
+        await assert_agents_paused(
+            expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
+        )
+
+    # Pause all agents in env1 and pause again
+    for _ in range(2):
+        result = await client.all_agents_action(tid=env1_id, action=AgentAction.pause)
+        assert result.code == 200
+        await assert_agents_paused(
+            expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): True, (env2_id, "agent1"): False}
+        )
+
+    # Unpause all agents in env1 and unpause again
+    for _ in range(2):
+        result = await client.all_agents_action(tid=env1_id, action=AgentAction.unpause)
+        assert result.code == 200
+        await assert_agents_paused(
+            expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
+        )

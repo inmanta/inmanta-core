@@ -37,7 +37,7 @@ from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, SessionManager
 from inmanta.server.server import Server
-from inmanta.types import Apireturn, ArgumentTypes
+from inmanta.types import ArgumentTypes, Apireturn
 from inmanta.util import retry_limited
 
 from . import config as server_config
@@ -179,6 +179,14 @@ class AgentManager(ServerSlice, SessionListener):
     async def stop(self) -> None:
         await super().stop()
 
+    @protocol.handle(methods_v2.all_agents_action, env="tid")
+    async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:
+        if action is AgentAction.pause:
+            await self._pause_agent(env)
+        else:
+            await self._unpause_agent(env)
+        return
+
     @protocol.handle(methods_v2.agent_action, env="tid")
     async def agent_action(self, env: data.Environment, name: str, action: AgentAction) -> None:
         if action is AgentAction.pause:
@@ -186,27 +194,29 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             await self._unpause_agent(env, name)
 
-    async def _pause_agent(self, env: data.Environment, endpoint: str) -> None:
-        key = (env.id, endpoint)
+    async def _pause_agent(self, env: data.Environment, endpoint: Optional[str] = None) -> None:
         async with self.session_lock:
-            await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True)
-            live_session = self.tid_endpoint_to_session.get(key)
-            if live_session is not None:
-                # The agent has an active agent instance that has to be paused
-                del self.tid_endpoint_to_session[key]
-                await live_session.get_client().set_state(endpoint, enabled=False)
+            agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True)
+            for agent_name in agents:
+                key = (env.id, agent_name)
+                live_session = self.tid_endpoint_to_session.get(key)
+                if live_session is not None:
+                    # The agent has an active agent instance that has to be paused
+                    del self.tid_endpoint_to_session[key]
+                    await live_session.get_client().set_state(agent_name, enabled=False)
 
-    async def _unpause_agent(self, env: data.Environment, endpoint: str) -> None:
-        key = (env.id, endpoint)
+    async def _unpause_agent(self, env: data.Environment, endpoint: Optional[str] = None) -> None:
         async with self.session_lock:
-            await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False)
-            live_session = self.tid_endpoint_to_session.get(key)
-            # If the agent has a live_session, the agent wasn't paused
-            if not live_session:
-                session = self._get_session_for(tid=env.id, endpoint=endpoint)
-                if session:
-                    self.tid_endpoint_to_session[key] = session
-                    await session.get_client().set_state(endpoint, enabled=True)
+            agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False)
+            for agent_name in agents:
+                key = (env.id, agent_name)
+                live_session = self.tid_endpoint_to_session.get(key)
+                # If the agent has a live_session, the agent wasn't paused
+                if not live_session:
+                    session = self._get_session_for(tid=env.id, endpoint=agent_name)
+                    if session:
+                        self.tid_endpoint_to_session[key] = session
+                        await session.get_client().set_state(agent_name, enabled=True)
 
     # Agent Management
     async def ensure_agent_registered(self, env: data.Environment, nodename: str) -> data.Agent:
