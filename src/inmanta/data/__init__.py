@@ -33,7 +33,7 @@ from asyncpg.protocol import Record
 
 import inmanta.db.versions
 from inmanta import const, util
-from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
+from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.resources import Id
@@ -192,9 +192,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
                         % (name, fields[name].field_type.__name__, type(value).__name__)
                     )
 
-            if value is not None:
+            if from_postgres or value is not None:
                 result[name] = value
-
             elif fields[name].default:
                 result[name] = fields[name].default_value
 
@@ -305,8 +304,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
             if value is not None:
                 if not isinstance(value, typing.field_type):
                     raise TypeError("Value of field %s does not have the correct type" % name)
-                column_names.append(name)
-                values.append(self._get_value(value))
+            column_names.append(name)
+            values.append(self._get_value(value))
 
         return (column_names, values)
 
@@ -1116,14 +1115,26 @@ class AgentInstance(BaseDocument):
     tid = Field(field_type=uuid.UUID, required=True)
 
     @classmethod
-    async def active_for(cls, tid, endpoint):
-        objects = await cls.get_list(expired=None, tid=tid, name=endpoint)
+    async def active_for(cls, tid, endpoint, process: uuid.UUID = None):
+        if process is not None:
+            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, process=process)
+        else:
+            objects = await cls.get_list(expired=None, tid=tid, name=endpoint)
         return objects
 
     @classmethod
     async def active(cls):
         objects = await cls.get_list(expired=None)
         return objects
+
+    @classmethod
+    async def expire_all_for_process(cls, tid: uuid.UUID, process: uuid.UUID, now: datetime.datetime) -> None:
+        """
+            Expire all instances which belong to the given process.
+        """
+        query = f"UPDATE {cls.table_name()} SET expired=$1 WHERE tid=$2 AND process=$3"
+        values = [cls._get_value(now), cls._get_value(tid), cls._get_value(process)]
+        await cls._execute_query(query, *values)
 
 
 class Agent(BaseDocument):
@@ -1154,12 +1165,23 @@ class Agent(BaseDocument):
 
     primary = property(get_primary, set_primary, del_primary)
 
-    def get_status(self) -> str:
+    @classmethod
+    async def get_statuses(cls, env_id: uuid.UUID, agent_names: List[str]) -> Dict[str, Optional[AgentStatus]]:
+        result: Dict[str, Optional[AgentStatus]] = {}
+        for agent_name in agent_names:
+            agent = await cls.get_one(environment=env_id, name=agent_name)
+            if agent:
+                result[agent_name] = agent.get_status()
+            else:
+                result[agent_name] = None
+        return result
+
+    def get_status(self) -> AgentStatus:
         if self.paused:
-            return "paused"
+            return AgentStatus.paused
         if self.primary is not None:
-            return "up"
-        return "down"
+            return AgentStatus.up
+        return AgentStatus.down
 
     def to_dict(self) -> JsonType:
         base = BaseDocument.to_dict(self)
@@ -1172,7 +1194,7 @@ class Agent(BaseDocument):
             base["primary"] = base["id_primary"]
             del base["id_primary"]
 
-        base["state"] = self.get_status()
+        base["state"] = self.get_status().value
 
         return base
 
@@ -1192,6 +1214,12 @@ class Agent(BaseDocument):
     async def get(cls, env: uuid.UUID, endpoint: str) -> "Agent":
         obj = await cls.get_one(environment=env, name=endpoint)
         return obj
+
+    @classmethod
+    async def pause(cls, env: uuid.UUID, endpoint: str, paused: bool) -> None:
+        query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 AND name=$3"
+        values = [cls._get_value(paused), cls._get_value(env), cls._get_value(endpoint)]
+        await cls._execute_query(query, *values)
 
 
 class Report(BaseDocument):
@@ -1458,7 +1486,7 @@ class ResourceAction(BaseDocument):
     def _create_dict_wrapper(cls, from_postgres, kwargs):
         result = cls._create_dict(from_postgres, kwargs)
         new_messages = []
-        if from_postgres and "messages" in result:
+        if from_postgres and result.get("messages"):
             for message in result["messages"]:
                 message = json.loads(message)
                 if "timestamp" in message:

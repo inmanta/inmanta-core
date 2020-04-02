@@ -34,7 +34,7 @@ from inmanta.execute.dataflow import (
     ValueNode,
     VariableNodeReference,
 )
-from inmanta.execute.runtime import Instance
+from inmanta.execute.runtime import Instance, ResultVariable
 
 try:
     import graphviz
@@ -52,42 +52,24 @@ class GraphicRenderer:
     """
 
     @classmethod
-    def view_graph(cls, graph: DataflowGraph, instances: Iterable[Instance]) -> None:
+    def view(cls, variables: Iterable[ResultVariable], instances: Iterable[Instance]) -> None:
         """
-            Renders and visualizes an entire graph: all root variables and the paths originating
-            in them as well as all entity instances.
+            Renders and visualizes supplied variables and instances and the paths originating in them.
         """
-        cls.render_graph(graph, instances).view()
+        cls.render(variables, instances).view()
 
     @classmethod
-    def render_graph(cls, graph: DataflowGraph, instances: Iterable[Instance]) -> "GraphicGraph":
+    def render(cls, variables: Iterable[ResultVariable], instances: Iterable[Instance]) -> "GraphicGraph":
         """
-            Renders an entire graph: all root variables and the paths originating in them
-            as well as all entity instances.
+            Renders supplied variables and instances and the paths originating in them.
         """
         graphic: GraphicGraph = GraphicGraph()
         for instance in instances:
             assert instance.instance_node is not None
             graphic.add_node(instance.instance_node.top_node())
-        for named_node in graph.named_nodes.values():
-            graphic.add_node(named_node)
-        return graphic
-
-    @classmethod
-    def view_node(cls, node_ref: AssignableNodeReference) -> None:
-        """
-            Renders and visualized a node and all its assignments, recursively.
-        """
-        cls.render_node(node_ref).view()
-
-    @classmethod
-    def render_node(cls, node_ref: AssignableNodeReference) -> "GraphicGraph":
-        """
-            Renders a node and all its assignments, recursively.
-        """
-        graphic: GraphicGraph = GraphicGraph()
-        for node in node_ref.nodes():
-            graphic.add_node(node)
+        for var in variables:
+            for node in var.get_dataflow_node().nodes():
+                graphic.add_node(node)
         return graphic
 
 

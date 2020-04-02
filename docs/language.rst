@@ -410,7 +410,7 @@ required are implemented using :inmanta:entity:`std::none`.
 In the implementation block, the entity instance itself can be accessed through the variable self.
 
 ``implement`` statements are not inherited, unless a statement of the form ``implement ServerX using parents`` is used.
-When it is used, all implementations of the direct parents will be inherited, including the once with a where clause.
+When it is used, all implementations of the direct parents will be inherited, including the ones with a where clause.
 
 
 The syntax for implements and implementation is:
@@ -418,8 +418,16 @@ The syntax for implements and implementation is:
 .. code-block:: antlr
 
     implementation: 'implementation' ID 'for' class ':' statement* 'end';
-    implement: 'implement' class 'using' ID ('when' condition)?
-    		 | 'implement' class 'using' 'parents';
+    implement: 'implement' class 'using' implement_list
+             | 'implement' class 'using' implement_list_cond 'when' condition
+             ;
+    implement_list: implement_list_cond
+                  | 'parents'
+                  | implement_list ',' implement_list
+                  ;
+    implement_list_cond: ID
+                       | ID ',' implement_list_cond
+                       ;
 
 
 .. _language_reference_indexes_and_queries:

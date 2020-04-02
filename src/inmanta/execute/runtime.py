@@ -789,11 +789,16 @@ class Resolver(object):
         return NamespaceResolver(self, namespace)
 
     def get_dataflow_node(self, name: str) -> "dataflow.AssignableNodeReference":
-        graph: Optional[DataflowGraph] = self.dataflow_graph
-        if self.get_root_resolver() == self:
-            graph = self.namespace.get_scope().dataflow_graph
-        assert graph is not None
-        return graph.get_named_node(name)
+        try:
+            result_variable: Typeorvalue = self.lookup(name)
+            assert isinstance(result_variable, ResultVariable)
+            return result_variable.get_dataflow_node()
+        except NotFoundException:
+            # This block is only executed if the model contains a reference to an undefined variable.
+            # Since we don't know in which scope it should be defined, we assume top scope.
+            root_graph: Optional[DataflowGraph] = self.get_root_resolver().dataflow_graph
+            assert root_graph is not None
+            return root_graph.get_own_variable(name)
 
 
 class NamespaceResolver(Resolver):
@@ -818,9 +823,6 @@ class NamespaceResolver(Resolver):
     def get_root_resolver(self) -> "Resolver":
         return self.parent.get_root_resolver()
 
-    def get_dataflow_node(self, name: str) -> "dataflow.AssignableNodeReference":
-        return self.parent.get_dataflow_node(name)
-
 
 class ExecutionContext(Resolver):
 
@@ -834,7 +836,7 @@ class ExecutionContext(Resolver):
         if resolver.dataflow_graph is not None:
             self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
             for name, var in self.slots.items():
-                node_ref: dataflow.AssignableNodeReference = self.dataflow_graph.get_named_node(name)
+                node_ref: dataflow.AssignableNodeReference = dataflow.AssignableNode(name).reference()
                 var.set_dataflow_node(node_ref)
 
     def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
@@ -859,13 +861,6 @@ class ExecutionContext(Resolver):
     def for_namespace(self, namespace: Namespace) -> Resolver:
         return NamespaceResolver(self, namespace)
 
-    def get_dataflow_node(self, name: str) -> "dataflow.AssignableNodeReference":
-        try:
-            self.direct_lookup(name.split(".")[0])
-            return Resolver.get_dataflow_node(self, name)
-        except NotFoundException:
-            return self.resolver.get_dataflow_node(name)
-
 
 # also extends locatable
 class Instance(ExecutionContext):
@@ -888,7 +883,6 @@ class Instance(ExecutionContext):
         "trackers",
         "locations",
         "instance_node",
-        "self_var_node",
     )
 
     def __init__(
@@ -902,27 +896,28 @@ class Instance(ExecutionContext):
         # ExecutionContext, Resolver -> this class only uses it as an "interface", so no constructor call!
         self.resolver = resolver.get_root_resolver()
         self.type = mytype
+        self.slots: Dict[str, ResultVariable] = {
+            n: mytype.get_attribute(n).get_new_result_variable(self, queue)
+            # prune duplicates first because get_new_result_variable() has side effects
+            for n in set(mytype.get_all_attribute_names())
+        }
 
         # TODO: this is somewhat ugly. Is there a cleaner way to enforce this constraint
         assert (resolver.dataflow_graph is None) == (node is None)
         self.dataflow_graph: Optional[DataflowGraph] = None
         self.instance_node: Optional[dataflow.InstanceNodeReference] = node
-        self.self_var_node: Optional[dataflow.AssignableNodeReference] = None
-        if resolver.dataflow_graph is not None:
+        if self.instance_node is not None:
             self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
-            self.self_var_node = dataflow.AssignableNode("__self__").reference()
-            self.self_var_node.assign(
-                cast(dataflow.InstanceNodeReference, self.instance_node), self, cast(DataflowGraph, self.dataflow_graph),
-            )
+            for name, var in self.slots.items():
+                var.set_dataflow_node(dataflow.InstanceAttributeNodeReference(self.instance_node.top_node(), name))
 
-        self.slots: Dict[str, ResultVariable] = {
-            n: mytype.get_attribute(n).get_new_result_variable(self, queue) for n in mytype.get_all_attribute_names()
-        }
         self.slots["self"] = ResultVariable()
         self.slots["self"].set_value(self, None)
-        # temporary fix, will get removed by merging #1879
-        if resolver.dataflow_graph is not None:
-            self.slots["self"].set_dataflow_node(self.get_dataflow_node("self"))
+        if self.instance_node is not None:
+            self_var_node: dataflow.AssignableNodeReference = dataflow.AssignableNode("__self__").reference()
+            self_var_node.assign(self.instance_node, self, cast(DataflowGraph, self.dataflow_graph))
+            self.slots["self"].set_dataflow_node(self_var_node)
+
         self.sid = id(self)
         self.implementations: "Set[Implementation]" = set()
 
@@ -1022,13 +1017,3 @@ class Instance(ExecutionContext):
 
     def get_locations(self) -> List[Location]:
         return self.locations
-
-    def get_dataflow_node(self, name: str) -> "dataflow.AssignableNodeReference":
-        assert self.self_var_node is not None
-        if name == "self":
-            return self.self_var_node
-        try:
-            self.direct_lookup(name.split(".")[0])
-            return dataflow.AttributeNodeReference(self.self_var_node, name)
-        except NotFoundException:
-            return self.resolver.get_dataflow_node(name)

@@ -113,7 +113,6 @@ class DotSource:
 def graphic_asserter(dataflow_test_helper: DataflowTestHelper) -> Callable[[str, str], None]:
     def asserter(model: str, expected: str, view: Optional[bool] = False) -> None:
         dataflow_test_helper.compile(model)
-        graph: DataflowGraph = dataflow_test_helper.get_graph()
         namespace: Namespace = dataflow_test_helper.get_namespace()
         entities: List[Entity] = [
             tp for tp in dataflow_test_helper.get_types().values() if isinstance(tp, Entity) if tp.namespace is namespace
@@ -122,8 +121,9 @@ def graphic_asserter(dataflow_test_helper: DataflowTestHelper) -> Callable[[str,
         for instance in chain.from_iterable(entity.get_all_instances() for entity in entities):
             assert instance.instance_node is not None
             graphic.add_node(instance.instance_node.top_node())
-        for named_node in graph.named_nodes.values():
-            graphic.add_node(named_node)
+        for result_variable in namespace.get_scope().slots.values():
+            for node in result_variable.get_dataflow_node().nodes():
+                graphic.add_node(node)
         if view:
             graphic.view()
         print(graphic.digraph.source.strip())

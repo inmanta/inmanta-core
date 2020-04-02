@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from compiler.dataflow.conftest import create_instance
+from compiler.dataflow.conftest import create_instance, get_dataflow_node
 
 import pytest
 
@@ -56,15 +56,15 @@ def test_dataflow_index_nodes(graph: DataflowGraph) -> None:
     i1.register_attribute("n").assign(ValueNode(0).reference(), Statement(), graph)
     i1.register_attribute("n").assign(ValueNode(0).reference(), Statement(), graph)
 
-    x: AssignableNodeReference = graph.get_named_node("x")
-    y: AssignableNodeReference = graph.get_named_node("y")
+    x: AssignableNodeReference = get_dataflow_node(graph, "x")
+    y: AssignableNodeReference = get_dataflow_node(graph, "y")
 
     x.assign(i1.reference(), Statement(), graph)
     y.assign(i2.reference(), Statement(), graph)
 
     graph.add_index_match([i.reference() for i in [i1, i2]])
 
-    x_n: AssignableNodeReference = graph.get_named_node("x.n")
-    y_n: AssignableNodeReference = graph.get_named_node("y.n")
+    x_n: AssignableNodeReference = get_dataflow_node(graph, "x.n")
+    y_n: AssignableNodeReference = get_dataflow_node(graph, "y.n")
 
     assert set(x_n.nodes()) == set(y_n.nodes())

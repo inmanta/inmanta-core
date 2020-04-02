@@ -79,8 +79,8 @@ def show_dataflow_graphic(scheduler, compiler):
     types: Dict[str, inmanta_type.Type] = scheduler.get_types()
     ns: Namespace = compiler.get_ns()
     config_ns: Namespace = ns.get_child("__config__")
-    GraphicRenderer.view_graph(
-        config_ns.get_scope().dataflow_graph,
+    GraphicRenderer.view(
+        config_ns.get_scope().slots.values(),
         list(
             chain.from_iterable(
                 tp.get_all_instances() for tp in types.values() if isinstance(tp, Entity) and tp.namespace is config_ns

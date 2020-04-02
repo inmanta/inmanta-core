@@ -462,7 +462,7 @@ class Session(object):
 
 
 class SessionListener(object):
-    def new_session(self, session: Session) -> None:
+    async def new_session(self, session: Session) -> None:
         pass
 
     def expire(self, session: Session, timeout: float) -> None:
@@ -560,15 +560,23 @@ class SessionManager(ServerSlice):
             sid = uuid.UUID(sid)
         return sid in self._sessions
 
-    def get_or_create_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: List[str], nodename: str) -> Session:
+    async def get_or_create_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: List[str], nodename: str) -> Session:
         if isinstance(sid, str):
             sid = uuid.UUID(sid)
 
         if sid not in self._sessions:
             session = self.new_session(sid, tid, endpoint_names, nodename)
             self._sessions[sid] = session
-            for listener in self.listeners:
-                listener.new_session(session)
+            try:
+                for listener in self.listeners:
+                    # This blocking wait is required to propagate exceptions when session creation fails
+                    # in one of the listeners. This implies that all session create operations queue up
+                    # on the session lock in the agent manager. The performance impact is limited due to
+                    # the usage of long poll sessions.
+                    await listener.new_session(session)
+            except Exception as e:
+                self.expire(session, 0)
+                raise e
         else:
             session = self._sessions[sid]
             self.seen(session, endpoint_names)
@@ -597,7 +605,7 @@ class SessionManager(ServerSlice):
     ) -> Union[int, Tuple[int, Dict[str, str]]]:
         LOGGER.debug("Received heartbeat from %s for agents %s in %s", nodename, ",".join(endpoint_names), env.id)
 
-        session: Session = self.get_or_create_session(sid, env.id, endpoint_names, nodename)
+        session: Session = await self.get_or_create_session(sid, env.id, endpoint_names, nodename)
 
         LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
         call_list = await session.get_calls()

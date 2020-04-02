@@ -161,26 +161,25 @@ class DataflowGraph:
         Graph representation of the data flow and declarative control flow of an Inmanta model.
     """
 
-    __slots__ = ("resolver", "parent", "named_nodes", "_entities", "_own_instances")
+    __slots__ = ("resolver", "parent", "_own_variables", "_own_instances")
 
     def __init__(self, resolver: "Resolver", parent: Optional["DataflowGraph"] = None) -> None:
         self.resolver: "Resolver" = resolver
         self.parent: Optional[DataflowGraph] = parent if parent is not None else None
-        self.named_nodes: Dict[str, AssignableNode] = {}
+        # keeps track of variables that have not been declared in the resolver's scope. This should only be populated
+        # if the model refers to a variable in the rhs that has no declaration in the left hand side.
+        # For example `n = y.n` in a scope that does not contain a `y = ...` statement.
+        self._own_variables: Dict[str, AssignableNode] = {}
         # keeps track of instance nodes and their responsible
         self._own_instances: Dict["Constructor", InstanceNode] = {}
 
-    def get_named_node(self, name: str) -> "AssignableNodeReference":
+    def get_own_variable(self, name: str) -> "AssignableNodeReference":
         """
-            Returns a reference to a named node, by name.
+            Returns a reference to one of this graph's own variable nodes.
         """
-        # TODO: temporary name lookup implementation. Will be replaced by #1879
-        parts: List[str] = name.split(".")
-        root: str = parts[0]
-        if root not in self.named_nodes:
-            self.named_nodes[root] = AssignableNode(root)
-        root_ref: AssignableNodeReference = VariableNodeReference(self.named_nodes[root])
-        return reduce(lambda acc, part: AttributeNodeReference(acc, part), parts[1:], root_ref)
+        if name not in self._own_variables:
+            self._own_variables[name] = AssignableNode(name)
+        return self._own_variables[name].reference()
 
     def own_instance_node_for_responsible(
         self, entity: "Entity", responsible: "Constructor", get_new: Callable[[], "InstanceNode"]
