@@ -626,4 +626,4 @@ async def test_tags(server):
     for path in openapi_parsed["paths"].values():
         for operation in path.values():
             assert len(operation["tags"]) > 0
-    assert "ProjectService" in openapi_parsed["paths"]["/api/v1/project"]["get"]["tags"]
+    assert "core.project" in openapi_parsed["paths"]["/api/v1/project"]["get"]["tags"]
