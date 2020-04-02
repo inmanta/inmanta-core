@@ -450,15 +450,17 @@ def agent_list(client: Client, environment: str) -> None:
 
     print_table(["Agent", "Environment", "Paused", "Last fail over"], data)
 
+
 @agent.command(
     name="pause",
-    help="Pause a specific agent or all agents in a specific environment. A paused agent cannot execute any deploy operations."
+    help="Pause a specific agent or all agents in a specific environment. A paused agent cannot execute any deploy operations.",
 )
 @click.option("--environment", "-e", help="The environment to use", required=True)
-@click.option("--agent",
-              help="The name of the agent to pause. When this option is omitted, all agents in the given environment will be "
-                   "paused.",
-              default=None)
+@click.option(
+    "--agent",
+    help="The name of the agent to pause. When this option is omitted, all agents in the given environment will be " "paused.",
+    default=None,
+)
 @click.pass_obj
 def pause_agent(client: Client, environment: str, agent: Optional[str]) -> None:
     if agent is not None:
@@ -470,13 +472,15 @@ def pause_agent(client: Client, environment: str, agent: Optional[str]) -> None:
 @agent.command(
     name="unpause",
     help="Unpause a specific agent or all agents in a specific environment. A unpaused agent will be able to execute "
-         "deploy operations."
+    "deploy operations.",
 )
 @click.option("--environment", "-e", help="The environment to use", required=True)
-@click.option("--agent",
-              help="The name of the agent to unpause. When this option is omitted, all agents in the given environment will "
-                   "be unpaused.",
-              default=None)
+@click.option(
+    "--agent",
+    help="The name of the agent to unpause. When this option is omitted, all agents in the given environment will "
+    "be unpaused.",
+    default=None,
+)
 @click.pass_obj
 def unpause_agent(client: Client, environment: str, agent: Optional[str]) -> None:
     if agent is not None:

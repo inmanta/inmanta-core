@@ -20,8 +20,8 @@ import datetime
 import logging
 import time
 import uuid
-
 from typing import Dict
+
 import asyncpg
 import pytest
 from asyncpg import Connection

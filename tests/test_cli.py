@@ -17,14 +17,14 @@
 """
 import logging
 import os
+import uuid
+from typing import Dict
 
 import pytest
-import uuid
 
 from inmanta import data
 from inmanta.util import get_compiler_version
 from utils import log_contains
-from typing import Dict
 
 
 @pytest.mark.asyncio
