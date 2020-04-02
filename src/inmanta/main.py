@@ -451,9 +451,7 @@ def agent_list(client: Client, environment: str) -> None:
     print_table(["Agent", "Environment", "Paused", "Last fail over"], data)
 
 
-@agent.command(
-    name="pause",
-)
+@agent.command(name="pause",)
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option(
     "--agent",
@@ -471,9 +469,7 @@ def pause_agent(client: Client, environment: str, agent: Optional[str]) -> None:
         client.do_request(method_name="all_agents_action", arguments=dict(tid=environment, action=AgentAction.pause))
 
 
-@agent.command(
-    name="unpause",
-)
+@agent.command(name="unpause",)
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option(
     "--agent",
