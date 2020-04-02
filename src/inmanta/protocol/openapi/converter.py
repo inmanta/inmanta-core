@@ -400,13 +400,25 @@ class OperationHandler:
         else:
             extra_params = {}
 
+        tags = self._get_tags_of_operation(url_method)
+
         return Operation(
             responses=responses,
             parameters=(parameters if len(parameters) else None),
             summary=url_method.short_method_description,
             description=url_method.long_method_description,
+            tags=tags,
             **extra_params,
         )
+
+    def _get_tags_of_operation(self, url_method: UrlMethod) -> Optional[List[str]]:
+        if url_method.endpoint is not None:
+            if hasattr(url_method.endpoint, "_name"):
+                return [url_method.endpoint._name]
+            else:
+                return [url_method.endpoint.__class__.__name__]
+        else:
+            return None
 
     def _build_responses(self, url_method_properties: MethodProperties) -> Dict[str, Response]:
         result: Dict[str, Response] = {}
