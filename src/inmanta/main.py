@@ -454,9 +454,7 @@ def agent_list(client: Client, environment: str) -> None:
 @agent.command(name="pause",)
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option(
-    "--agent",
-    help="The name of the agent to pause.",
-    default=None,
+    "--agent", help="The name of the agent to pause.", default=None,
 )
 @click.option("--all", help="Pause all agents in the given environment", is_flag=True)
 @click.pass_obj
@@ -479,9 +477,7 @@ def pause_agent(client: Client, environment: str, agent: Optional[str], all: boo
 @agent.command(name="unpause",)
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option(
-    "--agent",
-    help="The name of the agent to pause.",
-    default=None,
+    "--agent", help="The name of the agent to pause.", default=None,
 )
 @click.option("--all", help="Pause all agents in the given environment", is_flag=True)
 @click.pass_obj
