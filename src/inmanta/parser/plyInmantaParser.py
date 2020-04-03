@@ -855,17 +855,6 @@ def p_operand_list_term_2(p: YaccProduction) -> None:
     p[0] = []
 
 
-def p_ns_list_collect(p: YaccProduction) -> None:
-    """ns_list : ns_ref ',' ns_list"""
-    p[3].insert(0, p[1])
-    p[0] = p[3]
-
-
-def p_ns_list_term(p: YaccProduction) -> None:
-    "ns_list : ns_ref"
-    p[0] = [p[1]]
-
-
 def p_var_ref(p: YaccProduction) -> None:
     "var_ref : attr_ref"
     p[0] = p[1]
