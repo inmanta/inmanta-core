@@ -310,17 +310,28 @@ async def test_pause_agent(server, cli):
     await assert_agent_paused(env_id=env2.id, expected_records=dict(agent3=False))
 
     # Pause all agents in env1
-    result = await cli.run("agent", "pause", "-e", str(env1.id))
+    result = await cli.run("agent", "pause", "-e", str(env1.id), "--all")
     assert result.exit_code == 0
     await assert_agent_paused(env_id=env1.id, expected_records=dict(agent1=True, agent2=True))
     await assert_agent_paused(env_id=env2.id, expected_records=dict(agent3=False))
 
     # Unpause all agents in env1
-    result = await cli.run("agent", "unpause", "-e", str(env1.id))
+    result = await cli.run("agent", "unpause", "-e", str(env1.id), "--all")
     assert result.exit_code == 0
     await assert_agent_paused(env_id=env1.id, expected_records=dict(agent1=False, agent2=False))
     await assert_agent_paused(env_id=env2.id, expected_records=dict(agent3=False))
 
     # Mandatory option -e not specified
-    result = await cli.run("agent", "pause", "--agent", "agent1")
-    assert result.exit_code != 0
+    for action in ["pause", "unpause"]:
+        result = await cli.run("agent", action, "--agent", "agent1")
+        assert result.exit_code != 0
+
+    # --agent and --all are both set
+    for action in ["pause", "unpause"]:
+        result = await cli.run("agent", action, "-e", str(env1.id), "--agent", "agent1", "--all")
+        assert result.exit_code != 0
+
+    # --agent and --all are both not set
+    for action in ["pause", "unpause"]:
+        result = await cli.run("agent", action, "-e", str(env1.id))
+        assert result.exit_code != 0

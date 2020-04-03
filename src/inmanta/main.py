@@ -455,14 +455,21 @@ def agent_list(client: Client, environment: str) -> None:
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option(
     "--agent",
-    help="The name of the agent to pause. When this option is omitted, all agents in the given environment will be " "paused.",
+    help="The name of the agent to pause.",
     default=None,
 )
+@click.option("--all", help="Pause all agents in the given environment", is_flag=True)
 @click.pass_obj
-def pause_agent(client: Client, environment: str, agent: Optional[str]) -> None:
+def pause_agent(client: Client, environment: str, agent: Optional[str], all: bool) -> None:
     """
         Pause a specific agent or all agents in a given environment. A paused agent cannot execute deploy operations.
     """
+    if agent is not None and all:
+        raise click.ClickException("The --agent option and the --all flag cannot be used simultaneously.")
+    if agent is None and not all:
+        raise click.ClickException(
+            "Either the --agent options should be set or use the --all flag to pause all agents in the given environment."
+        )
     if agent is not None:
         client.do_request(method_name="agent_action", arguments=dict(tid=environment, name=agent, action=AgentAction.pause))
     else:
@@ -473,16 +480,22 @@ def pause_agent(client: Client, environment: str, agent: Optional[str]) -> None:
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option(
     "--agent",
-    help="The name of the agent to unpause. When this option is omitted, all agents in the given environment will "
-    "be unpaused.",
+    help="The name of the agent to pause.",
     default=None,
 )
+@click.option("--all", help="Pause all agents in the given environment", is_flag=True)
 @click.pass_obj
-def unpause_agent(client: Client, environment: str, agent: Optional[str]) -> None:
+def unpause_agent(client: Client, environment: str, agent: Optional[str], all: bool) -> None:
     """
         Unpause a specific agent or all agents in a given environment. A unpaused agent will be able to execute
         deploy operations.
     """
+    if agent is not None and all:
+        raise click.ClickException("The --agent option and the --all flag cannot be used simultaneously.")
+    if agent is None and not all:
+        raise click.ClickException(
+            "Either the --agent options should be set or use the --all flag to pause all agents in the given environment."
+        )
     if agent is not None:
         client.do_request(method_name="agent_action", arguments=dict(tid=environment, name=agent, action=AgentAction.unpause))
     else:
