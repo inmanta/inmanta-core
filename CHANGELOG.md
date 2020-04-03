@@ -29,6 +29,7 @@
  - Added support to pause an agent (#1128)
  - Added --no-tag option to module tool (#1939)
  - Added tags to openapi definition (#1751)
+ - Added support to pause an agent (#1128, #1982)
 
 # v 2020.1 (2020-02-19) Changes in this release:
 

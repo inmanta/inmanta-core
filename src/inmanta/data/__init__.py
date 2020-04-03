@@ -1216,10 +1216,20 @@ class Agent(BaseDocument):
         return obj
 
     @classmethod
-    async def pause(cls, env: uuid.UUID, endpoint: str, paused: bool) -> None:
-        query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 AND name=$3"
-        values = [cls._get_value(paused), cls._get_value(env), cls._get_value(endpoint)]
-        await cls._execute_query(query, *values)
+    async def pause(cls, env: uuid.UUID, endpoint: Optional[str], paused: bool) -> List[str]:
+        """
+            Pause a specific agent or all agents in an environment when endpoint is set to None.
+
+            :return A list of agent names that have been paused/unpaused by this method.
+        """
+        if endpoint is None:
+            query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 RETURNING name"
+            values = [cls._get_value(paused), cls._get_value(env)]
+        else:
+            query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 AND name=$3 RETURNING name"
+            values = [cls._get_value(paused), cls._get_value(env), cls._get_value(endpoint)]
+        result = await cls._fetch_query(query, *values)
+        return sorted([r["name"] for r in result])
 
 
 class Report(BaseDocument):
