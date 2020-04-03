@@ -7,6 +7,7 @@
 ## Deprecated
  - Leaving a nullable attribute unassigned now produces a deprecation warning. Explicitly assign null instead. (#1775)
  - Default constructors (typedef MyType as SomeEntityType(some_field = "some_value")). Use inheritance instead. (#402)
+ - Old relation syntax (A aa [0:] -- [0:] B bb) (#2000)
 
 ## Fixed
  - Various compiler error reporting improvements (#1810, #1920)
