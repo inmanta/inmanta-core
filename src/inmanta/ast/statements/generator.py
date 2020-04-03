@@ -382,7 +382,7 @@ class Constructor(ExpressionStatement):
         type_class = self.type.get_entity()
 
         # kwargs
-        kwarg_attrs: Dict[str, inmanta_type.Type] = {}
+        kwarg_attrs: Dict[str, object] = {}
         for kwargs in self.wrapped_kwargs:
             for (k, v) in kwargs.execute(requires, resolver, queue):
                 if k in self.attributes or k in kwarg_attrs:
@@ -400,16 +400,23 @@ class Constructor(ExpressionStatement):
                 self, "attributes %s are part of an index and should be set in the constructor." % ",".join(missing_attrs)
             )
 
-        # the attributes
-        attributes = {k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()}
-        attributes.update(kwarg_attrs)
+        # schedule all direct attributes for direct execution
+        direct_attributes: Dict[str, object] = {
+            k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()
+        }
+        direct_attributes.update(kwarg_attrs)
+
+        # override defaults with kwargs
+        indirect_attributes: Dict[str, ExpressionStatement] = {
+            k: v for k, v in self._indirect_attributes.items() if k not in kwarg_attrs
+        }
 
         # check if the instance already exists in the index (if there is one)
         instances: List[Instance] = []
         for index in type_class.get_indices():
             params = []
             for attr in index:
-                params.append((attr, attributes[attr]))
+                params.append((attr, direct_attributes[attr]))
 
             obj: Optional[Instance] = type_class.lookup_index(params, self)
 
@@ -432,16 +439,16 @@ class Constructor(ExpressionStatement):
 
             object_instance = first
             self.copy_location(object_instance)
-            for k, v in attributes.items():
+            for k, v in direct_attributes.items():
                 object_instance.set_attribute(k, v, self.location)
         else:
             # create the instance
             object_instance = type_class.get_instance(
-                attributes, resolver, queue, self.location, self.get_dataflow_node(graph) if graph is not None else None
+                direct_attributes, resolver, queue, self.location, self.get_dataflow_node(graph) if graph is not None else None
             )
 
         # deferred execution for indirect attributes
-        for attributename, valueexpression in self._indirect_attributes.items():
+        for attributename, valueexpression in indirect_attributes.items():
             var = object_instance.get_attribute(attributename)
             if var.is_multi():
                 # gradual only for multi
@@ -534,9 +541,7 @@ class WrappedKwargs(ExpressionStatement):
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return self.dictionary.requires_emit(resolver, queue)
 
-    def execute(
-        self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler
-    ) -> List[Tuple[str, inmanta_type.Type]]:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> List[Tuple[str, object]]:
         dct: object = self.dictionary.execute(requires, resolver, queue)
         if not isinstance(dct, Dict):
             raise TypingException(self, "The ** operator can only be applied to dictionaries")
