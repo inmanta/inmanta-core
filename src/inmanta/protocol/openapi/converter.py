@@ -49,7 +49,6 @@ from inmanta.protocol.openapi.model import (
 )
 from inmanta.server import config
 from inmanta.server.extensions import FeatureManager
-from inmanta.util import get_compiler_version
 
 
 def openapi_json_encoder(o) -> Union[Dict, str, List]:
