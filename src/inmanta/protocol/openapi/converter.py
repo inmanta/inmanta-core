@@ -81,7 +81,7 @@ class OpenApiConverter:
         return metadata["version"]
 
     def generate_openapi_definition(self) -> OpenAPI:
-        version = get_compiler_version()
+        version = self._get_inmanta_version()
         info = Info(title="Inmanta Service Orchestrator", version=version if version else "")
         servers = self._collect_server_information()
         paths = {}
