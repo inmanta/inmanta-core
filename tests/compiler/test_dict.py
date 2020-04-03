@@ -266,6 +266,20 @@ t = Test(
     assert instance.get_attribute("v").get_value() == (10 if override else 0)
 
 
+def test_constructor_kwargs_double_set(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity A:
+    int a
+end
+
+v = {"a": 4}
+A(a = 3, **v)
+        """,
+        "The attribute a is set twice in the constructor call of A. (reported in Construct(A) ({dir}/main.cf:7))",
+    )
+
+
 def test_constructor_kwargs_index_match(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

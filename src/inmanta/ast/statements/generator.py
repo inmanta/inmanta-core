@@ -400,13 +400,15 @@ class Constructor(ExpressionStatement):
                 self, "attributes %s are part of an index and should be set in the constructor." % ",".join(missing_attrs)
             )
 
-        # schedule all direct attributes for direct execution
+        # Schedule all direct attributes for direct execution. The kwarg keys and the direct_attributes keys are disjoint
+        # because a RuntimeException is raised above when they are not.
         direct_attributes: Dict[str, object] = {
             k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()
         }
         direct_attributes.update(kwarg_attrs)
 
-        # override defaults with kwargs
+        # Override defaults with kwargs. The kwarg keys and the indirect_attributes keys are disjoint because a RuntimeException
+        # is raised above when they are not.
         indirect_attributes: Dict[str, ExpressionStatement] = {
             k: v for k, v in self._indirect_attributes.items() if k not in kwarg_attrs
         }
