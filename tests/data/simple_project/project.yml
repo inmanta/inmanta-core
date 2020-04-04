@@ -1,5 +1,5 @@
 name: simple_project
-description: A sample project
+description: A sample project, used for database migration test
 modulepath: libs
 downloadpath: libs
 install_mode: "release"
