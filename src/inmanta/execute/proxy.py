@@ -75,11 +75,19 @@ class DynamicProxy(object):
 
     @classmethod
     def unwrap(cls, item):
+        if item is None:
+            return NoneValue()
+
         if isinstance(item, DynamicProxy):
             return item._get_instance()
 
         if isinstance(item, list):
             return [cls.unwrap(x) for x in item]
+
+        if isinstance(item, dict):
+            if not all(isinstance(key, str) for key in item.keys()):
+                raise RuntimeException(None, "dict keys should be strings.")
+            return {key: cls.unwrap(value) for key, value in item.items()}
 
         return item
 

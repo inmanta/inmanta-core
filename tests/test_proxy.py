@@ -19,7 +19,9 @@
 import pytest
 
 import inmanta.compiler as compiler
+from inmanta.ast import RuntimeException
 from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.util import NoneValue
 
 
 def proxy_object(snippetcompiler, snippet, var):
@@ -75,3 +77,16 @@ a = Test1(x={"a":"A"})
 
     with pytest.raises(Exception):
         dic["b"] = "a"
+
+
+def test_unwrap_none():
+    assert DynamicProxy.unwrap(None) == NoneValue()
+
+
+def test_unwrap_list_dict_recurse():
+    assert DynamicProxy.unwrap([{"null": None, "nulls": [None]}]) == [{"null": NoneValue(), "nulls": [NoneValue()]}]
+
+
+def test_unwrap_dict_key_validation():
+    with pytest.raises(RuntimeException):
+        DynamicProxy.unwrap({1: 2})
