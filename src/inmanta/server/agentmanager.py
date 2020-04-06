@@ -23,7 +23,7 @@ import time
 import uuid
 from asyncio import subprocess
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, Set
 from uuid import UUID
 
 from inmanta import const, data
@@ -147,14 +147,99 @@ class AgentManager(ServerSlice, SessionListener):
     def expire(self, session: protocol.Session, timeout: float) -> None:
         self.add_background_task(self._expire_session(session, datetime.now()))
 
-    def seen(self, session: protocol.Session, endpoint_names: List[str]) -> None:
-        if set(session.endpoint_names) != set(endpoint_names):
-            LOGGER.warning(
-                "Agent endpoint set changed, this should not occur, update ignored (was %s is %s)"
-                % (set(session.endpoint_names), set(endpoint_names))
-            )
-        # start async, let it run free
-        self.add_background_task(self._flush_agent_presence(session, datetime.now()))
+    def seen(self, session: protocol.Session) -> None:
+        self.add_background_task(self._seen_session(session))
+
+    async def _seen_session(self, session: protocol.Session) -> None:
+        # TODO: Check if session is autostarted agent session
+
+        endpoints_with_new_primary = []
+        async with self.session_lock:
+            endpoints_in_agent_manager = set([endpoint
+                                          for (tid, endpoint) in self.tid_endpoint_to_session.keys()
+                                          if self.tid_endpoint_to_session[(tid, endpoint)].id == session.id])
+            endpoints_in_session = set(session.endpoint_names)
+            endpoints_to_add = endpoints_in_session - endpoints_in_agent_manager
+            endpoints_to_remove = endpoints_in_agent_manager - endpoints_in_session
+
+
+            endpoints_with_new_primary += await self._failover_endpoints(session, endpoints_to_remove)
+            endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session)
+
+            now = datetime.now()
+            env = await data.Environment.get_by_id(session.tid)
+            if env is None:
+                LOGGER.warning("The environment id %s, for agent %s does not exist!", session.tid, session.id)
+            await self._log_instance_creation_to_db(session, list(endpoints_to_add), now)
+            await self._log_instance_expiry_to_db(session, list(endpoints_to_remove), now)
+            await self._log_primary_to_db(env, endpoints_with_new_primary, now)
+            await self._flush_agent_presence(session, now)
+
+    async def _use_new_active_session_for_agent(
+        self, tid: uuid.UUID, endpoint_name: str, wait_for_enable_agent: bool = False
+    ) -> Optional[protocol.Session]:
+        """
+            This method searches for a new active session for the given agent. If a new active session if found,
+            the in-memory state of the agentmanager is updated to use that new session. No logging is done in the
+            database.
+
+            :param wait_for_enable_agent: If set to True, wait until the set_state API call, executed on the agent with
+                                          the new active session, returns.
+            :return The new active session in use or None if no new active session was found
+
+            Note: Always call under session lock.
+        """
+        key = (tid, endpoint_name)
+        new_active_session = self._get_session_for(tid, endpoint_name)
+        if new_active_session:
+            self.tid_endpoint_to_session[key] = new_active_session
+            set_state_call = new_active_session.get_client().set_state(endpoint_name, enabled=True)
+            if wait_for_enable_agent:
+                await set_state_call
+            else:
+                self.add_background_task(set_state_call)
+        elif key in self.tid_endpoint_to_session:
+            del self.tid_endpoint_to_session[key]
+        return new_active_session
+
+    async def _ensure_primary_if_not_exists(self, session: protocol.Session) -> List[Tuple[str, protocol.Session]]:
+        """
+            Make this session the primary session for the endpoints of this session if no primary exists and the agent is not
+            paused.
+
+            :return: The endpoints that got a new primary.
+
+            Note: Always call under session lock.
+            Note: This call will fail when the database connection is lost.
+        """
+        agent_statuses = await data.Agent.get_statuses(session.tid, session.endpoint_names)
+
+        result = []
+        for endpoint in session.endpoint_names:
+            key = (session.tid, endpoint)
+            if key not in self.tid_endpoint_to_session and agent_statuses[endpoint] != AgentStatus.paused:
+                LOGGER.debug("set session %s as primary for agent %s in env %s", session.id, endpoint, session.tid)
+                self.tid_endpoint_to_session[key] = session
+                self.add_background_task(session.get_client().set_state(endpoint, enabled=True))
+                result.append((endpoint, session))
+        return result
+
+    async def _failover_endpoints(self, session: protocol.Session, endpoints: List[str]) -> List[Tuple[str, protocol.Session]]:
+        """
+            If the given session is the primary for a given endpoint, failover to a new session.
+
+            :return: The endpoints that got a new primary.
+
+            Note: Always call under session lock.
+        """
+        assert all([elem in session.endpoint_names for elem in endpoints])
+        result = []
+        for endpoint_name in endpoints:
+            key = (session.tid, endpoint_name)
+            if key in self.tid_endpoint_to_session and self.tid_endpoint_to_session[key].id == session.id:
+                new_active_session = await self._use_new_active_session_for_agent(session.tid, endpoint_name)
+                result.append((endpoint_name, new_active_session))
+        return result
 
     # From server
     def get_agent_client(self, tid: uuid.UUID, endpoint: str) -> Optional[ReturnClient]:
@@ -209,14 +294,8 @@ class AgentManager(ServerSlice, SessionListener):
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False)
             for agent_name in agents:
-                key = (env.id, agent_name)
-                live_session = self.tid_endpoint_to_session.get(key)
-                # If the agent has a live_session, the agent wasn't paused
-                if not live_session:
-                    session = self._get_session_for(tid=env.id, endpoint=agent_name)
-                    if session:
-                        self.tid_endpoint_to_session[key] = session
-                        await session.get_client().set_state(agent_name, enabled=True)
+                if (env.id, agent_name) not in self.tid_endpoint_to_session:
+                    await self._use_new_active_session_for_agent(env.id, agent_name, wait_for_enable_agent=True)
 
     # Agent Management
     async def ensure_agent_registered(self, env: data.Environment, nodename: str) -> data.Agent:
@@ -257,18 +336,13 @@ class AgentManager(ServerSlice, SessionListener):
         async with self.session_lock:
             tid = session.tid
             sid = session.get_id()
-
-            agent_statuses = await data.Agent.get_statuses(tid, session.endpoint_names)
-
             self.sessions[sid] = session
-
-            endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]] = []
-            for endpoint in session.endpoint_names:
-                if (tid, endpoint) not in self.tid_endpoint_to_session and agent_statuses[endpoint] != AgentStatus.paused:
-                    LOGGER.debug("set session %s as primary for agent %s in env %s", sid, endpoint, tid)
-                    self.tid_endpoint_to_session[(tid, endpoint)] = session
-                    self.add_background_task(session.get_client().set_state(endpoint, enabled=True))
-                    endpoints_with_new_primary.append((endpoint, session))
+            try:
+                endpoints_with_new_primary = await self._ensure_primary_if_not_exists(session)
+            except Exception as e:
+                # Database connection failed
+                del self.sessions[sid]
+                raise e
 
         self.add_background_task(self._log_session_creation_to_db(tid, endpoints_with_new_primary, session, now))
 
@@ -297,14 +371,25 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             await proc.update_fields(last_seen=now, expired=None)
 
-        # Fix database corruption when database was down
-        await data.AgentInstance.expire_all_for_process(tid, proc.sid, now)
-        for nh in session.endpoint_names:
-            LOGGER.debug("New session for agent %s on %s", nh, nodename)
-            await data.AgentInstance(tid=tid, process=proc.sid, name=nh).insert()
+        await self._log_instance_creation_to_db(session, session.endpoint_names, now)
 
         if env is not None:
             await self._log_primary_to_db(env, endpoints_with_new_primary, now)
+
+    async def _log_instance_creation_to_db(self,
+                                           session: protocol.Session,
+                                           endpoints: List[str],
+                                           now: datetime) -> None:
+        """
+            Note: This method call is allowed to fail when the database connection is lost.
+        """
+        if not endpoints:
+            return
+        # Fix database corruption when database was down
+        await data.AgentInstance.expire_endpoints_for_process(session.tid, session.id, endpoints, now)
+        for nh in endpoints:
+            LOGGER.debug("New session for agent %s on %s", nh, session.nodename)
+            await data.AgentInstance(tid=session.tid, process=session.id, name=nh).insert()
 
     def _get_session_for(self, tid: uuid.UUID, endpoint: str) -> Optional[protocol.Session]:
         """
@@ -326,24 +411,9 @@ class AgentManager(ServerSlice, SessionListener):
         async with self.session_lock:
             tid = session.tid
             sid = session.get_id()
-
             LOGGER.debug("expiring session %s", sid)
             del self.sessions[sid]
-
-            endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]] = []
-            for endpoint in session.endpoint_names:
-                key = (tid, endpoint)
-                current_active_session = self.tid_endpoint_to_session.get(key, None)
-                if current_active_session is not None and current_active_session == session:
-
-                    new_active_session = self._get_session_for(tid, endpoint)
-                    if new_active_session is not None:
-                        self.tid_endpoint_to_session[key] = new_active_session
-                        self.add_background_task(new_active_session.get_client().set_state(endpoint, enabled=True))
-                        endpoints_with_new_primary.append((endpoint, new_active_session))
-                    else:
-                        del self.tid_endpoint_to_session[key]
-                        endpoints_with_new_primary.append((endpoint, None))
+            endpoints_with_new_primary = await self._failover_endpoints(session, session.endpoint_names)
 
         self.add_background_task(self._log_session_expiry_to_db(tid, endpoints_with_new_primary, session, now))
 
@@ -367,13 +437,18 @@ class AgentManager(ServerSlice, SessionListener):
             LOGGER.info("expiring session on none existant process sid:%s", sid)
         else:
             await aps.update_fields(expired=now)
-
-            instances = await data.AgentInstance.get_list(process=aps.sid)
-            for ai in instances:
-                await ai.update_fields(expired=now)
+            await self._log_instance_expiry_to_db(session, session.endpoint_names, now)
 
         if env is not None:
             await self._log_primary_to_db(env, endpoints_with_new_primary, now)
+
+    async def _log_instance_expiry_to_db(self, session: protocol.Session, endpoints: List[str], now: datetime):
+        if not endpoints:
+            return
+        instances = await data.AgentInstance.get_list(process=session.id)
+        for ai in instances:
+            if ai.name in endpoints:
+                await ai.update_fields(expired=now)
 
     async def _get_environment_sessions(self, env_id: uuid.UUID) -> List[protocol.Session]:
         """
@@ -653,9 +728,9 @@ class AgentManager(ServerSlice, SessionListener):
         config = """[config]
 state-dir=%(statedir)s
 
+use_autostart_agent_map=true
 agent-names = %(agents)s
 environment=%(env_id)s
-agent-map=%(agent_map)s
 
 agent-deploy-splay-time=%(agent_deploy_splay)d
 agent-deploy-interval=%(agent_deploy_interval)d
@@ -669,7 +744,6 @@ host=%(serveradress)s
             "agents": ",".join(agent_names),
             "env_id": environment_id,
             "port": port,
-            "agent_map": ",".join(["%s=%s" % (k, v) for (k, v) in agent_map.items()]),
             "statedir": privatestatedir,
             "agent_deploy_splay": agent_deploy_splay,
             "agent_deploy_interval": agent_deploy_interval,
@@ -765,6 +839,12 @@ ssl=True
             if autostart:
                 agent_list = [a.name for a in agents]
                 await self._ensure_agents(env, agent_list)
+
+    async def notify_agent_about_agent_map_update(self, env: data.Environment) -> None:
+        agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
+        for session in self.tid_endpoint_to_session.values():
+            if session.tid == env.id:
+                self.add_background_task(session.get_client().update_agent_map(agent_map))
 
     async def restart_agents(self, env: data.Environment) -> None:
         agents = await data.Agent.get_list(environment=env.id)

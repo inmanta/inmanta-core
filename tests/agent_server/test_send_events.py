@@ -97,13 +97,13 @@ async def test_send_events_cross_agent(resource_container, environment, server, 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     async_finalizer.add(agent.stop)
-    agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
     async_finalizer.add(agent2.stop)
-    agent2.add_end_point_name("agent2")
+    await agent2.add_end_point_name("agent2")
     await agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
@@ -172,13 +172,13 @@ async def test_send_events_cross_agent_deploying(
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     async_finalizer.add(agent.stop)
-    agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
     async_finalizer.add(agent2.stop)
-    agent2.add_end_point_name("agent2")
+    await agent2.add_end_point_name("agent2")
     await agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
@@ -249,7 +249,7 @@ async def test_send_events_cross_agent_restart(
 
     agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
     async_finalizer.add(agent2.stop)
-    agent2.add_end_point_name("agent2")
+    await agent2.add_end_point_name("agent2")
     await agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -294,7 +294,7 @@ async def test_send_events_cross_agent_restart(
     # start agent 1 and wait for it to finish
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     async_finalizer.add(agent.stop)
-    agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
@@ -326,13 +326,13 @@ async def test_send_events_cross_agent_fail(resource_container, environment, ser
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     async_finalizer.add(agent.stop)
-    agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
     async_finalizer.add(agent2.stop)
-    agent2.add_end_point_name("agent2")
+    await agent2.add_end_point_name("agent2")
     await agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 

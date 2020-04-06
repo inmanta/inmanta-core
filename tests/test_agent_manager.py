@@ -140,7 +140,7 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
     assert not am.is_primary(env, uuid4(), "agent2")
 
     # alive
-    am.seen(ts1, ["agent1", "agent2"])
+    am.seen(ts1)
     await futures.proccess()
     assert len(am.sessions) == 1
     await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
@@ -355,7 +355,7 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
 
     # alive
-    am.seen(ts1, ["agent1", "agent2"])
+    am.seen(ts1)
     await futures.proccess()
     assert len(am.sessions) == 1
     await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
@@ -393,7 +393,7 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
 
     # alive
-    am.seen(ts1, ["agent1", "agent2"])
+    am.seen(ts1)
     await futures.proccess()
     assert len(am.sessions) == 1
     await assert_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
@@ -539,7 +539,7 @@ async def test_session_creation_fails(server, environment, caplog):
     env_id = UUID(environment)
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    a.add_end_point_name("agent1")
+    await a.add_end_point_name("agent1")
     await a.start()
 
     # Wait until session is created
@@ -570,7 +570,7 @@ async def test_session_creation_fails(server, environment, caplog):
     caplog.clear()
 
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    a.add_end_point_name("agent1")
+    await a.add_end_point_name("agent1")
     await a.start()
 
     # Verify that session creation fails and server state is stays consistent
@@ -607,7 +607,7 @@ async def test_agent_actions(server, client, async_finalizer):
         agent_map = {agent_name: "localhost" for agent_name in agent_names}
         a = agent.Agent(hostname="node1", environment=env_id, agent_map=agent_map, code_loader=False)
         for agent_name in agent_names:
-            a.add_end_point_name(agent_name)
+            await a.add_end_point_name(agent_name)
         await a.start()
         async_finalizer(a.stop)
         env_to_agent_map[env_id] = a

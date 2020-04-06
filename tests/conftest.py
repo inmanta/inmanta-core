@@ -353,7 +353,7 @@ async def agent_multi(server_multi, environment_multi):
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
     a = Agent(hostname="node1", environment=environment_multi, agent_map={"agent1": "localhost"}, code_loader=False)
-    a.add_end_point_name("agent1")
+    await a.add_end_point_name("agent1")
     await a.start()
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -369,7 +369,7 @@ async def agent(server, environment):
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    a.add_end_point_name("agent1")
+    await a.add_end_point_name("agent1")
     await a.start()
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 

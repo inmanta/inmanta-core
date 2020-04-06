@@ -40,7 +40,7 @@ from inmanta.agent.reporting import collect_report
 from inmanta.const import ResourceState
 from inmanta.data.model import AttributeStateChange, Event, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader
-from inmanta.protocol import SessionEndpoint, methods
+from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
 from inmanta.util import add_future
@@ -994,7 +994,7 @@ class Agent(SessionEndpoint):
     def __init__(
         self,
         hostname: str = None,
-        agent_map: Dict[str, str] = None,
+        agent_map: Optional[Dict[str, str]] = None,
         code_loader: bool = True,
         environment: uuid.UUID = None,
         poolsize: int = 1,
@@ -1002,15 +1002,12 @@ class Agent(SessionEndpoint):
     ):
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
+        self.hostname = hostname
         self.poolsize = poolsize
         self.ratelimiter = asyncio.Semaphore(poolsize)
         self.critical_ratelimiter = asyncio.Semaphore(cricital_pool_size)
         self.thread_pool = ThreadPoolExecutor(poolsize, thread_name_prefix="mainpool")
 
-        if agent_map is None:
-            agent_map = cfg.agent_map.get()
-
-        self.agent_map: Dict[str, str] = agent_map
         self._storage = self.check_storage()
 
         if environment is None:
@@ -1020,6 +1017,7 @@ class Agent(SessionEndpoint):
         self.set_environment(environment)
 
         self._instances: Dict[str, AgentInstance] = {}
+        self._instances_lock = asyncio.Lock()
 
         self._loader: Optional[CodeLoader] = None
         self._env: Optional[env.VirtualEnv] = None
@@ -1028,9 +1026,25 @@ class Agent(SessionEndpoint):
             self._env.use_virtual_env()
             self._loader = CodeLoader(self._storage["code"])
 
-        if hostname is not None:
-            self.add_end_point_name(hostname)
+        self.agent_map: Optional[Dict[str, str]] = agent_map
 
+    async def _init_agent_map(self):
+        if cfg.use_autostart_agent_map.get():
+            LOGGER.info("Using the agent-map configured on the server")
+            env_id = self.get_environment()
+            assert env_id is not None
+            result = await self._client.environment_setting_get(env_id, data.AUTOSTART_AGENT_MAP)
+            if result.code != 200:
+                print(result.__dict__)
+                # TODO: enhance
+                raise Exception("Failed to retrieve the autostart_agent_map from the server.")
+            self.agent_map = result.result["data"]["settings"][data.AUTOSTART_AGENT_MAP]
+        elif self.agent_map is None:
+            self.agent_map = cfg.agent_map.get()
+
+    async def _init_endpoint_names(self):
+        if self.hostname is not None:
+            await self.add_end_point_name(self.hostname)
         else:
             # load agent names from the config file
             agent_names = cfg.agent_names.get()
@@ -1039,8 +1053,7 @@ class Agent(SessionEndpoint):
                 for name in names:
                     if "$" in name:
                         name = name.replace("$node-name", self.node_name)
-
-                    self.add_end_point_name(name)
+                    await self.add_end_point_name(name)
 
     async def stop(self) -> None:
         await super(Agent, self).stop()
@@ -1048,13 +1061,26 @@ class Agent(SessionEndpoint):
         for instance in self._instances.values():
             await instance.stop()
 
+    async def do_start(self):
+        """
+            This method is required because:
+                1) The client transport is required to retrieve the autostart_agent_map from the server.
+                2) _init_endpoint_names() needs to be an async method and async calls are not possible in a constructor.
+        """
+        async with self._instances_lock:
+            await self._init_agent_map()
+            await self._init_endpoint_names()
+
     async def start(self) -> None:
         # cache reference to THIS ioloop for handlers to push requests on it
         self._io_loop = ioloop.IOLoop.current()
         await super(Agent, self).start()
 
-    def add_end_point_name(self, name: str) -> None:
-        SessionEndpoint.add_end_point_name(self, name)
+    async def add_end_point_name(self, name: str) -> None:
+        """
+            Note: Always call under _instances_lock.
+        """
+        await SessionEndpoint.add_end_point_name(self, name)
 
         hostname = "local:"
         if name in self.agent_map:
@@ -1062,14 +1088,48 @@ class Agent(SessionEndpoint):
 
         self._instances[name] = AgentInstance(self, name, hostname)
 
+    async def remove_end_point_name(self, name: str) -> None:
+        """
+            Note: Always call under _instances_lock.
+        """
+        await SessionEndpoint.remove_end_point_name(name)
+        agent_instance = self._instances[name]
+        del self._instances[name]
+        await agent_instance.stop()
+
+    @protocol.handle(methods_v2.update_agent_map)
+    async def update_agent_map(self, agent_map: Dict[str, str]) -> None:
+        if not cfg.use_autostart_agent_map.get():
+            return
+            # TODO: enhance
+            # raise Exception("Agent received an update_agent_map() trigger, but agent is not running with "
+            #                 "the use_autostart_agent_map option.")
+        async with self._instances_lock:
+            self.agent_map = agent_map
+            # Add missing agents
+            agents_to_add = [agent_name for agent_name in self.agent_map.keys() if agent_name not in self._instances]
+            for agent_name in agents_to_add:
+                await self.add_end_point_name(agent_name)
+            # Remove agents which are not present in agent-map anymore
+            agents_to_remove = [agent_name for agent_name in self._instances.keys() if agent_name not in self.agent_map]
+            for agent_name in agents_to_remove:
+                await self.remove_end_point_name(agent_name)
+            # URI was updated
+            for agent_name, uri in self.agent_map.items():
+                if self._instances[agent_name].uri != uri:
+                    await self.remove_end_point_name(agent_name)
+                    await self.add_end_point_name(agent_name)
+
     def unpause(self, name: str) -> Apireturn:
-        if name not in self._instances:
+        instance = self._instances.get(name)
+        if not instance:
             return 404, "No such agent"
 
         return self._instances[name].unpause()
 
     def pause(self, name: str) -> Apireturn:
-        if name not in self._instances:
+        instance = self._instances.get(name)
+        if not instance:
             return 404, "No such agent"
 
         return self._instances[name].pause()

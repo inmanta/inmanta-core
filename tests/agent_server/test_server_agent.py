@@ -106,7 +106,7 @@ async def test_deploy_with_undefined(server, client, resource_container, async_f
         hostname="node1", environment=env_id, agent_map={"agent1": "localhost", "agent2": "localhost"}, code_loader=False
     )
     async_finalizer.add(agent.stop)
-    agent.add_end_point_name("agent2")
+    await agent.add_end_point_name("agent2")
     await agent.start()
 
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -518,8 +518,8 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
     myagent = agent.Agent(
         hostname="node1", environment=environment, agent_map={"agent1": "localhost", "agent2": "localhost"}, code_loader=False
     )
-    myagent.add_end_point_name("agent1")
-    myagent.add_end_point_name("agent2")
+    await myagent.add_end_point_name("agent1")
+    await myagent.add_end_point_name("agent2")
     await myagent.start()
     async_finalizer(myagent.stop)
     await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
@@ -864,7 +864,7 @@ async def test_wait(resource_container, client, clienthelper, environment, serve
 
     # setup agent
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False, poolsize=10)
-    agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent1")
     await agent.start()
     async_finalizer(agent.stop)
 
@@ -1001,9 +1001,9 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
         code_loader=False,
         poolsize=1,
     )
-    agent.add_end_point_name("agent1")
-    agent.add_end_point_name("agent2")
-    agent.add_end_point_name("agent3")
+    await agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent2")
+    await agent.add_end_point_name("agent3")
 
     await agent.start()
     async_finalizer(agent.stop)
@@ -1127,12 +1127,12 @@ async def test_cross_agent_deps(resource_container, server, client, environment,
     env_id = environment
 
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     agent2 = Agent(hostname="node2", environment=env_id, agent_map={"agent2": "localhost"}, code_loader=False)
-    agent2.add_end_point_name("agent2")
+    await agent2.add_end_point_name("agent2")
     await agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
@@ -1386,7 +1386,7 @@ def ps_diff(original, current_process, diff=0):
 @pytest.mark.asyncio(timeout=15)
 async def test_autostart_mapping(server, client, clienthelper, resource_container, environment, no_agent_backoff):
     """
-        Test autostart mapping and restart agents when the map is modified
+        Test whether an autostarted agent updates its agent-map correctly when the autostart_agent_map is updated on the server.
 
         The handler code in the resource_container is not available to the autostarted agent. When the agent loads these
         resources it will mark them as unavailable. There is only one agent started when deploying is checked.
@@ -1434,21 +1434,23 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     result = await client.list_agents(tid=environment)
     assert result.code == 200
 
-    while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
-        result = await client.list_agents(tid=environment)
-        await asyncio.sleep(0.1)
+    def wait_for_nr_of_agents_in_up_state(nr_agents: int) -> None:
+        async def _check_wait_condition() -> bool:
+            result = await client.list_agents(tid=environment)
+            assert result.code == 200
+            return len([x for x in result.result["agents"] if x["state"] == "up"]) == nr_agents
+        return _check_wait_condition
 
+    await retry_limited(wait_for_nr_of_agents_in_up_state(1), 10)
+
+    result = await client.list_agents(tid=environment)
     assert len(result.result["agents"]) == 2
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
 
     result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {"agent1": "", "agent2": ""})
     assert result.code == 200
 
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-    while len([x for x in result.result["agents"] if x["state"] == "up"]) < 2:
-        result = await client.list_agents(tid=environment)
-        await asyncio.sleep(0.1)
+    await retry_limited(wait_for_nr_of_agents_in_up_state(2), 10)
 
     await server.stop()
 
@@ -1864,7 +1866,7 @@ async def test_deploy_and_events_failed(server, client, clienthelper, environmen
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -1933,7 +1935,7 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -2622,7 +2624,7 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
         Test retrieving facts from the agent
     """
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
 
@@ -2713,7 +2715,7 @@ async def test_push_incremental_deploy(
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent1")
     await agent.start()
     async_finalizer(agent.stop)
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -2793,7 +2795,7 @@ async def test_push_full_deploy(
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent1")
     await agent.start()
     async_finalizer(agent.stop)
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -2870,7 +2872,7 @@ async def test_agent_run_sync(resource_container, environment, server, client, c
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent1")
     await agent.start()
     async_finalizer(agent.stop)
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -3057,13 +3059,13 @@ async def test_agent_lockout(resource_container, environment, server, client, cl
 
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     async_finalizer.add(agent.stop)
-    agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     agent2 = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     async_finalizer.add(agent2.stop)
-    agent2.add_end_point_name("agent1")
+    await agent2.add_end_point_name("agent1")
     await agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
@@ -3125,7 +3127,7 @@ async def test_issue_1662(resource_container, server, client, clienthelper, envi
     config.Config.set("config", "agent-repair-interval", "0")
 
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    a.add_end_point_name("agent1")
+    await a.add_end_point_name("agent1")
     await a.start()
     await retry_limited(lambda: len(agent_manager.sessions) == 1, 10)
 

@@ -90,8 +90,12 @@ class EnvironmentService(protocol.ServerSlice):
             warnings = await self.server_slice._async_recompile(env, setting.update, metadata=metadata.dict())
 
         if setting.agent_restart:
-            LOGGER.info("Environment setting %s changed. Restarting agents.", key)
-            self.add_background_task(self.agentmanager.restart_agents(env))
+            if key == data.AUTOSTART_AGENT_MAP:
+                LOGGER.info("Environment setting %s changed. Notifying agents.", key)
+                self.add_background_task(self.agentmanager.notify_agent_about_agent_map_update(env))
+            else:
+                LOGGER.info("Environment setting %s changed. Restarting agents.", key)
+                self.add_background_task(self.agentmanager.restart_agents(env))
 
         return warnings
 

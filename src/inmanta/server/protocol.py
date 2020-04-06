@@ -384,8 +384,9 @@ class Session(object):
             IOLoop.current().remove_timeout(self._callhandle)
         self._sessionstore.expire(self, timeout)
 
-    def seen(self) -> None:
+    def seen(self, endpoint_names: List[str]) -> None:
         self._seen = time.time()
+        self.endpoint_names = endpoint_names
 
     async def _handle_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
         """ A function that awaits a future until its value is ready or until timeout. When the call times out, a message is
@@ -468,7 +469,7 @@ class SessionListener(object):
     def expire(self, session: Session, timeout: float) -> None:
         pass
 
-    def seen(self, session: Session, endpoint_names: List[str]) -> None:
+    def seen(self, session: Session) -> None:
         pass
 
 
@@ -581,7 +582,7 @@ class SessionManager(ServerSlice):
             session = self._sessions[sid]
             self.seen(session, endpoint_names)
             for listener in self.listeners:
-                listener.seen(session, endpoint_names)
+                listener.seen(session)
 
         return session
 
@@ -596,8 +597,8 @@ class SessionManager(ServerSlice):
             listener.expire(session, timeout)
 
     def seen(self, session: Session, endpoint_names: List[str]) -> None:
-        LOGGER.debug("Seen session with id %s" % (session.get_id()))
-        session.seen()
+        LOGGER.debug("Seen session with id %s; endpoints: %s", session.get_id(), endpoint_names)
+        session.seen(endpoint_names)
 
     @handle(methods.heartbeat, env="tid")
     async def heartbeat(

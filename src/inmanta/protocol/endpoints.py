@@ -108,12 +108,17 @@ class Endpoint(TaskHandler):
     def get_end_point_names(self) -> List[str]:
         return self._end_point_names
 
-    def add_end_point_name(self, name: str) -> None:
+    async def add_end_point_name(self, name: str) -> None:
         """
             Add an additional name to this endpoint to which it reacts and sends out in heartbeats
         """
         LOGGER.debug("Adding '%s' as endpoint", name)
         self._end_point_names.append(name)
+
+    async def remove_end_point_name(self, name: str) -> None:
+        LOGGER.debug("Removing '%s' as endpoint", name)
+        if name in self._end_point_names:
+            self._end_point_names.remove(name)
 
     def clear_end_points(self) -> None:
         """
@@ -177,6 +182,12 @@ class SessionEndpoint(Endpoint, CallTarget):
         else:
             self._env_id = environment_id
 
+    async def do_start(self):
+        """
+            This method is called after starting the client transport, but before sending the first heartbeat.
+        """
+        pass
+
     async def start(self) -> None:
         """
             Connect to the server and use a heartbeat and long-poll for two-way communication
@@ -184,6 +195,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
+        await self.do_start()
         self.add_background_task(self.perform_heartbeat())
 
     async def stop(self) -> None:

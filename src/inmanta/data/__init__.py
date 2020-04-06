@@ -1128,12 +1128,19 @@ class AgentInstance(BaseDocument):
         return objects
 
     @classmethod
-    async def expire_all_for_process(cls, tid: uuid.UUID, process: uuid.UUID, now: datetime.datetime) -> None:
+    async def expire_endpoints_for_process(
+        cls, tid: uuid.UUID, process: uuid.UUID, endpoints: List[str], now: datetime.datetime
+    ) -> None:
         """
-            Expire all instances which belong to the given process.
+            Expire the given endpoints in an agent process.
         """
-        query = f"UPDATE {cls.table_name()} SET expired=$1 WHERE tid=$2 AND process=$3"
-        values = [cls._get_value(now), cls._get_value(tid), cls._get_value(process)]
+        if not endpoints:
+            return
+        names_subquery = ",".join([f"${i}" for i in range(4, 4+len(endpoints))])
+        query = f"""UPDATE {cls.table_name()}
+                    SET expired=$1 WHERE tid=$2 AND process=$3 AND name IN ({names_subquery})
+                 """
+        values = [cls._get_value(now), cls._get_value(tid), cls._get_value(process)] + [cls._get_value(e) for e in endpoints]
         await cls._execute_query(query, *values)
 
 

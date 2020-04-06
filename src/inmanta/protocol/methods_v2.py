@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import uuid
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict
 
 from inmanta.const import AgentAction
 from inmanta.data import model
@@ -269,4 +269,15 @@ def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
         :param action: The type of action that should be executed on the agents
                         * pause: A paused agent cannot execute any deploy operations.
                         * unpause: A unpaused agent will be able to execute deploy operations.
+    """
+
+# TODO: client type???
+# TODO: Put this in agent_action API call???
+# TODO: timeout???
+@typedmethod(path="/agentmap", api=False, server_agent=True, timeout=5, operation="POST", client_types=[], api_version=2)
+def update_agent_map(agent_map: Dict[str, str]) -> None:
+    """
+        Notify an agent about the fact that the autostart_agent_map has been updated.
+
+        :param agent_map: The content of the new autostart_agent_map
     """
