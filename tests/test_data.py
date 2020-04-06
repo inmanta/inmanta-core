@@ -20,6 +20,7 @@ import datetime
 import logging
 import time
 import uuid
+from typing import Dict
 
 import asyncpg
 import pytest
@@ -539,7 +540,7 @@ async def test_agent(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
-async def test_pause_agent(environment):
+async def test_pause_agent_endpoint_set(environment):
     """
         Test the pause() method in the Agent class
     """
@@ -553,14 +554,49 @@ async def test_pause_agent(environment):
     assert not agent.paused
 
     # Pause
-    await data.Agent.pause(env=env_id, endpoint=agent_name, paused=True)
+    paused_agents = await data.Agent.pause(env=env_id, endpoint=agent_name, paused=True)
+    assert paused_agents == [agent_name]
     agent = await data.Agent.get_one(environment=env_id, name=agent_name)
     assert agent.paused
 
     # Unpause
-    await data.Agent.pause(env=env_id, endpoint=agent_name, paused=False)
+    paused_agents = await data.Agent.pause(env=env_id, endpoint=agent_name, paused=False)
+    assert paused_agents == [agent_name]
     agent = await data.Agent.get_one(environment=env_id, name=agent_name)
     assert not agent.paused
+
+
+@pytest.mark.asyncio
+async def test_pause_all_agent_in_environment(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+    env1 = data.Environment(name="env1", project=project.id)
+    await env1.insert()
+    env2 = data.Environment(name="env2", project=project.id)
+    await env2.insert()
+
+    await data.Agent(environment=env1.id, name="agent1", last_failover=datetime.datetime.now(), paused=False).insert()
+    await data.Agent(environment=env1.id, name="agent2", last_failover=datetime.datetime.now(), paused=False).insert()
+    await data.Agent(environment=env2.id, name="agent3", last_failover=datetime.datetime.now(), paused=False).insert()
+    agents_in_env1 = ["agent1", "agent2"]
+
+    async def assert_paused(env_paused_map: Dict[uuid.UUID, bool]) -> None:
+        for env_id, paused in env_paused_map.items():
+            agents = await data.Agent.get_list(environment=env_id)
+            assert all([a.paused == paused for a in agents])
+
+    # Test initial state
+    await assert_paused(env_paused_map={env1.id: False, env2.id: False})
+    # Pause env1 and pause again
+    for _ in range(2):
+        paused_agents = await data.Agent.pause(env1.id, endpoint=None, paused=True)
+        assert sorted(paused_agents) == sorted(agents_in_env1)
+        await assert_paused(env_paused_map={env1.id: True, env2.id: False})
+    # Unpause env1 and pause again
+    for _ in range(2):
+        paused_agents = await data.Agent.pause(env1.id, endpoint=None, paused=False)
+        assert sorted(paused_agents) == sorted(agents_in_env1)
+        await assert_paused(env_paused_map={env1.id: False, env2.id: False})
 
 
 @pytest.mark.asyncio

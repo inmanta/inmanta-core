@@ -37,11 +37,17 @@ from inmanta.protocol.openapi.converter import (
     OperationHandler,
 )
 from inmanta.protocol.openapi.model import MediaType, Schema
+from inmanta.server import SLICE_SERVER
 
 
 class DummyException(BaseHttpException):
     def __init__(self):
         super(DummyException, self).__init__(status_code=405)
+
+
+@pytest.fixture
+def feature_manager(server):
+    return server.get_slice(SLICE_SERVER).feature_manager
 
 
 @pytest.fixture(scope="function")
@@ -147,16 +153,16 @@ def api_methods_fixture(clean_reset):
 
 
 @pytest.mark.asyncio
-async def test_generate_openapi_definition(server):
+async def test_generate_openapi_definition(server, feature_manager):
     global_url_map = server._transport.get_global_url_map(server.get_slices().values())
-    openapi = OpenApiConverter(global_url_map)
+    openapi = OpenApiConverter(global_url_map, feature_manager)
     openapi_json = openapi.generate_openapi_json()
     assert openapi_json
     openapi_parsed = json.loads(openapi_json)
     openapi_v3_spec_validator.validate(openapi_parsed)
 
 
-def test_filter_api_methods(server, api_methods_fixture):
+def test_filter_api_methods(server, api_methods_fixture, feature_manager):
     post = UrlMethod(properties=MethodProperties.methods["post_method"][0], slice=None, method_name="post_method", handler=None)
     methods = {
         "POST": post,
@@ -164,7 +170,7 @@ def test_filter_api_methods(server, api_methods_fixture):
             properties=MethodProperties.methods["get_method"][0], slice=None, method_name="get_method", handler=None
         ),
     }
-    openapi = OpenApiConverter(server._transport.get_global_url_map(server.get_slices().values()))
+    openapi = OpenApiConverter(server._transport.get_global_url_map(server.get_slices().values()), feature_manager)
     api_methods = openapi._filter_api_methods(methods)
     assert len(api_methods) == 1
 
@@ -615,3 +621,15 @@ async def test_openapi_endpoint(client):
 async def test_swagger_endpoint(client):
     result = await client.get_api_docs()
     assert result.code == 200
+
+
+@pytest.mark.asyncio
+async def test_tags(server, feature_manager):
+    global_url_map = server._transport.get_global_url_map(server.get_slices().values())
+    openapi = OpenApiConverter(global_url_map, feature_manager)
+    openapi_json = openapi.generate_openapi_json()
+    openapi_parsed = json.loads(openapi_json)
+    for path in openapi_parsed["paths"].values():
+        for operation in path.values():
+            assert len(operation["tags"]) > 0
+    assert "core.project" in openapi_parsed["paths"]["/api/v1/project"]["get"]["tags"]

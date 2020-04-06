@@ -225,6 +225,13 @@ def compiler_config(parser: ArgumentParser) -> None:
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--experimental-dataflow-graphic",
+        dest="dataflow_graphic",
+        help="Experimental graphic data flow visualization",
+        action="store_true",
+        default=False,
+    )
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
 
 
@@ -255,6 +262,9 @@ def compile_project(options: argparse.Namespace):
 
     if options.datatrace is True:
         Config.set("compiler", "datatrace_enable", "true")
+
+    if options.dataflow_graphic is True:
+        Config.set("compiler", "dataflow_graphic_enable", "true")
 
     module.Project.get(options.main_file)
 

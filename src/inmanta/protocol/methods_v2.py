@@ -255,6 +255,18 @@ def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
         :param tid: The environment this agent is defined in.
         :param name: The name of the agent.
         :param action: The type of action that should be executed on an agent.
-                        * pause: Pause an agent.
-                        * unpause: unpause an agent.
+                        * pause: A paused agent cannot execute any deploy operations.
+                        * unpause: A unpaused agent will be able to execute deploy operations.
+    """
+
+
+@typedmethod(path="/agents/{action}", operation="POST", arg_options=methods.ENV_OPTS, client_types=["api"], api_version=2)
+def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
+    """
+        Execute an action on all agents in the given environment.
+
+        :param tid: The environment of the agents.
+        :param action: The type of action that should be executed on the agents
+                        * pause: A paused agent cannot execute any deploy operations.
+                        * unpause: A unpaused agent will be able to execute deploy operations.
     """

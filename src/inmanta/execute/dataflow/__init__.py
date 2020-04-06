@@ -562,6 +562,9 @@ class ValueNode(Node):
             return NotImplemented
         return self.value == other.value
 
+    def __hash__(self) -> int:
+        return hash(self.value)
+
     def __repr__(self) -> str:
         return repr(self.value)
 

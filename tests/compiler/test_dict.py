@@ -242,6 +242,44 @@ x = Test(**dct["config"], str = "Hello World!")
     assert instance.get_attribute("str").get_value() == "Hello World!"
 
 
+@pytest.mark.parametrize("override", [True, False])
+def test_2003_constructor_kwargs_default(snippetcompiler, override: bool):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    number v = 0
+end
+
+implement Test using std::none
+
+values = {%s}
+t = Test(
+    **values
+)
+        """
+        % ("'v': 10" if override else ""),
+    )
+    (_, root) = compiler.do_compile()
+    scope = root.get_child("__config__").scope
+
+    instance: Instance = scope.lookup("t").get_value()
+    assert instance.get_attribute("v").get_value() == (10 if override else 0)
+
+
+def test_constructor_kwargs_double_set(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity A:
+    int a
+end
+
+v = {"a": 4}
+A(a = 3, **v)
+        """,
+        "The attribute a is set twice in the constructor call of A. (reported in Construct(A) ({dir}/main.cf:7))",
+    )
+
+
 def test_constructor_kwargs_index_match(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
