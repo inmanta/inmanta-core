@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from inmanta.ast.entity import Entity  # noqa: F401
     from inmanta.ast.statements.define import DefineImport, DefineEntity  # noqa: F401
     from inmanta.compiler import Compiler
+    from inmanta.plugins import PluginException
 
 
 class Location(object):
@@ -618,6 +619,16 @@ class ExternalException(RuntimeException):
 
     def importantance(self):
         return 60
+
+
+class ExplicitPluginException(ExternalException):
+    """
+        Base exception for wrapping explicit PluginExceptions raised from a plugin call.
+    """
+
+    def __init__(self, stmt: Locatable, msg: str, cause: "PluginException") -> None:
+        ExternalException.__init__(self, stmt, msg, cause)
+        self.__cause__: PluginException
 
 
 class WrappingRuntimeException(RuntimeException):

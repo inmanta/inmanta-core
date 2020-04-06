@@ -1,6 +1,6 @@
 from _collections import defaultdict
 from inmanta.execute.util import Unknown
-from inmanta.plugins import plugin
+from inmanta.plugins import plugin, PluginException
 from inmanta import resources
 
 
@@ -42,3 +42,8 @@ def once(string: "string") -> "number":
 @plugin
 def get_id(instance: "std::Entity") -> "string":
     return resources.to_id(instance)
+
+
+@plugin
+def raise_exception(message: "string") -> None:
+    raise PluginException(message)
