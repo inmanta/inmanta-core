@@ -1,7 +1,7 @@
 name: test
-description: A sample project
+description: A sample project, used for compiler server tests
 modulepath: libs
 downloadpath: libs
 install_mode: "release"
 repo:
-    - git@github.com:inmanta/
+    - https://github.com/inmanta/
