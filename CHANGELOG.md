@@ -18,6 +18,7 @@
  - Agent manager remains consistent when the database connection is lost (#1893)
  - Ensure correct version is used in api docs (#1994)
  - Fixed double assignment error resulting from combining constructor kwargs with default values (#2003)
+ - Fixed agent_action url (#2009)
 
 ## Added
  - Experimental data trace and root cause application (#1820, #1831, #1821)
