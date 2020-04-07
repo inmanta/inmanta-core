@@ -23,7 +23,7 @@ import time
 import uuid
 from asyncio import subprocess
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional, Tuple, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from uuid import UUID
 
 from inmanta import const, data
@@ -222,8 +222,9 @@ class AgentManager(ServerSlice, SessionListener):
                 result.append((endpoint, session))
         return result
 
-    async def _failover_endpoints(self, session: protocol.Session, endpoints: List[str]
-                                  ) -> Sequence[Tuple[str, Optional[protocol.Session]]]:
+    async def _failover_endpoints(
+        self, session: protocol.Session, endpoints: List[str]
+    ) -> Sequence[Tuple[str, Optional[protocol.Session]]]:
         """
             If the given session is the primary for a given endpoint, failover to a new session.
 
