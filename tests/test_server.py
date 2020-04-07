@@ -48,7 +48,7 @@ async def test_autostart(server, client, environment, caplog):
         When the second agent is started for the same environment, the first is terminated in a controlled manner
     """
     env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": "", "iaas_agentx": ""})
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "iaas_agent": "", "iaas_agentx": ""})
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     sessionendpoint = server.get_slice(SLICE_SESSION_MANAGER)
@@ -111,10 +111,10 @@ async def test_autostart_dual_env(client, server):
     env_id2 = result.result["environment"]["id"]
 
     env = await data.Environment.get_by_id(uuid.UUID(env_id))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": ""})
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "iaas_agent": ""})
 
     env2 = await data.Environment.get_by_id(uuid.UUID(env_id2))
-    await env2.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": ""})
+    await env2.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "iaas_agent": ""})
 
     await agentmanager.ensure_agent_registered(env, "iaas_agent")
     await agentmanager.ensure_agent_registered(env2, "iaas_agent")
@@ -137,23 +137,23 @@ async def test_autostart_batched(client, server, environment):
         Test auto start of agent
     """
     env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": "", "iaas_agentx": ""})
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "iaas_agentx": ""})
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     sessionendpoint = server.get_slice(SLICE_SESSION_MANAGER)
 
-    await agentmanager.ensure_agent_registered(env, "iaas_agent")
+    await agentmanager.ensure_agent_registered(env, "internal")
     await agentmanager.ensure_agent_registered(env, "iaas_agentx")
 
-    res = await agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
+    res = await agentmanager._ensure_agents(env, ["internal", "iaas_agentx"])
     assert res
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
     assert len(sessionendpoint._sessions) == 1
-    res = await agentmanager._ensure_agents(env, ["iaas_agent"])
+    res = await agentmanager._ensure_agents(env, ["internal"])
     assert not res
     assert len(sessionendpoint._sessions) == 1
 
-    res = await agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
+    res = await agentmanager._ensure_agents(env, ["internal", "iaas_agentx"])
     assert not res
     assert len(sessionendpoint._sessions) == 1
 
@@ -163,7 +163,7 @@ async def test_autostart_batched(client, server, environment):
     await retry_limited(lambda: len(sessionendpoint._sessions) == 0, 20)
     # Prevent race condition
     await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 20)
-    res = await agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
+    res = await agentmanager._ensure_agents(env, ["internal", "iaas_agentx"])
     assert res
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 3)
     assert len(sessionendpoint._sessions) == 1

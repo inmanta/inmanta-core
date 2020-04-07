@@ -152,7 +152,6 @@ class AgentManager(ServerSlice, SessionListener):
 
     async def _seen_session(self, session: protocol.Session) -> None:
         # TODO: Check if session is autostarted agent session
-
         endpoints_with_new_primary = []
         async with self.session_lock:
             endpoints_in_agent_manager = set([endpoint
@@ -161,7 +160,6 @@ class AgentManager(ServerSlice, SessionListener):
             endpoints_in_session = set(session.endpoint_names)
             endpoints_to_add = endpoints_in_session - endpoints_in_agent_manager
             endpoints_to_remove = endpoints_in_agent_manager - endpoints_in_session
-
 
             endpoints_with_new_primary += await self._failover_endpoints(session, endpoints_to_remove)
             endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session)
@@ -232,7 +230,6 @@ class AgentManager(ServerSlice, SessionListener):
 
             Note: Always call under session lock.
         """
-        assert all([elem in session.endpoint_names for elem in endpoints])
         result = []
         for endpoint_name in endpoints:
             key = (session.tid, endpoint_name)
@@ -549,7 +546,7 @@ class AgentManager(ServerSlice, SessionListener):
 
             # TODO: perhaps show in dashboard?
             return await asyncio.create_subprocess_exec(
-                sys.executable, *full_args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle
+                sys.executable, *full_args, cwd=cwd, env=os.environ.copy(), stdout=sys.stdout, stderr=sys.stderr
             )
         finally:
             if outhandle is not None:
@@ -724,6 +721,10 @@ class AgentManager(ServerSlice, SessionListener):
         agent_repair_splay: int = await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME)
         agent_repair_interval: int = await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL)
 
+        # The internal agent always needs to have a session. Otherwise the agentmap update trigger doesn't work
+        if "internal" not in agent_names:
+            agent_names.append("internal")
+
         # generate config file
         config = """[config]
 state-dir=%(statedir)s
@@ -841,10 +842,21 @@ ssl=True
                 await self._ensure_agents(env, agent_list)
 
     async def notify_agent_about_agent_map_update(self, env: data.Environment) -> None:
-        agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
-        for session in self.tid_endpoint_to_session.values():
-            if session.tid == env.id:
-                self.add_background_task(session.get_client().update_agent_map(agent_map))
+        new_agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
+        key = (env.id, "internal")
+        session = self.tid_endpoint_to_session.get(key)
+        if session:
+            # Internal agent has live session
+            self.add_background_task(session.get_client().update_agent_map(new_agent_map))
+        else:
+            # Internal agent is paused or down
+            for session in self.sessions.values():
+                print(session.__dict__)
+                print(session.nodename)
+                if "internal" in session.endpoint_names:
+                    self.add_background_task(session.get_client().update_agent_map(new_agent_map))
+                    return
+            LOGGER.warning("Could not send update_agent_map() trigger for environment %s. Internal agent is down.", env.id)
 
     async def restart_agents(self, env: data.Environment) -> None:
         agents = await data.Agent.get_list(environment=env.id)

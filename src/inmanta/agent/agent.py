@@ -1080,7 +1080,8 @@ class Agent(SessionEndpoint):
         """
             Note: Always call under _instances_lock.
         """
-        await SessionEndpoint.add_end_point_name(self, name)
+        LOGGER.info("Adding endpoint %s", name)
+        await super(Agent, self).add_end_point_name(name)
 
         hostname = "local:"
         if name in self.agent_map:
@@ -1092,7 +1093,9 @@ class Agent(SessionEndpoint):
         """
             Note: Always call under _instances_lock.
         """
-        await SessionEndpoint.remove_end_point_name(name)
+        LOGGER.info("Removing endpoint %s", name)
+        await super(Agent, self).remove_end_point_name(name)
+
         agent_instance = self._instances[name]
         del self._instances[name]
         await agent_instance.stop()
@@ -1100,11 +1103,11 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods_v2.update_agent_map)
     async def update_agent_map(self, agent_map: Dict[str, str]) -> None:
         if not cfg.use_autostart_agent_map.get():
+            LOGGER.warning("Agent received an update_agent_map() trigger, but agent is not running with "
+                           "the use_autostart_agent_map option.")
             return
-            # TODO: enhance
-            # raise Exception("Agent received an update_agent_map() trigger, but agent is not running with "
-            #                 "the use_autostart_agent_map option.")
         async with self._instances_lock:
+            LOGGER.debug("Received update_agent_map() trigger with agent_map %s", agent_map)
             self.agent_map = agent_map
             # Add missing agents
             agents_to_add = [agent_name for agent_name in self.agent_map.keys() if agent_name not in self._instances]
@@ -1116,7 +1119,9 @@ class Agent(SessionEndpoint):
                 await self.remove_end_point_name(agent_name)
             # URI was updated
             for agent_name, uri in self.agent_map.items():
-                if self._instances[agent_name].uri != uri:
+                current_uri = self._instances[agent_name].uri
+                if current_uri != uri:
+                    LOGGER.info("Updating the URI of the endpoint %s from %s to %s", agent_name, current_uri, uri)
                     await self.remove_end_point_name(agent_name)
                     await self.add_end_point_name(agent_name)
 

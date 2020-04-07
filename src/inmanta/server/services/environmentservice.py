@@ -177,8 +177,8 @@ class EnvironmentService(protocol.ServerSlice):
             return attach_warnings(200, None, warnings)
         except KeyError:
             raise NotFound()
-        except ValueError:
-            raise ServerError("Invalid value")
+        except ValueError as e:
+            raise ServerError(f"Invalid value. {e}")
 
     @protocol.handle(methods.get_setting, env="tid", key="id")
     async def get_setting(self, env: data.Environment, key: str) -> Apireturn:

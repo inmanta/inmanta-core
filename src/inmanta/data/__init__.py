@@ -617,6 +617,9 @@ def convert_agent_map(value: Dict[str, str]) -> Dict[str, str]:
         if not isinstance(v, str):
             raise ValueError("The value of an agent map should be string")
 
+    if "internal" not in value:
+        raise ValueError("The internal agent must be present in the autostart_agent_map")
+
     return value
 
 
