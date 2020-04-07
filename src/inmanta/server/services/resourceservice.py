@@ -426,115 +426,125 @@ class ResourceService(protocol.ServerSlice):
                         action_id=action_id,
                     )
 
-        # validate resources
-        resources = await data.Resource.get_resources(env.id, resource_ids)
-        if len(resources) == 0 or (len(resources) != len(resource_ids)):
-            return (
-                404,
-                {
-                    "message": "The resources with the given ids do not exist in the given environment. "
-                    "Only %s of %s resources found." % (len(resources), len(resource_ids))
-                },
-            )
+        async with data.Resource.get_connection() as connection:
+            async with connection.transaction():
+                # validate resources
+                resources = await data.Resource.get_resources(env.id, resource_ids, connection=connection)
+                if len(resources) == 0 or (len(resources) != len(resource_ids)):
+                    return (
+                        404,
+                        {
+                            "message": "The resources with the given ids do not exist in the given environment. "
+                            "Only %s of %s resources found." % (len(resources), len(resource_ids))
+                        },
+                    )
 
-        # validate transitions
-        if is_resource_state_update:
-            # no escape from terminal
-            if any(resource.status != status and resource.status in TERMINAL_STATES for resource in resources):
-                LOGGER.error("Attempting to set undeployable resource to deployable state")
-                raise AssertionError("Attempting to set undeployable resource to deployable state")
+                # validate transitions
+                if is_resource_state_update:
+                    # no escape from terminal
+                    if any(resource.status != status and resource.status in TERMINAL_STATES for resource in resources):
+                        LOGGER.error("Attempting to set undeployable resource to deployable state")
+                        raise AssertionError("Attempting to set undeployable resource to deployable state")
 
-        # get instance
-        resource_action = await data.ResourceAction.get(action_id=action_id)
-        if resource_action is None:
-            # new
-            if started is None:
-                return 500, {"message": "A resource action can only be created with a start datetime."}
+                # get instance
+                resource_action = await data.ResourceAction.get(action_id=action_id, connection=connection)
+                if resource_action is None:
+                    # new
+                    if started is None:
+                        return 500, {"message": "A resource action can only be created with a start datetime."}
 
-            version = Id.parse_id(resource_ids[0]).version
-            resource_action = data.ResourceAction(
-                environment=env.id,
-                version=version,
-                resource_version_ids=resource_ids,
-                action_id=action_id,
-                action=action,
-                started=started,
-            )
-            await resource_action.insert()
-        else:
-            # existing
-            if resource_action.finished is not None:
-                return (
-                    500,
-                    {
-                        "message": "An resource action can only be updated when it has not been finished yet. This action "
-                        "finished at %s" % resource_action.finished
-                    },
-                )
+                    version = Id.parse_id(resource_ids[0]).version
+                    resource_action = data.ResourceAction(
+                        environment=env.id,
+                        version=version,
+                        resource_version_ids=resource_ids,
+                        action_id=action_id,
+                        action=action,
+                        started=started,
+                    )
+                    await resource_action.insert(connection=connection)
+                else:
+                    # existing
+                    if resource_action.finished is not None:
+                        return (
+                            500,
+                            {
+                                "message": (
+                                    "An resource action can only be updated when it has not been finished yet. This action "
+                                    "finished at %s" % resource_action.finished
+                                )
+                            },
+                        )
 
-        if len(messages) > 0:
-            resource_action.add_logs(messages)
-            for msg in messages:
-                # All other data is stored in the database. The msg was already formatted at the client side.
-                self.log_resource_action(
-                    env.id,
-                    resource_ids,
-                    const.LogLevel[msg["level"]].value,
-                    datetime.datetime.strptime(msg["timestamp"], const.TIME_ISOFMT),
-                    msg["msg"],
-                )
+                if len(messages) > 0:
+                    resource_action.add_logs(messages)
+                    for msg in messages:
+                        # All other data is stored in the database. The msg was already formatted at the client side.
+                        self.log_resource_action(
+                            env.id,
+                            resource_ids,
+                            const.LogLevel[msg["level"]].value,
+                            datetime.datetime.strptime(msg["timestamp"], const.TIME_ISOFMT),
+                            msg["msg"],
+                        )
 
-        if len(changes) > 0:
-            resource_action.add_changes(changes)
+                if len(changes) > 0:
+                    resource_action.add_changes(changes)
 
-        if status is not None:
-            resource_action.set_field("status", status)
+                if status is not None:
+                    resource_action.set_field("status", status)
 
-        if change is not None:
-            resource_action.set_field("change", change)
+                if change is not None:
+                    resource_action.set_field("change", change)
 
-        resource_action.set_field("send_event", send_events)
+                resource_action.set_field("send_event", send_events)
 
-        if finished is not None:
-            resource_action.set_field("finished", finished)
+                if finished is not None:
+                    resource_action.set_field("finished", finished)
 
-        await resource_action.save()
+                await resource_action.save(connection=connection)
 
-        if is_resource_state_update:
-            # transient resource update
-            if not is_resource_action_finished:
-                for res in resources:
-                    await res.update_fields(status=status)
-                if not keep_increment_cache:
-                    self.clear_env_cache(env)
+                if is_resource_state_update:
+                    # transient resource update
+                    if not is_resource_action_finished:
+                        for res in resources:
+                            await res.update_fields(status=status, connection=connection)
+                        if not keep_increment_cache:
+                            self.clear_env_cache(env)
+                        return 200
+
+                    else:
+                        # final resource update
+                        if not keep_increment_cache:
+                            self.clear_env_cache(env)
+
+                        model_version = None
+                        for res in resources:
+                            await res.update_fields(last_deploy=finished, status=status, connection=connection)
+                            model_version = res.model
+
+                            if (
+                                "purged" in res.attributes
+                                and res.attributes["purged"]
+                                and status == const.ResourceState.deployed
+                            ):
+                                await data.Parameter.delete_all(
+                                    environment=env.id, resource_id=res.resource_id, connection=connection
+                                )
+
+                        await data.ConfigurationModel.mark_done_if_done(env.id, model_version, connection=connection)
+
+                        waiting_agents = set(
+                            [
+                                (Id.parse_id(prov).get_agent_name(), res.resource_version_id)
+                                for res in resources
+                                for prov in res.provides
+                            ]
+                        )
+
+                        for agent, resource_id in waiting_agents:
+                            aclient = self.agentmanager_service.get_agent_client(env.id, agent)
+                            if aclient is not None:
+                                await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
+
                 return 200
-
-            else:
-                # final resource update
-                if not keep_increment_cache:
-                    self.clear_env_cache(env)
-
-                model_version = None
-                for res in resources:
-                    await res.update_fields(last_deploy=finished, status=status)
-                    model_version = res.model
-
-                    if "purged" in res.attributes and res.attributes["purged"] and status == const.ResourceState.deployed:
-                        await data.Parameter.delete_all(environment=env.id, resource_id=res.resource_id)
-
-                await data.ConfigurationModel.mark_done_if_done(env.id, model_version)
-
-                waiting_agents = set(
-                    [
-                        (Id.parse_id(prov).get_agent_name(), res.resource_version_id)
-                        for res in resources
-                        for prov in res.provides
-                    ]
-                )
-
-                for agent, resource_id in waiting_agents:
-                    aclient = self.agentmanager_service.get_agent_client(env.id, agent)
-                    if aclient is not None:
-                        await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
-
-        return 200

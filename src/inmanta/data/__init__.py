@@ -151,6 +151,13 @@ class BaseDocument(object, metaclass=DocumentMeta):
     _connection_pool: asyncpg.pool.Pool = None
 
     @classmethod
+    def get_connection(cls) -> asyncpg.pool.PoolAcquireContext:
+        """
+            Returns a PoolAcquireContext that can be either awaited or used in a with statement to receive a Connection.
+        """
+        return cls._connection_pool.acquire()
+
+    @classmethod
     def table_name(cls) -> str:
         """
             Return the name of the collection
@@ -309,7 +316,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         return (column_names, values)
 
-    async def insert(self, connection: asyncpg.Connection = None) -> None:
+    async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
             Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
@@ -339,12 +346,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return await con.fetchrow(query, *values)
 
     @classmethod
-    async def _fetch_query(cls, query, *values):
-        async with cls._connection_pool.acquire() as con:
-            return await con.fetch(query, *values)
+    async def _fetch_query(cls, query, *values, connection: Optional[asyncpg.connection.Connection] = None):
+        if connection is None:
+            async with cls._connection_pool.acquire() as con:
+                return await con.fetch(query, *values)
+        return await connection.fetch(query, *values)
 
     @classmethod
-    async def _execute_query(cls, query, *values, connection: asyncpg.connection.Connection = None) -> str:
+    async def _execute_query(cls, query, *values, connection: Optional[asyncpg.connection.Connection] = None) -> str:
         if connection:
             return await connection.execute(query, *values)
         async with cls._connection_pool.acquire() as con:
@@ -405,7 +414,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         set_statement = ",".join(parts_of_set_statement)
         return (set_statement, values)
 
-    async def update_fields(self, **kwargs: Any) -> None:
+    async def update_fields(self, connection: Optional[asyncpg.Connection] = None, **kwargs: Any) -> None:
         """
             Update the given fields of this document in the database. It will update the fields in this object and do a specific
             $set in the database on this document.
@@ -419,7 +428,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(kwargs) + 1)
         values = values_set_statement + values_for_filter
         query = "UPDATE " + self.table_name() + " SET " + set_statement + " WHERE " + filter_statement
-        await self._execute_query(query, *values)
+        await self._execute_query(query, *values, connection=connection)
 
     @classmethod
     async def get_by_id(cls: Type[T], doc_id: uuid.UUID) -> Optional[T]:
@@ -434,8 +443,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return None
 
     @classmethod
-    async def get_one(cls: Type[T], **query) -> T:
-        results = await cls.get_list(**query)
+    async def get_one(cls: Type[T], connection: Optional[asyncpg.connection.Connection] = None, **query) -> T:
+        results = await cls.get_list(connection=connection, **query)
         if results:
             return results[0]
 
@@ -447,6 +456,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         limit: int = None,
         offset: int = None,
         no_obj: bool = False,
+        connection: Optional[asyncpg.connection.Connection] = None,
         **query: Any,
     ) -> List[T]:
         """
@@ -463,11 +473,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
             sql_query += " LIMIT " + str(limit)
         if offset is not None and offset > 0:
             sql_query += " OFFSET " + str(offset)
-        result = await cls.select_query(sql_query, values, no_obj=no_obj)
+        result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
         return result
 
     @classmethod
-    async def delete_all(cls, connection=None, **query):
+    async def delete_all(cls, connection: Optional[asyncpg.Connection] = None, **query):
         """
             Delete all documents that match the given query
         """
@@ -535,8 +545,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self.delete()
 
     @classmethod
-    async def select_query(cls, query, values, no_obj=False):
-        async with cls._connection_pool.acquire() as con:
+    async def select_query(cls, query, values, no_obj=False, connection: Optional[asyncpg.connection.Connection] = None):
+        async def perform_query(con: asyncpg.connection.Connection) -> object:
             async with con.transaction():
                 result = []
                 async for record in con.cursor(query, *values):
@@ -545,6 +555,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
                     else:
                         result.append(cls(from_postgres=True, **record))
                 return result
+
+        if connection is None:
+            async with cls._connection_pool.acquire() as con:
+                return await perform_query(con)
+        return await perform_query(connection)
 
     def to_dict(self) -> JsonType:
         """
@@ -866,7 +881,7 @@ class Environment(BaseDocument):
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
     }  # name new_option -> name deprecated_option
 
-    async def get(self, key: str) -> m.EnvSettingType:
+    async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """
             Get a setting in this environment.
 
@@ -891,10 +906,10 @@ class Environment(BaseDocument):
             raise KeyError()
 
         value = self._settings[key].default
-        await self.set(key, value)
+        await self.set(key, value, connection=connection)
         return value
 
-    async def set(self, key: str, value: m.EnvSettingType) -> None:
+    async def set(self, key: str, value: m.EnvSettingType, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
             Set a new setting in this environment.
 
@@ -919,7 +934,7 @@ class Environment(BaseDocument):
             + filter_statement
         )
         values = [self._get_value([key]), self._get_value(value)] + values
-        await self._execute_query(query, *values)
+        await self._execute_query(query, *values, connection=connection)
         self.settings[key] = value
 
     async def unset(self, key: str) -> None:
@@ -1211,8 +1226,8 @@ class Agent(BaseDocument):
         return cls._create_dict(from_postgres, kwargs)
 
     @classmethod
-    async def get(cls, env: uuid.UUID, endpoint: str) -> "Agent":
-        obj = await cls.get_one(environment=env, name=endpoint)
+    async def get(cls, env: uuid.UUID, endpoint: str, connection: Optional[asyncpg.connection.Connection] = None) -> "Agent":
+        obj = await cls.get_one(environment=env, name=endpoint, connection=connection)
         return obj
 
     @classmethod
@@ -1529,8 +1544,8 @@ class ResourceAction(BaseDocument):
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
     @classmethod
-    async def get(cls, action_id):
-        return await cls.get_one(action_id=action_id)
+    async def get(cls, action_id, connection: Optional[asyncpg.connection.Connection] = None):
+        return await cls.get_one(action_id=action_id, connection=connection)
 
     def set_field(self, name, value):
         self._updates[name] = value
@@ -1551,13 +1566,13 @@ class ResourceAction(BaseDocument):
                     self._updates["changes"][resource] = {}
                 self._updates["changes"][resource][field] = change
 
-    async def save(self):
+    async def save(self, connection: Optional[asyncpg.Connection] = None):
         """
             Save the changes
         """
         if len(self._updates) == 0:
             return
-        await self.update_fields(**self._updates)
+        await self.update_fields(connection=connection, **self._updates)
         self._updates = {}
 
     @classmethod
@@ -1632,7 +1647,10 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resources(
-        cls, environment: uuid.UUID, resource_version_ids: List[m.ResourceVersionIdStr]
+        cls,
+        environment: uuid.UUID,
+        resource_version_ids: List[m.ResourceVersionIdStr],
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> List["Resource"]:
         """
             Get all resources listed in resource_version_ids
@@ -1651,7 +1669,7 @@ class Resource(BaseDocument):
             + resource_version_ids_statement
             + ")"
         )
-        resources = await cls.select_query(query, values)
+        resources = await cls.select_query(query, values, connection=connection)
         return resources
 
     @classmethod
@@ -1809,11 +1827,16 @@ class Resource(BaseDocument):
             return resources[0]
 
     @classmethod
-    async def get(cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr) -> Optional["Resource"]:
+    async def get(
+        cls,
+        environment: uuid.UUID,
+        resource_version_id: m.ResourceVersionIdStr,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> Optional["Resource"]:
         """
             Get a resource with the given resource version id
         """
-        value = await cls.get_one(environment=environment, resource_version_id=resource_version_id)
+        value = await cls.get_one(environment=environment, resource_version_id=resource_version_id, connection=connection)
         return value
 
     @classmethod
@@ -1922,7 +1945,7 @@ class Resource(BaseDocument):
 
         return should_purge
 
-    async def insert(self, connection: Optional[asyncpg.Connection] = None) -> None:
+    async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
         await super(Resource, self).insert(connection=connection)
 
@@ -1936,9 +1959,9 @@ class Resource(BaseDocument):
         self.make_hash()
         await super(Resource, self).update(**kwargs)
 
-    async def update_fields(self, **kwargs: Any) -> None:
+    async def update_fields(self, connection: Optional[asyncpg.Connection] = None, **kwargs: Any) -> None:
         self.make_hash()
-        await super(Resource, self).update_fields(**kwargs)
+        await super(Resource, self).update_fields(connection=connection, **kwargs)
 
     def to_dict(self) -> Dict[str, Any]:
         self.make_hash()
@@ -2022,6 +2045,7 @@ class ConfigurationModel(BaseDocument):
         limit: int = None,
         offset: int = None,
         no_obj: bool = False,
+        connection: Optional[asyncpg.connection.Connection] = None,
         **query: Any,
     ) -> List["ConfigurationModel"]:
         transient_states = ",".join(["$" + str(i) for i in range(1, len(const.TRANSIENT_STATES) + 1)])
@@ -2046,7 +2070,7 @@ class ConfigurationModel(BaseDocument):
                     {order_by_statement}
                     {limit_statement}
                     {offset_statement}"""
-        query_result = await cls._fetch_query(query, *values)
+        query_result = await cls._fetch_query(query, *values, connection=connection)
         result = []
         for record in query_result:
             record = dict(record)
@@ -2196,7 +2220,7 @@ class ConfigurationModel(BaseDocument):
         self.deployed = True
 
     @classmethod
-    async def mark_done_if_done(cls, environment, version):
+    async def mark_done_if_done(cls, environment, version, connection: Optional[asyncpg.Connection] = None):
         query = f"""UPDATE {ConfigurationModel.table_name()}
                         SET deployed=True,
                             result=(CASE WHEN (
@@ -2220,7 +2244,7 @@ class ConfigurationModel(BaseDocument):
             cls._get_value(const.VersionState.success),
             cls._get_value(DONE_STATES),
         ]
-        await cls._execute_query(query, *values)
+        await cls._execute_query(query, *values, connection=connection)
 
     @classmethod
     async def get_increment(
