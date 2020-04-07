@@ -23,7 +23,7 @@ import time
 import uuid
 from asyncio import subprocess
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, Sequence
 from uuid import UUID
 
 from inmanta import const, data
@@ -151,7 +151,7 @@ class AgentManager(ServerSlice, SessionListener):
         self.add_background_task(self._seen_session(session))
 
     async def _seen_session(self, session: protocol.Session) -> None:
-        endpoints_with_new_primary = []
+        endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]] = []
         async with self.session_lock:
             endpoints_in_agent_manager = set(
                 [
@@ -168,13 +168,9 @@ class AgentManager(ServerSlice, SessionListener):
             endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session)
 
         now = datetime.now()
-        env = await data.Environment.get_by_id(session.tid)
-        if env is None:
-            LOGGER.warning("The environment id %s, for agent %s does not exist!", session.tid, session.id)
-
         await self._log_instance_creation_to_db(session, endpoints_to_add, now)
         await self._log_instance_expiry_to_db(session, endpoints_to_remove, now)
-        await self._log_primary_to_db(env, endpoints_with_new_primary, now)
+        await self._log_primary_to_db(session.tid, endpoints_with_new_primary, now)
         await self._flush_agent_presence(session, now)
 
     async def _use_new_active_session_for_agent(
@@ -204,7 +200,7 @@ class AgentManager(ServerSlice, SessionListener):
             del self.tid_endpoint_to_session[key]
         return new_active_session
 
-    async def _ensure_primary_if_not_exists(self, session: protocol.Session) -> List[Tuple[str, protocol.Session]]:
+    async def _ensure_primary_if_not_exists(self, session: protocol.Session) -> Sequence[Tuple[str, protocol.Session]]:
         """
             Make this session the primary session for the endpoints of this session if no primary exists and the agent is not
             paused.
@@ -226,7 +222,8 @@ class AgentManager(ServerSlice, SessionListener):
                 result.append((endpoint, session))
         return result
 
-    async def _failover_endpoints(self, session: protocol.Session, endpoints: List[str]) -> List[Tuple[str, protocol.Session]]:
+    async def _failover_endpoints(self, session: protocol.Session, endpoints: List[str]
+                                  ) -> Sequence[Tuple[str, Optional[protocol.Session]]]:
         """
             If the given session is the primary for a given endpoint, failover to a new session.
 
@@ -324,7 +321,7 @@ class AgentManager(ServerSlice, SessionListener):
         key = (env.id, nodename)
         session = self.tid_endpoint_to_session.get(key, None)
         if session is not None:
-            await self._log_primary_to_db(env, [(nodename, session)], datetime.now())
+            await self._log_primary_to_db(env.id, [(nodename, session)], datetime.now())
 
         return saved
 
@@ -350,7 +347,7 @@ class AgentManager(ServerSlice, SessionListener):
     async def _log_session_creation_to_db(
         self,
         tid: uuid.UUID,
-        endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]],
+        endpoints_with_new_primary: Sequence[Tuple[str, Optional[protocol.Session]]],
         session: protocol.Session,
         now: datetime,
     ) -> None:
@@ -359,10 +356,6 @@ class AgentManager(ServerSlice, SessionListener):
         """
         sid = session.get_id()
         nodename = session.nodename
-
-        env = await data.Environment.get_by_id(tid)
-        if env is None:
-            LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
 
         proc = await data.AgentProcess.get_one(sid=sid)
 
@@ -373,9 +366,7 @@ class AgentManager(ServerSlice, SessionListener):
             await proc.update_fields(last_seen=now, expired=None)
 
         await self._log_instance_creation_to_db(session, session.endpoint_names, now)
-
-        if env is not None:
-            await self._log_primary_to_db(env, endpoints_with_new_primary, now)
+        await self._log_primary_to_db(tid, endpoints_with_new_primary, now)
 
     async def _log_instance_creation_to_db(self, session: protocol.Session, endpoints: List[str], now: datetime) -> None:
         """
@@ -418,7 +409,7 @@ class AgentManager(ServerSlice, SessionListener):
     async def _log_session_expiry_to_db(
         self,
         tid: uuid.UUID,
-        endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]],
+        endpoints_with_new_primary: Sequence[Tuple[str, Optional[protocol.Session]]],
         session: protocol.Session,
         now: datetime,
     ) -> None:
@@ -426,9 +417,6 @@ class AgentManager(ServerSlice, SessionListener):
             Note: This method call is allowed to fail when the database connection is lost.
         """
         sid = session.get_id()
-        env = await data.Environment.get_by_id(tid)
-        if env is None:
-            LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
 
         aps = await data.AgentProcess.get_by_sid(sid=sid)
         if aps is None:
@@ -437,8 +425,7 @@ class AgentManager(ServerSlice, SessionListener):
             await aps.update_fields(expired=now)
             await self._log_instance_expiry_to_db(session, session.endpoint_names, now)
 
-        if env is not None:
-            await self._log_primary_to_db(env, endpoints_with_new_primary, now)
+        await self._log_primary_to_db(tid, endpoints_with_new_primary, now)
 
     async def _log_instance_expiry_to_db(self, session: protocol.Session, endpoints: List[str], now: datetime):
         if not endpoints:
@@ -462,13 +449,7 @@ class AgentManager(ServerSlice, SessionListener):
         return result
 
     async def _flush_agent_presence(self, session: protocol.Session, now: datetime) -> None:
-        tid = session.tid
         sid = session.get_id()
-
-        env = await data.Environment.get_by_id(tid)
-        if env is None:
-            LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
-            return
 
         aps = await data.AgentProcess.get_by_sid(sid=sid)
         if aps is None:
@@ -478,7 +459,7 @@ class AgentManager(ServerSlice, SessionListener):
         await aps.update_fields(last_seen=now)
 
     async def _log_primary_to_db(
-        self, env: data.Environment, endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]], now: datetime
+        self, env_id: uuid.UUID, endpoints_with_new_primary: Sequence[Tuple[str, Optional[protocol.Session]]], now: datetime
     ) -> None:
         """
             Update the primary agent instance for agents present in the database.
@@ -492,14 +473,14 @@ class AgentManager(ServerSlice, SessionListener):
             :param now: Timestamp of this failover
         """
         for (endpoint, session) in endpoints_with_new_primary:
-            agent = await data.Agent.get(env.id, endpoint)
+            agent = await data.Agent.get(env_id, endpoint)
             if agent is None:
                 continue
 
             if session is None:
                 await agent.update_fields(last_failover=now, primary=None)
             else:
-                instances = await data.AgentInstance.active_for(tid=env.id, endpoint=agent.name, process=session.get_id())
+                instances = await data.AgentInstance.active_for(tid=env_id, endpoint=agent.name, process=session.get_id())
                 if instances:
                     await agent.update_fields(last_failover=now, primary=instances[0].id)
                 else:

@@ -1026,7 +1026,11 @@ class Agent(SessionEndpoint):
             self._env.use_virtual_env()
             self._loader = CodeLoader(self._storage["code"])
 
-        self.agent_map: Optional[Dict[str, str]] = agent_map
+        self.agent_map: Dict[str, str]
+        if agent_map is None:
+            self.agent_map = {}
+        else:
+            self.agent_map = agent_map
 
     async def _init_agent_map(self):
         if cfg.use_autostart_agent_map.get():
