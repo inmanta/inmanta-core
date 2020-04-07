@@ -529,7 +529,7 @@ class AgentManager(ServerSlice, SessionListener):
 
             # TODO: perhaps show in dashboard?
             return await asyncio.create_subprocess_exec(
-                sys.executable, *full_args, cwd=cwd, env=os.environ.copy(), stdout=sys.stdout, stderr=sys.stderr
+                sys.executable, *full_args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle
             )
         finally:
             if outhandle is not None:
@@ -834,8 +834,6 @@ ssl=True
         else:
             # Internal agent is paused or down
             for session in self.sessions.values():
-                print(session.__dict__)
-                print(session.nodename)
                 if "internal" in session.endpoint_names:
                     self.add_background_task(session.get_client().update_agent_map(new_agent_map))
                     return
