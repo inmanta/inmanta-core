@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import uuid
-from typing import List, Optional, Union, Dict
+from typing import Dict, List, Optional, Union
 
 from inmanta.const import AgentAction
 from inmanta.data import model

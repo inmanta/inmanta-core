@@ -26,13 +26,13 @@ import psutil
 import pytest
 from psutil import NoSuchProcess, Process
 
-from inmanta.const import AgentStatus
 from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent
 from inmanta import agent, config, const, data, execute
-from inmanta.agent.agent import Agent
 from inmanta.agent import config as agent_config
+from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
+from inmanta.const import AgentStatus
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
@@ -1443,6 +1443,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
             result = await client.list_agents(tid=environment)
             assert result.code == 200
             return len([x for x in result.result["agents"] if x["state"] == "up"]) == nr_agents
+
         return _check_wait_condition
 
     async def assert_session_state(expected_agent_states: Dict[str, AgentStatus], expected_agent_instances: List[str]) -> None:
@@ -1463,7 +1464,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
             if agent_name not in expected_agent_instances:
                 assert agent_name not in agents
             elif state == AgentStatus.down:
-                assert (agents[agent_name].expired is not None)
+                assert agents[agent_name].expired is not None
             else:
                 assert agents[agent_name].expired is None
 

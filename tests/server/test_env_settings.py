@@ -86,11 +86,7 @@ async def test_environment_settings(client, server, environment_default):
     assert result.code == 200
 
     agent_map = {"internal": "", "agent1": "", "agent2": "localhost", "agent3": "user@agent3"}
-    result = await client.set_setting(
-        tid=environment_default,
-        id=data.AUTOSTART_AGENT_MAP,
-        value=agent_map,
-    )
+    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP, value=agent_map,)
     assert result.code == 200
 
     # Internal agent is missing

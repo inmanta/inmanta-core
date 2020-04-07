@@ -44,7 +44,7 @@ use_autostart_agent_map = Option(
     False,
     """If this option is set to true, the agent-map of this agent will be set the the autostart_agent_map configured on the
     server. The agent_map will be kept up-to-date automatically.""",
-    is_bool
+    is_bool,
 )
 
 environment = Option("config", "environment", None, "The environment this agent or compile belongs to", is_uuid_opt)
@@ -55,7 +55,7 @@ agent_names = Option(
     "$node-name",
     """Names of the agents this instance should deploy configuration for. When the configuration option
 config.use_autostart_agent_map is set to true, this option will be ignored.""",
-    is_str
+    is_str,
 )
 
 agent_interval = Option(

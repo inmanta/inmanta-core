@@ -1101,8 +1101,10 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods_v2.update_agent_map)
     async def update_agent_map(self, agent_map: Dict[str, str]) -> None:
         if not cfg.use_autostart_agent_map.get():
-            LOGGER.warning("Agent received an update_agent_map() trigger, but agent is not running with "
-                           "the use_autostart_agent_map option.")
+            LOGGER.warning(
+                "Agent received an update_agent_map() trigger, but agent is not running with "
+                "the use_autostart_agent_map option."
+            )
             return
         async with self._instances_lock:
             LOGGER.debug("Received update_agent_map() trigger with agent_map %s", agent_map)

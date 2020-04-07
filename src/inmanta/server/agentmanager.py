@@ -23,7 +23,7 @@ import time
 import uuid
 from asyncio import subprocess
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional, Tuple, Set
+from typing import Dict, Iterable, List, Optional, Tuple
 from uuid import UUID
 
 from inmanta import const, data
@@ -153,9 +153,13 @@ class AgentManager(ServerSlice, SessionListener):
     async def _seen_session(self, session: protocol.Session) -> None:
         endpoints_with_new_primary = []
         async with self.session_lock:
-            endpoints_in_agent_manager = set([endpoint
-                                          for (tid, endpoint) in self.tid_endpoint_to_session.keys()
-                                          if self.tid_endpoint_to_session[(tid, endpoint)].id == session.id])
+            endpoints_in_agent_manager = set(
+                [
+                    endpoint
+                    for (tid, endpoint) in self.tid_endpoint_to_session.keys()
+                    if self.tid_endpoint_to_session[(tid, endpoint)].id == session.id
+                ]
+            )
             endpoints_in_session = set(session.endpoint_names)
             endpoints_to_add = list(endpoints_in_session - endpoints_in_agent_manager)
             endpoints_to_remove = list(endpoints_in_agent_manager - endpoints_in_session)
@@ -373,10 +377,7 @@ class AgentManager(ServerSlice, SessionListener):
         if env is not None:
             await self._log_primary_to_db(env, endpoints_with_new_primary, now)
 
-    async def _log_instance_creation_to_db(self,
-                                           session: protocol.Session,
-                                           endpoints: List[str],
-                                           now: datetime) -> None:
+    async def _log_instance_creation_to_db(self, session: protocol.Session, endpoints: List[str], now: datetime) -> None:
         """
             Note: This method call is allowed to fail when the database connection is lost.
         """

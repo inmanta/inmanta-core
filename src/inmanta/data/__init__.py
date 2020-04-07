@@ -1139,7 +1139,7 @@ class AgentInstance(BaseDocument):
         """
         if not endpoints:
             return
-        names_subquery = ",".join([f"${i}" for i in range(4, 4+len(endpoints))])
+        names_subquery = ",".join([f"${i}" for i in range(4, 4 + len(endpoints))])
         query = f"""UPDATE {cls.table_name()}
                     SET expired=$1 WHERE tid=$2 AND process=$3 AND name IN ({names_subquery})
                  """
