@@ -419,7 +419,7 @@ class ResourceScheduler(object):
     def __init__(
         self, agent: "AgentInstance", env_id: uuid.UUID, name: str, cache: AgentCache, ratelimiter: asyncio.Semaphore
     ) -> None:
-        self.generation: Dict[str, ResourceAction] = {}
+        self.generation: Dict[ResourceIdStr, ResourceAction] = {}
         self.cad: Dict[str, RemoteResourceAction] = {}
         self._env_id = env_id
         self.agent = agent
@@ -498,7 +498,7 @@ class ResourceScheduler(object):
         self.logger.info("Running %s for reason: %s" % (gid, reason))
 
         # re-generate generation
-        self.generation: Dict[ResourceIdStr, ResourceAction] = {
+        self.generation = {
             r.id.resource_str(): ResourceAction(self, r, gid, reason) for r in resources
         }
 
