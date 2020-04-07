@@ -498,9 +498,7 @@ class ResourceScheduler(object):
         self.logger.info("Running %s for reason: %s" % (gid, reason))
 
         # re-generate generation
-        self.generation = {
-            r.id.resource_str(): ResourceAction(self, r, gid, reason) for r in resources
-        }
+        self.generation = {r.id.resource_str(): ResourceAction(self, r, gid, reason) for r in resources}
 
         # mark undeployable
         for key, res in self.generation.items():
