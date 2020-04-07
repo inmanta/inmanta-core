@@ -15,10 +15,11 @@
 
     Contact: code@inmanta.com
 """
-import pytest
 import os
-import uuid
 import subprocess
+import uuid
+
+import pytest
 
 from inmanta.agent import reporting
 from inmanta.agent.handler import HandlerContext, InvalidOperation
@@ -85,7 +86,8 @@ async def test_agent_cannot_retrieve_autostart_agent_map(unused_tcp_port_factory
     free_port = unused_tcp_port_factory()
     config_file = tmpdir.join("inmanta.cfg")
     with open(config_file, "w") as f:
-        f.write(f"""[config]
+        f.write(
+            f"""[config]
 state-dir={state_dir}
 environment={uuid.uuid4()}
 use_autostart_agent_map=true
@@ -93,11 +95,10 @@ use_autostart_agent_map=true
 [agent_rest_transport]
 port={free_port}
 host=127.0.0.1
-        """)
-    try:
-        completed_process = subprocess.run(
-            ["inmanta", "-vvv", "-c", config_file, "agent"], stdout=subprocess.PIPE, timeout=10
+        """
         )
+    try:
+        completed_process = subprocess.run(["inmanta", "-vvv", "-c", config_file, "agent"], stdout=subprocess.PIPE, timeout=10)
         assert completed_process.returncode == 1
         assert "Failed to retrieve the autostart_agent_map setting from the server" in completed_process.stdout.decode()
     except subprocess.TimeoutExpired as e:
