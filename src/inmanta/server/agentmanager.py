@@ -151,27 +151,27 @@ class AgentManager(ServerSlice, SessionListener):
         self.add_background_task(self._seen_session(session))
 
     async def _seen_session(self, session: protocol.Session) -> None:
-        # TODO: Check if session is autostarted agent session
         endpoints_with_new_primary = []
         async with self.session_lock:
             endpoints_in_agent_manager = set([endpoint
                                           for (tid, endpoint) in self.tid_endpoint_to_session.keys()
                                           if self.tid_endpoint_to_session[(tid, endpoint)].id == session.id])
             endpoints_in_session = set(session.endpoint_names)
-            endpoints_to_add = endpoints_in_session - endpoints_in_agent_manager
-            endpoints_to_remove = endpoints_in_agent_manager - endpoints_in_session
+            endpoints_to_add = list(endpoints_in_session - endpoints_in_agent_manager)
+            endpoints_to_remove = list(endpoints_in_agent_manager - endpoints_in_session)
 
             endpoints_with_new_primary += await self._failover_endpoints(session, endpoints_to_remove)
             endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session)
 
-            now = datetime.now()
-            env = await data.Environment.get_by_id(session.tid)
-            if env is None:
-                LOGGER.warning("The environment id %s, for agent %s does not exist!", session.tid, session.id)
-            await self._log_instance_creation_to_db(session, list(endpoints_to_add), now)
-            await self._log_instance_expiry_to_db(session, list(endpoints_to_remove), now)
-            await self._log_primary_to_db(env, endpoints_with_new_primary, now)
-            await self._flush_agent_presence(session, now)
+        now = datetime.now()
+        env = await data.Environment.get_by_id(session.tid)
+        if env is None:
+            LOGGER.warning("The environment id %s, for agent %s does not exist!", session.tid, session.id)
+
+        await self._log_instance_creation_to_db(session, endpoints_to_add, now)
+        await self._log_instance_expiry_to_db(session, endpoints_to_remove, now)
+        await self._log_primary_to_db(env, endpoints_with_new_primary, now)
+        await self._flush_agent_presence(session, now)
 
     async def _use_new_active_session_for_agent(
         self, tid: uuid.UUID, endpoint_name: str, wait_for_enable_agent: bool = False

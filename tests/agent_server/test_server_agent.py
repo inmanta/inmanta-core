@@ -1386,15 +1386,13 @@ def ps_diff(original, current_process, diff=0):
 
 
 @pytest.mark.asyncio(timeout=15)
-async def test_autostart_mapping(server, client, clienthelper, resource_container, environment, no_agent_backoff, caplog):
+async def test_autostart_mapping(server, client, clienthelper, resource_container, environment, no_agent_backoff):
     """
         Test whether an autostarted agent updates its agent-map correctly when the autostart_agent_map is updated on the server.
 
         The handler code in the resource_container is not available to the autostarted agent. When the agent loads these
         resources it will mark them as unavailable. There is only one agent started when deploying is checked.
     """
-    caplog.set_level(logging.DEBUG)
-
     env_uuid = uuid.UUID(environment)
     agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
     current_process = psutil.Process()

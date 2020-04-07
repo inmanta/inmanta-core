@@ -271,10 +271,8 @@ def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
                         * unpause: A unpaused agent will be able to execute deploy operations.
     """
 
-# TODO: client type???
-# TODO: Put this in agent_action API call???
-# TODO: timeout???
-@typedmethod(path="/agentmap", api=False, server_agent=True, timeout=5, operation="POST", client_types=[], api_version=2)
+
+@typedmethod(path="/agentmap", api=False, server_agent=True, operation="POST", client_types=[], api_version=2)
 def update_agent_map(agent_map: Dict[str, str]) -> None:
     """
         Notify an agent about the fact that the autostart_agent_map has been updated.

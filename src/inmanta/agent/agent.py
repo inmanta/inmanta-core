@@ -1035,8 +1035,6 @@ class Agent(SessionEndpoint):
             assert env_id is not None
             result = await self._client.environment_setting_get(env_id, data.AUTOSTART_AGENT_MAP)
             if result.code != 200:
-                print(result.__dict__)
-                # TODO: enhance
                 raise Exception("Failed to retrieve the autostart_agent_map from the server.")
             self.agent_map = result.result["data"]["settings"][data.AUTOSTART_AGENT_MAP]
         elif self.agent_map is None:
