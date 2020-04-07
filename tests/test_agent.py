@@ -16,6 +16,9 @@
     Contact: code@inmanta.com
 """
 import pytest
+import os
+import uuid
+import subprocess
 
 from inmanta.agent import reporting
 from inmanta.agent.handler import HandlerContext, InvalidOperation
@@ -67,3 +70,39 @@ def test_context_changes():
 
     with pytest.raises(InvalidOperation):
         ctx.update_changes({"value": "test"})
+
+
+@pytest.mark.asyncio
+async def test_agent_cannot_retrieve_autostart_agent_map(unused_tcp_port_factory, tmpdir):
+    """
+        When an agent with the config option use_autostart_agent_map set to true, cannot retrieve the autostart_agent_map
+        from the server at startup, the process should exit. Otherwise the process will hang with an empty ioloop and no
+        session to the server. This tests verifies whether the process exits correctly.
+    """
+    state_dir = tmpdir.join("state")
+    os.mkdir(state_dir)
+
+    free_port = unused_tcp_port_factory()
+    config_file = tmpdir.join("inmanta.cfg")
+    with open(config_file, "w") as f:
+        f.write(f"""[config]
+state-dir={state_dir}
+environment={uuid.uuid4()}
+use_autostart_agent_map=true
+
+[agent_rest_transport]
+port={free_port}
+host=127.0.0.1
+        """)
+    try:
+        completed_process = subprocess.run(
+            ["inmanta", "-vvv", "-c", config_file, "agent"], stdout=subprocess.PIPE, timeout=10
+        )
+        assert completed_process.returncode == 1
+        assert "Failed to retrieve the autostart_agent_map setting from the server" in completed_process.stdout.decode()
+    except subprocess.TimeoutExpired as e:
+        for line in e.stdout.decode().split("\n"):
+            print(line)
+        for line in e.stderr.decode().split("\n"):
+            print(line)
+        raise e

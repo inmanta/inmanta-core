@@ -23,6 +23,7 @@ import os
 import random
 import time
 import uuid
+import sys
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
@@ -1039,7 +1040,10 @@ class Agent(SessionEndpoint):
             assert env_id is not None
             result = await self._client.environment_setting_get(env_id, data.AUTOSTART_AGENT_MAP)
             if result.code != 200:
-                raise Exception("Failed to retrieve the autostart_agent_map from the server.")
+                error_msg = result.result["message"]
+                LOGGER.error(f"Failed to retrieve the autostart_agent_map setting from the server. %s", error_msg)
+                await self.stop()
+                sys.exit(1)
             self.agent_map = result.result["data"]["settings"][data.AUTOSTART_AGENT_MAP]
         elif self.agent_map is None:
             self.agent_map = cfg.agent_map.get()
