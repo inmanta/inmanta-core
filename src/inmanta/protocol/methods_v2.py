@@ -247,7 +247,7 @@ def get_api_docs(format: Optional[str] = None) -> ReturnValue[Union[OpenAPI, str
     """
 
 
-@typedmethod(path="/agent/{name}/{action}", operation="POST", arg_options=methods.ENV_OPTS, client_types=["api"], api_version=2)
+@typedmethod(path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=["api"], api_version=2)
 def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
     """
         Execute an action on an agent
@@ -260,7 +260,7 @@ def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
     """
 
 
-@typedmethod(path="/agents/{action}", operation="POST", arg_options=methods.ENV_OPTS, client_types=["api"], api_version=2)
+@typedmethod(path="/agents/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=["api"], api_version=2)
 def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
     """
         Execute an action on all agents in the given environment.

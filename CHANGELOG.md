@@ -18,6 +18,7 @@
  - Agent manager remains consistent when the database connection is lost (#1893)
  - Ensure correct version is used in api docs (#1994)
  - Fixed double assignment error resulting from combining constructor kwargs with default values (#2003)
+ - Fixed recursive unwrapping of dict return values from plugins (#2004)
 
 ## Added
  - Experimental data trace, root cause and graphic data flow visualization applications (#1820, #1831, #1821, #1822)
@@ -29,6 +30,7 @@
  - Resource Action Log now includes timestamps (#1496)
  - Added support to pause an agent (#1128)
  - Added --no-tag option to module tool (#1939)
+ - Added base exception for plugins and corresponding documentation (#1205)
  - Added tags to openapi definition (#1751)
  - Added support to pause an agent (#1128, #1982)
 

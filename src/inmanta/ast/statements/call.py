@@ -23,7 +23,15 @@ from typing import Dict, List, Optional, Tuple
 import inmanta.ast.type as InmantaType
 import inmanta.execute.dataflow as dataflow
 from inmanta import plugins
-from inmanta.ast import ExternalException, LocatableString, Location, Namespace, RuntimeException, WrappingRuntimeException
+from inmanta.ast import (
+    ExplicitPluginException,
+    ExternalException,
+    LocatableString,
+    Location,
+    Namespace,
+    RuntimeException,
+    WrappingRuntimeException,
+)
 from inmanta.ast.statements import ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.dataflow import DataflowGraph
@@ -196,8 +204,16 @@ class PluginFunction(Function):
         else:
             try:
                 return self.plugin(*args, **kwargs)
+            except RuntimeException as e:
+                raise WrappingRuntimeException(
+                    self.ast_node, "Exception in direct execution for plugin %s" % self.ast_node.name, e
+                )
+            except plugins.PluginException as e:
+                raise ExplicitPluginException(
+                    self.ast_node, "PluginException in direct execution for plugin %s" % self.ast_node.name, e
+                )
             except Exception as e:
-                raise WrappingRuntimeException(self.ast_node, "Exception in direct execution for plugin %s" % self.name, e)
+                raise ExternalException(self.ast_node, "Exception in direct execution for plugin %s" % self.ast_node.name, e)
 
     def call_in_context(
         self, args: List[object], kwargs: Dict[str, object], resolver: Resolver, queue: QueueScheduler, result: ResultVariable
@@ -223,6 +239,8 @@ class PluginFunction(Function):
                 raise e
             except RuntimeException as e:
                 raise WrappingRuntimeException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
+            except plugins.PluginException as e:
+                raise ExplicitPluginException(self.ast_node, "PluginException in plugin %s" % self.ast_node.name, e)
             except Exception as e:
                 raise ExternalException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
 

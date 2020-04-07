@@ -630,7 +630,7 @@ async def test_agent_actions(server, client, async_finalizer):
     )
     # Pause agent1 and pause again
     for _ in range(2):
-        result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.pause)
+        result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.pause.value)
         assert result.code == 200
         await assert_agents_paused(
             expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
@@ -638,7 +638,7 @@ async def test_agent_actions(server, client, async_finalizer):
 
     # Unpause agent1 and unpause again
     for _ in range(2):
-        result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.unpause)
+        result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.unpause.value)
         assert result.code == 200
         await assert_agents_paused(
             expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
@@ -646,7 +646,7 @@ async def test_agent_actions(server, client, async_finalizer):
 
     # Pause all agents in env1 and pause again
     for _ in range(2):
-        result = await client.all_agents_action(tid=env1_id, action=AgentAction.pause)
+        result = await client.all_agents_action(tid=env1_id, action=AgentAction.pause.value)
         assert result.code == 200
         await assert_agents_paused(
             expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): True, (env2_id, "agent1"): False}
@@ -654,7 +654,7 @@ async def test_agent_actions(server, client, async_finalizer):
 
     # Unpause all agents in env1 and unpause again
     for _ in range(2):
-        result = await client.all_agents_action(tid=env1_id, action=AgentAction.unpause)
+        result = await client.all_agents_action(tid=env1_id, action=AgentAction.unpause.value)
         assert result.code == 200
         await assert_agents_paused(
             expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
