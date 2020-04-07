@@ -17,10 +17,10 @@
 """
 
 import re
+import warnings
 from typing import List
 
 import pytest
-import warnings
 
 from inmanta.ast import LocatableString, Namespace
 from inmanta.ast.blocks import BasicBlock
