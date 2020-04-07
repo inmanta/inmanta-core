@@ -18,7 +18,7 @@
 import os
 
 import inmanta.compiler as compiler
-from inmanta.ast import Namespace
+from inmanta.ast import ExplicitPluginException, Namespace
 
 
 def test_plugin_excn(snippetcompiler):
@@ -220,3 +220,22 @@ import test_1920
         f" (original at ({modpath}/plugins/__init__.py:5:1))"
         f" (duplicate at ({modpath}/model/_init.cf:1:16))",
     )
+
+
+def test_explicit_plugin_exception(snippetcompiler):
+    msg: str = "my exception message"
+    snippetcompiler.setup_for_snippet(
+        """
+import tests
+
+tests::raise_exception("%s")
+        """
+        % msg,
+    )
+    try:
+        compiler.do_compile()
+        assert False, "Expected ExplicitPluginException"
+    except ExplicitPluginException as e:
+        assert e.__cause__.message == msg
+    except Exception as e:
+        assert False, "Expected ExplicitPluginException, got %s" % e

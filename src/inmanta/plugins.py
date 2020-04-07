@@ -454,6 +454,11 @@ class Plugin(NamedType, metaclass=PluginMeta):
         return self.get_full_name()
 
 
+class PluginException(Exception):
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+
 def plugin(
     function: Callable = None, commands: List[str] = None, emits_statements: bool = False, allow_unknown: bool = False
 ) -> None:  # noqa: H801

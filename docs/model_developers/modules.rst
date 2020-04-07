@@ -254,6 +254,18 @@ Argument type annotations are strings that refer to Inmanta primitive types or t
 entity is passed to a plugin, the python code of the plugin can navigate relations throughout the
 orchestration model to access attributes of other entities.
 
+A base exception for plugins is provided in ``inmanta.plugins.PluginException``. Exceptions raised
+from a plugin should be of a subtype of this base exception.
+
+.. code-block:: python
+    :linenos:
+
+    from inmanta.plugins import plugin, PluginException
+
+    @plugin
+    def raise_exception(message: "string"):
+        raise PluginException(message)
+
 If your plugin requires external libraries, include a requirements.txt in the module. The libraries
 listed in this file are automatically installed by the compiler and agents.
 

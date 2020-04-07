@@ -29,6 +29,7 @@
  - Resource Action Log now includes timestamps (#1496)
  - Added support to pause an agent (#1128)
  - Added --no-tag option to module tool (#1939)
+ - Added base exception for plugins and corresponding documentation (#1205)
  - Added tags to openapi definition (#1751)
  - Added support to pause an agent (#1128, #1982)
 
