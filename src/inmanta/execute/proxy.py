@@ -18,7 +18,7 @@
 
 from collections import Mapping
 from copy import copy
-from typing import Any, Optional, Union
+from typing import Any, Optional, Tuple, Union
 
 from inmanta.ast import RuntimeException
 from inmanta.execute.util import NoneValue, Unknown
@@ -75,11 +75,26 @@ class DynamicProxy(object):
 
     @classmethod
     def unwrap(cls, item):
+        if item is None:
+            return NoneValue()
+
         if isinstance(item, DynamicProxy):
             return item._get_instance()
 
         if isinstance(item, list):
             return [cls.unwrap(x) for x in item]
+
+        if isinstance(item, dict):
+
+            def recurse_dict_item(key_value: Tuple[object, object]) -> Tuple[object, object]:
+                (key, value) = key_value
+                if not isinstance(key, str):
+                    raise RuntimeException(
+                        None, "dict keys should be strings, got %s of type %s with dict value %s" % (key, type(key), value)
+                    )
+                return (key, cls.unwrap(value))
+
+            return dict(map(recurse_dict_item, item.items()))
 
         return item
 
