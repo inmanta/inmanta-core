@@ -1,6 +1,0 @@
-[epel]
-name = epel
-enabled=1
-gpgcheck=1
-baseurl = https://mirror.23media.com/epel/7/$basearch
-gpgkey = https://mirror.23media.com/epel/RPM-GPG-KEY-EPEL-7Server
