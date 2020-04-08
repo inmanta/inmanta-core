@@ -34,6 +34,7 @@
  - Added base exception for plugins and corresponding documentation (#1205)
  - Added tags to openapi definition (#1751)
  - Added support to pause an agent (#1128, #1982)
+ - Plugins are now imported in the inmanta_plugins package to allow importing submodules (#507)
 
 # v 2020.1 (2020-02-19) Changes in this release:
 
