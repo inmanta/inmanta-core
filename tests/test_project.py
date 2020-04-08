@@ -16,8 +16,13 @@
     Contact: code@inmanta.com
 """
 import uuid
+from typing import cast
 
 import pytest
+
+from inmanta.data import model
+from inmanta.server import SLICE_ENVIRONMENT
+from inmanta.server.services.environmentservice import EnvironmentAction, EnvironmentListener, EnvironmentService
 
 
 @pytest.mark.asyncio
@@ -245,3 +250,85 @@ async def test_create_with_id(client):
 
     result = await client.create_environment(project_id=project_id, name="test_env2", environment_id=env_id)
     assert result.code == 500
+
+
+@pytest.mark.asyncio
+async def test_environment_listener(server, client_v2):
+    class EnvironmentListenerCounter(EnvironmentListener):
+        def __init__(self):
+            self.counter = 0
+
+        async def environment_action(self, action: EnvironmentAction, env: model.Environment) -> None:
+            self.counter += 1
+
+    create_environment_listener = EnvironmentListenerCounter()
+    update_environment_listener = EnvironmentListenerCounter()
+    delete_environment_listener = EnvironmentListenerCounter()
+    clear_environment_listener = EnvironmentListenerCounter()
+
+    environment_service = cast(EnvironmentService, server.get_slice(SLICE_ENVIRONMENT))
+    environment_service.register_listener(EnvironmentAction.created, create_environment_listener)
+    environment_service.register_listener(EnvironmentAction.updated, update_environment_listener)
+    environment_service.register_listener(EnvironmentAction.deleted, delete_environment_listener)
+    environment_service.register_listener(EnvironmentAction.cleared, clear_environment_listener)
+    result = await client_v2.project_create("project-test")
+    assert result.code == 200
+    assert "data" in result.result
+    assert "id" in result.result["data"]
+
+    project_id = result.result["data"]["id"]
+
+    result = await client_v2.environment_create(project_id=project_id, name="dev")
+    assert result.code == 200
+    assert "data" in result.result
+    assert "id" in result.result["data"]
+    assert "project_id" in result.result["data"]
+    assert project_id == result.result["data"]["project_id"]
+    assert "dev" == result.result["data"]["name"]
+    env1_id = result.result["data"]["id"]
+
+    result = await client_v2.environment_create(project_id=project_id, name="dev2")
+    assert result.code == 200
+    assert "data" in result.result
+    assert "id" in result.result["data"]
+    assert "project_id" in result.result["data"]
+    assert project_id == result.result["data"]["project_id"]
+    assert "dev2" == result.result["data"]["name"]
+
+    # modify branch and repo
+    result = await client_v2.environment_modify(id=env1_id, name="dev", repository="test")
+    assert result.code == 200
+
+    result = await client_v2.environment_modify(id=env1_id, name="dev", branch="test")
+    assert result.code == 200
+
+    result = await client_v2.project_list()
+    assert result.code == 200
+    assert "data" in result.result
+    assert len(result.result["data"]) == 1
+    assert len(result.result["data"][0]["environments"]) == 2
+
+    # Get an environment
+    result = await client_v2.environment_get(id=env1_id)
+    assert result.code == 200
+    assert result.result["data"]["name"] == "dev"
+
+    result = await client_v2.environment_delete(id=uuid.uuid4())
+    assert result.code == 404
+
+    # Decommission
+    result = await client_v2.environment_decommission(id=env1_id)
+    assert result.code == 200
+
+    # Clear
+    result = await client_v2.environment_clear(id=env1_id)
+    assert result.code == 200
+
+    # Delete
+    result = await client_v2.environment_delete(id=env1_id)
+    assert result.code == 200
+
+    assert create_environment_listener.counter == 2
+    assert update_environment_listener.counter == 3
+    assert clear_environment_listener.counter == 1
+    assert delete_environment_listener.counter == 1

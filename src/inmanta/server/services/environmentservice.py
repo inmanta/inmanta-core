@@ -20,7 +20,9 @@ import logging
 import os
 import shutil
 import uuid
-from typing import List, Optional, cast
+from collections import defaultdict
+from enum import Enum
+from typing import Dict, List, Optional, cast
 
 from inmanta import data
 from inmanta.data import model
@@ -54,6 +56,18 @@ def rename_fields(env: model.Environment) -> JsonType:
     return env_dict
 
 
+class EnvironmentAction(str, Enum):
+    created = "create"
+    deleted = "delete"
+    cleared = "clear"
+    updated = "update"
+
+
+class EnvironmentListener:
+    async def environment_action(self, action: EnvironmentAction, env: model.Environment) -> None:
+        pass
+
+
 class EnvironmentService(protocol.ServerSlice):
     """Slice with project and environment management"""
 
@@ -61,9 +75,11 @@ class EnvironmentService(protocol.ServerSlice):
     agentmanager: AgentManager
     orchestration_service: OrchestrationService
     resource_service: ResourceService
+    listeners: Dict[EnvironmentAction, List[EnvironmentListener]]
 
     def __init__(self) -> None:
         super(EnvironmentService, self).__init__(SLICE_ENVIRONMENT)
+        self.listeners = defaultdict(list)
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER, SLICE_DATABASE, SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE]
@@ -170,6 +186,7 @@ class EnvironmentService(protocol.ServerSlice):
         try:
             await env.set(key, value)
             warnings = await self._setting_change(env, key)
+            await self.notify_listeners(EnvironmentAction.updated, env.to_dto())
             return attach_warnings(200, None, warnings)
         except KeyError:
             raise NotFound()
@@ -186,6 +203,7 @@ class EnvironmentService(protocol.ServerSlice):
         try:
             await env.unset(key)
             warnings = await self._setting_change(env, key)
+            await self.notify_listeners(EnvironmentAction.updated, env.to_dto())
             return attach_warnings(200, None, warnings)
         except KeyError:
             raise NotFound()
@@ -213,6 +231,7 @@ class EnvironmentService(protocol.ServerSlice):
 
         env = data.Environment(id=environment_id, name=name, project=project_id, repo_url=repository, repo_branch=branch)
         await env.insert()
+        await self.notify_listeners(EnvironmentAction.created, env.to_dto())
         return env.to_dto()
 
     @protocol.handle(methods_v2.environment_modify, environment_id="id")
@@ -236,6 +255,7 @@ class EnvironmentService(protocol.ServerSlice):
             fields["repo_branch"] = branch
 
         await env.update_fields(**fields)
+        await self.notify_listeners(EnvironmentAction.updated, env.to_dto())
         return env.to_dto()
 
     @protocol.handle(methods_v2.environment_get, environment_id="id", api_version=2)
@@ -260,6 +280,7 @@ class EnvironmentService(protocol.ServerSlice):
         await asyncio.gather(self.agentmanager.stop_agents(env), env.delete_cascade())
 
         self.resource_service.close_resource_action_logger(environment_id)
+        await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
 
     @protocol.handle(methods_v2.environment_decommission, env="id")
     async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
@@ -268,6 +289,7 @@ class EnvironmentService(protocol.ServerSlice):
             metadata = model.ModelMetadata(message="Decommission of environment", type="api")
         version_info = model.ModelVersionInfo(export_metadata=metadata)
         await self.orchestration_service.put_version(env, version, [], {}, [], version_info.dict(), get_compiler_version())
+        await self.notify_listeners(EnvironmentAction.updated, env.to_dto())
         return version
 
     @protocol.handle(methods_v2.environment_clear, env="id")
@@ -281,6 +303,7 @@ class EnvironmentService(protocol.ServerSlice):
         project_dir = os.path.join(self.server_slice._server_storage["environments"], str(env.id))
         if os.path.exists(project_dir):
             shutil.rmtree(project_dir)
+        await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
 
     @protocol.handle(methods_v2.environment_create_token, env="tid")
     async def environment_create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> str:
@@ -303,6 +326,7 @@ class EnvironmentService(protocol.ServerSlice):
             result: ReturnValue[None] = ReturnValue(response=None)
             if warnings:
                 result.add_warnings(warnings)
+            await self.notify_listeners(EnvironmentAction.updated, env.to_dto())
             return result
         except KeyError:
             raise NotFound()
@@ -327,6 +351,17 @@ class EnvironmentService(protocol.ServerSlice):
             result: ReturnValue[None] = ReturnValue(response=None)
             if warnings:
                 result.add_warnings(warnings)
+            await self.notify_listeners(EnvironmentAction.updated, env.to_dto())
             return result
         except KeyError:
             raise NotFound()
+
+    def register_listener(self, action: EnvironmentAction, listener: EnvironmentListener) -> None:
+        self.listeners[action].append(listener)
+
+    def remove_listener(self, action: EnvironmentAction, listener: EnvironmentListener) -> None:
+        self.listeners[action].remove(listener)
+
+    async def notify_listeners(self, action: EnvironmentAction, env: model.Environment) -> None:
+        for listener in self.listeners[action]:
+            await listener.environment_action(action, env)
