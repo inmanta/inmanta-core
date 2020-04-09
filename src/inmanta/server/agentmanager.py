@@ -23,7 +23,7 @@ import time
 import uuid
 from asyncio import subprocess
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Set
 from uuid import UUID
 
 from inmanta import const, data
@@ -113,6 +113,8 @@ class AgentManager(ServerSlice, SessionListener):
         self.sessions: Dict[UUID, protocol.Session] = {}
         # live sessions: Sessions to agents which are primary and unpaused
         self.tid_endpoint_to_session: Dict[Tuple[UUID, str], protocol.Session] = {}
+        # All endpoints associated with a sid
+        self.endpoints_for_sid: Dict[uuid.UUID, Set[str]] = {}
 
         self.closesessionsonstart: bool = closesessionsonstart
 
@@ -153,19 +155,14 @@ class AgentManager(ServerSlice, SessionListener):
     async def _seen_session(self, session: protocol.Session) -> None:
         endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]] = []
         async with self.session_lock:
-            endpoints_in_agent_manager = set(
-                [
-                    endpoint
-                    for (tid, endpoint) in self.tid_endpoint_to_session.keys()
-                    if self.tid_endpoint_to_session[(tid, endpoint)].id == session.id
-                ]
-            )
+            endpoints_in_agent_manager = self.endpoints_for_sid[session.id]
             endpoints_in_session = set(session.endpoint_names)
             endpoints_to_add = list(endpoints_in_session - endpoints_in_agent_manager)
             endpoints_to_remove = list(endpoints_in_agent_manager - endpoints_in_session)
 
             endpoints_with_new_primary += await self._failover_endpoints(session, endpoints_to_remove)
             endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session)
+            self.endpoints_for_sid[session.id] = set(session.endpoint_names)
 
         now = datetime.now()
         await self._log_instance_creation_to_db(session, endpoints_to_add, now)
@@ -336,11 +333,13 @@ class AgentManager(ServerSlice, SessionListener):
             tid = session.tid
             sid = session.get_id()
             self.sessions[sid] = session
+            self.endpoints_for_sid[sid] = set(session.endpoint_names)
             try:
                 endpoints_with_new_primary = await self._ensure_primary_if_not_exists(session)
             except Exception as e:
                 # Database connection failed
                 del self.sessions[sid]
+                del self.endpoints_for_sid[sid]
                 raise e
 
         self.add_background_task(self._log_session_creation_to_db(tid, endpoints_with_new_primary, session, now))
@@ -403,6 +402,7 @@ class AgentManager(ServerSlice, SessionListener):
             sid = session.get_id()
             LOGGER.debug("expiring session %s", sid)
             del self.sessions[sid]
+            del self.endpoints_for_sid[sid]
             endpoints_with_new_primary = await self._failover_endpoints(session, session.endpoint_names)
 
         self.add_background_task(self._log_session_expiry_to_db(tid, endpoints_with_new_primary, session, now))

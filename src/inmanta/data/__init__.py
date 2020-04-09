@@ -1135,13 +1135,14 @@ class AgentInstance(BaseDocument):
         cls, tid: uuid.UUID, process: uuid.UUID, endpoints: List[str], now: datetime.datetime
     ) -> None:
         """
-            Expire the given endpoints in an agent process.
+            Expire the agent instances for the given endpoints if they are not expired yet.
         """
         if not endpoints:
             return
         names_subquery = ",".join([f"${i}" for i in range(4, 4 + len(endpoints))])
         query = f"""UPDATE {cls.table_name()}
-                    SET expired=$1 WHERE tid=$2 AND process=$3 AND name IN ({names_subquery})
+                    SET expired=$1
+                    WHERE tid=$2 AND process=$3 AND name IN ({names_subquery}) AND expired IS NULL
                  """
         values = [cls._get_value(now), cls._get_value(tid), cls._get_value(process)] + [cls._get_value(e) for e in endpoints]
         await cls._execute_query(query, *values)

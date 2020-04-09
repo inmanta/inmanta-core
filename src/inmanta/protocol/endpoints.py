@@ -182,7 +182,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         else:
             self._env_id = environment_id
 
-    async def do_start(self):
+    async def start_connected(self):
         """
             This method is called after starting the client transport, but before sending the first heartbeat.
         """
@@ -195,7 +195,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
-        await self.do_start()
+        await self.start_connected()
         self.add_background_task(self.perform_heartbeat())
 
     async def stop(self) -> None:

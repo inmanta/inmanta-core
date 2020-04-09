@@ -1065,15 +1065,14 @@ class Agent(SessionEndpoint):
         for instance in self._instances.values():
             await instance.stop()
 
-    async def do_start(self):
+    async def start_connected(self):
         """
             This method is required because:
                 1) The client transport is required to retrieve the autostart_agent_map from the server.
                 2) _init_endpoint_names() needs to be an async method and async calls are not possible in a constructor.
         """
-        async with self._instances_lock:
-            await self._init_agent_map()
-            await self._init_endpoint_names()
+        await self._init_agent_map()
+        await self._init_endpoint_names()
 
     async def start(self) -> None:
         # cache reference to THIS ioloop for handlers to push requests on it
@@ -1081,28 +1080,24 @@ class Agent(SessionEndpoint):
         await super(Agent, self).start()
 
     async def add_end_point_name(self, name: str) -> None:
-        """
-            Note: Always call under _instances_lock.
-        """
-        LOGGER.info("Adding endpoint %s", name)
-        await super(Agent, self).add_end_point_name(name)
+        async with self._instances_lock:
+            LOGGER.info("Adding endpoint %s", name)
+            await super(Agent, self).add_end_point_name(name)
 
-        hostname = "local:"
-        if name in self.agent_map:
-            hostname = self.agent_map[name]
+            hostname = "local:"
+            if name in self.agent_map:
+                hostname = self.agent_map[name]
 
-        self._instances[name] = AgentInstance(self, name, hostname)
+            self._instances[name] = AgentInstance(self, name, hostname)
 
     async def remove_end_point_name(self, name: str) -> None:
-        """
-            Note: Always call under _instances_lock.
-        """
-        LOGGER.info("Removing endpoint %s", name)
-        await super(Agent, self).remove_end_point_name(name)
+        async with self._instances_lock:
+            LOGGER.info("Removing endpoint %s", name)
+            await super(Agent, self).remove_end_point_name(name)
 
-        agent_instance = self._instances[name]
-        del self._instances[name]
-        await agent_instance.stop()
+            agent_instance = self._instances[name]
+            del self._instances[name]
+            await agent_instance.stop()
 
     @protocol.handle(methods_v2.update_agent_map)
     async def update_agent_map(self, agent_map: Dict[str, str]) -> None:
@@ -1112,24 +1107,27 @@ class Agent(SessionEndpoint):
                 "the use_autostart_agent_map option."
             )
             return
-        async with self._instances_lock:
-            LOGGER.debug("Received update_agent_map() trigger with agent_map %s", agent_map)
-            self.agent_map = agent_map
-            # Add missing agents
-            agents_to_add = [agent_name for agent_name in self.agent_map.keys() if agent_name not in self._instances]
-            for agent_name in agents_to_add:
-                await self.add_end_point_name(agent_name)
-            # Remove agents which are not present in agent-map anymore
-            agents_to_remove = [agent_name for agent_name in self._instances.keys() if agent_name not in self.agent_map]
-            for agent_name in agents_to_remove:
-                await self.remove_end_point_name(agent_name)
-            # URI was updated
-            for agent_name, uri in self.agent_map.items():
-                current_uri = self._instances[agent_name].uri
-                if current_uri != uri:
-                    LOGGER.info("Updating the URI of the endpoint %s from %s to %s", agent_name, current_uri, uri)
-                    await self.remove_end_point_name(agent_name)
-                    await self.add_end_point_name(agent_name)
+        LOGGER.debug("Received update_agent_map() trigger with agent_map %s", agent_map)
+        self.agent_map = agent_map
+        # Add missing agents
+        agents_to_add = [agent_name for agent_name in self.agent_map.keys() if agent_name not in self._instances]
+        # Remove agents which are not present in agent-map anymore
+        agents_to_remove = [agent_name for agent_name in self._instances.keys() if agent_name not in self.agent_map]
+        # URI was updated
+        update_uri_agents = []
+        for agent_name, uri in self.agent_map.items():
+            if agent_name not in self._instances:
+                continue
+            current_uri = self._instances[agent_name].uri
+            if current_uri != uri:
+                LOGGER.info("Updating the URI of the endpoint %s from %s to %s", agent_name, current_uri, uri)
+                update_uri_agents.append(agent_name)
+
+        to_be_gathered = [self.add_end_point_name(agent_name) for agent_name in agents_to_add]
+        to_be_gathered += [self.remove_end_point_name(agent_name) for agent_name in agents_to_remove + update_uri_agents]
+        await asyncio.gather(*to_be_gathered)
+        # Re-add agents with updated URI
+        await asyncio.gather(*[self.add_end_point_name(agent_name) for agent_name in update_uri_agents])
 
     def unpause(self, name: str) -> Apireturn:
         instance = self._instances.get(name)

@@ -343,6 +343,7 @@ class Session(object):
         tid: uuid.UUID,
         endpoint_names: List[str],
         nodename: str,
+        disable_expire_check: bool = False
     ) -> None:
         self._sid = sid
         self._interval = hang_interval
@@ -357,7 +358,10 @@ class Session(object):
         self.nodename: str = nodename
 
         self._replies: Dict[uuid.UUID, asyncio.Future] = {}
-        self.check_expire()
+
+        # Disable expiry in certain tests
+        if not disable_expire_check:
+            self.check_expire()
         self._queue: queues.Queue[common.Request] = queues.Queue()
 
         self.client = ReturnClient(str(sid), self)
