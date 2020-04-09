@@ -427,5 +427,5 @@ class EnvironmentService(protocol.ServerSlice):
                     await listener.environment_action_cleared(updated_env)
                 if action == EnvironmentAction.updated:
                     await listener.environment_action_updated(updated_env, original_env)
-            except Exception as e:
-                LOGGER.warning(f"Notifying listener of {action} failed with the following exception", e)
+            except Exception:
+                LOGGER.warning(f"Notifying listener of {action} failed with the following exception", exc_info=True)

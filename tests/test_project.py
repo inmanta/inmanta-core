@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import logging
 import uuid
 from typing import cast
 
@@ -23,6 +24,7 @@ import pytest
 from inmanta.data import model
 from inmanta.server import SLICE_ENVIRONMENT
 from inmanta.server.services.environmentservice import EnvironmentAction, EnvironmentListener, EnvironmentService
+from utils import log_contains
 
 
 @pytest.mark.asyncio
@@ -253,7 +255,7 @@ async def test_create_with_id(client):
 
 
 @pytest.mark.asyncio
-async def test_environment_listener(server, client_v2):
+async def test_environment_listener(server, client_v2, caplog):
     class EnvironmentListenerCounter(EnvironmentListener):
         def __init__(self):
             self.created_counter = 0
@@ -266,6 +268,8 @@ async def test_environment_listener(server, client_v2):
 
         async def environment_action_created(self, env: model.Environment) -> None:
             self.created_counter += 1
+            if self.created_counter == 3:
+                raise Exception("Something is not right")
 
         async def environment_action_deleted(self, env: model.Environment) -> None:
             self.deleted_counter += 1
@@ -322,7 +326,17 @@ async def test_environment_listener(server, client_v2):
     result = await client_v2.environment_delete(id=env1_id)
     assert result.code == 200
 
-    assert environment_listener.created_counter == 2
+    result = await client_v2.environment_create(project_id=project_id, name="dev3")
+    assert result.code == 200
+
+    log_contains(
+        caplog,
+        "inmanta.server.services.environmentservice",
+        logging.WARNING,
+        "Notifying listener of created failed with the following exception",
+    )
+
+    assert environment_listener.created_counter == 3
     assert environment_listener.updated_counter == 2
     assert environment_listener.cleared_counter == 1
     assert environment_listener.deleted_counter == 1
