@@ -2220,31 +2220,49 @@ class ConfigurationModel(BaseDocument):
         self.deployed = True
 
     @classmethod
-    async def mark_done_if_done(cls, environment, version, connection: Optional[asyncpg.Connection] = None):
-        query = f"""UPDATE {ConfigurationModel.table_name()}
-                        SET deployed=True,
-                            result=(CASE WHEN (
-                                         EXISTS(SELECT 1
-                                                FROM {Resource.table_name()}
-                                                WHERE environment=$1 AND model=$2 AND status != $3)
-                                         )::boolean
-                                    THEN $4::versionstate
-                                    ELSE $5::versionstate END
-                            )
-                        WHERE environment=$1 AND version=$2 AND
-                              total=(SELECT COUNT(*)
-                                     FROM Resource
-                                     WHERE environment=$1 AND model=$2 AND status = any($6::resourcestate[])
-                    )"""
-        values = [
-            cls._get_value(environment),
-            cls._get_value(version),
-            cls._get_value(ResourceState.deployed),
-            cls._get_value(const.VersionState.failed),
-            cls._get_value(const.VersionState.success),
-            cls._get_value(DONE_STATES),
-        ]
-        await cls._execute_query(query, *values, connection=connection)
+    async def mark_done_if_done(cls, environment, version, connection: Optional[asyncpg.Connection] = None) -> None:
+        async def do_query_exclusive(con: asyncpg.connection.Connection) -> None:
+            """
+                Performs the query to mark done if done. Acquires a lock that blocks execution until other transactions holding
+                this lock have committed. This makes sure that once a transaction performs this query, it needs to commit before
+                another transaction is able to perform it. This way no race condition is possible where the deployed state is
+                not set: when a transaction A is in this part of its lifecycle, either all other related (possibly conflicting)
+                transactions have committed already, or they will only start this part of their lifecycle when A has committed
+                itself.
+            """
+            async with con.transaction():
+                # SHARE UPDATE EXCLUSIVE is self-conflicting
+                # and does not conflict with the ROW EXCLUSIVE lock acquired by UPDATE
+                await cls._execute_query(f"LOCK TABLE {Resource.table_name()} IN SHARE UPDATE EXCLUSIVE MODE", connection=con)
+                query = f"""UPDATE {ConfigurationModel.table_name()}
+                                SET deployed=True,
+                                    result=(CASE WHEN (
+                                                 EXISTS(SELECT 1
+                                                        FROM {Resource.table_name()}
+                                                        WHERE environment=$1 AND model=$2 AND status != $3)
+                                                 )::boolean
+                                            THEN $4::versionstate
+                                            ELSE $5::versionstate END
+                                    )
+                                WHERE environment=$1 AND version=$2 AND
+                                      total=(SELECT COUNT(*)
+                                             FROM {Resource.table_name()}
+                                             WHERE environment=$1 AND model=$2 AND status = any($6::resourcestate[])
+                            )"""
+                values = [
+                    cls._get_value(environment),
+                    cls._get_value(version),
+                    cls._get_value(ResourceState.deployed),
+                    cls._get_value(const.VersionState.failed),
+                    cls._get_value(const.VersionState.success),
+                    cls._get_value(DONE_STATES),
+                ]
+                await cls._execute_query(query, *values, connection=con)
+
+        if connection is None:
+            async with cls._connection_pool.acquire() as con:
+                await do_query_exclusive(con)
+        await do_query_exclusive(connection)
 
     @classmethod
     async def get_increment(
