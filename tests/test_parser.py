@@ -17,6 +17,7 @@
 """
 
 import re
+import warnings
 from typing import List
 
 import pytest
@@ -47,7 +48,7 @@ from inmanta.ast.statements.define import (
 from inmanta.ast.statements.generator import Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import ParserException
+from inmanta.parser import ParserException, SyntaxDeprecationWarning
 from inmanta.parser.plyInmantaParser import parse
 
 
@@ -1769,3 +1770,24 @@ __x__ = {expression}
             raise Exception("this test does not support %s" % type(expression))
 
     expression_asserter(assign_stmt.rhs, expected_tree)
+
+
+def test_relation_deprecated_syntax():
+    with warnings.catch_warnings(record=True) as w:
+        parse_code(
+            """
+entity A:
+end
+
+entity B:
+end
+
+A aa [1] -- [0:] B bb
+            """,
+        )
+        assert len(w) == 1
+        assert issubclass(w[0].category, SyntaxDeprecationWarning)
+        assert str(w[0].message) == (
+            "The relation definition syntax `A aa [1:1] -- [0:] B bb` is deprecated."
+            " Please use `A.bb [0:] -- B.aa [1:1]` instead. (test:8)"
+        )
