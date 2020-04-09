@@ -23,7 +23,7 @@ import time
 import uuid
 from asyncio import subprocess
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Set
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from uuid import UUID
 
 from inmanta import const, data

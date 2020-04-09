@@ -470,7 +470,14 @@ async def test_session_renewal(init_dataclasses_and_load_schema):
     tid = env.id
     endpoint = "vm1"
     session = Session(
-        sessionstore=session_manager, sid=sid, hang_interval=1, timout=1, tid=tid, endpoint_names=[endpoint], nodename="test", disable_expire_check=True
+        sessionstore=session_manager,
+        sid=sid,
+        hang_interval=1,
+        timout=1,
+        tid=tid,
+        endpoint_names=[endpoint],
+        nodename="test",
+        disable_expire_check=True,
     )
 
     await assert_agent_db_state(tid, nr_procs=0, nr_non_expired_procs=0, nr_agent_instances=0, nr_non_expired_instances=0)
@@ -504,8 +511,14 @@ async def test_fix_corrupted_database(init_dataclasses_and_load_schema):
     tid = env.id
     endpoint = "vm1"
     session = Session(
-        sessionstore=session_manager, sid=sid, hang_interval=1, timout=1, tid=tid, endpoint_names=[endpoint],
-        nodename="node1", disable_expire_check=True
+        sessionstore=session_manager,
+        sid=sid,
+        hang_interval=1,
+        timout=1,
+        tid=tid,
+        endpoint_names=[endpoint],
+        nodename="node1",
+        disable_expire_check=True,
     )
 
     await assert_agent_db_state(tid, nr_procs=0, nr_non_expired_procs=0, nr_agent_instances=0, nr_non_expired_instances=0)

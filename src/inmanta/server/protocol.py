@@ -343,7 +343,7 @@ class Session(object):
         tid: uuid.UUID,
         endpoint_names: List[str],
         nodename: str,
-        disable_expire_check: bool = False
+        disable_expire_check: bool = False,
     ) -> None:
         self._sid = sid
         self._interval = hang_interval
