@@ -532,16 +532,19 @@ class ResourceService(protocol.ServerSlice):
                                     environment=env.id, resource_id=res.resource_id, connection=connection
                                 )
 
-        if is_resource_state_update and is_resource_action_finished:
-            await data.ConfigurationModel.mark_done_if_done(env.id, model_version)
+                        await data.ConfigurationModel.mark_done_if_done(env.id, model_version, connection=connection)
 
-            waiting_agents = set(
-                [(Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides]
-            )
+                        waiting_agents = set(
+                            [
+                                (Id.parse_id(prov).get_agent_name(), res.resource_version_id)
+                                for res in resources
+                                for prov in res.provides
+                            ]
+                        )
 
-            for agent, resource_id in waiting_agents:
-                aclient = self.agentmanager_service.get_agent_client(env.id, agent)
-                if aclient is not None:
-                    await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
+                        for agent, resource_id in waiting_agents:
+                            aclient = self.agentmanager_service.get_agent_client(env.id, agent)
+                            if aclient is not None:
+                                await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
 
-        return 200
+                return 200
