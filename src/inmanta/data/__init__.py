@@ -414,7 +414,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         set_statement = ",".join(parts_of_set_statement)
         return (set_statement, values)
 
-    async def update_fields(self, connection: Optional[asyncpg.Connection] = None, **kwargs: Any) -> None:
+    async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         """
             Update the given fields of this document in the database. It will update the fields in this object and do a specific
             $set in the database on this document.
@@ -477,7 +477,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return result
 
     @classmethod
-    async def delete_all(cls, connection: Optional[asyncpg.Connection] = None, **query):
+    async def delete_all(cls, connection: Optional[asyncpg.connection.Connection] = None, **query):
         """
             Delete all documents that match the given query
         """
@@ -1566,7 +1566,7 @@ class ResourceAction(BaseDocument):
                     self._updates["changes"][resource] = {}
                 self._updates["changes"][resource][field] = change
 
-    async def save(self, connection: Optional[asyncpg.Connection] = None):
+    async def save(self, connection: Optional[asyncpg.connection.Connection] = None):
         """
             Save the changes
         """
@@ -1959,7 +1959,7 @@ class Resource(BaseDocument):
         self.make_hash()
         await super(Resource, self).update(**kwargs)
 
-    async def update_fields(self, connection: Optional[asyncpg.Connection] = None, **kwargs: Any) -> None:
+    async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         self.make_hash()
         await super(Resource, self).update_fields(connection=connection, **kwargs)
 
@@ -2220,7 +2220,7 @@ class ConfigurationModel(BaseDocument):
         self.deployed = True
 
     @classmethod
-    async def mark_done_if_done(cls, environment, version, connection: Optional[asyncpg.Connection] = None) -> None:
+    async def mark_done_if_done(cls, environment, version, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         async def do_query_exclusive(con: asyncpg.connection.Connection) -> None:
             """
                 Performs the query to mark done if done. Acquires a lock that blocks execution until other transactions holding
