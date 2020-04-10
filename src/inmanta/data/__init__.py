@@ -2262,7 +2262,8 @@ class ConfigurationModel(BaseDocument):
         if connection is None:
             async with cls._connection_pool.acquire() as con:
                 await do_query_exclusive(con)
-        await do_query_exclusive(connection)
+        else:
+            await do_query_exclusive(connection)
 
     @classmethod
     async def get_increment(
