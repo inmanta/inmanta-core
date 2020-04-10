@@ -18,6 +18,7 @@
  - Agent manager remains consistent when the database connection is lost (#1893)
  - Ensure correct version is used in api docs (#1994)
  - Fixed double assignment error resulting from combining constructor kwargs with default values (#2003)
+ - Resource action update is now performed in a single transaction, eliminating the possibility of inconsistent state (#1944)
 
 ## Added
  - Experimental data trace, root cause and graphic data flow visualization applications (#1820, #1831, #1821, #1822)
