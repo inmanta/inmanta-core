@@ -25,6 +25,7 @@ from typing import List, Optional, Union
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
 
+import inmanta.warnings as inmanta_warnings
 from inmanta.ast import LocatableString, Location, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import IsDefined, Not, Operator
@@ -46,7 +47,7 @@ from inmanta.ast.statements.define import (
 from inmanta.ast.statements.generator import Constructor, For, If, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import ParserException, plyInmantaLex
+from inmanta.parser import ParserException, SyntaxDeprecationWarning, plyInmantaLex
 from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 
 # the token map is imported from the lexer. This is required.
@@ -425,9 +426,7 @@ def p_block_empty(p: YaccProduction) -> None:
 
 
 # RELATION
-
-
-def p_relation(p: YaccProduction) -> None:
+def p_relation_deprecated(p: YaccProduction) -> None:
     "relation : class_ref ID multi REL multi class_ref ID"
     if not (p[4] == "--"):
         LOGGER.warning(
@@ -435,9 +434,10 @@ def p_relation(p: YaccProduction) -> None:
         )
     p[0] = DefineRelation((p[1], p[2], p[3]), (p[6], p[7], p[5]))
     attach_lnr(p, 2)
+    deprecated_relation_warning(p)
 
 
-def p_relation_comment(p: YaccProduction) -> None:
+def p_relation_deprecated_comment(p: YaccProduction) -> None:
     "relation : class_ref ID multi REL multi class_ref ID mls"
     if not (p[4] == "--"):
         LOGGER.warning(
@@ -447,40 +447,63 @@ def p_relation_comment(p: YaccProduction) -> None:
     rel.comment = str(p[8])
     p[0] = rel
     attach_lnr(p, 2)
+    deprecated_relation_warning(p)
 
 
-def p_relation_new_outer_comment(p: YaccProduction) -> None:
-    "relation : relationnew mls"
+def deprecated_relation_warning(p: YaccProduction) -> None:
+    inmanta_warnings.warn(
+        SyntaxDeprecationWarning(
+            p[0].location,
+            None,
+            "The relation definition syntax"
+            " `{entity_left} {attr_left_on_right} {multi_left} {rel} {multi_right} {entity_right} {attr_right_on_left}`"
+            " is deprecated. Please use"
+            " `{entity_left}.{attr_right_on_left} {multi_right} -- {entity_right}.{attr_left_on_right} {multi_left}`"
+            " instead.".format(
+                entity_left=p[1],
+                attr_left_on_right=p[2],
+                multi_left="[%s:%s]" % tuple(v if v is not None else "" for v in p[3]),
+                rel=p[4],
+                multi_right="[%s:%s]" % tuple(v if v is not None else "" for v in p[5]),
+                entity_right=p[6],
+                attr_right_on_left=p[7],
+            ),
+        ),
+    )
+
+
+def p_relation_outer_comment(p: YaccProduction) -> None:
+    "relation : relation_def mls"
     rel = p[1]
     rel.comment = str(p[2])
     p[0] = rel
 
 
-def p_relation_new_outer(p: YaccProduction) -> None:
-    "relation : relationnew"
+def p_relation_outer(p: YaccProduction) -> None:
+    "relation : relation_def"
     p[0] = p[1]
 
 
-def p_relation_new(p: YaccProduction) -> None:
-    "relationnew : class_ref '.' ID multi REL class_ref '.' ID multi"
+def p_relation(p: YaccProduction) -> None:
+    "relation_def : class_ref '.' ID multi REL class_ref '.' ID multi"
     p[0] = DefineRelation((p[1], p[8], p[9]), (p[6], p[3], p[4]))
     attach_lnr(p, 2)
 
 
-def p_relation_new_unidir(p: YaccProduction) -> None:
-    "relationnew : class_ref '.' ID multi REL class_ref"
+def p_relation_unidir(p: YaccProduction) -> None:
+    "relation_def : class_ref '.' ID multi REL class_ref"
     p[0] = DefineRelation((p[1], None, None), (p[6], p[3], p[4]))
     attach_lnr(p, 2)
 
 
-def p_relation_new_annotated(p: YaccProduction) -> None:
-    "relationnew : class_ref '.' ID multi operand_list class_ref '.' ID multi"
+def p_relation_annotated(p: YaccProduction) -> None:
+    "relation_def : class_ref '.' ID multi operand_list class_ref '.' ID multi"
     p[0] = DefineRelation((p[1], p[8], p[9]), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 
 
-def p_relation_new_annotated_unidir(p: YaccProduction) -> None:
-    "relationnew : class_ref '.' ID multi operand_list class_ref"
+def p_relation_annotated_unidir(p: YaccProduction) -> None:
+    "relation_def : class_ref '.' ID multi operand_list class_ref"
     p[0] = DefineRelation((p[1], None, None), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 

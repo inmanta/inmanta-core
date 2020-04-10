@@ -7,6 +7,7 @@
 ## Deprecated
  - Leaving a nullable attribute unassigned now produces a deprecation warning. Explicitly assign null instead. (#1775)
  - Default constructors (typedef MyType as SomeEntityType(some_field = "some_value")). Use inheritance instead. (#402)
+ - Old relation syntax (A aa [0:] -- [0:] B bb) (#2000)
 
 ## Fixed
  - Various compiler error reporting improvements (#1810, #1920)
@@ -18,6 +19,7 @@
  - Agent manager remains consistent when the database connection is lost (#1893)
  - Ensure correct version is used in api docs (#1994)
  - Fixed double assignment error resulting from combining constructor kwargs with default values (#2003)
+ - Fixed recursive unwrapping of dict return values from plugins (#2004)
  - Resource action update is now performed in a single transaction, eliminating the possibility of inconsistent state (#1944)
 
 ## Added
@@ -30,8 +32,11 @@
  - Resource Action Log now includes timestamps (#1496)
  - Added support to pause an agent (#1128)
  - Added --no-tag option to module tool (#1939)
+ - Added base exception for plugins and corresponding documentation (#1205)
  - Added tags to openapi definition (#1751)
  - Added support to pause an agent (#1128, #1982)
+ - Plugins are now imported in the inmanta_plugins package to allow importing submodules (#507)
+ - Added event listener to Environment Service (#1996)
 
 # v 2020.1 (2020-02-19) Changes in this release:
 

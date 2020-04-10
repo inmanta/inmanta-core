@@ -469,9 +469,11 @@ def pause_agent(client: Client, environment: str, agent: Optional[str], all: boo
             "Either the --agent options should be set or use the --all flag to pause all agents in the given environment."
         )
     if agent is not None:
-        client.do_request(method_name="agent_action", arguments=dict(tid=environment, name=agent, action=AgentAction.pause))
+        client.do_request(
+            method_name="agent_action", arguments=dict(tid=environment, name=agent, action=AgentAction.pause.value)
+        )
     else:
-        client.do_request(method_name="all_agents_action", arguments=dict(tid=environment, action=AgentAction.pause))
+        client.do_request(method_name="all_agents_action", arguments=dict(tid=environment, action=AgentAction.pause.value))
 
 
 @agent.command(name="unpause",)
@@ -493,9 +495,11 @@ def unpause_agent(client: Client, environment: str, agent: Optional[str], all: b
             "Either the --agent options should be set or use the --all flag to pause all agents in the given environment."
         )
     if agent is not None:
-        client.do_request(method_name="agent_action", arguments=dict(tid=environment, name=agent, action=AgentAction.unpause))
+        client.do_request(
+            method_name="agent_action", arguments=dict(tid=environment, name=agent, action=AgentAction.unpause.value)
+        )
     else:
-        client.do_request(method_name="all_agents_action", arguments=dict(tid=environment, action=AgentAction.unpause))
+        client.do_request(method_name="all_agents_action", arguments=dict(tid=environment, action=AgentAction.unpause.value))
 
 
 @cmd.group("version")
