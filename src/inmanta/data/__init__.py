@@ -1166,7 +1166,9 @@ class AgentInstance(BaseDocument):
         await cls._execute_query(query, *values)
 
     @classmethod
-    async def log_instance_creation(cls, tid: uuid.UUID, process: uuid.UUID, endpoints: List[str], now: datetime) -> None:
+    async def log_instance_creation(
+        cls, tid: uuid.UUID, process: uuid.UUID, endpoints: List[str], now: datetime.datetime
+    ) -> None:
         """
             Create new agent instances for a given session.
         """
@@ -1178,7 +1180,9 @@ class AgentInstance(BaseDocument):
             await cls(tid=tid, process=process, name=nh).insert()
 
     @classmethod
-    async def log_instance_expiry(cls, sid: uuid.UUID, endpoints: List[str], now: datetime) -> None:
+    async def log_instance_expiry(
+        cls, sid: uuid.UUID, endpoints: List[str], now: datetime.datetime
+    ) -> None:
         """
             Expire specific instances for a given session id.
         """
@@ -1286,7 +1290,7 @@ class Agent(BaseDocument):
 
     @classmethod
     async def update_primary(
-        cls, env: uuid.UUID, endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]], now: datetime
+        cls, env: uuid.UUID, endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]], now: datetime.datetime
     ) -> None:
         """
             Update the primary agent instance for agents present in the database.
