@@ -36,6 +36,7 @@
  - Added tags to openapi definition (#1751)
  - Added support to pause an agent (#1128, #1982)
  - Plugins are now imported in the inmanta_plugins package to allow importing submodules (#507)
+ - Added event listener to Environment Service (#1996)
  - Autostarted agents can load a new value for the autostart_agent_map setting without agent restart (#1839)
 
 # v 2020.1 (2020-02-19) Changes in this release:

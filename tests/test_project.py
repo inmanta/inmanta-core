@@ -15,9 +15,16 @@
 
     Contact: code@inmanta.com
 """
+import logging
 import uuid
+from typing import cast
 
 import pytest
+
+from inmanta.data import model
+from inmanta.server import SLICE_ENVIRONMENT
+from inmanta.server.services.environmentservice import EnvironmentAction, EnvironmentListener, EnvironmentService
+from utils import log_contains
 
 
 @pytest.mark.asyncio
@@ -245,3 +252,91 @@ async def test_create_with_id(client):
 
     result = await client.create_environment(project_id=project_id, name="test_env2", environment_id=env_id)
     assert result.code == 500
+
+
+@pytest.mark.asyncio
+async def test_environment_listener(server, client_v2, caplog):
+    class EnvironmentListenerCounter(EnvironmentListener):
+        def __init__(self):
+            self.created_counter = 0
+            self.updated_counter = 0
+            self.cleared_counter = 0
+            self.deleted_counter = 0
+
+        async def environment_action_cleared(self, env: model.Environment) -> None:
+            self.cleared_counter += 1
+
+        async def environment_action_created(self, env: model.Environment) -> None:
+            self.created_counter += 1
+            if self.created_counter == 3:
+                raise Exception("Something is not right")
+
+        async def environment_action_deleted(self, env: model.Environment) -> None:
+            self.deleted_counter += 1
+
+        async def environment_action_updated(self, updated_env: model.Environment, original_env: model.Environment) -> None:
+            self.updated_counter += 1
+
+    environment_listener = EnvironmentListenerCounter()
+
+    environment_service = cast(EnvironmentService, server.get_slice(SLICE_ENVIRONMENT))
+    environment_service.register_listener_for_multiple_actions(
+        environment_listener,
+        {EnvironmentAction.created, EnvironmentAction.updated, EnvironmentAction.deleted, EnvironmentAction.cleared},
+    )
+    result = await client_v2.project_create("project-test")
+    assert result.code == 200
+
+    project_id = result.result["data"]["id"]
+
+    result = await client_v2.environment_create(project_id=project_id, name="dev")
+    assert result.code == 200
+    env1_id = result.result["data"]["id"]
+
+    result = await client_v2.environment_create(project_id=project_id, name="dev2")
+    assert result.code == 200
+
+    # modify branch and repo
+    result = await client_v2.environment_modify(id=env1_id, name="dev", repository="test")
+    assert result.code == 200
+
+    result = await client_v2.environment_modify(id=env1_id, name="dev", branch="test")
+    assert result.code == 200
+
+    result = await client_v2.project_list()
+    assert result.code == 200
+
+    # Get an environment
+    result = await client_v2.environment_get(id=env1_id)
+    assert result.code == 200
+    assert result.result["data"]["name"] == "dev"
+
+    result = await client_v2.environment_delete(id=uuid.uuid4())
+    assert result.code == 404
+
+    # Decommission
+    result = await client_v2.environment_decommission(id=env1_id)
+    assert result.code == 200
+
+    # Clear
+    result = await client_v2.environment_clear(id=env1_id)
+    assert result.code == 200
+
+    # Delete
+    result = await client_v2.environment_delete(id=env1_id)
+    assert result.code == 200
+
+    result = await client_v2.environment_create(project_id=project_id, name="dev3")
+    assert result.code == 200
+
+    log_contains(
+        caplog,
+        "inmanta.server.services.environmentservice",
+        logging.WARNING,
+        "Notifying listener of created failed with the following exception",
+    )
+
+    assert environment_listener.created_counter == 3
+    assert environment_listener.updated_counter == 2
+    assert environment_listener.cleared_counter == 1
+    assert environment_listener.deleted_counter == 1
