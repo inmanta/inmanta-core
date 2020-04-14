@@ -31,7 +31,14 @@ from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest, ServerError
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_TRANSPORT, SLICE_AUTOSTARTED_AGENT_MANAGER
+from inmanta.server import (
+    SLICE_AGENT_MANAGER,
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_DATABASE,
+    SLICE_ORCHESTRATION,
+    SLICE_RESOURCE,
+    SLICE_TRANSPORT,
+)
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager

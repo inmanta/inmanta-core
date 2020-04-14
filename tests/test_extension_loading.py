@@ -28,7 +28,14 @@ import yaml
 import inmanta.server
 import inmanta_ext
 from inmanta.config import feature_file_config
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT, config, SLICE_AUTOSTARTED_AGENT_MANAGER
+from inmanta.server import (
+    SLICE_AGENT_MANAGER,
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_SERVER,
+    SLICE_SESSION_MANAGER,
+    SLICE_TRANSPORT,
+    config,
+)
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
 from inmanta.server.extensions import BoolFeature, FeatureManager, InvalidFeature, InvalidSliceNameException, StringListFeature

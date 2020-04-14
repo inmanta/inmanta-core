@@ -30,13 +30,13 @@ from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import (
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_DATABASE,
     SLICE_ENVIRONMENT,
     SLICE_ORCHESTRATION,
     SLICE_RESOURCE,
     SLICE_SERVER,
     SLICE_TRANSPORT,
-    SLICE_AUTOSTARTED_AGENT_MANAGER,
     protocol,
 )
 from inmanta.server.agentmanager import AutostartedAgentManager

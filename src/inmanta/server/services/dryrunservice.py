@@ -25,8 +25,15 @@ from inmanta.data.model import ResourceVersionIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
-from inmanta.server import SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_DATABASE, SLICE_DRYRUN, SLICE_TRANSPORT, protocol, SLICE_AGENT_MANAGER
-from inmanta.server.agentmanager import AutostartedAgentManager, AgentManager
+from inmanta.server import (
+    SLICE_AGENT_MANAGER,
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_DATABASE,
+    SLICE_DRYRUN,
+    SLICE_TRANSPORT,
+    protocol,
+)
+from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.types import Apireturn, JsonType
 
 LOGGER = logging.getLogger(__name__)

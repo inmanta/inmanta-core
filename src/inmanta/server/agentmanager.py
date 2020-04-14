@@ -32,8 +32,14 @@ from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound, ShutdownInProgress
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT, \
-    SLICE_AUTOSTARTED_AGENT_MANAGER
+from inmanta.server import (
+    SLICE_AGENT_MANAGER,
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_DATABASE,
+    SLICE_SERVER,
+    SLICE_SESSION_MANAGER,
+    SLICE_TRANSPORT,
+)
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, SessionManager
@@ -80,7 +86,7 @@ set_parameters
 """
 
 
-class AgentManager(ServerSlice):
+class AgentManager(ServerSlice, SessionListener):
     """ This class contains all server functionality related to the management of agents
     """
 
@@ -668,7 +674,6 @@ class AgentManager(ServerSlice):
 
 
 class AutostartedAgentManager(ServerSlice):
-
     def __init__(self):
         super(AutostartedAgentManager, self).__init__(SLICE_AUTOSTARTED_AGENT_MANAGER)
         self._agent_procs: Dict[UUID, subprocess.Process] = {}  # env uuid -> subprocess.Process
@@ -677,7 +682,7 @@ class AutostartedAgentManager(ServerSlice):
     async def get_status(self) -> Dict[str, ArgumentTypes]:
         return {"processes": len(self._agent_procs)}
 
-    async def prestart(self, server: Server) -> None:
+    async def prestart(self, server: protocol.Server) -> None:
         await ServerSlice.prestart(self, server)
         preserver = server.get_slice(SLICE_SERVER)
         assert isinstance(preserver, Server)

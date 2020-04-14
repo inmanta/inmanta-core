@@ -21,7 +21,6 @@ import datetime
 import logging
 import os
 import random
-import sys
 import time
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor

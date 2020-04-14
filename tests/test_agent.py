@@ -16,23 +16,24 @@
     Contact: code@inmanta.com
 """
 
-import pytest
-import uuid
 import asyncio
-import logging
 import concurrent
+import logging
+import uuid
+
+import pytest
 
 from inmanta import config, protocol
-from inmanta.agent import reporting, Agent
+from inmanta.agent import Agent, reporting
 from inmanta.agent.handler import HandlerContext, InvalidOperation
 from inmanta.data.model import AttributeStateChange
 from inmanta.resources import Id, PurgeableResource
-from inmanta.server import SLICE_SESSION_MANAGER, SLICE_AGENT_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from utils import retry_limited
 
-
 logger = logging.getLogger(__name__)
+
 
 @pytest.mark.slowtest
 @pytest.mark.asyncio
