@@ -980,6 +980,10 @@ class AgentInstance(object):
         return undeployable, loaded_resources
 
 
+class CouldNotConnectToServer(Exception):
+    pass
+
+
 class Agent(SessionEndpoint):
     """
         An agent to enact changes upon resources. This agent listens to the
@@ -1040,8 +1044,7 @@ class Agent(SessionEndpoint):
             if result.code != 200:
                 error_msg = result.result["message"]
                 LOGGER.error(f"Failed to retrieve the autostart_agent_map setting from the server. %s", error_msg)
-                await self.stop()
-                sys.exit(1)
+                raise CouldNotConnectToServer()
             self.agent_map = result.result["data"]["settings"][data.AUTOSTART_AGENT_MAP]
         elif self.agent_map is None:
             self.agent_map = cfg.agent_map.get()
@@ -1071,7 +1074,13 @@ class Agent(SessionEndpoint):
                 1) The client transport is required to retrieve the autostart_agent_map from the server.
                 2) _init_endpoint_names() needs to be an async method and async calls are not possible in a constructor.
         """
-        await self._init_agent_map()
+        init_agentmap_succeeded = False
+        while not init_agentmap_succeeded:
+            try:
+                await self._init_agent_map()
+                init_agentmap_succeeded = True
+            except CouldNotConnectToServer:
+                await asyncio.sleep(1)
         await self._init_endpoint_names()
 
     async def start(self) -> None:

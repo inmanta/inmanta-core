@@ -33,7 +33,7 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentStatus
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from utils import (
@@ -3204,6 +3204,7 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
 @pytest.mark.asyncio
 async def test_issue_1662(resource_container, server, client, clienthelper, environment, monkeypatch, request):
     agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
 
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
@@ -3224,7 +3225,7 @@ async def test_issue_1662(resource_container, server, client, clienthelper, envi
         # Run off main thread
         await asyncio.get_event_loop().run_in_executor(None, stop_agents_thread_pools)
 
-    monkeypatch.setattr(agent_manager, "restart_agents", restart_agents_patch)
+    monkeypatch.setattr(autostarted_agent_manager, "restart_agents", restart_agents_patch)
 
     version = await clienthelper.get_version()
     resource_id = f"test::AgentConfig[agent1,agentname=agent2],v={version}"

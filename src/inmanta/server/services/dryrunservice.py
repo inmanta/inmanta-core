@@ -25,8 +25,8 @@ from inmanta.data.model import ResourceVersionIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_DRYRUN, SLICE_TRANSPORT, protocol
-from inmanta.server.agentmanager import AgentManager
+from inmanta.server import SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_DATABASE, SLICE_DRYRUN, SLICE_TRANSPORT, protocol, SLICE_AGENT_MANAGER
+from inmanta.server.agentmanager import AutostartedAgentManager, AgentManager
 from inmanta.types import Apireturn, JsonType
 
 LOGGER = logging.getLogger(__name__)
@@ -35,21 +35,23 @@ LOGGER = logging.getLogger(__name__)
 class DyrunService(protocol.ServerSlice):
     """Slice for dryun support"""
 
-    agentmanager: AgentManager
+    agent_manager: AgentManager
+    autostarted_agent_manager: AutostartedAgentManager
 
     def __init__(self) -> None:
         super(DyrunService, self).__init__(SLICE_DRYRUN)
         self.dryrun_lock = asyncio.Lock()
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_DATABASE, SLICE_AGENT_MANAGER]
+        return [SLICE_DATABASE, SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
-        self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
+        self.agent_manager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
+        self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
 
     @protocol.handle(methods.dryrun_request, version_id="id", env="tid")
     async def dryrun_request(self, env: data.Environment, version_id: int) -> Apireturn:
@@ -64,10 +66,10 @@ class DyrunService(protocol.ServerSlice):
         dryrun = await data.DryRun.create(environment=env.id, model=version_id, todo=len(rvs), total=len(rvs))
 
         agents = await data.ConfigurationModel.get_agents(env.id, version_id)
-        await self.agentmanager._ensure_agents(env, agents)
+        await self.autostarted_agent_manager._ensure_agents(env, agents)
 
         for agent in agents:
-            client = self.agentmanager.get_agent_client(env.id, agent)
+            client = self.agent_manager.get_agent_client(env.id, agent)
             if client is not None:
                 self.add_background_task(client.do_dryrun(env.id, dryrun.id, agent, version_id))
             else:

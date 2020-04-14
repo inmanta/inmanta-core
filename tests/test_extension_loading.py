@@ -28,8 +28,8 @@ import yaml
 import inmanta.server
 import inmanta_ext
 from inmanta.config import feature_file_config
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT, config
-from inmanta.server.agentmanager import AgentManager
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT, config, SLICE_AUTOSTARTED_AGENT_MANAGER
+from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
 from inmanta.server.extensions import BoolFeature, FeatureManager, InvalidFeature, InvalidSliceNameException, StringListFeature
 from inmanta.server.protocol import Server, ServerSlice
@@ -111,13 +111,15 @@ def test_phase_3():
         server.add_slice(XTestSlice())
         server.add_slice(inmanta.server.server.Server())
         server.add_slice(AgentManager())
+        server.add_slice(AutostartedAgentManager())
 
         order = server._get_slice_sequence()
         print([s.name for s in order])
         assert [s.name for s in order] == [
-            SLICE_SERVER,
             SLICE_SESSION_MANAGER,
             SLICE_AGENT_MANAGER,
+            SLICE_SERVER,
+            SLICE_AUTOSTARTED_AGENT_MANAGER,
             SLICE_TRANSPORT,
             "testplugin.testslice",
         ]

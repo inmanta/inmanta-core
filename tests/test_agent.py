@@ -15,18 +15,24 @@
 
     Contact: code@inmanta.com
 """
-import os
-import subprocess
-import uuid
 
 import pytest
+import uuid
+import asyncio
+import logging
+import concurrent
 
-from inmanta.agent import reporting
+from inmanta import config, protocol
+from inmanta.agent import reporting, Agent
 from inmanta.agent.handler import HandlerContext, InvalidOperation
 from inmanta.data.model import AttributeStateChange
 from inmanta.resources import Id, PurgeableResource
-from inmanta.server import SLICE_SESSION_MANAGER
+from inmanta.server import SLICE_SESSION_MANAGER, SLICE_AGENT_MANAGER
+from inmanta.server.bootloader import InmantaBootloader
+from utils import retry_limited
 
+
+logger = logging.getLogger(__name__)
 
 @pytest.mark.slowtest
 @pytest.mark.asyncio
@@ -73,37 +79,61 @@ def test_context_changes():
         ctx.update_changes({"value": "test"})
 
 
+@pytest.fixture(scope="function")
+async def async_started_agent(server_config):
+    """
+        Start agent with the use_autostart_agent_map option to true.
+        agent.start() is executed in the background, since connection to the server will fail.
+    """
+    config.Config.set("config", "use_autostart_agent_map", "true")
+
+    env_id = uuid.uuid4()
+    a = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
+    await a.add_end_point_name("agent1")
+    task = asyncio.ensure_future(a.start())
+    yield a
+    task.cancel()
+
+
+@pytest.fixture(scope="function")
+async def startable_server(server_config):
+    """
+        This fixture returns the bootloader of a server which is not yet started.
+    """
+    bootloader = InmantaBootloader()
+    yield bootloader
+    try:
+        await asyncio.wait_for(bootloader.stop(), 15)
+    except concurrent.futures.TimeoutError:
+        logger.exception("Timeout during stop of the server in teardown")
+
+
 @pytest.mark.asyncio
-async def test_agent_cannot_retrieve_autostart_agent_map(unused_tcp_port_factory, tmpdir):
+async def test_agent_cannot_retrieve_autostart_agent_map(async_started_agent, startable_server, caplog):
     """
         When an agent with the config option use_autostart_agent_map set to true, cannot retrieve the autostart_agent_map
-        from the server at startup, the process should exit. Otherwise the process will hang with an empty ioloop and no
-        session to the server. This tests verifies whether the process exits correctly.
+        from the server at startup, the process should retry. This test verifies that the retry happens correctly.
     """
-    state_dir = tmpdir.join("state")
-    os.mkdir(state_dir)
+    client = protocol.Client("client")
 
-    free_port = unused_tcp_port_factory()
-    config_file = tmpdir.join("inmanta.cfg")
-    with open(config_file, "w") as f:
-        f.write(
-            f"""[config]
-state-dir={state_dir}
-environment={uuid.uuid4()}
-use_autostart_agent_map=true
+    def retry_occured() -> bool:
+        return caplog.text.count("Failed to retrieve the autostart_agent_map setting from the server.") > 2
 
-[agent_rest_transport]
-port={free_port}
-host=127.0.0.1
-        """
-        )
-    try:
-        completed_process = subprocess.run(["inmanta", "-vvv", "-c", config_file, "agent"], stdout=subprocess.PIPE, timeout=10)
-        assert completed_process.returncode == 1
-        assert "Failed to retrieve the autostart_agent_map setting from the server" in completed_process.stdout.decode()
-    except subprocess.TimeoutExpired as e:
-        for line in e.stdout.decode().split("\n"):
-            print(line)
-        for line in e.stderr.decode().split("\n"):
-            print(line)
-        raise e
+    # Agent cannot contact server, since server is not started yet.
+    await retry_limited(retry_occured, 10)
+
+    # Start server
+    await startable_server.start()
+
+    # Create project
+    result = await client.create_project("env-test")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    # Create environment
+    result = await client.create_environment(project_id=project_id, name="dev", environment_id=async_started_agent.environment)
+    assert result.code == 200
+
+    # Assert agent managed to establish session with the server
+    agent_manager = startable_server.restserver.get_slice(SLICE_AGENT_MANAGER)
+    await retry_limited(lambda: (async_started_agent.environment, "agent1") in agent_manager.tid_endpoint_to_session, 10)

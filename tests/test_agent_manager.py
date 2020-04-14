@@ -28,7 +28,7 @@ from inmanta import config, data
 from inmanta.agent import Agent, agent
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result
-from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.agentmanager import AgentManager, SessionManager
 from inmanta.server.protocol import Session
 from utils import UNKWN, assert_equal_ish, retry_limited
@@ -681,3 +681,23 @@ async def test_agent_actions(server, client, async_finalizer):
         await assert_agents_paused(
             expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
         )
+
+
+@pytest.mark.asyncio
+async def test_process_already_terminated(server, environment):
+    """
+        This test case tests whether the termination of autostarted agents (processes) happens correctly,
+        when one of the processes has already terminated.
+    """
+    env_id = UUID(environment)
+    env = await data.Environment.get_by_id(env_id)
+
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+    await autostarted_agent_manager._ensure_agents(env=env, agents=["internal"])
+    assert len(autostarted_agent_manager._agent_procs) == 1
+
+    # Terminate process
+    autostarted_agent_manager._agent_procs[env_id].terminate()
+
+    # This call shouldn't raise an exception
+    await autostarted_agent_manager._terminate_agents()

@@ -32,7 +32,8 @@ from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound, ShutdownInProgress
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_SERVER, SLICE_SESSION_MANAGER, SLICE_TRANSPORT, \
+    SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, SessionManager
@@ -43,9 +44,6 @@ from inmanta.util import retry_limited
 from . import config as server_config
 
 LOGGER = logging.getLogger(__name__)
-
-
-agent_lock = asyncio.Lock()
 
 
 """
@@ -82,15 +80,7 @@ set_parameters
 """
 
 
-async def wait_for_proc_bounded(procs: Iterable[subprocess.Process], timeout: float = const.SHUTDOWN_GRACE_HARD) -> None:
-    try:
-        unfinished_processes = [proc for proc in procs if proc.returncode is None]
-        await asyncio.wait_for(asyncio.gather(*[asyncio.shield(proc.wait()) for proc in unfinished_processes]), timeout)
-    except asyncio.TimeoutError:
-        LOGGER.warning("Agent processes did not close in time (%s)", procs)
-
-
-class AgentManager(ServerSlice, SessionListener):
+class AgentManager(ServerSlice):
     """ This class contains all server functionality related to the management of agents
     """
 
@@ -100,9 +90,7 @@ class AgentManager(ServerSlice, SessionListener):
         if fact_back_off is None:
             fact_back_off = opt.server_fact_resource_block.get()
 
-        self._agent_procs: Dict[UUID, subprocess.Process] = {}  # env uuid -> subprocess.Process
-
-        # back-off timer for fact requests
+            # back-off timer for fact requests
         self._fact_resource_block: int = fact_back_off
         # per resource time of last fact request
         self._fact_resource_block_set: Dict[str, float] = {}
@@ -120,142 +108,34 @@ class AgentManager(ServerSlice, SessionListener):
 
     async def get_status(self) -> Dict[str, ArgumentTypes]:
         return {
-            "sessions": len(self.sessions),
-            "processes": len(self._agent_procs),
             "resource_facts": len(self._fact_resource_block_set),
+            "sessions": len(self.sessions),
         }
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_SERVER, SLICE_DATABASE, SLICE_SESSION_MANAGER]
+        return [SLICE_DATABASE, SLICE_SESSION_MANAGER]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
         await ServerSlice.prestart(self, server)
-
-        preserver = server.get_slice(SLICE_SERVER)
-        assert isinstance(preserver, Server)
-        self._server: Server = preserver
-        self._server_storage: Dict[str, str] = self._server._server_storage
+        autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+        assert isinstance(autostarted_agent_manager, AutostartedAgentManager)
+        self._autostarted_agent_manager = autostarted_agent_manager
 
         presession = server.get_slice(SLICE_SESSION_MANAGER)
         assert isinstance(presession, SessionManager)
         presession.add_listener(self)
 
-    async def new_session(self, session: protocol.Session) -> None:
-        await self._register_session(session, datetime.now())
-
-    def expire(self, session: protocol.Session, timeout: float) -> None:
-        self.add_background_task(self._expire_session(session, datetime.now()))
-
-    def seen(self, session: protocol.Session) -> None:
-        self.add_background_task(self._seen_session(session))
-
-    async def _seen_session(self, session: protocol.Session) -> None:
-        endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]] = []
-        async with self.session_lock:
-            endpoints_in_agent_manager = self.endpoints_for_sid[session.id]
-            endpoints_in_session = set(session.endpoint_names)
-            endpoints_to_add = list(endpoints_in_session - endpoints_in_agent_manager)
-            endpoints_to_remove = list(endpoints_in_agent_manager - endpoints_in_session)
-
-            endpoints_with_new_primary += await self._failover_endpoints(session, endpoints_to_remove)
-            endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session)
-            self.endpoints_for_sid[session.id] = set(session.endpoint_names)
-
-        now = datetime.now()
-        await self._log_instance_creation_to_db(session, endpoints_to_add, now)
-        await self._log_instance_expiry_to_db(session, endpoints_to_remove, now)
-        await self._log_primary_to_db(session.tid, endpoints_with_new_primary, now)
-        await self._flush_agent_presence(session, now)
-
-    async def _use_new_active_session_for_agent(
-        self, tid: uuid.UUID, endpoint_name: str, wait_for_enable_agent: bool = False
-    ) -> Optional[protocol.Session]:
-        """
-            This method searches for a new active session for the given agent. If a new active session if found,
-            the in-memory state of the agentmanager is updated to use that new session. No logging is done in the
-            database.
-
-            :param wait_for_enable_agent: If set to True, wait until the set_state API call, executed on the agent with
-                                          the new active session, returns.
-            :return The new active session in use or None if no new active session was found
-
-            Note: Always call under session lock.
-        """
-        key = (tid, endpoint_name)
-        new_active_session = self._get_session_for(tid, endpoint_name)
-        if new_active_session:
-            self.tid_endpoint_to_session[key] = new_active_session
-            set_state_call = new_active_session.get_client().set_state(endpoint_name, enabled=True)
-            if wait_for_enable_agent:
-                await set_state_call
-            else:
-                self.add_background_task(set_state_call)
-        elif key in self.tid_endpoint_to_session:
-            del self.tid_endpoint_to_session[key]
-        return new_active_session
-
-    async def _ensure_primary_if_not_exists(self, session: protocol.Session) -> Sequence[Tuple[str, protocol.Session]]:
-        """
-            Make this session the primary session for the endpoints of this session if no primary exists and the agent is not
-            paused.
-
-            :return: The endpoints that got a new primary.
-
-            Note: Always call under session lock.
-            Note: This call will fail when the database connection is lost.
-        """
-        agent_statuses = await data.Agent.get_statuses(session.tid, session.endpoint_names)
-
-        result = []
-        for endpoint in session.endpoint_names:
-            key = (session.tid, endpoint)
-            if key not in self.tid_endpoint_to_session and agent_statuses[endpoint] != AgentStatus.paused:
-                LOGGER.debug("set session %s as primary for agent %s in env %s", session.id, endpoint, session.tid)
-                self.tid_endpoint_to_session[key] = session
-                self.add_background_task(session.get_client().set_state(endpoint, enabled=True))
-                result.append((endpoint, session))
-        return result
-
-    async def _failover_endpoints(
-        self, session: protocol.Session, endpoints: List[str]
-    ) -> Sequence[Tuple[str, Optional[protocol.Session]]]:
-        """
-            If the given session is the primary for a given endpoint, failover to a new session.
-
-            :return: The endpoints that got a new primary.
-
-            Note: Always call under session lock.
-        """
-        result = []
-        for endpoint_name in endpoints:
-            key = (session.tid, endpoint_name)
-            if key in self.tid_endpoint_to_session and self.tid_endpoint_to_session[key].id == session.id:
-                new_active_session = await self._use_new_active_session_for_agent(session.tid, endpoint_name)
-                result.append((endpoint_name, new_active_session))
-        return result
-
-    # From server
-    def get_agent_client(self, tid: uuid.UUID, endpoint: str) -> Optional[ReturnClient]:
-        if isinstance(tid, str):
-            tid = uuid.UUID(tid)
-        key = (tid, endpoint)
-        session = self.tid_endpoint_to_session.get(key, None)
-        if session is not None:
-            return session.get_client()
-        return None
-
     async def start(self) -> None:
         await super().start()
+
         if self.closesessionsonstart:
             await self._expire_all_sessions_in_db()
-        self.add_background_task(self._start_agents())
 
     async def prestop(self) -> None:
         await super().prestop()
-        await self._terminate_agents()
 
     async def stop(self) -> None:
         await super().stop()
@@ -266,7 +146,6 @@ class AgentManager(ServerSlice, SessionListener):
             await self._pause_agent(env)
         else:
             await self._unpause_agent(env)
-        return
 
     @protocol.handle(methods_v2.agent_action, env="tid")
     async def agent_action(self, env: data.Environment, name: str, action: AgentAction) -> None:
@@ -290,39 +169,57 @@ class AgentManager(ServerSlice, SessionListener):
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False)
             for agent_name in agents:
-                if (env.id, agent_name) not in self.tid_endpoint_to_session:
-                    await self._use_new_active_session_for_agent(env.id, agent_name, wait_for_enable_agent=True)
+                key = (env.id, agent_name)
+                live_session = self.tid_endpoint_to_session.get(key)
+                # If the agent has a live_session, the agent wasn't paused
+                if not live_session:
+                    session = self.get_session_for(tid=env.id, endpoint=agent_name)
+                    if session:
+                        self.tid_endpoint_to_session[key] = session
+                        await session.get_client().set_state(agent_name, enabled=True)
 
-    # Agent Management
-    async def ensure_agent_registered(self, env: data.Environment, nodename: str) -> data.Agent:
-        """
-            Make sure that an agent has been created in the database
-        """
+    # Notify from session listener
+    async def new_session(self, session: protocol.Session) -> None:
+        await self._register_session(session, datetime.now())
+
+    # Notify from session listener
+    def expire(self, session: protocol.Session, timeout: float) -> None:
+        self.add_background_task(self._expire_session(session, datetime.now()))
+
+    # Notify from session listener
+    def seen(self, session: protocol.Session) -> None:
+        self.add_background_task(self._seen_session(session))
+
+    # Seen
+    async def _seen_session(self, session: protocol.Session) -> None:
+        endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]] = []
         async with self.session_lock:
-            agent = await data.Agent.get(env.id, nodename)
-            if agent is not None:
-                return agent
-            else:
-                return await self._create_default_agent(env, nodename)
+            endpoints_in_agent_manager = self.endpoints_for_sid[session.id]
+            endpoints_in_session = set(session.endpoint_names)
+            endpoints_to_add = list(endpoints_in_session - endpoints_in_agent_manager)
+            endpoints_to_remove = list(endpoints_in_agent_manager - endpoints_in_session)
 
-    async def _create_default_agent(self, env: data.Environment, nodename: str) -> data.Agent:
-        """
-            This method creates a new agent (agent in the model) in the database.
-            If an active agent instance exists for the given agent, it is marked as a the
-            primary instance for that agent in the database.
+            endpoints_with_new_primary += await self._failover_endpoints(session, endpoints_to_remove)
+            endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session)
+            self.endpoints_for_sid[session.id] = set(session.endpoint_names)
 
-            Note: This method must be called under session lock
-        """
-        saved = data.Agent(environment=env.id, name=nodename, paused=False)
-        await saved.insert()
+        now = datetime.now()
+        await self._log_instance_creation_to_db(session, endpoints_to_add, now)
+        await self._log_instance_expiry_to_db(session, endpoints_to_remove, now)
+        await self._log_primary_to_db(session.tid, endpoints_with_new_primary, now)
+        await self._flush_agent_presence(session, now)
 
-        key = (env.id, nodename)
-        session = self.tid_endpoint_to_session.get(key, None)
-        if session is not None:
-            await self._log_primary_to_db(env.id, [(nodename, session)], datetime.now())
+    async def _flush_agent_presence(self, session: protocol.Session, now: datetime) -> None:
+        sid = session.get_id()
 
-        return saved
+        aps = await data.AgentProcess.get_by_sid(sid=sid)
+        if aps is None:
+            LOGGER.warning("No process registered for SID %s", sid)
+            return
 
+        await aps.update_fields(last_seen=now)
+
+    # Session registration
     async def _register_session(self, session: protocol.Session, now: datetime) -> None:
         """
             This method registers a new session in memory and asynchronously updates the agent
@@ -380,15 +277,7 @@ class AgentManager(ServerSlice, SessionListener):
             LOGGER.debug("New session for agent %s on %s", nh, session.nodename)
             await data.AgentInstance(tid=session.tid, process=session.id, name=nh).insert()
 
-    def _get_session_for(self, tid: uuid.UUID, endpoint: str) -> Optional[protocol.Session]:
-        """
-            Return a session that matches the given environment and endpoint.
-        """
-        for current_session in self.sessions.values():
-            if current_session.tid == tid and endpoint in current_session.endpoint_names:
-                return current_session
-        return None
-
+    # Session expiry
     async def _expire_session(self, session: protocol.Session, now: datetime) -> None:
         """
             This method expires the given session and update the in-memory session state.
@@ -436,28 +325,90 @@ class AgentManager(ServerSlice, SessionListener):
             if ai.name in endpoints:
                 await ai.update_fields(expired=now)
 
-    async def _get_environment_sessions(self, env_id: uuid.UUID) -> List[protocol.Session]:
+    async def _expire_all_sessions_in_db(self) -> None:
+        async with self.session_lock:
+            LOGGER.debug("Cleaning server session DB")
+
+            # TODO: do as one query
+            procs = await data.AgentProcess.get_live()
+            for proc in procs:
+                await proc.update_fields(expired=datetime.now())
+
+            ais = await data.AgentInstance.active()
+            for ai in ais:
+                await ai.update_fields(expired=datetime.now())
+
+            agents = await data.Agent.get_list()
+            for agent in agents:
+                await agent.update_fields(primary=None)
+
+    # Util
+    async def _use_new_active_session_for_agent(
+        self, tid: uuid.UUID, endpoint_name: str, wait_for_enable_agent: bool = False
+    ) -> Optional[protocol.Session]:
         """
-            Get a list of all sessions for the given environment id
+            This method searches for a new active session for the given agent. If a new active session if found,
+            the in-memory state of the agentmanager is updated to use that new session. No logging is done in the
+            database.
+
+            :param wait_for_enable_agent: If set to True, wait until the set_state API call, executed on the agent with
+                                          the new active session, returns.
+            :return The new active session in use or None if no new active session was found
+
+            Note: Always call under session lock.
         """
-        sessions = await data.AgentProcess.get_live_by_env(env_id)
+        key = (tid, endpoint_name)
+        new_active_session = self._get_session_to_failover_agent(tid, endpoint_name)
+        if new_active_session:
+            self.tid_endpoint_to_session[key] = new_active_session
+            set_state_call = new_active_session.get_client().set_state(endpoint_name, enabled=True)
+            if wait_for_enable_agent:
+                await set_state_call
+            else:
+                self.add_background_task(set_state_call)
+        elif key in self.tid_endpoint_to_session:
+            del self.tid_endpoint_to_session[key]
+        return new_active_session
+
+    async def _ensure_primary_if_not_exists(self, session: protocol.Session) -> Sequence[Tuple[str, protocol.Session]]:
+        """
+            Make this session the primary session for the endpoints of this session if no primary exists and the agent is not
+            paused.
+
+            :return: The endpoints that got a new primary.
+
+            Note: Always call under session lock.
+            Note: This call will fail when the database connection is lost.
+        """
+        agent_statuses = await data.Agent.get_statuses(session.tid, session.endpoint_names)
 
         result = []
-        for session in sessions:
-            live_session = self.sessions.get(session.sid, None)
-            if live_session is not None:
-                result.append(live_session)
+        for endpoint in session.endpoint_names:
+            key = (session.tid, endpoint)
+            if key not in self.tid_endpoint_to_session and agent_statuses[endpoint] != AgentStatus.paused:
+                LOGGER.debug("set session %s as primary for agent %s in env %s", session.id, endpoint, session.tid)
+                self.tid_endpoint_to_session[key] = session
+                self.add_background_task(session.get_client().set_state(endpoint, enabled=True))
+                result.append((endpoint, session))
         return result
 
-    async def _flush_agent_presence(self, session: protocol.Session, now: datetime) -> None:
-        sid = session.get_id()
+    async def _failover_endpoints(
+        self, session: protocol.Session, endpoints: List[str]
+    ) -> Sequence[Tuple[str, Optional[protocol.Session]]]:
+        """
+            If the given session is the primary for a given endpoint, failover to a new session.
 
-        aps = await data.AgentProcess.get_by_sid(sid=sid)
-        if aps is None:
-            LOGGER.warning("No process registered for SID %s", sid)
-            return
+            :return: The endpoints that got a new primary.
 
-        await aps.update_fields(last_seen=now)
+            Note: Always call under session lock.
+        """
+        result = []
+        for endpoint_name in endpoints:
+            key = (session.tid, endpoint_name)
+            if key in self.tid_endpoint_to_session and self.tid_endpoint_to_session[key].id == session.id:
+                new_active_session = await self._use_new_active_session_for_agent(session.tid, endpoint_name)
+                result.append((endpoint_name, new_active_session))
+        return result
 
     async def _log_primary_to_db(
         self, env_id: uuid.UUID, endpoints_with_new_primary: Sequence[Tuple[str, Optional[protocol.Session]]], now: datetime
@@ -487,55 +438,113 @@ class AgentManager(ServerSlice, SessionListener):
                 else:
                     await agent.update_fields(last_failover=now, primary=None)
 
+    async def _get_environment_sessions(self, env_id: uuid.UUID) -> List[protocol.Session]:
+        """
+            Get a list of all sessions for the given environment id
+        """
+        sessions = await data.AgentProcess.get_live_by_env(env_id)
+
+        result = []
+        for session in sessions:
+            live_session = self.sessions.get(session.sid, None)
+            if live_session is not None:
+                result.append(live_session)
+        return result
+
     def is_primary(self, env: data.Environment, sid: uuid.UUID, agent: str) -> bool:
         prim = self.tid_endpoint_to_session.get((env.id, agent), None)
         if prim is None:
             return False
         return prim.get_id() == sid
 
-    async def _expire_all_sessions_in_db(self) -> None:
+    def get_session_for(self, tid: uuid.UUID, endpoint: str) -> Optional[protocol.Session]:
+        """
+            Return a session that matches the given environment and endpoint.
+            This method also returns session to paused or non-live agents.
+        """
+        key = (tid, endpoint)
+        session = self.tid_endpoint_to_session.get(key)
+        if session:
+            # Agent has live session
+            return session
+        else:
+            # Maybe session exists for a paused agent
+            for session in self.sessions.values():
+                if endpoint in session.endpoint_names:
+                    return session
+            # Agent is down
+            return None
+
+    def _get_session_to_failover_agent(self, tid: uuid.UUID, endpoint: str) -> Optional[protocol.Session]:
+        current_active_session = self.tid_endpoint_to_session[(tid, endpoint)]
+        for session in self.sessions.values():
+            if endpoint in session.endpoint_names:
+                if not current_active_session or session.id != current_active_session.id:
+                    return session
+        return None
+
+    def get_agent_client(self, tid: uuid.UUID, endpoint: str, live_agent_only: bool = True) -> Optional[ReturnClient]:
+        if isinstance(tid, str):
+            tid = uuid.UUID(tid)
+        key = (tid, endpoint)
+        session = self.tid_endpoint_to_session.get(key)
+        if session:
+            return session.get_client()
+        elif not live_agent_only:
+            session = self.get_session_for(tid, endpoint)
+            if session:
+                return session.get_client()
+            else:
+                return None
+        else:
+            return None
+
+    def is_agent_up(self, tid: uuid.UUID, endpoint: str) -> bool:
+        key = (tid, endpoint)
+        return self.tid_endpoint_to_session.get(key) is not None
+
+    async def expire_all_sessions_for_environment(self, env_id: uuid.UUID) -> None:
+        sessions: List[protocol.Session] = await self._get_environment_sessions(env_id)
+        for session in sessions:
+            session.expire(0)
+            # TODO: CHECK ABORT
+            session.abort()
+
+    async def expire_all_sessions(self) -> None:
+        for session in self.sessions.values():
+            session.expire(0)
+            # TODO: CHECK ABORT
+            session.abort()
+
+    # Agent Management
+    async def ensure_agent_registered(self, env: data.Environment, nodename: str) -> data.Agent:
+        """
+            Make sure that an agent has been created in the database
+        """
         async with self.session_lock:
-            LOGGER.debug("Cleaning server session DB")
+            agent = await data.Agent.get(env.id, nodename)
+            if agent is not None:
+                return agent
+            else:
+                return await self._create_default_agent(env, nodename)
 
-            # TODO: do as one query
-            procs = await data.AgentProcess.get_live()
-            for proc in procs:
-                await proc.update_fields(expired=datetime.now())
-
-            ais = await data.AgentInstance.active()
-            for ai in ais:
-                await ai.update_fields(expired=datetime.now())
-
-            agents = await data.Agent.get_list()
-            for agent in agents:
-                await agent.update_fields(primary=None)
-
-    # utils
-    async def _fork_inmanta(
-        self, args: List[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
-    ) -> subprocess.Process:
+    async def _create_default_agent(self, env: data.Environment, nodename: str) -> data.Agent:
         """
-            Fork an inmanta process from the same code base as the current code
-        """
-        full_args = ["-m", "inmanta.app", *args]
-        # handles can be closed, owned by child process,...
-        outhandle = None
-        errhandle = None
-        try:
-            if outfile is not None:
-                outhandle = open(outfile, "wb+")
-            if errfile is not None:
-                errhandle = open(errfile, "wb+")
+            This method creates a new agent (agent in the model) in the database.
+            If an active agent instance exists for the given agent, it is marked as a the
+            primary instance for that agent in the database.
 
-            # TODO: perhaps show in dashboard?
-            return await asyncio.create_subprocess_exec(
-                sys.executable, *full_args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle
-            )
-        finally:
-            if outhandle is not None:
-                outhandle.close()
-            if errhandle is not None:
-                errhandle.close()
+            Note: This method must be called under session lock
+        """
+        saved = data.Agent(environment=env.id, name=nodename, paused=False)
+        await saved.insert()
+
+        key = (env.id, nodename)
+        session = self.tid_endpoint_to_session.get(key, None)
+        if session is not None:
+            await self._log_primary_to_db(env.id, [(nodename, session)], datetime.now())
+
+        return saved
 
     # External APIS
     @protocol.handle(methods.get_agent_process, agent_sid="id")
@@ -611,6 +620,142 @@ class AgentManager(ServerSlice, SessionListener):
         result = await client.get_status()
         return result.code, result.get_result()
 
+    async def request_parameter(self, env_id: uuid.UUID, resource_id: str) -> Apireturn:
+        """
+            Request the value of a parameter from an agent
+        """
+        if resource_id is not None and resource_id != "":
+            env = await data.Environment.get_by_id(env_id)
+
+            if env is None:
+                raise NotFound(f"Environment with {env_id} does not exist.")
+
+            # get a resource version
+            res = await data.Resource.get_latest_version(env_id, resource_id)
+
+            if res is None:
+                return 404, {"message": "The resource has no recent version."}
+
+            rid: Id = Id.parse_id(res.resource_version_id)
+            version: int = rid.version
+
+            # only request facts of a resource every _fact_resource_block time
+            now = time.time()
+            if (
+                resource_id not in self._fact_resource_block_set
+                or (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now
+            ):
+
+                agents = await data.ConfigurationModel.get_agents(env.id, version)
+                await self._autostarted_agent_manager._ensure_agents(env, agents)
+
+                client = self.get_agent_client(env_id, res.agent)
+                if client is not None:
+                    self.add_background_task(client.get_parameter(str(env_id), res.agent, res.to_dict()))
+
+                self._fact_resource_block_set[resource_id] = now
+
+            else:
+                LOGGER.debug(
+                    "Ignore fact request for %s, last request was sent %d seconds ago.",
+                    resource_id,
+                    now - self._fact_resource_block_set[resource_id],
+                )
+
+            return 503, {"message": "Agents queried for resource parameter."}
+        else:
+            return 404, {"message": "resource_id parameter is required."}
+
+
+class AutostartedAgentManager(ServerSlice):
+
+    def __init__(self):
+        super(AutostartedAgentManager, self).__init__(SLICE_AUTOSTARTED_AGENT_MANAGER)
+        self._agent_procs: Dict[UUID, subprocess.Process] = {}  # env uuid -> subprocess.Process
+        self.agent_lock = asyncio.Lock()  # Prevent concurrent updates on _agent_procs
+
+    async def get_status(self) -> Dict[str, ArgumentTypes]:
+        return {"processes": len(self._agent_procs)}
+
+    async def prestart(self, server: Server) -> None:
+        await ServerSlice.prestart(self, server)
+        preserver = server.get_slice(SLICE_SERVER)
+        assert isinstance(preserver, Server)
+        self._server: Server = preserver
+        self._server_storage: Dict[str, str] = self._server._server_storage
+
+        agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+        assert isinstance(agent_manager, AgentManager)
+        self._agent_manager = agent_manager
+
+    async def start(self) -> None:
+        await super().start()
+        self.add_background_task(self._start_agents())
+
+    async def prestop(self) -> None:
+        await super().prestop()
+        await self._terminate_agents()
+
+    async def stop(self) -> None:
+        await super().stop()
+
+    def get_dependencies(self) -> List[str]:
+        return [SLICE_SERVER, SLICE_DATABASE, SLICE_AGENT_MANAGER]
+
+    def get_depended_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
+
+    async def _start_agents(self) -> None:
+        """
+            Ensure that autostarted agents of each environment are started when AUTOSTART_ON_START is true. This method
+            is called on server start.
+        """
+        environments = await data.Environment.get_list()
+        for env in environments:
+            autostart = await env.get(data.AUTOSTART_ON_START)
+            if autostart:
+                agents = await data.Agent.get_list(environment=env.id)
+                agent_list = [a.name for a in agents]
+                await self._ensure_agents(env, agent_list)
+
+    async def restart_agents(self, env: data.Environment) -> None:
+        autostart = await env.get(data.AUTOSTART_ON_START)
+        if autostart:
+            agents = await data.Agent.get_list(environment=env.id)
+            agent_list = [a.name for a in agents]
+            await self._ensure_agents(env, agent_list, True)
+
+    async def stop_agents(self, env: data.Environment) -> None:
+        """
+            Stop all agents for this environment and close sessions
+        """
+        async with self.agent_lock:
+            LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
+            if env.id in self._agent_procs:
+                subproc = self._agent_procs[env.id]
+                self._stop_process(subproc)
+                await self._wait_for_proc_bounded([subproc])
+                del self._agent_procs[env.id]
+
+            LOGGER.debug("Expiring all sessions for %s", env.id)
+            await self._agent_manager.expire_all_sessions_for_environment(env.id)
+
+    def _stop_process(self, process: subprocess.Process) -> None:
+        try:
+            process.terminate()
+        except ProcessLookupError:
+            # Process was already terminated
+            pass
+
+    async def _terminate_agents(self) -> None:
+        async with self.agent_lock:
+            LOGGER.debug("Stopping all autostarted agents")
+            for proc in self._agent_procs.values():
+                self._stop_process(proc)
+            await self._wait_for_proc_bounded(self._agent_procs.values())
+            LOGGER.debug("Expiring all sessions")
+            await self._agent_manager.expire_all_sessions()
+
     # Start/stop agents
     async def _ensure_agents(self, env: data.Environment, agents: List[str], restart: bool = False) -> bool:
         """
@@ -630,15 +775,18 @@ class AgentManager(ServerSlice, SessionListener):
         if len(agents) == 0:
             return False
 
-        async with agent_lock:
-            LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
-            for agent in agents:
-                async with self.session_lock:
-                    myagent = self.get_agent_client(env.id, agent)
-                    if myagent is None:
-                        needsstart = True
+        LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
 
+        async def is_start_agent_required() -> bool:
             if needsstart:
+                return True
+            for agent in agents:
+                if not self._agent_manager.is_agent_up(env.id, agent):
+                    return True
+            return False
+
+        async with self.agent_lock:
+            if await is_start_agent_required():
                 res = await self.__do_start_agent(agents, env)
                 return res
         return False
@@ -646,6 +794,8 @@ class AgentManager(ServerSlice, SessionListener):
     async def __do_start_agent(self, agents: List[str], env: data.Environment) -> bool:
         """
             Start an agent process for the given agents in the given environment
+
+            Note: Always call under agent_lock
         """
         agent_map: Dict[str, str]
         agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
@@ -673,13 +823,12 @@ class AgentManager(ServerSlice, SessionListener):
             if self._agent_procs[env.id].returncode is None:
                 LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].pid)
                 self._agent_procs[env.id].terminate()
-                await wait_for_proc_bounded([self._agent_procs[env.id]])
+                await self._wait_for_proc_bounded([self._agent_procs[env.id]])
 
         self._agent_procs[env.id] = proc
 
         # Wait for an agent to start
-        await retry_limited(lambda: self.get_agent_client(env.id, agents[0]) is not None, 5)
-        # await sleep(2)
+        await retry_limited(lambda: self._agent_manager.is_agent_up(env.id, agents[0]), 5)
 
         LOGGER.debug("Started new agent with PID %s", proc.pid)
         return True
@@ -763,114 +912,45 @@ ssl=True
 
         return config
 
-    # Parameters
-
-    async def request_parameter(self, env_id: uuid.UUID, resource_id: str) -> Apireturn:
+    async def _fork_inmanta(
+        self, args: List[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
+    ) -> subprocess.Process:
         """
-            Request the value of a parameter from an agent
+            Fork an inmanta process from the same code base as the current code
         """
-        if resource_id is not None and resource_id != "":
-            env = await data.Environment.get_by_id(env_id)
+        full_args = ["-m", "inmanta.app", *args]
+        # handles can be closed, owned by child process,...
+        outhandle = None
+        errhandle = None
+        try:
+            if outfile is not None:
+                outhandle = open(outfile, "wb+")
+            if errfile is not None:
+                errhandle = open(errfile, "wb+")
 
-            if env is None:
-                raise NotFound(f"Environment with {env_id} does not exist.")
-
-            # get a resource version
-            res = await data.Resource.get_latest_version(env_id, resource_id)
-
-            if res is None:
-                return 404, {"message": "The resource has no recent version."}
-
-            rid: Id = Id.parse_id(res.resource_version_id)
-            version: int = rid.version
-
-            # only request facts of a resource every _fact_resource_block time
-            now = time.time()
-            if (
-                resource_id not in self._fact_resource_block_set
-                or (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now
-            ):
-
-                agents = await data.ConfigurationModel.get_agents(env.id, version)
-                await self._ensure_agents(env, agents)
-
-                client = self.get_agent_client(env_id, res.agent)
-                if client is not None:
-                    self.add_background_task(client.get_parameter(str(env_id), res.agent, res.to_dict()))
-
-                self._fact_resource_block_set[resource_id] = now
-
-            else:
-                LOGGER.debug(
-                    "Ignore fact request for %s, last request was sent %d seconds ago.",
-                    resource_id,
-                    now - self._fact_resource_block_set[resource_id],
-                )
-
-            return 503, {"message": "Agents queried for resource parameter."}
-        else:
-            return 404, {"message": "resource_id parameter is required."}
-
-    async def _start_agents(self) -> None:
-        """
-            Ensure that autostarted agents of each environment are started when AUTOSTART_ON_START is true. This method
-            is called on server start.
-        """
-        environments = await data.Environment.get_list()
-        for env in environments:
-            agents = await data.Agent.get_list(environment=env.id)
-            autostart = await env.get(data.AUTOSTART_ON_START)
-            if autostart:
-                agent_list = [a.name for a in agents]
-                await self._ensure_agents(env, agent_list)
+            # TODO: perhaps show in dashboard?
+            return await asyncio.create_subprocess_exec(
+                sys.executable, *full_args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle
+            )
+        finally:
+            if outhandle is not None:
+                outhandle.close()
+            if errhandle is not None:
+                errhandle.close()
 
     async def notify_agent_about_agent_map_update(self, env: data.Environment) -> None:
-        new_agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
-        key = (env.id, "internal")
-        session = self.tid_endpoint_to_session.get(key)
-        if session:
-            # Internal agent has live session
-            self.add_background_task(session.get_client().update_agent_map(new_agent_map))
+        agent_client = self._agent_manager.get_agent_client(tid=env.id, endpoint="internal", live_agent_only=False)
+        if agent_client:
+            new_agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
+            self.add_background_task(agent_client.update_agent_map(new_agent_map))
         else:
-            # Internal agent is paused or down
-            for session in self.sessions.values():
-                if "internal" in session.endpoint_names:
-                    self.add_background_task(session.get_client().update_agent_map(new_agent_map))
-                    return
             LOGGER.warning("Could not send update_agent_map() trigger for environment %s. Internal agent is down.", env.id)
 
-    async def restart_agents(self, env: data.Environment) -> None:
-        agents = await data.Agent.get_list(environment=env.id)
-        autostart = await env.get(data.AUTOSTART_ON_START)
-        if autostart:
-            agent_list = [a.name for a in agents]
-            await self._ensure_agents(env, agent_list, True)
-
-    async def stop_agents(self, env: data.Environment) -> None:
-        """
-            Stop all agents for this environment and close sessions
-        """
-        LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
-        if env.id in self._agent_procs:
-            subproc = self._agent_procs[env.id]
-            subproc.terminate()
-            await wait_for_proc_bounded([subproc])
-            del self._agent_procs[env.id]
-
-        LOGGER.debug("Expiring all sessions for %s", env.id)
-        sessions: List[protocol.Session]
-        sessions = await self._get_environment_sessions(env.id)
-        for session in sessions:
-            session.expire(0)
-            session.abort()
-
-    async def _terminate_agents(self) -> None:
-        LOGGER.debug("Stopping all autostarted agents")
-        for proc in self._agent_procs.values():
-            proc.terminate()
-        await wait_for_proc_bounded(self._agent_procs.values())
-
-        LOGGER.debug("Expiring all sessions")
-        for session in self.sessions.values():
-            session.expire(0)
-            session.abort()
+    async def _wait_for_proc_bounded(
+        self, procs: Iterable[subprocess.Process], timeout: float = const.SHUTDOWN_GRACE_HARD
+    ) -> None:
+        try:
+            unfinished_processes = [proc for proc in procs if proc.returncode is None]
+            await asyncio.wait_for(asyncio.gather(*[asyncio.shield(proc.wait()) for proc in unfinished_processes]), timeout)
+        except asyncio.TimeoutError:
+            LOGGER.warning("Agent processes did not close in time (%s)", procs)
