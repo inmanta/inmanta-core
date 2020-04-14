@@ -35,7 +35,7 @@ typing==3.7.4.1
 asyncpg==0.20.1
 pytest-postgresql==2.3.0
 pytest-env==0.6.2
-jinja2==2.11.1
+jinja2==2.11.2
 pep8-naming==0.10.0
 flake8==3.7.9
 flake8-black==0.1.1
