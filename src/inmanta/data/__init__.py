@@ -1085,7 +1085,7 @@ class AgentProcess(BaseDocument):
         return nodes
 
     @classmethod
-    async def get_by_sid(cls, sid: uuid.UUID) -> List["AgentProcess"]:
+    async def get_by_sid(cls, sid: uuid.UUID) -> Optional["AgentProcess"]:
         objects = await cls.get_list(limit=DBLIMIT, expired=None, sid=sid)
         if len(objects) == 0:
             return None
