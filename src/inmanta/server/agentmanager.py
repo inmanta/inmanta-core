@@ -198,21 +198,23 @@ class AgentManager(ServerSlice, SessionListener):
 
     # Seen
     async def _seen_session(self, session: protocol.Session) -> None:
-        endpoints_with_new_primary: List[Tuple[str, Optional[protocol.Session]]] = []
+        endpoints_with_new_primary: List[Tuple[str, Optional[uuid.UUID]]] = []
         async with self.session_lock:
             endpoints_in_agent_manager = self.endpoints_for_sid[session.id]
             endpoints_in_session = set(session.endpoint_names)
             endpoints_to_add = list(endpoints_in_session - endpoints_in_agent_manager)
+            LOGGER.debug("Adding endpoints %s to session %s on %s", endpoints_to_add, session.id, session.nodename)
             endpoints_to_remove = list(endpoints_in_agent_manager - endpoints_in_session)
+            LOGGER.debug("Removing endpoints %s from session %s on %s", endpoints_to_add, session.id, session.nodename)
 
             endpoints_with_new_primary += await self._failover_endpoints(session, endpoints_to_remove)
             endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session)
             self.endpoints_for_sid[session.id] = set(session.endpoint_names)
 
         now = datetime.now()
-        await self._log_instance_creation_to_db(session, endpoints_to_add, now)
-        await self._log_instance_expiry_to_db(session, endpoints_to_remove, now)
-        await self._log_primary_to_db(session.tid, endpoints_with_new_primary, now)
+        await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add, now)
+        await data.AgentInstance.log_instance_expiry(session.id, endpoints_to_remove, now)
+        await data.Agent.update_primary(session.tid, endpoints_with_new_primary, now)
         await self._flush_agent_presence(session, now)
 
     async def _flush_agent_presence(self, session: protocol.Session, now: datetime) -> None:
@@ -232,6 +234,7 @@ class AgentManager(ServerSlice, SessionListener):
             session log in the database. When the database connection is lost, the get_statuses()
             call fails and the new session will be refused.
         """
+        LOGGER.debug("New session %s for agents %s on %s", session.id, session.endpoint_names, session.nodename)
         async with self.session_lock:
             tid = session.tid
             sid = session.get_id()
@@ -250,38 +253,16 @@ class AgentManager(ServerSlice, SessionListener):
     async def _log_session_creation_to_db(
         self,
         tid: uuid.UUID,
-        endpoints_with_new_primary: Sequence[Tuple[str, Optional[protocol.Session]]],
+        endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]],
         session: protocol.Session,
         now: datetime,
     ) -> None:
         """
             Note: This method call is allowed to fail when the database connection is lost.
         """
-        sid = session.get_id()
-        nodename = session.nodename
-
-        proc = await data.AgentProcess.get_one(sid=sid)
-
-        if proc is None:
-            proc = data.AgentProcess(hostname=nodename, environment=tid, first_seen=now, last_seen=now, sid=sid)
-            await proc.insert()
-        else:
-            await proc.update_fields(last_seen=now, expired=None)
-
-        await self._log_instance_creation_to_db(session, session.endpoint_names, now)
-        await self._log_primary_to_db(tid, endpoints_with_new_primary, now)
-
-    async def _log_instance_creation_to_db(self, session: protocol.Session, endpoints: List[str], now: datetime) -> None:
-        """
-            Note: This method call is allowed to fail when the database connection is lost.
-        """
-        if not endpoints:
-            return
-        # Fix database corruption when database was down
-        await data.AgentInstance.expire_endpoints_for_process(session.tid, session.id, endpoints, now)
-        for nh in endpoints:
-            LOGGER.debug("New session for agent %s on %s", nh, session.nodename)
-            await data.AgentInstance(tid=session.tid, process=session.id, name=nh).insert()
+        await data.AgentProcess.seen(tid, session.nodename, session.id, now)
+        await data.AgentInstance.log_instance_creation(tid, session.id, session.endpoint_names, now)
+        await data.Agent.update_primary(tid, endpoints_with_new_primary, now)
 
     # Session expiry
     async def _expire_session(self, session: protocol.Session, now: datetime) -> None:
@@ -305,31 +286,16 @@ class AgentManager(ServerSlice, SessionListener):
     async def _log_session_expiry_to_db(
         self,
         tid: uuid.UUID,
-        endpoints_with_new_primary: Sequence[Tuple[str, Optional[protocol.Session]]],
+        endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]],
         session: protocol.Session,
         now: datetime,
     ) -> None:
         """
             Note: This method call is allowed to fail when the database connection is lost.
         """
-        sid = session.get_id()
-
-        aps = await data.AgentProcess.get_by_sid(sid=sid)
-        if aps is None:
-            LOGGER.info("expiring session on none existant process sid:%s", sid)
-        else:
-            await aps.update_fields(expired=now)
-            await self._log_instance_expiry_to_db(session, session.endpoint_names, now)
-
-        await self._log_primary_to_db(tid, endpoints_with_new_primary, now)
-
-    async def _log_instance_expiry_to_db(self, session: protocol.Session, endpoints: List[str], now: datetime):
-        if not endpoints:
-            return
-        instances = await data.AgentInstance.get_list(process=session.id)
-        for ai in instances:
-            if ai.name in endpoints:
-                await ai.update_fields(expired=now)
+        await data.AgentProcess.expire_process(session.id, now)
+        await data.AgentInstance.log_instance_expiry(session.id, session.endpoint_names, now)
+        await data.Agent.update_primary(tid, endpoints_with_new_primary, now)
 
     async def _expire_all_sessions_in_db(self) -> None:
         async with self.session_lock:
@@ -376,7 +342,7 @@ class AgentManager(ServerSlice, SessionListener):
             del self.tid_endpoint_to_session[key]
         return new_active_session
 
-    async def _ensure_primary_if_not_exists(self, session: protocol.Session) -> Sequence[Tuple[str, protocol.Session]]:
+    async def _ensure_primary_if_not_exists(self, session: protocol.Session) -> Sequence[Tuple[str, uuid.UUID]]:
         """
             Make this session the primary session for the endpoints of this session if no primary exists and the agent is not
             paused.
@@ -395,12 +361,12 @@ class AgentManager(ServerSlice, SessionListener):
                 LOGGER.debug("set session %s as primary for agent %s in env %s", session.id, endpoint, session.tid)
                 self.tid_endpoint_to_session[key] = session
                 self.add_background_task(session.get_client().set_state(endpoint, enabled=True))
-                result.append((endpoint, session))
+                result.append((endpoint, session.id))
         return result
 
     async def _failover_endpoints(
         self, session: protocol.Session, endpoints: List[str]
-    ) -> Sequence[Tuple[str, Optional[protocol.Session]]]:
+    ) -> Sequence[Tuple[str, Optional[uuid.UUID]]]:
         """
             If the given session is the primary for a given endpoint, failover to a new session.
 
@@ -413,36 +379,11 @@ class AgentManager(ServerSlice, SessionListener):
             key = (session.tid, endpoint_name)
             if key in self.tid_endpoint_to_session and self.tid_endpoint_to_session[key].id == session.id:
                 new_active_session = await self._use_new_active_session_for_agent(session.tid, endpoint_name)
-                result.append((endpoint_name, new_active_session))
-        return result
-
-    async def _log_primary_to_db(
-        self, env_id: uuid.UUID, endpoints_with_new_primary: Sequence[Tuple[str, Optional[protocol.Session]]], now: datetime
-    ) -> None:
-        """
-            Update the primary agent instance for agents present in the database.
-
-            Note: This method call is allowed to fail when the database connection is lost.
-
-            :param env: The environment of the agent
-            :param endpoints_with_new_primary: Contains a tuple (agent-name, session) for each agent that has got a new
-                                               primary agent instance. The session in the tuple is the session of the new
-                                               primary.
-            :param now: Timestamp of this failover
-        """
-        for (endpoint, session) in endpoints_with_new_primary:
-            agent = await data.Agent.get(env_id, endpoint)
-            if agent is None:
-                continue
-
-            if session is None:
-                await agent.update_fields(last_failover=now, primary=None)
-            else:
-                instances = await data.AgentInstance.active_for(tid=env_id, endpoint=agent.name, process=session.get_id())
-                if instances:
-                    await agent.update_fields(last_failover=now, primary=instances[0].id)
+                if new_active_session:
+                    result.append((endpoint_name, new_active_session.id))
                 else:
-                    await agent.update_fields(last_failover=now, primary=None)
+                    result.append((endpoint_name, None))
+        return result
 
     async def _get_environment_sessions(self, env_id: uuid.UUID) -> List[protocol.Session]:
         """
@@ -513,13 +454,11 @@ class AgentManager(ServerSlice, SessionListener):
         sessions: List[protocol.Session] = await self._get_environment_sessions(env_id)
         for session in sessions:
             session.expire(0)
-            # TODO: CHECK ABORT
             session.abort()
 
     async def expire_all_sessions(self) -> None:
         for session in self.sessions.values():
             session.expire(0)
-            # TODO: CHECK ABORT
             session.abort()
 
     # Agent Management
@@ -548,7 +487,7 @@ class AgentManager(ServerSlice, SessionListener):
         key = (env.id, nodename)
         session = self.tid_endpoint_to_session.get(key, None)
         if session is not None:
-            await self._log_primary_to_db(env.id, [(nodename, session)], datetime.now())
+            await data.Agent.update_primary(env.id, [(nodename, session.id)], datetime.now())
 
         return saved
 
