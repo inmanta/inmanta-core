@@ -93,13 +93,28 @@ class Type(Locatable):
         """
         return True
 
-    def type_string(self) -> str:
-        """get the name of the type """
+    def type_string(self) -> Optional[str]:
+        """
+            Returns the type string as expressed in the inmanta DSL, if this type can be expressed in the DSL.
+            Otherwise returns None.
+        """
+        return None
+
+    def type_string_internal(self) -> str:
+        """
+            Returns the internal string representation of the instance of the type. This is used by __str__
+            when type_string() returns None.
+            Use this method only when you explicitly need the internal string representation of the type.
+        """
         return "Type"
 
     def __str__(self) -> str:
-        """get the string representation of the instance of the type """
-        return self.type_string()
+        """
+            Returns the string representation of the type, to be used for informative reporting as in error messages.
+            When a structured representation of the inmanta type is required, type_string() should be used instead.
+        """
+        type_string: Optional[str] = self.type_string()
+        return type_string if type_string is not None else self.type_string_internal()
 
     def normalize(self) -> None:
         pass
@@ -129,8 +144,15 @@ class NullableType(Type):
 
         return self.basetype.validate(value)
 
-    def type_string(self) -> str:
-        return "%s?" % (self.basetype.type_string())
+    def _wrap_type_string(self, string: str) -> str:
+        return "%s?" % string
+
+    def type_string(self) -> Optional[str]:
+        base_type_string: Optional[str] = self.basetype.type_string()
+        return None if base_type_string is None else self._wrap_type_string(base_type_string)
+
+    def type_string_internal(self) -> str:
+        return self._wrap_type_string(self.basetype.type_string_internal())
 
     def normalize(self) -> None:
         self.basetype.normalize()
@@ -142,7 +164,7 @@ class Primitive(Type):
         self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = []
 
     def cast(self, value: Optional[object]) -> object:
-        exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self.type_string()))
+        exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self))
 
         for cast in self.try_cast_functions:
             try:
@@ -152,6 +174,9 @@ class Primitive(Type):
             except TypeError:
                 raise exception
         raise exception
+
+    def type_string_internal(self) -> str:
+        return "Primitive"
 
 
 class Number(Primitive):
@@ -187,6 +212,9 @@ class Number(Primitive):
 
     def type_string(self) -> str:
         return "number"
+
+    def type_string_internal(self) -> str:
+        return self.type_string()
 
 
 class Integer(Number):
@@ -232,6 +260,9 @@ class Bool(Primitive):
     def type_string(self) -> str:
         return "bool"
 
+    def type_string_internal(self) -> str:
+        return self.type_string()
+
     def is_primitive(self) -> bool:
         return True
 
@@ -270,6 +301,9 @@ class String(Primitive):
     def type_string(self) -> str:
         return "string"
 
+    def type_string_internal(self) -> str:
+        return self.type_string()
+
     def is_primitive(self) -> bool:
         return True
 
@@ -301,8 +335,8 @@ class List(Type):
 
         return True
 
-    def type_string(self) -> str:
-        return "list"
+    def type_string_internal(self) -> str:
+        return "List"
 
     def get_location(self) -> Location:
         return None
@@ -327,8 +361,15 @@ class TypedList(List):
 
         return True
 
-    def type_string(self) -> str:
-        return "%s[]" % (self.element_type.type_string())
+    def _wrap_type_string(self, string: str) -> str:
+        return "%s[]" % string
+
+    def type_string(self) -> Optional[str]:
+        element_type_string: Optional[str] = self.element_type.type_string()
+        return None if element_type_string is None else self._wrap_type_string(element_type_string)
+
+    def type_string_internal(self) -> str:
+        return self._wrap_type_string(self.element_type.type_string_internal())
 
     def get_location(self) -> Location:
         return None
@@ -342,6 +383,9 @@ class LiteralList(TypedList):
 
     def __init__(self) -> None:
         TypedList.__init__(self, Literal())
+
+    def type_string(self) -> str:
+        return "list"
 
 
 class Dict(Type):
@@ -368,8 +412,8 @@ class Dict(Type):
 
         return True
 
-    def type_string(self) -> str:
-        return "dict"
+    def type_string_internal(self) -> str:
+        return "Dict"
 
     def get_location(self) -> Location:
         return None
@@ -393,8 +437,8 @@ class TypedDict(Dict):
 
         return True
 
-    def type_string(self) -> str:
-        return "dict[%s, %s]" % (String().type_string(), self.element_type.type_string())
+    def type_string_internal(self) -> str:
+        return "dict[%s]" % self.element_type.type_string_internal()
 
     def get_location(self) -> Location:
         return None
@@ -409,6 +453,9 @@ class LiteralDict(TypedDict):
     def __init__(self) -> None:
         TypedDict.__init__(self, Literal())
 
+    def type_string(self) -> str:
+        return "dict"
+
 
 class Union(Type):
     def __init__(self, types: PythonList[Type]) -> None:
@@ -422,10 +469,10 @@ class Union(Type):
                     return True
             except RuntimeException:
                 pass
-        raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
+        raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self))
 
-    def type_string(self) -> str:
-        return "Union[%s]" % ",".join((t.type_string() for t in self.types))
+    def type_string_internal(self) -> str:
+        return "Union[%s]" % ",".join((t.type_string_internal() for t in self.types))
 
 
 class Literal(Union):
@@ -437,7 +484,7 @@ class Literal(Union):
     def __init__(self) -> None:
         Union.__init__(self, [NullableType(Number()), Bool(), String(), TypedList(self), TypedDict(self)])
 
-    def type_string(self) -> str:
+    def type_string_internal(self) -> str:
         return "Literal"
 
 
@@ -502,7 +549,7 @@ class ConstraintType(NamedType):
     def type_string(self):
         return "%s::%s" % (self.namespace, self.name)
 
-    def __str__(self):
+    def type_string_internal(self) -> str:
         return self.type_string()
 
     def get_full_name(self) -> str:
