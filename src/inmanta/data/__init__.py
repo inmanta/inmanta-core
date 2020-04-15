@@ -1180,9 +1180,7 @@ class AgentInstance(BaseDocument):
             await cls(tid=tid, process=process, name=nh).insert()
 
     @classmethod
-    async def log_instance_expiry(
-        cls, sid: uuid.UUID, endpoints: List[str], now: datetime.datetime
-    ) -> None:
+    async def log_instance_expiry(cls, sid: uuid.UUID, endpoints: List[str], now: datetime.datetime) -> None:
         """
             Expire specific instances for a given session id.
         """
