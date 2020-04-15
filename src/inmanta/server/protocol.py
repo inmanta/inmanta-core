@@ -371,7 +371,8 @@ class Session(object):
             LOGGER.exception("Tried to expire session already expired")
         ttw = self._timeout + self._seen - time.time()
         if ttw < 0:
-            self.expire(self._seen - time.time())
+            expire_coroutine = self.expire(self._seen - time.time())
+            self._sessionstore.add_background_task(expire_coroutine)
         else:
             self._callhandle = IOLoop.current().call_later(ttw, self.check_expire)
 
@@ -380,13 +381,13 @@ class Session(object):
 
     id = property(get_id)
 
-    def expire(self, timeout: float) -> None:
+    async def expire(self, timeout: float) -> None:
         if self.expired:
             return
         self.expired = True
         if self._callhandle is not None:
             IOLoop.current().remove_timeout(self._callhandle)
-        self._sessionstore.expire(self, timeout)
+        await self._sessionstore.expire(self, timeout)
 
     def seen(self, endpoint_names: List[str]) -> None:
         self._seen = time.time()
@@ -540,6 +541,7 @@ class SessionManager(ServerSlice):
 
         # Session management
         self._sessions: Dict[uuid.UUID, Session] = {}
+        self._sessions_lock = asyncio.Lock()
 
         # Listeners
         self.listeners: List[SessionListener] = []
@@ -554,7 +556,7 @@ class SessionManager(ServerSlice):
         await super(SessionManager, self).prestop()
         # terminate all sessions cleanly
         for session in self._sessions.copy().values():
-            session.expire(0)
+            await session.expire(0)
             session.abort()
 
     def get_depended_by(self) -> List[str]:
@@ -569,36 +571,41 @@ class SessionManager(ServerSlice):
         if isinstance(sid, str):
             sid = uuid.UUID(sid)
 
-        if sid not in self._sessions:
-            session = self.new_session(sid, tid, endpoint_names, nodename)
-            self._sessions[sid] = session
-            try:
+        async with self._sessions_lock:
+            if sid not in self._sessions:
+                session = self.new_session(sid, tid, endpoint_names, nodename)
+                self._sessions[sid] = session
+                try:
+                    for listener in self.listeners:
+                        # This blocking wait is required to propagate exceptions when session creation fails
+                        # in one of the listeners. This implies that all session create operations queue up
+                        # on the session lock in the agent manager. The performance impact is limited due to
+                        # the usage of long poll sessions.
+                        await listener.new_session(session)
+                except Exception as e:
+                    # Rollback
+                    del self._sessions[sid]
+                    for listener in self.listeners:
+                        listener.expire(session, 0)
+                    raise e
+            else:
+                session = self._sessions[sid]
+                self.seen(session, endpoint_names)
                 for listener in self.listeners:
-                    # This blocking wait is required to propagate exceptions when session creation fails
-                    # in one of the listeners. This implies that all session create operations queue up
-                    # on the session lock in the agent manager. The performance impact is limited due to
-                    # the usage of long poll sessions.
-                    await listener.new_session(session)
-            except Exception as e:
-                self.expire(session, 0)
-                raise e
-        else:
-            session = self._sessions[sid]
-            self.seen(session, endpoint_names)
-            for listener in self.listeners:
-                listener.seen(session)
+                    listener.seen(session)
 
-        return session
+            return session
 
     def new_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: List[str], nodename: str) -> Session:
         LOGGER.debug("New session with id %s on node %s for env %s with endpoints %s" % (sid, nodename, tid, endpoint_names))
         return Session(self, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
 
-    def expire(self, session: Session, timeout: float) -> None:
-        LOGGER.debug("Expired session with id %s, last seen %d seconds ago" % (session.get_id(), timeout))
-        del self._sessions[session.id]
-        for listener in self.listeners:
-            listener.expire(session, timeout)
+    async def expire(self, session: Session, timeout: float) -> None:
+        async with self._sessions_lock:
+            LOGGER.debug("Expired session with id %s, last seen %d seconds ago" % (session.get_id(), timeout))
+            del self._sessions[session.id]
+            for listener in self.listeners:
+                listener.expire(session, timeout)
 
     def seen(self, session: Session, endpoint_names: List[str]) -> None:
         LOGGER.debug("Seen session with id %s; endpoints: %s", session.get_id(), endpoint_names)

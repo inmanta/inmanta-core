@@ -453,12 +453,12 @@ class AgentManager(ServerSlice, SessionListener):
     async def expire_all_sessions_for_environment(self, env_id: uuid.UUID) -> None:
         sessions: List[protocol.Session] = await self._get_environment_sessions(env_id)
         for session in sessions:
-            session.expire(0)
+            await session.expire(0)
             session.abort()
 
     async def expire_all_sessions(self) -> None:
         for session in self.sessions.values():
-            session.expire(0)
+            await session.expire(0)
             session.abort()
 
     # Agent Management
