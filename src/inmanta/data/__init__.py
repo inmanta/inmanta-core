@@ -1108,7 +1108,7 @@ class AgentProcess(BaseDocument):
             await proc.update_fields(last_seen=now, expired=None)
 
     @classmethod
-    async def update_last_seen(cls, sid: uuid.UUID, last_seen: datetime) -> None:
+    async def update_last_seen(cls, sid: uuid.UUID, last_seen: datetime.datetime) -> None:
         aps = await cls.get_by_sid(sid=sid)
         if aps:
             await aps.update_fields(last_seen=last_seen)
