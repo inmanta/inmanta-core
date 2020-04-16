@@ -96,7 +96,7 @@ class AgentManager(ServerSlice, SessionListener):
         if fact_back_off is None:
             fact_back_off = opt.server_fact_resource_block.get()
 
-            # back-off timer for fact requests
+         # back-off timer for fact requests
         self._fact_resource_block: int = fact_back_off
         # per resource time of last fact request
         self._fact_resource_block_set: Dict[str, float] = {}
