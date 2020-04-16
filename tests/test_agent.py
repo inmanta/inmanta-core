@@ -20,6 +20,7 @@ import asyncio
 import concurrent
 import logging
 import uuid
+import json
 
 import pytest
 
@@ -138,3 +139,23 @@ async def test_agent_cannot_retrieve_autostart_agent_map(async_started_agent, st
     # Assert agent managed to establish session with the server
     agent_manager = startable_server.restserver.get_slice(SLICE_AGENT_MANAGER)
     await retry_limited(lambda: (async_started_agent.environment, "agent1") in agent_manager.tid_endpoint_to_session, 10)
+
+
+@pytest.mark.asyncio
+async def test_set_agent_map(server, environment, agent_factory):
+    """
+        This test verifies whether an agentmap is set correct when set via:
+            1) The constructor
+            2) Via the agent-map configuration option
+    """
+    env_id = uuid.UUID(environment)
+    agent_map = {"agent1": "localhost"}
+
+    # Set agentmap in constructor
+    agent1 = await agent_factory(hostname="node1", environment=env_id, agent_map=agent_map)
+    assert agent1.agent_map == agent_map
+
+    # Set agentmap via config option
+    config.Config.set("config", "agent-map", "agent1=localhost")
+    agent2 = await agent_factory(hostname="node2", environment=env_id)
+    assert agent2.agent_map == agent_map

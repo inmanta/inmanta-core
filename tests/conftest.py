@@ -34,7 +34,7 @@ import time
 import traceback
 import uuid
 from tempfile import mktemp
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 import asyncpg
 import pkg_resources
@@ -376,6 +376,38 @@ async def agent(server, environment):
     yield a
 
     await a.stop()
+
+
+@pytest.fixture(scope="function")
+async def agent_factory(server):
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+
+    started_agents = []
+
+    async def create_agent(
+        environment: uuid.UUID,
+        hostname: Optional[str] = None,
+        agent_map: Optional[Dict[str, str]] = None,
+        code_loader: bool = False,
+        agent_names: List[str] = []
+    ) -> None:
+        a = Agent(hostname=hostname, environment=environment, agent_map=agent_map, code_loader=code_loader)
+        for agent_name in agent_names:
+            await a.add_end_point_name(agent_name)
+        await a.start()
+        started_agents.append(a)
+        await utils.retry_limited(lambda: a.sessionid in agentmanager.sessions, 10)
+        return a
+
+    yield create_agent
+    gather_future = asyncio.gather(*[agent.stop() for agent in started_agents], return_exceptions=True)
+    stop_agents_result = await asyncio.wait_for(gather_future, timeout=30)
+    for elem in stop_agents_result:
+        if isinstance(elem, Exception):
+            raise elem
 
 
 @pytest.fixture(scope="function")

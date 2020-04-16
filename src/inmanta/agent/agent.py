@@ -1028,11 +1028,7 @@ class Agent(SessionEndpoint):
             self._env.use_virtual_env()
             self._loader = CodeLoader(self._storage["code"])
 
-        self.agent_map: Dict[str, str]
-        if agent_map is None:
-            self.agent_map = {}
-        else:
-            self.agent_map = agent_map
+        self.agent_map: Optional[Dict[str, str]] = agent_map
 
     async def _init_agent_map(self):
         if cfg.use_autostart_agent_map.get():
@@ -1089,23 +1085,35 @@ class Agent(SessionEndpoint):
 
     async def add_end_point_name(self, name: str) -> None:
         async with self._instances_lock:
-            LOGGER.info("Adding endpoint %s", name)
-            await super(Agent, self).add_end_point_name(name)
+            await self._add_end_point_name(name)
 
-            hostname = "local:"
-            if name in self.agent_map:
-                hostname = self.agent_map[name]
+    async def _add_end_point_name(self, name: str) -> None:
+        """
+            Note: always call under _instances_lock
+        """
+        LOGGER.info("Adding endpoint %s", name)
+        await super(Agent, self).add_end_point_name(name)
 
-            self._instances[name] = AgentInstance(self, name, hostname)
+        hostname = "local:"
+        if name in self.agent_map:
+            hostname = self.agent_map[name]
+
+        self._instances[name] = AgentInstance(self, name, hostname)
 
     async def remove_end_point_name(self, name: str) -> None:
         async with self._instances_lock:
-            LOGGER.info("Removing endpoint %s", name)
-            await super(Agent, self).remove_end_point_name(name)
+            await self._remove_end_point_name(name)
 
-            agent_instance = self._instances[name]
-            del self._instances[name]
-            await agent_instance.stop()
+    async def _remove_end_point_name(self, name: str) -> None:
+        """
+            Note: always call under _instances_lock
+        """
+        LOGGER.info("Removing endpoint %s", name)
+        await super(Agent, self).remove_end_point_name(name)
+
+        agent_instance = self._instances[name]
+        del self._instances[name]
+        await agent_instance.stop()
 
     @protocol.handle(methods_v2.update_agent_map)
     async def update_agent_map(self, agent_map: Dict[str, str]) -> None:
@@ -1115,41 +1123,42 @@ class Agent(SessionEndpoint):
                 "the use_autostart_agent_map option."
             )
             return
-        LOGGER.debug("Received update_agent_map() trigger with agent_map %s", agent_map)
-        self.agent_map = agent_map
-        # Add missing agents
-        agents_to_add = [agent_name for agent_name in self.agent_map.keys() if agent_name not in self._instances]
-        # Remove agents which are not present in agent-map anymore
-        agents_to_remove = [agent_name for agent_name in self._instances.keys() if agent_name not in self.agent_map]
-        # URI was updated
-        update_uri_agents = []
-        for agent_name, uri in self.agent_map.items():
-            if agent_name not in self._instances:
-                continue
-            current_uri = self._instances[agent_name].uri
-            if current_uri != uri:
-                LOGGER.info("Updating the URI of the endpoint %s from %s to %s", agent_name, current_uri, uri)
-                update_uri_agents.append(agent_name)
+        async with self._instances_lock:
+            LOGGER.debug("Received update_agent_map() trigger with agent_map %s", agent_map)
+            self.agent_map = agent_map
+            # Add missing agents
+            agents_to_add = [agent_name for agent_name in self.agent_map.keys() if agent_name not in self._instances]
+            # Remove agents which are not present in agent-map anymore
+            agents_to_remove = [agent_name for agent_name in self._instances.keys() if agent_name not in self.agent_map]
+            # URI was updated
+            update_uri_agents = []
+            for agent_name, uri in self.agent_map.items():
+                if agent_name not in self._instances:
+                    continue
+                current_uri = self._instances[agent_name].uri
+                if current_uri != uri:
+                    LOGGER.info("Updating the URI of the endpoint %s from %s to %s", agent_name, current_uri, uri)
+                    update_uri_agents.append(agent_name)
 
-        to_be_gathered = [self.add_end_point_name(agent_name) for agent_name in agents_to_add]
-        to_be_gathered += [self.remove_end_point_name(agent_name) for agent_name in agents_to_remove + update_uri_agents]
-        await asyncio.gather(*to_be_gathered)
-        # Re-add agents with updated URI
-        await asyncio.gather(*[self.add_end_point_name(agent_name) for agent_name in update_uri_agents])
+            to_be_gathered = [self._add_end_point_name(agent_name) for agent_name in agents_to_add]
+            to_be_gathered += [self._remove_end_point_name(agent_name) for agent_name in agents_to_remove + update_uri_agents]
+            await asyncio.gather(*to_be_gathered)
+            # Re-add agents with updated URI
+            await asyncio.gather(*[self._add_end_point_name(agent_name) for agent_name in update_uri_agents])
 
     def unpause(self, name: str) -> Apireturn:
         instance = self._instances.get(name)
         if not instance:
             return 404, "No such agent"
 
-        return self._instances[name].unpause()
+        return instance.unpause()
 
     def pause(self, name: str) -> Apireturn:
         instance = self._instances.get(name)
         if not instance:
             return 404, "No such agent"
 
-        return self._instances[name].pause()
+        return instance.pause()
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
@@ -1217,15 +1226,17 @@ class Agent(SessionEndpoint):
         """
             Trigger an update
         """
-        if agent not in self._instances:
+        instance = self._instances.get(agent)
+
+        if not instance:
             return 200
 
-        if not self._instances[agent].is_enabled():
+        if not instance.is_enabled():
             return 500, "Agent is not _enabled"
 
         LOGGER.info("Agent %s got a trigger to update in environment %s", agent, env)
         self.add_background_task(
-            self._instances[agent].get_latest_version_for_agent(
+            instance.get_latest_version_for_agent(
                 reason="call to trigger_update", incremental_deploy=incremental_deploy
             )
         )
@@ -1252,7 +1263,8 @@ class Agent(SessionEndpoint):
             )
             return 200
 
-        if agent not in self._instances:
+        instance = self._instances.get(agent)
+        if not instance:
             LOGGER.warning(
                 "received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
                 env,
@@ -1265,7 +1277,7 @@ class Agent(SessionEndpoint):
         LOGGER.debug(
             "Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s", agent, env, agent, resource, state
         )
-        self._instances[agent].notify_ready(resource, send_events, state, change, changes)
+        instance.notify_ready(resource, send_events, state, change, changes)
 
         return 200
 
@@ -1276,12 +1288,13 @@ class Agent(SessionEndpoint):
         """
         assert env == self._env_id
 
-        if agent not in self._instances:
+        instance = self._instances.get(agent)
+        if not instance:
             return 200
 
         LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s", agent, dry_run_id, version, env)
 
-        return await self._instances[agent].dryrun(dry_run_id, version)
+        return await instance.dryrun(dry_run_id, version)
 
     def check_storage(self) -> Dict[str, str]:
         """
@@ -1314,10 +1327,11 @@ class Agent(SessionEndpoint):
 
     @protocol.handle(methods.get_parameter, env="tid")
     async def get_facts(self, env: uuid.UUID, agent: str, resource: Dict[str, Any]) -> Apireturn:
-        if agent not in self._instances:
+        instance = self._instances.get(agent)
+        if not instance:
             return 200
 
-        return await self._instances[agent].get_facts(resource)
+        return await instance.get_facts(resource)
 
     @protocol.handle(methods.get_status)
     async def get_status(self) -> Apireturn:
