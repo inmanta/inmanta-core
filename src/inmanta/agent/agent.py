@@ -1094,6 +1094,9 @@ class Agent(SessionEndpoint):
         LOGGER.info("Adding endpoint %s", name)
         await super(Agent, self).add_end_point_name(name)
 
+        # Make mypy happy
+        assert self.agent_map is not None
+
         hostname = "local:"
         if name in self.agent_map:
             hostname = self.agent_map[name]
@@ -1236,9 +1239,7 @@ class Agent(SessionEndpoint):
 
         LOGGER.info("Agent %s got a trigger to update in environment %s", agent, env)
         self.add_background_task(
-            instance.get_latest_version_for_agent(
-                reason="call to trigger_update", incremental_deploy=incremental_deploy
-            )
+            instance.get_latest_version_for_agent(reason="call to trigger_update", incremental_deploy=incremental_deploy)
         )
         return 200
 

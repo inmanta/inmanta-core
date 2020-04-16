@@ -34,7 +34,7 @@ import time
 import traceback
 import uuid
 from tempfile import mktemp
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional
 
 import asyncpg
 import pkg_resources
@@ -392,7 +392,7 @@ async def agent_factory(server):
         hostname: Optional[str] = None,
         agent_map: Optional[Dict[str, str]] = None,
         code_loader: bool = False,
-        agent_names: List[str] = []
+        agent_names: List[str] = [],
     ) -> None:
         a = Agent(hostname=hostname, environment=environment, agent_map=agent_map, code_loader=code_loader)
         for agent_name in agent_names:

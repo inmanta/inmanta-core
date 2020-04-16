@@ -20,7 +20,6 @@ import asyncio
 import concurrent
 import logging
 import uuid
-import json
 
 import pytest
 
