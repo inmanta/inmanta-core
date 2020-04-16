@@ -190,10 +190,18 @@ class AgentManager(ServerSlice, SessionListener):
 
     # Notify from session listener
     def expire(self, session: protocol.Session, timeout: float) -> None:
+        # Expiry, creation and endpoint update (for different session) will come in here in-order, but could get re-ordered by the add_background_task. This is safe because all scenarios result in the same end-result: the primary is moved to the newly created session. 
         self.add_background_task(self._expire_session(session, datetime.now()))
 
     # Notify from session listener
     def seen(self, session: protocol.Session) -> None:
+       """
+       Primarily used to 1) update last_seen time and 2) process updates of the endpoints list 
+       
+       Expiry, creation and endpoint update (for different session) will come in here in-order, but could get re-ordered by the add_background_task. This is safe because all scenarios result in the same end-result: the primary is moved to the newly created session. 
+      
+       Expiry and endpoint update or the same session should not get re-ordered. This is possible in theory, but in practice these calls are separated by at least one session timeout, as expired session can not be re-opened. 
+       """
         self.add_background_task(self._seen_session(session))
 
     # Seen
@@ -209,7 +217,7 @@ class AgentManager(ServerSlice, SessionListener):
 
             endpoints_with_new_primary += await self._failover_endpoints(session, endpoints_to_remove)
             endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session)
-            self.endpoints_for_sid[session.id] = set(session.endpoint_names)
+            self.endpoints_for_sid[session.id] = set(endpoints_in_session)
 
         now = datetime.now()
         await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add, now)
