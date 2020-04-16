@@ -2167,18 +2167,21 @@ class ConfigurationModel(BaseDocument):
                 # Delete all code associated with this version
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
 
-                # Delete version and all resources (FK)
-                await self.delete(connection=con)
+                # Acquire explicit lock to avoid deadlock.
+                # Any transactions that update ResourceAction, Resource, Parameter and/or ConfigurationModel
+                # should acquire their locks in that order.
+                await self._execute_query(f"LOCK TABLE {ResourceAction.table_name()} IN SHARE MODE", connection=con)
+                await Resource.delete_all(connection=con, environment=self.environment, model=self.version)
 
                 # Delete facts when the resources in this version are the only
-                resource_table_name = Resource.table_name()
-                param_table_name = Parameter.table_name()
-
                 await con.execute(
-                    f"DELETE FROM {param_table_name} p WHERE environment=$1 AND NOT EXISTS "
-                    f"(SELECT * FROM {resource_table_name} r WHERE p.resource_id=r.resource_id)",
+                    f"DELETE FROM {Parameter.table_name()} p WHERE environment=$1 AND NOT EXISTS "
+                    f"(SELECT * FROM {Resource.table_name()} r WHERE p.resource_id=r.resource_id)",
                     self.environment,
                 )
+
+                # Delete ConfigurationModel and cascade delete on connected tables
+                await self.delete(connection=con)
 
     async def get_undeployable(self) -> List[m.ResourceIdStr]:
         """
