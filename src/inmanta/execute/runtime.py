@@ -865,12 +865,11 @@ class ExecutionContext(Resolver):
 # also extends locatable
 class Instance(ExecutionContext):
     def set_location(self, location: Location) -> None:
-        assert location is not None and location.lnr > 0
-        self._location = location
+        Locatable.set_location(self, location)
+        self.locations.append(location)
 
     def get_location(self) -> Location:
-        assert self._location is not None
-        return self._location
+        return Locatable.get_location(self)
 
     location = property(get_location, set_location)
 
@@ -1007,13 +1006,6 @@ class Instance(ExecutionContext):
             if not v.can_get():
                 return False
         return True
-
-    def set_location(self, location: Location) -> None:
-        Locatable.set_location(self, location)
-        self.locations.append(location)
-
-    def get_location(self) -> Location:
-        return self.location
 
     def get_locations(self) -> List[Location]:
         return self.locations
