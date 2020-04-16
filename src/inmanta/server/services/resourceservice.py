@@ -426,6 +426,7 @@ class ResourceService(protocol.ServerSlice):
                         action_id=action_id,
                     )
 
+        resources: List[data.Resource]
         async with data.Resource.get_connection() as connection:
             async with connection.transaction():
                 # validate resources
@@ -534,17 +535,18 @@ class ResourceService(protocol.ServerSlice):
 
                         await data.ConfigurationModel.mark_done_if_done(env.id, model_version, connection=connection)
 
-                        waiting_agents = set(
-                            [
-                                (Id.parse_id(prov).get_agent_name(), res.resource_version_id)
-                                for res in resources
-                                for prov in res.provides
-                            ]
-                        )
+        if is_resource_state_update and is_resource_action_finished:
+            waiting_agents = set(
+                [
+                    (Id.parse_id(prov).get_agent_name(), res.resource_version_id)
+                    for res in resources
+                    for prov in res.provides
+                ]
+            )
 
-                        for agent, resource_id in waiting_agents:
-                            aclient = self.agentmanager_service.get_agent_client(env.id, agent)
-                            if aclient is not None:
-                                await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
+            for agent, resource_id in waiting_agents:
+                aclient = self.agentmanager_service.get_agent_client(env.id, agent)
+                if aclient is not None:
+                    await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
 
-                return 200
+        return 200
