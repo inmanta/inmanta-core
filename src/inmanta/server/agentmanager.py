@@ -96,7 +96,7 @@ class AgentManager(ServerSlice, SessionListener):
         if fact_back_off is None:
             fact_back_off = opt.server_fact_resource_block.get()
 
-         # back-off timer for fact requests
+        # back-off timer for fact requests
         self._fact_resource_block: int = fact_back_off
         # per resource time of last fact request
         self._fact_resource_block_set: Dict[str, float] = {}
@@ -190,18 +190,25 @@ class AgentManager(ServerSlice, SessionListener):
 
     # Notify from session listener
     def expire(self, session: protocol.Session, timeout: float) -> None:
-        # Expiry, creation and endpoint update (for different session) will come in here in-order, but could get re-ordered by the add_background_task. This is safe because all scenarios result in the same end-result: the primary is moved to the newly created session. 
+        """
+            Expiry, creation and endpoint update (for different session) will come in here in-order, but could get re-ordered
+            by the add_background_task. This is safe because all scenarios result in the same end-result: the primary is moved
+            to the newly created session.
+        """
         self.add_background_task(self._expire_session(session, datetime.now()))
 
     # Notify from session listener
     def seen(self, session: protocol.Session) -> None:
-       """
-       Primarily used to 1) update last_seen time and 2) process updates of the endpoints list 
-       
-       Expiry, creation and endpoint update (for different session) will come in here in-order, but could get re-ordered by the add_background_task. This is safe because all scenarios result in the same end-result: the primary is moved to the newly created session. 
-      
-       Expiry and endpoint update or the same session should not get re-ordered. This is possible in theory, but in practice these calls are separated by at least one session timeout, as expired session can not be re-opened. 
-       """
+        """
+           Primarily used to 1) update last_seen time and 2) process updates of the endpoints list
+
+           Expiry, creation and endpoint update (for different session) will come in here in-order, but could get re-ordered
+           by the add_background_task. This is safe because all scenarios result in the same end-result: the primary is moved
+           to the newly created session.
+
+           Expiry and endpoint update on the same session should not get re-ordered. This is possible in theory, but in
+           practice these calls are separated by at least one session timeout, as expired session can not be re-opened.
+        """
         self.add_background_task(self._seen_session(session))
 
     # Seen
@@ -209,6 +216,7 @@ class AgentManager(ServerSlice, SessionListener):
         endpoints_with_new_primary: List[Tuple[str, Optional[uuid.UUID]]] = []
         async with self.session_lock:
             endpoints_in_agent_manager = self.endpoints_for_sid[session.id]
+            # Copy endpoint_names, because the agent_manager may update this list
             endpoints_in_session = set(session.endpoint_names)
             endpoints_to_add = list(endpoints_in_session - endpoints_in_agent_manager)
             LOGGER.debug("Adding endpoints %s to session %s on %s", endpoints_to_add, session.id, session.nodename)
@@ -216,24 +224,14 @@ class AgentManager(ServerSlice, SessionListener):
             LOGGER.debug("Removing endpoints %s from session %s on %s", endpoints_to_add, session.id, session.nodename)
 
             endpoints_with_new_primary += await self._failover_endpoints(session, endpoints_to_remove)
-            endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session)
+            endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session, endpoints_to_add)
             self.endpoints_for_sid[session.id] = set(endpoints_in_session)
 
         now = datetime.now()
         await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add, now)
         await data.AgentInstance.log_instance_expiry(session.id, endpoints_to_remove, now)
         await data.Agent.update_primary(session.tid, endpoints_with_new_primary, now)
-        await self._flush_agent_presence(session, now)
-
-    async def _flush_agent_presence(self, session: protocol.Session, now: datetime) -> None:
-        sid = session.get_id()
-
-        aps = await data.AgentProcess.get_by_sid(sid=sid)
-        if aps is None:
-            LOGGER.warning("No process registered for SID %s", sid)
-            return
-
-        await aps.update_fields(last_seen=now)
+        await data.AgentProcess.update_last_seen(session.id, now)
 
     # Session registration
     async def _register_session(self, session: protocol.Session, now: datetime) -> None:
@@ -242,34 +240,39 @@ class AgentManager(ServerSlice, SessionListener):
             session log in the database. When the database connection is lost, the get_statuses()
             call fails and the new session will be refused.
         """
-        LOGGER.debug("New session %s for agents %s on %s", session.id, session.endpoint_names, session.nodename)
+        # Copy endpoint_names, because the agent_manager may update this list
+        endpoint_names = list(session.endpoint_names)
+        LOGGER.debug("New session %s for agents %s on %s", session.id, endpoint_names, session.nodename)
         async with self.session_lock:
             tid = session.tid
             sid = session.get_id()
             self.sessions[sid] = session
-            self.endpoints_for_sid[sid] = set(session.endpoint_names)
+            self.endpoints_for_sid[sid] = set(endpoint_names)
             try:
-                endpoints_with_new_primary = await self._ensure_primary_if_not_exists(session)
+                endpoints_with_new_primary = await self._ensure_primary_if_not_exists(session, endpoint_names)
             except Exception as e:
                 # Database connection failed
                 del self.sessions[sid]
                 del self.endpoints_for_sid[sid]
                 raise e
 
-        self.add_background_task(self._log_session_creation_to_db(tid, endpoints_with_new_primary, session, now))
+        self.add_background_task(
+            self._log_session_creation_to_db(tid, session, endpoint_names, endpoints_with_new_primary, now)
+        )
 
     async def _log_session_creation_to_db(
         self,
         tid: uuid.UUID,
-        endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]],
         session: protocol.Session,
+        endpoint_names: List[str],
+        endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]],
         now: datetime,
     ) -> None:
         """
             Note: This method call is allowed to fail when the database connection is lost.
         """
         await data.AgentProcess.seen(tid, session.nodename, session.id, now)
-        await data.AgentInstance.log_instance_creation(tid, session.id, session.endpoint_names, now)
+        await data.AgentInstance.log_instance_creation(tid, session.id, endpoint_names, now)
         await data.Agent.update_primary(tid, endpoints_with_new_primary, now)
 
     # Session expiry
@@ -350,7 +353,9 @@ class AgentManager(ServerSlice, SessionListener):
             del self.tid_endpoint_to_session[key]
         return new_active_session
 
-    async def _ensure_primary_if_not_exists(self, session: protocol.Session) -> Sequence[Tuple[str, uuid.UUID]]:
+    async def _ensure_primary_if_not_exists(
+        self, session: protocol.Session, endpoints: List[str]
+    ) -> Sequence[Tuple[str, uuid.UUID]]:
         """
             Make this session the primary session for the endpoints of this session if no primary exists and the agent is not
             paused.
@@ -360,10 +365,10 @@ class AgentManager(ServerSlice, SessionListener):
             Note: Always call under session lock.
             Note: This call will fail when the database connection is lost.
         """
-        agent_statuses = await data.Agent.get_statuses(session.tid, session.endpoint_names)
+        agent_statuses = await data.Agent.get_statuses(session.tid, endpoints)
 
         result = []
-        for endpoint in session.endpoint_names:
+        for endpoint in endpoints:
             key = (session.tid, endpoint)
             if key not in self.tid_endpoint_to_session and agent_statuses[endpoint] != AgentStatus.paused:
                 LOGGER.debug("set session %s as primary for agent %s in env %s", session.id, endpoint, session.tid)
