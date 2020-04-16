@@ -16,8 +16,8 @@
     Contact: code@inmanta.com
 """
 
-import datetime
 import asyncio
+import datetime
 import enum
 import functools
 import hashlib
