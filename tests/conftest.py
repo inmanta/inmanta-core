@@ -403,11 +403,7 @@ async def agent_factory(server):
         return a
 
     yield create_agent
-    gather_future = asyncio.gather(*[agent.stop() for agent in started_agents], return_exceptions=True)
-    stop_agents_result = await asyncio.wait_for(gather_future, timeout=30)
-    for elem in stop_agents_result:
-        if isinstance(elem, Exception):
-            raise elem
+    await asyncio.gather(*[agent.stop() for agent in started_agents])
 
 
 @pytest.fixture(scope="function")

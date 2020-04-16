@@ -17,6 +17,7 @@
 """
 
 import datetime
+import asyncio
 import enum
 import functools
 import hashlib
@@ -246,6 +247,8 @@ async def retry_limited(fun: Callable[[], bool], timeout: float, interval: float
     start = time.time()
     while time.time() - start < timeout and not fun():
         await sleep(interval)
+    if not fun():
+        raise asyncio.TimeoutError()
 
 
 class StoppedException(Exception):

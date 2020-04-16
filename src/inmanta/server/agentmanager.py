@@ -446,6 +446,9 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             return None
 
+    def are_agents_up(self, tid: uuid.UUID, endpoints: List[str]) -> bool:
+        return all([self.is_agent_up(tid, e) for e in endpoints])
+
     def is_agent_up(self, tid: uuid.UUID, endpoint: str) -> bool:
         key = (tid, endpoint)
         return self.tid_endpoint_to_session.get(key) is not None
@@ -771,8 +774,11 @@ class AutostartedAgentManager(ServerSlice):
 
         self._agent_procs[env.id] = proc
 
-        # Wait for an agent to start
-        await retry_limited(lambda: self._agent_manager.is_agent_up(env.id, agents[0]), 5)
+        # Wait for all agents to start
+        try:
+            await retry_limited(lambda: self._agent_manager.are_agents_up(env.id, agents), 5)
+        except asyncio.TimeoutError:
+            LOGGER.warning("Timeout: agent with PID %s took too long to start", proc.pid)
 
         LOGGER.debug("Started new agent with PID %s", proc.pid)
         return True
