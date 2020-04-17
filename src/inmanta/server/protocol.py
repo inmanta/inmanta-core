@@ -29,6 +29,7 @@ from tornado.ioloop import IOLoop
 import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta.protocol import Client, common, endpoints, handle, methods
+from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
@@ -553,7 +554,10 @@ class SessionManager(ServerSlice):
         self.listeners.append(listener)
 
     async def prestop(self) -> None:
-        await super(SessionManager, self).prestop()
+        async with self._sessions_lock:
+            # Keep the super call in the session_lock to make sure that no additional sessions are created
+            # while the server is shutting down. This call sets the is_stopping() flag to true.
+            await super(SessionManager, self).prestop()
         # terminate all sessions cleanly
         for session in self._sessions.copy().values():
             await session.expire(0)
@@ -572,6 +576,8 @@ class SessionManager(ServerSlice):
             sid = uuid.UUID(sid)
 
         async with self._sessions_lock:
+            if self.is_stopping():
+                raise ShutdownInProgress()
             if sid not in self._sessions:
                 session = self.new_session(sid, tid, endpoint_names, nodename)
                 self._sessions[sid] = session
