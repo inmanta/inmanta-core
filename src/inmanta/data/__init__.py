@@ -866,7 +866,7 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="When set to true, this environment cannot be cleared or deleted.",
-        )
+        ),
     }
 
     _renamed_settings_map = {

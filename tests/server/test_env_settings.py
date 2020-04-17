@@ -176,11 +176,7 @@ async def test_clear_protected_environment(server, client):
         version = res.result["data"]
 
         result = await client.put_version(
-            tid=env_id,
-            version=version,
-            resources=[],
-            unknowns=[],
-            compiler_version=get_compiler_version(),
+            tid=env_id, version=version, resources=[], unknowns=[], compiler_version=get_compiler_version(),
         )
         assert result.code == 200
 

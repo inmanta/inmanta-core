@@ -28,7 +28,7 @@ from inmanta import data
 from inmanta.data import model
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
-from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError, Forbidden
+from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_DATABASE,
