@@ -20,7 +20,11 @@ from typing import Tuple
 
 import pytest
 
-from inmanta.ast.type import TYPES, NullableType, Type, TypedList
+from inmanta.ast import Namespace, RuntimeException
+from inmanta.ast.attribute import Attribute
+from inmanta.ast.entity import Entity
+from inmanta.ast.type import TYPES, Integer, NullableType, Type, TypedList
+from inmanta.execute.util import NoneValue
 
 
 @pytest.mark.parametrize("base_type_string", TYPES.keys())
@@ -38,3 +42,22 @@ def test_dsl_types_type_string(base_type_string: str, multi: bool, nullable: boo
 
     assert tp.type_string() == type_string
     assert str(tp) == type_string
+
+
+@pytest.mark.parametrize("multi", [True, False])
+@pytest.mark.parametrize("nullable", [True, False])
+def test_attribute_validate(multi: bool, nullable: bool) -> None:
+    entity: Entity = Entity("DummyEntity", Namespace("dummy_namespace"))
+    attribute: Attribute = Attribute(entity, Integer(), "my_attribute", multi, nullable)
+
+    def validate(value: object, success: bool) -> None:
+        if success:
+            attribute.validate(value)
+        else:
+            with pytest.raises(RuntimeException):
+                attribute.validate(value)
+
+    validate(42, not multi)
+    validate(NoneValue(), nullable)
+    validate([0, 1, 2], multi)
+    validate([0, 1, NoneValue()], False)
