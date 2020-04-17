@@ -87,7 +87,7 @@ server_timeout = Option(
     "config",
     "server-timeout",
     125,
-    "Amount of time to wait for a response from the server before we try to reconnect, must be smaller than server.agent-hold",
+    "Amount of time to wait for a response from the server before we try to reconnect, must be larger than server.agent-hold",
     is_time,
 )
 
