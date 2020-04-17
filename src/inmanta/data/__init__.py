@@ -653,6 +653,7 @@ AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
 RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
 PURGE_ON_DELETE = "purge_on_delete"
+PROTECTED_ENVIRONMENT = "protected_environment"
 
 
 class Setting(object):
@@ -859,6 +860,13 @@ class Environment(BaseDocument):
             doc="Enable purge on delete. When set to true, the server will detect the absence of resources with purge_on_delete"
             " set to true and automatically purges them.",
         ),
+        PROTECTED_ENVIRONMENT: Setting(
+            name=PROTECTED_ENVIRONMENT,
+            default=False,
+            typ="bool",
+            validator=convert_boolean,
+            doc="When set to true, this environment cannot be cleared or deleted.",
+        )
     }
 
     _renamed_settings_map = {
