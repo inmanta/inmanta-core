@@ -38,6 +38,7 @@
  - Plugins are now imported in the inmanta_plugins package to allow importing submodules (#507)
  - Added event listener to Environment Service (#1996)
  - Added protected environment option (#1997)
+ - Added warning when trying to override a built-in type with a typedef (#81)
 
 # v 2020.1 (2020-02-19) Changes in this release:
 
