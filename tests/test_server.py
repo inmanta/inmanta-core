@@ -30,7 +30,14 @@ from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.export import upload_code
 from inmanta.protocol import Client
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_SERVER, SLICE_SESSION_MANAGER
+from inmanta.server import (
+    SLICE_AGENT_MANAGER,
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_ORCHESTRATION,
+    SLICE_RESOURCE,
+    SLICE_SERVER,
+    SLICE_SESSION_MANAGER,
+)
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version, hash_file
@@ -48,44 +55,45 @@ async def test_autostart(server, client, environment, caplog):
         When the second agent is started for the same environment, the first is terminated in a controlled manner
     """
     env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": "", "iaas_agentx": ""})
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "iaas_agent": "", "iaas_agentx": ""})
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    autostarted_agentmanager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
     sessionendpoint = server.get_slice(SLICE_SESSION_MANAGER)
 
     await agentmanager.ensure_agent_registered(env, "iaas_agent")
     await agentmanager.ensure_agent_registered(env, "iaas_agentx")
 
-    res = await agentmanager._ensure_agents(env, ["iaas_agent"])
+    res = await autostarted_agentmanager._ensure_agents(env, ["iaas_agent"])
     assert res
 
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
     assert len(sessionendpoint._sessions) == 1
-    res = await agentmanager._ensure_agents(env, ["iaas_agent"])
+    res = await autostarted_agentmanager._ensure_agents(env, ["iaas_agent"])
     assert not res
     assert len(sessionendpoint._sessions) == 1
 
     LOGGER.warning("Killing agent")
-    agentmanager._agent_procs[env.id].terminate()
-    await agentmanager._agent_procs[env.id].wait()
+    autostarted_agentmanager._agent_procs[env.id].terminate()
+    await autostarted_agentmanager._agent_procs[env.id].wait()
     await retry_limited(lambda: len(sessionendpoint._sessions) == 0, 20)
     # Prevent race condition
     await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 20)
-    res = await agentmanager._ensure_agents(env, ["iaas_agent"])
+    res = await autostarted_agentmanager._ensure_agents(env, ["iaas_agent"])
     assert res
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 3)
     assert len(sessionendpoint._sessions) == 1
 
     # second agent for same env
-    res = await agentmanager._ensure_agents(env, ["iaas_agentx"])
+    res = await autostarted_agentmanager._ensure_agents(env, ["iaas_agentx"])
     assert res
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
     assert len(sessionendpoint._sessions) == 1
 
     # Test stopping all agents
-    await agentmanager.stop_agents(env)
+    await autostarted_agentmanager.stop_agents(env)
     assert len(sessionendpoint._sessions) == 0
-    assert len(agentmanager._agent_procs) == 0
+    assert len(autostarted_agentmanager._agent_procs) == 0
 
     log_doesnt_contain(caplog, "inmanta.config", logging.WARNING, "rest_transport not defined")
     log_doesnt_contain(caplog, "inmanta.server.agentmanager", logging.WARNING, "Agent processes did not close in time")
@@ -98,6 +106,7 @@ async def test_autostart_dual_env(client, server):
         Test auto start of agent
     """
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
     sessionendpoint = server.get_slice(SLICE_SESSION_MANAGER)
 
     result = await client.create_project("env-test")
@@ -111,20 +120,20 @@ async def test_autostart_dual_env(client, server):
     env_id2 = result.result["environment"]["id"]
 
     env = await data.Environment.get_by_id(uuid.UUID(env_id))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": ""})
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "iaas_agent": ""})
 
     env2 = await data.Environment.get_by_id(uuid.UUID(env_id2))
-    await env2.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": ""})
+    await env2.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "iaas_agent": ""})
 
     await agentmanager.ensure_agent_registered(env, "iaas_agent")
     await agentmanager.ensure_agent_registered(env2, "iaas_agent")
 
-    res = await agentmanager._ensure_agents(env, ["iaas_agent"])
+    res = await autostarted_agent_manager._ensure_agents(env, ["iaas_agent"])
     assert res
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
     assert len(sessionendpoint._sessions) == 1
 
-    res = await agentmanager._ensure_agents(env2, ["iaas_agent"])
+    res = await autostarted_agent_manager._ensure_agents(env2, ["iaas_agent"])
     assert res
     await retry_limited(lambda: len(sessionendpoint._sessions) == 2, 20)
     assert len(sessionendpoint._sessions) == 2
@@ -137,33 +146,34 @@ async def test_autostart_batched(client, server, environment):
         Test auto start of agent
     """
     env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": "", "iaas_agentx": ""})
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "iaas_agentx": ""})
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
     sessionendpoint = server.get_slice(SLICE_SESSION_MANAGER)
 
-    await agentmanager.ensure_agent_registered(env, "iaas_agent")
+    await agentmanager.ensure_agent_registered(env, "internal")
     await agentmanager.ensure_agent_registered(env, "iaas_agentx")
 
-    res = await agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
+    res = await autostarted_agent_manager._ensure_agents(env, ["internal", "iaas_agentx"])
     assert res
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
     assert len(sessionendpoint._sessions) == 1
-    res = await agentmanager._ensure_agents(env, ["iaas_agent"])
+    res = await autostarted_agent_manager._ensure_agents(env, ["internal"])
     assert not res
     assert len(sessionendpoint._sessions) == 1
 
-    res = await agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
+    res = await autostarted_agent_manager._ensure_agents(env, ["internal", "iaas_agentx"])
     assert not res
     assert len(sessionendpoint._sessions) == 1
 
     LOGGER.warning("Killing agent")
-    agentmanager._agent_procs[env.id].terminate()
-    await agentmanager._agent_procs[env.id].wait()
+    autostarted_agent_manager._agent_procs[env.id].terminate()
+    await autostarted_agent_manager._agent_procs[env.id].wait()
     await retry_limited(lambda: len(sessionendpoint._sessions) == 0, 20)
     # Prevent race condition
     await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 20)
-    res = await agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
+    res = await autostarted_agent_manager._ensure_agents(env, ["internal", "iaas_agentx"])
     assert res
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 3)
     assert len(sessionendpoint._sessions) == 1
@@ -202,8 +212,8 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
         Test the server to manage the updates on a model during agent deploy
     """
     agent = Agent("localhost", {"nvblah": "localhost"}, environment=environment_multi, code_loader=False)
-    agent.add_end_point_name("vm1.dev.inmanta.com")
-    agent.add_end_point_name("vm2.dev.inmanta.com")
+    await agent.add_end_point_name("vm1.dev.inmanta.com")
+    await agent.add_end_point_name("vm2.dev.inmanta.com")
     await agent.start()
     aclient = agent._client
 

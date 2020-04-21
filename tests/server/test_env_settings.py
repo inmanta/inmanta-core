@@ -86,15 +86,26 @@ async def test_environment_settings(client, server, environment_default):
     result = await client.delete_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
     assert result.code == 200
 
-    result = await client.set_setting(
-        tid=environment_default,
-        id=data.AUTOSTART_AGENT_MAP,
-        value={"agent1": "", "agent2": "localhost", "agent3": "user@agent3"},
-    )
+    agent_map = {"internal": "", "agent1": "", "agent2": "localhost", "agent3": "user@agent3"}
+    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP, value=agent_map,)
     assert result.code == 200
+
+    # Internal agent is missing
+    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP, value={"agent1": ""})
+    assert result.code == 500
+    assert "The internal agent must be present in the autostart_agent_map" in result.result["message"]
+    # Assert agent_map didn't change
+    result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP)
+    assert result.code == 200
+    assert result.result["value"] == agent_map
 
     result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP, value="")
     assert result.code == 500
+    assert "Agent map should be a dict" in result.result["message"]
+    # Assert agent_map didn't change
+    result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP)
+    assert result.code == 200
+    assert result.result["value"] == agent_map
 
 
 @pytest.mark.asyncio

@@ -617,6 +617,9 @@ def convert_agent_map(value: Dict[str, str]) -> Dict[str, str]:
         if not isinstance(v, str):
             raise ValueError("The value of an agent map should be string")
 
+    if "internal" not in value:
+        raise ValueError("The internal agent must be present in the autostart_agent_map")
+
     return value
 
 
@@ -1090,7 +1093,7 @@ class AgentProcess(BaseDocument):
         return nodes
 
     @classmethod
-    async def get_by_sid(cls, sid: uuid.UUID) -> List["AgentProcess"]:
+    async def get_by_sid(cls, sid: uuid.UUID) -> Optional["AgentProcess"]:
         objects = await cls.get_list(limit=DBLIMIT, expired=None, sid=sid)
         if len(objects) == 0:
             return None
@@ -1099,6 +1102,30 @@ class AgentProcess(BaseDocument):
             return objects[0]
         else:
             return objects[0]
+
+    @classmethod
+    async def seen(cls, env: uuid.UUID, nodename: str, sid: uuid.UUID, now: datetime.datetime):
+        """
+            Update the last_seen parameter of the process and mark as not expired.
+        """
+        proc = await cls.get_one(sid=sid)
+        if proc is None:
+            proc = cls(hostname=nodename, environment=env, first_seen=now, last_seen=now, sid=sid)
+            await proc.insert()
+        else:
+            await proc.update_fields(last_seen=now, expired=None)
+
+    @classmethod
+    async def update_last_seen(cls, sid: uuid.UUID, last_seen: datetime.datetime) -> None:
+        aps = await cls.get_by_sid(sid=sid)
+        if aps:
+            await aps.update_fields(last_seen=last_seen)
+
+    @classmethod
+    async def expire_process(cls, sid: uuid.UUID, now: datetime.datetime) -> None:
+        aps = await cls.get_by_sid(sid=sid)
+        if aps is not None:
+            await aps.update_fields(expired=now)
 
     def to_dict(self) -> JsonType:
         result = super(AgentProcess, self).to_dict()
@@ -1136,13 +1163,47 @@ class AgentInstance(BaseDocument):
         return objects
 
     @classmethod
-    async def expire_all_for_process(cls, tid: uuid.UUID, process: uuid.UUID, now: datetime.datetime) -> None:
+    async def _expire_endpoints_for_process(
+        cls, tid: uuid.UUID, process: uuid.UUID, endpoints: List[str], now: datetime.datetime
+    ) -> None:
         """
-            Expire all instances which belong to the given process.
+            Expire the agent instances for the given endpoints if they are not expired yet.
         """
-        query = f"UPDATE {cls.table_name()} SET expired=$1 WHERE tid=$2 AND process=$3"
-        values = [cls._get_value(now), cls._get_value(tid), cls._get_value(process)]
+        if not endpoints:
+            return
+        names_subquery = ",".join([f"${i}" for i in range(4, 4 + len(endpoints))])
+        query = f"""UPDATE {cls.table_name()}
+                    SET expired=$1
+                    WHERE tid=$2 AND process=$3 AND name IN ({names_subquery}) AND expired IS NULL
+                 """
+        values = [cls._get_value(now), cls._get_value(tid), cls._get_value(process)] + [cls._get_value(e) for e in endpoints]
         await cls._execute_query(query, *values)
+
+    @classmethod
+    async def log_instance_creation(
+        cls, tid: uuid.UUID, process: uuid.UUID, endpoints: List[str], now: datetime.datetime
+    ) -> None:
+        """
+            Create new agent instances for a given session.
+        """
+        if not endpoints:
+            return
+        # Fix database corruption when database was down
+        await cls._expire_endpoints_for_process(tid, process, endpoints, now)
+        for nh in endpoints:
+            await cls(tid=tid, process=process, name=nh).insert()
+
+    @classmethod
+    async def log_instance_expiry(cls, sid: uuid.UUID, endpoints: List[str], now: datetime.datetime) -> None:
+        """
+            Expire specific instances for a given session id.
+        """
+        if not endpoints:
+            return
+        instances = await cls.get_list(process=sid)
+        for ai in instances:
+            if ai.name in endpoints:
+                await ai.update_fields(expired=now)
 
 
 class Agent(BaseDocument):
@@ -1238,6 +1299,33 @@ class Agent(BaseDocument):
             values = [cls._get_value(paused), cls._get_value(env), cls._get_value(endpoint)]
         result = await cls._fetch_query(query, *values)
         return sorted([r["name"] for r in result])
+
+    @classmethod
+    async def update_primary(
+        cls, env: uuid.UUID, endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]], now: datetime.datetime
+    ) -> None:
+        """
+            Update the primary agent instance for agents present in the database.
+
+            :param env: The environment of the agent
+            :param endpoints_with_new_primary: Contains a tuple (agent-name, sid) for each agent that has got a new
+                                               primary agent instance. The sid in the tuple is the session id of the new
+                                               primary. If the session id is None, the Agent doesn't have a primary anymore.
+            :param now: Timestamp of this failover
+        """
+        for (endpoint, sid) in endpoints_with_new_primary:
+            agent = await cls.get(env, endpoint)
+            if agent is None:
+                continue
+
+            if sid is None:
+                await agent.update_fields(last_failover=now, primary=None)
+            else:
+                instances = await AgentInstance.active_for(tid=env, endpoint=agent.name, process=sid)
+                if instances:
+                    await agent.update_fields(last_failover=now, primary=instances[0].id)
+                else:
+                    await agent.update_fields(last_failover=now, primary=None)
 
 
 class Report(BaseDocument):

@@ -130,7 +130,7 @@ class MultiVersionSetup(object):
 
         a = Agent(hostname="node1", environment=environment, agent_map={e: "localhost" for e in endpoints}, code_loader=False)
         for e in endpoints:
-            a.add_end_point_name(e)
+            await a.add_end_point_name(e)
         await a.start()
         await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
