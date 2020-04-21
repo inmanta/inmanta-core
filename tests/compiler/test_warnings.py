@@ -241,7 +241,5 @@ typedef string as number matching self > 0
         assert len(w) == 1
         assert issubclass(w[0].category, CompilerRuntimeWarning)
         assert str(w[0].message) == (
-            "Trying to override a built-in type: string (reported in Type(string) ({dir}/test.cf:2:9))".format(
-                dir=snippetcompiler.project_dir
-            )
+            "Trying to override a built-in type: string (reported in Type(string) ({snippetcompiler.project_dir}/test.cf:2:9))"
         )
