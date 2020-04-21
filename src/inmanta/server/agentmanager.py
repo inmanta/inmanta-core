@@ -15,15 +15,15 @@
 
     Contact: code@inmanta.com
 """
-from enum import Enum
 import asyncio
 import logging
 import os
 import sys
 import time
 import uuid
-from asyncio import subprocess, queues
+from asyncio import queues, subprocess
 from datetime import datetime
+from enum import Enum
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from uuid import UUID
 
@@ -133,7 +133,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         # This queue ensures that notifications from the SessionManager are processed in the same order
         # in which they arrive in the SessionManager, without blocking the SessionManager.
-        self._session_listener_actions = queues.Queue()
+        self._session_listener_actions: queues.Queue = queues.Queue()
 
         self.closesessionsonstart: bool = closesessionsonstart
 
@@ -227,7 +227,8 @@ class AgentManager(ServerSlice, SessionListener):
                     "An exception occurred while handling session action %s on session id %s.",
                     session_action.action_type.name,
                     session_action.session.id,
-                    exc_info=True)
+                    exc_info=True,
+                )
             finally:
                 try:
                     self._session_listener_actions.task_done()
@@ -255,7 +256,7 @@ class AgentManager(ServerSlice, SessionListener):
             action_type=SessionActionType.REGISTER_SESSION,
             session=session,
             endpoint_names_snapshot=endpoint_names_snapshot,
-            timestamp=datetime.now()
+            timestamp=datetime.now(),
         )
         await self._session_listener_actions.put(session_action)
 
@@ -270,7 +271,7 @@ class AgentManager(ServerSlice, SessionListener):
             action_type=SessionActionType.EXPIRE_SESSION,
             session=session,
             endpoint_names_snapshot=endpoint_names_snapshot,
-            timestamp=datetime.now()
+            timestamp=datetime.now(),
         )
         await self._session_listener_actions.put(session_action)
 
@@ -290,7 +291,7 @@ class AgentManager(ServerSlice, SessionListener):
             action_type=SessionActionType.SEEN_SESSION,
             session=session,
             endpoint_names_snapshot=endpoint_names_snapshot,
-            timestamp=datetime.now()
+            timestamp=datetime.now(),
         )
         await self._session_listener_actions.put(session_action)
 

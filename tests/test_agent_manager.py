@@ -29,7 +29,7 @@ from inmanta.agent import Agent, agent
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
-from inmanta.server.agentmanager import AgentManager, SessionManager, SessionAction
+from inmanta.server.agentmanager import AgentManager, SessionAction, SessionManager
 from inmanta.server.protocol import Session
 from utils import UNKWN, assert_equal_ish, retry_limited
 
@@ -125,6 +125,7 @@ def assert_state_agents_retry(
         except AssertionError:
             return False
         return True
+
     return func
 
 
@@ -576,7 +577,9 @@ async def test_fix_corrupted_database(init_dataclasses_and_load_schema):
     await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=0, nr_agent_instances=2, nr_non_expired_instances=1)
 
     # Session registration should fix the inconsistency
-    await agent_manager._register_session(session=session, endpoint_names_snapshot=session.endpoint_names, now=datetime.datetime.now())
+    await agent_manager._register_session(
+        session=session, endpoint_names_snapshot=session.endpoint_names, now=datetime.datetime.now()
+    )
     await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=3, nr_non_expired_instances=1)
     instance_one_after_fix = await data.AgentInstance.get_by_id(instance_one.id)
     assert instance_one_after_fix.expired is not None

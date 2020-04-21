@@ -18,11 +18,11 @@
 
 import logging
 import uuid
+from typing import List
 
 import pytest
 from pytest import fixture
 from tornado.gen import sleep
-from typing import List
 
 # Methods need to be defined before the Client class is loaded by Python
 from inmanta import protocol  # NOQA

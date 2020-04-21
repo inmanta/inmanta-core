@@ -473,7 +473,6 @@ class Session(object):
 
 
 class SessionListener(object):
-
     async def new_session(self, session: Session, endpoint_names_snapshot: List[str]) -> None:
         """
         Notify that a new session was created.
