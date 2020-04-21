@@ -80,7 +80,7 @@ agent_deploy_interval = Option(
     "config",
     "agent-deploy-interval",
     0,
-    "The number of seconds between two (incremental) deployment runs of the agent.",
+    "The number of seconds between two (incremental) deployment runs of the agent. Set this to 0 to disable the scheduled deploy runs.",
     is_time,
     predecessor_option=agent_interval,
 )
