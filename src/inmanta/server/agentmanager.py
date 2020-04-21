@@ -313,7 +313,7 @@ class AgentManager(ServerSlice, SessionListener):
         session: protocol.Session,
         endpoints_to_add: List[str],
         endpoints_to_remove: List[str],
-        endpoints_with_new_primary: Sequence[Tuple[str, uuid.UUID]]
+        endpoints_with_new_primary: List[Tuple[str, Optional[uuid.UUID]]],
     ) -> None:
         """
             Note: This method call is allowed to fail when the database connection is lost.
