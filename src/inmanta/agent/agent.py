@@ -1032,7 +1032,7 @@ class Agent(SessionEndpoint):
 
     async def _init_agent_map(self):
         if cfg.use_autostart_agent_map.get():
-            LOGGER.info("Using the agent-map configured on the server")
+            LOGGER.info("Using the autostart_agent_map configured on the server")
             env_id = self.get_environment()
             assert env_id is not None
             result = await self._client.environment_setting_get(env_id, data.AUTOSTART_AGENT_MAP)

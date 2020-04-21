@@ -155,6 +155,34 @@ async def test_set_agent_map(server, environment, agent_factory):
     assert agent1.agent_map == agent_map
 
     # Set agentmap via config option
-    config.Config.set("config", "agent-map", "agent1=localhost")
+    config.Config.set("config", "agent-map", "agent2=localhost")
     agent2 = await agent_factory(hostname="node2", environment=env_id)
-    assert agent2.agent_map == agent_map
+    assert agent2.agent_map == {"agent2": "localhost"}
+
+    # When both are set, the constructor takes precedence
+    config.Config.set("config", "agent-map", "agent3=localhost")
+    agent3 = await agent_factory(hostname="node3", environment=env_id, agent_map=agent_map)
+    assert agent3.agent_map == agent_map
+
+
+@pytest.mark.asyncio
+async def test_hostname(server, environment, agent_factory):
+    """
+        This test verifies whether the hostname of an agent is set correct when set via:
+            1) The constructor
+            2) Via the agent-names configuration option
+    """
+    env_id = uuid.UUID(environment)
+
+    # Set hostname in constructor
+    agent1 = await agent_factory(hostname="node1", environment=env_id)
+    assert agent1.get_end_point_names() == ["node1"]
+
+    # Set hostname via config option
+    config.Config.set("config", "agent-names", "test123,test456")
+    agent2 = await agent_factory(environment=env_id)
+    assert sorted(agent2.get_end_point_names()) == sorted(["test123", "test456"])
+
+    # When both are set, the constructor takes precedence
+    agent3 = await agent_factory(hostname="node3", environment=env_id)
+    assert agent3.get_end_point_names() == ["node3"]
