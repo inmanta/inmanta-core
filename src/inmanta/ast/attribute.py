@@ -98,8 +98,14 @@ class Attribute(Locatable):
         """
             Validate a value that is going to be assigned to this attribute
         """
-        if not isinstance(value, Unknown):
-            self.type.validate(value)
+        if isinstance(value, Unknown):
+            return
+        validation_type: Type = self.type
+        if self.is_multi():
+            validation_type = TypedList(validation_type)
+        if self.is_optional():
+            validation_type = NullableType(validation_type)
+        validation_type.validate(value)
 
     def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
         if self.__multi:

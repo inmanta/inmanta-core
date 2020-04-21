@@ -21,6 +21,7 @@
  - Fixed double assignment error resulting from combining constructor kwargs with default values (#2003)
  - Fixed recursive unwrapping of dict return values from plugins (#2004)
  - Resource action update is now performed in a single transaction, eliminating the possibility of inconsistent state (#1944)
+ - Type.type_string is now defined as returning the representation of the type in the inmanta DSL (inmanta/lsm#75)
 
 ## Added
  - Experimental data trace, root cause and graphic data flow visualization applications (#1820, #1831, #1821, #1822)
@@ -37,6 +38,7 @@
  - Added support to pause an agent (#1128, #1982)
  - Plugins are now imported in the inmanta_plugins package to allow importing submodules (#507)
  - Added event listener to Environment Service (#1996)
+ - Added protected environment option (#1997)
 
 # v 2020.1 (2020-02-19) Changes in this release:
 

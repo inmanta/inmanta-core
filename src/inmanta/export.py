@@ -618,8 +618,11 @@ class ModelExporter(object):
                 return model.DirectValue(value)
 
         def convert_attribute(attr):
+            type_string: Optional[str] = attr.type.type_string()
+            if type_string is None:
+                raise Exception("Type %s can not be represented in the inmanta DSL" % attr.type)
             return model.Attribute(
-                attr.type.type_string(), attr.is_optional(), attr.is_multi(), convert_comment(attr.comment), location(attr)
+                type_string, attr.is_optional(), attr.is_multi(), convert_comment(attr.comment), location(attr)
             )
 
         def convert_relation(relation: RelationAttribute):
