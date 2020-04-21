@@ -24,6 +24,7 @@ import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeReferenceAnchor,
     CompilerDeprecationWarning,
+    CompilerRuntimeWarning,
     DuplicateException,
     Import,
     IndexException,
@@ -42,7 +43,7 @@ from inmanta.ast.constraint.expression import Equals
 from inmanta.ast.entity import Default, Entity, EntityLike, Implement, Implementation
 from inmanta.ast.statements import BiStatement, ExpressionStatement, Literal, Statement, TypeDefinitionStatement
 from inmanta.ast.statements.generator import Constructor
-from inmanta.ast.type import ConstraintType, NullableType, Type, TypedList
+from inmanta.ast.type import ConstraintType, NullableType, Type, TypedList, TYPES
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 
 from . import DefinitionStatement
@@ -413,6 +414,8 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self.type = ConstraintType(self.namespace, str(name))
         self.type.location = name.get_location()
         self.comment = None
+        if self.name in TYPES:
+            inmanta_warnings.warn(CompilerRuntimeWarning(self, "Trying to override a built-in type: %s" % self.name))
 
     def get_expression(self) -> ExpressionStatement:
         """
