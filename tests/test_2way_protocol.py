@@ -22,6 +22,7 @@ import uuid
 import pytest
 from pytest import fixture
 from tornado.gen import sleep
+from typing import List
 
 # Methods need to be defined before the Client class is loaded by Python
 from inmanta import protocol  # NOQA
@@ -51,7 +52,7 @@ class SessionSpy(SessionListener, ServerSlice):
         self.expires = 0
         self.__sessions = []
 
-    async def new_session(self, session):
+    async def new_session(self, session, endpoint_names_snapshot: List[str]):
         self.__sessions.append(session)
 
     @protocol.handle(get_status_x)
@@ -65,7 +66,7 @@ class SessionSpy(SessionListener, ServerSlice):
 
         return 200, {"agents": status_list}
 
-    def expire(self, session, timeout):
+    async def expire(self, session, endpoint_names_snapshot: List[str]):
         self.__sessions.remove(session)
         print(session._sid)
         self.expires += 1

@@ -15,13 +15,14 @@
 
     Contact: code@inmanta.com
 """
+from enum import Enum
 import asyncio
 import logging
 import os
 import sys
 import time
 import uuid
-from asyncio import subprocess
+from asyncio import subprocess, queues
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from uuid import UUID
@@ -86,6 +87,26 @@ set_parameters
 """
 
 
+class SessionActionType(str, Enum):
+    REGISTER_SESSION = "register_session"
+    EXPIRE_SESSION = "expire_session"
+    SEEN_SESSION = "seen_session"
+
+
+class SessionAction:
+    """
+        A session update to be executed by the AgentManager.
+    """
+
+    def __init__(
+        self, action_type: SessionActionType, session: protocol.Session, endpoint_names_snapshot: List[str], timestamp: datetime
+    ):
+        self.action_type = action_type
+        self.session = session
+        self.endpoint_names_snapshot = endpoint_names_snapshot
+        self.timestamp = timestamp
+
+
 class AgentManager(ServerSlice, SessionListener):
     """ This class contains all server functionality related to the management of agents
     """
@@ -109,6 +130,10 @@ class AgentManager(ServerSlice, SessionListener):
         self.tid_endpoint_to_session: Dict[Tuple[UUID, str], protocol.Session] = {}
         # All endpoints associated with a sid
         self.endpoints_for_sid: Dict[uuid.UUID, Set[str]] = {}
+
+        # This queue ensures that notifications from the SessionManager are processed in the same order
+        # in which they arrive in the SessionManager, without blocking the SessionManager.
+        self._session_listener_actions = queues.Queue()
 
         self.closesessionsonstart: bool = closesessionsonstart
 
@@ -139,6 +164,8 @@ class AgentManager(ServerSlice, SessionListener):
 
         if self.closesessionsonstart:
             await self._expire_all_sessions_in_db()
+
+        self.add_background_task(self._process_session_listener_actions())
 
     async def prestop(self) -> None:
         await super().prestop()
@@ -184,21 +211,71 @@ class AgentManager(ServerSlice, SessionListener):
                         self.tid_endpoint_to_session[key] = session
                         await session.get_client().set_state(agent_name, enabled=True)
 
-    # Notify from session listener
-    async def new_session(self, session: protocol.Session) -> None:
-        await self._register_session(session, datetime.now())
+    async def _process_session_listener_actions(self) -> None:
+        """
+            This is the consumer of the _session_listener_actions queue.
+        """
+        while not self.is_stopping():
+            try:
+                session_action = await self._session_listener_actions.get()
+                await self._process_action(session_action)
+            except asyncio.CancelledError as e:
+                # Cancel this task
+                raise e
+            except Exception:
+                LOGGER.exception(
+                    "An exception occurred while handling session action %s on session id %s.",
+                    session_action.action_type.name,
+                    session_action.session.id,
+                    exc_info=True)
+            finally:
+                try:
+                    self._session_listener_actions.task_done()
+                except Exception:
+                    # Should never occur
+                    pass
+
+    async def _process_action(self, action: SessionAction) -> None:
+        """
+            Process a specific SessionAction.
+        """
+        action_type = action.action_type
+        if action_type == SessionActionType.REGISTER_SESSION:
+            await self._register_session(action.session, action.endpoint_names_snapshot, action.timestamp)
+        elif action_type == SessionActionType.SEEN_SESSION:
+            await self._seen_session(action.session, action.endpoint_names_snapshot)
+        elif action_type == SessionActionType.EXPIRE_SESSION:
+            await self._expire_session(action.session, action.endpoint_names_snapshot, action.timestamp)
+        else:
+            LOGGER.warning("Unknown SessionAction %s", action_type.name)
 
     # Notify from session listener
-    def expire(self, session: protocol.Session, timeout: float) -> None:
+    async def new_session(self, session: protocol.Session, endpoint_names_snapshot: List[str]) -> None:
+        session_action = SessionAction(
+            action_type=SessionActionType.REGISTER_SESSION,
+            session=session,
+            endpoint_names_snapshot=endpoint_names_snapshot,
+            timestamp=datetime.now()
+        )
+        await self._session_listener_actions.put(session_action)
+
+    # Notify from session listener
+    async def expire(self, session: protocol.Session, endpoint_names_snapshot: List[str]) -> None:
         """
             Expiry, creation and endpoint update (for different session) will come in here in-order, but could get re-ordered
             by the add_background_task. This is safe because all scenarios result in the same end-result: the primary is moved
             to the newly created session.
         """
-        self.add_background_task(self._expire_session(session, datetime.now()))
+        session_action = SessionAction(
+            action_type=SessionActionType.EXPIRE_SESSION,
+            session=session,
+            endpoint_names_snapshot=endpoint_names_snapshot,
+            timestamp=datetime.now()
+        )
+        await self._session_listener_actions.put(session_action)
 
     # Notify from session listener
-    def seen(self, session: protocol.Session) -> None:
+    async def seen(self, session: protocol.Session, endpoint_names_snapshot: List[str]) -> None:
         """
            Primarily used to 1) update last_seen time and 2) process updates of the endpoints list
 
@@ -209,15 +286,21 @@ class AgentManager(ServerSlice, SessionListener):
            Expiry and endpoint update on the same session should not get re-ordered. This is possible in theory, but in
            practice these calls are separated by at least one session timeout, as expired session can not be re-opened.
         """
-        self.add_background_task(self._seen_session(session))
+        session_action = SessionAction(
+            action_type=SessionActionType.SEEN_SESSION,
+            session=session,
+            endpoint_names_snapshot=endpoint_names_snapshot,
+            timestamp=datetime.now()
+        )
+        await self._session_listener_actions.put(session_action)
 
     # Seen
-    async def _seen_session(self, session: protocol.Session) -> None:
+    async def _seen_session(self, session: protocol.Session, endpoint_names_snapshot: List[str]) -> None:
         endpoints_with_new_primary: List[Tuple[str, Optional[uuid.UUID]]] = []
         async with self.session_lock:
             endpoints_in_agent_manager = self.endpoints_for_sid[session.id]
             # Copy endpoint_names, because the agent_manager may update this list
-            endpoints_in_session = set(session.endpoint_names)
+            endpoints_in_session = set(endpoint_names_snapshot)
             endpoints_to_add = list(endpoints_in_session - endpoints_in_agent_manager)
             LOGGER.debug("Adding endpoints %s to session %s on %s", endpoints_to_add, session.id, session.nodename)
             endpoints_to_remove = list(endpoints_in_agent_manager - endpoints_in_session)
@@ -234,30 +317,30 @@ class AgentManager(ServerSlice, SessionListener):
         await data.AgentProcess.update_last_seen(session.id, now)
 
     # Session registration
-    async def _register_session(self, session: protocol.Session, now: datetime) -> None:
+    async def _register_session(self, session: protocol.Session, endpoint_names_snapshot: List[str], now: datetime) -> None:
         """
             This method registers a new session in memory and asynchronously updates the agent
             session log in the database. When the database connection is lost, the get_statuses()
             call fails and the new session will be refused.
         """
         # Copy endpoint_names, because the agent_manager may update this list
-        endpoint_names = list(session.endpoint_names)
-        LOGGER.debug("New session %s for agents %s on %s", session.id, endpoint_names, session.nodename)
+        LOGGER.debug("New session %s for agents %s on %s", session.id, endpoint_names_snapshot, session.nodename)
         async with self.session_lock:
             tid = session.tid
             sid = session.get_id()
             self.sessions[sid] = session
-            self.endpoints_for_sid[sid] = set(endpoint_names)
+            self.endpoints_for_sid[sid] = set(endpoint_names_snapshot)
             try:
-                endpoints_with_new_primary = await self._ensure_primary_if_not_exists(session, endpoint_names)
+                endpoints_with_new_primary = await self._ensure_primary_if_not_exists(session, endpoint_names_snapshot)
             except Exception as e:
                 # Database connection failed
                 del self.sessions[sid]
                 del self.endpoints_for_sid[sid]
+                self.add_background_task(session.expire(timeout=0))
                 raise e
 
         self.add_background_task(
-            self._log_session_creation_to_db(tid, session, endpoint_names, endpoints_with_new_primary, now)
+            self._log_session_creation_to_db(tid, session, endpoint_names_snapshot, endpoints_with_new_primary, now)
         )
 
     async def _log_session_creation_to_db(
@@ -276,7 +359,7 @@ class AgentManager(ServerSlice, SessionListener):
         await data.Agent.update_primary(tid, endpoints_with_new_primary, now)
 
     # Session expiry
-    async def _expire_session(self, session: protocol.Session, now: datetime) -> None:
+    async def _expire_session(self, session: protocol.Session, endpoint_names_snapshot: List[str], now: datetime) -> None:
         """
             This method expires the given session and update the in-memory session state.
             The in-database session log is updated asynchronously. These database updates
@@ -287,10 +370,13 @@ class AgentManager(ServerSlice, SessionListener):
         async with self.session_lock:
             tid = session.tid
             sid = session.get_id()
+            if sid not in self.sessions:
+                # The session is already expired
+                return
             LOGGER.debug("expiring session %s", sid)
             del self.sessions[sid]
             del self.endpoints_for_sid[sid]
-            endpoints_with_new_primary = await self._failover_endpoints(session, session.endpoint_names)
+            endpoints_with_new_primary = await self._failover_endpoints(session, endpoint_names_snapshot)
 
         self.add_background_task(self._log_session_expiry_to_db(tid, endpoints_with_new_primary, session, now))
 
@@ -398,19 +484,6 @@ class AgentManager(ServerSlice, SessionListener):
                     result.append((endpoint_name, None))
         return result
 
-    async def _get_environment_sessions(self, env_id: uuid.UUID) -> List[protocol.Session]:
-        """
-            Get a list of all sessions for the given environment id
-        """
-        sessions = await data.AgentProcess.get_live_by_env(env_id)
-
-        result = []
-        for session in sessions:
-            live_session = self.sessions.get(session.sid, None)
-            if live_session is not None:
-                result.append(live_session)
-        return result
-
     def is_primary(self, env: data.Environment, sid: uuid.UUID, agent: str) -> bool:
         prim = self.tid_endpoint_to_session.get((env.id, agent), None)
         if prim is None:
@@ -467,15 +540,12 @@ class AgentManager(ServerSlice, SessionListener):
         return self.tid_endpoint_to_session.get(key) is not None
 
     async def expire_all_sessions_for_environment(self, env_id: uuid.UUID) -> None:
-        sessions: List[protocol.Session] = await self._get_environment_sessions(env_id)
-        for session in sessions:
-            await session.expire(0)
-            session.abort()
+        async with self.session_lock:
+            await asyncio.gather(*[s.expire_and_abort(timeout=0) for s in self.sessions.values() if s.tid == env_id])
 
     async def expire_all_sessions(self) -> None:
-        for session in self.sessions.values():
-            await session.expire(0)
-            session.abort()
+        async with self.session_lock:
+            await asyncio.gather(*[s.expire_and_abort(timeout=0) for s in self.sessions.values()])
 
     # Agent Management
     async def ensure_agent_registered(self, env: data.Environment, nodename: str) -> data.Agent:
