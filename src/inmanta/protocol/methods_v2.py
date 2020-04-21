@@ -101,7 +101,12 @@ def environment_modify(id: uuid.UUID, name: str, repository: str = None, branch:
 @typedmethod(path="/environment/<id>", operation="DELETE", client_types=["api"], api_version=2)
 def environment_delete(id: uuid.UUID) -> None:
     """
-        Delete the given environment and all related data
+        Delete the given environment and all related data.
+
+        :param id: The uuid of the environment.
+
+        :raises NotFound: The given environment doesn't exist.
+        :raises Forbidden: The given environment is protected.
     """
 
 
@@ -150,7 +155,12 @@ def environment_decommission(id: uuid.UUID, metadata: Optional[model.ModelMetada
 )
 def environment_clear(id: uuid.UUID) -> None:
     """
-        Clear all data from this environment
+        Clear all data from this environment.
+
+        :param id: The uuid of the environment.
+
+        :raises NotFound: The given environment doesn't exist.
+        :raises Forbidden: The given environment is protected.
     """
 
 

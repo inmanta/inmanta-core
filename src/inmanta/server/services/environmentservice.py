@@ -28,7 +28,7 @@ from inmanta import data
 from inmanta.data import model
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
-from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
 from inmanta.server import (
     SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_DATABASE,
@@ -318,6 +318,10 @@ class EnvironmentService(protocol.ServerSlice):
         if env is None:
             raise NotFound("The environment with given id does not exist.")
 
+        is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)
+        if is_protected_environment:
+            raise Forbidden(f"Environment {environment_id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
+
         await asyncio.gather(self.autostarted_agent_manager.stop_agents(env), env.delete_cascade())
 
         self.resource_service.close_resource_action_logger(environment_id)
@@ -337,6 +341,10 @@ class EnvironmentService(protocol.ServerSlice):
         """
             Clear the environment
         """
+        is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)
+        if is_protected_environment:
+            raise Forbidden(f"Environment {env.id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
+
         await self.autostarted_agent_manager.stop_agents(env)
         await env.delete_cascade(only_content=True)
 
