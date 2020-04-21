@@ -219,9 +219,8 @@ class AgentManager(ServerSlice, SessionListener):
             try:
                 session_action = await self._session_listener_actions.get()
                 await self._process_action(session_action)
-            except asyncio.CancelledError as e:
-                # Cancel this task
-                raise e
+            except asyncio.CancelledError:
+                return
             except Exception:
                 LOGGER.exception(
                     "An exception occurred while handling session action %s on session id %s.",
