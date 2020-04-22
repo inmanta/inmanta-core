@@ -217,8 +217,7 @@ class Compiler(object):
         # TODO: check option
         data: CompileData = CompileData()
         data.add_error(exception)
-        # TODO: actually export instead of printing
-        print(data.to_json())
+        # TODO: actually export
         raise exception
 
     def _handle_exception_datatrace(self, exception: CompilerException) -> None:
