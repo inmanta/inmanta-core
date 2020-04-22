@@ -1006,7 +1006,8 @@ SOURCE = ("fact", "plugin", "user", "report")
 class Parameter(BaseDocument):
     """
         A parameter that can be used in the configuration model
-        Any transactions that update Parameter should adhere to the locking order described in the ConfigurationModel docstring.
+        Any transactions that update Parameter should adhere to the locking order described in
+        :py:class:`inmanta.data.ConfigurationModel`.
 
         :param name: The name of the parameter
         :param value: The value of the parameter
@@ -1476,8 +1477,8 @@ class LogLine(DataDocument):
 class ResourceAction(BaseDocument):
     """
         Log related to actions performed on a specific resource version by Inmanta.
-        Any transactions that update ResourceAction should adhere to the locking order described in the ConfigurationModel
-        docstring.
+        Any transactions that update ResourceAction should adhere to the locking order described in
+        :py:class:`inmanta.data.ConfigurationModel
 
         :param environment: The environment this action belongs to.
         :param version: The version of the configuration model this action belongs to.
@@ -1600,7 +1601,8 @@ class ResourceAction(BaseDocument):
 class Resource(BaseDocument):
     """
         A specific version of a resource. This entity contains the desired state of a resource.
-        Any transactions that update Resource should adhere to the locking order described in the ConfigurationModel docstring.
+        Any transactions that update Resource should adhere to the locking order described in
+        :py:class:`inmanta.data.ConfigurationModel`.
 
         :param environment: The environment this resource version is defined in
         :param rid: The id of the resource and its version
