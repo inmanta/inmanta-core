@@ -1006,6 +1006,7 @@ SOURCE = ("fact", "plugin", "user", "report")
 class Parameter(BaseDocument):
     """
         A parameter that can be used in the configuration model
+        Any transactions that update Parameter should adhere to the locking order described in the ConfigurationModel docstring.
 
         :param name: The name of the parameter
         :param value: The value of the parameter
@@ -1475,6 +1476,8 @@ class LogLine(DataDocument):
 class ResourceAction(BaseDocument):
     """
         Log related to actions performed on a specific resource version by Inmanta.
+        Any transactions that update ResourceAction should adhere to the locking order described in the ConfigurationModel
+        docstring.
 
         :param environment: The environment this action belongs to.
         :param version: The version of the configuration model this action belongs to.
@@ -1597,6 +1600,7 @@ class ResourceAction(BaseDocument):
 class Resource(BaseDocument):
     """
         A specific version of a resource. This entity contains the desired state of a resource.
+        Any transactions that update Resource should adhere to the locking order described in the ConfigurationModel docstring.
 
         :param environment: The environment this resource version is defined in
         :param rid: The id of the resource and its version
@@ -1994,6 +1998,8 @@ class Resource(BaseDocument):
 class ConfigurationModel(BaseDocument):
     """
         A specific version of the configuration model.
+        Any transactions that update ResourceAction, Resource, Parameter and/or ConfigurationModel
+        should acquire their locks in that order.
 
         :param version: The version of the configuration model, represented by a unix timestamp.
         :param environment: The environment this configuration model is defined in
@@ -2175,9 +2181,7 @@ class ConfigurationModel(BaseDocument):
                 # Delete all code associated with this version
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
 
-                # Acquire explicit lock to avoid deadlock.
-                # Any transactions that update ResourceAction, Resource, Parameter and/or ConfigurationModel
-                # should acquire their locks in that order.
+                # Acquire explicit lock to avoid deadlock. See ConfigurationModel docstring
                 await self._execute_query(f"LOCK TABLE {ResourceAction.table_name()} IN SHARE MODE", connection=con)
                 await Resource.delete_all(connection=con, environment=self.environment, model=self.version)
 
