@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import inmanta.ast.export as ast_export
 from inmanta.ast import CompilerException, Range
 from inmanta.warnings import InmantaWarning
 
@@ -31,6 +32,11 @@ class ParserException(CompilerException):
         CompilerException.__init__(self, msg)
         self.set_location(location)
         self.value = value
+
+    def export(self) -> ast_export.Error:
+        error: ast_export.Error = super().export()
+        error.type = ast_export.ErrorType.parser
+        return error
 
 
 class ParserWarning(InmantaWarning, ParserException):
