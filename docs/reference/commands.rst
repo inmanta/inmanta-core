@@ -16,7 +16,6 @@ inmanta
    :func: cmd_parser
    :prog: inmanta
 
-inmanta-cli
-###########
-
-Use ``inmanta-cli --help``
+.. click:: inmanta.main:cmd
+   :prog: inmanta-cli
+   :show-nested:
