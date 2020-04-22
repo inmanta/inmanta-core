@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import builtins
 import traceback
 from abc import abstractmethod
 from functools import lru_cache
@@ -540,7 +541,7 @@ class CompilerException(Exception, export.Exportable):
 
     def export(self) -> export.Error:
         location: Optional[Location] = self.get_location()
-        return export.Error(type=str(type(self)), message=self.get_message(), location=location.export() if location is not None else None,)
+        return export.Error(type=str(builtins.type(self)), message=self.get_message(), location=location.export() if location is not None else None,)
 
     def __str__(self) -> str:
         return self.format()
