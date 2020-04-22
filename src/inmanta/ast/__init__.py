@@ -522,6 +522,7 @@ class CompilerException(Exception):
 
     def attach_compile_info(self, compiler: "Compiler") -> None:
         self.root_ns = compiler.get_ns()
+        pass
 
     def __str__(self) -> str:
         return self.format()

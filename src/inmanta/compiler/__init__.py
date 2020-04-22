@@ -36,6 +36,7 @@ from inmanta.ast import (
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.compiler import config as compiler_config
+from inmanta.compiler.data import CompileData
 from inmanta.execute import scheduler
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
 from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
@@ -64,6 +65,7 @@ def do_compile(refs={}):
         if compiler_config.dataflow_graphic_enable.get():
             show_dataflow_graphic(sched, compiler)
         compiler.handle_exception(e)
+        success = False
 
     LOGGER.debug("Compile done")
 
@@ -206,6 +208,19 @@ class Compiler(object):
         return (statements, blocks)
 
     def handle_exception(self, exception: CompilerException) -> None:
+        try:
+            self._handle_exception_datatrace(exception)
+        except CompilerException as e:
+            self._handle_exception_export(e)
+
+    def _handle_exception_export(self, exception: CompilerException) -> None:
+        # TODO: check option
+        data: CompileData = CompileData()
+        data.add_error(exception)
+        print(data.to_json())
+        raise exception
+
+    def _handle_exception_datatrace(self, exception: CompilerException) -> None:
         if not compiler_config.datatrace_enable.get():
             raise exception
 
