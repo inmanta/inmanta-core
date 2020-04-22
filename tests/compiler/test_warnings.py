@@ -228,3 +228,18 @@ implement A using std::none
         assert len(w) == 1
         assert issubclass(w[0].category, CompilerDeprecationWarning)
         assert str(w[0].message) == message
+
+
+def test_2030_type_overwrite_warning(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+typedef string as number matching self > 0
+        """,
+    )
+    with warnings.catch_warnings(record=True) as w:
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerRuntimeWarning)
+        assert str(w[0].message) == (
+            f"Trying to override a built-in type: string (reported in Type(string) ({snippetcompiler.project_dir}/main.cf:2:9))"
+        )
