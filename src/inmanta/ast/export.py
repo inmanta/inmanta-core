@@ -59,14 +59,15 @@ class Location(BaseModel):
     range: Range
 
 
-class ErrorType(str, Enum):
+class ErrorCategory(str, Enum):
     plugin = "plugin_exception"
     parser = "parse_error"
     runtime = "runtime_error"
 
 
 class Error(BaseModel):
-    type: ErrorType = ErrorType.runtime
+    category: ErrorCategory = ErrorCategory.runtime
+    type: str  # str(type(exception))
     message: str
     location: Optional[Location] = None
 

@@ -35,7 +35,7 @@ class ParserException(CompilerException):
 
     def export(self) -> ast_export.Error:
         error: ast_export.Error = super().export()
-        error.type = ast_export.ErrorType.parser
+        error.category = ast_export.ErrorCategory.parser
         return error
 
 

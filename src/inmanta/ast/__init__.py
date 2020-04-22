@@ -540,7 +540,7 @@ class CompilerException(Exception, export.Exportable):
 
     def export(self) -> export.Error:
         location: Optional[Location] = self.get_location()
-        return export.Error(message=self.get_message(), location=location.export() if location is not None else None,)
+        return export.Error(type=str(type(self)), message=self.get_message(), location=location.export() if location is not None else None,)
 
     def __str__(self) -> str:
         return self.format()
@@ -651,7 +651,7 @@ class ExplicitPluginException(ExternalException):
 
     def export(self) -> export.Error:
         error: export.Error = super().export()
-        error.type = export.ErrorType.plugin
+        error.category = export.ErrorCategory.plugin
         return error
 
 
