@@ -153,7 +153,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     def get_connection(cls) -> asyncpg.pool.PoolAcquireContext:
         """
-            Returns a PoolAcquireContext that can be either awaited or used in a with statement to receive a Connection.
+            Returns a PoolAcquireContext that can be either awaited or used in an async with statement to receive a Connection.
         """
         return cls._connection_pool.acquire()
 
