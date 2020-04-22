@@ -3,7 +3,7 @@ PyJWT==1.7.1
 click==7.1.1
 colorlog==4.1.0
 cookiecutter==1.7.2
-cryptography==2.9
+cryptography==2.9.1
 execnet==1.7.1
 graphviz==0.13.2
 inmanta-sphinx>=1.0.0
