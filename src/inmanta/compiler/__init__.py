@@ -217,6 +217,7 @@ class Compiler(object):
         # TODO: check option
         data: CompileData = CompileData()
         data.add_error(exception)
+        # TODO: actually export instead of printing
         print(data.to_json())
         raise exception
 
