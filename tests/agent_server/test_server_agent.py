@@ -3248,3 +3248,35 @@ async def test_issue_1662(resource_container, server, client, clienthelper, envi
     assert result.code == 200
 
     await _wait_until_deployment_finishes(client, environment, version, timeout=10)
+
+
+@pytest.mark.asyncio
+async def test_restart_agent_with_outdated_agent_map(server, client, environment):
+    """
+        Due to a race condition, it is possible that an autostarted agent get's started with an outdated agent_map.
+        The agent resolves this inconsistency automatically when is has established a new session with the server.
+        This test verifies this behavior.
+    """
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+
+    env_id = uuid.UUID(environment)
+    env = await data.Environment.get_by_id(env_id)
+
+    await env.set(key=data.AUTOSTART_AGENT_MAP, value={"internal": ""})
+    await agent_manager.ensure_agent_registered(env=env, nodename="internal")
+    await agent_manager.ensure_agent_registered(env=env, nodename="agent1")
+    await autostarted_agent_manager.restart_agents(env)
+    # Internal agent should have a session with the server
+    await retry_limited(lambda: len(agent_manager.tid_endpoint_to_session) == 1, 10)
+
+    # Keep an old environment object with the outdated agentmap
+    old_env = await data.Environment.get_by_id(env_id)
+    # Update the agentmap
+    await env.set(key=data.AUTOSTART_AGENT_MAP, value={"internal": "", "agent1": ""})
+
+    # Restart agent with an old agent_map
+    await autostarted_agent_manager.restart_agents(old_env)
+
+    # The agent should fetch the up-to-date autostart_agent_map from the server after the first heartbeat
+    await retry_limited(lambda: len(agent_manager.tid_endpoint_to_session) == 2, 10)

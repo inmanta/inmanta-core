@@ -1125,9 +1125,12 @@ class Agent(SessionEndpoint):
                 "Agent received an update_agent_map() trigger, but agent is not running with "
                 "the use_autostart_agent_map option."
             )
-            return
-        async with self._instances_lock:
+        else:
             LOGGER.debug("Received update_agent_map() trigger with agent_map %s", agent_map)
+            await self._update_agent_map(agent_map)
+
+    async def _update_agent_map(self, agent_map: Dict[str, str]) -> None:
+        async with self._instances_lock:
             self.agent_map = agent_map
             # Add missing agents
             agents_to_add = [agent_name for agent_name in self.agent_map.keys() if agent_name not in self._instances]
@@ -1171,6 +1174,16 @@ class Agent(SessionEndpoint):
             return self.pause(agent)
 
     async def on_reconnect(self) -> None:
+        if cfg.use_autostart_agent_map.get():
+            # When the internal agent doesn't have a session with the server, it doesn't receive notifications
+            # about updates to the autostart_agent_map environment setting. On reconnect the autostart_agent_map
+            # is fetched from the server to resolve this inconsistency.
+            result = await self._client.environment_setting_get(tid=self.get_environment(), id=data.AUTOSTART_AGENT_MAP)
+            if result.code == 200:
+                agent_map = result.result["data"]["settings"][data.AUTOSTART_AGENT_MAP]
+                await self._update_agent_map(agent_map=agent_map)
+            else:
+                LOGGER.warning("Could not get environment setting %s from server", data.AUTOSTART_AGENT_MAP)
         for name in self._instances.keys():
             result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=name)
             if result.code == 200:
