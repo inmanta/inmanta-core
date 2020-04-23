@@ -40,3 +40,8 @@ dataflow_graphic_enable: Option[bool] = Option(
 
 def track_dataflow() -> bool:
     return datatrace_enable.get() or dataflow_graphic_enable.get()
+
+
+data_export: Option[bool] = Option(
+    "compiler", "data_export", False, "Export structured json containing compile data such as occurred errors.", is_bool,
+)

@@ -219,6 +219,13 @@ def compiler_config(parser: ArgumentParser) -> None:
     parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
     parser.add_argument(
+        "--export-compile-data",
+        dest="compile_data_export",
+        help="Export structured json containing compile data such as occurred errors.",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--experimental-data-trace",
         dest="datatrace",
         help="Experimental data trace tool useful for debugging",
@@ -259,6 +266,9 @@ def compile_project(options: argparse.Namespace):
 
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
+
+    if options.compile_data_export is True:
+        Config.set("compiler", "data_export", "true")
 
     if options.datatrace is True:
         Config.set("compiler", "datatrace_enable", "true")

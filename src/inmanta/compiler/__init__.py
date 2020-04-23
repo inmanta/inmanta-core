@@ -214,10 +214,12 @@ class Compiler(object):
             self._handle_exception_export(e)
 
     def _handle_exception_export(self, exception: CompilerException) -> None:
-        # TODO: check option
+        if not compiler_config.data_export.get():
+            raise exception
         data: CompileData = CompileData()
         data.add_error(exception)
         # TODO: actually export
+        print(data.export().json())
         raise exception
 
     def _handle_exception_datatrace(self, exception: CompilerException) -> None:
