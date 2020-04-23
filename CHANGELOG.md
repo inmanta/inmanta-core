@@ -3,6 +3,7 @@
 ## Breaking changes
 - Non-boolean arguments to boolean operators are no longer allowed, this was previously possible due to bug (#1808)
 - Server will no longer start if the database schema is for a newer version (#1878)
+- The environment setting autostart_agent_map should always contain an entry for the agent "internal" (#1839)
 
 ## Deprecated
  - Leaving a nullable attribute unassigned now produces a deprecation warning. Explicitly assign null instead. (#1775)
@@ -37,7 +38,9 @@
  - Added support to pause an agent (#1128, #1982)
  - Plugins are now imported in the inmanta_plugins package to allow importing submodules (#507)
  - Added event listener to Environment Service (#1996)
+ - Autostarted agents can load a new value for the autostart_agent_map setting without agent restart (#1839)
  - Added protected environment option (#1997)
+ - Added warning when trying to override a built-in type with a typedef (#81)
 
 # v 2020.1 (2020-02-19) Changes in this release:
 

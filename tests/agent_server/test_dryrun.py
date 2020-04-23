@@ -42,7 +42,7 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
+    await agent.add_end_point_name("agent1")
     await agent.start()
 
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)

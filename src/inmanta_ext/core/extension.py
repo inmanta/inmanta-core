@@ -36,6 +36,7 @@ from inmanta.server.services import (
 def setup(application: ApplicationContext) -> None:
     application.register_slice(server.Server())
     application.register_slice(agentmanager.AgentManager())
+    application.register_slice(agentmanager.AutostartedAgentManager())
     application.register_slice(databaseservice.DatabaseService())
     application.register_slice(compilerservice.CompilerService())
     application.register_slice(projectservice.ProjectService())

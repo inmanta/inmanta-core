@@ -34,7 +34,7 @@ import time
 import traceback
 import uuid
 from tempfile import mktemp
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import asyncpg
 import pkg_resources
@@ -353,7 +353,7 @@ async def agent_multi(server_multi, environment_multi):
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
     a = Agent(hostname="node1", environment=environment_multi, agent_map={"agent1": "localhost"}, code_loader=False)
-    a.add_end_point_name("agent1")
+    await a.add_end_point_name("agent1")
     await a.start()
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -369,7 +369,7 @@ async def agent(server, environment):
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    a.add_end_point_name("agent1")
+    await a.add_end_point_name("agent1")
     await a.start()
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -379,11 +379,39 @@ async def agent(server, environment):
 
 
 @pytest.fixture(scope="function")
+async def agent_factory(server):
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+
+    started_agents = []
+
+    async def create_agent(
+        environment: uuid.UUID,
+        hostname: Optional[str] = None,
+        agent_map: Optional[Dict[str, str]] = None,
+        code_loader: bool = False,
+        agent_names: List[str] = [],
+    ) -> None:
+        a = Agent(hostname=hostname, environment=environment, agent_map=agent_map, code_loader=code_loader)
+        for agent_name in agent_names:
+            await a.add_end_point_name(agent_name)
+        await a.start()
+        started_agents.append(a)
+        await utils.retry_limited(lambda: a.sessionid in agentmanager.sessions, 10)
+        return a
+
+    yield create_agent
+    await asyncio.gather(*[agent.stop() for agent in started_agents])
+
+
+@pytest.fixture(scope="function")
 async def autostarted_agent(server, environment):
     """ Configure agent1 as an autostarted agent.
     """
     env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTO_DEPLOY, True)
     await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
     await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)

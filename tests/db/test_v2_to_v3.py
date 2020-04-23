@@ -36,7 +36,8 @@ async def migrate_v2_to_v3(hard_clean_db, hard_clean_db_post, postgresql_client:
     ibl = InmantaBootloader()
 
     await ibl.start()
-    async_finalizer(ibl.stop)
+    yield
+    await ibl.stop()
 
 
 @pytest.mark.asyncio

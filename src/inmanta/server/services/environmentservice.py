@@ -30,7 +30,7 @@ from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
 from inmanta.server import (
-    SLICE_AGENT_MANAGER,
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_DATABASE,
     SLICE_ENVIRONMENT,
     SLICE_ORCHESTRATION,
@@ -39,7 +39,7 @@ from inmanta.server import (
     SLICE_TRANSPORT,
     protocol,
 )
-from inmanta.server.agentmanager import AgentManager
+from inmanta.server.agentmanager import AutostartedAgentManager
 from inmanta.server.server import Server
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
@@ -106,7 +106,7 @@ class EnvironmentService(protocol.ServerSlice):
     """Slice with project and environment management"""
 
     server_slice: Server
-    agentmanager: AgentManager
+    autostarted_agent_manager: AutostartedAgentManager
     orchestration_service: OrchestrationService
     resource_service: ResourceService
     listeners: Dict[EnvironmentAction, List[EnvironmentListener]]
@@ -116,7 +116,7 @@ class EnvironmentService(protocol.ServerSlice):
         self.listeners = defaultdict(list)
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_SERVER, SLICE_DATABASE, SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE]
+        return [SLICE_SERVER, SLICE_DATABASE, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
@@ -124,7 +124,7 @@ class EnvironmentService(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
-        self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
+        self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
         self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
@@ -140,8 +140,12 @@ class EnvironmentService(protocol.ServerSlice):
             warnings = await self.server_slice._async_recompile(env, setting.update, metadata=metadata.dict())
 
         if setting.agent_restart:
-            LOGGER.info("Environment setting %s changed. Restarting agents.", key)
-            self.add_background_task(self.agentmanager.restart_agents(env))
+            if key == data.AUTOSTART_AGENT_MAP:
+                LOGGER.info("Environment setting %s changed. Notifying agents.", key)
+                self.add_background_task(self.autostarted_agent_manager.notify_agent_about_agent_map_update(env))
+            else:
+                LOGGER.info("Environment setting %s changed. Restarting agents.", key)
+                self.add_background_task(self.autostarted_agent_manager.restart_agents(env))
 
         return warnings
 
@@ -225,8 +229,8 @@ class EnvironmentService(protocol.ServerSlice):
             return attach_warnings(200, None, warnings)
         except KeyError:
             raise NotFound()
-        except ValueError:
-            raise ServerError("Invalid value")
+        except ValueError as e:
+            raise ServerError(f"Invalid value. {e}")
 
     @protocol.handle(methods.get_setting, env="tid", key="id")
     async def get_setting(self, env: data.Environment, key: str) -> Apireturn:
@@ -318,7 +322,7 @@ class EnvironmentService(protocol.ServerSlice):
         if is_protected_environment:
             raise Forbidden(f"Environment {environment_id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
 
-        await asyncio.gather(self.agentmanager.stop_agents(env), env.delete_cascade())
+        await asyncio.gather(self.autostarted_agent_manager.stop_agents(env), env.delete_cascade())
 
         self.resource_service.close_resource_action_logger(environment_id)
         await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
@@ -341,7 +345,7 @@ class EnvironmentService(protocol.ServerSlice):
         if is_protected_environment:
             raise Forbidden(f"Environment {env.id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
 
-        await self.agentmanager.stop_agents(env)
+        await self.autostarted_agent_manager.stop_agents(env)
         await env.delete_cascade(only_content=True)
 
         project_dir = os.path.join(self.server_slice._server_storage["environments"], str(env.id))

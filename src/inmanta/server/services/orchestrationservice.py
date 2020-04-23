@@ -31,10 +31,17 @@ from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest, ServerError
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_ORCHESTRATION, SLICE_RESOURCE, SLICE_TRANSPORT
+from inmanta.server import (
+    SLICE_AGENT_MANAGER,
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_DATABASE,
+    SLICE_ORCHESTRATION,
+    SLICE_RESOURCE,
+    SLICE_TRANSPORT,
+)
 from inmanta.server import config as opt
 from inmanta.server import protocol
-from inmanta.server.agentmanager import AgentManager
+from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 
@@ -45,6 +52,7 @@ class OrchestrationService(protocol.ServerSlice):
     """Resource Manager service"""
 
     agentmanager_service: "AgentManager"
+    autostarted_agent_manager: AutostartedAgentManager
     resource_service: ResourceService
 
     def __init__(self) -> None:
@@ -59,6 +67,7 @@ class OrchestrationService(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
         self.agentmanager_service = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
+        self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
     async def start(self) -> None:
@@ -430,7 +439,7 @@ class OrchestrationService(protocol.ServerSlice):
         if push:
             # fetch all resource in this cm and create a list of distinct agents
             agents = await data.ConfigurationModel.get_agents(env.id, version_id)
-            await self.agentmanager_service._ensure_agents(env, agents)
+            await self.autostarted_agent_manager._ensure_agents(env, agents)
 
             for agent in agents:
                 client = self.agentmanager_service.get_agent_client(env.id, agent)
@@ -478,7 +487,7 @@ class OrchestrationService(protocol.ServerSlice):
         present = set()
         absent = set()
 
-        await self.agentmanager_service._ensure_agents(env, allagents)
+        await self.autostarted_agent_manager._ensure_agents(env, allagents)
 
         for agent in allagents:
             client = self.agentmanager_service.get_agent_client(env.id, agent)
