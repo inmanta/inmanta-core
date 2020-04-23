@@ -19,7 +19,7 @@
 import json
 import re
 from tempfile import mkstemp
-from typing import Optional, TextIO, Type
+from typing import Optional, Type
 
 import pytest
 
