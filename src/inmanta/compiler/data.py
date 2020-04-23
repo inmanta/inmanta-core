@@ -23,15 +23,15 @@ import inmanta.ast.export as ast_export
 from inmanta.ast import CompilerException
 
 
-class CompileData:
+class CompileData(ast_export.Exportable):
     def __init__(self) -> None:
         self.errors: List[CompilerException] = []
 
     def add_error(self, error: CompilerException) -> None:
         self.errors.append(error)
 
-    def to_json(self) -> str:
-        return ExportCompileData.from_compile_data(self).json()
+    def export(self) -> "ExportCompileData":
+        return ExportCompileData(errors=[e.export() for e in self.errors])
 
 
 class ExportCompileData(BaseModel):
@@ -40,7 +40,3 @@ class ExportCompileData(BaseModel):
     """
 
     errors: List[ast_export.Error]
-
-    @classmethod
-    def from_compile_data(cls, compile_data: CompileData) -> "ExportCompileData":
-        return ExportCompileData(errors=[e.export() for e in compile_data.errors])
