@@ -71,6 +71,8 @@ def do_compile(refs={}):
 
     if not success:
         sys.stderr.write("Unable to execute all statements.\n")
+    if compiler_config.data_export.get():
+        compiler.export_data()
     if compiler_config.dataflow_graphic_enable.get():
         show_dataflow_graphic(sched, compiler)
     return (sched.get_types(), compiler.get_ns())
@@ -119,6 +121,7 @@ class Compiler(object):
 
         self.__cf_file = cf_file
         self.__root_ns = None
+        self._data: CompileData = CompileData()
         self.refs = refs
 
     def get_plugins(self):
@@ -207,6 +210,21 @@ class Compiler(object):
         statements.append(requires_rel)
         return (statements, blocks)
 
+    def export_data(self) -> None:
+        """
+            Exports compiler data if the option has been set.
+        """
+        def do_write(f: TextIO) -> None:
+            # wrap between start and end markers if writing to stdout
+            wrap: bool = f == sys.stdout
+            if wrap:
+                f.write("---START export-compile-data---\n")
+            f.write("%s\n" % self._data.export().json())
+            if wrap:
+                f.write("---END export-compile-data---\n")
+
+        compiler_config.do_data_export(do_write)
+
     def handle_exception(self, exception: CompilerException) -> None:
         try:
             self._handle_exception_datatrace(exception)
@@ -214,21 +232,9 @@ class Compiler(object):
             self._handle_exception_export(e)
 
     def _handle_exception_export(self, exception: CompilerException) -> None:
-        if not compiler_config.data_export.get():
-            raise exception
-        data: CompileData = CompileData()
-        data.add_error(exception)
-
-        def do_write(f: TextIO) -> None:
-            # wrap between start and end markers if writing to stdout
-            wrap: bool = f == sys.stdout
-            if wrap:
-                f.write("---START export-compile-data---\n")
-            f.write("%s\n" % data.export().json())
-            if wrap:
-                f.write("---END export-compile-data---\n")
-
-        compiler_config.do_data_export(do_write)
+        self._data.add_error(exception)
+        if compiler_config.data_export.get():
+            self.export_data()
         raise exception
 
     def _handle_exception_datatrace(self, exception: CompilerException) -> None:
