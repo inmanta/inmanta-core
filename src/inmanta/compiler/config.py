@@ -16,8 +16,10 @@
     Contact: code@inmanta.com
 """
 
+import sys
+from typing import Callable, TextIO
 
-from inmanta.config import Option, is_bool
+from inmanta.config import Option, is_bool, is_str
 
 datatrace_enable: Option[bool] = Option(
     "compiler",
@@ -45,3 +47,28 @@ def track_dataflow() -> bool:
 data_export: Option[bool] = Option(
     "compiler", "data_export", False, "Export structured json containing compile data such as occurred errors.", is_bool,
 )
+
+
+STDOUT_REPR = "-"
+
+
+data_export_file: Option[str] = Option(
+    "compiler",
+    "data_export_file",
+    STDOUT_REPR,
+    "File to export compile data to. If omitted or set to %s stdout is used." % STDOUT_REPR,
+    is_str,
+)
+
+
+def do_data_export(do_write: Callable[[TextIO], None]) -> None:
+    """
+        Exports to the configured file, using do_write to do the actual export. Overwrites file content.
+        :param do_write: function that writes export data to a given file.
+    """
+    file_name: str = data_export_file.get()
+    if file_name == STDOUT_REPR:
+        do_write(sys.stdout)
+    else:
+        with open(file_name, "w") as f:
+            do_write(f)

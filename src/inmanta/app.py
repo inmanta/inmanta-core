@@ -226,6 +226,11 @@ def compiler_config(parser: ArgumentParser) -> None:
         default=False,
     )
     parser.add_argument(
+        "--export-compile-data-file",
+        dest="compile_data_export_file",
+        help="File to export compile data to. If omitted or set to - stdout is used.",
+    )
+    parser.add_argument(
         "--experimental-data-trace",
         dest="datatrace",
         help="Experimental data trace tool useful for debugging",
@@ -269,6 +274,10 @@ def compile_project(options: argparse.Namespace):
 
     if options.compile_data_export is True:
         Config.set("compiler", "data_export", "true")
+
+    if options.compile_data_export_file is not None:
+        print(options.compile_data_export_file)
+        Config.set("compiler", "data_export_file", options.compile_data_export_file)
 
     if options.datatrace is True:
         Config.set("compiler", "datatrace_enable", "true")

@@ -19,7 +19,7 @@ import logging
 import os
 import sys
 from itertools import chain
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, TextIO
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -218,8 +218,17 @@ class Compiler(object):
             raise exception
         data: CompileData = CompileData()
         data.add_error(exception)
-        # TODO: actually export
-        print(data.export().json())
+
+        def do_write(f: TextIO) -> None:
+            # wrap between start and end markers if writing to stdout
+            wrap: bool = f == sys.stdout
+            if wrap:
+                f.write("---START export-compile-data---\n")
+            f.write("%s\n" % data.export().json())
+            if wrap:
+                f.write("---END export-compile-data---\n")
+
+        compiler_config.do_data_export(do_write)
         raise exception
 
     def _handle_exception_datatrace(self, exception: CompilerException) -> None:
