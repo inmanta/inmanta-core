@@ -16,6 +16,8 @@ inmanta
    :func: cmd_parser
    :prog: inmanta
 
+inmanta-cli
+###########
 .. click:: inmanta.main:cmd
    :prog: inmanta-cli
    :show-nested:
