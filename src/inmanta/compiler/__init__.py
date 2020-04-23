@@ -43,6 +43,7 @@ from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ResultVariable
 from inmanta.module import Project
+from inmanta.parser import ParserException
 from inmanta.plugins import PluginMeta
 
 LOGGER = logging.getLogger(__name__)
@@ -57,7 +58,10 @@ def do_compile(refs={}):
 
     LOGGER.debug("Starting compile")
 
-    (statements, blocks) = compiler.compile()
+    try:
+        (statements, blocks) = compiler.compile()
+    except ParserException as e:
+        compiler.handle_exception(e)
     sched = scheduler.Scheduler(compiler_config.track_dataflow())
     try:
         success = sched.run(compiler, statements, blocks)
@@ -214,6 +218,7 @@ class Compiler(object):
         """
             Exports compiler data if the option has been set.
         """
+
         def do_write(f: TextIO) -> None:
             # wrap between start and end markers if writing to stdout
             wrap: bool = f == sys.stdout
