@@ -1,4 +1,4 @@
-# v 2020.2 (?) Changes in this release:
+# v 2020.2 (2020-04-24) Changes in this release:
 
 ## Breaking changes
 - Non-boolean arguments to boolean operators are no longer allowed, this was previously possible due to bug (#1808)
