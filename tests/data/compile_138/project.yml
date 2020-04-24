@@ -1,8 +1,8 @@
-name: beamsat-os
-description: Openstack environment for beamsat
+name: test-project
+description: test for compiler scheduling
 modulepath: libs
 downloadpath: libs
 repo:
-    - git@git.inmanta.com:modules/
+    - https://github.com/inmanta/
 requires:
     - std 

@@ -18,6 +18,7 @@
 
 import logging
 import uuid
+from typing import List
 
 import pytest
 from pytest import fixture
@@ -51,7 +52,7 @@ class SessionSpy(SessionListener, ServerSlice):
         self.expires = 0
         self.__sessions = []
 
-    def new_session(self, session):
+    async def new_session(self, session, endpoint_names_snapshot: List[str]):
         self.__sessions.append(session)
 
     @protocol.handle(get_status_x)
@@ -65,7 +66,7 @@ class SessionSpy(SessionListener, ServerSlice):
 
         return 200, {"agents": status_list}
 
-    def expire(self, session, timeout):
+    async def expire(self, session, endpoint_names_snapshot: List[str]):
         self.__sessions.remove(session)
         print(session._sid)
         self.expires += 1
@@ -115,7 +116,7 @@ async def test_2way_protocol(unused_tcp_port, no_tid_check, postgres_db, databas
     await rs.start()
 
     agent = Agent("agent")
-    agent.add_end_point_name("agent")
+    await agent.add_end_point_name("agent")
     agent.set_environment(uuid.uuid4())
     await agent.start()
 
@@ -160,7 +161,7 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
 
     # agent 1
     agent = Agent("agent")
-    agent.add_end_point_name("agent")
+    await agent.add_end_point_name("agent")
     agent.set_environment(env)
     await agent.start()
     async_finalizer(agent.stop)
@@ -171,7 +172,7 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
 
     # agent 2
     agent2 = Agent("agent")
-    agent2.add_end_point_name("agent")
+    await agent2.add_end_point_name("agent")
     agent2.set_environment(env)
     await agent2.start()
     async_finalizer(agent2.stop)
@@ -218,7 +219,7 @@ async def test_server_timeout(unused_tcp_port, no_tid_check, async_finalizer, po
 
     # agent 1
     agent = Agent("agent")
-    agent.add_end_point_name("agent")
+    await agent.add_end_point_name("agent")
     agent.set_environment(env)
     await agent.start()
     async_finalizer(agent.stop)

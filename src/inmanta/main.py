@@ -29,7 +29,7 @@ import texttable
 
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
-from inmanta.const import TIME_ISOFMT, AgentTriggerMethod
+from inmanta.const import TIME_ISOFMT, AgentAction, AgentTriggerMethod
 from inmanta.resources import Id
 from inmanta.types import JsonType
 
@@ -210,6 +210,7 @@ def project_show(client: Client, project: str) -> None:
 @click.option("--name", "-n", help="The name of the new project", required=True)
 @click.pass_obj
 def project_create(client: Client, name: str) -> None:
+    """ Create a new project on the server """
     project = client.get_dict("create_project", "project", {"name": name})
     print_table(["Name", "Value"], [["ID", project["id"]], ["Name", project["name"]]])
 
@@ -445,9 +446,60 @@ def agent_list(client: Client, environment: str) -> None:
     agents = client.get_list("list_agents", key_name="agents", arguments=dict(tid=env_id))
     data = []
     for agent in agents:
-        data.append([agent["name"], agent["environment"], agent["last_failover"]])
+        data.append([agent["name"], agent["environment"], str(agent["paused"]), agent["last_failover"]])
 
-    print_table(["Agent", "Environment", "Last fail over"], data)
+    print_table(["Agent", "Environment", "Paused", "Last fail over"], data)
+
+
+@agent.command(name="pause",)
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option(
+    "--agent", help="The name of the agent to pause.", default=None,
+)
+@click.option("--all", help="Pause all agents in the given environment", is_flag=True)
+@click.pass_obj
+def pause_agent(client: Client, environment: str, agent: Optional[str], all: bool) -> None:
+    """
+        Pause a specific agent or all agents in a given environment. A paused agent cannot execute deploy operations.
+    """
+    if agent is not None and all:
+        raise click.ClickException("The --agent option and the --all flag cannot be used simultaneously.")
+    if agent is None and not all:
+        raise click.ClickException(
+            "Either the --agent options should be set or use the --all flag to pause all agents in the given environment."
+        )
+    if agent is not None:
+        client.do_request(
+            method_name="agent_action", arguments=dict(tid=environment, name=agent, action=AgentAction.pause.value)
+        )
+    else:
+        client.do_request(method_name="all_agents_action", arguments=dict(tid=environment, action=AgentAction.pause.value))
+
+
+@agent.command(name="unpause",)
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option(
+    "--agent", help="The name of the agent to pause.", default=None,
+)
+@click.option("--all", help="Pause all agents in the given environment", is_flag=True)
+@click.pass_obj
+def unpause_agent(client: Client, environment: str, agent: Optional[str], all: bool) -> None:
+    """
+        Unpause a specific agent or all agents in a given environment. A unpaused agent will be able to execute
+        deploy operations.
+    """
+    if agent is not None and all:
+        raise click.ClickException("The --agent option and the --all flag cannot be used simultaneously.")
+    if agent is None and not all:
+        raise click.ClickException(
+            "Either the --agent options should be set or use the --all flag to pause all agents in the given environment."
+        )
+    if agent is not None:
+        client.do_request(
+            method_name="agent_action", arguments=dict(tid=environment, name=agent, action=AgentAction.unpause.value)
+        )
+    else:
+        client.do_request(method_name="all_agents_action", arguments=dict(tid=environment, action=AgentAction.unpause.value))
 
 
 @cmd.group("version")

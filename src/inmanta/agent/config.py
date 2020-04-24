@@ -30,17 +30,32 @@ agent_map = Option(
     None,
     """By default the agent assumes that all agent names map to the host on which the process is executed. With the
 agent map it can be mapped to other hosts. This value consists of a list of key/value pairs. The key is the name of the
-agent and the format of the value is described in :inmanta:entity:`std::AgentConfig`
+agent and the format of the value is described in :inmanta:entity:`std::AgentConfig`. When the configuration option
+config.use_autostart_agent_map is set to true, this option will be ignored.
 
 
 example: iaas_openstack=localhost,vm1=192.16.13.2""",
     is_map,
 )
 
+use_autostart_agent_map = Option(
+    "config",
+    "use_autostart_agent_map",
+    False,
+    """If this option is set to true, the agent-map of this agent will be set the the autostart_agent_map configured on the
+    server. The agent_map will be kept up-to-date automatically.""",
+    is_bool,
+)
+
 environment = Option("config", "environment", None, "The environment this agent or compile belongs to", is_uuid_opt)
 
 agent_names = Option(
-    "config", "agent-names", "$node-name", "Names of the agents this instance should deploy configuration for", is_str
+    "config",
+    "agent-names",
+    "$node-name",
+    """Names of the agents this instance should deploy configuration for. When the configuration option
+config.use_autostart_agent_map is set to true, this option will be ignored.""",
+    is_str,
 )
 
 agent_interval = Option(
@@ -72,7 +87,7 @@ server_timeout = Option(
     "config",
     "server-timeout",
     125,
-    "Amount of time to wait for a response from the server before we try to reconnect, must be smaller than server.agent-hold",
+    "Amount of time to wait for a response from the server before we try to reconnect, must be larger than server.agent-hold",
     is_time,
 )
 
@@ -80,7 +95,7 @@ agent_deploy_interval = Option(
     "config",
     "agent-deploy-interval",
     0,
-    "The number of seconds between two (incremental) deployment runs of the agent.",
+    "The number of seconds between two (incremental) deployment runs of the agent. Set this to 0 to disable the scheduled deploy runs.",
     is_time,
     predecessor_option=agent_interval,
 )

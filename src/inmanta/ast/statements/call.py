@@ -21,10 +21,20 @@ from itertools import chain
 from typing import Dict, List, Optional, Tuple
 
 import inmanta.ast.type as InmantaType
+import inmanta.execute.dataflow as dataflow
 from inmanta import plugins
-from inmanta.ast import ExternalException, LocatableString, Location, Namespace, RuntimeException, WrappingRuntimeException
+from inmanta.ast import (
+    ExplicitPluginException,
+    ExternalException,
+    LocatableString,
+    Location,
+    Namespace,
+    RuntimeException,
+    WrappingRuntimeException,
+)
 from inmanta.ast.statements import ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
+from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.proxy import UnknownException, UnsetException
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, Waiter
 from inmanta.execute.util import NoneValue, Unknown
@@ -110,6 +120,9 @@ class FunctionCall(ReferenceStatement):
                 kwargs[k] = v
         self.function.call_in_context(arguments, kwargs, resolver, queue, result)
 
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("FunctionCall.get_node() placeholder for %s" % self).reference()
+
     def __repr__(self):
         return "%s(%s)" % (
             self.name,
@@ -191,8 +204,16 @@ class PluginFunction(Function):
         else:
             try:
                 return self.plugin(*args, **kwargs)
+            except RuntimeException as e:
+                raise WrappingRuntimeException(
+                    self.ast_node, "Exception in direct execution for plugin %s" % self.ast_node.name, e
+                )
+            except plugins.PluginException as e:
+                raise ExplicitPluginException(
+                    self.ast_node, "PluginException in direct execution for plugin %s" % self.ast_node.name, e
+                )
             except Exception as e:
-                raise WrappingRuntimeException(self.ast_node, "Exception in direct execution for plugin %s" % self.name, e)
+                raise ExternalException(self.ast_node, "Exception in direct execution for plugin %s" % self.ast_node.name, e)
 
     def call_in_context(
         self, args: List[object], kwargs: Dict[str, object], resolver: Resolver, queue: QueueScheduler, result: ResultVariable
@@ -218,6 +239,8 @@ class PluginFunction(Function):
                 raise e
             except RuntimeException as e:
                 raise WrappingRuntimeException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
+            except plugins.PluginException as e:
+                raise ExplicitPluginException(self.ast_node, "PluginException in plugin %s" % self.ast_node.name, e)
             except Exception as e:
                 raise ExternalException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
 

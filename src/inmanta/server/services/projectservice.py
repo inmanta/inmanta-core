@@ -26,8 +26,15 @@ from inmanta import data
 from inmanta.data import model
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.exceptions import NotFound, ServerError
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PROJECT, SLICE_RESOURCE, SLICE_TRANSPORT, protocol
-from inmanta.server.agentmanager import AgentManager
+from inmanta.server import (
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_DATABASE,
+    SLICE_PROJECT,
+    SLICE_RESOURCE,
+    SLICE_TRANSPORT,
+    protocol,
+)
+from inmanta.server.agentmanager import AutostartedAgentManager
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType
 
@@ -37,21 +44,21 @@ LOGGER = logging.getLogger(__name__)
 class ProjectService(protocol.ServerSlice):
     """Slice with project and environment management"""
 
-    agentmanager: AgentManager
+    autostarted_agent_manager: AutostartedAgentManager
     resource_service: ResourceService
 
     def __init__(self) -> None:
         super(ProjectService, self).__init__(SLICE_PROJECT)
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_DATABASE, SLICE_RESOURCE, SLICE_AGENT_MANAGER]
+        return [SLICE_DATABASE, SLICE_RESOURCE, SLICE_AUTOSTARTED_AGENT_MANAGER]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
-        self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
+        self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
     # v1 handlers
@@ -103,7 +110,7 @@ class ProjectService(protocol.ServerSlice):
 
         environments = await data.Environment.get_list(project=project.id)
         for env in environments:
-            await asyncio.gather(self.agentmanager.stop_agents(env), env.delete_cascade())
+            await asyncio.gather(self.autostarted_agent_manager.stop_agents(env), env.delete_cascade())
             self.resource_service.close_resource_action_logger(env.id)
 
         await project.delete()

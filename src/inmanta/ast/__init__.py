@@ -19,7 +19,9 @@
 import traceback
 from abc import abstractmethod
 from functools import lru_cache
-from typing import Dict, List, Optional, Sequence, Union  # noqa: F401
+from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple, Union  # noqa: F401
+
+from inmanta.warnings import InmantaWarning
 
 try:
     from typing import TYPE_CHECKING
@@ -30,11 +32,14 @@ except ImportError:
 if TYPE_CHECKING:
     import inmanta.ast.statements  # noqa: F401
     from inmanta.ast.attribute import Attribute  # noqa: F401
+    from inmanta.ast.blocks import BasicBlock  # noqa: F401
     from inmanta.ast.type import Type, NamedType  # noqa: F401
     from inmanta.execute.runtime import ExecutionContext, Instance, DelayedResultVariable, ResultVariable  # noqa: F401
     from inmanta.ast.statements import Statement, AssignStatement  # noqa: F401
     from inmanta.ast.entity import Entity  # noqa: F401
     from inmanta.ast.statements.define import DefineImport, DefineEntity  # noqa: F401
+    from inmanta.compiler import Compiler
+    from inmanta.plugins import PluginException
 
 
 class Location(object):
@@ -471,6 +476,8 @@ class CompilerException(Exception):
         Exception.__init__(self, msg)
         self.location = None  # type: Optional[Location]
         self.msg = msg
+        # store root namespace so error reporters can inspect the compiler state
+        self.root_ns: Optional[Namespace] = None
 
     def set_location(self, location: Location) -> None:
         if self.location is None:
@@ -513,6 +520,9 @@ class CompilerException(Exception):
         """
         return 100
 
+    def attach_compile_info(self, compiler: "Compiler") -> None:
+        self.root_ns = compiler.get_ns()
+
     def __str__(self) -> str:
         return self.format()
 
@@ -541,6 +551,26 @@ class RuntimeException(CompilerException):
         if self.stmt is not None:
             return "%s (reported in %s (%s))" % (self.get_message(), self.stmt, self.get_location())
         return super(RuntimeException, self).format()
+
+
+class CompilerRuntimeWarning(InmantaWarning, RuntimeException):
+    """
+        Baseclass for compiler warnings after parsing is complete.
+    """
+
+    def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
+        InmantaWarning.__init__(self)
+        RuntimeException.__init__(self, stmt, msg)
+
+
+class CompilerDeprecationWarning(CompilerRuntimeWarning):
+    def __init__(self, stmt: Optional["Locatable"], msg: str) -> None:
+        CompilerRuntimeWarning.__init__(self, stmt, msg)
+
+
+class VariableShadowWarning(CompilerRuntimeWarning):
+    def __init__(self, stmt: Optional["Locatable"], msg: str):
+        CompilerRuntimeWarning.__init__(self, stmt, msg)
 
 
 class TypeNotFoundException(RuntimeException):
@@ -591,6 +621,16 @@ class ExternalException(RuntimeException):
         return 60
 
 
+class ExplicitPluginException(ExternalException):
+    """
+        Base exception for wrapping explicit PluginExceptions raised from a plugin call.
+    """
+
+    def __init__(self, stmt: Locatable, msg: str, cause: "PluginException") -> None:
+        ExternalException.__init__(self, stmt, msg, cause)
+        self.__cause__: PluginException
+
+
 class WrappingRuntimeException(RuntimeException):
     """ Baseclass for RuntimeExceptions wrapping other CompilerException """
 
@@ -626,7 +666,7 @@ class OptionalValueException(RuntimeException):
 
     def __init__(self, instance: "Instance", attribute: "Attribute") -> None:
         RuntimeException.__init__(
-            self, instance, "Optional variable accessed that has no value (%s.%s)" % (instance, attribute)
+            self, instance, "Optional variable accessed that has no value (attribute `%s` of `%s`)" % (attribute, instance)
         )
         self.instance = instance
         self.attribute = attribute
@@ -709,15 +749,14 @@ class NotFoundException(RuntimeException):
 
 class DoubleSetException(RuntimeException):
     def __init__(
-        self, stmt: "Optional[Statement]", value: object, location: Location, newvalue: object, newlocation: Location
+        self, variable: "ResultVariable", stmt: "Optional[Statement]", newvalue: object, newlocation: Location
     ) -> None:
-        self.value = value  # type: object
-        self.location = location
+        self.variable: "ResultVariable" = variable
         self.newvalue = newvalue  # type: object
         self.newlocation = newlocation
         msg = "value set twice:\n\told value: %s\n\t\tset at %s\n\tnew value: %s\n\t\tset at %s\n" % (
-            self.value,
-            self.location,
+            self.variable.value,
+            self.variable.location,
             self.newvalue,
             self.newlocation,
         )

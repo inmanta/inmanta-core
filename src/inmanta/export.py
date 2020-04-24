@@ -33,6 +33,7 @@ from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_str, is_uuid_opt
 from inmanta.const import ResourceState
+from inmanta.data.model import ResourceVersionIdStr
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
@@ -222,7 +223,38 @@ class Exporter(object):
             except UnknownException:
                 LOGGER.debug("Dependency manager %s caused an unknown exception", fnc)
 
-        # TODO: check for cycles
+        # Because dependency managers are only semi-trusted code, we can not assume they respect the proper typing
+        # There are already many dependency manager who are somewhat liberal in what they put into the requires set
+
+        def cleanup(requires: Union[ResourceVersionIdStr, Resource, Id]) -> Id:
+            """
+            Main type cleanup
+
+            :param requires: a requirement, can be a string, resource, Id
+            :return: the same requirement, but as an Id
+            :raises Exception: the requirement can not be converted
+            """
+
+            if isinstance(requires, str):
+                myid = Id.parse_id(requires)
+                if myid.version == 0:
+                    raise Exception(
+                        f"A dependency manager inserted a resource id without version this is not allowed {requires}"
+                    )
+                return myid
+            if isinstance(requires, Resource):
+                return requires.id
+            if isinstance(requires, Id):
+                return requires
+            raise Exception(
+                f"A dependency manager inserted the object {repr(requires)} of type {type(requires)} "
+                "into a requires relation. However, only string, Resource or Id are allowable types "
+            )
+
+        # Clean up requires and resource_requires
+        for res in self._resources.values():
+            res.requires = set((cleanup(r) for r in res.requires))
+            res.resource_requires = set(self._resources[r] for r in res.requires)
 
     def _validate_graph(self) -> None:
         """
@@ -586,8 +618,11 @@ class ModelExporter(object):
                 return model.DirectValue(value)
 
         def convert_attribute(attr):
+            type_string: Optional[str] = attr.type.type_string()
+            if type_string is None:
+                raise Exception("Type %s can not be represented in the inmanta DSL" % attr.type)
             return model.Attribute(
-                attr.type.type_string(), attr.is_optional(), attr.is_multi(), convert_comment(attr.comment), location(attr)
+                type_string, attr.is_optional(), attr.is_multi(), convert_comment(attr.comment), location(attr)
             )
 
         def convert_relation(relation: RelationAttribute):

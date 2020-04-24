@@ -1,8 +1,7 @@
 FROM centos:7
 ARG branch
 
-# Pin the base-url of the epel repo to ensure stability
-COPY misc/epel.repo /etc/yum.repos.d/epel.repo
+RUN curl -sL https://rpm.nodesource.com/setup_11.x | bash -
 RUN curl --silent --location https://dl.yarnpkg.com/rpm/yarn.repo >/etc/yum.repos.d/yarn.repo
 RUN yum install -y \
 		git \
@@ -12,12 +11,13 @@ RUN yum install -y \
 		make \
 		procps-ng \
 		python3-devel \
-		nodejs-grunt-cli \
+		nodejs \
 		gcc-c++ \
 		gcc \
 		make \
 		yarn \
 		postgresql
+RUN npm install -g grunt
 
 # install the server
 RUN mkdir -p /opt/inmanta

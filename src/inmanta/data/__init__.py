@@ -33,7 +33,7 @@ from asyncpg.protocol import Record
 
 import inmanta.db.versions
 from inmanta import const, util
-from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, ResourceState
+from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.resources import Id
@@ -151,6 +151,13 @@ class BaseDocument(object, metaclass=DocumentMeta):
     _connection_pool: asyncpg.pool.Pool = None
 
     @classmethod
+    def get_connection(cls) -> asyncpg.pool.PoolAcquireContext:
+        """
+            Returns a PoolAcquireContext that can be either awaited or used in an async with statement to receive a Connection.
+        """
+        return cls._connection_pool.acquire()
+
+    @classmethod
     def table_name(cls) -> str:
         """
             Return the name of the collection
@@ -192,9 +199,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
                         % (name, fields[name].field_type.__name__, type(value).__name__)
                     )
 
-            if value is not None:
+            if from_postgres or value is not None:
                 result[name] = value
-
             elif fields[name].default:
                 result[name] = fields[name].default_value
 
@@ -305,12 +311,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
             if value is not None:
                 if not isinstance(value, typing.field_type):
                     raise TypeError("Value of field %s does not have the correct type" % name)
-                column_names.append(name)
-                values.append(self._get_value(value))
+            column_names.append(name)
+            values.append(self._get_value(value))
 
         return (column_names, values)
 
-    async def insert(self, connection: asyncpg.Connection = None) -> None:
+    async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
             Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
@@ -340,12 +346,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return await con.fetchrow(query, *values)
 
     @classmethod
-    async def _fetch_query(cls, query, *values):
-        async with cls._connection_pool.acquire() as con:
-            return await con.fetch(query, *values)
+    async def _fetch_query(cls, query, *values, connection: Optional[asyncpg.connection.Connection] = None):
+        if connection is None:
+            async with cls._connection_pool.acquire() as con:
+                return await con.fetch(query, *values)
+        return await connection.fetch(query, *values)
 
     @classmethod
-    async def _execute_query(cls, query, *values, connection: asyncpg.connection.Connection = None) -> str:
+    async def _execute_query(cls, query, *values, connection: Optional[asyncpg.connection.Connection] = None) -> str:
         if connection:
             return await connection.execute(query, *values)
         async with cls._connection_pool.acquire() as con:
@@ -406,7 +414,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         set_statement = ",".join(parts_of_set_statement)
         return (set_statement, values)
 
-    async def update_fields(self, **kwargs: Any) -> None:
+    async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         """
             Update the given fields of this document in the database. It will update the fields in this object and do a specific
             $set in the database on this document.
@@ -420,7 +428,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(kwargs) + 1)
         values = values_set_statement + values_for_filter
         query = "UPDATE " + self.table_name() + " SET " + set_statement + " WHERE " + filter_statement
-        await self._execute_query(query, *values)
+        await self._execute_query(query, *values, connection=connection)
 
     @classmethod
     async def get_by_id(cls: Type[T], doc_id: uuid.UUID) -> Optional[T]:
@@ -435,8 +443,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return None
 
     @classmethod
-    async def get_one(cls: Type[T], **query) -> T:
-        results = await cls.get_list(**query)
+    async def get_one(cls: Type[T], connection: Optional[asyncpg.connection.Connection] = None, **query) -> T:
+        results = await cls.get_list(connection=connection, **query)
         if results:
             return results[0]
 
@@ -448,6 +456,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         limit: int = None,
         offset: int = None,
         no_obj: bool = False,
+        connection: Optional[asyncpg.connection.Connection] = None,
         **query: Any,
     ) -> List[T]:
         """
@@ -464,11 +473,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
             sql_query += " LIMIT " + str(limit)
         if offset is not None and offset > 0:
             sql_query += " OFFSET " + str(offset)
-        result = await cls.select_query(sql_query, values, no_obj=no_obj)
+        result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
         return result
 
     @classmethod
-    async def delete_all(cls, connection=None, **query):
+    async def delete_all(cls, connection: Optional[asyncpg.connection.Connection] = None, **query):
         """
             Delete all documents that match the given query
         """
@@ -536,8 +545,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self.delete()
 
     @classmethod
-    async def select_query(cls, query, values, no_obj=False):
-        async with cls._connection_pool.acquire() as con:
+    async def select_query(cls, query, values, no_obj=False, connection: Optional[asyncpg.connection.Connection] = None):
+        async def perform_query(con: asyncpg.connection.Connection) -> object:
             async with con.transaction():
                 result = []
                 async for record in con.cursor(query, *values):
@@ -546,6 +555,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
                     else:
                         result.append(cls(from_postgres=True, **record))
                 return result
+
+        if connection is None:
+            async with cls._connection_pool.acquire() as con:
+                return await perform_query(con)
+        return await perform_query(connection)
 
     def to_dict(self) -> JsonType:
         """
@@ -618,6 +632,9 @@ def convert_agent_map(value: Dict[str, str]) -> Dict[str, str]:
         if not isinstance(v, str):
             raise ValueError("The value of an agent map should be string")
 
+    if "internal" not in value:
+        raise ValueError("The internal agent must be present in the autostart_agent_map")
+
     return value
 
 
@@ -654,6 +671,7 @@ AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
 RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
 PURGE_ON_DELETE = "purge_on_delete"
+PROTECTED_ENVIRONMENT = "protected_environment"
 
 
 class Setting(object):
@@ -860,6 +878,13 @@ class Environment(BaseDocument):
             doc="Enable purge on delete. When set to true, the server will detect the absence of resources with purge_on_delete"
             " set to true and automatically purges them.",
         ),
+        PROTECTED_ENVIRONMENT: Setting(
+            name=PROTECTED_ENVIRONMENT,
+            default=False,
+            typ="bool",
+            validator=convert_boolean,
+            doc="When set to true, this environment cannot be cleared or deleted.",
+        ),
     }
 
     _renamed_settings_map = {
@@ -867,7 +892,7 @@ class Environment(BaseDocument):
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
     }  # name new_option -> name deprecated_option
 
-    async def get(self, key: str) -> m.EnvSettingType:
+    async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """
             Get a setting in this environment.
 
@@ -892,10 +917,10 @@ class Environment(BaseDocument):
             raise KeyError()
 
         value = self._settings[key].default
-        await self.set(key, value)
+        await self.set(key, value, connection=connection)
         return value
 
-    async def set(self, key: str, value: m.EnvSettingType) -> None:
+    async def set(self, key: str, value: m.EnvSettingType, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
             Set a new setting in this environment.
 
@@ -920,7 +945,7 @@ class Environment(BaseDocument):
             + filter_statement
         )
         values = [self._get_value([key]), self._get_value(value)] + values
-        await self._execute_query(query, *values)
+        await self._execute_query(query, *values, connection=connection)
         self.settings[key] = value
 
     async def unset(self, key: str) -> None:
@@ -984,6 +1009,8 @@ SOURCE = ("fact", "plugin", "user", "report")
 class Parameter(BaseDocument):
     """
         A parameter that can be used in the configuration model
+        Any transactions that update Parameter should adhere to the locking order described in
+        :py:class:`inmanta.data.ConfigurationModel`.
 
         :param name: The name of the parameter
         :param value: The value of the parameter
@@ -1083,7 +1110,7 @@ class AgentProcess(BaseDocument):
         return nodes
 
     @classmethod
-    async def get_by_sid(cls, sid: uuid.UUID) -> List["AgentProcess"]:
+    async def get_by_sid(cls, sid: uuid.UUID) -> Optional["AgentProcess"]:
         objects = await cls.get_list(limit=DBLIMIT, expired=None, sid=sid)
         if len(objects) == 0:
             return None
@@ -1092,6 +1119,30 @@ class AgentProcess(BaseDocument):
             return objects[0]
         else:
             return objects[0]
+
+    @classmethod
+    async def seen(cls, env: uuid.UUID, nodename: str, sid: uuid.UUID, now: datetime.datetime):
+        """
+            Update the last_seen parameter of the process and mark as not expired.
+        """
+        proc = await cls.get_one(sid=sid)
+        if proc is None:
+            proc = cls(hostname=nodename, environment=env, first_seen=now, last_seen=now, sid=sid)
+            await proc.insert()
+        else:
+            await proc.update_fields(last_seen=now, expired=None)
+
+    @classmethod
+    async def update_last_seen(cls, sid: uuid.UUID, last_seen: datetime.datetime) -> None:
+        aps = await cls.get_by_sid(sid=sid)
+        if aps:
+            await aps.update_fields(last_seen=last_seen)
+
+    @classmethod
+    async def expire_process(cls, sid: uuid.UUID, now: datetime.datetime) -> None:
+        aps = await cls.get_by_sid(sid=sid)
+        if aps is not None:
+            await aps.update_fields(expired=now)
 
     def to_dict(self) -> JsonType:
         result = super(AgentProcess, self).to_dict()
@@ -1116,14 +1167,60 @@ class AgentInstance(BaseDocument):
     tid = Field(field_type=uuid.UUID, required=True)
 
     @classmethod
-    async def active_for(cls, tid, endpoint):
-        objects = await cls.get_list(expired=None, tid=tid, name=endpoint)
+    async def active_for(cls, tid, endpoint, process: uuid.UUID = None):
+        if process is not None:
+            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, process=process)
+        else:
+            objects = await cls.get_list(expired=None, tid=tid, name=endpoint)
         return objects
 
     @classmethod
     async def active(cls):
         objects = await cls.get_list(expired=None)
         return objects
+
+    @classmethod
+    async def _expire_endpoints_for_process(
+        cls, tid: uuid.UUID, process: uuid.UUID, endpoints: List[str], now: datetime.datetime
+    ) -> None:
+        """
+            Expire the agent instances for the given endpoints if they are not expired yet.
+        """
+        if not endpoints:
+            return
+        names_subquery = ",".join([f"${i}" for i in range(4, 4 + len(endpoints))])
+        query = f"""UPDATE {cls.table_name()}
+                    SET expired=$1
+                    WHERE tid=$2 AND process=$3 AND name IN ({names_subquery}) AND expired IS NULL
+                 """
+        values = [cls._get_value(now), cls._get_value(tid), cls._get_value(process)] + [cls._get_value(e) for e in endpoints]
+        await cls._execute_query(query, *values)
+
+    @classmethod
+    async def log_instance_creation(
+        cls, tid: uuid.UUID, process: uuid.UUID, endpoints: List[str], now: datetime.datetime
+    ) -> None:
+        """
+            Create new agent instances for a given session.
+        """
+        if not endpoints:
+            return
+        # Fix database corruption when database was down
+        await cls._expire_endpoints_for_process(tid, process, endpoints, now)
+        for nh in endpoints:
+            await cls(tid=tid, process=process, name=nh).insert()
+
+    @classmethod
+    async def log_instance_expiry(cls, sid: uuid.UUID, endpoints: List[str], now: datetime.datetime) -> None:
+        """
+            Expire specific instances for a given session id.
+        """
+        if not endpoints:
+            return
+        instances = await cls.get_list(process=sid)
+        for ai in instances:
+            if ai.name in endpoints:
+                await ai.update_fields(expired=now)
 
 
 class Agent(BaseDocument):
@@ -1154,12 +1251,23 @@ class Agent(BaseDocument):
 
     primary = property(get_primary, set_primary, del_primary)
 
-    def get_status(self) -> str:
+    @classmethod
+    async def get_statuses(cls, env_id: uuid.UUID, agent_names: List[str]) -> Dict[str, Optional[AgentStatus]]:
+        result: Dict[str, Optional[AgentStatus]] = {}
+        for agent_name in agent_names:
+            agent = await cls.get_one(environment=env_id, name=agent_name)
+            if agent:
+                result[agent_name] = agent.get_status()
+            else:
+                result[agent_name] = None
+        return result
+
+    def get_status(self) -> AgentStatus:
         if self.paused:
-            return "paused"
+            return AgentStatus.paused
         if self.primary is not None:
-            return "up"
-        return "down"
+            return AgentStatus.up
+        return AgentStatus.down
 
     def to_dict(self) -> JsonType:
         base = BaseDocument.to_dict(self)
@@ -1172,7 +1280,7 @@ class Agent(BaseDocument):
             base["primary"] = base["id_primary"]
             del base["id_primary"]
 
-        base["state"] = self.get_status()
+        base["state"] = self.get_status().value
 
         return base
 
@@ -1189,9 +1297,52 @@ class Agent(BaseDocument):
         return cls._create_dict(from_postgres, kwargs)
 
     @classmethod
-    async def get(cls, env: uuid.UUID, endpoint: str) -> "Agent":
-        obj = await cls.get_one(environment=env, name=endpoint)
+    async def get(cls, env: uuid.UUID, endpoint: str, connection: Optional[asyncpg.connection.Connection] = None) -> "Agent":
+        obj = await cls.get_one(environment=env, name=endpoint, connection=connection)
         return obj
+
+    @classmethod
+    async def pause(cls, env: uuid.UUID, endpoint: Optional[str], paused: bool) -> List[str]:
+        """
+            Pause a specific agent or all agents in an environment when endpoint is set to None.
+
+            :return A list of agent names that have been paused/unpaused by this method.
+        """
+        if endpoint is None:
+            query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 RETURNING name"
+            values = [cls._get_value(paused), cls._get_value(env)]
+        else:
+            query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 AND name=$3 RETURNING name"
+            values = [cls._get_value(paused), cls._get_value(env), cls._get_value(endpoint)]
+        result = await cls._fetch_query(query, *values)
+        return sorted([r["name"] for r in result])
+
+    @classmethod
+    async def update_primary(
+        cls, env: uuid.UUID, endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]], now: datetime.datetime
+    ) -> None:
+        """
+            Update the primary agent instance for agents present in the database.
+
+            :param env: The environment of the agent
+            :param endpoints_with_new_primary: Contains a tuple (agent-name, sid) for each agent that has got a new
+                                               primary agent instance. The sid in the tuple is the session id of the new
+                                               primary. If the session id is None, the Agent doesn't have a primary anymore.
+            :param now: Timestamp of this failover
+        """
+        for (endpoint, sid) in endpoints_with_new_primary:
+            agent = await cls.get(env, endpoint)
+            if agent is None:
+                continue
+
+            if sid is None:
+                await agent.update_fields(last_failover=now, primary=None)
+            else:
+                instances = await AgentInstance.active_for(tid=env, endpoint=agent.name, process=sid)
+                if instances:
+                    await agent.update_fields(last_failover=now, primary=instances[0].id)
+                else:
+                    await agent.update_fields(last_failover=now, primary=None)
 
 
 class Report(BaseDocument):
@@ -1414,6 +1565,8 @@ class LogLine(DataDocument):
 class ResourceAction(BaseDocument):
     """
         Log related to actions performed on a specific resource version by Inmanta.
+        Any transactions that update ResourceAction should adhere to the locking order described in
+        :py:class:`inmanta.data.ConfigurationModel
 
         :param environment: The environment this action belongs to.
         :param version: The version of the configuration model this action belongs to.
@@ -1458,7 +1611,7 @@ class ResourceAction(BaseDocument):
     def _create_dict_wrapper(cls, from_postgres, kwargs):
         result = cls._create_dict(from_postgres, kwargs)
         new_messages = []
-        if from_postgres and "messages" in result:
+        if from_postgres and result.get("messages"):
             for message in result["messages"]:
                 message = json.loads(message)
                 if "timestamp" in message:
@@ -1491,8 +1644,8 @@ class ResourceAction(BaseDocument):
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
     @classmethod
-    async def get(cls, action_id):
-        return await cls.get_one(action_id=action_id)
+    async def get(cls, action_id, connection: Optional[asyncpg.connection.Connection] = None):
+        return await cls.get_one(action_id=action_id, connection=connection)
 
     def set_field(self, name, value):
         self._updates[name] = value
@@ -1513,13 +1666,13 @@ class ResourceAction(BaseDocument):
                     self._updates["changes"][resource] = {}
                 self._updates["changes"][resource][field] = change
 
-    async def save(self):
+    async def save(self, connection: Optional[asyncpg.connection.Connection] = None):
         """
             Save the changes
         """
         if len(self._updates) == 0:
             return
-        await self.update_fields(**self._updates)
+        await self.update_fields(connection=connection, **self._updates)
         self._updates = {}
 
     @classmethod
@@ -1536,6 +1689,8 @@ class ResourceAction(BaseDocument):
 class Resource(BaseDocument):
     """
         A specific version of a resource. This entity contains the desired state of a resource.
+        Any transactions that update Resource should adhere to the locking order described in
+        :py:class:`inmanta.data.ConfigurationModel`.
 
         :param environment: The environment this resource version is defined in
         :param rid: The id of the resource and its version
@@ -1594,7 +1749,10 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resources(
-        cls, environment: uuid.UUID, resource_version_ids: List[m.ResourceVersionIdStr]
+        cls,
+        environment: uuid.UUID,
+        resource_version_ids: List[m.ResourceVersionIdStr],
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> List["Resource"]:
         """
             Get all resources listed in resource_version_ids
@@ -1613,7 +1771,7 @@ class Resource(BaseDocument):
             + resource_version_ids_statement
             + ")"
         )
-        resources = await cls.select_query(query, values)
+        resources = await cls.select_query(query, values, connection=connection)
         return resources
 
     @classmethod
@@ -1771,11 +1929,16 @@ class Resource(BaseDocument):
             return resources[0]
 
     @classmethod
-    async def get(cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr) -> Optional["Resource"]:
+    async def get(
+        cls,
+        environment: uuid.UUID,
+        resource_version_id: m.ResourceVersionIdStr,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> Optional["Resource"]:
         """
             Get a resource with the given resource version id
         """
-        value = await cls.get_one(environment=environment, resource_version_id=resource_version_id)
+        value = await cls.get_one(environment=environment, resource_version_id=resource_version_id, connection=connection)
         return value
 
     @classmethod
@@ -1884,7 +2047,7 @@ class Resource(BaseDocument):
 
         return should_purge
 
-    async def insert(self, connection: Optional[asyncpg.Connection] = None) -> None:
+    async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
         await super(Resource, self).insert(connection=connection)
 
@@ -1898,9 +2061,9 @@ class Resource(BaseDocument):
         self.make_hash()
         await super(Resource, self).update(**kwargs)
 
-    async def update_fields(self, **kwargs: Any) -> None:
+    async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         self.make_hash()
-        await super(Resource, self).update_fields(**kwargs)
+        await super(Resource, self).update_fields(connection=connection, **kwargs)
 
     def to_dict(self) -> Dict[str, Any]:
         self.make_hash()
@@ -1925,6 +2088,8 @@ class Resource(BaseDocument):
 class ConfigurationModel(BaseDocument):
     """
         A specific version of the configuration model.
+        Any transactions that update ResourceAction, Resource, Parameter and/or ConfigurationModel
+        should acquire their locks in that order.
 
         :param version: The version of the configuration model, represented by a unix timestamp.
         :param environment: The environment this configuration model is defined in
@@ -1984,6 +2149,7 @@ class ConfigurationModel(BaseDocument):
         limit: int = None,
         offset: int = None,
         no_obj: bool = False,
+        connection: Optional[asyncpg.connection.Connection] = None,
         **query: Any,
     ) -> List["ConfigurationModel"]:
         transient_states = ",".join(["$" + str(i) for i in range(1, len(const.TRANSIENT_STATES) + 1)])
@@ -2008,7 +2174,7 @@ class ConfigurationModel(BaseDocument):
                     {order_by_statement}
                     {limit_statement}
                     {offset_statement}"""
-        query_result = await cls._fetch_query(query, *values)
+        query_result = await cls._fetch_query(query, *values, connection=connection)
         result = []
         for record in query_result:
             record = dict(record)
@@ -2105,18 +2271,19 @@ class ConfigurationModel(BaseDocument):
                 # Delete all code associated with this version
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
 
-                # Delete version and all resources (FK)
-                await self.delete(connection=con)
+                # Acquire explicit lock to avoid deadlock. See ConfigurationModel docstring
+                await self._execute_query(f"LOCK TABLE {ResourceAction.table_name()} IN SHARE MODE", connection=con)
+                await Resource.delete_all(connection=con, environment=self.environment, model=self.version)
 
                 # Delete facts when the resources in this version are the only
-                resource_table_name = Resource.table_name()
-                param_table_name = Parameter.table_name()
-
                 await con.execute(
-                    f"DELETE FROM {param_table_name} p WHERE environment=$1 AND NOT EXISTS "
-                    f"(SELECT * FROM {resource_table_name} r WHERE p.resource_id=r.resource_id)",
+                    f"DELETE FROM {Parameter.table_name()} p WHERE environment=$1 AND NOT EXISTS "
+                    f"(SELECT * FROM {Resource.table_name()} r WHERE p.resource_id=r.resource_id)",
                     self.environment,
                 )
+
+                # Delete ConfigurationModel and cascade delete on connected tables
+                await self.delete(connection=con)
 
     async def get_undeployable(self) -> List[m.ResourceIdStr]:
         """
@@ -2158,31 +2325,50 @@ class ConfigurationModel(BaseDocument):
         self.deployed = True
 
     @classmethod
-    async def mark_done_if_done(cls, environment, version):
-        query = f"""UPDATE {ConfigurationModel.table_name()}
-                        SET deployed=True,
-                            result=(CASE WHEN (
-                                         EXISTS(SELECT 1
-                                                FROM {Resource.table_name()}
-                                                WHERE environment=$1 AND model=$2 AND status != $3)
-                                         )::boolean
-                                    THEN $4::versionstate
-                                    ELSE $5::versionstate END
-                            )
-                        WHERE environment=$1 AND version=$2 AND
-                              total=(SELECT COUNT(*)
-                                     FROM Resource
-                                     WHERE environment=$1 AND model=$2 AND status = any($6::resourcestate[])
-                    )"""
-        values = [
-            cls._get_value(environment),
-            cls._get_value(version),
-            cls._get_value(ResourceState.deployed),
-            cls._get_value(const.VersionState.failed),
-            cls._get_value(const.VersionState.success),
-            cls._get_value(DONE_STATES),
-        ]
-        await cls._execute_query(query, *values)
+    async def mark_done_if_done(cls, environment, version, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        async def do_query_exclusive(con: asyncpg.connection.Connection) -> None:
+            """
+                Performs the query to mark done if done. Acquires a lock that blocks execution until other transactions holding
+                this lock have committed. This makes sure that once a transaction performs this query, it needs to commit before
+                another transaction is able to perform it. This way no race condition is possible where the deployed state is
+                not set: when a transaction A is in this part of its lifecycle, either all other related (possibly conflicting)
+                transactions have committed already, or they will only start this part of their lifecycle when A has committed
+                itself.
+            """
+            async with con.transaction():
+                # SHARE UPDATE EXCLUSIVE is self-conflicting
+                # and does not conflict with the ROW EXCLUSIVE lock acquired by UPDATE
+                await cls._execute_query(f"LOCK TABLE {Resource.table_name()} IN SHARE UPDATE EXCLUSIVE MODE", connection=con)
+                query = f"""UPDATE {ConfigurationModel.table_name()}
+                                SET deployed=True,
+                                    result=(CASE WHEN (
+                                                 EXISTS(SELECT 1
+                                                        FROM {Resource.table_name()}
+                                                        WHERE environment=$1 AND model=$2 AND status != $3)
+                                                 )::boolean
+                                            THEN $4::versionstate
+                                            ELSE $5::versionstate END
+                                    )
+                                WHERE environment=$1 AND version=$2 AND
+                                      total=(SELECT COUNT(*)
+                                             FROM {Resource.table_name()}
+                                             WHERE environment=$1 AND model=$2 AND status = any($6::resourcestate[])
+                            )"""
+                values = [
+                    cls._get_value(environment),
+                    cls._get_value(version),
+                    cls._get_value(ResourceState.deployed),
+                    cls._get_value(const.VersionState.failed),
+                    cls._get_value(const.VersionState.success),
+                    cls._get_value(DONE_STATES),
+                ]
+                await cls._execute_query(query, *values, connection=con)
+
+        if connection is None:
+            async with cls._connection_pool.acquire() as con:
+                await do_query_exclusive(con)
+        else:
+            await do_query_exclusive(connection)
 
     @classmethod
     async def get_increment(

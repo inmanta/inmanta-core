@@ -9,5 +9,8 @@ The options are listed per config section.
 
 .. show-options::
 
-	inmanta.server.config
-	inmanta.agent.config
+    inmanta.deploy
+    inmanta.export
+    inmanta.server.config
+    inmanta.agent.config
+    inmanta.compiler.config

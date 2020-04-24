@@ -110,13 +110,21 @@ When done, first use git to add files::
 
     git add *
 
-To commit, use the module tool. It will autmatically set the right tags on the module::
+To commit, use the module tool. This will create a new dev release.::
 
     inmanta module commit -m "First commit"
 
-This will create a new dev release. To make an actual release::
+For the dev releases, no tags are created by default. If a tag is required for a dev release, use the --tag option.::
+
+    inmanta module commit -m "First commit" --tag
+
+To make an actual release. It will automatically set the right tags on the module::
 
     inmanta module commit -r -m "First Release"
+
+If a release shouldn't be tagged, the --no-tag option should be specified::
+
+    inmanta module commit -r -m "First Release" --no-tag
 
 To set a specific version::
 
@@ -245,6 +253,18 @@ This plugin can be tested with:
 Argument type annotations are strings that refer to Inmanta primitive types or to entities. If an
 entity is passed to a plugin, the python code of the plugin can navigate relations throughout the
 orchestration model to access attributes of other entities.
+
+A base exception for plugins is provided in ``inmanta.plugins.PluginException``. Exceptions raised
+from a plugin should be of a subtype of this base exception.
+
+.. code-block:: python
+    :linenos:
+
+    from inmanta.plugins import plugin, PluginException
+
+    @plugin
+    def raise_exception(message: "string"):
+        raise PluginException(message)
 
 If your plugin requires external libraries, include a requirements.txt in the module. The libraries
 listed in this file are automatically installed by the compiler and agents.

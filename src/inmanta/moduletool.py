@@ -27,9 +27,10 @@ from typing import TYPE_CHECKING, Iterable, List, Mapping
 
 import texttable
 import yaml
+from cookiecutter.main import cookiecutter
 from pkg_resources import parse_version
 
-from inmanta.ast import RuntimeException
+from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
 from inmanta.module import INSTALL_MASTER, INSTALL_RELEASES, Module, Project, gitprovider
@@ -169,6 +170,12 @@ class ProjectTool(ModuleLikeTool):
             " project.yml is used which defaults to ~=",
             default=None,
         )
+        init = subparser.add_parser("init", help="Initialize directory structure for a project")
+        init.add_argument("--name", "-n", help="The name of the new project", required=True)
+        init.add_argument("--output-dir", "-o", help="Output directory path", default="./")
+        init.add_argument(
+            "--default", help="Use default parameters for the project generation", action="store_true", default=False
+        )
 
     def freeze(self, outfile, recursive, operator):
         """
@@ -215,6 +222,18 @@ class ProjectTool(ModuleLikeTool):
             if close:
                 outfile.close()
 
+    def init(self, output_dir, name, default):
+        os.makedirs(output_dir, exist_ok=True)
+        project_path = os.path.join(output_dir, name)
+        if os.path.exists(project_path):
+            raise Exception(f"Project directory {project_path} already exists")
+        cookiecutter(
+            "https://github.com/inmanta/inmanta-project-template.git",
+            output_dir=output_dir,
+            extra_context={"project_name": name},
+            no_input=default,
+        )
+
 
 class ModuleTool(ModuleLikeTool):
     """
@@ -257,6 +276,16 @@ class ModuleTool(ModuleLikeTool):
         commit.add_argument("--patch", dest="patch", help="make a major release", action="store_true")
         commit.add_argument("-v", "--version", help="Version to use on tag")
         commit.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
+        commit.add_argument(
+            "-t",
+            "--tag",
+            dest="tag",
+            help="Create a tag for the commit."
+            "Tags are not created for dev releases by default, if you want to tag it, specify this flag explicitly",
+            action="store_true",
+        )
+        commit.add_argument("-n", "--no-tag", dest="tag", help="Don't create a tag for the commit", action="store_false")
+        commit.set_defaults(tag=False)
 
         create = subparser.add_parser("create", help="Create a new module")
         create.add_argument("name", help="The name of the module")
@@ -436,7 +465,7 @@ version: 0.0.1dev0"""
                     modules = [module]
                 do_update(specs, modules)
                 done = True
-            except RuntimeException as e:
+            except CompilerException as e:
                 last_failure = e
                 # model is corrupt
                 LOGGER.info(
@@ -494,7 +523,9 @@ version: 0.0.1dev0"""
         LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
         return module
 
-    def commit(self, message, module=None, version=None, dev=False, major=False, minor=False, patch=False, commit_all=False):
+    def commit(
+        self, message, module=None, version=None, dev=False, major=False, minor=False, patch=False, commit_all=False, tag=False,
+    ):
         """
             Commit all current changes.
         """
@@ -512,7 +543,8 @@ version: 0.0.1dev0"""
         # commit
         gitprovider.commit(module._path, message, commit_all, [module.get_config_file_name()])
         # tag
-        gitprovider.tag(module._path, str(outversion))
+        if not dev or tag:
+            gitprovider.tag(module._path, str(outversion))
 
     def freeze(self, outfile, recursive, operator, module=None):
         """

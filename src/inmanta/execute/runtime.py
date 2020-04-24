@@ -17,10 +17,13 @@
 """
 
 from abc import abstractmethod
-from typing import Dict, Generic, List, Optional, Set, TypeVar, Union
+from typing import Dict, Generic, List, Optional, Set, TypeVar, Union, cast
 
+import inmanta.execute.dataflow as dataflow
+import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeException,
+    CompilerDeprecationWarning,
     CompilerException,
     DoubleSetException,
     Locatable,
@@ -32,6 +35,7 @@ from inmanta.ast import (
     RuntimeException,
 )
 from inmanta.ast.type import Type
+from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.tracking import Tracker
 from inmanta.execute.util import Unknown
@@ -90,7 +94,7 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
 
     location: Location
 
-    __slots__ = ("location", "provider", "waiters", "value", "hasValue", "type")
+    __slots__ = ("location", "provider", "waiters", "value", "hasValue", "type", "_node")
 
     def __init__(self, value: Optional[T] = None) -> None:
         self.provider: "Optional[Statement]" = None
@@ -98,6 +102,7 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
         self.value: Optional[T] = value
         self.hasValue: bool = False
         self.type: Optional[Type] = None
+        self._node: Optional[dataflow.AssignableNodeReference] = None
 
     def set_type(self, mytype: Type) -> None:
         self.type = mytype
@@ -123,7 +128,7 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
     def set_value(self, value: T, location: Location, recur: bool = True) -> None:
         if self.hasValue:
             if self.value != value:
-                raise DoubleSetException(None, self.value, self.location, value, location)
+                raise DoubleSetException(self, None, value, location)
             else:
                 return
         if not isinstance(value, Unknown) and self.type is not None:
@@ -160,6 +165,15 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
     def is_multi(self) -> bool:
         return False
 
+    def set_dataflow_node(self, node: dataflow.AssignableNodeReference) -> None:
+        assert self._node is None or self._node == node
+        self._node = node
+        self._node.set_result_variable(self)
+
+    def get_dataflow_node(self) -> dataflow.AssignableNodeReference:
+        assert self._node is not None, "assertion error at %s.get_dataflow_node() in ResultVariable" % self
+        return self._node
+
 
 class AttributeVariable(ResultVariable["Instance"]):
     """
@@ -178,7 +192,7 @@ class AttributeVariable(ResultVariable["Instance"]):
     def set_value(self, value: "Instance", location: Location, recur: bool = True) -> None:
         if self.hasValue:
             if self.value != value:
-                raise DoubleSetException(None, self.value, self.location, value, location)
+                raise DoubleSetException(self, None, value, location)
             else:
                 return
         if not isinstance(value, Unknown) and self.type is not None:
@@ -455,7 +469,7 @@ class OptionVariable(DelayedResultVariable["Instance"]):
                     self, instance=self.myself, attribute=self.attribute, value=value, location=location, reverse=not recur
                 )
             if self.value != value:
-                raise DoubleSetException(None, self.value, self.location, value, location)
+                raise DoubleSetException(self, None, value, location)
 
         if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
@@ -487,6 +501,23 @@ class OptionVariable(DelayedResultVariable["Instance"]):
 
     def __str__(self) -> str:
         return "OptionVariable %s %s = %s" % (self.myself, self.attribute, self.value)
+
+
+class DeprecatedOptionVariable(OptionVariable):
+    """
+        Represents nullable attributes. In the future this class can be removed, and a standard
+        ResultVariable with nullable type should be used.
+    """
+
+    def freeze(self) -> None:
+        if self.value is None:
+            warning: CompilerDeprecationWarning = CompilerDeprecationWarning(
+                None,
+                "No value for attribute %s.%s. Assign null instead of leaving unassigned." % (self.myself.type, self.attribute),
+            )
+            warning.set_location(self.myself.get_location())
+            inmanta_warnings.warn(warning)
+        super().freeze()
 
 
 class QueueScheduler(object):
@@ -710,6 +741,7 @@ class RawUnit(Waiter):
             self.resumer.resume(self.requires, self.resolver, self.queue)
         except RuntimeException as e:
             e.set_statement(self.resumer)
+            e.location = self.resumer.location
             raise e
         self.done = True
 
@@ -734,10 +766,11 @@ Typeorvalue = Union[Type, ResultVariable]
 
 class Resolver(object):
 
-    __slots__ = "namespace"
+    __slots__ = ("namespace", "dataflow_graph")
 
-    def __init__(self, namespace: Namespace) -> None:
+    def __init__(self, namespace: Namespace, enable_dataflow_graph: bool = False) -> None:
         self.namespace = namespace
+        self.dataflow_graph: Optional[DataflowGraph] = DataflowGraph(self) if enable_dataflow_graph else None
 
     def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
         # override lexial root
@@ -755,6 +788,18 @@ class Resolver(object):
     def for_namespace(self, namespace: Namespace) -> "Resolver":
         return NamespaceResolver(self, namespace)
 
+    def get_dataflow_node(self, name: str) -> "dataflow.AssignableNodeReference":
+        try:
+            result_variable: Typeorvalue = self.lookup(name)
+            assert isinstance(result_variable, ResultVariable)
+            return result_variable.get_dataflow_node()
+        except NotFoundException:
+            # This block is only executed if the model contains a reference to an undefined variable.
+            # Since we don't know in which scope it should be defined, we assume top scope.
+            root_graph: Optional[DataflowGraph] = self.get_root_resolver().dataflow_graph
+            assert root_graph is not None
+            return root_graph.get_own_variable(name)
+
 
 class NamespaceResolver(Resolver):
 
@@ -763,6 +808,9 @@ class NamespaceResolver(Resolver):
     def __init__(self, parent: Resolver, lecial_root: Namespace) -> None:
         self.parent = parent
         self.root = lecial_root
+        self.dataflow_graph: Optional[DataflowGraph] = None
+        if parent.dataflow_graph is not None:
+            self.dataflow_graph = DataflowGraph(self, parent.dataflow_graph)
 
     def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
         if root is not None:
@@ -784,6 +832,12 @@ class ExecutionContext(Resolver):
         self.block = block
         self.slots: Dict[str, ResultVariable] = {n: ResultVariable() for n in block.get_variables()}
         self.resolver = resolver
+        self.dataflow_graph: Optional[DataflowGraph] = None
+        if resolver.dataflow_graph is not None:
+            self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
+            for name, var in self.slots.items():
+                node_ref: dataflow.AssignableNodeReference = dataflow.AssignableNode(name).reference()
+                var.set_dataflow_node(node_ref)
 
     def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
         if "::" in name:
@@ -811,29 +865,60 @@ class ExecutionContext(Resolver):
 # also extends locatable
 class Instance(ExecutionContext):
     def set_location(self, location: Location) -> None:
-        assert location is not None and location.lnr > 0
-        self._location = location
+        Locatable.set_location(self, location)
+        self.locations.append(location)
 
     def get_location(self) -> Location:
-        assert self._location is not None
-        return self._location
+        return Locatable.get_location(self)
 
     location = property(get_location, set_location)
 
-    __slots__ = ("_location", "resolver", "type", "slots", "sid", "implemenations", "trackers", "locations")
+    __slots__ = (
+        "_location",
+        "resolver",
+        "type",
+        "sid",
+        "implementations",
+        "trackers",
+        "locations",
+        "instance_node",
+    )
 
-    def __init__(self, mytype: "Entity", resolver: Resolver, queue: QueueScheduler) -> None:
+    def __init__(
+        self,
+        mytype: "Entity",
+        resolver: Resolver,
+        queue: QueueScheduler,
+        node: Optional["dataflow.InstanceNodeReference"] = None,
+    ) -> None:
         Locatable.__init__(self)
         # ExecutionContext, Resolver -> this class only uses it as an "interface", so no constructor call!
         self.resolver = resolver.get_root_resolver()
         self.type = mytype
         self.slots: Dict[str, ResultVariable] = {
-            n: mytype.get_attribute(n).get_new_result_variable(self, queue) for n in mytype.get_all_attribute_names()
+            n: mytype.get_attribute(n).get_new_result_variable(self, queue)
+            # prune duplicates first because get_new_result_variable() has side effects
+            for n in set(mytype.get_all_attribute_names())
         }
+
+        # TODO: this is somewhat ugly. Is there a cleaner way to enforce this constraint
+        assert (resolver.dataflow_graph is None) == (node is None)
+        self.dataflow_graph: Optional[DataflowGraph] = None
+        self.instance_node: Optional[dataflow.InstanceNodeReference] = node
+        if self.instance_node is not None:
+            self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
+            for name, var in self.slots.items():
+                var.set_dataflow_node(dataflow.InstanceAttributeNodeReference(self.instance_node.top_node(), name))
+
         self.slots["self"] = ResultVariable()
         self.slots["self"].set_value(self, None)
+        if self.instance_node is not None:
+            self_var_node: dataflow.AssignableNodeReference = dataflow.AssignableNode("__self__").reference()
+            self_var_node.assign(self.instance_node, self, cast(DataflowGraph, self.dataflow_graph))
+            self.slots["self"].set_dataflow_node(self_var_node)
+
         self.sid = id(self)
-        self.implemenations: "Set[Implementation]" = set()
+        self.implementations: "Set[Implementation]" = set()
 
         # see inmanta.ast.execute.scheduler.QueueScheduler
         self.trackers: List[Tracker] = []
@@ -864,16 +949,16 @@ class Instance(ExecutionContext):
         return "%s (instantiated at %s)" % (self.type, ",".join([str(l) for l in self.get_locations()]))
 
     def add_implementation(self, impl: "Implementation") -> bool:
-        if impl in self.implemenations:
+        if impl in self.implementations:
             return False
-        self.implemenations.add(impl)
+        self.implementations.add(impl)
         return True
 
     def final(self, excns: List[RuntimeException]) -> None:
         """
             The object should be complete, freeze all attributes
         """
-        if len(self.implemenations) == 0:
+        if len(self.implementations) == 0:
             excns.append(RuntimeException(self, "Unable to select implementation for entity %s" % self.type.name))
 
         for k, v in self.slots.items():
@@ -921,13 +1006,6 @@ class Instance(ExecutionContext):
             if not v.can_get():
                 return False
         return True
-
-    def set_location(self, location: Location) -> None:
-        Locatable.set_location(self, location)
-        self.locations.append(location)
-
-    def get_location(self) -> Location:
-        return self.location
 
     def get_locations(self) -> List[Location]:
         return self.locations

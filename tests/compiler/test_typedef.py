@@ -34,7 +34,7 @@ Test(value="a")
 """,
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:11)` (reported in Construct(Test) ({dir}/main.cf:11))
 caused by:
-  Could not resolve the value a in this static context (reported in a ({dir}/main.cf:3:41))""",  # noqa: E501
+  Unable to resolve `a`: a type constraint can not reference variables. (reported in a ({dir}/main.cf:3:41))""",  # noqa: E501
     )
 
 
@@ -107,4 +107,19 @@ end
         """,
         "Invalid value [42, 42], does not match constraint `(std::unique(self) == true)`"
         " (reported in mytype v = List() ({dir}/main.cf:5))",
+    )
+
+
+def test_1810_type_constraint_resolution_error_message(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+x = ["allowed", "values"]
+typedef mytype as string matching self in x
+
+entity A:
+    mytype myvalue = "allowed"
+end
+implement A using std::none
+        """,
+        "Unable to resolve `x`: a type constraint can not reference variables. (reported in x ({dir}/main.cf:3:43))",
     )

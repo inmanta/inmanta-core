@@ -337,12 +337,18 @@ class Entity(EntityLike, NamedType):
             parent.add_instance(obj)
 
     def get_instance(
-        self, attributes: Dict[str, object], resolver: Resolver, queue: QueueScheduler, location: Location
+        self,
+        attributes: Dict[str, object],
+        resolver: Resolver,
+        queue: QueueScheduler,
+        location: Location,
+        node: Optional["dataflow.InstanceNodeReference"] = None,
     ) -> "Instance":
         """
-            Return an instance of the class defined in this entity
+            Return an instance of the class defined in this entity.
+            If the corresponding node is not None, passes it on the instance.
         """
-        out = Instance(self, resolver, queue)
+        out = Instance(self, resolver, queue, node)
         out.set_location(location)
         for k, v in attributes.items():
             out.set_attribute(k, v, location)

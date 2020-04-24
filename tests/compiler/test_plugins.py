@@ -18,7 +18,7 @@
 import os
 
 import inmanta.compiler as compiler
-from inmanta.ast import Namespace
+from inmanta.ast import ExplicitPluginException, Namespace
 
 
 def test_plugin_excn(snippetcompiler):
@@ -208,3 +208,34 @@ std::generate_password("pw_id", context=42)
         "Invalid keyword argument 'context' for 'generate_password()'"
         " (reported in std::generate_password('pw_id',context=42) ({dir}/main.cf:2))",
     )
+
+
+def test_1920_type_double_defined_plugin(snippetcompiler):
+    modpath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "modules", "test_1920")
+    snippetcompiler.setup_for_error(
+        """
+import test_1920
+        """,
+        "Type test_1920::some_name is already defined"
+        f" (original at ({modpath}/plugins/__init__.py:5:1))"
+        f" (duplicate at ({modpath}/model/_init.cf:1:16))",
+    )
+
+
+def test_explicit_plugin_exception(snippetcompiler):
+    msg: str = "my exception message"
+    snippetcompiler.setup_for_snippet(
+        """
+import tests
+
+tests::raise_exception("%s")
+        """
+        % msg,
+    )
+    try:
+        compiler.do_compile()
+        assert False, "Expected ExplicitPluginException"
+    except ExplicitPluginException as e:
+        assert e.__cause__.message == msg
+    except Exception as e:
+        assert False, "Expected ExplicitPluginException, got %s" % e

@@ -20,15 +20,17 @@ import logging
 import os
 import shutil
 import uuid
-from typing import List, Optional, cast
+from collections import defaultdict
+from enum import Enum
+from typing import Dict, List, Optional, Set, cast
 
 from inmanta import data
 from inmanta.data import model
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
-from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
 from inmanta.server import (
-    SLICE_AGENT_MANAGER,
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_DATABASE,
     SLICE_ENVIRONMENT,
     SLICE_ORCHESTRATION,
@@ -37,7 +39,7 @@ from inmanta.server import (
     SLICE_TRANSPORT,
     protocol,
 )
-from inmanta.server.agentmanager import AgentManager
+from inmanta.server.agentmanager import AutostartedAgentManager
 from inmanta.server.server import Server
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
@@ -54,19 +56,67 @@ def rename_fields(env: model.Environment) -> JsonType:
     return env_dict
 
 
+class EnvironmentAction(str, Enum):
+    created = "created"
+    deleted = "deleted"
+    cleared = "cleared"
+    updated = "updated"
+
+
+class EnvironmentListener:
+    """
+        Base class for environment listeners
+        Exceptions from the listeners are dropped, the listeners are responsible for handling them
+    """
+
+    async def environment_action_created(self, env: model.Environment) -> None:
+        """
+        Will be called when a new environment is created
+
+        :param env: The new environment
+        """
+        pass
+
+    async def environment_action_cleared(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is cleared
+
+        :param env: The environment that is cleared
+        """
+        pass
+
+    async def environment_action_deleted(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is deleted
+
+        :param env: The environment that is deleted
+        """
+        pass
+
+    async def environment_action_updated(self, updated_env: model.Environment, original_env: model.Environment) -> None:
+        """
+        Will be called when an environment is updated
+        :param updated_env: The updated environment
+        :param original_env: The original environment
+        """
+        pass
+
+
 class EnvironmentService(protocol.ServerSlice):
     """Slice with project and environment management"""
 
     server_slice: Server
-    agentmanager: AgentManager
+    autostarted_agent_manager: AutostartedAgentManager
     orchestration_service: OrchestrationService
     resource_service: ResourceService
+    listeners: Dict[EnvironmentAction, List[EnvironmentListener]]
 
     def __init__(self) -> None:
         super(EnvironmentService, self).__init__(SLICE_ENVIRONMENT)
+        self.listeners = defaultdict(list)
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_SERVER, SLICE_DATABASE, SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE]
+        return [SLICE_SERVER, SLICE_DATABASE, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
@@ -74,7 +124,7 @@ class EnvironmentService(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
-        self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
+        self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
         self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
@@ -90,8 +140,12 @@ class EnvironmentService(protocol.ServerSlice):
             warnings = await self.server_slice._async_recompile(env, setting.update, metadata=metadata.dict())
 
         if setting.agent_restart:
-            LOGGER.info("Environment setting %s changed. Restarting agents.", key)
-            self.add_background_task(self.agentmanager.restart_agents(env))
+            if key == data.AUTOSTART_AGENT_MAP:
+                LOGGER.info("Environment setting %s changed. Notifying agents.", key)
+                self.add_background_task(self.autostarted_agent_manager.notify_agent_about_agent_map_update(env))
+            else:
+                LOGGER.info("Environment setting %s changed. Restarting agents.", key)
+                self.add_background_task(self.autostarted_agent_manager.restart_agents(env))
 
         return warnings
 
@@ -168,13 +222,15 @@ class EnvironmentService(protocol.ServerSlice):
     @protocol.handle(methods.set_setting, env="tid", key="id")
     async def set_setting(self, env: data.Environment, key: str, value: model.EnvSettingType) -> Apireturn:
         try:
+            original_env = env.to_dto()
             await env.set(key, value)
             warnings = await self._setting_change(env, key)
+            await self.notify_listeners(EnvironmentAction.updated, env.to_dto(), original_env)
             return attach_warnings(200, None, warnings)
         except KeyError:
             raise NotFound()
-        except ValueError:
-            raise ServerError("Invalid value")
+        except ValueError as e:
+            raise ServerError(f"Invalid value. {e}")
 
     @protocol.handle(methods.get_setting, env="tid", key="id")
     async def get_setting(self, env: data.Environment, key: str) -> Apireturn:
@@ -184,8 +240,10 @@ class EnvironmentService(protocol.ServerSlice):
     @protocol.handle(methods.delete_setting, env="tid", key="id")
     async def delete_setting(self, env: data.Environment, key: str) -> Apireturn:
         try:
+            original_env = env.to_dto()
             await env.unset(key)
             warnings = await self._setting_change(env, key)
+            await self.notify_listeners(EnvironmentAction.updated, env.to_dto(), original_env)
             return attach_warnings(200, None, warnings)
         except KeyError:
             raise NotFound()
@@ -213,6 +271,7 @@ class EnvironmentService(protocol.ServerSlice):
 
         env = data.Environment(id=environment_id, name=name, project=project_id, repo_url=repository, repo_branch=branch)
         await env.insert()
+        await self.notify_listeners(EnvironmentAction.created, env.to_dto())
         return env.to_dto()
 
     @protocol.handle(methods_v2.environment_modify, environment_id="id")
@@ -222,6 +281,7 @@ class EnvironmentService(protocol.ServerSlice):
         env = await data.Environment.get_by_id(environment_id)
         if env is None:
             raise NotFound("The environment id does not exist.")
+        original_env = env.to_dto()
 
         # check if an environment with this name is already defined in this project
         envs = await data.Environment.get_list(project=env.project, name=name)
@@ -236,6 +296,7 @@ class EnvironmentService(protocol.ServerSlice):
             fields["repo_branch"] = branch
 
         await env.update_fields(**fields)
+        await self.notify_listeners(EnvironmentAction.updated, env.to_dto(), original_env)
         return env.to_dto()
 
     @protocol.handle(methods_v2.environment_get, environment_id="id", api_version=2)
@@ -257,9 +318,14 @@ class EnvironmentService(protocol.ServerSlice):
         if env is None:
             raise NotFound("The environment with given id does not exist.")
 
-        await asyncio.gather(self.agentmanager.stop_agents(env), env.delete_cascade())
+        is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)
+        if is_protected_environment:
+            raise Forbidden(f"Environment {environment_id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
+
+        await asyncio.gather(self.autostarted_agent_manager.stop_agents(env), env.delete_cascade())
 
         self.resource_service.close_resource_action_logger(environment_id)
+        await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
 
     @protocol.handle(methods_v2.environment_decommission, env="id")
     async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
@@ -275,12 +341,17 @@ class EnvironmentService(protocol.ServerSlice):
         """
             Clear the environment
         """
-        await self.agentmanager.stop_agents(env)
+        is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)
+        if is_protected_environment:
+            raise Forbidden(f"Environment {env.id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
+
+        await self.autostarted_agent_manager.stop_agents(env)
         await env.delete_cascade(only_content=True)
 
         project_dir = os.path.join(self.server_slice._server_storage["environments"], str(env.id))
         if os.path.exists(project_dir):
             shutil.rmtree(project_dir)
+        await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
 
     @protocol.handle(methods_v2.environment_create_token, env="tid")
     async def environment_create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> str:
@@ -298,11 +369,13 @@ class EnvironmentService(protocol.ServerSlice):
     @protocol.handle(methods_v2.environment_settings_set, env="tid", key="id")
     async def environment_settings_set(self, env: data.Environment, key: str, value: model.EnvSettingType) -> ReturnValue[None]:
         try:
+            original_env = env.to_dto()
             await env.set(key, value)
             warnings = await self._setting_change(env, key)
             result: ReturnValue[None] = ReturnValue(response=None)
             if warnings:
                 result.add_warnings(warnings)
+            await self.notify_listeners(EnvironmentAction.updated, env.to_dto(), original_env)
             return result
         except KeyError:
             raise NotFound()
@@ -322,11 +395,49 @@ class EnvironmentService(protocol.ServerSlice):
     @protocol.handle(methods_v2.environment_setting_delete, env="tid", key="id")
     async def environment_setting_delete(self, env: data.Environment, key: str) -> ReturnValue[None]:
         try:
+            original_env = env.to_dto()
             await env.unset(key)
             warnings = await self._setting_change(env, key)
             result: ReturnValue[None] = ReturnValue(response=None)
             if warnings:
                 result.add_warnings(warnings)
+            await self.notify_listeners(EnvironmentAction.updated, env.to_dto(), original_env)
             return result
         except KeyError:
             raise NotFound()
+
+    def register_listener_for_multiple_actions(self, listener, actions: Set[EnvironmentAction]) -> None:
+        """
+            Should only be called during pre-start
+        :param listener: The listener to register
+        :param actions: type of actions the listener is interested in
+        """
+        for action in actions:
+            self.register_listener(listener, action)
+
+    def register_listener(self, listener: EnvironmentListener, action: EnvironmentAction) -> None:
+        """
+            Should only be called during pre-start
+        :param listener: The listener to register
+        :param action: type of action the listener is interested in
+        """
+        self.listeners[action].append(listener)
+
+    def remove_listener(self, action: EnvironmentAction, listener: EnvironmentListener) -> None:
+        self.listeners[action].remove(listener)
+
+    async def notify_listeners(
+        self, action: EnvironmentAction, updated_env: model.Environment, original_env: Optional[model.Environment] = None
+    ) -> None:
+        for listener in self.listeners[action]:
+            try:
+                if action == EnvironmentAction.created:
+                    await listener.environment_action_created(updated_env)
+                if action == EnvironmentAction.deleted:
+                    await listener.environment_action_deleted(updated_env)
+                if action == EnvironmentAction.cleared:
+                    await listener.environment_action_cleared(updated_env)
+                if action == EnvironmentAction.updated:
+                    await listener.environment_action_updated(updated_env, original_env)
+            except Exception:
+                LOGGER.warning(f"Notifying listener of {action} failed with the following exception", exc_info=True)

@@ -29,9 +29,11 @@ import pytest
 from asyncpg import PostgresSyntaxError
 
 import inmanta.db.versions
+from data.db import versions
+from data.db_with_invalid_versions import invalid_versions
 from inmanta import data
 from inmanta.data import CORE_SCHEMA_NAME, schema
-from inmanta.data.schema import TableNotFound, Version
+from inmanta.data.schema import InvalidSchemaVersion, TableNotFound, Version, create_schemamanager
 from utils import log_contains
 
 
@@ -259,6 +261,10 @@ async def test_dbschema_partial_update_db_schema_failure(postgresql_client, get_
 @pytest.mark.asyncio
 async def test_dbschema_get_dct_with_update_functions():
     module_names = [modname for _, modname, ispkg in pkgutil.iter_modules(data.PACKAGE_WITH_UPDATE_FILES.__path__) if not ispkg]
+    for module_name in module_names:
+        module = __import__(data.PACKAGE_WITH_UPDATE_FILES.__name__ + "." + module_name, fromlist=["update"])
+        if module.DISABLED:
+            module_names.remove(module_name)
     all_versions = [int(mod_name[1:]) for mod_name in module_names]
 
     db_schema = schema.DBSchema(CORE_SCHEMA_NAME, data.PACKAGE_WITH_UPDATE_FILES, None)
@@ -340,3 +346,45 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
             ) is not None
 
             await assert_core_untouched(postgresql_client, corev)
+
+
+@pytest.mark.asyncio
+async def test_dbschema_get_dct_filter_disabled():
+    db_schema = schema.DBSchema(CORE_SCHEMA_NAME, versions, None)
+    update_function_map = await db_schema._get_update_functions()
+    assert 2 not in [v.version for v in update_function_map]
+    for version in update_function_map:
+        assert version.version >= 0
+        assert isinstance(version.function, types.FunctionType)
+        assert version.function.__name__ == "update"
+        assert inspect.getfullargspec(version.function)[0] == ["connection"]
+
+
+@pytest.mark.asyncio
+async def test_dbschema_update_db_downgrade(postgresql_client):
+    schema_name = "test_dbschema_update_db_downgrade"
+    SCHEMA_VERSION_TABLE = "schemamanager"
+    await postgresql_client.execute(create_schemamanager)
+
+    db_schema = schema.DBSchema(schema_name, inmanta.db.versions, postgresql_client)
+    update_function_map = await db_schema._get_update_functions()
+    original_version = len(update_function_map) + 1
+    await postgresql_client.execute(
+        f"INSERT INTO {SCHEMA_VERSION_TABLE} (name, current_version) VALUES ($1, $2)", schema_name, original_version
+    )
+    with pytest.raises(InvalidSchemaVersion):
+        await db_schema.ensure_db_schema()
+    current_db_version = await db_schema.get_current_version()
+    assert original_version == current_db_version
+
+
+@pytest.mark.asyncio
+async def test_dbschema_get_dct_filter_invalid_names(caplog):
+    db_schema = schema.DBSchema(CORE_SCHEMA_NAME, invalid_versions, None)
+    update_function_map = await db_schema._get_update_functions()
+    assert len(update_function_map) == 0
+    log_contains(caplog, "inmanta.data.schema", logging.WARNING, "V2 doesn't match the expected pattern")
+    log_contains(caplog, "inmanta.data.schema", logging.WARNING, "ver1 doesn't match the expected pattern")
+    log_contains(caplog, "inmanta.data.schema", logging.WARNING, "ver1a doesn't match the expected pattern")
+    log_contains(caplog, "inmanta.data.schema", logging.WARNING, "version3 doesn't match the expected pattern")
+    log_contains(caplog, "inmanta.data.schema", logging.WARNING, "v1b doesn't match the expected pattern")

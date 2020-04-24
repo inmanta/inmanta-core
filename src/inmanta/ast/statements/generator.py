@@ -20,8 +20,10 @@
 
 import logging
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Set, Tuple  # noqa: F401
+from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple  # noqa: F401
 
+import inmanta.ast.type as inmanta_type
+import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     AttributeReferenceAnchor,
     DuplicateException,
@@ -36,8 +38,8 @@ from inmanta.ast import (
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DynamicStatement, ExpressionStatement
 from inmanta.ast.statements.assign import SetAttributeHelper
-from inmanta.ast.type import Type as InmantaType
 from inmanta.const import LOG_LEVEL_TRACE
+from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver, ResultCollector, ResultVariable
 from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
@@ -49,6 +51,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Default, Entity, Implement, EntityLike  # noqa: F401
+    from inmanta.execute.runtime import Instance
 
 LOGGER = logging.getLogger(__name__)
 
@@ -82,8 +85,17 @@ class SubConstructor(ExpressionStatement):
             Evaluate this statement
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing subconstructor for %s implement %s", self.type, self.implements.location)
-        expr = self.implements.constraint
-        if not expr.execute(requires, instance, queue):
+        condition = self.implements.constraint.execute(requires, instance, queue)
+        try:
+            inmanta_type.Bool().validate(condition)
+        except RuntimeException as e:
+            e.set_statement(self.implements)
+            e.msg = (
+                "Invalid value `%s`: the condition for a conditional implementation can only be a boolean expression"
+                % condition
+            )
+            raise e
+        if not condition:
             return None
 
         myqueue = queue.for_tracker(ImplementsTracker(self, instance))
@@ -97,6 +109,16 @@ class SubConstructor(ExpressionStatement):
                 xc.emit(myqueue)
 
         return None
+
+    def pretty_print(self) -> str:
+        return "implement %s using %s when %s" % (
+            self.type,
+            ",".join(i.name for i in self.implements.implementations),
+            self.implements.constraint.pretty_print(),
+        )
+
+    def __str__(self) -> str:
+        return self.pretty_print()
 
     def __repr__(self) -> str:
         return "SubConstructor(%s)" % self.type
@@ -144,7 +166,7 @@ class For(DynamicStatement):
         self.base.normalize()
         # self.loop_var.normalize(resolver)
         self.module.normalize()
-        self.module.add_var(self.loop_var)
+        self.module.add_var(self.loop_var, self)
 
     def requires(self) -> List[str]:
         base = self.base.requires()
@@ -191,6 +213,9 @@ class For(DynamicStatement):
 
         return None
 
+    def nested_blocks(self) -> Iterator["BasicBlock"]:
+        yield self.module
+
 
 class If(ExpressionStatement):
     """
@@ -224,12 +249,20 @@ class If(ExpressionStatement):
         cond: object = self.condition.execute(requires, resolver, queue)
         if isinstance(cond, Unknown):
             return None
-        if not isinstance(cond, bool):
-            raise TypingException(self, "The condition for an if statement can only be a boolean expression")
+        try:
+            inmanta_type.Bool().validate(cond)
+        except RuntimeException as e:
+            e.set_statement(self)
+            e.msg = "Invalid value `%s`: the condition for an if statement can only be a boolean expression" % cond
+            raise e
         branch: BasicBlock = self.if_branch if cond else self.else_branch
         xc = ExecutionContext(branch, resolver.for_namespace(branch.namespace))
         xc.emit(queue)
         return None
+
+    def nested_blocks(self) -> Iterator["BasicBlock"]:
+        yield self.if_branch
+        yield self.else_branch
 
 
 class Constructor(ExpressionStatement):
@@ -330,6 +363,13 @@ class Constructor(ExpressionStatement):
             LOG_LEVEL_TRACE, "emitting constructor for %s at %s with %s", self.class_type, self.location, direct_requires
         )
 
+        graph: Optional[DataflowGraph] = resolver.dataflow_graph
+        if graph is not None:
+            node: dataflow.InstanceNodeReference = self._register_dataflow_node(graph)
+            # TODO: also add wrapped_kwargs
+            for (k, v) in chain(self._direct_attributes.items(), self._indirect_attributes.items()):
+                node.assign_attribute(k, v.get_dataflow_node(graph), self, graph)
+
         return direct_requires
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler):
@@ -342,7 +382,7 @@ class Constructor(ExpressionStatement):
         type_class = self.type.get_entity()
 
         # kwargs
-        kwarg_attrs: Dict[str, InmantaType] = {}
+        kwarg_attrs: Dict[str, object] = {}
         for kwargs in self.wrapped_kwargs:
             for (k, v) in kwargs.execute(requires, resolver, queue):
                 if k in self.attributes or k in kwarg_attrs:
@@ -360,25 +400,39 @@ class Constructor(ExpressionStatement):
                 self, "attributes %s are part of an index and should be set in the constructor." % ",".join(missing_attrs)
             )
 
-        # the attributes
-        attributes = {k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()}
-        attributes.update(kwarg_attrs)
+        # Schedule all direct attributes for direct execution. The kwarg keys and the direct_attributes keys are disjoint
+        # because a RuntimeException is raised above when they are not.
+        direct_attributes: Dict[str, object] = {
+            k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()
+        }
+        direct_attributes.update(kwarg_attrs)
+
+        # Override defaults with kwargs. The kwarg keys and the indirect_attributes keys are disjoint because a RuntimeException
+        # is raised above when they are not.
+        indirect_attributes: Dict[str, ExpressionStatement] = {
+            k: v for k, v in self._indirect_attributes.items() if k not in kwarg_attrs
+        }
 
         # check if the instance already exists in the index (if there is one)
-        instances = []
+        instances: List[Instance] = []
         for index in type_class.get_indices():
             params = []
             for attr in index:
-                params.append((attr, attributes[attr]))
+                params.append((attr, direct_attributes[attr]))
 
-            obj = type_class.lookup_index(params, self)
+            obj: Optional[Instance] = type_class.lookup_index(params, self)
 
             if obj is not None:
                 if obj.get_type().get_entity() != type_class:
                     raise DuplicateException(self, obj, "Type found in index is not an exact match")
                 instances.append(obj)
 
+        graph: Optional[DataflowGraph] = resolver.dataflow_graph
         if len(instances) > 0:
+            if graph is not None:
+                graph.add_index_match(
+                    chain([self.get_dataflow_node(graph)], (i.instance_node for i in instances if i.instance_node is not None),)
+                )
             # ensure that instances are all the same objects
             first = instances[0]
             for i in instances[1:]:
@@ -387,14 +441,16 @@ class Constructor(ExpressionStatement):
 
             object_instance = first
             self.copy_location(object_instance)
-            for k, v in attributes.items():
+            for k, v in direct_attributes.items():
                 object_instance.set_attribute(k, v, self.location)
         else:
             # create the instance
-            object_instance = type_class.get_instance(attributes, resolver, queue, self.location)
+            object_instance = type_class.get_instance(
+                direct_attributes, resolver, queue, self.location, self.get_dataflow_node(graph) if graph is not None else None
+            )
 
         # deferred execution for indirect attributes
-        for attributename, valueexpression in self._indirect_attributes.items():
+        for attributename, valueexpression in indirect_attributes.items():
             var = object_instance.get_attribute(attributename)
             if var.is_multi():
                 # gradual only for multi
@@ -442,6 +498,22 @@ class Constructor(ExpressionStatement):
     attributes = property(get_attributes)
     wrapped_kwargs = property(get_wrapped_kwargs)
 
+    def _register_dataflow_node(self, graph: DataflowGraph) -> dataflow.InstanceNodeReference:
+        """
+            Registers the dataflow node for this constructor to the graph if it does not exist yet.
+            Returns the node.
+        """
+
+        def get_new_node() -> dataflow.InstanceNode:
+            assert self.type is not None
+            return dataflow.InstanceNode(self.type.get_entity().get_all_attribute_names())
+
+        assert self.type is not None
+        return graph.own_instance_node_for_responsible(self.type.get_entity(), self, get_new_node).reference()
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.InstanceNodeReference:
+        return self._register_dataflow_node(graph)
+
     def __repr__(self) -> str:
         """
             The representation of the this statement
@@ -471,9 +543,7 @@ class WrappedKwargs(ExpressionStatement):
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return self.dictionary.requires_emit(resolver, queue)
 
-    def execute(
-        self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler
-    ) -> List[Tuple[str, InmantaType]]:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> List[Tuple[str, object]]:
         dct: object = self.dictionary.execute(requires, resolver, queue)
         if not isinstance(dct, Dict):
             raise TypingException(self, "The ** operator can only be applied to dictionaries")

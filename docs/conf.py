@@ -29,7 +29,7 @@ import sys, os, pkg_resources
 extensions = [
     'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.ifconfig', 'sphinx.ext.viewcode',
     'sphinxarg.ext', 'sphinxcontrib.inmanta.config', 'sphinxcontrib.inmanta.dsl', 'sphinx_tabs.tabs',
-    'sphinxcontrib.inmanta.environmentsettings',
+    'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext'
 ]
 
 

@@ -18,8 +18,9 @@
 
 import logging
 import pkgutil
+import re
 from types import ModuleType
-from typing import Any, Callable, Coroutine, List, Optional
+from typing import Any, Callable, Coroutine, List, Optional, Tuple
 
 from asyncpg import Connection, UndefinedTableError
 from asyncpg.transaction import Transaction
@@ -42,6 +43,10 @@ CREATE TABLE IF NOT EXISTS public.schemamanager (
 
 
 class TableNotFound(Exception):
+    pass
+
+
+class InvalidSchemaVersion(Exception):
     pass
 
 
@@ -81,8 +86,14 @@ class DBSchema(object):
     async def ensure_db_schema(self) -> None:
         current_version_db_schema = await self.ensure_self_update()
         update_functions = await self._get_update_functions()
-        if update_functions[-1].version > current_version_db_schema:
+        desired_version = update_functions[-1].version
+        if desired_version > current_version_db_schema:
             await self._update_db_schema(update_functions)
+        elif desired_version < current_version_db_schema:
+            raise InvalidSchemaVersion(
+                f"Desired database version {desired_version} is lower "
+                f"than the current version {current_version_db_schema}, downgrading is not supported"
+            )
 
     async def ensure_self_update(self) -> int:
         try:
@@ -228,12 +239,29 @@ class DBSchema(object):
     async def _get_update_functions(self) -> List[Version]:
         module_names = [modname for _, modname, ispkg in pkgutil.iter_modules(self.package.__path__) if not ispkg]
 
-        def make_version(mod_name: str) -> Version:
+        def get_modules(mod_name: str) -> Tuple[str, ModuleType]:
             fq_module_name = self.package.__name__ + "." + mod_name
-            module = __import__(fq_module_name, fromlist=["update"])
+            return mod_name, __import__(fq_module_name, fromlist=["update"])
+
+        def make_version(mod_name: str, module: ModuleType) -> Version:
             update_function = module.update
             return Version(mod_name, update_function)
 
-        version = [make_version(v) for v in module_names]
+        pattern = re.compile("^v[0-9]+$")
+
+        filtered_module_names = []
+        for module_name in module_names:
+            if not pattern.match(module_name):
+                LOGGER.warning(
+                    f"Database schema version file name {module_name} "
+                    f"doesn't match the expected pattern: v<version_number>.py, skipping it"
+                )
+            else:
+                filtered_module_names.append(module_name)
+
+        modules_with_names = [get_modules(mod_name) for mod_name in filtered_module_names]
+        filtered_modules = [(module_name, module) for module_name, module in modules_with_names if not module.DISABLED]
+
+        version = [make_version(name, mod) for name, mod in filtered_modules]
 
         return sorted(version, key=lambda x: x.version)

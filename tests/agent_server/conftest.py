@@ -42,7 +42,7 @@ async def get_agent(server, environment, *endpoints, hostname="nodes1"):
         hostname=hostname, environment=environment, agent_map={agent: "localhost" for agent in endpoints}, code_loader=False
     )
     for agentname in endpoints:
-        agent.add_end_point_name(agentname)
+        await agent.add_end_point_name(agentname)
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == prelen + 1, 10)
     return agent

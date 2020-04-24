@@ -16,8 +16,9 @@
     Contact: code@inmanta.com
 """
 import uuid
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
+from inmanta.const import AgentAction
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
 
@@ -100,7 +101,12 @@ def environment_modify(id: uuid.UUID, name: str, repository: str = None, branch:
 @typedmethod(path="/environment/<id>", operation="DELETE", client_types=["api"], api_version=2)
 def environment_delete(id: uuid.UUID) -> None:
     """
-        Delete the given environment and all related data
+        Delete the given environment and all related data.
+
+        :param id: The uuid of the environment.
+
+        :raises NotFound: The given environment doesn't exist.
+        :raises Forbidden: The given environment is protected.
     """
 
 
@@ -149,7 +155,12 @@ def environment_decommission(id: uuid.UUID, metadata: Optional[model.ModelMetada
 )
 def environment_clear(id: uuid.UUID) -> None:
     """
-        Clear all data from this environment
+        Clear all data from this environment.
+
+        :param id: The uuid of the environment.
+
+        :raises NotFound: The given environment doesn't exist.
+        :raises Forbidden: The given environment is protected.
     """
 
 
@@ -243,4 +254,38 @@ def get_api_docs(format: Optional[str] = None) -> ReturnValue[Union[OpenAPI, str
     """
        Get the OpenAPI definition of the API
        :param format: Use 'openapi' to get the schema in json format
+    """
+
+
+@typedmethod(path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=["api"], api_version=2)
+def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
+    """
+        Execute an action on an agent
+
+        :param tid: The environment this agent is defined in.
+        :param name: The name of the agent.
+        :param action: The type of action that should be executed on an agent.
+                        * pause: A paused agent cannot execute any deploy operations.
+                        * unpause: A unpaused agent will be able to execute deploy operations.
+    """
+
+
+@typedmethod(path="/agents/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=["api"], api_version=2)
+def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
+    """
+        Execute an action on all agents in the given environment.
+
+        :param tid: The environment of the agents.
+        :param action: The type of action that should be executed on the agents
+                        * pause: A paused agent cannot execute any deploy operations.
+                        * unpause: A unpaused agent will be able to execute deploy operations.
+    """
+
+
+@typedmethod(path="/agentmap", api=False, server_agent=True, operation="POST", client_types=[], api_version=2)
+def update_agent_map(agent_map: Dict[str, str]) -> None:
+    """
+        Notify an agent about the fact that the autostart_agent_map has been updated.
+
+        :param agent_map: The content of the new autostart_agent_map
     """

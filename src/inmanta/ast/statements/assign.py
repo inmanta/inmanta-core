@@ -21,6 +21,7 @@
 import typing
 from itertools import chain
 
+import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     AttributeException,
     DuplicateException,
@@ -32,6 +33,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import AssignStatement, ExpressionStatement, Resumer, Statement
+from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionUnit,
     HangUnit,
@@ -126,6 +128,9 @@ class CreateList(ReferenceStatement):
     def as_constant(self) -> typing.List[object]:
         return [item.as_constant() for item in self.items]
 
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("CreateList.get_node() placeholder for %s" % self).reference()
+
     def pretty_print(self) -> str:
         return "[%s]" % ",".join(item.pretty_print() for item in self.items)
 
@@ -167,6 +172,9 @@ class CreateDict(ReferenceStatement):
     def as_constant(self) -> typing.Dict[str, object]:
         return {k: v.as_constant() for k, v in self.items}
 
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("CreateDict.get_node() placeholder for %s" % self).reference()
+
     def __repr__(self) -> str:
         return "Dict()"
 
@@ -183,7 +191,14 @@ class SetAttribute(AssignStatement, Resumer):
         self.value = value
         self.list_only = list_only
 
+    def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
+        if graph is None:
+            return
+        node: dataflow.AttributeNodeReference = self.instance.get_dataflow_node(graph).get_attribute(self.attribute_name)
+        node.assign(self.value.get_dataflow_node(graph), self, graph)
+
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        self._add_to_dataflow_graph(resolver.dataflow_graph)
         reqs = self.instance.requires_emit(resolver, queue)
         HangUnit(queue, resolver, reqs, ResultVariable(), self)
 
@@ -208,6 +223,9 @@ class SetAttribute(AssignStatement, Resumer):
             reqs = self.value.requires_emit(resolver, queue)
 
         SetAttributeHelper(queue, resolver, var, reqs, self.value, self, instance, self.attribute_name)
+
+    def pretty_print(self) -> str:
+        return "%s.%s = %s" % (self.instance.pretty_print(), self.attribute_name, self.value.pretty_print())
 
     def __str__(self) -> str:
         return "%s.%s = %s" % (str(self.instance), self.attribute_name, str(self.value))
@@ -257,11 +275,24 @@ class Assign(AssignStatement):
         self.name = name
         self.value = value
 
+    def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
+        if graph is None:
+            return
+        node: dataflow.AssignableNodeReference = graph.resolver.get_dataflow_node(self.name)
+        node.assign(self.value.get_dataflow_node(graph), self, graph)
+
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        self._add_to_dataflow_graph(resolver.dataflow_graph)
         target = resolver.lookup(self.name)
         assert isinstance(target, ResultVariable)
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self.value, owner=self)
+
+    def declared_variables(self) -> typing.Iterator[str]:
+        yield self.name
+
+    def pretty_print(self) -> str:
+        return f"{self.name} = {self.value.pretty_print()}"
 
     def __repr__(self) -> str:
         return "Assign(%s, %s)" % (self.name, self.value)
@@ -294,6 +325,9 @@ class MapLookup(ReferenceStatement):
             raise KeyException(self, "key %s not found in dict, options are [%s]" % (keyv, ",".join(mapv.keys())))
 
         return mapv[keyv]
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("MapLookup.get_node() placeholder for %s" % self).reference()
 
     def __repr__(self) -> str:
         return "%s[%s]" % (repr(self.themap), repr(self.key))
@@ -344,6 +378,9 @@ class IndexLookup(ReferenceStatement, Resumer):
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("IndexLookup.get_node() placeholder for %s" % self).reference()
 
     def __repr__(self) -> str:
         """
@@ -444,6 +481,9 @@ class StringFormat(ReferenceStatement):
             result_string = result_string.replace(str_id, str(value))
 
         return result_string
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("StringFormat.get_node() placeholder for %s" % self).reference()
 
     def __repr__(self) -> str:
         return "Format(%s)" % self._format_string

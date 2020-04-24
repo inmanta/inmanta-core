@@ -211,3 +211,14 @@ ENVELOPE_KEY = "data"
 
 # Max number of attempts when updating modules
 MAX_UPDATE_ATTEMPT = 5
+
+
+class AgentAction(str, Enum):
+    pause = "pause"
+    unpause = "unpause"
+
+
+class AgentStatus(str, Enum):
+    paused = "paused"
+    up = "up"
+    down = "down"

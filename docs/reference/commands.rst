@@ -19,4 +19,10 @@ inmanta
 inmanta-cli
 ###########
 
-Use ``inmanta-cli --help``
+The ``inmanta-cli`` command can be used to interact with the inmanta server and agents,
+including manage projects, environments, parameters and more.
+The following reference explains the available subcommands.
+
+.. click:: inmanta.main:cmd
+   :prog: inmanta-cli
+   :show-nested:
