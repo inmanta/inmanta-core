@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import builtins
 import traceback
 from abc import abstractmethod
 from functools import lru_cache

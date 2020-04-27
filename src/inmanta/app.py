@@ -226,9 +226,7 @@ def compiler_config(parser: ArgumentParser) -> None:
         default=False,
     )
     parser.add_argument(
-        "--json-file",
-        dest="compile_json_file",
-        help="File to export compile json to. If omitted or set to - stdout is used.",
+        "--json-file", dest="compile_json_file", help="File to export compile json to. If omitted or set to - stdout is used.",
     )
     parser.add_argument(
         "--experimental-data-trace",
