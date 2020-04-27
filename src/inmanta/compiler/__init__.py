@@ -19,7 +19,7 @@ import logging
 import os
 import sys
 from itertools import chain
-from typing import Dict, List, Optional, Set, TextIO
+from typing import Dict, List, Optional, Set
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -218,17 +218,8 @@ class Compiler(object):
         """
             Exports compiler data if the option has been set.
         """
-
-        def do_write(f: TextIO) -> None:
-            # wrap between start and end markers if writing to stdout
-            wrap: bool = f == sys.stdout
-            if wrap:
-                f.write("---START export-compile-data---\n")
-            f.write("%s\n" % self._data.export().json())
-            if wrap:
-                f.write("---END export-compile-data---\n")
-
-        compiler_config.do_json_export(do_write)
+        with open(compiler_config.json_file.get(), "w") as file:
+            file.write("%s\n" % self._data.export().json())
 
     def handle_exception(self, exception: CompilerException) -> None:
         try:

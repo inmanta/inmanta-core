@@ -17,7 +17,6 @@
 """
 
 import json
-import re
 from tempfile import mkstemp
 from typing import Optional, Type
 
@@ -48,24 +47,6 @@ def export_to_file(file: str, expected_error_type: Optional[Type[CompilerExcepti
 
 def export_to_tempfile(expected_error_type: Optional[Type[CompilerException]] = None) -> ExportCompileData:
     return export_to_file(mkstemp(text=True)[1], expected_error_type)
-
-
-@pytest.mark.parametrize("explicit", [True, False])
-def test_export_compile_data_to_stdout(capsys, snippetcompiler, explicit: bool) -> None:
-    snippetcompiler.setup_for_snippet(
-        """
-x = 0
-        """,
-    )
-    Config.set("compiler", "json", "true")
-    if explicit:
-        Config.set("compiler", "json_file", "-")
-    compiler.do_compile()
-    match: Optional[re.Match] = re.search(
-        "---START export-compile-data---\n(.*)\n---END export-compile-data---\n", capsys.readouterr().out
-    )
-    assert match is not None
-    assert ExportCompileData(**json.loads(match.group(1)))
 
 
 def test_export_compile_data_to_file(snippetcompiler) -> None:

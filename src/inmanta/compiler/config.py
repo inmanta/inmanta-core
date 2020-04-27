@@ -16,9 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import sys
-from typing import Callable, TextIO
-
 from inmanta.config import Option, is_bool, is_str
 
 datatrace_enable: Option[bool] = Option(
@@ -49,26 +46,13 @@ json: Option[bool] = Option(
 )
 
 
-STDOUT_REPR = "-"
+default_json_file: str = "compile_data.json"
 
 
 json_file: Option[str] = Option(
     "compiler",
     "json_file",
-    STDOUT_REPR,
-    "File to export compile json to. If omitted or set to %s stdout is used." % STDOUT_REPR,
+    default_json_file,
+    "File to export compile json to. If omitted %s is used." % default_json_file,
     is_str,
 )
-
-
-def do_json_export(do_write: Callable[[TextIO], None]) -> None:
-    """
-        Exports to the configured file, using do_write to do the actual export. Overwrites file content.
-        :param do_write: function that writes export data to a given file.
-    """
-    file_name: str = json_file.get()
-    if file_name == STDOUT_REPR:
-        do_write(sys.stdout)
-    else:
-        with open(file_name, "w") as f:
-            do_write(f)
