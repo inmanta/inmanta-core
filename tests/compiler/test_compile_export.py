@@ -99,7 +99,7 @@ x = 1
     assert len(compile_data.errors) == 1
     error: ast_export.Error = compile_data.errors[0]
     assert error.category == ast_export.ErrorCategory.runtime
-    assert error.type == "<class 'inmanta.ast.DoubleSetException'>"
+    assert error.type == "inmanta.ast.DoubleSetException"
     filename = f"{snippetcompiler.project_dir}/main.cf"
     assert error.message == (
         f"value set twice:\n\told value: 0\n\t\tset at {filename}:2\n\tnew value: 1\n\t\tset at {filename}:3\n"

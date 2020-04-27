@@ -541,8 +541,10 @@ class CompilerException(Exception, export.Exportable):
 
     def export(self) -> export.Error:
         location: Optional[Location] = self.get_location()
+        module: Optional[str] = self.__class__.__module__
+        name: str = self.__class__.__qualname__
         return export.Error(
-            type=str(builtins.type(self)),
+            type=name if module is None else "%s.%s" % (module, name),
             message=self.get_message(),
             location=location.export() if location is not None else None,
         )
