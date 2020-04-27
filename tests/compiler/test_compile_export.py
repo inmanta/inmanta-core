@@ -35,8 +35,8 @@ def export_to_file(file: str, expected_error_type: Optional[Type[CompilerExcepti
     """
         Compiles, exporting to a file, and returns the file contents, loaded as ExportCompileData.
     """
-    Config.set("compiler", "data_export", "true")
-    Config.set("compiler", "data_export_file", file)
+    Config.set("compiler", "json", "true")
+    Config.set("compiler", "json_file", file)
     if expected_error_type is None:
         compiler.do_compile()
     else:
@@ -57,9 +57,9 @@ def test_export_compile_data_to_stdout(capsys, snippetcompiler, explicit: bool) 
 x = 0
         """,
     )
-    Config.set("compiler", "data_export", "true")
+    Config.set("compiler", "json", "true")
     if explicit:
-        Config.set("compiler", "data_export_file", "-")
+        Config.set("compiler", "json_file", "-")
     compiler.do_compile()
     match: Optional[re.Match] = re.search(
         "---START export-compile-data---\n(.*)\n---END export-compile-data---\n", capsys.readouterr().out

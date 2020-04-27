@@ -44,29 +44,29 @@ def track_dataflow() -> bool:
     return datatrace_enable.get() or dataflow_graphic_enable.get()
 
 
-data_export: Option[bool] = Option(
-    "compiler", "data_export", False, "Export structured json containing compile data such as occurred errors.", is_bool,
+json: Option[bool] = Option(
+    "compiler", "json", False, "Export structured json containing compile data such as occurred errors.", is_bool,
 )
 
 
 STDOUT_REPR = "-"
 
 
-data_export_file: Option[str] = Option(
+json_file: Option[str] = Option(
     "compiler",
-    "data_export_file",
+    "json_file",
     STDOUT_REPR,
-    "File to export compile data to. If omitted or set to %s stdout is used." % STDOUT_REPR,
+    "File to export compile json to. If omitted or set to %s stdout is used." % STDOUT_REPR,
     is_str,
 )
 
 
-def do_data_export(do_write: Callable[[TextIO], None]) -> None:
+def do_json_export(do_write: Callable[[TextIO], None]) -> None:
     """
         Exports to the configured file, using do_write to do the actual export. Overwrites file content.
         :param do_write: function that writes export data to a given file.
     """
-    file_name: str = data_export_file.get()
+    file_name: str = json_file.get()
     if file_name == STDOUT_REPR:
         do_write(sys.stdout)
     else:

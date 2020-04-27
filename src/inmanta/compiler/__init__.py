@@ -75,7 +75,7 @@ def do_compile(refs={}):
 
     if not success:
         sys.stderr.write("Unable to execute all statements.\n")
-    if compiler_config.data_export.get():
+    if compiler_config.json.get():
         compiler.export_data()
     if compiler_config.dataflow_graphic_enable.get():
         show_dataflow_graphic(sched, compiler)
@@ -228,7 +228,7 @@ class Compiler(object):
             if wrap:
                 f.write("---END export-compile-data---\n")
 
-        compiler_config.do_data_export(do_write)
+        compiler_config.do_json_export(do_write)
 
     def handle_exception(self, exception: CompilerException) -> None:
         try:
@@ -238,7 +238,7 @@ class Compiler(object):
 
     def _handle_exception_export(self, exception: CompilerException) -> None:
         self._data.add_error(exception)
-        if compiler_config.data_export.get():
+        if compiler_config.json.get():
             self.export_data()
         raise exception
 
