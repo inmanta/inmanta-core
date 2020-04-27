@@ -1,4 +1,9 @@
-# v 2020.2 (?) Changes in this release:
+# v 2020.3 (?) Changes in this release:
+
+## Fixed
+- Fixed issue of autostarted agents not being restarted on environment setting change (#2049)
+
+# v 2020.2 (2020-04-27) Changes in this release:
 
 ## Breaking changes
 - Non-boolean arguments to boolean operators are no longer allowed, this was previously possible due to bug (#1808)
