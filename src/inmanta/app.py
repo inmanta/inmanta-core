@@ -52,6 +52,7 @@ from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 
+import inmanta.compiler as compiler
 from inmanta import const, module, moduletool, protocol
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, Commander, ShowUsageException, command
@@ -226,7 +227,9 @@ def compiler_config(parser: ArgumentParser) -> None:
         default=False,
     )
     parser.add_argument(
-        "--json-file", dest="compile_json_file", help="File to export compile json to. If omitted %s is used.",
+        "--json-file",
+        dest="compile_json_file",
+        help="File to export compile json to. If omitted %s is used." % compiler.config.default_json_file,
     )
     parser.add_argument(
         "--experimental-data-trace",
