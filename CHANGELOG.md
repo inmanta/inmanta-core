@@ -41,7 +41,7 @@
  - Autostarted agents can load a new value for the autostart_agent_map setting without agent restart (#1839)
  - Added protected environment option (#1997)
  - Added warning when trying to override a built-in type with a typedef (#81)
- - Added compile data json export (#1206)
+ - Added `compiler.json` option and `--json` compile flag to export structured compile data such as occurred errors (#1206)
 
 # v 2020.1 (2020-02-19) Changes in this release:
 
