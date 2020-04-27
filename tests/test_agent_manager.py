@@ -17,6 +17,7 @@
 """
 import asyncio
 import datetime
+import logging
 import typing
 from typing import Dict, List, Optional, Tuple
 from unittest.mock import Mock
@@ -782,3 +783,20 @@ async def test_exception_occurs_while_processing_session_action(server, environm
 
     # Verify that session is created successfully -> Consumer didn't crash
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+
+@pytest.mark.asyncio
+async def test_restart_on_environment_setting(server, client, environment, caplog):
+    response = await client.environment_settings_set(tid=environment, id="autostart_agent_deploy_interval", value=300)
+    assert response.code == 200
+
+    def check_log_contains(caplog, loggerpart, level, msg):
+        for record in caplog.get_records("call"):
+            logger_name, log_level, message = record.name, record.levelno, record.message
+            if msg in message and loggerpart in logger_name and level == log_level:
+                return True
+        return False
+
+    await retry_limited(
+        lambda: check_log_contains(caplog, "inmanta.server.agentmanager", logging.DEBUG, "Restarting agents in environment"), 10
+    )
