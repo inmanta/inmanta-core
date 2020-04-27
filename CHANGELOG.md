@@ -21,6 +21,7 @@
  - Ensure correct version is used in api docs (#1994)
  - Fixed double assignment error resulting from combining constructor kwargs with default values (#2003)
  - Fixed recursive unwrapping of dict return values from plugins (#2004)
+ - Resource action update is now performed in a single transaction, eliminating the possibility of inconsistent state (#1944)
  - Type.type_string is now defined as returning the representation of the type in the inmanta DSL (inmanta/lsm#75)
 
 ## Added

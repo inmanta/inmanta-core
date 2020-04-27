@@ -414,7 +414,9 @@ async def autostarted_agent(server, environment):
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTO_DEPLOY, True)
     await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
-    await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
+    # disable deploy and repair intervals
+    await env.set(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
+    await env.set(data.AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
     await env.set(data.AUTOSTART_ON_START, True)
 
 
