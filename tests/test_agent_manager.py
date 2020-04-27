@@ -794,7 +794,7 @@ async def test_restart_on_environment_setting(server, client, environment, caplo
         for record in caplog.get_records("call"):
             logger_name, log_level, message = record.name, record.levelno, record.message
             if msg in message and loggerpart in logger_name and level == log_level:
-                    return True
+                return True
         return False
 
     await retry_limited(
