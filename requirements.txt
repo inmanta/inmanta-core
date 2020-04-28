@@ -1,6 +1,6 @@
 openapi-spec-validator==0.2.8
 PyJWT==1.7.1
-click==7.1.1
+click==7.1.2
 colorlog==4.1.0
 cookiecutter==1.7.2
 cryptography==2.9.2
