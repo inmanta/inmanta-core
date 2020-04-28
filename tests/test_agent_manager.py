@@ -799,5 +799,8 @@ async def test_restart_on_environment_setting(server, client, environment, caplo
             return False
 
         await retry_limited(
-            lambda: check_log_contains(caplog, "inmanta.server.agentmanager", logging.DEBUG, "Restarting agents in environment"), 10
+            lambda: check_log_contains(
+                caplog, "inmanta.server.agentmanager", logging.DEBUG, "Restarting agents in environment"
+            ),
+            10,
         )
