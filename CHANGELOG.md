@@ -3,6 +3,9 @@
 ## Fixed
 - Fixed issue of autostarted agents not being restarted on environment setting change (#2049)
 
+## Added
+- Added cleanup mechanism of old compile reports (#2054)
+
 # v 2020.2 (2020-04-24) Changes in this release:
 
 ## Breaking changes

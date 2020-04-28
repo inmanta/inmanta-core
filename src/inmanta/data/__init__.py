@@ -1524,6 +1524,15 @@ class Compile(BaseDocument):
         )
         return results
 
+    @classmethod
+    async def delete_older_than(
+        cls, oldest_retained_date: datetime.datetime, connection: Optional[asyncpg.Connection] = None
+    ) -> int:
+        query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::date"
+        result = await cls._execute_query(query, oldest_retained_date, connection=connection)
+        record_count = int(result.split(" ")[1])
+        return record_count
+
     def to_dto(self) -> m.CompileRun:
         return m.CompileRun(
             id=self.id,

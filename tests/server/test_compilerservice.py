@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import datetime
 import logging
 import os
 import shutil
@@ -27,6 +28,7 @@ from typing import List
 import pytest
 
 from inmanta import config, data
+from inmanta.data import Compile, Report
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server import config as server_config
 from inmanta.server.protocol import Server
@@ -590,3 +592,75 @@ async def test_compileservice_queue(mocked_compiler_service_block, server, clien
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 0
     assert result.code == 200
+
+
+@pytest.fixture
+async def old_compile_report(server, client, environment):
+    now = datetime.datetime.now()
+    time_of_compile = now - datetime.timedelta(days=30)
+    compile_id = uuid.UUID("c00cc33f-f70f-4800-ad01-ff042f67118f")
+    old_compile = {
+        "id": compile_id,
+        "remote_id": uuid.UUID("c9a10da1-9bf6-4152-8461-98adc02c4cee"),
+        "environment": uuid.UUID(environment),
+        "requested": time_of_compile,
+        "started": time_of_compile,
+        "completed": time_of_compile,
+        "do_export": True,
+        "force_update": True,
+        "metadata": {"type": "api", "message": "Recompile trigger through API call"},
+        "environment_variables": {},
+        "success": True,
+        "handled": True,
+        "version": 1,
+    }
+    await Compile(**old_compile).insert()
+    new_compile = {**old_compile, "id": uuid.uuid4(), "requested": now, "started": now, "completed": now}
+    await Compile(**new_compile).insert()
+
+    report1 = {
+        "id": uuid.UUID("2baa0175-9169-40c5-a546-64d646f62da6"),
+        "started": time_of_compile,
+        "completed": time_of_compile,
+        "command": "",
+        "name": "Init",
+        "errstream": "",
+        "outstream": "Using extra environment variables during compile \n",
+        "returncode": 0,
+        "compile": compile_id,
+    }
+    report2 = {
+        **report1,
+        "id": uuid.UUID("2a86d2a0-666f-4cca-b0a8-13e0379128d5"),
+        "command": "python -m inmanta.app -vvv export -X",
+        "name": "Recompiling configuration model",
+    }
+    await Report(**report1).insert()
+    await Report(**report2).insert()
+    yield compile_id
+
+
+@pytest.mark.asyncio
+async def test_compileservice_cleanup(server, client, environment, old_compile_report):
+    # There is a new and an older report in the database
+    result = await client.get_reports(environment)
+    assert result.code == 200
+    assert len(result.result["reports"]) == 2
+
+    result = await client.get_report(old_compile_report)
+    assert result.code == 200
+    assert len(result.result["report"]["reports"]) > 0
+
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    await compilerslice._cleanup()
+
+    # The old report is deleted after cleanup
+    result = await client.get_report(old_compile_report)
+    assert result.code == 404
+    reports_after_cleanup = await Report.get_list(compile=old_compile_report)
+    assert len(reports_after_cleanup) == 0
+
+    # The new report is still there
+    result = await client.get_reports(environment)
+    assert result.code == 200
+    assert len(result.result["reports"]) == 1
