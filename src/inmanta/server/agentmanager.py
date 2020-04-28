@@ -747,11 +747,10 @@ class AutostartedAgentManager(ServerSlice):
                 await self._ensure_agents(env, agent_list)
 
     async def restart_agents(self, env: data.Environment) -> None:
-        autostart = await env.get(data.AUTOSTART_ON_START)
-        if autostart:
-            agents = await data.Agent.get_list(environment=env.id)
-            agent_list = [a.name for a in agents]
-            await self._ensure_agents(env, agent_list, True)
+        LOGGER.debug("Restarting agents in environment %s", env.id)
+        agents = await data.Agent.get_list(environment=env.id)
+        agent_list = [a.name for a in agents]
+        await self._ensure_agents(env, agent_list, True)
 
     async def stop_agents(self, env: data.Environment) -> None:
         """

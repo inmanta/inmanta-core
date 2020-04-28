@@ -1,5 +1,8 @@
 # v 2020.3 (?) Changes in this release:
 
+## Fixed
+- Fixed issue of autostarted agents not being restarted on environment setting change (#2049)
+
 # v 2020.2 (2020-04-24) Changes in this release:
 
 ## Breaking changes
