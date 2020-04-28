@@ -340,12 +340,11 @@ class CompilerService(ServerSlice):
     async def start(self) -> None:
         await super(CompilerService, self).start()
         await self._recover()
-        self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get())
-        self.add_background_task(self._cleanup())
+        self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0)
 
     async def _cleanup(self) -> None:
         oldest_retained_date = datetime.datetime.now() - datetime.timedelta(days=opt.server_compiler_report_retention.get())
-        LOGGER.info(f"Cleaning up compile reports that are older than {oldest_retained_date}")
+        LOGGER.info("Cleaning up compile reports that are older than %s", oldest_retained_date)
         try:
             await data.Compile.delete_older_than(oldest_retained_date)
         except Exception:

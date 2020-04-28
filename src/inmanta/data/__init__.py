@@ -37,6 +37,7 @@ from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, Resource
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.resources import Id
+from inmanta.server import config
 from inmanta.types import JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -251,7 +252,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if not cls._connection_pool:
             return
         try:
-            await cls._connection_pool.close()
+            await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
+        except asyncio.TimeoutError:
+            cls._connection_pool.terminate()
         finally:
             cls._connection_pool = None
 
@@ -1527,11 +1530,9 @@ class Compile(BaseDocument):
     @classmethod
     async def delete_older_than(
         cls, oldest_retained_date: datetime.datetime, connection: Optional[asyncpg.Connection] = None
-    ) -> int:
+    ) -> None:
         query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::date"
-        result = await cls._execute_query(query, oldest_retained_date, connection=connection)
-        record_count = int(result.split(" ")[1])
-        return record_count
+        await cls._execute_query(query, oldest_retained_date, connection=connection)
 
     def to_dto(self) -> m.CompileRun:
         return m.CompileRun(
