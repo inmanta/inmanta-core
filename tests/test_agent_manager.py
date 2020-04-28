@@ -787,6 +787,7 @@ async def test_exception_occurs_while_processing_session_action(server, environm
 
 @pytest.mark.asyncio
 async def test_restart_on_environment_setting(server, client, environment, caplog):
+    caplog.set_level(logging.DEBUG)
     response = await client.environment_settings_set(tid=environment, id="autostart_agent_deploy_interval", value=300)
     assert response.code == 200
 
