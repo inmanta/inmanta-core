@@ -599,7 +599,7 @@ async def test_compileservice_queue(mocked_compiler_service_block, server, clien
 
 @pytest.fixture(scope="function")
 async def server_with_frequent_cleanups(server_pre_start, server_config, async_finalizer):
-    config.Config.set("server", "compiler_report_retention", "3")
+    config.Config.set("server", "compiler_report_retention", "2")
     config.Config.set("server", "cleanup_compiler_reports_interval", "1")
     ibl = InmantaBootloader()
     await ibl.start()
@@ -704,6 +704,7 @@ async def test_compileservice_cleanup(
     assert len(result.result["reports"]) == 1
 
 
+@pytest.mark.slowtest
 @pytest.mark.asyncio
 async def test_compileservice_cleanup_on_trigger(client_for_cleanup, environment_for_cleanup, old_compile_report):
     # Two reports are in the table
@@ -715,7 +716,7 @@ async def test_compileservice_cleanup_on_trigger(client_for_cleanup, environment
     assert result.code == 200
     assert len(result.result["report"]["reports"]) > 0
 
-    await asyncio.sleep(4)
+    await asyncio.sleep(3)
 
     # Both reports should be deleted after the triggered cleanup
     result = await client_for_cleanup.get_reports(environment_for_cleanup)
