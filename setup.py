@@ -12,7 +12,6 @@ requires = [
     "pyyaml",
     "texttable",
     "tornado",
-    "typing",
     "PyJWT",
     "cryptography",
     "jinja2",
