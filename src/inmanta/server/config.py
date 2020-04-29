@@ -202,6 +202,24 @@ server_version_to_keep = Option(
     is_int,
 )
 
+server_compiler_report_retention = Option(
+    "server",
+    "compiler_report_retention",
+    604800,
+    """The server regularly cleans up old compiler reports.
+    This options specifies the number of seconds to keep old compiler reports for. The default is seven days""",
+    is_time,
+)
+
+server_cleanup_compiler_reports_interval = Option(
+    "server",
+    "cleanup_compiler_reports_interval",
+    3600,
+    """Number of seconds between old compile report cleanups.
+    see :inmanta.config:option:`server.compiler_report_retention`""",
+    is_time,
+)
+
 server_address: Option[str] = Option(
     "server",
     "server_address",
