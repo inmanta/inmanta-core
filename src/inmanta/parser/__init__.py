@@ -17,6 +17,7 @@
 """
 
 from inmanta.ast import CompilerException, Range
+from inmanta.warnings import InmantaWarning
 
 
 class ParserException(CompilerException):
@@ -30,3 +31,20 @@ class ParserException(CompilerException):
         CompilerException.__init__(self, msg)
         self.set_location(location)
         self.value = value
+
+
+class ParserWarning(InmantaWarning, ParserException):
+    """Warning occurring during the parsing of the code"""
+
+    def __init__(self, location: Range, value: object, msg: str) -> None:
+        InmantaWarning.__init__(self)
+        ParserException.__init__(self, location, value, msg)
+        # Override parent message since it's not an error
+        self.msg = msg
+
+
+class SyntaxDeprecationWarning(ParserWarning):
+    """Deprecation warning occurring during the parsing of the code"""
+
+    def __init__(self, location: Range, value: object, msg: str) -> None:
+        ParserWarning.__init__(self, location, value, msg)

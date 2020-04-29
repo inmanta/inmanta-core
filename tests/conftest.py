@@ -34,7 +34,7 @@ import time
 import traceback
 import uuid
 from tempfile import mktemp
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import asyncpg
 import pkg_resources
@@ -44,14 +44,14 @@ import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
 from pyformance.registry import MetricsRegistry
-from tornado import netutil, process
+from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.main
-from inmanta import config, const, data, protocol, resources
+from inmanta import config, const, data, loader, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
@@ -87,6 +87,13 @@ def postgres_proc(unused_tcp_port_factory):
 @pytest.fixture(scope="session", autouse=True)
 def postgres_db(postgresql_proc):
     yield postgresql_proc
+
+
+@pytest.fixture
+def ensure_running_postgres_db_post(postgres_db):
+    yield
+    if not postgres_db.running():
+        postgres_db.start()
 
 
 @pytest.fixture(scope="function")
@@ -206,7 +213,7 @@ async def hard_clean_db_post(postgresql_client):
 
 
 @pytest.fixture(scope="function")
-async def clean_db(postgresql_client, create_db):
+async def clean_db(postgresql_pool, create_db, postgres_db):
     """
         1) Truncated tables: All tables which are part of the inmanta schema, except for the schemaversion table. The version
                              number stored in the schemaversion table is read by the Inmanta server during startup.
@@ -214,18 +221,22 @@ async def clean_db(postgresql_client, create_db):
                            not part of the Inmanta schema. These should be cleaned-up before running a new test.
     """
     yield
-    tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-    tables_in_db = [x["table_name"] for x in tables_in_db]
-    tables_to_preserve = TABLES_TO_KEEP
-    tables_to_preserve.append(SCHEMA_VERSION_TABLE)
-    tables_to_truncate = [x for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE]
-    tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
-    if tables_to_drop:
-        drop_query = "DROP TABLE %s CASCADE" % ", ".join(tables_to_drop)
-        await postgresql_client.execute(drop_query)
-    if tables_to_truncate:
-        truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
-        await postgresql_client.execute(truncate_query)
+    # By using the connection pool, we can make sure that the connection we use is alive
+    async with postgresql_pool.acquire() as postgresql_client:
+        tables_in_db = await postgresql_client.fetch(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+        )
+        tables_in_db = [x["table_name"] for x in tables_in_db]
+        tables_to_preserve = TABLES_TO_KEEP
+        tables_to_preserve.append(SCHEMA_VERSION_TABLE)
+        tables_to_truncate = [x for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE]
+        tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
+        if tables_to_drop:
+            drop_query = "DROP TABLE %s CASCADE" % ", ".join(tables_to_drop)
+            await postgresql_client.execute(drop_query)
+        if tables_to_truncate:
+            truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
+            await postgresql_client.execute(truncate_query)
 
 
 @pytest.fixture(scope="function")
@@ -264,15 +275,16 @@ async def clean_reset(create_db, clean_db):
     reset_all_objects()
     config.Config._reset()
     methods = inmanta.protocol.common.MethodProperties.methods.copy()
+    loader.unload_inmanta_plugins()
     yield
     inmanta.protocol.common.MethodProperties.methods = methods
     config.Config._reset()
     reset_all_objects()
+    loader.unload_inmanta_plugins()
 
 
 def reset_all_objects():
     resources.resource.reset()
-    process.Subprocess.uninitialize()
     asyncio.set_child_watcher(None)
     reset_metrics()
     # No dynamic loading of commands at the moment, so no need to reset/reload
@@ -341,7 +353,7 @@ async def agent_multi(server_multi, environment_multi):
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
     a = Agent(hostname="node1", environment=environment_multi, agent_map={"agent1": "localhost"}, code_loader=False)
-    a.add_end_point_name("agent1")
+    await a.add_end_point_name("agent1")
     await a.start()
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -357,7 +369,7 @@ async def agent(server, environment):
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    a.add_end_point_name("agent1")
+    await a.add_end_point_name("agent1")
     await a.start()
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -367,14 +379,44 @@ async def agent(server, environment):
 
 
 @pytest.fixture(scope="function")
+async def agent_factory(server):
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+
+    started_agents = []
+
+    async def create_agent(
+        environment: uuid.UUID,
+        hostname: Optional[str] = None,
+        agent_map: Optional[Dict[str, str]] = None,
+        code_loader: bool = False,
+        agent_names: List[str] = [],
+    ) -> None:
+        a = Agent(hostname=hostname, environment=environment, agent_map=agent_map, code_loader=code_loader)
+        for agent_name in agent_names:
+            await a.add_end_point_name(agent_name)
+        await a.start()
+        started_agents.append(a)
+        await utils.retry_limited(lambda: a.sessionid in agentmanager.sessions, 10)
+        return a
+
+    yield create_agent
+    await asyncio.gather(*[agent.stop() for agent in started_agents])
+
+
+@pytest.fixture(scope="function")
 async def autostarted_agent(server, environment):
     """ Configure agent1 as an autostarted agent.
     """
     env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTO_DEPLOY, True)
     await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
-    await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
+    # disable deploy and repair intervals
+    await env.set(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
+    await env.set(data.AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
     await env.set(data.AUTOSTART_ON_START, True)
 
 
@@ -721,9 +763,11 @@ class SnippetCompilationTest(KeepOnFail):
     def setup_for_snippet(self, snippet, autostd=True):
         self.setup_for_snippet_external(snippet)
         Project.set(Project(self.project_dir, autostd=autostd))
+        loader.unload_inmanta_plugins()
 
     def reset(self):
         Project.set(Project(self.project_dir, autostd=Project.get().autostd))
+        loader.unload_inmanta_plugins()
 
     def setup_for_snippet_external(self, snippet):
         if self.modules_dir:

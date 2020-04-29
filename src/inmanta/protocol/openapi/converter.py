@@ -48,7 +48,7 @@ from inmanta.protocol.openapi.model import (
     Server,
 )
 from inmanta.server import config
-from inmanta.util import get_compiler_version
+from inmanta.server.extensions import FeatureManager
 
 
 def openapi_json_encoder(o) -> Union[Dict, str, List]:
@@ -62,8 +62,9 @@ class OpenApiConverter:
         Extracts API information for the OpenAPI definition from the server
     """
 
-    def __init__(self, global_url_map: Dict[str, Dict[str, UrlMethod]]):
+    def __init__(self, global_url_map: Dict[str, Dict[str, UrlMethod]], feature_manager: FeatureManager):
         self.global_url_map = global_url_map
+        self.feature_manager = feature_manager
         self.type_converter = OpenApiTypeConverter()
         self.arg_option_handler = ArgOptionHandler(self.type_converter)
 
@@ -74,8 +75,12 @@ class OpenApiConverter:
             Server(url=AnyUrl(url=f"http://{server_address}:{bind_port}/", scheme="http", host=server_address, port=bind_port))
         ]
 
+    def _get_inmanta_version(self) -> Optional[str]:
+        metadata = self.feature_manager.get_product_metadata()
+        return metadata["version"]
+
     def generate_openapi_definition(self) -> OpenAPI:
-        version = get_compiler_version()
+        version = self._get_inmanta_version()
         info = Info(title="Inmanta Service Orchestrator", version=version if version else "")
         servers = self._collect_server_information()
         paths = {}
@@ -400,13 +405,25 @@ class OperationHandler:
         else:
             extra_params = {}
 
+        tags = self._get_tags_of_operation(url_method)
+
         return Operation(
             responses=responses,
             parameters=(parameters if len(parameters) else None),
             summary=url_method.short_method_description,
             description=url_method.long_method_description,
+            tags=tags,
             **extra_params,
         )
+
+    def _get_tags_of_operation(self, url_method: UrlMethod) -> Optional[List[str]]:
+        if url_method.endpoint is not None:
+            if hasattr(url_method.endpoint, "_name"):
+                return [url_method.endpoint._name]
+            else:
+                return [url_method.endpoint.__class__.__name__]
+        else:
+            return None
 
     def _build_responses(self, url_method_properties: MethodProperties) -> Dict[str, Response]:
         result: Dict[str, Response] = {}

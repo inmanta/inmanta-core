@@ -18,10 +18,13 @@
 # pylint: disable-msg=R0923,W0613
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
+import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeReferenceAnchor,
+    CompilerDeprecationWarning,
+    CompilerRuntimeWarning,
     DuplicateException,
     Import,
     IndexException,
@@ -29,6 +32,7 @@ from inmanta.ast import (
     Namespace,
     NotFoundException,
     Range,
+    RuntimeException,
     TypeNotFoundException,
     TypeReferenceAnchor,
     TypingException,
@@ -39,7 +43,7 @@ from inmanta.ast.constraint.expression import Equals
 from inmanta.ast.entity import Default, Entity, EntityLike, Implement, Implementation
 from inmanta.ast.statements import BiStatement, ExpressionStatement, Literal, Statement, TypeDefinitionStatement
 from inmanta.ast.statements.generator import Constructor
-from inmanta.ast.type import ConstraintType, NullableType, Type, TypedList
+from inmanta.ast.type import TYPES, ConstraintType, NullableType, Type, TypedList
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 
 from . import DefinitionStatement
@@ -287,42 +291,11 @@ class DefineImplementation(TypeDefinitionStatement):
             e.set_statement(self)
             raise e
 
-
-class DefineImplementInherits(DefinitionStatement):
-    comment: Optional[str]
-
-    def __init__(self, entity_name: LocatableString, comment: LocatableString = None):
-        DefinitionStatement.__init__(self)
-        self.entity = entity_name
-        if comment is not None:
-            self.comment = str(comment)
-        else:
-            self.comment = None
-        self.location = entity_name.get_location()
-        self.anchors.append(TypeReferenceAnchor(entity_name.namespace, entity_name))
-
-    def __repr__(self) -> str:
+    def nested_blocks(self) -> Iterator["BasicBlock"]:
         """
-            Returns a representation of this class
+            Returns an iterator over blocks contained within this statement.
         """
-        return "ImplementParent(%s)" % (self.entity)
-
-    def evaluate(self) -> None:
-        """
-            Evaluate this statement.
-        """
-        try:
-            entity_type = self.namespace.get_type(self.entity)
-
-            if not isinstance(entity_type, Entity):
-                raise TypingException(
-                    self, "Implementation can only be define for an Entity, but %s is a %s" % (self.entity, entity_type)
-                )
-
-            entity_type.implements_inherits = True
-        except TypeNotFoundException as e:
-            e.set_statement(self)
-            raise e
+        yield self.block
 
 
 class DefineImplement(DefinitionStatement):
@@ -331,7 +304,8 @@ class DefineImplement(DefinitionStatement):
 
         :param entity: The name of the entity that is implemented
         :param implementations: A list of implementations
-        :param whem: A clause that determines when this implementation is "active"
+        :param select: A clause that determines when this implementation is "active"
+        :param inherit: True iff the entity should inherit all implementations from its parents
     """
 
     comment: Optional[str]
@@ -341,6 +315,7 @@ class DefineImplement(DefinitionStatement):
         entity_name: LocatableString,
         implementations: List[LocatableString],
         select: ExpressionStatement,
+        inherit: bool = False,
         comment: LocatableString = None,
     ) -> None:
         DefinitionStatement.__init__(self)
@@ -350,7 +325,11 @@ class DefineImplement(DefinitionStatement):
         self.anchors = [TypeReferenceAnchor(x.namespace, x) for x in implementations]
         self.anchors.append(TypeReferenceAnchor(entity_name.namespace, entity_name))
         self.anchors.extend(select.get_anchors())
+        self.location = entity_name.get_location()
+        if inherit and (not isinstance(select, Literal) or select.value is not True):
+            raise RuntimeException(self, "Conditional implementation with parents not allowed")
         self.select = select
+        self.inherit: bool = inherit
         if comment is not None:
             self.comment = str(comment)
         else:
@@ -376,6 +355,9 @@ class DefineImplement(DefinitionStatement):
 
             entity_type = entity_type.get_entity()
 
+            # If one implements statement has parent declared, set to true
+            entity_type.implements_inherits |= self.inherit
+
             implement = Implement()
             implement.comment = self.comment
             implement.constraint = self.select
@@ -387,7 +369,7 @@ class DefineImplement(DefinitionStatement):
 
                 # check if the implementation has the correct type
                 impl_obj = self.namespace.get_type(_impl)
-                assert isinstance(impl_obj, Implementation), "%s is not and implementation" % (_impl)
+                assert isinstance(impl_obj, Implementation), "%s is not an implementation" % (_impl)
 
                 if impl_obj.entity is not None and not (
                     entity_type is impl_obj.entity or entity_type.is_parent(impl_obj.entity)
@@ -432,6 +414,8 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self.type = ConstraintType(self.namespace, str(name))
         self.type.location = name.get_location()
         self.comment = None
+        if self.name in TYPES:
+            inmanta_warnings.warn(CompilerRuntimeWarning(self, "Trying to override a built-in type: %s" % self.name))
 
     def get_expression(self) -> ExpressionStatement:
         """
@@ -500,11 +484,14 @@ class DefineTypeDefault(TypeDefinitionStatement):
         self.type.location = name.get_location()
         self.anchors.extend(class_ctor.get_anchors())
 
+    def pretty_print(self) -> str:
+        return "typedef %s as %s" % (self.name, self.ctor.pretty_print())
+
     def __repr__(self) -> str:
         """
             Get a representation of this default
         """
-        return "Constructor(%s, %s)" % (self.name, self.ctor)
+        return self.pretty_print()
 
     def evaluate(self) -> None:
         """
@@ -517,6 +504,7 @@ class DefineTypeDefault(TypeDefinitionStatement):
             raise TypingException(
                 self, "Default can only be define for an Entity, but %s is a %s" % (self.ctor.class_type, self.ctor.class_type)
             )
+        inmanta_warnings.warn(CompilerDeprecationWarning(self, "Default constructors are deprecated. Use inheritance instead."))
 
         self.type.comment = self.comment
 

@@ -27,7 +27,11 @@ import pytest
 from inmanta import const
 from inmanta.protocol import methods
 from inmanta.server import SLICE_SERVER
-from utils import _wait_until_deployment_finishes, wait_for_version
+
+if __file__ and os.path.dirname(__file__).split("/")[-2] == "inmanta_tests":
+    from inmanta_tests.utils import _wait_until_deployment_finishes, wait_for_version  # noqa: F401
+else:
+    from utils import _wait_until_deployment_finishes, wait_for_version
 
 
 def check_result(result):

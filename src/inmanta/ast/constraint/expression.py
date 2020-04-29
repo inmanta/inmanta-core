@@ -20,10 +20,12 @@ import re
 from abc import ABCMeta, abstractmethod
 from typing import Dict, Optional
 
-from inmanta.ast import LocatableString, TypingException
+import inmanta.execute.dataflow as dataflow
+from inmanta.ast import LocatableString, RuntimeException, TypingException
 from inmanta.ast.statements import Literal, ReferenceStatement
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedReferenceHelper, Reference
+from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, RawUnit, Resolver, ResultVariable
 
 
@@ -89,6 +91,9 @@ class IsDefined(ReferenceStatement):
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("IsDefined.get_node() placeholder for %s" % self).reference()
 
     def pretty_print(self) -> str:
         if self.attr is not None:
@@ -165,6 +170,9 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
         """
         return create_function(self)
 
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("Operator.get_node() placeholder for %s" % self).reference()
+
     def pretty_print(self):
         return repr(self)
 
@@ -193,10 +201,13 @@ class BinaryOperator(Operator):
     def pretty_print(self):
         return "(%s %s %s)" % (self._arguments[0].pretty_print(), self.get_op(), self._arguments[1].pretty_print())
 
+    def __repr__(self) -> str:
+        return self.pretty_print()
 
-class LazyBinaryOperator(BinaryOperator):
+
+class LazyBooleanOperator(BinaryOperator):
     """
-        This class represents a binary operator.
+        This class represents a binary boolean operator.
     """
 
     def __init__(self, name, op1, op2):
@@ -213,8 +224,21 @@ class LazyBinaryOperator(BinaryOperator):
         HangUnit(queue, resolver, self.children[0].requires_emit(resolver, queue), temp, self)
         return {self: temp}
 
+    def _validate_value(self, value: object, side: int) -> None:
+        try:
+            Bool().validate(value)
+        except RuntimeException as e:
+            e.set_statement(self)
+            e.msg = "Invalid %s hand value `%s`: `%s` expects a boolean" % (
+                "left" if side == 0 else "right",
+                value,
+                self.get_op(),
+            )
+            raise e
+
     def resume(self, requires, resolver, queue, target):
         result = self.children[0].execute(requires, resolver, queue)
+        self._validate_value(result, 0)
         if self._is_final(result):
             target.set_value(result, self.location)
         else:
@@ -223,11 +247,14 @@ class LazyBinaryOperator(BinaryOperator):
             )
 
     def execute_direct(self, requires):
-        result = self.children[0].execute_direct(requires)
-        if self._is_final(result):
-            return result
+        lhs = self.children[0].execute_direct(requires)
+        self._validate_value(lhs, 0)
+        if self._is_final(lhs):
+            return lhs
         else:
-            return self.children[1].execute_direct(requires)
+            rhs = self.children[1].execute_direct(requires)
+            self._validate_value(rhs, 1)
+            return rhs
 
     def execute(self, requires, resolver, queue):
         # helper returned: return result
@@ -284,6 +311,12 @@ class Not(UnaryOperator):
 
             @see Operator#_op
         """
+        try:
+            Bool().validate(arg)
+        except RuntimeException as e:
+            e.set_statement(self)
+            e.msg = "Invalid value `%s`: `%s` expects a boolean" % (arg, self.get_op())
+            raise e
         return not arg
 
 
@@ -425,7 +458,7 @@ class NotEqual(BinaryOperator):
         return arg1 != arg2
 
 
-class And(LazyBinaryOperator):
+class And(LazyBooleanOperator):
     """
         The and boolean operator
     """
@@ -433,13 +466,13 @@ class And(LazyBinaryOperator):
     __op = "and"
 
     def __init__(self, op1, op2):
-        LazyBinaryOperator.__init__(self, "and", op1, op2)
+        LazyBooleanOperator.__init__(self, "and", op1, op2)
 
-    def _is_final(self, result):
+    def _is_final(self, result: bool):
         return not result
 
 
-class Or(LazyBinaryOperator):
+class Or(LazyBooleanOperator):
     """
         The or boolean operator
     """
@@ -447,9 +480,9 @@ class Or(LazyBinaryOperator):
     __op = "or"
 
     def __init__(self, op1, op2):
-        LazyBinaryOperator.__init__(self, "or", op1, op2)
+        LazyBooleanOperator.__init__(self, "or", op1, op2)
 
-    def _is_final(self, result):
+    def _is_final(self, result: bool):
         return result
 
 

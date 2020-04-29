@@ -15,12 +15,16 @@
 
     Contact: code@inmanta.com
 """
+import logging
 import os
+import uuid
+from typing import Dict
 
 import pytest
 
 from inmanta import data
 from inmanta.util import get_compiler_version
+from utils import log_contains
 
 
 @pytest.mark.asyncio
@@ -259,3 +263,75 @@ async def test_create_environment(tmpdir, server, client, cli):
 
     assert file_content_0 != file_content_2
     assert ctime_0 != ctime_2
+
+
+@pytest.mark.asyncio
+async def test_inmanta_cli_http_version(server, client, cli, caplog):
+    with caplog.at_level(logging.DEBUG):
+        result = await cli.run("project", "create", "-n", "test_project")
+        assert result.exit_code == 0
+        log_contains(caplog, "inmanta.protocol.rest.server", logging.DEBUG, "HTTP version of request: HTTP/1.1")
+
+
+@pytest.mark.asyncio
+async def test_pause_agent(server, cli):
+    project = data.Project(name="test")
+    await project.insert()
+    env1 = data.Environment(name="env1", project=project.id)
+    await env1.insert()
+    env2 = data.Environment(name="env2", project=project.id)
+    await env2.insert()
+
+    await data.Agent(environment=env1.id, name="agent1", paused=False).insert()
+    await data.Agent(environment=env1.id, name="agent2", paused=False).insert()
+    await data.Agent(environment=env2.id, name="agent3", paused=False).insert()
+
+    async def assert_agent_paused(env_id: uuid.UUID, expected_records: Dict[str, bool]) -> None:
+        result = await cli.run("agent", "list", "-e", str(env_id))
+        assert result.exit_code == 0
+        output = result.stdout.replace(" ", "")
+        assert f"Agent|Environment|Paused" in output
+        for (agent_name, paused) in expected_records.items():
+            assert f"{agent_name}|{env_id}|{paused}" in output
+
+    await assert_agent_paused(env_id=env1.id, expected_records=dict(agent1=False, agent2=False))
+    await assert_agent_paused(env_id=env2.id, expected_records=dict(agent3=False))
+
+    # Pause
+    result = await cli.run("agent", "pause", "-e", str(env1.id), "--agent", "agent1")
+    assert result.exit_code == 0
+    await assert_agent_paused(env_id=env1.id, expected_records=dict(agent1=True, agent2=False))
+    await assert_agent_paused(env_id=env2.id, expected_records=dict(agent3=False))
+
+    # Unpause
+    result = await cli.run("agent", "unpause", "-e", str(env1.id), "--agent", "agent1")
+    assert result.exit_code == 0
+    await assert_agent_paused(env_id=env1.id, expected_records=dict(agent1=False, agent2=False))
+    await assert_agent_paused(env_id=env2.id, expected_records=dict(agent3=False))
+
+    # Pause all agents in env1
+    result = await cli.run("agent", "pause", "-e", str(env1.id), "--all")
+    assert result.exit_code == 0
+    await assert_agent_paused(env_id=env1.id, expected_records=dict(agent1=True, agent2=True))
+    await assert_agent_paused(env_id=env2.id, expected_records=dict(agent3=False))
+
+    # Unpause all agents in env1
+    result = await cli.run("agent", "unpause", "-e", str(env1.id), "--all")
+    assert result.exit_code == 0
+    await assert_agent_paused(env_id=env1.id, expected_records=dict(agent1=False, agent2=False))
+    await assert_agent_paused(env_id=env2.id, expected_records=dict(agent3=False))
+
+    # Mandatory option -e not specified
+    for action in ["pause", "unpause"]:
+        result = await cli.run("agent", action, "--agent", "agent1")
+        assert result.exit_code != 0
+
+    # --agent and --all are both set
+    for action in ["pause", "unpause"]:
+        result = await cli.run("agent", action, "-e", str(env1.id), "--agent", "agent1", "--all")
+        assert result.exit_code != 0
+
+    # --agent and --all are both not set
+    for action in ["pause", "unpause"]:
+        result = await cli.run("agent", action, "-e", str(env1.id))
+        assert result.exit_code != 0

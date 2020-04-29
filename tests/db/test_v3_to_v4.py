@@ -46,9 +46,8 @@ async def migrate_v3_to_v4(hard_clean_db, hard_clean_db_post, postgresql_client:
 
     # When the bootloader is started, it also executes the migration to v4
     await ibl.start()
-    async_finalizer(ibl.stop)
-
     yield resource_version_id_dict
+    await ibl.stop()
 
 
 @pytest.mark.asyncio

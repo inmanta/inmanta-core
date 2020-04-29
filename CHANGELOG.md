@@ -1,4 +1,53 @@
+# v 2020.2 (2020-04-24) Changes in this release:
+
+## Breaking changes
+- Non-boolean arguments to boolean operators are no longer allowed, this was previously possible due to bug (#1808)
+- Server will no longer start if the database schema is for a newer version (#1878)
+- The environment setting autostart_agent_map should always contain an entry for the agent "internal" (#1839)
+
+## Deprecated
+ - Leaving a nullable attribute unassigned now produces a deprecation warning. Explicitly assign null instead. (#1775)
+ - Default constructors (typedef MyType as SomeEntityType(some_field = "some_value")). Use inheritance instead. (#402)
+ - Old relation syntax (A aa [0:] -- [0:] B bb) (#2000)
+
+## Fixed
+ - Various compiler error reporting improvements (#1810, #1920)
+ - Fixed cache leak in agent when deployments are canceled (#1883)
+ - Improved robustness of modules update (#1885)
+ - Removed environmental variables from agent report (#1891)
+ - Use asyncio subprocess instead of tornado subprocess (#1792)
+ - Added warning for incorrect database migration script names (#1912)
+ - Agent manager remains consistent when the database connection is lost (#1893)
+ - Ensure correct version is used in api docs (#1994)
+ - Fixed double assignment error resulting from combining constructor kwargs with default values (#2003)
+ - Fixed recursive unwrapping of dict return values from plugins (#2004)
+ - Resource action update is now performed in a single transaction, eliminating the possibility of inconsistent state (#1944)
+ - Type.type_string is now defined as returning the representation of the type in the inmanta DSL (inmanta/lsm#75)
+
+## Added
+ - Experimental data trace, root cause and graphic data flow visualization applications (#1820, #1831, #1821, #1822)
+ - Warning when shadowing variable (#1366, #1918)
+ - Added support for compiler warnings (#1779, #1905, #1906)
+ - Added support for DISABLED flag for database migration scripts (#1913)
+ - Added v5 database migration script (#1914)
+ - Added support for declaring implement using parents together with normal implement declaration list (#1971)
+ - Resource Action Log now includes timestamps (#1496)
+ - Added support to pause an agent (#1128)
+ - Added --no-tag option to module tool (#1939)
+ - Added base exception for plugins and corresponding documentation (#1205)
+ - Added tags to openapi definition (#1751)
+ - Added support to pause an agent (#1128, #1982)
+ - Plugins are now imported in the inmanta_plugins package to allow importing submodules (#507)
+ - Added event listener to Environment Service (#1996)
+ - Autostarted agents can load a new value for the autostart_agent_map setting without agent restart (#1839)
+ - Added protected environment option (#1997)
+ - Added warning when trying to override a built-in type with a typedef (#81)
+ - Added inmanta-cli documentation to the docs (#1992)
+
 # v 2020.1 (2020-02-19) Changes in this release:
+
+## Fixed
+ - Added support for conditions as expressions and vice versa (#1815)
 
 ## Breaking changes
 - Entity instances are no longer allowed in list and dict attributes, this was previously possible due to bug (#1435)

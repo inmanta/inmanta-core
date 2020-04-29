@@ -42,6 +42,7 @@ import time
 import traceback
 from argparse import ArgumentParser
 from asyncio import ensure_future
+from configparser import ConfigParser
 from threading import Timer
 from typing import Any, Callable, Coroutine
 
@@ -60,6 +61,7 @@ from inmanta.const import EXIT_START_FAILED
 from inmanta.export import ModelExporter, cfg_env
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
+from inmanta.warnings import WarningsManager
 
 LOGGER = logging.getLogger("inmanta")
 
@@ -216,6 +218,20 @@ def compiler_config(parser: ArgumentParser) -> None:
     parser.add_argument("--password", dest="password", help="The password of the server")
     parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
+    parser.add_argument(
+        "--experimental-data-trace",
+        dest="datatrace",
+        help="Experimental data trace tool useful for debugging",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--experimental-dataflow-graphic",
+        dest="dataflow_graphic",
+        help="Experimental graphic data flow visualization",
+        action="store_true",
+        default=False,
+    )
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
 
 
@@ -243,6 +259,12 @@ def compile_project(options: argparse.Namespace):
 
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
+
+    if options.datatrace is True:
+        Config.set("compiler", "datatrace_enable", "true")
+
+    if options.dataflow_graphic is True:
+        Config.set("compiler", "dataflow_graphic_enable", "true")
 
     module.Project.get(options.main_file)
 
@@ -491,6 +513,13 @@ def cmd_parser() -> ArgumentParser:
         "-v warning, -vv info and -vvv debug and -vvvv trace",
     )
     parser.add_argument(
+        "--warnings",
+        dest="warnings",
+        choices=["warn", "ignore", "error"],
+        default="warn",
+        help="The warning behaviour of the compiler. Must be one of 'warn', 'ignore', 'error'",
+    )
+    parser.add_argument(
         "-X", "--extended-errors", dest="errors", help="Show stack traces for errors", action="store_true", default=False
     )
     parser.add_argument(
@@ -598,6 +627,13 @@ def app() -> None:
 
     # Load the configuration
     Config.load_config(options.config_file, options.config_dir)
+
+    if options.warnings is not None:
+        Config.set("warnings", "default", options.warnings)
+
+    config = Config.get()
+    assert isinstance(config, ConfigParser)
+    WarningsManager.apply_config(config["warnings"] if "warnings" in config else None)
 
     # start the command
     if not hasattr(options, "func"):

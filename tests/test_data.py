@@ -15,11 +15,12 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import datetime
 import logging
 import time
 import uuid
-from concurrent.futures._base import TimeoutError
+from typing import Dict
 
 import asyncpg
 import pytest
@@ -27,7 +28,7 @@ from asyncpg import Connection
 from asyncpg.pool import Pool
 
 from inmanta import const, data
-from inmanta.const import LogLevel
+from inmanta.const import AgentStatus, LogLevel
 
 
 @pytest.mark.asyncio
@@ -46,7 +47,7 @@ async def test_connect_too_small_connection_pool(postgres_db, database_name: str
     assert pool is not None
     connection: Connection = await pool.acquire()
     try:
-        with pytest.raises(TimeoutError):
+        with pytest.raises(asyncio.TimeoutError):
             await pool.acquire(timeout=1.0)
     finally:
         await connection.close()
@@ -517,25 +518,85 @@ async def test_agent(init_dataclasses_and_load_schema):
         assert retrieved_agent.environment == agent.environment
         assert retrieved_agent.name == agent.name
 
-    assert agent1.get_status() == "up"
-    assert agent2.get_status() == "down"
-    assert agent3.get_status() == "paused"
+    assert agent1.get_status() == AgentStatus.up
+    assert agent2.get_status() == AgentStatus.down
+    assert agent3.get_status() == AgentStatus.paused
 
     for agent in [agent1, agent2, agent3]:
-        assert agent.to_dict()["state"] == agent.get_status()
+        assert AgentStatus(agent.to_dict()["state"]) == agent.get_status()
 
     await agent1.update_fields(paused=True)
-    assert agent1.get_status() == "paused"
+    assert agent1.get_status() == AgentStatus.paused
 
     await agent2.update_fields(primary=agi1.id)
-    assert agent2.get_status() == "up"
+    assert agent2.get_status() == AgentStatus.up
 
     await agent3.update_fields(paused=False)
-    assert agent3.get_status() == "down"
+    assert agent3.get_status() == AgentStatus.down
 
     primary_instance = await data.AgentInstance.get_by_id(agent1.primary)
     primary_process = await data.AgentProcess.get_one(sid=primary_instance.process)
     assert primary_process.sid == agent_proc.sid
+
+
+@pytest.mark.asyncio
+async def test_pause_agent_endpoint_set(environment):
+    """
+        Test the pause() method in the Agent class
+    """
+    env_id = uuid.UUID(environment)
+    agent_name = "test"
+    agent = data.Agent(environment=env_id, name=agent_name, last_failover=datetime.datetime.now(), paused=False)
+    await agent.insert()
+
+    # Verify not paused
+    agent = await data.Agent.get_one(environment=env_id, name=agent_name)
+    assert not agent.paused
+
+    # Pause
+    paused_agents = await data.Agent.pause(env=env_id, endpoint=agent_name, paused=True)
+    assert paused_agents == [agent_name]
+    agent = await data.Agent.get_one(environment=env_id, name=agent_name)
+    assert agent.paused
+
+    # Unpause
+    paused_agents = await data.Agent.pause(env=env_id, endpoint=agent_name, paused=False)
+    assert paused_agents == [agent_name]
+    agent = await data.Agent.get_one(environment=env_id, name=agent_name)
+    assert not agent.paused
+
+
+@pytest.mark.asyncio
+async def test_pause_all_agent_in_environment(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+    env1 = data.Environment(name="env1", project=project.id)
+    await env1.insert()
+    env2 = data.Environment(name="env2", project=project.id)
+    await env2.insert()
+
+    await data.Agent(environment=env1.id, name="agent1", last_failover=datetime.datetime.now(), paused=False).insert()
+    await data.Agent(environment=env1.id, name="agent2", last_failover=datetime.datetime.now(), paused=False).insert()
+    await data.Agent(environment=env2.id, name="agent3", last_failover=datetime.datetime.now(), paused=False).insert()
+    agents_in_env1 = ["agent1", "agent2"]
+
+    async def assert_paused(env_paused_map: Dict[uuid.UUID, bool]) -> None:
+        for env_id, paused in env_paused_map.items():
+            agents = await data.Agent.get_list(environment=env_id)
+            assert all([a.paused == paused for a in agents])
+
+    # Test initial state
+    await assert_paused(env_paused_map={env1.id: False, env2.id: False})
+    # Pause env1 and pause again
+    for _ in range(2):
+        paused_agents = await data.Agent.pause(env1.id, endpoint=None, paused=True)
+        assert sorted(paused_agents) == sorted(agents_in_env1)
+        await assert_paused(env_paused_map={env1.id: True, env2.id: False})
+    # Unpause env1 and pause again
+    for _ in range(2):
+        paused_agents = await data.Agent.pause(env1.id, endpoint=None, paused=False)
+        assert sorted(paused_agents) == sorted(agents_in_env1)
+        await assert_paused(env_paused_map={env1.id: False, env2.id: False})
 
 
 @pytest.mark.asyncio
@@ -2192,3 +2253,24 @@ async def test_resources_json(init_dataclasses_and_load_schema):
     res = await data.Resource.get_one(environment=res1.environment, resource_version_id=res1.resource_version_id)
 
     assert res1.attributes == res.attributes
+
+
+@pytest.mark.asyncio
+async def test_update_to_none_value(init_dataclasses_and_load_schema):
+    """
+        Verify that a field with a default value can be set to None if that field is nullable.
+    """
+    project = data.Project(name="test")
+    await project.insert()
+    env = data.Environment(name="dev", project=project.id)
+    await env.insert()
+
+    # Default value is empty string
+    assert env.repo_url is not None
+    assert env.repo_url == ""
+    # Set value to None
+    await env.update(repo_url=None)
+    # Assert None value
+    assert env.repo_url is None
+    env = await data.Environment.get_by_id(env.id)
+    assert env.repo_url is None

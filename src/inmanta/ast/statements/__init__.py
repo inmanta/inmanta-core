@@ -15,9 +15,11 @@
 
     Contact: code@inmanta.com
 """
-from typing import Any, Dict, List, Optional, Tuple  # noqa: F401
+from typing import Any, Dict, Iterator, List, Optional, Tuple  # noqa: F401
 
+import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced, RuntimeException
+from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 
 try:
@@ -27,6 +29,7 @@ except ImportError:
 
 
 if TYPE_CHECKING:
+    from inmanta.ast.blocks import BasicBlock  # noqa: F401
     from inmanta.ast.variables import Reference  # noqa: F401
     from inmanta.ast.type import Type, NamedType  # noqa: F401
 
@@ -59,6 +62,12 @@ class Statement(Namespaced):
     def get_anchors(self) -> List[Anchor]:
         return self.anchors
 
+    def nested_blocks(self) -> Iterator["BasicBlock"]:
+        """
+            Returns an iterator over blocks contained within this statement.
+        """
+        return iter(())
+
 
 class DynamicStatement(Statement):
     """
@@ -82,6 +91,12 @@ class DynamicStatement(Statement):
 
     def execute_direct(self, requires):
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
+
+    def declared_variables(self) -> Iterator[str]:
+        """
+            Returns an iterator over this statement's own declared variables.
+        """
+        return iter(())
 
 
 class ExpressionStatement(DynamicStatement):
@@ -119,6 +134,12 @@ class ExpressionStatement(DynamicStatement):
             Returns this expression as a constant value, if possible. Otherwise, raise a RuntimeException.
         """
         raise RuntimeException(None, "%s is not a constant")
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        """
+            Return the node in the data flow graph this ExpressionStatement will evaluate to.
+        """
+        raise NotImplementedError()
 
 
 class Resumer(ExpressionStatement):
@@ -173,6 +194,12 @@ class AssignStatement(DynamicStatement):
         out.extend(self.rhs.requires())  # type : List[str]
         return out
 
+    def _add_to_dataflow_graph(self, graph: Optional[DataflowGraph]) -> None:
+        """
+            Adds this assignment to the resolver's data flow graph.
+        """
+        raise NotImplementedError()
+
 
 class Literal(ExpressionStatement):
     def __init__(self, value: object) -> None:
@@ -201,6 +228,9 @@ class Literal(ExpressionStatement):
 
     def as_constant(self) -> object:
         return self.value
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.ValueNodeReference:
+        return dataflow.ValueNode(self.value).reference()
 
 
 class DefinitionStatement(Statement):

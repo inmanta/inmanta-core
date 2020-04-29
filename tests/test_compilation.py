@@ -141,6 +141,10 @@ class TestCompileIssue138(CompilerBaseTest, unittest.TestCase):
             is not None
         )
 
+    def tearDown(self):
+        super().tearDown()
+        shutil.rmtree(os.path.join(self.project_dir, "libs", "std"))
+
 
 class TestCompileluginTyping(CompilerBaseTest, unittest.TestCase):
     def __init__(self, methodName="runTest"):  # noqa: N803

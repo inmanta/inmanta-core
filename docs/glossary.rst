@@ -53,7 +53,7 @@ Glossary
     module
         A :term:`configuration model` consists of multiple configuration modules. A module provides
         a partial and reusable configuration model and its related resources such as files,
-        templates, ... The :doc:`module developer guide<module_developers/modules>` provides more details.
+        templates, ... The :doc:`module developer guide <model_developers/modules>` provides more details.
 
     resource handler
         See :term:`handler`

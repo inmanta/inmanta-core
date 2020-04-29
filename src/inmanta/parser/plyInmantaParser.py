@@ -25,6 +25,7 @@ from typing import List, Optional, Union
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
 
+import inmanta.warnings as inmanta_warnings
 from inmanta.ast import LocatableString, Location, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import IsDefined, Not, Operator
@@ -36,7 +37,6 @@ from inmanta.ast.statements.define import (
     DefineEntity,
     DefineImplement,
     DefineImplementation,
-    DefineImplementInherits,
     DefineImport,
     DefineIndex,
     DefineRelation,
@@ -47,7 +47,7 @@ from inmanta.ast.statements.define import (
 from inmanta.ast.statements.generator import Constructor, For, If, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import ParserException, plyInmantaLex
+from inmanta.parser import ParserException, SyntaxDeprecationWarning, plyInmantaLex
 from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 
 # the token map is imported from the lexer. This is required.
@@ -58,7 +58,16 @@ LOGGER = logging.getLogger()
 file = "NOFILE"
 namespace = None
 
-precedence = (("left", "OR"), ("left", "AND"), ("right", "NOT"), ("right", "MLS"), ("right", "MLS_END"))
+precedence = (
+    ("right", ","),
+    ("left", "OR"),
+    ("left", "AND"),
+    ("left", "CMP_OP"),
+    ("right", "NOT"),
+    ("left", "IN"),
+    ("right", "MLS"),
+    ("right", "MLS_END"),
+)
 
 
 def attach_lnr(p: YaccProduction, token: int = 1) -> None:
@@ -201,13 +210,13 @@ def p_for(p: YaccProduction) -> None:
 
 
 def p_if(p: YaccProduction) -> None:
-    "if : IF condition ':' block"
+    "if : IF expression ':' block"
     p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, []))
     attach_lnr(p, 1)
 
 
 def p_if_else(p: YaccProduction) -> None:
-    "if : IF condition ':' stmt_list ELSE ':' block"
+    "if : IF expression ':' stmt_list ELSE ':' block"
     p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, p[7]))
     attach_lnr(p, 1)
 
@@ -350,39 +359,34 @@ def p_attr_list_dict_null(p: YaccProduction) -> None:
 
 
 # IMPLEMENT
-def p_implement_inh(p: YaccProduction) -> None:
-    "implement_def : IMPLEMENT class_ref USING PARENTS"
-    p[0] = DefineImplementInherits(p[2])
-    attach_lnr(p)
+def p_implement_ns_list_ref(p: YaccProduction) -> None:
+    "implement_ns_list : ns_ref"
+    p[0] = (False, [p[1]])
+
+
+def p_implement_ns_list_parents(p: YaccProduction) -> None:
+    "implement_ns_list : PARENTS"
+    p[0] = (True, [])
+
+
+def p_implement_ns_list_collect(p: YaccProduction) -> None:
+    "implement_ns_list : implement_ns_list ',' implement_ns_list"
+    p[0] = (p[1][0] or p[3][0], p[1][1] + p[3][1])
 
 
 def p_implement(p: YaccProduction) -> None:
-    "implement_def : IMPLEMENT class_ref USING ns_list"
-    p[0] = DefineImplement(p[2], p[4], Literal(True))
+    """implement_def : IMPLEMENT class_ref USING implement_ns_list empty
+        | IMPLEMENT class_ref USING implement_ns_list mls"""
+    (inherit, implementations) = p[4]
+    p[0] = DefineImplement(p[2], implementations, Literal(True), inherit=inherit, comment=p[5])
     attach_lnr(p)
 
 
 def p_implement_when(p: YaccProduction) -> None:
-    "implement_def : IMPLEMENT class_ref USING ns_list WHEN condition"
-    p[0] = DefineImplement(p[2], p[4], p[6])
-    attach_lnr(p)
-
-
-def p_implement_comment(p: YaccProduction) -> None:
-    "implement_def : IMPLEMENT class_ref USING ns_list mls"
-    p[0] = DefineImplement(p[2], p[4], Literal(True), comment=p[5])
-    attach_lnr(p)
-
-
-def p_implement_inh_comment(p: YaccProduction) -> None:
-    "implement_def : IMPLEMENT class_ref USING PARENTS mls"
-    p[0] = DefineImplementInherits(p[2], comment=p[5])
-    attach_lnr(p)
-
-
-def p_implement_when_comment(p: YaccProduction) -> None:
-    "implement_def : IMPLEMENT class_ref USING ns_list WHEN condition mls"
-    p[0] = DefineImplement(p[2], p[4], p[6], comment=p[7])
+    """implement_def : IMPLEMENT class_ref USING implement_ns_list WHEN expression empty
+        | IMPLEMENT class_ref USING implement_ns_list WHEN expression mls"""
+    (inherit, implementations) = p[4]
+    p[0] = DefineImplement(p[2], implementations, p[6], inherit=inherit, comment=p[7])
     attach_lnr(p)
 
 
@@ -422,9 +426,7 @@ def p_block_empty(p: YaccProduction) -> None:
 
 
 # RELATION
-
-
-def p_relation(p: YaccProduction) -> None:
+def p_relation_deprecated(p: YaccProduction) -> None:
     "relation : class_ref ID multi REL multi class_ref ID"
     if not (p[4] == "--"):
         LOGGER.warning(
@@ -432,9 +434,10 @@ def p_relation(p: YaccProduction) -> None:
         )
     p[0] = DefineRelation((p[1], p[2], p[3]), (p[6], p[7], p[5]))
     attach_lnr(p, 2)
+    deprecated_relation_warning(p)
 
 
-def p_relation_comment(p: YaccProduction) -> None:
+def p_relation_deprecated_comment(p: YaccProduction) -> None:
     "relation : class_ref ID multi REL multi class_ref ID mls"
     if not (p[4] == "--"):
         LOGGER.warning(
@@ -444,40 +447,63 @@ def p_relation_comment(p: YaccProduction) -> None:
     rel.comment = str(p[8])
     p[0] = rel
     attach_lnr(p, 2)
+    deprecated_relation_warning(p)
 
 
-def p_relation_new_outer_comment(p: YaccProduction) -> None:
-    "relation : relationnew mls"
+def deprecated_relation_warning(p: YaccProduction) -> None:
+    inmanta_warnings.warn(
+        SyntaxDeprecationWarning(
+            p[0].location,
+            None,
+            "The relation definition syntax"
+            " `{entity_left} {attr_left_on_right} {multi_left} {rel} {multi_right} {entity_right} {attr_right_on_left}`"
+            " is deprecated. Please use"
+            " `{entity_left}.{attr_right_on_left} {multi_right} -- {entity_right}.{attr_left_on_right} {multi_left}`"
+            " instead.".format(
+                entity_left=p[1],
+                attr_left_on_right=p[2],
+                multi_left="[%s:%s]" % tuple(v if v is not None else "" for v in p[3]),
+                rel=p[4],
+                multi_right="[%s:%s]" % tuple(v if v is not None else "" for v in p[5]),
+                entity_right=p[6],
+                attr_right_on_left=p[7],
+            ),
+        ),
+    )
+
+
+def p_relation_outer_comment(p: YaccProduction) -> None:
+    "relation : relation_def mls"
     rel = p[1]
     rel.comment = str(p[2])
     p[0] = rel
 
 
-def p_relation_new_outer(p: YaccProduction) -> None:
-    "relation : relationnew"
+def p_relation_outer(p: YaccProduction) -> None:
+    "relation : relation_def"
     p[0] = p[1]
 
 
-def p_relation_new(p: YaccProduction) -> None:
-    "relationnew : class_ref '.' ID multi REL class_ref '.' ID multi"
+def p_relation(p: YaccProduction) -> None:
+    "relation_def : class_ref '.' ID multi REL class_ref '.' ID multi"
     p[0] = DefineRelation((p[1], p[8], p[9]), (p[6], p[3], p[4]))
     attach_lnr(p, 2)
 
 
-def p_relation_new_unidir(p: YaccProduction) -> None:
-    "relationnew : class_ref '.' ID multi REL class_ref"
+def p_relation_unidir(p: YaccProduction) -> None:
+    "relation_def : class_ref '.' ID multi REL class_ref"
     p[0] = DefineRelation((p[1], None, None), (p[6], p[3], p[4]))
     attach_lnr(p, 2)
 
 
-def p_relation_new_annotated(p: YaccProduction) -> None:
-    "relationnew : class_ref '.' ID multi operand_list class_ref '.' ID multi"
+def p_relation_annotated(p: YaccProduction) -> None:
+    "relation_def : class_ref '.' ID multi operand_list class_ref '.' ID multi"
     p[0] = DefineRelation((p[1], p[8], p[9]), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 
 
-def p_relation_new_annotated_unidir(p: YaccProduction) -> None:
-    "relationnew : class_ref '.' ID multi operand_list class_ref"
+def p_relation_annotated_unidir(p: YaccProduction) -> None:
+    "relation_def : class_ref '.' ID multi operand_list class_ref"
     p[0] = DefineRelation((p[1], None, None), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 
@@ -518,8 +544,7 @@ def p_typedef_outer_comment(p: YaccProduction) -> None:
 
 
 def p_typedef_1(p: YaccProduction) -> None:
-    """typedef_inner : TYPEDEF ID AS ns_ref MATCHING REGEX
-                | TYPEDEF ID AS ns_ref MATCHING condition"""
+    """typedef_inner : TYPEDEF ID AS ns_ref MATCHING expression"""
     p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[6])
     attach_lnr(p, 2)
 
@@ -540,69 +565,57 @@ def p_index(p: YaccProduction) -> None:
 
 
 #######################
-# CONDITIONALS
+# EXPRESSIONS
 
 
-def p_condition_1(p: YaccProduction) -> None:
-    "condition : '(' condition ')'"
+def p_expression(p: YaccProduction) -> None:
+    """ expression : boolean_expression
+            | constant
+            | function_call
+            | var_ref
+            | constructor
+            | list_def
+            | map_def
+            | map_lookup
+            | index_lookup """
+    p[0] = p[1]
+
+
+def p_expression_parentheses(p: YaccProduction) -> None:
+    """ expression : '(' expression ')' """
     p[0] = p[2]
 
 
-def p_condition_2(p: YaccProduction) -> None:
-    """condition : operand CMP_OP operand
-                | operand IN list_def
-                | operand IN var_ref
-                | condition AND condition
-                | condition OR condition """
+def p_boolean_expression(p: YaccProduction) -> None:
+    """ boolean_expression : expression CMP_OP expression
+            | expression IN expression
+            | expression AND expression
+            | expression OR expression """
     operator = Operator.get_operator_class(str(p[2]))
     p[0] = operator(p[1], p[3])
     attach_lnr(p, 2)
 
 
-def p_condition_3(p: YaccProduction) -> None:
-    """condition : function_call
-                | var_ref
-                | map_lookup"""
-    p[0] = p[1]
-
-
-def p_condition_not(p: YaccProduction) -> None:
-    """condition : NOT condition"""
+def p_boolean_expression_not(p: YaccProduction) -> None:
+    """ boolean_expression : NOT expression """
     p[0] = Not(p[2])
     attach_lnr(p)
 
 
-def p_condition_is_defined(p: YaccProduction) -> None:
-    """condition : var_ref '.' ID IS DEFINED"""
+def p_boolean_expression_is_defined(p: YaccProduction) -> None:
+    """ boolean_expression : var_ref '.' ID IS DEFINED"""
     p[0] = IsDefined(p[1], p[3])
     attach_lnr(p, 2)
 
 
-def p_condition_is_defined_short(p: YaccProduction) -> None:
-    """condition : ID IS DEFINED"""
+def p_boolean_expression_is_defined_short(p: YaccProduction) -> None:
+    """ boolean_expression : ID IS DEFINED """
     p[0] = IsDefined(None, p[1])
     attach_lnr(p)
 
 
-def p_condition_term_1(p: YaccProduction) -> None:
-    "condition : boolean_constant"
-    p[0] = p[1]
-
-
-#######################
-# EXPRESSIONS
-
-
-# TODO
 def p_operand(p: YaccProduction) -> None:
-    """ operand : constant
-              | function_call
-              | constructor
-              | list_def
-              | map_def
-              | var_ref
-              | index_lookup
-              | map_lookup"""
+    """ operand : expression """
     p[0] = p[1]
 
 
@@ -688,20 +701,15 @@ def p_constant_regex(p: YaccProduction) -> None:
     attach_lnr(p)
 
 
-def p_constant_bool(p: YaccProduction) -> None:
-    " constant : boolean_constant "
-    p[0] = p[1]
-
-
-def p_boolean_constant_t(p: YaccProduction) -> None:
-    """ boolean_constant : TRUE
+def p_constant_true(p: YaccProduction) -> None:
+    """ constant : TRUE
     """
     p[0] = Literal(True)
     attach_lnr(p)
 
 
-def p_boolean_constant_f(p: YaccProduction) -> None:
-    """ boolean_constant : FALSE
+def p_constant_false(p: YaccProduction) -> None:
+    """ constant : FALSE
     """
     p[0] = Literal(False)
     attach_lnr(p)
@@ -868,17 +876,6 @@ def p_operand_list_term(p: YaccProduction) -> None:
 def p_operand_list_term_2(p: YaccProduction) -> None:
     "operand_list :"
     p[0] = []
-
-
-def p_ns_list_collect(p: YaccProduction) -> None:
-    """ns_list : ns_ref ',' ns_list"""
-    p[3].insert(0, p[1])
-    p[0] = p[3]
-
-
-def p_ns_list_term(p: YaccProduction) -> None:
-    "ns_list : ns_ref"
-    p[0] = [p[1]]
 
 
 def p_var_ref(p: YaccProduction) -> None:

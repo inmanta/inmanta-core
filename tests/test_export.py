@@ -18,6 +18,7 @@
 import pytest
 
 from inmanta import config, const
+from inmanta.export import DependencyCycleException
 
 
 def test_id_mapping_export(snippetcompiler):
@@ -239,3 +240,60 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
 
     assert len(json_value) == 1
     print(_version, json_value, status, model)
+
+
+def test_1934_cycle_in_dep_mgmr(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import exp
+
+a = exp::RequiresTest()
+b = exp::RequiresTest(name="idb")
+a.requires += b
+"""
+    )
+    with pytest.raises(DependencyCycleException):
+        snippetcompiler.do_export()
+
+
+def test_bad_value_in_dep_mgmr(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import exp
+
+a = exp::RequiresTest(do_break=1)
+"""
+    )
+    with pytest.raises(Exception, match="Invalid id for resource xyz"):
+        snippetcompiler.do_export()
+
+
+def test_bad_value_in_dep_mgmr_2(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import exp
+
+a = exp::RequiresTest(do_break=2)
+"""
+    )
+    with pytest.raises(
+        Exception,
+        match="A dependency manager inserted the object <object object at .*> of type <class 'object'> "
+        "into a requires relation. However, only string, Resource or Id are allowable types",
+    ):
+        snippetcompiler.do_export()
+
+
+def test_bad_value_in_dep_mgmr_3(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import exp
+
+a = exp::RequiresTest(do_break=3)
+"""
+    )
+    with pytest.raises(
+        Exception,
+        match="A dependency manager inserted a resource id without version this is not allowed aa::Bbbb\\[agent,name=agent\\]",
+    ):
+        snippetcompiler.do_export()
