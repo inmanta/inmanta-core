@@ -5,6 +5,7 @@
 
 ## Added
 - Added cleanup mechanism of old compile reports (#2054)
+- Documentation on valid client types (#2015)
 
 # v 2020.2 (2020-04-24) Changes in this release:
 
