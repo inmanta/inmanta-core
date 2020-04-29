@@ -29,8 +29,11 @@ import pytest
 
 from inmanta import config, data
 from inmanta.data import Compile, Report
+from inmanta.deploy import cfg_env
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server import config as server_config
+from inmanta.server import protocol
+from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.util import ensure_directory_exist
@@ -594,15 +597,48 @@ async def test_compileservice_queue(mocked_compiler_service_block, server, clien
     assert result.code == 200
 
 
+@pytest.fixture(scope="function")
+async def server_with_frequent_cleanups(server_pre_start, server_config, async_finalizer):
+    config.Config.set("server", "compiler_report_retention", "3")
+    config.Config.set("server", "cleanup_compiler_reports_interval", "1")
+    ibl = InmantaBootloader()
+    await ibl.start()
+    yield ibl.restserver
+    await asyncio.wait_for(ibl.stop(), 15)
+
+
+@pytest.fixture(scope="function")
+def client_for_cleanup(server_with_frequent_cleanups):
+    client = protocol.Client("client")
+    yield client
+
+
+@pytest.fixture(scope="function")
+async def environment_for_cleanup(client_for_cleanup, server_with_frequent_cleanups):
+    """
+        Create a project and environment. This fixture returns the uuid of the environment
+    """
+    result = await client_for_cleanup.create_project("env-test")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    result = await client_for_cleanup.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+
+    cfg_env.set(env_id)
+
+    yield env_id
+
+
 @pytest.fixture
-async def old_compile_report(server, client, environment):
+async def old_compile_report(server_with_frequent_cleanups, environment_for_cleanup):
     now = datetime.datetime.now()
     time_of_compile = now - datetime.timedelta(days=30)
     compile_id = uuid.UUID("c00cc33f-f70f-4800-ad01-ff042f67118f")
     old_compile = {
         "id": compile_id,
         "remote_id": uuid.UUID("c9a10da1-9bf6-4152-8461-98adc02c4cee"),
-        "environment": uuid.UUID(environment),
+        "environment": uuid.UUID(environment_for_cleanup),
         "requested": time_of_compile,
         "started": time_of_compile,
         "completed": time_of_compile,
@@ -641,26 +677,47 @@ async def old_compile_report(server, client, environment):
 
 
 @pytest.mark.asyncio
-async def test_compileservice_cleanup(server, client, environment, old_compile_report):
+async def test_compileservice_cleanup(
+    server_with_frequent_cleanups, client_for_cleanup, environment_for_cleanup, old_compile_report
+):
     # There is a new and an older report in the database
-    result = await client.get_reports(environment)
+    result = await client_for_cleanup.get_reports(environment_for_cleanup)
     assert result.code == 200
     assert len(result.result["reports"]) == 2
 
-    result = await client.get_report(old_compile_report)
+    result = await client_for_cleanup.get_report(old_compile_report)
     assert result.code == 200
     assert len(result.result["report"]["reports"]) > 0
 
-    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    compilerslice: CompilerService = server_with_frequent_cleanups.get_slice(SLICE_COMPILER)
     await compilerslice._cleanup()
 
     # The old report is deleted after cleanup
-    result = await client.get_report(old_compile_report)
+    result = await client_for_cleanup.get_report(old_compile_report)
     assert result.code == 404
     reports_after_cleanup = await Report.get_list(compile=old_compile_report)
     assert len(reports_after_cleanup) == 0
 
     # The new report is still there
-    result = await client.get_reports(environment)
+    result = await client_for_cleanup.get_reports(environment_for_cleanup)
     assert result.code == 200
     assert len(result.result["reports"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_compileservice_cleanup_on_trigger(client_for_cleanup, environment_for_cleanup, old_compile_report):
+    # Two reports are in the table
+    result = await client_for_cleanup.get_reports(environment_for_cleanup)
+    assert result.code == 200
+    assert len(result.result["reports"]) == 2
+
+    result = await client_for_cleanup.get_report(old_compile_report)
+    assert result.code == 200
+    assert len(result.result["report"]["reports"]) > 0
+
+    await asyncio.sleep(4)
+
+    # Both reports should be deleted after the triggered cleanup
+    result = await client_for_cleanup.get_reports(environment_for_cleanup)
+    assert result.code == 200
+    assert len(result.result["reports"]) == 0

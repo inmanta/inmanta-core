@@ -1531,7 +1531,7 @@ class Compile(BaseDocument):
     async def delete_older_than(
         cls, oldest_retained_date: datetime.datetime, connection: Optional[asyncpg.Connection] = None
     ) -> None:
-        query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::date"
+        query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::timestamp"
         await cls._execute_query(query, oldest_retained_date, connection=connection)
 
     def to_dto(self) -> m.CompileRun:

@@ -343,7 +343,7 @@ class CompilerService(ServerSlice):
         self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0)
 
     async def _cleanup(self) -> None:
-        oldest_retained_date = datetime.datetime.now() - datetime.timedelta(days=opt.server_compiler_report_retention.get())
+        oldest_retained_date = datetime.datetime.now() - datetime.timedelta(seconds=opt.server_compiler_report_retention.get())
         LOGGER.info("Cleaning up compile reports that are older than %s", oldest_retained_date)
         try:
             await data.Compile.delete_older_than(oldest_retained_date)

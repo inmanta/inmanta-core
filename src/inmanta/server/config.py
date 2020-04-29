@@ -205,9 +205,9 @@ server_version_to_keep = Option(
 server_compiler_report_retention = Option(
     "server",
     "compiler_report_retention",
-    7,
+    604800,
     """The server regularly cleans up old compiler reports.
-    This options specifies the number of days to keep old compiler reports for""",
+    This options specifies the number of seconds to keep old compiler reports for. The default is seven days""",
     is_time,
 )
 
