@@ -12,7 +12,6 @@ requires = [
     "pyyaml",
     "texttable",
     "tornado",
-    "typing",
     "PyJWT",
     "cryptography",
     "jinja2",
@@ -33,7 +32,7 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    version="2020.2",
+    version="2020.3",
     python_requires=">=3.6",  # also update classifiers
     # Meta data
     name="inmanta",

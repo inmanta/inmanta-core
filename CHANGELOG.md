@@ -1,4 +1,15 @@
-# v 2020.2 (?) Changes in this release:
+# v 2020.3 (?) Changes in this release:
+
+## Fixed
+- Fixed issue of autostarted agents not being restarted on environment setting change (#2049)
+
+## Added
+- Added cleanup mechanism of old compile reports (#2054)
+- Documentation on valid client types (#2015)
+- Added `compiler.json` option and `--json` compile flag to export structured compile data such as occurred errors (#1206)
+
+
+# v 2020.2 (2020-04-24) Changes in this release:
 
 ## Breaking changes
 - Non-boolean arguments to boolean operators are no longer allowed, this was previously possible due to bug (#1808)
@@ -21,6 +32,7 @@
  - Ensure correct version is used in api docs (#1994)
  - Fixed double assignment error resulting from combining constructor kwargs with default values (#2003)
  - Fixed recursive unwrapping of dict return values from plugins (#2004)
+ - Resource action update is now performed in a single transaction, eliminating the possibility of inconsistent state (#1944)
  - Type.type_string is now defined as returning the representation of the type in the inmanta DSL (inmanta/lsm#75)
 
 ## Added
@@ -41,7 +53,7 @@
  - Autostarted agents can load a new value for the autostart_agent_map setting without agent restart (#1839)
  - Added protected environment option (#1997)
  - Added warning when trying to override a built-in type with a typedef (#81)
- - Added `compiler.json` option and `--json` compile flag to export structured compile data such as occurred errors (#1206)
+ - Added inmanta-cli documentation to the docs (#1992)
 
 # v 2020.1 (2020-02-19) Changes in this release:
 

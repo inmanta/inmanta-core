@@ -365,7 +365,7 @@ class MethodProperties(object):
         api: Optional[bool],
         agent_server: bool,
         validate_sid: Optional[bool],
-        client_types: List[str],
+        client_types: List[const.ClientType],
         api_version: int,
         api_prefix: str,
         envelope: bool,
@@ -419,7 +419,7 @@ class MethodProperties(object):
 
         # validate client types
         for ct in self._client_types:
-            if ct not in const.VALID_CLIENT_TYPES:
+            if ct not in [client_type for client_type in const.ClientType]:
                 raise InvalidMethodDefinition("Invalid client type %s specified for function %s" % (ct, function))
 
         self._validate_function_types(typed)
@@ -604,7 +604,7 @@ class MethodProperties(object):
         return self._reply
 
     @property
-    def client_types(self) -> List[str]:
+    def client_types(self) -> List[const.ClientType]:
         return self._client_types
 
     @property

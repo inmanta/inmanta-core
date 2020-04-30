@@ -414,7 +414,9 @@ async def autostarted_agent(server, environment):
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTO_DEPLOY, True)
     await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
-    await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
+    # disable deploy and repair intervals
+    await env.set(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
+    await env.set(data.AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
     await env.set(data.AUTOSTART_ON_START, True)
 
 
@@ -472,7 +474,7 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
     config.Config.set("database", "port", str(postgres_db.port))
-    config.Config.set("database", "connection_timeout", str(1))
+    config.Config.set("database", "connection_timeout", str(3))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("agent_rest_transport", "port", port)
@@ -568,7 +570,7 @@ async def server_multi(
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
     config.Config.set("database", "port", str(postgres_db.port))
-    config.Config.set("database", "connection_timeout", str(1))
+    config.Config.set("database", "connection_timeout", str(3))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("agent_rest_transport", "port", port)

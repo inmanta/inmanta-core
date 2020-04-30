@@ -67,7 +67,7 @@ def method(
     api: bool = None,
     agent_server: bool = False,
     validate_sid: bool = None,
-    client_types: List[str] = ["public"],
+    client_types: List[const.ClientType] = [const.ClientType.api],
     api_version: int = 1,
     api_prefix: str = "api",
     envelope: bool = False,
@@ -85,7 +85,8 @@ def method(
         :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
         :param agent_server: This is a call from the Agent to the Server
         :param validate_sid: This call requires a valid session, true by default if agent_server and not api
-        :param client_types: The allowed client types for this call
+        :param client_types: The allowed client types for this call.
+                The valid values are defined by the :const:`inmanta.const.ClientType` enum.
         :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
             which the options apply. The value is another dict that can contain the following options:
                 header: Map this argument to a header with the following name.
@@ -133,7 +134,7 @@ def typedmethod(
     api: bool = None,
     agent_server: bool = False,
     validate_sid: bool = None,
-    client_types: List[str] = ["public"],
+    client_types: List[const.ClientType] = [const.ClientType.api],
     api_version: int = 1,
     api_prefix: str = "api",
     envelope_key: str = const.ENVELOPE_KEY,
@@ -150,7 +151,8 @@ def typedmethod(
         :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
         :param agent_server: This is a call from the Agent to the Server
         :param validate_sid: This call requires a valid session, true by default if agent_server and not api
-        :param client_types: The allowed client types for this call
+        :param client_types: The allowed client types for this call.
+                The valid values are defined by the :const:`inmanta.const.ClientType` enum.
         :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
             which the options apply. The value is another dict that can contain the following options:
                 header: Map this argument to a header with the following name.
