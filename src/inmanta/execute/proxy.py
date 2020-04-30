@@ -74,7 +74,10 @@ class DynamicProxy(object):
         return object.__getattribute__(self, "__instance")
 
     @classmethod
-    def unwrap(cls, item):
+    def unwrap(cls, item: object) -> object:
+        """
+            Converts a value from the plugin domain to the internal domain.
+        """
         if item is None:
             return NoneValue()
 
@@ -99,7 +102,10 @@ class DynamicProxy(object):
         return item
 
     @classmethod
-    def return_value(cls, value: Any) -> Union[str, tuple, int, float, bool, "DynamicProxy"]:
+    def return_value(cls, value: object) -> Union[None, str, tuple, int, float, bool, "DynamicProxy"]:
+        """
+            Converts a value from the internal domain to the plugin domain.
+        """
         if value is None:
             return None
 

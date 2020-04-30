@@ -455,6 +455,10 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
 
 class PluginException(Exception):
+    """
+        Base class for custom exceptions raised from a plugin.
+    """
+
     def __init__(self, message: str) -> None:
         self.message = message
 
