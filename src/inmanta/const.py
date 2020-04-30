@@ -173,7 +173,16 @@ class Compilestate(Enum):
 EXPORT_META_DATA = "export_metadata"
 META_DATA_COMPILE_STATE = "inmanta:compile:state"
 INMANTA_MT_HEADER = "X-Inmanta-tid"
-VALID_CLIENT_TYPES = ["api", "agent", "compiler", "public"]
+
+
+class ClientType(str, Enum):
+    # api: The method with this client type can be used by external clients like the Dashboard, cli or 3rd party services
+    # compiler: The method with this client type is called by the compiler to communicate with the server
+    # agent: The method with this client type is called by the agent to communicate with the server
+    api = "api"
+    agent = "agent"
+    compiler = "compiler"
+
 
 # For testing
 

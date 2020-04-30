@@ -55,7 +55,7 @@ AGENT_ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=
 
 
 # Method for working with projects
-@method(path="/project", operation="PUT", client_types=["api"])
+@method(path="/project", operation="PUT", client_types=[const.ClientType.api])
 def create_project(name: str, project_id: uuid.UUID = None):
     """
         Create a new project
@@ -65,28 +65,28 @@ def create_project(name: str, project_id: uuid.UUID = None):
     """
 
 
-@method(path="/project/<id>", operation="POST", client_types=["api"])
+@method(path="/project/<id>", operation="POST", client_types=[const.ClientType.api])
 def modify_project(id: uuid.UUID, name: str):
     """
         Modify the given project
     """
 
 
-@method(path="/project/<id>", operation="DELETE", client_types=["api"])
+@method(path="/project/<id>", operation="DELETE", client_types=[const.ClientType.api])
 def delete_project(id: uuid.UUID):
     """
         Delete the given project and all related data
     """
 
 
-@method(path="/project", operation="GET", client_types=["api"])
+@method(path="/project", operation="GET", client_types=[const.ClientType.api])
 def list_projects():
     """
         Create a list of projects
     """
 
 
-@method(path="/project/<id>", operation="GET", client_types=["api"])
+@method(path="/project/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_project(id: uuid.UUID):
     """
         Get a project and a list of the ids of all environments
@@ -94,7 +94,7 @@ def get_project(id: uuid.UUID):
 
 
 # Methods for working with environments
-@method(path="/environment", operation="PUT", client_types=["api"])
+@method(path="/environment", operation="PUT", client_types=[const.ClientType.api])
 def create_environment(
     project_id: uuid.UUID, name: str, repository: str = None, branch: str = None, environment_id: uuid.UUID = None
 ):
@@ -109,7 +109,7 @@ def create_environment(
     """
 
 
-@method(path="/environment/<id>", operation="POST", client_types=["api"])
+@method(path="/environment/<id>", operation="POST", client_types=[const.ClientType.api])
 def modify_environment(id: uuid.UUID, name: str, repository: str = None, branch: str = None):
     """
         Modify the given environment
@@ -121,7 +121,7 @@ def modify_environment(id: uuid.UUID, name: str, repository: str = None, branch:
     """
 
 
-@method(path="/environment/<id>", operation="DELETE", client_types=["api"])
+@method(path="/environment/<id>", operation="DELETE", client_types=[const.ClientType.api])
 def delete_environment(id: uuid.UUID):
     """
         Delete the given environment and all related data.
@@ -133,14 +133,19 @@ def delete_environment(id: uuid.UUID):
     """
 
 
-@method(path="/environment", operation="GET", client_types=["api"])
+@method(path="/environment", operation="GET", client_types=[const.ClientType.api])
 def list_environments():
     """
         Create a list of environments
     """
 
 
-@method(path="/environment/<id>", operation="GET", client_types=["api"], arg_options={"id": ArgOption(getter=add_env)})
+@method(
+    path="/environment/<id>",
+    operation="GET",
+    client_types=[const.ClientType.api],
+    arg_options={"id": ArgOption(getter=add_env)},
+)
 def get_environment(id: uuid.UUID, versions: int = None, resources: int = None):
     """
         Get an environment and all versions associated
@@ -161,7 +166,7 @@ def get_environment(id: uuid.UUID, versions: int = None, resources: int = None):
     arg_options=ENV_OPTS,
     api=True,
     agent_server=True,
-    client_types=["api", "agent", "compiler"],
+    client_types=[const.ClientType.api, const.ClientType.agent, const.ClientType.compiler],
 )
 def list_settings(tid: uuid.UUID):
     """
@@ -175,7 +180,7 @@ def list_settings(tid: uuid.UUID):
     arg_options=ENV_OPTS,
     api=True,
     agent_server=True,
-    client_types=["api", "agent", "compiler"],
+    client_types=[const.ClientType.api, const.ClientType.agent, const.ClientType.compiler],
 )
 def set_setting(tid: uuid.UUID, id: str, value: Union[PrimitiveTypes, JsonType]):
     """
@@ -189,7 +194,7 @@ def set_setting(tid: uuid.UUID, id: str, value: Union[PrimitiveTypes, JsonType])
     arg_options=ENV_OPTS,
     api=True,
     agent_server=True,
-    client_types=["api", "agent"],
+    client_types=[const.ClientType.api, const.ClientType.agent],
 )
 def get_setting(tid: uuid.UUID, id: str):
     """
@@ -203,7 +208,7 @@ def get_setting(tid: uuid.UUID, id: str):
     arg_options=ENV_OPTS,
     api=True,
     agent_server=True,
-    client_types=["api", "agent"],
+    client_types=[const.ClientType.api, const.ClientType.agent],
 )
 def delete_setting(tid: uuid.UUID, id: str):
     """
@@ -214,7 +219,12 @@ def delete_setting(tid: uuid.UUID, id: str):
 # Method for listing and creating auth tokens for an environment that can be used by the agent and compilers
 
 
-@method(path="/environment_auth", operation="POST", arg_options=ENV_OPTS, client_types=["api", "compiler"])
+@method(
+    path="/environment_auth",
+    operation="POST",
+    arg_options=ENV_OPTS,
+    client_types=[const.ClientType.api, const.ClientType.compiler],
+)
 def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
     """
         Create or get a new token for the given client types. Tokens generated with this call are scoped to the current
@@ -234,7 +244,7 @@ def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
     path="/decommission/<id>",
     operation="POST",
     arg_options={"id": ArgOption(getter=convert_environment)},
-    client_types=["api"],
+    client_types=[const.ClientType.api],
     api_version=1,
 )
 def decomission_environment(id: uuid.UUID, metadata: dict = None):
@@ -248,7 +258,7 @@ def decomission_environment(id: uuid.UUID, metadata: dict = None):
     path="/decommission/<id>",
     operation="DELETE",
     arg_options={"id": ArgOption(getter=convert_environment)},
-    client_types=["api"],
+    client_types=[const.ClientType.api],
 )
 def clear_environment(id: uuid.UUID):
     """
@@ -263,7 +273,12 @@ def clear_environment(id: uuid.UUID):
 
 # Send a heartbeat to indicate that an agent is alive
 @method(
-    path="/heartbeat", operation="POST", agent_server=True, validate_sid=False, arg_options=ENV_OPTS, client_types=["agent"]
+    path="/heartbeat",
+    operation="POST",
+    agent_server=True,
+    validate_sid=False,
+    arg_options=ENV_OPTS,
+    client_types=[const.ClientType.agent],
 )
 def heartbeat(sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: str):
     """
@@ -283,7 +298,7 @@ def heartbeat(sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: st
     operation="PUT",
     agent_server=True,
     arg_options={"sid": ArgOption(getter=ignore_env)},
-    client_types=["agent"],
+    client_types=[const.ClientType.agent],
 )
 def heartbeat_reply(sid: uuid.UUID, reply_id: uuid.UUID, data: dict):
     """
@@ -303,7 +318,7 @@ def heartbeat_reply(sid: uuid.UUID, reply_id: uuid.UUID, data: dict):
     operation="PUT",
     agent_server=True,
     api=True,
-    client_types=["api", "agent", "compiler"],
+    client_types=[const.ClientType.api, const.ClientType.agent, const.ClientType.compiler],
     arg_options={"id": ArgOption(getter=ignore_env)},
 )
 def upload_file(id: str, content: str):
@@ -320,7 +335,7 @@ def upload_file(id: str, content: str):
     operation="HEAD",
     agent_server=True,
     api=True,
-    client_types=["api", "agent", "compiler"],
+    client_types=[const.ClientType.api, const.ClientType.agent, const.ClientType.compiler],
     arg_options={"id": ArgOption(getter=ignore_env)},
 )
 def stat_file(id: str):
@@ -336,7 +351,7 @@ def stat_file(id: str):
     operation="GET",
     agent_server=True,
     api=True,
-    client_types=["api", "agent", "compiler"],
+    client_types=[const.ClientType.api, const.ClientType.agent, const.ClientType.compiler],
     arg_options={"id": ArgOption(getter=ignore_env)},
 )
 def get_file(id: str):
@@ -347,7 +362,12 @@ def get_file(id: str):
     """
 
 
-@method(path="/file", api=True, client_types=["api", "agent", "compiler"], arg_options={"files": ArgOption(getter=ignore_env)})
+@method(
+    path="/file",
+    api=True,
+    client_types=[const.ClientType.api, const.ClientType.agent, const.ClientType.compiler],
+    arg_options={"files": ArgOption(getter=ignore_env)},
+)
 def stat_files(files: list):
     """
         Check which files exist in the given list
@@ -367,7 +387,7 @@ def stat_files(files: list):
     validate_sid=False,
     arg_options=ENV_OPTS,
     api=True,
-    client_types=["api", "agent"],
+    client_types=[const.ClientType.api, const.ClientType.agent],
 )
 def get_resource(
     tid: uuid.UUID, id: str, logs: bool = None, status: bool = None, log_action: const.ResourceAction = None, log_limit: int = 0
@@ -385,7 +405,7 @@ def get_resource(
     """
 
 
-@method(path="/resource", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
+@method(path="/resource", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
 def get_resources_for_agent(
     tid: uuid.UUID, agent: str, sid: uuid.UUID = None, version: int = None, incremental_deploy: bool = False
 ):
@@ -402,7 +422,7 @@ def get_resources_for_agent(
     """
 
 
-@method(path="/resource", operation="POST", agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
+@method(path="/resource", operation="POST", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
 def resource_action_update(
     tid: uuid.UUID,
     resource_ids: list,
@@ -439,7 +459,7 @@ def resource_action_update(
 # Manage configuration model versions
 
 
-@method(path="/version", operation="GET", arg_options=ENV_OPTS, client_types=["api"])
+@method(path="/version", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def list_versions(tid: uuid.UUID, start: int = None, limit: int = None):
     """
         Returns a list of all available versions
@@ -450,7 +470,7 @@ def list_versions(tid: uuid.UUID, start: int = None, limit: int = None):
     """
 
 
-@method(path="/version/<id>", operation="GET", arg_options=ENV_OPTS, client_types=["api"])
+@method(path="/version/<id>", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def get_version(tid: uuid.UUID, id: int, include_logs: bool = None, log_filter: str = None, limit: int = None):
     """
         Get a particular version and a list of all resources in this version
@@ -463,7 +483,7 @@ def get_version(tid: uuid.UUID, id: int, include_logs: bool = None, log_filter: 
     """
 
 
-@method(path="/version/<id>", operation="DELETE", arg_options=ENV_OPTS, client_types=["api"])
+@method(path="/version/<id>", operation="DELETE", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def delete_version(tid: uuid.UUID, id: int):
     """
         Delete a particular version and resources
@@ -473,7 +493,7 @@ def delete_version(tid: uuid.UUID, id: int):
     """
 
 
-@method(path="/version", operation="PUT", arg_options=ENV_OPTS, client_types=["compiler"])
+@method(path="/version", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
 def put_version(
     tid: uuid.UUID,
     version: int,
@@ -498,7 +518,9 @@ def put_version(
     """
 
 
-@method(path="/version/<id>", operation="POST", arg_options=ENV_OPTS, client_types=["api", "compiler"])
+@method(
+    path="/version/<id>", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api, const.ClientType.compiler]
+)
 def release_version(tid: uuid.UUID, id: int, push: bool = False, agent_trigger_method: const.AgentTriggerMethod = None):
     """
         Release version of the configuration model for deployment.
@@ -511,7 +533,7 @@ def release_version(tid: uuid.UUID, id: int, push: bool = False, agent_trigger_m
     """
 
 
-@method(path="/deploy", operation="POST", arg_options=ENV_OPTS, client_types=["api"])
+@method(path="/deploy", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def deploy(
     tid: uuid.UUID,
     agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
@@ -529,7 +551,7 @@ def deploy(
 # Method for requesting and quering a dryrun
 
 
-@method(path="/dryrun/<id>", operation="POST", arg_options=ENV_OPTS, client_types=["api"])
+@method(path="/dryrun/<id>", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def dryrun_request(tid: uuid.UUID, id: int):
     """
         Do a dryrun
@@ -539,7 +561,7 @@ def dryrun_request(tid: uuid.UUID, id: int):
     """
 
 
-@method(path="/dryrun", operation="GET", arg_options=ENV_OPTS, client_types=["api"])
+@method(path="/dryrun", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def dryrun_list(tid: uuid.UUID, version: int = None):
     """
         Create a list of dry runs
@@ -549,7 +571,7 @@ def dryrun_list(tid: uuid.UUID, version: int = None):
     """
 
 
-@method(path="/dryrun/<id>", operation="GET", arg_options=ENV_OPTS, client_types=["api"])
+@method(path="/dryrun/<id>", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def dryrun_report(tid: uuid.UUID, id: uuid.UUID):
     """
         Create a dryrun report
@@ -559,7 +581,7 @@ def dryrun_report(tid: uuid.UUID, id: uuid.UUID):
     """
 
 
-@method(path="/dryrun/<id>", operation="PUT", agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
+@method(path="/dryrun/<id>", operation="PUT", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
 def dryrun_update(tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
     """
         Store dryrun results at the server
@@ -589,14 +611,24 @@ def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
 # Method to notify the server of changes in the configuration model source code
 
 
-@method(path="/notify/<id>", operation="GET", arg_options={"id": ArgOption(getter=convert_environment)}, client_types=["api"])
+@method(
+    path="/notify/<id>",
+    operation="GET",
+    arg_options={"id": ArgOption(getter=convert_environment)},
+    client_types=[const.ClientType.api],
+)
 def notify_change_get(id: uuid.UUID, update: bool = True):
     """
         Simplified GET version of the POST method
     """
 
 
-@method(path="/notify/<id>", operation="POST", arg_options={"id": ArgOption(getter=convert_environment)}, client_types=["api"])
+@method(
+    path="/notify/<id>",
+    operation="POST",
+    arg_options={"id": ArgOption(getter=convert_environment)},
+    client_types=[const.ClientType.api],
+)
 def notify_change(id: uuid.UUID, update: bool = True, metadata: dict = {}):
     """
         Notify the server that the repository of the environment with the given id, has changed.
@@ -607,7 +639,7 @@ def notify_change(id: uuid.UUID, update: bool = True, metadata: dict = {}):
     """
 
 
-@method(path="/notify/<id>", operation="HEAD", client_types=["api"])
+@method(path="/notify/<id>", operation="HEAD", client_types=[const.ClientType.api])
 def is_compiling(id: uuid.UUID):
     """
        Is a compiler running for the given environment
@@ -619,7 +651,12 @@ def is_compiling(id: uuid.UUID):
 # Get and set parameters on the server
 
 
-@method(path="/parameter/<id>", operation="GET", arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
+@method(
+    path="/parameter/<id>",
+    operation="GET",
+    arg_options=ENV_OPTS,
+    client_types=[const.ClientType.api, const.ClientType.compiler, const.ClientType.agent],
+)
 def get_param(tid: uuid.UUID, id: str, resource_id: str = None):
     """
         Get a parameter from the server.
@@ -636,7 +673,12 @@ def get_param(tid: uuid.UUID, id: str, resource_id: str = None):
     """
 
 
-@method(path="/parameter/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
+@method(
+    path="/parameter/<id>",
+    operation="PUT",
+    arg_options=ENV_OPTS,
+    client_types=[const.ClientType.api, const.ClientType.compiler, const.ClientType.agent],
+)
 def set_param(
     tid: uuid.UUID, id: str, source: str, value: str, resource_id: str = None, metadata: dict = {}, recompile: bool = False
 ):
@@ -654,7 +696,12 @@ def set_param(
     """
 
 
-@method(path="/parameter/<id>", operation="DELETE", arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
+@method(
+    path="/parameter/<id>",
+    operation="DELETE",
+    arg_options=ENV_OPTS,
+    client_types=[const.ClientType.api, const.ClientType.compiler, const.ClientType.agent],
+)
 def delete_param(tid: uuid.UUID, id: str, resource_id: str = None):
     """
         Delete a parameter on the server
@@ -665,7 +712,9 @@ def delete_param(tid: uuid.UUID, id: str, resource_id: str = None):
     """
 
 
-@method(path="/parameter", operation="POST", arg_options=ENV_OPTS, client_types=["api", "compiler"])
+@method(
+    path="/parameter", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api, const.ClientType.compiler]
+)
 def list_params(tid: uuid.UUID, query: dict = {}):
     """
         List/query parameters in this environment
@@ -678,7 +727,13 @@ def list_params(tid: uuid.UUID, query: dict = {}):
 #  Get and set parameters on the server
 
 
-@method(path="/parameters", operation="PUT", agent_server=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
+@method(
+    path="/parameters",
+    operation="PUT",
+    agent_server=True,
+    arg_options=ENV_OPTS,
+    client_types=[const.ClientType.api, const.ClientType.compiler, const.ClientType.agent],
+)
 def set_parameters(tid: uuid.UUID, parameters: list):
     """
         Set a parameter on the server
@@ -710,7 +765,7 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
 # Upload code to the server
 
 
-@method(path="/code/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=["compiler"])
+@method(path="/code/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
 def upload_code(tid: uuid.UUID, id: int, resource: str, sources: dict):
     """
         Upload the supporting code to the server
@@ -722,7 +777,7 @@ def upload_code(tid: uuid.UUID, id: int, resource: str, sources: dict):
     """
 
 
-@method(path="/code/<id>", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
+@method(path="/code/<id>", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
 def get_code(tid: uuid.UUID, id: int, resource: str):
     """
         Get the code for a given version of the configuration model
@@ -735,7 +790,7 @@ def get_code(tid: uuid.UUID, id: int, resource: str):
 # Upload code to the server
 
 
-@method(path="/codebatched/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=["compiler"])
+@method(path="/codebatched/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
 def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
     """
         Upload the supporting code to the server
@@ -749,7 +804,7 @@ def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
 # Generate download the diff of two hashes
 
 
-@method(path="/filediff", client_types=["api"])
+@method(path="/filediff", client_types=[const.ClientType.api])
 def diff(a: str, b: str):
     """
         Returns the diff of the files with the two given ids
@@ -759,7 +814,7 @@ def diff(a: str, b: str):
 # Get a list of compile reports
 
 
-@method(path="/compilereport", operation="GET", arg_options=ENV_OPTS, client_types=["api"])
+@method(path="/compilereport", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def get_reports(tid: uuid.UUID, start: str = None, end: str = None, limit: int = None):
     """
         Return compile reports newer then start
@@ -771,7 +826,7 @@ def get_reports(tid: uuid.UUID, start: str = None, end: str = None, limit: int =
     """
 
 
-@method(path="/compilereport/<id>", operation="GET", client_types=["api"])
+@method(path="/compilereport/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_report(id: uuid.UUID):
     """
         Get a compile report from the server
@@ -783,7 +838,7 @@ def get_report(id: uuid.UUID):
 # Get a list of all agents
 
 
-@method(path="/agentproc", operation="GET", client_types=["api"])
+@method(path="/agentproc", operation="GET", client_types=[const.ClientType.api])
 def list_agent_processes(environment: uuid.UUID = None, expired: bool = True):
     """
         Return a list of all nodes and the agents for these nodes
@@ -794,7 +849,7 @@ def list_agent_processes(environment: uuid.UUID = None, expired: bool = True):
     """
 
 
-@method(path="/agentproc/<id>", operation="GET", client_types=["api"])
+@method(path="/agentproc/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_agent_process(id: uuid.UUID):
     """
         Return a detailed report for a node
@@ -805,7 +860,7 @@ def get_agent_process(id: uuid.UUID):
 
 
 # Get a list of all agents
-@method(path="/agent/<id>", operation="POST", api=True, timeout=5, arg_options=ENV_OPTS, client_types=["api"])
+@method(path="/agent/<id>", operation="POST", api=True, timeout=5, arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def trigger_agent(tid: uuid.UUID, id: str):
     """
         Request the server to reload an agent
@@ -816,7 +871,7 @@ def trigger_agent(tid: uuid.UUID, id: str):
     """
 
 
-@method(path="/agent", operation="GET", api=True, timeout=5, arg_options=ENV_OPTS, client_types=["api"])
+@method(path="/agent", operation="GET", api=True, timeout=5, arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def list_agents(tid: uuid.UUID):
     """
         List all agent for an environment
@@ -881,7 +936,7 @@ def resource_event(
 # Methods for the agent to get its initial state from the server
 
 
-@method(path="/agentrecovery", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
+@method(path="/agentrecovery", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
 def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
     """
         Get the state for this agent.
@@ -893,7 +948,7 @@ def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
     """
 
 
-@typedmethod(path="/serverstatus", operation="GET", client_types=["api"])
+@typedmethod(path="/serverstatus", operation="GET", client_types=[const.ClientType.api])
 def get_server_status() -> model.StatusResponse:
     """
         Get the status of the server
@@ -901,7 +956,12 @@ def get_server_status() -> model.StatusResponse:
 
 
 @typedmethod(
-    path="/compilequeue", operation="GET", arg_options=ENV_OPTS, client_types=["api"], api_version=1, envelope_key="queue"
+    path="/compilequeue",
+    operation="GET",
+    arg_options=ENV_OPTS,
+    client_types=[const.ClientType.api],
+    api_version=1,
+    envelope_key="queue",
 )
 def get_compile_queue(tid: uuid.UUID) -> List[model.CompileRun]:
     """

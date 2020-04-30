@@ -3,7 +3,13 @@
 ## Fixed
 - Fixed issue of autostarted agents not being restarted on environment setting change (#2049)
 
-# v 2020.2 (2020-04-27) Changes in this release:
+## Added
+- Added cleanup mechanism of old compile reports (#2054)
+- Documentation on valid client types (#2015)
+- Added `compiler.json` option and `--json` compile flag to export structured compile data such as occurred errors (#1206)
+
+
+# v 2020.2 (2020-04-24) Changes in this release:
 
 ## Breaking changes
 - Non-boolean arguments to boolean operators are no longer allowed, this was previously possible due to bug (#1808)

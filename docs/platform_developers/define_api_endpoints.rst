@@ -17,9 +17,10 @@ An example is shown in the code snippet below.
 .. code-block:: python
 
     import uuid
+    from inmanta.const import ClientType
     from inmanta.protocol.decorators import method
 
-    @method(path="/project/<id>", operation="GET", client_types=["api"])
+    @method(path="/project/<id>", operation="GET", client_types=[ClientType.api])
     def get_project(id: uuid.UUID):
         """
             Get a project and a list of the ids of all environments.
