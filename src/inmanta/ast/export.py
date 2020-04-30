@@ -34,7 +34,8 @@ class Exportable:
 
 class Position(BaseModel):
     """
-        Position in a file. Based on the LSP spec 3.15
+        Position in a file. Based on the
+        `LSP spec 3.15 <https://microsoft.github.io/language-server-protocol/specifications/specification-3-15/#position>`__
     """
 
     line: int
@@ -43,7 +44,8 @@ class Position(BaseModel):
 
 class Range(BaseModel):
     """
-        Range in a file. Based on the LSP spec 3.15
+        Range in a file. Based on the
+        `LSP spec 3.15 <https://microsoft.github.io/language-server-protocol/specifications/specification-3-15/#range>`__
     """
 
     start: Position
@@ -52,7 +54,8 @@ class Range(BaseModel):
 
 class Location(BaseModel):
     """
-        Location in a file. Based on the LSP spec 3.15
+        Location in a file. Based on the
+        `LSP spec 3.15 <https://microsoft.github.io/language-server-protocol/specifications/specification-3-15/#location>`__
     """
 
     uri: str
@@ -60,16 +63,50 @@ class Location(BaseModel):
 
 
 class ErrorCategory(str, Enum):
+    """
+        Category of an error.
+    """
+
     plugin = "plugin_exception"
+    """
+        Explicitly raised :py:class`inmanta.plugins.PluginException` by a plugin.
+    """
+
     parser = "parse_error"
+    """
+        Error occurred while parsing.
+    """
+
     runtime = "runtime_error"
+    """
+        Error occurred after parsing.
+    """
 
 
 class Error(BaseModel):
+    """
+        Error occurred while trying to compile.
+    """
+
     category: ErrorCategory = ErrorCategory.runtime
-    type: str  # str(type(exception))
+    """
+        Category of this error.
+    """
+
+    type: str
+    """
+        Fully qualified name of the actual exception.
+    """
+
     message: str
+    """
+        Error message.
+    """
+
     location: Optional[Location] = None
+    """
+        Location where this error occurred.
+    """
 
     class Config:
         # allow additional fields to be set for exception types that require it
