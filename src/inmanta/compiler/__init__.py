@@ -36,12 +36,14 @@ from inmanta.ast import (
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.compiler import config as compiler_config
+from inmanta.compiler.data import CompileData
 from inmanta.execute import scheduler
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
 from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ResultVariable
 from inmanta.module import Project
+from inmanta.parser import ParserException
 from inmanta.plugins import PluginMeta
 
 LOGGER = logging.getLogger(__name__)
@@ -56,7 +58,10 @@ def do_compile(refs={}):
 
     LOGGER.debug("Starting compile")
 
-    (statements, blocks) = compiler.compile()
+    try:
+        (statements, blocks) = compiler.compile()
+    except ParserException as e:
+        compiler.handle_exception(e)
     sched = scheduler.Scheduler(compiler_config.track_dataflow())
     try:
         success = sched.run(compiler, statements, blocks)
@@ -64,11 +69,14 @@ def do_compile(refs={}):
         if compiler_config.dataflow_graphic_enable.get():
             show_dataflow_graphic(sched, compiler)
         compiler.handle_exception(e)
+        success = False
 
     LOGGER.debug("Compile done")
 
     if not success:
         sys.stderr.write("Unable to execute all statements.\n")
+    if compiler_config.json.get():
+        compiler.export_data()
     if compiler_config.dataflow_graphic_enable.get():
         show_dataflow_graphic(sched, compiler)
     return (sched.get_types(), compiler.get_ns())
@@ -117,6 +125,7 @@ class Compiler(object):
 
         self.__cf_file = cf_file
         self.__root_ns = None
+        self._data: CompileData = CompileData()
         self.refs = refs
 
     def get_plugins(self):
@@ -205,7 +214,26 @@ class Compiler(object):
         statements.append(requires_rel)
         return (statements, blocks)
 
+    def export_data(self) -> None:
+        """
+            Exports compiler data if the option has been set.
+        """
+        with open(compiler_config.json_file.get(), "w") as file:
+            file.write("%s\n" % self._data.export().json())
+
     def handle_exception(self, exception: CompilerException) -> None:
+        try:
+            self._handle_exception_datatrace(exception)
+        except CompilerException as e:
+            self._handle_exception_export(e)
+
+    def _handle_exception_export(self, exception: CompilerException) -> None:
+        self._data.add_error(exception)
+        if compiler_config.json.get():
+            self.export_data()
+        raise exception
+
+    def _handle_exception_datatrace(self, exception: CompilerException) -> None:
         if not compiler_config.datatrace_enable.get():
             raise exception
 
