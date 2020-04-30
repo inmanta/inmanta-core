@@ -18,7 +18,7 @@
 
 from collections import Mapping
 from copy import copy
-from typing import Any, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 from inmanta.ast import RuntimeException
 from inmanta.execute.util import NoneValue, Unknown
