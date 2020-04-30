@@ -86,7 +86,7 @@ def method(
         :param agent_server: This is a call from the Agent to the Server
         :param validate_sid: This call requires a valid session, true by default if agent_server and not api
         :param client_types: The allowed client types for this call.
-                The valid values defined by the :const:`inmanta.const.VALID_CLIENT_TYPES` constant.
+                The valid values are defined by the :const:`inmanta.const.ClientType` enum.
         :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
             which the options apply. The value is another dict that can contain the following options:
                 header: Map this argument to a header with the following name.
@@ -152,7 +152,7 @@ def typedmethod(
         :param agent_server: This is a call from the Agent to the Server
         :param validate_sid: This call requires a valid session, true by default if agent_server and not api
         :param client_types: The allowed client types for this call.
-                The valid values defined by the :const:`inmanta.const.VALID_CLIENT_TYPES` constant.
+                The valid values are defined by the :const:`inmanta.const.ClientType` enum.
         :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
             which the options apply. The value is another dict that can contain the following options:
                 header: Map this argument to a header with the following name.
