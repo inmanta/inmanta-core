@@ -7,6 +7,7 @@
 - Added cleanup mechanism of old compile reports (#2054)
 - Documentation on valid client types (#2015)
 - Added `compiler.json` option and `--json` compile flag to export structured compile data such as occurred errors (#1206)
+- Added further documentation to inmanta-cli command (#2057)
 
 
 # v 2020.2 (2020-04-24) Changes in this release:
