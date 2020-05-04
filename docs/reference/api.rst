@@ -4,7 +4,7 @@ Inmanta API reference
 This page describes parts of the compiler that provide a stable API that could be used from modules.
 
 .. warning::
-    Only those parts explicitly mentioned here are part of the internal API. They provide a stable
+    Only those parts explicitly mentioned here are part of the API. They provide a stable
     interface. Other parts of the containing modules provide no such guarantees.
 
 
