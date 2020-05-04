@@ -14,7 +14,7 @@ pytest-instafail==0.4.1.post0
 pytest-randomly==3.3.1
 pytest-sugar==0.9.3
 pytest-asyncio==0.10.0
-pytest-xdist==1.31.0
+pytest-xdist==1.32.0
 pytest==5.4.1
 python-dateutil==2.8.1
 pyyaml==5.3.1
@@ -29,7 +29,7 @@ sphinxcontrib-serializinghtml==1.1.4
 sphinxcontrib-redoc==1.6.0
 texttable==1.6.2
 tornado==6.0.4
-tox==3.14.6
+tox==3.15.0
 tox-venv==0.4.0
 typing==3.7.4.1
 asyncpg==0.20.1
@@ -46,7 +46,7 @@ pydantic==1.5.1
 isort==4.3.21
 flake8-isort==3.0.0
 black==19.10b0
-typing_inspect==0.5.0
+typing_inspect==0.6.0
 importlib_metadata==1.6.0
 mypy==0.770
 setuptools==46.1.3
