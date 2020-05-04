@@ -220,20 +220,30 @@ def project_create(client: Client, name: str) -> None:
     print_table(["Name", "Value"], [["ID", project["id"]], ["Name", project["name"]]])
 
 
-@project.command(name="modify", help="Modify an existing project")
+@project.command(name="modify")
 @click.option("--name", "-n", help="The new name of the project", required=True)
 @click.argument("project")
 @click.pass_obj
 def project_modify(client: Client, name: str, project: str) -> None:
+    """
+    Modify an existing project.
+
+    PROJECT: The the id or name of the project to modify
+    """
     project_id = client.to_project_id(project)
     project_data = client.get_dict("modify_project", "project", dict(id=project_id, name=name))
     print_table(["Name", "Value"], [["ID", project_data["id"]], ["Name", project_data["name"]]])
 
 
-@project.command(name="delete", help="Delete an existing project")
+@project.command(name="delete")
 @click.argument("project")
 @click.pass_obj
 def project_delete(client: Client, project: str) -> None:
+    """
+    Delete an existing project.
+
+    PROJECT: The the id or name of the project to delete
+    """
     project_id = client.to_project_id(project)
     client.do_request("delete_project", arguments={"id": project_id})
     click.echo("Project successfully deleted")
@@ -325,25 +335,35 @@ def environment_list(client: Client) -> None:
         click.echo("No environment defined.")
 
 
-@environment.command(name="show", help="Show details of an environment")
+@environment.command(name="show")
 @click.argument("environment")
 @click.pass_obj
 def environment_show(client: Client, environment: str) -> None:
+    """
+    Show details of an environment
+
+    ENVIRONMENT: ID or name of the environment to show
+    """
     env = client.get_dict("get_environment", "environment", dict(id=client.to_environment_id(environment)))
     print_table(
         ["ID", "Name", "Repository URL", "Branch Name"], [[env["id"], env["name"], env["repo_url"], env["repo_branch"]]]
     )
 
 
-@environment.command(name="save", help="Save the ID of the environment and the server to the .inmanta config file")
+@environment.command(name="save")
 @click.argument("environment")
 @click.pass_obj
 def environment_write_config(client: Client, environment: str) -> None:
+    """
+        Save the ID of the environment and the server to the .inmanta config file
+
+        ENVIRONMENT: ID or name of the environment to write the config for
+    """
     env = client.get_dict("get_environment", "environment", dict(id=client.to_environment_id(environment)))
     save_config(client, env)
 
 
-@environment.command(name="modify", help="Modify an existing environment")
+@environment.command(name="modify")
 @click.option("--name", "-n", help="The name of the new environment", required=True)
 @click.option(
     "--repo-url", "-r", required=False, default="", help="The url of the repository that contains the configuration model"
@@ -358,6 +378,11 @@ def environment_write_config(client: Client, environment: str) -> None:
 @click.argument("environment")
 @click.pass_obj
 def environment_modify(client: Client, environment: str, name: str, repo_url: str, branch: str) -> None:
+    """
+    Modify an existing environment
+
+
+    """
     env = client.get_dict(
         "modify_environment",
         "environment",
@@ -369,10 +394,15 @@ def environment_modify(client: Client, environment: str, name: str, repo_url: st
     )
 
 
-@environment.command(name="delete", help="Delete an existing environment")
+@environment.command(name="delete")
 @click.argument("environment")
 @click.pass_obj
 def environment_delete(client: Client, environment: str) -> None:
+    """
+    Delete an existing environment
+
+    ENVIRONMENT: ID or name of the environment to delete
+    """
     env_id = client.to_environment_id(environment)
     client.do_request("delete_environment", arguments=dict(id=env_id))
     click.echo("Environment successfully deleted")
@@ -628,7 +658,7 @@ def param_get(client: Client, environment: str, name: str, resource: str) -> Non
     print_table(["Name", "Value", "Source", "Updated"], [[param["name"], param["value"], param["source"], param["updated"]]])
 
 
-@version.command(name="report", help="Get a report about a version")
+@version.command(name="report", help="Get a report about a version, describing the involved resources, agents and actions")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option("--version", "-i", help="The version to create a report from", required=True)
 @click.option("-l", is_flag=True, help="Show a detailed version of the report")
@@ -687,7 +717,11 @@ def version_report(client: Client, environment: str, version: str, l: bool) -> N
             click.echo("")
 
 
-@cmd.command(name="monitor", help="Monitor the deployment of the configuration model in an environment")
+@cmd.command(
+    name="monitor",
+    help="Monitor the deployment process of the configuration model in an environment, "
+    "receiving continuous updates on the deployment status",
+)
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.pass_obj
 def monitor_deploy(client: Client, environment: str) -> None:
