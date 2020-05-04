@@ -510,7 +510,7 @@ class AuthJWTConfig(object):
 
         self.client_types = is_list(self._config["client_types"])
         for ct in self.client_types:
-            if ct not in const.VALID_CLIENT_TYPES:
+            if ct not in [client_type for client_type in const.ClientType]:
                 raise ValueError("invalid client_type %s in %s" % (ct, self.section))
 
         if "expire" in self._config:
