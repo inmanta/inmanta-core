@@ -5,6 +5,7 @@
 
 ## Added
 - Added cleanup mechanism of old compile reports (#2054)
+- Added troubleshooting documentation (#1211)
 
 # v 2020.2 (2020-04-24) Changes in this release:
 

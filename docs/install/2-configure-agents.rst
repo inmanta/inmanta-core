@@ -1,3 +1,5 @@
+.. _configure_agents:
+
 Configure agents
 ****************
 
