@@ -619,7 +619,7 @@ def stringify_exception(exn: Exception) -> str:
 
 class ExternalException(RuntimeException):
     """
-    When a plugin call produces an exception that is not a RuntimeException,
+    When a plugin call produces an exception that is not a :py:class:`RuntimeException`,
     it is wrapped in an ExternalException to make it conform to the expected interface
     """
 
@@ -648,7 +648,7 @@ class ExternalException(RuntimeException):
 
 class ExplicitPluginException(ExternalException):
     """
-        Base exception for wrapping explicit PluginExceptions raised from a plugin call.
+        Base exception for wrapping an explicit :py:class:`inmanta.plugins.PluginException` raised from a plugin call.
     """
 
     def __init__(self, stmt: Locatable, msg: str, cause: "PluginException") -> None:

@@ -40,3 +40,6 @@ class ExportCompileData(BaseModel):
     """
 
     errors: List[ast_export.Error]
+    """
+        All errors occurred while trying to compile.
+    """
