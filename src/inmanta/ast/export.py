@@ -69,7 +69,7 @@ class ErrorCategory(str, Enum):
 
     plugin = "plugin_exception"
     """
-        Explicitly raised :py:class`inmanta.plugins.PluginException` by a plugin.
+        A plugin explicitly raised an :py:class:`inmanta.plugins.PluginException`.
     """
 
     parser = "parse_error"
