@@ -28,7 +28,6 @@ requires = [
     "pytest-env",
     "pytest-postgresql",
     "tornado",
-    "typing",
 ]
 
 this_directory = path.abspath(path.dirname(__file__))
