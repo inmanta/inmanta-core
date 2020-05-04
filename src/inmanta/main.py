@@ -203,7 +203,7 @@ def project_show(client: Client, project: str) -> None:
     """
     Show the details of a single project
 
-    PROJECT: The the id or name of the project to show
+    PROJECT: The id or name of the project to show
     """
     project_id = client.to_project_id(project)
     project_data = client.get_dict("get_project", "project", dict(id=project_id))
@@ -228,7 +228,7 @@ def project_modify(client: Client, name: str, project: str) -> None:
     """
     Modify an existing project.
 
-    PROJECT: The the id or name of the project to modify
+    PROJECT: The id or name of the project to modify
     """
     project_id = client.to_project_id(project)
     project_data = client.get_dict("modify_project", "project", dict(id=project_id, name=name))
@@ -242,7 +242,7 @@ def project_delete(client: Client, project: str) -> None:
     """
     Delete an existing project.
 
-    PROJECT: The the id or name of the project to delete
+    PROJECT: The id or name of the project to delete
     """
     project_id = client.to_project_id(project)
     client.do_request("delete_project", arguments={"id": project_id})
@@ -381,7 +381,7 @@ def environment_modify(client: Client, environment: str, name: str, repo_url: st
     """
     Modify an existing environment
 
-
+    ENVIRONMENT: ID or name of the environment to modify
     """
     env = client.get_dict(
         "modify_environment",
@@ -557,7 +557,7 @@ def version_list(client: Client, environment: str) -> None:
     )
 
 
-@version.command(name="release", help="Release the specified version")
+@version.command(name="release")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option("--push", "-p", help="Push the version to the deployment agents", is_flag=True)
 @click.option(
@@ -569,6 +569,11 @@ def version_list(client: Client, environment: str) -> None:
 @click.argument("version")
 @click.pass_obj
 def version_release(client: Client, environment: str, push: bool, full: bool, version: str) -> None:
+    """
+    Release the specified version of the configuration model for deployment.
+
+    VERSION: Version of the model to release
+    """
     env_id = client.to_environment_id(environment)
     if push:
         trigger_method = AgentTriggerMethod.get_agent_trigger_method(full)
