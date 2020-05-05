@@ -2,6 +2,7 @@
 
 ## Fixed
 - Fixed issue of autostarted agents not being restarted on environment setting change (#2049)
+- Cancel scheduled deploy operations of an agent when that agent is paused (#2077)
 
 ## Added
 - Added cleanup mechanism of old compile reports (#2054)

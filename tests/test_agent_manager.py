@@ -26,6 +26,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from inmanta import config, data
+from inmanta.agent import config as agent_config
 from inmanta.agent import Agent, agent
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result
@@ -804,3 +805,55 @@ async def test_restart_on_environment_setting(server, client, environment, caplo
             ),
             10,
         )
+
+
+@pytest.mark.asyncio
+async def test_failover_doesnt_make_paused_agent_primary(server, client, environment, agent_factory):
+    """
+        This test verifies that:
+
+         * The standby agent doesn't take over when the agent is paused.
+         * Session expiry doesn't make a standby agent primary when the agent is paused.
+    """
+    agent_name = "agent1"
+    agent_config.agent_names.set(agent_name)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    env_id = UUID(environment)
+    env = await data.Environment.get_by_id(env_id)
+    await agentmanager.ensure_agent_registered(env, agent_name)
+
+    # Create two agent instances for the same agent (primary + standby agent)
+    first_agent = await agent_factory(environment=environment, agent_map={agent_name: ""}, agent_names=[agent_name])
+    # Wait until first_agent is elected as primary
+    await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 1, timeout=10)
+    second_agent = await agent_factory(environment=environment, agent_map={agent_name: ""}, agent_names=[agent_name])
+
+    # Wait until both agents have a session with the server
+    await retry_limited(lambda: len(agentmanager.sessions) == 2, timeout=10)
+
+    # Both agents have a session to the server, first_agent is primary
+    assert len(agentmanager.sessions) == 2
+    assert len(agentmanager.tid_endpoint_to_session) == 1
+    # first_agent is primary
+    assert agentmanager.tid_endpoint_to_session[(env_id, agent_name)].id == first_agent.sessionid
+
+    # Pause agent1
+    result = await client.agent_action(tid=environment, name=agent_name, action=AgentAction.pause.value)
+    assert result.code == 200
+
+    # Two agents have a session to the server, none of them is primary. The agent is paused
+    assert len(agentmanager.sessions) == 2
+    assert len(agentmanager.tid_endpoint_to_session) == 0
+
+    # Stop one of the agents
+    await first_agent.stop()
+
+    # Wait until session expires
+    await retry_limited(lambda: len(agentmanager.sessions) == 1 and len(agentmanager.tid_endpoint_to_session) == 0, timeout=10)
+
+    # One agent has a session to the server, none of them is primary. The agent is paused
+    assert len(agentmanager.sessions) == 1
+    assert len(agentmanager.tid_endpoint_to_session) == 0
+
+

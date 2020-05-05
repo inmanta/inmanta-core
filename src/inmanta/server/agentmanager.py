@@ -472,14 +472,19 @@ class AgentManager(ServerSlice, SessionListener):
 
             Note: Always call under session lock.
         """
+        agent_statuses = await data.Agent.get_statuses(session.tid, endpoints)
         result = []
         for endpoint_name in endpoints:
             key = (session.tid, endpoint_name)
             if key in self.tid_endpoint_to_session and self.tid_endpoint_to_session[key].id == session.id:
-                new_active_session = await self._use_new_active_session_for_agent(session.tid, endpoint_name)
-                if new_active_session:
-                    result.append((endpoint_name, new_active_session.id))
+                if agent_statuses[endpoint_name] != AgentStatus.paused:
+                    new_active_session = await self._use_new_active_session_for_agent(session.tid, endpoint_name)
+                    if new_active_session:
+                        result.append((endpoint_name, new_active_session.id))
+                    else:
+                        result.append((endpoint_name, None))
                 else:
+                    del self.tid_endpoint_to_session[key]
                     result.append((endpoint_name, None))
         return result
 

@@ -447,6 +447,12 @@ class ResourceScheduler(object):
     def is_normal_deploy_running(self) -> bool:
         return not self.finished() and not self.is_repair
 
+    def cancel(self) -> None:
+        for ra in self.generation.values():
+            ra.cancel()
+        self.generation = {}
+        self.cad = {}
+
     def reload(
         self,
         resources: List[Resource],
@@ -486,8 +492,7 @@ class ResourceScheduler(object):
                     # increment overrules increment
                     self.logger.info("Terminating run '%s' for '%s'", self.reason, reason)
             # cancel old run
-            for ra in self.generation.values():
-                ra.cancel()
+            self.cancel()
 
         # start new run
         self.reason = reason
@@ -645,6 +650,10 @@ class AgentInstance(object):
 
         self._disable_time_triggers()
         self._enabled = False
+
+        # Cancel the ongoing deployment if exists
+        self._nq.cancel()
+
         return 200, "paused"
 
     def _enable_time_triggers(self) -> None:
