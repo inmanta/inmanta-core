@@ -50,6 +50,7 @@ Currently, the Inmanta project is mainly developed and maintained by `Inmanta nv
     faq
     glossary
     reference/index
+    troubleshooting
 
 Additional resources
 --------------------

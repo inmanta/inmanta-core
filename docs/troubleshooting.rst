@@ -15,13 +15,13 @@ Filter on resources in the available state and check which resource are ready to
 dependencies or a resource for which all dependencies were deployed successfully). The agent of that resource, is the agent that
 causes the problem. In the figure below, the epel-release package should be ready to deploy on agent vm2
 
-.. figure:: ./images/troubleshooting/resources_overview_stuck_in_available_state.png
+.. figure:: ./_static/troubleshooting/resources_overview_stuck_in_available_state.png
    :width: 100%
    :align: center
 
 Next, go to the agents tab of the dashboard to verify the state of that agent.
 
-.. figure:: ./images/troubleshooting/agent_is_paused.png
+.. figure:: ./_static/troubleshooting/agent_is_paused.png
    :width: 100%
    :align: center
 
@@ -46,7 +46,7 @@ The agent is paused
 
 Unpause the agent by clicking the ``Unpause agent`` button in the agents tab of the dashboard.
 
-.. figure:: ./images/troubleshooting/agent_is_paused.png
+.. figure:: ./_static/troubleshooting/agent_is_paused.png
    :width: 100%
    :align: center
 
@@ -62,7 +62,7 @@ environment ID can be found in the URL of the dashboard. More information about 
 ``/var/log/inmanta/agent.log``. If the log file doesn't provide any more information, trigger the agents to execute a
 deployment by clicking on the ``Force Repair`` button in the versions tab of the dashboard, as shown in the figure below:
 
-.. figure:: ./images/troubleshooting/force_repair_button.png
+.. figure:: ./_static/troubleshooting/force_repair_button.png
    :width: 100%
    :align: center
 
@@ -109,19 +109,19 @@ version of the configuration model being deployed to get a list of all the resou
 the magnifier in front of a resource, as shown in the figure below, to get the logs for that specific resource. The log messages
 for the different stages of the deployment are grouped together.
 
-.. figure:: ./images/troubleshooting/get_logs_failed_resource.png
+.. figure:: ./_static/troubleshooting/get_logs_failed_resource.png
    :width: 100%
    :align: center
 
 The magnifier in front of each log message can be used to get a more structured output for that specific log message.
 
-.. figure:: ./images/troubleshooting/action_log.png
+.. figure:: ./_static/troubleshooting/action_log.png
    :width: 100%
    :align: center
 
 In the figure below, the traceback of the exception is shown.
 
-.. figure:: ./images/troubleshooting/action_log_specific_message.png
+.. figure:: ./_static/troubleshooting/action_log_specific_message.png
    :width: 100%
    :align: center
 
@@ -134,7 +134,7 @@ Check which facts are not yet resolved
 To find out which fact of a certain resource is not yet resolved, click on the magnifier in front of the resource in the
 ``undefined`` state, as shown in the figure below.
 
-.. figure:: ./images/troubleshooting/resources_in_the_undefined_state.png
+.. figure:: ./_static/troubleshooting/resources_in_the_undefined_state.png
    :width: 100%
    :align: center
 
@@ -142,7 +142,7 @@ The list of attributes of that resource, will contain one attribute which is mar
 attribute that wasn't resolved yet. Track the source of this attribute down within the configuration model to find out why this
 attribute is undefined.
 
-.. figure:: ./images/troubleshooting/undefined_attribute.png
+.. figure:: ./_static/troubleshooting/undefined_attribute.png
    :width: 100%
    :align: center
 
@@ -155,7 +155,7 @@ Agent doesn't come up
 This section explains how to troubleshoot the problem where an agent is in the down state while it should be up. In the figure
 shown below, the agent vm1 is down.
 
-.. figure:: ./images/troubleshooting/agent_in_down_state.png
+.. figure:: ./_static/troubleshooting/agent_in_down_state.png
    :width: 100%
    :align: center
 
@@ -173,7 +173,7 @@ Auto-started agents
 An auto-started agent is only started when that agent is present in the ``autostart_agent_map`` environment setting. Verify that
 requirement via the settings tab of the inmanta dashboard as shown in the figure below.
 
-.. figure:: ./images/troubleshooting/environment_settings_autostart_agent_map.png
+.. figure:: ./_static/troubleshooting/environment_settings_autostart_agent_map.png
    :width: 100%
    :align: center
 
@@ -191,6 +191,11 @@ agent is added as an endpoint to the process:
 
 
 When the agent is not added as an endpoint, log an issue on https://github.com/inmanta/inmanta/issues.
+
+An autostarted-agent connects to the Inmanta server via the address configured in the
+:inmanta.config:option:`server.server-address` config option. If this option is set incorrectly, the agent will not be able to
+connect to the server.
+
 
 .. _manually_started_agents:
 
@@ -217,6 +222,26 @@ output and the standard error streams produced by the agent, can be obtained via
     $ journalctl -u inmanta-agent
 
 
+Potential reasons why an agent doesn't start
+--------------------------------------------
+
+This section provides a list of potential reasons why an agent wouldn't start:
+
+* **bind-address set incorrectly:** The Inmanta server listens on all the interfaces configured
+  via the :inmanta.config:option:`server.bind-address` option. If the server doesn't listen on an interface used by a remote
+  agent, the agent will not be able to connect to the server.
+* **Authentication issue:** If the Inmanta server has been setup with authentication, a misconfiguration may deny an agent
+  access to the Inmanta API. For example, not configuring a token provider (issuer) with ``sign=true`` in the ``auth_jwt_<ID>``
+  section of the Inmanta configuration file. Documentation on how to configure authentication correctly can be found
+  :ref:`here<auth-setup>`.
+* **SSL problems:** If the Inmanta server is configured to use SSL, the Agent should be configured to use SSL as well (See the
+  SSL-related configuration options in the :inmanta.config:group:`server` and :inmanta.config:group:`agent_rest_transport`
+  section of the Inmanta configuration reference)
+* **Network issue:** Many network-related issue may exist which don't allow the agent to establish a connection with the Inmanta
+  server. A firewall may blocks traffic between the Inmanta agent and the server, no network route may exist towards the Inmanta
+  server, etc.
+
+
 No version appears after recompile trigger
 ==========================================
 
@@ -225,7 +250,7 @@ versions. If this doesn't happen, the compilation has failed. Click on the ``Com
 figure below, to get the compile report of the latest compilation. This report will give more information about the exact
 problem.
 
-.. figure:: ./images/troubleshooting/compile_report_button.png
+.. figure:: ./_static/troubleshooting/compile_report_button.png
    :width: 100%
    :align: center
 
@@ -234,7 +259,7 @@ timestamp of the compile report corresponds to the time the compilation was trig
 generated or the compile report doesn't show any errors, check the server logs as well. By default the server log is present in
 ``<config.log-dir>/server.log``.
 
-.. figure:: ./images/troubleshooting/compile_report.png
+.. figure:: ./_static/troubleshooting/compile_report.png
    :width: 100%
    :align: center
 
