@@ -170,7 +170,7 @@ def print_table(header: List[str], rows: List[List[str]], data_type: List[str] =
     click.echo(table.draw())
 
 
-@click.group()
+@click.group(help="Base command")
 @click.option("--host", help="The server hostname to connect to")
 @click.option("--port", help="The server port to connect to")
 @click.pass_context
@@ -178,13 +178,13 @@ def cmd(ctx: click.Context, host: str, port: int) -> None:
     ctx.obj = Client(host, port)
 
 
-@cmd.group("project")
+@cmd.group("project", help="Subcommand to manage projects")
 @click.pass_context
 def project(ctx: click.Context) -> None:
     pass
 
 
-@project.command(name="list")
+@project.command(name="list", help="List all projects")
 @click.pass_obj
 def project_list(client: Client) -> None:
     projects = client.get_list("list_projects", "projects")
@@ -197,9 +197,14 @@ def project_list(client: Client) -> None:
 
 
 @project.command(name="show")
-@click.argument("project")  # , help="The the id or name of the project to show")
+@click.argument("project")
 @click.pass_obj
 def project_show(client: Client, project: str) -> None:
+    """
+    Show the details of a single project
+
+    PROJECT: The id or name of the project to show
+    """
     project_id = client.to_project_id(project)
     project_data = client.get_dict("get_project", "project", dict(id=project_id))
 
@@ -217,30 +222,40 @@ def project_create(client: Client, name: str) -> None:
 
 @project.command(name="modify")
 @click.option("--name", "-n", help="The new name of the project", required=True)
-@click.argument("project")  # , help="The id of the project to modify")
+@click.argument("project")
 @click.pass_obj
 def project_modify(client: Client, name: str, project: str) -> None:
+    """
+    Modify an existing project.
+
+    PROJECT: The id or name of the project to modify
+    """
     project_id = client.to_project_id(project)
     project_data = client.get_dict("modify_project", "project", dict(id=project_id, name=name))
     print_table(["Name", "Value"], [["ID", project_data["id"]], ["Name", project_data["name"]]])
 
 
 @project.command(name="delete")
-@click.argument("project")  # , help="The id of the project to modify")
+@click.argument("project")
 @click.pass_obj
 def project_delete(client: Client, project: str) -> None:
+    """
+    Delete an existing project.
+
+    PROJECT: The id or name of the project to delete
+    """
     project_id = client.to_project_id(project)
     client.do_request("delete_project", arguments={"id": project_id})
     click.echo("Project successfully deleted")
 
 
-@cmd.group("environment")
+@cmd.group("environment", help="Subcommand to manage environments")
 @click.pass_context
 def environment(ctx: click.Context) -> None:
     pass
 
 
-@environment.command(name="create")
+@environment.command(name="create", help="Create a new environment")
 @click.option("--name", "-n", help="The name of the new environment", required=True)
 @click.option("--project", "-p", help="The id of the project this environment belongs to", required=True)
 @click.option(
@@ -303,7 +318,7 @@ port=%(port)s
             f.write(cfg)
 
 
-@environment.command(name="list")
+@environment.command(name="list", help="List all environments")
 @click.pass_obj
 def environment_list(client: Client) -> None:
     environments = client.get_list("list_environments", "environments")
@@ -324,16 +339,26 @@ def environment_list(client: Client) -> None:
 @click.argument("environment")
 @click.pass_obj
 def environment_show(client: Client, environment: str) -> None:
+    """
+    Show details of an environment
+
+    ENVIRONMENT: ID or name of the environment to show
+    """
     env = client.get_dict("get_environment", "environment", dict(id=client.to_environment_id(environment)))
     print_table(
         ["ID", "Name", "Repository URL", "Branch Name"], [[env["id"], env["name"], env["repo_url"], env["repo_branch"]]]
     )
 
 
-@environment.command(name="save", help="Save the ID of the environment and the server to the .inmanta config file")
+@environment.command(name="save")
 @click.argument("environment")
 @click.pass_obj
 def environment_write_config(client: Client, environment: str) -> None:
+    """
+        Save the ID of the environment and the server to the .inmanta config file
+
+        ENVIRONMENT: ID or name of the environment to write the config for
+    """
     env = client.get_dict("get_environment", "environment", dict(id=client.to_environment_id(environment)))
     save_config(client, env)
 
@@ -353,6 +378,11 @@ def environment_write_config(client: Client, environment: str) -> None:
 @click.argument("environment")
 @click.pass_obj
 def environment_modify(client: Client, environment: str, name: str, repo_url: str, branch: str) -> None:
+    """
+    Modify an existing environment
+
+    ENVIRONMENT: ID or name of the environment to modify
+    """
     env = client.get_dict(
         "modify_environment",
         "environment",
@@ -368,18 +398,23 @@ def environment_modify(client: Client, environment: str, name: str, repo_url: st
 @click.argument("environment")
 @click.pass_obj
 def environment_delete(client: Client, environment: str) -> None:
+    """
+    Delete an existing environment
+
+    ENVIRONMENT: ID or name of the environment to delete
+    """
     env_id = client.to_environment_id(environment)
     client.do_request("delete_environment", arguments=dict(id=env_id))
     click.echo("Environment successfully deleted")
 
 
-@environment.group("setting")
+@environment.group("setting", help="Subcommand to manage environment settings")
 @click.pass_context
 def env_setting(ctx: click.Context) -> None:
     pass
 
 
-@env_setting.command(name="list")
+@env_setting.command(name="list", help="List settings of an environment")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.pass_obj
 def env_setting_list(client: Client, environment: str) -> None:
@@ -403,7 +438,7 @@ def env_setting_list(client: Client, environment: str) -> None:
     print_table(["Key", "Value", "Default value", "Type", "Help"], table_body)
 
 
-@env_setting.command(name="set")
+@env_setting.command(name="set", help="Adjust an environment setting")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option("--key", "-k", help="The key to set", required=True)
 @click.option("--value", "-o", help="The value to set", required=True)
@@ -413,7 +448,7 @@ def env_setting_set(client: Client, environment: str, key: str, value: str) -> N
     client.do_request("set_setting", arguments=dict(tid=tid, id=key, value=value))
 
 
-@env_setting.command(name="get")
+@env_setting.command(name="get", help="Get an environment setting")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option("--key", "-k", help="The key to get", required=True)
 @click.pass_obj
@@ -423,7 +458,7 @@ def env_setting_get(client: Client, environment: str, key: str) -> None:
     click.echo(value["value"])
 
 
-@env_setting.command(name="delete")
+@env_setting.command(name="delete", help="Delete an environment setting")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option("--key", "-k", help="The key to delete", required=True)
 @click.pass_obj
@@ -432,13 +467,13 @@ def env_setting_del(client: Client, environment: str, key: str) -> None:
     client.do_request("delete_setting", arguments=dict(tid=tid, id=key))
 
 
-@cmd.group("agent")
+@cmd.group("agent", help="Subcommand to manage agents")
 @click.pass_context
 def agent(ctx: click.Context) -> None:
     pass
 
 
-@agent.command(name="list")
+@agent.command(name="list", help="List agents in an environment")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.pass_obj
 def agent_list(client: Client, environment: str) -> None:
@@ -451,7 +486,7 @@ def agent_list(client: Client, environment: str) -> None:
     print_table(["Agent", "Environment", "Paused", "Last fail over"], data)
 
 
-@agent.command(name="pause",)
+@agent.command(name="pause")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option(
     "--agent", help="The name of the agent to pause.", default=None,
@@ -476,12 +511,12 @@ def pause_agent(client: Client, environment: str, agent: Optional[str], all: boo
         client.do_request(method_name="all_agents_action", arguments=dict(tid=environment, action=AgentAction.pause.value))
 
 
-@agent.command(name="unpause",)
+@agent.command(name="unpause")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option(
-    "--agent", help="The name of the agent to pause.", default=None,
+    "--agent", help="The name of the agent to unpause.", default=None,
 )
-@click.option("--all", help="Pause all agents in the given environment", is_flag=True)
+@click.option("--all", help="Unpause all agents in the given environment", is_flag=True)
 @click.pass_obj
 def unpause_agent(client: Client, environment: str, agent: Optional[str], all: bool) -> None:
     """
@@ -502,13 +537,13 @@ def unpause_agent(client: Client, environment: str, agent: Optional[str], all: b
         client.do_request(method_name="all_agents_action", arguments=dict(tid=environment, action=AgentAction.unpause.value))
 
 
-@cmd.group("version")
+@cmd.group("version", help="Subcommand to manage versions")
 @click.pass_context
 def version(ctx: click.Context) -> None:
     pass
 
 
-@version.command(name="list")
+@version.command(name="list", help="List versions in an environment")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.pass_obj
 def version_list(client: Client, environment: str) -> None:
@@ -534,6 +569,11 @@ def version_list(client: Client, environment: str) -> None:
 @click.argument("version")
 @click.pass_obj
 def version_release(client: Client, environment: str, push: bool, full: bool, version: str) -> None:
+    """
+    Release the specified version of the configuration model for deployment.
+
+    VERSION: Version of the model to release
+    """
     env_id = client.to_environment_id(environment)
     if push:
         trigger_method = AgentTriggerMethod.get_agent_trigger_method(full)
@@ -549,13 +589,13 @@ def version_release(client: Client, environment: str, push: bool, full: bool, ve
     )
 
 
-@cmd.group("param")
+@cmd.group("param", help="Subcommand to manage parameters")
 @click.pass_context
 def param(ctx: click.Context) -> None:
     pass
 
 
-@param.command(name="list")
+@param.command(name="list", help="List parameters in an environment")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.pass_obj
 def param_list(client: Client, environment: str) -> None:
@@ -580,7 +620,7 @@ def param_list(client: Client, environment: str) -> None:
     print_table(["Resource", "Name", "Source", "Updated", "Expired"], data)
 
 
-@param.command(name="set")
+@param.command(name="set", help="Set a parameter in an environment")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option("--name", help="The name of the parameter", required=True)
 @click.option("--value", help="The value of the parameter", required=True)
@@ -606,7 +646,7 @@ def param_set(client: Client, environment: str, name: str, value: str) -> None:
     )
 
 
-@param.command(name="get")
+@param.command(name="get", help="Get a parameter from an environment")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option("--name", help="The name of the parameter", required=True)
 @click.option("--resource", help="The resource id of the parameter")
@@ -623,7 +663,7 @@ def param_get(client: Client, environment: str, name: str, resource: str) -> Non
     print_table(["Name", "Value", "Source", "Updated"], [[param["name"], param["value"], param["source"], param["updated"]]])
 
 
-@version.command(name="report")
+@version.command(name="report", help="Get a report about a version, describing the involved resources, agents and actions")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option("--version", "-i", help="The version to create a report from", required=True)
 @click.option("-l", is_flag=True, help="Show a detailed version of the report")
@@ -682,7 +722,11 @@ def version_report(client: Client, environment: str, version: str, l: bool) -> N
             click.echo("")
 
 
-@cmd.command(name="monitor")
+@cmd.command(
+    name="monitor",
+    help="Monitor the deployment process of the configuration model in an environment, "
+    "receiving continuous updates on the deployment status",
+)
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.pass_obj
 def monitor_deploy(client: Client, environment: str) -> None:
@@ -718,13 +762,13 @@ def monitor_deploy(client: Client, environment: str) -> None:
     click.echo("Complete: %s/%s" % (done, total))
 
 
-@cmd.group("token")
+@cmd.group("token", help="Subcommand to manage access tokens")
 @click.pass_context
 def token(ctx: click.Context) -> None:
     pass
 
 
-@token.command(name="create")
+@token.command(name="create", help="Create a new token for an environment for the specified client types")
 @click.option("--environment", "-e", help="The environment to use.", required=True)
 @click.option("--api", is_flag=True, help="Add client_type api to the token.")
 @click.option("--compiler", is_flag=True, help="Add client_type compiler to the token.")

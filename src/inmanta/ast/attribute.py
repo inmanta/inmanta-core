@@ -96,7 +96,8 @@ class Attribute(Locatable):
 
     def validate(self, value: object) -> None:
         """
-            Validate a value that is going to be assigned to this attribute
+            Validate a value that is going to be assigned to this attribute. Raises a :py:class:`inmanta.ast.RuntimeException`
+            if validation fails.
         """
         if isinstance(value, Unknown):
             return
