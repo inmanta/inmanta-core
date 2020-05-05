@@ -26,8 +26,8 @@ from uuid import UUID, uuid4
 import pytest
 
 from inmanta import config, data
-from inmanta.agent import config as agent_config
 from inmanta.agent import Agent, agent
+from inmanta.agent import config as agent_config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
@@ -827,7 +827,7 @@ async def test_failover_doesnt_make_paused_agent_primary(server, client, environ
     first_agent = await agent_factory(environment=environment, agent_map={agent_name: ""}, agent_names=[agent_name])
     # Wait until first_agent is elected as primary
     await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 1, timeout=10)
-    second_agent = await agent_factory(environment=environment, agent_map={agent_name: ""}, agent_names=[agent_name])
+    await agent_factory(environment=environment, agent_map={agent_name: ""}, agent_names=[agent_name])
 
     # Wait until both agents have a session with the server
     await retry_limited(lambda: len(agentmanager.sessions) == 2, timeout=10)
@@ -855,5 +855,3 @@ async def test_failover_doesnt_make_paused_agent_primary(server, client, environ
     # One agent has a session to the server, none of them is primary. The agent is paused
     assert len(agentmanager.sessions) == 1
     assert len(agentmanager.tid_endpoint_to_session) == 0
-
-

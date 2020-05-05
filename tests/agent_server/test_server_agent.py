@@ -32,7 +32,7 @@ from inmanta.agent import config as agent_config
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.const import AgentStatus, AgentAction, ResourceState
+from inmanta.const import AgentAction, AgentStatus, ResourceState
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
@@ -3302,30 +3302,32 @@ async def test_agent_stop_deploying_when_paused(
     version = await clienthelper.get_version()
 
     def _get_resources(agent_name: str) -> List[Dict]:
-        return [{
-            "key": "key1",
-            "value": "value1",
-            "id": f"test::Resource[{agent_name},key=key1],v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-        {
-            "key": "key2",
-            "value": "value2",
-            "id": f"test::Wait[{agent_name},key=key2],v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [f"test::Resource[{agent_name},key=key1],v={version}"],
-        },
-        {
-            "key": "key3",
-            "value": "value3",
-            "id": f"test::Resource[{agent_name},key=key3],v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [f"test::Wait[{agent_name},key=key2],v={version}"],
-        }]
+        return [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": f"test::Resource[{agent_name},key=key1],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "key": "key2",
+                "value": "value2",
+                "id": f"test::Wait[{agent_name},key=key2],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [f"test::Resource[{agent_name},key=key1],v={version}"],
+            },
+            {
+                "key": "key3",
+                "value": "value3",
+                "id": f"test::Resource[{agent_name},key=key3],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [f"test::Wait[{agent_name},key=key2],v={version}"],
+            },
+        ]
 
     resources = _get_resources(agent1) + _get_resources(agent2)
 
@@ -3364,12 +3366,13 @@ async def test_agent_stop_deploying_when_paused(
     #   * test::Wait[agent1,key=key2],v=1: Was already in flight and will be deployed.
     #   * test::Resource[agent1,key=key3],v=1: Will not be deployed because the agent is paused.
     # Agent2: This agent is not paused. All resources will be deployed.
-    rvis_to_expected_states = {"test::Resource[agent1,key=key1],v=1": ResourceState.deployed.value,
-                               "test::Wait[agent1,key=key2],v=1": ResourceState.deployed.value,
-                               "test::Resource[agent1,key=key3],v=1": ResourceState.available.value,
-                               "test::Resource[agent2,key=key1],v=1": ResourceState.deployed.value,
-                               "test::Wait[agent2,key=key2],v=1": ResourceState.deployed.value,
-                               "test::Resource[agent2,key=key3],v=1": ResourceState.deployed.value,
-                               }
+    rvis_to_expected_states = {
+        "test::Resource[agent1,key=key1],v=1": ResourceState.deployed.value,
+        "test::Wait[agent1,key=key2],v=1": ResourceState.deployed.value,
+        "test::Resource[agent1,key=key3],v=1": ResourceState.available.value,
+        "test::Resource[agent2,key=key1],v=1": ResourceState.deployed.value,
+        "test::Wait[agent2,key=key2],v=1": ResourceState.deployed.value,
+        "test::Resource[agent2,key=key3],v=1": ResourceState.deployed.value,
+    }
 
     assert rvid_to_actual_states_dct == rvis_to_expected_states
