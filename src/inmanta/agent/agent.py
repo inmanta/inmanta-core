@@ -244,11 +244,6 @@ class ResourceAction(object):
                     # Action is cancelled
                     self.logger.log(const.LogLevel.TRACE.value, "%s %s is no longer active" % (self.gid, self.resource))
                     self.running = False
-                    if self.undeployable is not None:
-                        # don't overwrite undeployable
-                        ctx.set_status(self.undeployable)
-                    else:
-                        ctx.set_status(const.ResourceState.cancelled)
                     return
 
                 result = sum(results, ResourceActionResult(True, False, False))
@@ -256,11 +251,6 @@ class ResourceAction(object):
                 if result.cancel:
                     # self.running will be set to false when self.cancel is called
                     # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                    if self.undeployable is not None:
-                        # don't overwrite undeployable
-                        ctx.set_status(self.undeployable)
-                    else:
-                        ctx.set_status(const.ResourceState.cancelled)
                     return
 
                 received_events: Dict[Id, Event]
