@@ -4,6 +4,7 @@
 - Fixed issue of autostarted agents not being restarted on environment setting change (#2049)
 - Log primary for agent correctly in the database when pausing/unpausing agents (#2079)
 - Cancel scheduled deploy operations of an agent when that agent is paused (#2077)
+- Fix agent-names config type (#2071)
 
 ## Added
 - Added cleanup mechanism of old compile reports (#2054)
