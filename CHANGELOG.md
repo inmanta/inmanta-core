@@ -2,6 +2,7 @@
 
 ## Fixed
 - Fixed issue of autostarted agents not being restarted on environment setting change (#2049)
+- Fix agent-names config type (#2071)
 
 ## Added
 - Added cleanup mechanism of old compile reports (#2054)

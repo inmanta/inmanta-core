@@ -1051,8 +1051,7 @@ class Agent(SessionEndpoint):
             # load agent names from the config file
             agent_names = cfg.agent_names.get()
             if agent_names is not None:
-                names = [x.strip() for x in agent_names.split(",")]
-                for name in names:
+                for name in agent_names:
                     if "$" in name:
                         name = name.replace("$node-name", self.node_name)
                     await self.add_end_point_name(name)
