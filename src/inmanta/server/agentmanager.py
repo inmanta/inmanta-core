@@ -816,7 +816,7 @@ class AutostartedAgentManager(ServerSlice):
         # set in a previous version of the orchestrator which didn't have this constraint. This code fixes the inconsistency.
         if "internal" not in agent_map:
             agent_map["internal"] = "local:"
-            await env.set(data.AUTOSTART_AGENT_MAP, agent_map)
+            await env.set(data.AUTOSTART_AGENT_MAP, dict(agent_map))
 
         agents = [agent for agent in agents if agent in agent_map]
         needsstart = restart
