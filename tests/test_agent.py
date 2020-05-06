@@ -176,13 +176,13 @@ async def test_hostname(server, environment, agent_factory):
 
     # Set hostname in constructor
     agent1 = await agent_factory(hostname="node1", environment=env_id)
-    assert agent1.get_end_point_names() == ["node1"]
+    assert list(agent1.get_end_point_names()) == ["node1"]
 
     # Set hostname via config option
     config.Config.set("config", "agent-names", "test123,test456")
     agent2 = await agent_factory(environment=env_id)
-    assert sorted(agent2.get_end_point_names()) == sorted(["test123", "test456"])
+    assert sorted(list(agent2.get_end_point_names())) == sorted(["test123", "test456"])
 
     # When both are set, the constructor takes precedence
     agent3 = await agent_factory(hostname="node3", environment=env_id)
-    assert agent3.get_end_point_names() == ["node3"]
+    assert list(agent3.get_end_point_names()) == ["node3"]
