@@ -188,7 +188,7 @@ def is_float(value: str) -> float:
 
 
 def is_time(value: str) -> int:
-    """time"""
+    """Time, the number of seconds represented as an integer value"""
     return int(value)
 
 
@@ -200,12 +200,12 @@ def is_bool(value: str) -> bool:
 
 
 def is_list(value: str) -> List[str]:
-    """list"""
+    """List of comma-separated values"""
     return [x.strip() for x in value.split(",")]
 
 
 def is_map(map_in: str) -> Dict[str, str]:
-    """map"""
+    """List of comma-separated key=value pairs"""
     map_out = {}
     if map_in is not None:
         mappings = map_in.split(",")
