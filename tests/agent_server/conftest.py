@@ -91,10 +91,11 @@ async def _deploy_resources(client, environment, resources, version, push, agent
     return result
 
 
-async def _wait_for_n(client, environment, version, n, timeout=10):
+async def wait_for_n_deployed_resources(client, environment, version, n, timeout=10):
     async def is_deployment_finished():
         result = await client.get_version(environment, version)
-        return result.result["model"]["done"] < n
+        assert result.code == 200
+        return result.result["model"]["done"] >= n
 
     await retry_limited(is_deployment_finished, timeout)
 

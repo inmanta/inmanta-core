@@ -244,11 +244,6 @@ class ResourceAction(object):
                     # Action is cancelled
                     self.logger.log(const.LogLevel.TRACE.value, "%s %s is no longer active" % (self.gid, self.resource))
                     self.running = False
-                    if self.undeployable is not None:
-                        # don't overwrite undeployable
-                        ctx.set_status(self.undeployable)
-                    else:
-                        ctx.set_status(const.ResourceState.cancelled)
                     return
 
                 result = sum(results, ResourceActionResult(True, False, False))
@@ -256,11 +251,6 @@ class ResourceAction(object):
                 if result.cancel:
                     # self.running will be set to false when self.cancel is called
                     # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                    if self.undeployable is not None:
-                        # don't overwrite undeployable
-                        ctx.set_status(self.undeployable)
-                    else:
-                        ctx.set_status(const.ResourceState.cancelled)
                     return
 
                 received_events: Dict[Id, Event]
@@ -447,6 +437,15 @@ class ResourceScheduler(object):
     def is_normal_deploy_running(self) -> bool:
         return not self.finished() and not self.is_repair
 
+    def cancel(self) -> None:
+        """
+            Cancel all scheduled deployments.
+        """
+        for ra in self.generation.values():
+            ra.cancel()
+        self.generation = {}
+        self.cad = {}
+
     def reload(
         self,
         resources: List[Resource],
@@ -486,8 +485,7 @@ class ResourceScheduler(object):
                     # increment overrules increment
                     self.logger.info("Terminating run '%s' for '%s'", self.reason, reason)
             # cancel old run
-            for ra in self.generation.values():
-                ra.cancel()
+            self.cancel()
 
         # start new run
         self.reason = reason
@@ -645,6 +643,10 @@ class AgentInstance(object):
 
         self._disable_time_triggers()
         self._enabled = False
+
+        # Cancel the ongoing deployment if exists
+        self._nq.cancel()
+
         return 200, "paused"
 
     def _enable_time_triggers(self) -> None:
@@ -1051,8 +1053,7 @@ class Agent(SessionEndpoint):
             # load agent names from the config file
             agent_names = cfg.agent_names.get()
             if agent_names is not None:
-                names = [x.strip() for x in agent_names.split(",")]
-                for name in names:
+                for name in agent_names:
                     if "$" in name:
                         name = name.replace("$node-name", self.node_name)
                     await self.add_end_point_name(name)

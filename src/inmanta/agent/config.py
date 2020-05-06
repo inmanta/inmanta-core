@@ -55,7 +55,7 @@ agent_names = Option(
     "$node-name",
     """Names of the agents this instance should deploy configuration for. When the configuration option
 config.use_autostart_agent_map is set to true, this option will be ignored.""",
-    is_str,
+    is_list,
 )
 
 agent_interval = Option(
