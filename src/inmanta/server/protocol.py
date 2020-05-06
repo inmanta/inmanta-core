@@ -342,7 +342,7 @@ class Session(object):
         hang_interval: int,
         timout: int,
         tid: uuid.UUID,
-        endpoint_names: List[str],
+        endpoint_names: Set[str],
         nodename: str,
         disable_expire_check: bool = False,
     ) -> None:
@@ -355,7 +355,7 @@ class Session(object):
         self.expired: bool = False
 
         self.tid: uuid.UUID = tid
-        self.endpoint_names: List[str] = endpoint_names
+        self.endpoint_names: Set[str] = endpoint_names
         self.nodename: str = nodename
 
         self._replies: Dict[uuid.UUID, asyncio.Future] = {}
@@ -390,7 +390,7 @@ class Session(object):
             IOLoop.current().remove_timeout(self._callhandle)
         await self._sessionstore.expire(self, timeout)
 
-    def seen(self, endpoint_names: List[str]) -> None:
+    def seen(self, endpoint_names: Set[str]) -> None:
         self._seen = time.time()
         self.endpoint_names = endpoint_names
 
@@ -473,7 +473,7 @@ class Session(object):
 
 
 class SessionListener(object):
-    async def new_session(self, session: Session, endpoint_names_snapshot: List[str]) -> None:
+    async def new_session(self, session: Session, endpoint_names_snapshot: Set[str]) -> None:
         """
         Notify that a new session was created.
 
@@ -483,7 +483,7 @@ class SessionListener(object):
         """
         pass
 
-    async def expire(self, session: Session, endpoint_names_snapshot: List[str]) -> None:
+    async def expire(self, session: Session, endpoint_names_snapshot: Set[str]) -> None:
         """
         Notify that a session expired.
 
@@ -493,7 +493,7 @@ class SessionListener(object):
         """
         pass
 
-    async def seen(self, session: Session, endpoint_names_snapshot: List[str]) -> None:
+    async def seen(self, session: Session, endpoint_names_snapshot: Set[str]) -> None:
         """
         Notify that a heartbeat was received for an existing session.
 
@@ -596,7 +596,7 @@ class SessionManager(ServerSlice):
             sid = uuid.UUID(sid)
         return sid in self._sessions
 
-    async def get_or_create_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: List[str], nodename: str) -> Session:
+    async def get_or_create_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: Set[str], nodename: str) -> Session:
         if isinstance(sid, str):
             sid = uuid.UUID(sid)
 
@@ -606,17 +606,17 @@ class SessionManager(ServerSlice):
             if sid not in self._sessions:
                 session = self.new_session(sid, tid, endpoint_names, nodename)
                 self._sessions[sid] = session
-                endpoint_names_snapshot = list(session.endpoint_names)
+                endpoint_names_snapshot = set(session.endpoint_names)
                 await asyncio.gather(*[listener.new_session(session, endpoint_names_snapshot) for listener in self.listeners])
             else:
                 session = self._sessions[sid]
                 self.seen(session, endpoint_names)
-                endpoint_names_snapshot = list(session.endpoint_names)
+                endpoint_names_snapshot = set(session.endpoint_names)
                 await asyncio.gather(*[listener.seen(session, endpoint_names_snapshot) for listener in self.listeners])
 
             return session
 
-    def new_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: List[str], nodename: str) -> Session:
+    def new_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: Set[str], nodename: str) -> Session:
         LOGGER.debug("New session with id %s on node %s for env %s with endpoints %s" % (sid, nodename, tid, endpoint_names))
         return Session(self, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
 
@@ -625,10 +625,10 @@ class SessionManager(ServerSlice):
             LOGGER.debug("Expired session with id %s, last seen %d seconds ago" % (session.get_id(), timeout))
             if session.id in self._sessions:
                 del self._sessions[session.id]
-            endpoint_names_snapshot = list(session.endpoint_names)
+            endpoint_names_snapshot = set(session.endpoint_names)
             await asyncio.gather(*[listener.expire(session, endpoint_names_snapshot) for listener in self.listeners])
 
-    def seen(self, session: Session, endpoint_names: List[str]) -> None:
+    def seen(self, session: Session, endpoint_names: Set[str]) -> None:
         LOGGER.debug("Seen session with id %s; endpoints: %s", session.get_id(), endpoint_names)
         session.seen(endpoint_names)
 
@@ -638,7 +638,7 @@ class SessionManager(ServerSlice):
     ) -> Union[int, Tuple[int, Dict[str, str]]]:
         LOGGER.debug("Received heartbeat from %s for agents %s in %s", nodename, ",".join(endpoint_names), env.id)
 
-        session: Session = await self.get_or_create_session(sid, env.id, endpoint_names, nodename)
+        session: Session = await self.get_or_create_session(sid, env.id, set(endpoint_names), nodename)
 
         LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
         call_list = await session.get_calls()
