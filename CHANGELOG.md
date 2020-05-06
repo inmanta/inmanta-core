@@ -1,3 +1,8 @@
+# v 2020.2.1 (2020-05-07) Changes in this release:
+
+## Fixed
+- Log primary for agent correctly in the database when pausing/unpausing agents (#2079)
+
 # v 2020.2 (2020-04-24) Changes in this release:
 
 ## Breaking changes
