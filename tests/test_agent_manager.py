@@ -690,7 +690,7 @@ async def test_agent_actions(server, client, async_finalizer):
             assert (agent_from_db.primary is None) == paused
             if not paused:
                 live_session = agent_manager.tid_endpoint_to_session[(env_id, agent_name)]
-                agent_instance = await data.AgentInstance.get_by_id(agent_from_db.id_primary)
+                agent_instance = await data.AgentInstance.get_by_id(agent_from_db.primary)
                 assert agent_instance.process == live_session.id
             # Check agent state
             assert env_to_agent_map[env_id]._instances[agent_name].is_enabled() != paused
