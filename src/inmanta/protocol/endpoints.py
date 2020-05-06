@@ -95,7 +95,7 @@ class Endpoint(TaskHandler):
         super(Endpoint, self).__init__()
         self._name: str = name
         self._node_name: str = inmanta_config.nodename.get()
-        self._end_point_names: List[str] = []
+        self._end_point_names: Set[str] = set()
         self._targets: List[CallTarget] = []
 
     def add_call_target(self, target: CallTarget) -> None:
@@ -105,7 +105,7 @@ class Endpoint(TaskHandler):
     def call_targets(self) -> List[CallTarget]:
         return self._targets
 
-    def get_end_point_names(self) -> List[str]:
+    def get_end_point_names(self) -> Set[str]:
         return self._end_point_names
 
     async def add_end_point_name(self, name: str) -> None:
@@ -113,18 +113,17 @@ class Endpoint(TaskHandler):
             Add an additional name to this endpoint to which it reacts and sends out in heartbeats
         """
         LOGGER.debug("Adding '%s' as endpoint", name)
-        self._end_point_names.append(name)
+        self._end_point_names.add(name)
 
     async def remove_end_point_name(self, name: str) -> None:
         LOGGER.debug("Removing '%s' as endpoint", name)
-        if name in self._end_point_names:
-            self._end_point_names.remove(name)
+        self._end_point_names.discard(name)
 
     def clear_end_points(self) -> None:
         """
             Clear all endpoints
         """
-        self._end_point_names = []
+        self._end_point_names = set()
 
     name = property(lambda self: self._name)
     end_point_names = property(get_end_point_names)
@@ -220,7 +219,7 @@ class SessionEndpoint(Endpoint, CallTarget):
             while True:
                 LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
                 result = await self._client.heartbeat(
-                    sid=str(self.sessionid), tid=str(self._env_id), endpoint_names=self.end_point_names, nodename=self.node_name
+                    sid=str(self.sessionid), tid=str(self._env_id), endpoint_names=list(self.end_point_names), nodename=self.node_name
                 )
                 LOGGER.log(3, "returned heartbeat for %s", str(self.sessionid))
                 if result.code == 200:
