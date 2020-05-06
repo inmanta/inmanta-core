@@ -219,7 +219,10 @@ class SessionEndpoint(Endpoint, CallTarget):
             while True:
                 LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
                 result = await self._client.heartbeat(
-                    sid=str(self.sessionid), tid=str(self._env_id), endpoint_names=list(self.end_point_names), nodename=self.node_name
+                    sid=str(self.sessionid),
+                    tid=str(self._env_id),
+                    endpoint_names=list(self.end_point_names),
+                    nodename=self.node_name,
                 )
                 LOGGER.log(3, "returned heartbeat for %s", str(self.sessionid))
                 if result.code == 200:
