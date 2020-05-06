@@ -438,6 +438,9 @@ class ResourceScheduler(object):
         return not self.finished() and not self.is_repair
 
     def cancel(self) -> None:
+        """
+            Cancel all scheduled deployments.
+        """
         for ra in self.generation.values():
             ra.cancel()
         self.generation = {}

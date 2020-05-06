@@ -26,7 +26,7 @@ import psutil
 import pytest
 from psutil import NoSuchProcess, Process
 
-from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent
+from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent, wait_for_n_deployed_resources
 from inmanta import agent, config, const, data, execute
 from inmanta.agent import config as agent_config
 from inmanta.agent.agent import Agent
@@ -923,15 +923,6 @@ async def test_wait(resource_container, client, clienthelper, environment, serve
         ]
         return version, resources
 
-    async def wait_for_resources(version, n):
-        result = await client.get_version(env_id, version)
-        assert result.code == 200
-
-        while result.result["model"]["done"] < n:
-            result = await client.get_version(env_id, version)
-            await asyncio.sleep(0.1)
-        assert result.result["model"]["done"] == n
-
     logger.info("setup done")
 
     version1, resources = await make_version()
@@ -948,7 +939,11 @@ async def test_wait(resource_container, client, clienthelper, environment, serve
 
     logger.info("first version released")
 
-    await wait_for_resources(version1, 2)
+    await wait_for_n_deployed_resources(client, env_id, version1, n=2)
+
+    result = await client.get_version(environment, version1)
+    assert result.code == 200
+    assert result.result["model"]["done"] == 2
 
     logger.info("first version, 2 resources deployed")
 
@@ -3334,27 +3329,18 @@ async def test_agent_stop_deploying_when_paused(
     # Initial deploy
     await _deploy_resources(client, environment, resources, version, push=True)
 
-    async def wait_for_resources(version, n):
-        result = await client.get_version(environment, version)
-        assert result.code == 200
-
-        counter = 0
-        while result.result["model"]["done"] < n:
-            result = await client.get_version(environment, version)
-            await asyncio.sleep(0.1)
-            counter += 1
-            if counter > 100:
-                raise Exception()
-        assert result.result["model"]["done"] == n
-
     # Wait until the deployment blocks on the test::Wait resources
-    await wait_for_resources(version, 2)
+    await wait_for_n_deployed_resources(client, environment, version, n=2)
 
-    # Pause agent
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["done"] == 2
+
+    # Pause agent1
     result = await client.agent_action(tid=environment, name=agent1, action=AgentAction.pause.name)
     assert result.code == 200
 
-    # Continue the deployment until it finishes
+    # Continue the deployment. Only 5 resources will be deployed because agent1 cancelled its deployment.
     result = await resource_container.wait_for_done_with_waiters(
         client, environment, version, wait_for_this_amount_of_resources_in_done=5
     )

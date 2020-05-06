@@ -634,7 +634,7 @@ class SessionManager(ServerSlice):
 
     @handle(methods.heartbeat, env="tid")
     async def heartbeat(
-        self, sid: uuid.UUID, env: "inmanta.data.Environment", endpoint_names, nodename
+        self, sid: uuid.UUID, env: "inmanta.data.Environment", endpoint_names: List[str], nodename: str
     ) -> Union[int, Tuple[int, Dict[str, str]]]:
         LOGGER.debug("Received heartbeat from %s for agents %s in %s", nodename, ",".join(endpoint_names), env.id)
 
