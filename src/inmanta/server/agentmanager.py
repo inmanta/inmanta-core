@@ -486,6 +486,7 @@ class AgentManager(ServerSlice, SessionListener):
                 else:
                     # This should never occur. An agent cannot have an active session while its paused,
                     # given the fact that this method executes under session_lock
+                    LOGGER.warning("Paused agent %s has an active session (sid=%s)", endpoint_name, session.id)
                     del self.tid_endpoint_to_session[key]
                     result.append((endpoint_name, None))
         return result
