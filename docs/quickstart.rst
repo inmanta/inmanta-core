@@ -226,7 +226,9 @@ Finally compile the project and deploy it:
 The first time you run this command, it may take a while, as all dependencies are downloaded.
 
 When the model is sent to the server, it will start deploying the configuration.
-To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_, select the `test` project and then the `quickstart-env` environment.
+To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_, select the `test` project and then the
+`quickstart-env` environment. When the deployment fails for some reason, consult the
+:ref:`troubleshooting page<troubleshooting>` to investigate the root cause of the issue.
 
 .. note::
 
@@ -294,7 +296,8 @@ In the Inmanta server container terminal:
     inmanta -vvv export -d
 
 
-If you browse to the Drupal site again, the database should be empty once more.
+If you browse to the Drupal site again, the database should be empty once more. When the deployment fails for some reason,
+consult the :ref:`troubleshooting page<troubleshooting>` to investigate the root cause of the issue.
 
 .. note::
 
@@ -495,6 +498,8 @@ Nothing will change because the generated configuration should be exactly the sa
 
     inmanta -vvv export -d
 
+When the deployment fails for some reason, consult the :ref:`troubleshooting page<troubleshooting>` to investigate the root
+cause of the issue.
 
 Next steps
 ___________________

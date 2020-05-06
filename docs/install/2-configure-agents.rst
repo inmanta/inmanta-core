@@ -53,7 +53,8 @@ python       python         The Python2 interpreter available on the remote side
 
 
 Auto-started agents start when they are required by a specific deployment or when the Inmanta server starts if the
-:inmanta.environment-settings:setting:`autostart_on_start` setting is set to true.
+:inmanta.environment-settings:setting:`autostart_on_start` setting is set to true. When the agent doesn't come up when required,
+consult the :ref:`troubleshooting documentation<agent_doesnt_come_up>` to investigate the root cause of the issue.
 
 
 Configuring the autostart_agent_map via the std::AgentConfig entity
@@ -143,4 +144,6 @@ Finally, enable and start the ``inmanta-agent`` service:
     sudo systemctl start inmanta-agent
 
 
-The logs of the agent are written to ``/var/log/inmanta/agent.log``.
+The logs of the agent are written to ``/var/log/inmanta/agent.log``. When the agent doesn't come up after starting the
+``inmanta-agent`` service, consult the :ref:`troubleshooting documentation<agent_doesnt_come_up>` to investigate the root cause of
+the issue.
