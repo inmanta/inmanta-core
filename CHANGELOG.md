@@ -2,6 +2,7 @@
 
 ## Fixed
 - Log primary for agent correctly in the database when pausing/unpausing agents (#2079)
+- Cancel scheduled deploy operations of an agent when that agent is paused (#2077)
 
 # v 2020.2 (2020-04-24) Changes in this release:
 
