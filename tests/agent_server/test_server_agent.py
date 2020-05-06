@@ -26,13 +26,13 @@ import psutil
 import pytest
 from psutil import NoSuchProcess, Process
 
-from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent
+from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent, wait_for_n_deployed_resources
 from inmanta import agent, config, const, data, execute
 from inmanta.agent import config as agent_config
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.const import AgentStatus
+from inmanta.const import AgentAction, AgentStatus, ResourceState
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
@@ -923,15 +923,6 @@ async def test_wait(resource_container, client, clienthelper, environment, serve
         ]
         return version, resources
 
-    async def wait_for_resources(version, n):
-        result = await client.get_version(env_id, version)
-        assert result.code == 200
-
-        while result.result["model"]["done"] < n:
-            result = await client.get_version(env_id, version)
-            await asyncio.sleep(0.1)
-        assert result.result["model"]["done"] == n
-
     logger.info("setup done")
 
     version1, resources = await make_version()
@@ -948,7 +939,11 @@ async def test_wait(resource_container, client, clienthelper, environment, serve
 
     logger.info("first version released")
 
-    await wait_for_resources(version1, 2)
+    await wait_for_n_deployed_resources(client, env_id, version1, n=2)
+
+    result = await client.get_version(environment, version1)
+    assert result.code == 200
+    assert result.result["model"]["done"] == 2
 
     logger.info("first version, 2 resources deployed")
 
@@ -3280,3 +3275,90 @@ async def test_restart_agent_with_outdated_agent_map(server, client, environment
 
     # The agent should fetch the up-to-date autostart_agent_map from the server after the first heartbeat
     await retry_limited(lambda: len(agent_manager.tid_endpoint_to_session) == 2, 10)
+
+
+@pytest.mark.asyncio
+async def test_agent_stop_deploying_when_paused(
+    server, client, environment, agent_factory, clienthelper, resource_container, no_agent_backoff
+):
+    """
+        This test case verifies that an agent, which is executing a deployment, stops
+        its deploy operations when the agent is paused.
+    """
+    resource_container.Provider.reset()
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+
+    agent1 = "agent1"
+    agent2 = "agent2"
+    for agent_name in [agent1, agent2]:
+        await agent_factory(environment=environment, agent_map={agent_name: "localhost"}, agent_names=[agent_name])
+
+    version = await clienthelper.get_version()
+
+    def _get_resources(agent_name: str) -> List[Dict]:
+        return [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": f"test::Resource[{agent_name},key=key1],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "key": "key2",
+                "value": "value2",
+                "id": f"test::Wait[{agent_name},key=key2],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [f"test::Resource[{agent_name},key=key1],v={version}"],
+            },
+            {
+                "key": "key3",
+                "value": "value3",
+                "id": f"test::Resource[{agent_name},key=key3],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [f"test::Wait[{agent_name},key=key2],v={version}"],
+            },
+        ]
+
+    resources = _get_resources(agent1) + _get_resources(agent2)
+
+    # Initial deploy
+    await _deploy_resources(client, environment, resources, version, push=True)
+
+    # Wait until the deployment blocks on the test::Wait resources
+    await wait_for_n_deployed_resources(client, environment, version, n=2)
+
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["done"] == 2
+
+    # Pause agent1
+    result = await client.agent_action(tid=environment, name=agent1, action=AgentAction.pause.name)
+    assert result.code == 200
+
+    # Continue the deployment. Only 5 resources will be deployed because agent1 cancelled its deployment.
+    result = await resource_container.wait_for_done_with_waiters(
+        client, environment, version, wait_for_this_amount_of_resources_in_done=5
+    )
+
+    rvid_to_actual_states_dct = {resource["resource_version_id"]: resource["status"] for resource in result.result["resources"]}
+
+    # Agent1:
+    #   * test::Resource[agent1,key=key1],v=1: Was deployed before the agent got paused.
+    #   * test::Wait[agent1,key=key2],v=1: Was already in flight and will be deployed.
+    #   * test::Resource[agent1,key=key3],v=1: Will not be deployed because the agent is paused.
+    # Agent2: This agent is not paused. All resources will be deployed.
+    rvis_to_expected_states = {
+        "test::Resource[agent1,key=key1],v=1": ResourceState.deployed.value,
+        "test::Wait[agent1,key=key2],v=1": ResourceState.deployed.value,
+        "test::Resource[agent1,key=key3],v=1": ResourceState.available.value,
+        "test::Resource[agent2,key=key1],v=1": ResourceState.deployed.value,
+        "test::Wait[agent2,key=key2],v=1": ResourceState.deployed.value,
+        "test::Resource[agent2,key=key3],v=1": ResourceState.deployed.value,
+    }
+
+    assert rvid_to_actual_states_dct == rvis_to_expected_states
