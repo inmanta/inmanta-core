@@ -682,10 +682,18 @@ async def test_agent_actions(server, client, async_finalizer):
 
     async def assert_agents_paused(expected_statuses: Dict[Tuple[UUID, str], bool]) -> None:
         for (env_id, agent_name), paused in expected_statuses.items():
+            # Check in-memory session state
             live_session_found = (env_id, agent_name) in agent_manager.tid_endpoint_to_session
             assert live_session_found != paused
+            # Check database state
             agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
             assert agent_from_db.paused == paused
+            assert (agent_from_db.primary is None) == paused
+            if not paused:
+                live_session = agent_manager.tid_endpoint_to_session[(env_id, agent_name)]
+                agent_instance = await data.AgentInstance.get_by_id(agent_from_db.primary)
+                assert agent_instance.process == live_session.id
+            # Check agent state
             assert env_to_agent_map[env_id]._instances[agent_name].is_enabled() != paused
 
     await assert_agents_paused(

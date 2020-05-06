@@ -190,6 +190,7 @@ class AgentManager(ServerSlice, SessionListener):
     async def _pause_agent(self, env: data.Environment, endpoint: Optional[str] = None) -> None:
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True)
+            endpoints_with_new_primary = []
             for agent_name in agents:
                 key = (env.id, agent_name)
                 live_session = self.tid_endpoint_to_session.get(key)
@@ -197,10 +198,13 @@ class AgentManager(ServerSlice, SessionListener):
                     # The agent has an active agent instance that has to be paused
                     del self.tid_endpoint_to_session[key]
                     await live_session.get_client().set_state(agent_name, enabled=False)
+                    endpoints_with_new_primary.append((agent_name, None))
+            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now())
 
     async def _unpause_agent(self, env: data.Environment, endpoint: Optional[str] = None) -> None:
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False)
+            endpoints_with_new_primary = []
             for agent_name in agents:
                 key = (env.id, agent_name)
                 live_session = self.tid_endpoint_to_session.get(key)
@@ -210,6 +214,8 @@ class AgentManager(ServerSlice, SessionListener):
                     if session:
                         self.tid_endpoint_to_session[key] = session
                         await session.get_client().set_state(agent_name, enabled=True)
+                        endpoints_with_new_primary.append((agent_name, session.id))
+            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now())
 
     async def _process_session_listener_actions(self) -> None:
         """
