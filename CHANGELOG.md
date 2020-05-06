@@ -3,6 +3,7 @@
 ## Fixed
 - Fixed issue of autostarted agents not being restarted on environment setting change (#2049)
 - Log primary for agent correctly in the database when pausing/unpausing agents (#2079)
+- Ensure the internal agent is always present in the autostart_agent_map of auto-started agents (#2101)
 
 ## Added
 - Added cleanup mechanism of old compile reports (#2054)

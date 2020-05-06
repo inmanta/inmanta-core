@@ -812,3 +812,33 @@ async def test_restart_on_environment_setting(server, client, environment, caplo
             ),
             10,
         )
+
+
+@pytest.mark.asyncio
+async def test_add_internal_agent_when_missing_in_agent_map(server, environment, postgresql_client):
+    """
+        The internal agent should always be present in the autostart_agent_map. If it is not present, it is added when to
+        auto-started agent is started. This test case verifies this behavior.
+    """
+    # Ensure agent1
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    env = await data.Environment.get_by_id(UUID(environment))
+    await agentmanager.ensure_agent_registered(env=env, nodename="agent1")
+
+    # Remove the internal agent from the autostart_agent_map
+    query = "UPDATE public.environment SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::jsonb), TRUE)"
+    await postgresql_client.execute(query, [data.AUTOSTART_AGENT_MAP], "{}")
+
+    # Assert internal agent not in autostart_agent_map
+    env = await data.Environment.get_by_id(UUID(environment))
+    autostart_agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
+    assert "internal" not in autostart_agent_map
+
+    # Start autostarted agent1
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+    await autostarted_agent_manager._ensure_agents(env=env, agents=["agent1"])
+
+    # Verify patch on autostart_agent_map
+    env = await data.Environment.get_by_id(UUID(environment))
+    autostart_agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
+    assert "internal" in autostart_agent_map
