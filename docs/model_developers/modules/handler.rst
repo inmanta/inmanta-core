@@ -2,12 +2,12 @@ South Bound Integration
 ***********************
 
 The inmanta orchestrator comes with a set of integrations with different platforms (see: :ref:`ref-modules`).
-But it is also possible to develop your own south bound integrations. 
+But it is also possible to develop your own south bound integrations.
 
 To integrate a new platform into the orchestrator, you must take the following steps:
 
 1. Create a new module to contain the integration (see: :ref:`moddev-module`).
-2. Model the target platform as set of :term:`entities<entity>`. 
+2. Model the target platform as set of :term:`entities<entity>`.
 3. Create :term:`resources<resource>` and :term:`handler<handler>`, as described below.
 
 A :term:`resources<resource>` defines how to serialize an :term:`entity` so that is can be sent
@@ -104,21 +104,21 @@ Logging
 """""""
 
 The agent has a built-in logging facility, similar to the standard python logger. All logs written
-to this logger will be sent to the server and are available via the dashboard and the API. 
+to this logger will be sent to the server and are available via the dashboard and the API.
 
 To use this logger, use one of the methods: :py:meth:`ctx.debug<inmanta.agent.handler.HandlerContext.debug>`,
 :py:meth:`ctx.info<inmanta.agent.handler.HandlerContext.info>`,
 :py:meth:`ctx.warning<inmanta.agent.handler.HandlerContext.warning>`,
 :py:meth:`ctx.error<inmanta.agent.handler.HandlerContext.error>`,
 :py:meth:`ctx.critical<inmanta.agent.handler.HandlerContext.critical>` or
-:py:meth:`ctx.exception<inmanta.agent.handler.HandlerContext.exception>`.  
+:py:meth:`ctx.exception<inmanta.agent.handler.HandlerContext.exception>`.
 
-This logger supports kwargs. The kwargs have to be json serializable. They will be available via the API in their json structured form. 
+This logger supports kwargs. The kwargs have to be json serializable. They will be available via the API in their json structured form.
 
 For example:
 
 .. code-block:: python
-    
+
     def create_resource(self, ctx: HandlerContext, resource: ELB) -> None:
         # ...
         ctx.debug("Creating loadbalancer with security group %(sg)s", sg=sg_id)
@@ -135,14 +135,14 @@ for a specific time. A version based cache is used for all resource in a specifi
 The cache will be dropped when the deployment for this version is ready.
 
 The cache can be used through the :py:func:`@cache<inmanta.agent.handler.cache>` decorator. Any
-method annotated with this annotation will be cached, similar to the way 
+method annotated with this annotation will be cached, similar to the way
 `lru_cache <https://docs.python.org/3/library/functools.html#functools.lru_cache>`_ works. The arguments to
 the method will form the cache key, the return value will be cached. When the method is called a
 second time with the same arguments, it will not be executed again, but the cached result is
 returned instead. To exclude specific arguments from the cache key, use the `ignore` parameter.
 
 
-For example, to cache the connection to a specific device for 120 seconds: 
+For example, to cache the connection to a specific device for 120 seconds:
 
 .. code-block:: python
 
@@ -151,7 +151,7 @@ For example, to cache the connection to a specific device for 120 seconds:
        # ...
        return connection
 
-To do the same, but additionally also expire the cache when the next version is deployed, the method must have a parameter called `version`. 
+To do the same, but additionally also expire the cache when the next version is deployed, the method must have a parameter called `version`.
 `for_version` is True by default, so when a version parameter is present, the cache is version bound by default.
 
 .. code-block:: python
@@ -162,12 +162,12 @@ To do the same, but additionally also expire the cache when the next version is 
        return connection
 
 To also ensure the connection is properly closed, an `on_delete` function can be attached. This
-function is called when the cache is expired. If gets the cached item as argument. 
+function is called when the cache is expired. If gets the cached item as argument.
 
 
 .. code-block:: python
 
-    @cache(timeout=120, ignore=["ctx"], for_version=True, 
+    @cache(timeout=120, ignore=["ctx"], for_version=True,
        call_on_delete=lambda connection:connection.close())
     def get_client_connection(self, ctx, device_id, version):
        # ...
