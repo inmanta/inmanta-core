@@ -3373,30 +3373,30 @@ async def test_agentinstance_stops_deploying_when_stopped(
     """
     version = await clienthelper.get_version()
     resources = [
-            {
-                "key": "key1",
-                "value": "value1",
-                "id": f"test::Resource[agent1,key=key1],v={version}",
-                "send_event": False,
-                "purged": False,
-                "requires": [],
-            },
-            {
-                "key": "key2",
-                "value": "value2",
-                "id": f"test::Wait[agent1,key=key2],v={version}",
-                "send_event": False,
-                "purged": False,
-                "requires": [f"test::Resource[agent1,key=key1],v={version}"],
-            },
-            {
-                "key": "key3",
-                "value": "value3",
-                "id": f"test::Wait[agent1,key=key3],v={version}",
-                "send_event": False,
-                "purged": False,
-                "requires": [f"test::Resource[agent1,key=key2],v={version}"],
-            },
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": f"test::Resource[agent1,key=key1],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": f"test::Wait[agent1,key=key2],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"test::Resource[agent1,key=key1],v={version}"],
+        },
+        {
+            "key": "key3",
+            "value": "value3",
+            "id": f"test::Wait[agent1,key=key3],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"test::Resource[agent1,key=key2],v={version}"],
+        },
     ]
 
     await _deploy_resources(client, environment, resources, version, push=True)
