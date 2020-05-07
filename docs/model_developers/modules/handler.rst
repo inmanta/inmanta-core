@@ -10,7 +10,7 @@ To integrate a new platform into the orchestrator, you must take the following s
 2. Model the target platform as set of :term:`entities<entity>`.
 3. Create :term:`resources<resource>` and :term:`handler<handler>`, as described below.
 
-A :term:`resources<resource>` defines how to serialize an :term:`entity` so that is can be sent
+A :term:`resource<resource>` defines how to serialize an :term:`entity` so that it can be sent
 over to the server and the agent. A :term:`handler<handler>` is the python code required by the
 agent to enforce the :term:`desired state` expressed by a resource.
 
