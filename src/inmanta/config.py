@@ -193,7 +193,7 @@ def is_time(value: str) -> int:
 
 
 def is_bool(value: str) -> bool:
-    """bool"""
+    """Boolean value, represented as any of true, false, on, off, yes, no, 1, 0. (Case-insensitive)"""
     if type(value) == bool:
         return cast(bool, value)
     return Config._get_instance()._convert_to_boolean(value)
