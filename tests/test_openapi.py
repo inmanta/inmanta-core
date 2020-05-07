@@ -366,12 +366,10 @@ def test_post_operation(api_methods_fixture):
     raises_os_error_description = "Something went wrong"
     raises_not_found_description = "Resource was not found."
     raises_dummy_exception_description = "A dummy exception"
+    method_name = "dummy_post_with_parameters"
 
     post = UrlMethod(
-        properties=MethodProperties.methods["dummy_post_with_parameters"][0],
-        slice=None,
-        method_name="dummy_post_with_parameters",
-        handler=None,
+        properties=MethodProperties.methods["dummy_post_with_parameters"][0], slice=None, method_name=method_name, handler=None,
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
@@ -388,6 +386,7 @@ def test_post_operation(api_methods_fixture):
     # Asserts on parameters
     assert operation.summary == short_description
     assert operation.description == long_description
+    assert operation.operationId == method_name
     assert sorted(["header-val", "id"]) == sorted([parameter.name for parameter in operation.parameters])
     param_map = {param.name: param.description for param in operation.parameters}
     assert len(param_map) == 2
@@ -417,12 +416,10 @@ def test_get_operation(api_methods_fixture):
     raises_os_error_description = "Something went wrong"
     raises_not_found_description = "Resource was not found."
     raises_dummy_exception_description = "A dummy exception"
+    method_name = "dummy_get_with_parameters"
 
     get = UrlMethod(
-        properties=MethodProperties.methods["dummy_get_with_parameters"][0],
-        slice=None,
-        method_name="dummy_get_with_parameters",
-        handler=None,
+        properties=MethodProperties.methods["dummy_get_with_parameters"][0], slice=None, method_name=method_name, handler=None,
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
@@ -434,6 +431,7 @@ def test_get_operation(api_methods_fixture):
     # Asserts on parameters
     assert operation.summary == short_description
     assert operation.description == long_description
+    assert operation.operationId == method_name
     assert sorted(["header-val", "non_header", "param", "id"]) == sorted([parameter.name for parameter in operation.parameters])
     param_map = {param.name: param.description for param in operation.parameters}
     assert len(param_map) == 4
