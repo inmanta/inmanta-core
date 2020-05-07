@@ -162,7 +162,7 @@ To do the same, but additionally also expire the cache when the next version is 
        return connection
 
 To also ensure the connection is properly closed, an `on_delete` function can be attached. This
-function is called when the cache is expired. If gets the cached item as argument.
+function is called when the cache is expired. It gets the cached item as argument.
 
 
 .. code-block:: python
