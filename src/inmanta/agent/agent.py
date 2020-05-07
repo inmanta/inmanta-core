@@ -593,6 +593,7 @@ class AgentInstance(object):
         self._nq = ResourceScheduler(self, self._env_id, name, self._cache, ratelimiter=self.ratelimiter)
         self._time_triggered_actions: Set[Callable[[], Awaitable[None]]] = set()
         self._enabled = False
+        self._stopped = False
 
         # do regular deploys
         self._deploy_interval = cfg.agent_deploy_interval.get()
@@ -608,6 +609,9 @@ class AgentInstance(object):
         self._get_resource_timeout = 0
 
     async def stop(self) -> None:
+        self._stopped = True
+        self._enabled = False
+        self._disable_time_triggers()
         self._nq.cancel()
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
@@ -627,6 +631,9 @@ class AgentInstance(object):
         return self._enabled
 
     def unpause(self) -> Apireturn:
+        if self._stopped:
+            return 403, "Cannot unpause stopped agent instance"
+
         if self.is_enabled():
             return 200, "already running"
 
