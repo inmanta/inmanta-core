@@ -409,6 +409,7 @@ class OperationHandler:
 
         return Operation(
             responses=responses,
+            operationId=url_method.method_name,
             parameters=(parameters if len(parameters) else None),
             summary=url_method.short_method_description,
             description=url_method.long_method_description,

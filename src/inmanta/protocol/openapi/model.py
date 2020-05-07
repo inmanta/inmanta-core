@@ -141,6 +141,7 @@ class Response(BaseModel):
 
 
 class Operation(BaseModel):
+    operationId: Optional[str] = None
     summary: Optional[str] = None
     description: Optional[str] = None
     parameters: Optional[List[Union[Parameter, Reference]]] = None
