@@ -608,6 +608,7 @@ class AgentInstance(object):
         self._get_resource_timeout = 0
 
     async def stop(self) -> None:
+        self._nq.cancel()
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
 

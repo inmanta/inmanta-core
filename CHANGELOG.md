@@ -6,6 +6,7 @@
 - Cancel scheduled deploy operations of an agent when that agent is paused (#2077)
 - Fix agent-names config type (#2071)
 - Ensure the internal agent is always present in the autostart_agent_map of auto-started agents (#2101)
+- Cancel scheduled ResourceActions when AgentInstance is stopped (#2106)
 
 ## Added
 - Added cleanup mechanism of old compile reports (#2054)

@@ -3362,3 +3362,58 @@ async def test_agent_stop_deploying_when_paused(
     }
 
     assert rvid_to_actual_states_dct == rvis_to_expected_states
+
+
+@pytest.mark.asyncio
+async def test_agentinstance_stops_deploying_when_stopped(
+    server, client, environment, agent, clienthelper, resource_container, no_agent_backoff
+):
+    """
+        Test whether the ResourceActions scheduled on an AgentInstance are cancelled when the AgentInstance is stopped.
+    """
+    version = await clienthelper.get_version()
+    resources = [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": f"test::Resource[agent1,key=key1],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "key": "key2",
+                "value": "value2",
+                "id": f"test::Wait[agent1,key=key2],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [f"test::Resource[agent1,key=key1],v={version}"],
+            },
+            {
+                "key": "key3",
+                "value": "value3",
+                "id": f"test::Wait[agent1,key=key3],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [f"test::Resource[agent1,key=key2],v={version}"],
+            },
+    ]
+
+    await _deploy_resources(client, environment, resources, version, push=True)
+
+    # Wait until agent has scheduled the deployment on its ResourceScheduler
+    await wait_for_n_deployed_resources(client, environment, version, n=1)
+
+    assert "agent1" in agent._instances
+    agent_instance = agent._instances["agent1"]
+    assert not agent_instance._nq.finished()
+
+    await agent.remove_end_point_name("agent1")
+
+    assert "agent1" not in agent._instances
+    assert agent_instance._nq.finished()
+
+    # Cleanly stop in flight coroutines
+    await resource_container.wait_for_done_with_waiters(
+        client, environment, version, wait_for_this_amount_of_resources_in_done=2
+    )
