@@ -44,6 +44,14 @@ A complete module might contain the following files:
          |__ conf_file.conf.tmpl
 
 
+To quickly initialize a module use cookiecutter:
+
+.. code-block:: sh
+
+   pip install cookiecutter
+   cookiecutter gh:inmanta/inmanta-module-template
+
+
 Module metadata
 ---------------
 The module.yml file provides metadata about the module. This file is a yaml file with the following
@@ -142,11 +150,7 @@ Inmanta to extend the platform. Python code that extends Inmanta is stored in th
 of a module. All python modules in the plugins subdirectory will be loaded by the compiler when at
 least a ``__init__.py`` file exists, exactly like any other python package.
 
-.. note::
-    It is not possible to import python modules from other Inmanta modules.
-
-
-The Inmanta Python SDK offerts several extension mechanism:
+The Inmanta Python SDK offers several extension mechanism:
 
 * Plugins
 * Resources
@@ -170,190 +174,6 @@ The format for requires in requirements.txt is the folllowing:
  * Or a repository location such as  git+https://github.com/project/python-foo The correct syntax
    to use is then: eggname@git+https://../repository#branch with branch being optional.
 
-.. _module-plugins:
+.. include:: modules/plugins.rst
+.. include:: modules/handler.rst
 
-Plugins
-*******
-Plugins provide :ref:`functions<lang-plugins>` that can be called from the :term:`DSL`. This is the
-primary mechanism to interface Python code with the orchestration model at compile time. For Example,
-this mechanism is also used for std::template and std::file. In addition to this, Inmanta also registers all
-plugins with the template engine (Jinja2) to use as filters.
-
-A plugin is a python function, registered with the platform with the :func:`~inmanta.plugins.plugin`
-decorator. This plugin accepts arguments when called from the DSL and can return a value. Both the
-arguments and the return value must by annotated with the allowed types from the orchestration model.
-Type annotations are provided as a string (Python3 style argument annotation). ``any`` is a special
-type that effectively disables type validation.
-
-Through the arguments of the function, the Python code in the plugin can navigate the orchestration
-model. The compiler takes care of scheduling the execution at the correct point in the model
-evaluation.
-
-A simple plugin that accepts no arguments, prints out "hello world" and returns no value requires
-the following code:
-
-.. code-block:: python
-    :linenos:
-
-    from inmanta.plugins import plugin
-
-    @plugin
-    def hello():
-        print("Hello world!")
-
-
-If the code above is placed in the plugins directory of the example module
-(``examples/plugins/__init__.py``) the plugin can be invoked from the orchestration model as
-follows:
-
-.. code-block:: inmanta
-
-    import example
-
-    example::hello()
-
-The plugin decorator accepts an argument name. This can be used to change the name of the plugin in
-the DSL. This can be used to create plugins that use python reserved names such as ``print`` for example:
-
-.. code-block:: python
-    :linenos:
-
-    from inmanta.plugins import plugin
-
-    @plugin("print")
-    def printf():
-        """
-            Prints inmanta
-        """
-        print("inmanta")
-
-
-A more complex plugin accepts arguments and returns a value. The following example creates a plugin
-that converts a string to uppercase:
-
-.. code-block:: python
-    :linenos:
-
-    from inmanta.plugins import plugin
-
-    @plugin
-    def upper(value: "string") -> "string":
-        return value.upper()
-
-
-This plugin can be tested with:
-
-.. code-block:: inmanta
-
-    import example
-
-    std::print(example::upper("hello world"))
-
-
-Argument type annotations are strings that refer to Inmanta primitive types or to entities. If an
-entity is passed to a plugin, the python code of the plugin can navigate relations throughout the
-orchestration model to access attributes of other entities.
-
-A base exception for plugins is provided in ``inmanta.plugins.PluginException``. Exceptions raised
-from a plugin should be of a subtype of this base exception.
-
-.. code-block:: python
-    :linenos:
-
-    from inmanta.plugins import plugin, PluginException
-
-    @plugin
-    def raise_exception(message: "string"):
-        raise PluginException(message)
-
-If your plugin requires external libraries, include a requirements.txt in the module. The libraries
-listed in this file are automatically installed by the compiler and agents.
-
-.. todo:: context
-.. todo:: new statements
-
-Resources and handlers
-**********************
-
-A module can add additional :term:`resources<resource>` and/or handlers for resources to Inmanta. A
-resource defines a type that resembles an :term:`entity` but without any relations. This is required
-for the serializing resources for communication between the compiler, server and agents.
-
-Resource
-^^^^^^^^
-A resource is represented by a Python class that is registered with Inmanta using the
-:func:`~inmanta.resources.resource` decorator. This decorator decorates a class that inherits from
-the :class:`~inmanta.resources.Resource` class.
-
-The fields of the resource are indicated with a ``fields`` field in the class. This field is a tuple
-or list of strings with the name of the desired fields of the resource. The orchestrator uses these
-fields to determine which attributes of the matching entity need to be included in the resource.
-
-Fields of a resource cannot refer to instance in the orchestration model or fields of other
-resources. The resource serializers allows to map field values. Instead of referring directly to an
-attribute of the entity is serializes (path in std::File and path in the resource map one on one).
-This mapping is done by adding a static method to the resource class with ``get_$(field_name)`` as
-name. This static method has two arguments: a reference to the exporter and the instance of the
-entity it is serializing.
-
-
-.. code-block:: python
-    :linenos:
-
-    from inmanta.resources import resource, Resource
-
-    @resource("std::File", agent="host.name", id_attribute="path")
-    class File(Resource):
-        fields = ("path", "owner", "hash", "group", "permissions", "purged", "reload")
-
-        @staticmethod
-        def get_hash(exporter, obj):
-            hash_id = md5sum(obj.content)
-            exporter.upload_file(hash_id, obj.content)
-            return hash_id
-
-        @staticmethod
-        def get_permissions(_, obj):
-            return int(x.mode)
-
-
-Classes decorated with :func:`~inmanta.resources.resource` do not have to inherit directly from
-Resource. The orchestrator already offers two additional base classes with fields and mappings
-defined: :class:`~inmanta.resources.PurgeableResource` and
-:class:`~inmanta.resources.ManagedResource`. This mechanism is useful for resources that have fields
-in common.
-
-A resource can also indicate that it has to be ignored by raising the
-:class:`~inmanta.resources.IgnoreResourceException` exception.
-
-Handler
-^^^^^^^
-Handlers interface the orchestrator with resources in the :term:`infrastructure` in the agents.
-Handlers take care of changing the current state of a resource to the desired state expressed in the
-orchestration model.
-
-The compiler collects all python modules from Inmanta modules that provide handlers and uploads them
-to the server. When a new orchestration module version is deployed, the handler code is pushed to all
-agents and imported there.
-
-Handlers should inherit the class :class:`~inmanta.agent.handler.ResourceHandler`. The
-:func:`~inmanta.agent.handler.provider` decorator register the class with the orchestrator. When the
-agent needs a handler for a resource it will load all handler classes registered for that resource
-and call the :func:`~inmanta.agent.handler.ResourceHandler.available`. This method should check
-if all conditions are fulfilled to use this handler. The agent will select a handler, only when a
-single handler is available, so the is_available method of all handlers of a resource need to be
-mutually exclusive. If no handler is available, the resource will be marked unavailable.
-
-:class:`~inmanta.agent.handler.ResourceHandler` is the handler base class.
-:class:`~inmanta.agent.handler.CRUDHandler` provides a more recent base class that is better suited
-for resources that are manipulated with Create, Delete or Update operations. This operations often
-match managed APIs very well. The CRUDHandler is recommended for new handlers unless the resource
-has special resource states that do not match CRUD operations.
-
-Each handler basically needs to support two things: reading the current state and changing the state
-of the resource to the desired state in the orchestration model. Reading the state is used for dry
-runs and reporting. The CRUDHandler handler also uses the result to determine whether create, delete
-or update needs to be invoked.
-
-The context (See :class:`~inmanta.agent.handler.HandlerContext`) passed to most methods is used to
-report results, changes and logs to the handler and the server.
