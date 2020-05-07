@@ -1,3 +1,5 @@
+.. _moddev-module:
+
 Module Developers Guide
 ========================
 In inmanta all orchestration model code and related files, templates, plugins and resource handlers
@@ -19,8 +21,7 @@ Inmanta expects that each module is a git repository with a specific layout:
 The template, file and source plugins from the std module expect the following directories as well:
 
 * The ``files`` directory contains files that are deployed verbatim to managed machines.
-* The ``templates`` directory contains templates that use parameters from the orchestration model to
-generate configuration files.
+* The ``templates`` directory contains templates that use parameters from the orchestration model to generate configuration files.
 
 A complete module might contain the following files:
 
