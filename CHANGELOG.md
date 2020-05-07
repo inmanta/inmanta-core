@@ -14,6 +14,7 @@
 - Added troubleshooting documentation (#1211)
 - Documentation on compiler API and JSON (#2060)
 - Added further documentation to inmanta-cli command (#2057)
+- Documentation of config option types (#2072)
 
 
 # v 2020.2 (2020-04-24) Changes in this release:
