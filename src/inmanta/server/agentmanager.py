@@ -99,7 +99,7 @@ class SessionAction:
     """
 
     def __init__(
-        self, action_type: SessionActionType, session: protocol.Session, endpoint_names_snapshot: List[str], timestamp: datetime
+        self, action_type: SessionActionType, session: protocol.Session, endpoint_names_snapshot: Set[str], timestamp: datetime
     ):
         self.action_type = action_type
         self.session = session
@@ -190,6 +190,7 @@ class AgentManager(ServerSlice, SessionListener):
     async def _pause_agent(self, env: data.Environment, endpoint: Optional[str] = None) -> None:
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True)
+            endpoints_with_new_primary = []
             for agent_name in agents:
                 key = (env.id, agent_name)
                 live_session = self.tid_endpoint_to_session.get(key)
@@ -197,10 +198,13 @@ class AgentManager(ServerSlice, SessionListener):
                     # The agent has an active agent instance that has to be paused
                     del self.tid_endpoint_to_session[key]
                     await live_session.get_client().set_state(agent_name, enabled=False)
+                    endpoints_with_new_primary.append((agent_name, None))
+            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now())
 
     async def _unpause_agent(self, env: data.Environment, endpoint: Optional[str] = None) -> None:
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False)
+            endpoints_with_new_primary = []
             for agent_name in agents:
                 key = (env.id, agent_name)
                 live_session = self.tid_endpoint_to_session.get(key)
@@ -210,6 +214,8 @@ class AgentManager(ServerSlice, SessionListener):
                     if session:
                         self.tid_endpoint_to_session[key] = session
                         await session.get_client().set_state(agent_name, enabled=True)
+                        endpoints_with_new_primary.append((agent_name, session.id))
+            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now())
 
     async def _process_session_listener_actions(self) -> None:
         """
@@ -250,7 +256,7 @@ class AgentManager(ServerSlice, SessionListener):
             LOGGER.warning("Unknown SessionAction %s", action_type.name)
 
     # Notify from session listener
-    async def new_session(self, session: protocol.Session, endpoint_names_snapshot: List[str]) -> None:
+    async def new_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str]) -> None:
         """
            The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
         """
@@ -263,7 +269,7 @@ class AgentManager(ServerSlice, SessionListener):
         await self._session_listener_actions.put(session_action)
 
     # Notify from session listener
-    async def expire(self, session: protocol.Session, endpoint_names_snapshot: List[str]) -> None:
+    async def expire(self, session: protocol.Session, endpoint_names_snapshot: Set[str]) -> None:
         """
             The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
         """
@@ -276,7 +282,7 @@ class AgentManager(ServerSlice, SessionListener):
         await self._session_listener_actions.put(session_action)
 
     # Notify from session listener
-    async def seen(self, session: protocol.Session, endpoint_names_snapshot: List[str]) -> None:
+    async def seen(self, session: protocol.Session, endpoint_names_snapshot: Set[str]) -> None:
         """
            The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
         """
@@ -289,19 +295,19 @@ class AgentManager(ServerSlice, SessionListener):
         await self._session_listener_actions.put(session_action)
 
     # Seen
-    async def _seen_session(self, session: protocol.Session, endpoint_names_snapshot: List[str]) -> None:
+    async def _seen_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str]) -> None:
         endpoints_with_new_primary: List[Tuple[str, Optional[uuid.UUID]]] = []
         async with self.session_lock:
             endpoints_in_agent_manager = self.endpoints_for_sid[session.id]
-            endpoints_in_session = set(endpoint_names_snapshot)
-            endpoints_to_add = list(endpoints_in_session - endpoints_in_agent_manager)
+            endpoints_in_session = endpoint_names_snapshot
+            endpoints_to_add = endpoints_in_session - endpoints_in_agent_manager
             LOGGER.debug("Adding endpoints %s to session %s on %s", endpoints_to_add, session.id, session.nodename)
-            endpoints_to_remove = list(endpoints_in_agent_manager - endpoints_in_session)
+            endpoints_to_remove = endpoints_in_agent_manager - endpoints_in_session
             LOGGER.debug("Removing endpoints %s from session %s on %s", endpoints_to_add, session.id, session.nodename)
 
             endpoints_with_new_primary += await self._failover_endpoints(session, endpoints_to_remove)
             endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session, endpoints_to_add)
-            self.endpoints_for_sid[session.id] = set(endpoints_in_session)
+            self.endpoints_for_sid[session.id] = endpoints_in_session
 
         self.add_background_task(
             self._log_session_seen_to_db(session, endpoints_to_add, endpoints_to_remove, endpoints_with_new_primary)
@@ -310,8 +316,8 @@ class AgentManager(ServerSlice, SessionListener):
     async def _log_session_seen_to_db(
         self,
         session: protocol.Session,
-        endpoints_to_add: List[str],
-        endpoints_to_remove: List[str],
+        endpoints_to_add: Set[str],
+        endpoints_to_remove: Set[str],
         endpoints_with_new_primary: List[Tuple[str, Optional[uuid.UUID]]],
     ) -> None:
         """
@@ -324,7 +330,7 @@ class AgentManager(ServerSlice, SessionListener):
         await data.AgentProcess.update_last_seen(session.id, now)
 
     # Session registration
-    async def _register_session(self, session: protocol.Session, endpoint_names_snapshot: List[str], now: datetime) -> None:
+    async def _register_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str], now: datetime) -> None:
         """
             This method registers a new session in memory and asynchronously updates the agent
             session log in the database. When the database connection is lost, the get_statuses()
@@ -335,7 +341,7 @@ class AgentManager(ServerSlice, SessionListener):
             tid = session.tid
             sid = session.get_id()
             self.sessions[sid] = session
-            self.endpoints_for_sid[sid] = set(endpoint_names_snapshot)
+            self.endpoints_for_sid[sid] = endpoint_names_snapshot
             try:
                 endpoints_with_new_primary = await self._ensure_primary_if_not_exists(session, endpoint_names_snapshot)
             except Exception as e:
@@ -353,7 +359,7 @@ class AgentManager(ServerSlice, SessionListener):
         self,
         tid: uuid.UUID,
         session: protocol.Session,
-        endpoint_names: List[str],
+        endpoint_names: Set[str],
         endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]],
         now: datetime,
     ) -> None:
@@ -365,7 +371,7 @@ class AgentManager(ServerSlice, SessionListener):
         await data.Agent.update_primary(tid, endpoints_with_new_primary, now)
 
     # Session expiry
-    async def _expire_session(self, session: protocol.Session, endpoint_names_snapshot: List[str], now: datetime) -> None:
+    async def _expire_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str], now: datetime) -> None:
         """
             This method expires the given session and update the in-memory session state.
             The in-database session log is updated asynchronously. These database updates
@@ -439,7 +445,7 @@ class AgentManager(ServerSlice, SessionListener):
         return new_active_session
 
     async def _ensure_primary_if_not_exists(
-        self, session: protocol.Session, endpoints: List[str]
+        self, session: protocol.Session, endpoints: Set[str]
     ) -> Sequence[Tuple[str, uuid.UUID]]:
         """
             Make this session the primary session for the endpoints of this session if no primary exists and the agent is not
@@ -463,7 +469,7 @@ class AgentManager(ServerSlice, SessionListener):
         return result
 
     async def _failover_endpoints(
-        self, session: protocol.Session, endpoints: List[str]
+        self, session: protocol.Session, endpoints: Set[str]
     ) -> Sequence[Tuple[str, Optional[uuid.UUID]]]:
         """
             If the given session is the primary for a given endpoint, failover to a new session.
@@ -472,14 +478,22 @@ class AgentManager(ServerSlice, SessionListener):
 
             Note: Always call under session lock.
         """
+        agent_statuses = await data.Agent.get_statuses(session.tid, endpoints)
         result = []
         for endpoint_name in endpoints:
             key = (session.tid, endpoint_name)
             if key in self.tid_endpoint_to_session and self.tid_endpoint_to_session[key].id == session.id:
-                new_active_session = await self._use_new_active_session_for_agent(session.tid, endpoint_name)
-                if new_active_session:
-                    result.append((endpoint_name, new_active_session.id))
+                if agent_statuses[endpoint_name] != AgentStatus.paused:
+                    new_active_session = await self._use_new_active_session_for_agent(session.tid, endpoint_name)
+                    if new_active_session:
+                        result.append((endpoint_name, new_active_session.id))
+                    else:
+                        result.append((endpoint_name, None))
                 else:
+                    # This should never occur. An agent cannot have an active session while its paused,
+                    # given the fact that this method executes under session_lock
+                    LOGGER.warning("Paused agent %s has an active session (sid=%s)", endpoint_name, session.id)
+                    del self.tid_endpoint_to_session[key]
                     result.append((endpoint_name, None))
         return result
 
@@ -798,6 +812,13 @@ class AutostartedAgentManager(ServerSlice):
 
         agent_map: Dict[str, str]
         agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
+
+        # The internal agent should always be present in the autostart_agent_map. If it's not, this autostart_agent_map was
+        # set in a previous version of the orchestrator which didn't have this constraint. This code fixes the inconsistency.
+        if "internal" not in agent_map:
+            agent_map["internal"] = "local:"
+            await env.set(data.AUTOSTART_AGENT_MAP, dict(agent_map))
+
         agents = [agent for agent in agents if agent in agent_map]
         needsstart = restart
         if len(agents) == 0:

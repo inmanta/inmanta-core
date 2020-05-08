@@ -1181,7 +1181,7 @@ class AgentInstance(BaseDocument):
 
     @classmethod
     async def _expire_endpoints_for_process(
-        cls, tid: uuid.UUID, process: uuid.UUID, endpoints: List[str], now: datetime.datetime
+        cls, tid: uuid.UUID, process: uuid.UUID, endpoints: Set[str], now: datetime.datetime
     ) -> None:
         """
             Expire the agent instances for the given endpoints if they are not expired yet.
@@ -1198,7 +1198,7 @@ class AgentInstance(BaseDocument):
 
     @classmethod
     async def log_instance_creation(
-        cls, tid: uuid.UUID, process: uuid.UUID, endpoints: List[str], now: datetime.datetime
+        cls, tid: uuid.UUID, process: uuid.UUID, endpoints: Set[str], now: datetime.datetime
     ) -> None:
         """
             Create new agent instances for a given session.
@@ -1211,7 +1211,7 @@ class AgentInstance(BaseDocument):
             await cls(tid=tid, process=process, name=nh).insert()
 
     @classmethod
-    async def log_instance_expiry(cls, sid: uuid.UUID, endpoints: List[str], now: datetime.datetime) -> None:
+    async def log_instance_expiry(cls, sid: uuid.UUID, endpoints: Set[str], now: datetime.datetime) -> None:
         """
             Expire specific instances for a given session id.
         """
@@ -1252,7 +1252,7 @@ class Agent(BaseDocument):
     primary = property(get_primary, set_primary, del_primary)
 
     @classmethod
-    async def get_statuses(cls, env_id: uuid.UUID, agent_names: List[str]) -> Dict[str, Optional[AgentStatus]]:
+    async def get_statuses(cls, env_id: uuid.UUID, agent_names: Set[str]) -> Dict[str, Optional[AgentStatus]]:
         result: Dict[str, Optional[AgentStatus]] = {}
         for agent_name in agent_names:
             agent = await cls.get_one(environment=env_id, name=agent_name)
