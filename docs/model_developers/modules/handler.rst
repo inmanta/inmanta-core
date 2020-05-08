@@ -18,7 +18,7 @@ agent to enforce the :term:`desired state` expressed by a resource.
 Resource
 ^^^^^^^^
 A resource is represented by a Python class that is registered with Inmanta using the
-:func:`~inmanta.resources.resource` decorator. This decorator decorates a class that inherits from
+:func:`@resource<inmanta.resources.resource>` decorator. This decorator decorates a class that inherits from
 the :class:`~inmanta.resources.Resource` class.
 
 The fields of the resource are indicated with a ``fields`` field in the class. This field is a tuple
@@ -53,7 +53,7 @@ entity it is serializing.
             return int(x.mode)
 
 
-Classes decorated with :func:`~inmanta.resources.resource` do not have to inherit directly from
+Classes decorated with :func:`@resource<inmanta.resources.resource>` do not have to inherit directly from
 :class:`~inmanta.resources.Resource`. The orchestrator already offers two additional base classes with fields and mappings
 defined: :class:`~inmanta.resources.PurgeableResource` and
 :class:`~inmanta.resources.ManagedResource`. This mechanism is useful for resources that have fields
@@ -73,11 +73,11 @@ to the server. When a new orchestration model version is deployed, the handler c
 agents and imported there.
 
 Handlers should inherit the class :class:`~inmanta.agent.handler.ResourceHandler`. The
-:func:`~inmanta.agent.handler.provider` decorator registers the class with the orchestrator. When the
+:func:`@provider<inmanta.agent.handler.provider>` decorator registers the class with the orchestrator. When the
 agent needs a handler for a resource it will load all handler classes registered for that resource
-and call the :func:`~inmanta.agent.handler.ResourceHandler.available` method. This method should check
+and call the :meth:`~inmanta.agent.handler.ResourceHandler.available` method. This method should check
 if all conditions are fulfilled to use this handler. The agent will select a handler, only when a
-single handler is available, so the :func:`~inmanta.agent.handler.ResourceHandler.available` method of all handlers of a resource need to be
+single handler is available, so the :meth:`~inmanta.agent.handler.ResourceHandler.available` method of all handlers of a resource need to be
 mutually exclusive. If no handler is available, the resource will be marked unavailable.
 
 :class:`~inmanta.agent.handler.ResourceHandler` is the handler base class.
