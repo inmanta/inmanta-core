@@ -3408,12 +3408,21 @@ async def test_agentinstance_stops_deploying_when_stopped(
     agent_instance = agent._instances["agent1"]
     assert not agent_instance._nq.finished()
     assert agent_instance.is_enabled()
+    assert not agent_instance.is_stopped()
 
     await agent.remove_end_point_name("agent1")
 
     assert "agent1" not in agent._instances
     assert agent_instance._nq.finished()
     assert not agent_instance.is_enabled()
+    assert agent_instance.is_stopped()
+
+    # Agent cannot be unpaused after it is stopped
+    return_code, _ = agent_instance.unpause()
+    assert return_code == 403
+    assert agent_instance._nq.finished()
+    assert not agent_instance.is_enabled()
+    assert agent_instance.is_stopped()
 
     # Cleanly stop in flight coroutines
     await resource_container.wait_for_done_with_waiters(

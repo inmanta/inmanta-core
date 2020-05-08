@@ -630,6 +630,9 @@ class AgentInstance(object):
     def is_enabled(self) -> bool:
         return self._enabled
 
+    def is_stopped(self) -> bool:
+        return self._stopped
+
     def unpause(self) -> Apireturn:
         if self._stopped:
             return 403, "Cannot unpause stopped agent instance"
