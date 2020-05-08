@@ -4,6 +4,7 @@
 - Log primary for agent correctly in the database when pausing/unpausing agents (#2079)
 - Cancel scheduled deploy operations of an agent when that agent is paused (#2077)
 - Ensure the internal agent is always present in the autostart_agent_map of auto-started agents (#2101)
+- Cancel scheduled ResourceActions when AgentInstance is stopped (#2106)
 
 # v 2020.2 (2020-04-24) Changes in this release:
 
