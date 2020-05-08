@@ -25,9 +25,9 @@ The fields of the resource are indicated with a ``fields`` field in the class. T
 or list of strings with the name of the desired fields of the resource. The orchestrator uses these
 fields to determine which attributes of the matching entity need to be included in the resource.
 
-Fields of a resource cannot refer to instance in the orchestration model or fields of other
+Fields of a resource cannot refer to an instance in the orchestration model or fields of other
 resources. The resource serializers allows to map field values. Instead of referring directly to an
-attribute of the entity is serializes (path in std::File and path in the resource map one on one).
+attribute of the entity it serializes (path in std::File and path in the resource map one on one).
 This mapping is done by adding a static method to the resource class with ``get_$(field_name)`` as
 name. This static method has two arguments: a reference to the exporter and the instance of the
 entity it is serializing.
@@ -54,7 +54,7 @@ entity it is serializing.
 
 
 Classes decorated with :func:`~inmanta.resources.resource` do not have to inherit directly from
-Resource. The orchestrator already offers two additional base classes with fields and mappings
+:class:`~inmanta.resources.Resource`. The orchestrator already offers two additional base classes with fields and mappings
 defined: :class:`~inmanta.resources.PurgeableResource` and
 :class:`~inmanta.resources.ManagedResource`. This mechanism is useful for resources that have fields
 in common.
@@ -64,25 +64,25 @@ A resource can also indicate that it has to be ignored by raising the
 
 Handler
 ^^^^^^^
-Handlers interface the orchestrator with resources in the :term:`infrastructure` in the agents.
+Handlers interface the orchestrator with resources in the :term:`infrastructure`.
 Handlers take care of changing the current state of a resource to the desired state expressed in the
 orchestration model.
 
 The compiler collects all python modules from Inmanta modules that provide handlers and uploads them
-to the server. When a new orchestration module version is deployed, the handler code is pushed to all
+to the server. When a new orchestration model version is deployed, the handler code is pushed to all
 agents and imported there.
 
 Handlers should inherit the class :class:`~inmanta.agent.handler.ResourceHandler`. The
-:func:`~inmanta.agent.handler.provider` decorator register the class with the orchestrator. When the
+:func:`~inmanta.agent.handler.provider` decorator registers the class with the orchestrator. When the
 agent needs a handler for a resource it will load all handler classes registered for that resource
-and call the :func:`~inmanta.agent.handler.ResourceHandler.available`. This method should check
+and call the :func:`~inmanta.agent.handler.ResourceHandler.available` method. This method should check
 if all conditions are fulfilled to use this handler. The agent will select a handler, only when a
-single handler is available, so the is_available method of all handlers of a resource need to be
+single handler is available, so the :func:`~inmanta.agent.handler.ResourceHandler.available` method of all handlers of a resource need to be
 mutually exclusive. If no handler is available, the resource will be marked unavailable.
 
 :class:`~inmanta.agent.handler.ResourceHandler` is the handler base class.
 :class:`~inmanta.agent.handler.CRUDHandler` provides a more recent base class that is better suited
-for resources that are manipulated with Create, Delete or Update operations. This operations often
+for resources that are manipulated with Create, Delete or Update operations. These operations often
 match managed APIs very well. The CRUDHandler is recommended for new handlers unless the resource
 has special resource states that do not match CRUD operations.
 
@@ -129,7 +129,7 @@ Caching
 """""""
 
 The agent maintains a cache, that is kept over handler invocations. It can, for example, be used to
-cache connection, so that multiple resources on the same device can share a connection.
+cache a connection, so that multiple resources on the same device can share a connection.
 
 The cache can be invalidated either based on a timeout or on version. A timeout based cache is kept
 for a specific time. A version based cache is used for all resource in a specific version.
