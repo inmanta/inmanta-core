@@ -10,10 +10,11 @@
 
 ## Added
 - Added cleanup mechanism of old compile reports (#2054)
-- Documentation on valid client types (#2015)
 - Added `compiler.json` option and `--json` compile flag to export structured compile data such as occurred errors (#1206)
 - Added troubleshooting documentation (#1211)
 - Documentation on compiler API and JSON (#2060)
+- Documentation on valid client types (#2015)
+- Improved documentation on handler development (#1278)
 - Added further documentation to inmanta-cli command (#2057)
 - Documentation of config option types (#2072)
 - Added method names as Operation Id to OpenApi definition (#2053)

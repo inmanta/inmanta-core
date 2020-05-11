@@ -21,8 +21,9 @@ Glossary
         available such as development, integration and testing.
 
     agent
-        Agents group :term:`resources<resource>` This grouping is free to choose by the designer of
-        a resource, however this determines
+        The process that enforces the desired state described by :term:`resources<resource>` by
+        executing :term:`handlers<handler>`. Each agent is responsible for all resources that go to
+        a single device or API endpoint.
 
     resource
         Inmanta orchestrates and manages resources, of any abstraction level, in an infrastructure.
