@@ -22,7 +22,7 @@ Glossary
 
     agent
         The process that enforces the desired state described by :term:`resources<resource>` by
-        executing :term:`handlers<handler>`. Each agent is responsible for all resource that go to
+        executing :term:`handlers<handler>`. Each agent is responsible for all resources that go to
         a single device or API endpoint.
 
     resource
