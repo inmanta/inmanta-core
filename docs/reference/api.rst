@@ -7,6 +7,7 @@ This page describes parts of the compiler that provide a stable API that could b
     Only those parts explicitly mentioned here are part of the API. They provide a stable
     interface. Other parts of the containing modules provide no such guarantees.
 
+.. _compiler-exceptions:
 
 Compiler exceptions
 -------------------
