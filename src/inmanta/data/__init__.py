@@ -817,7 +817,7 @@ class Environment(BaseDocument):
             typ="int",
             default=10,
             doc="The splay time on the deployment interval of the autostarted agents."
-            " See also: inmanta.config:option:`config.agent-deploy-splay-time`",
+            " See also: :inmanta.config:option:`config.agent-deploy-splay-time`",
             validator=convert_int,
             agent_restart=True,
         ),
@@ -825,7 +825,7 @@ class Environment(BaseDocument):
             name=AUTOSTART_AGENT_REPAIR_INTERVAL,
             typ="int",
             default=86400,
-            doc="The repair interval of the autostarted agents. See also: inmanta.config:option:`config.agent-repair-interval`",
+            doc="The repair interval of the autostarted agents. See also: :inmanta.config:option:`config.agent-repair-interval`",
             validator=convert_int,
             agent_restart=True,
         ),
@@ -834,7 +834,7 @@ class Environment(BaseDocument):
             typ="int",
             default=600,
             doc="The splay time on the repair interval of the autostarted agents."
-            " See also: inmanta.config:option:`config.agent-repair-splay-time`",
+            " See also: :inmanta.config:option:`config.agent-repair-splay-time`",
             validator=convert_int,
             agent_restart=True,
         ),
@@ -851,7 +851,7 @@ class Environment(BaseDocument):
             typ="dict",
             validator=convert_agent_map,
             doc="A dict with key the name of agents that should be automatically started. The value "
-            "is either an empty string or an agent map string. See also :inmanta.config:option:`config.agent-map`",
+            "is either an empty string or an agent map string. See also: :inmanta.config:option:`config.agent-map`",
             agent_restart=True,
         ),
         AUTOSTART_AGENT_INTERVAL: Setting(
