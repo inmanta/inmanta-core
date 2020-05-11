@@ -18,6 +18,7 @@
 - Documentation of config option types (#2072)
 - Added method names as Operation Id to OpenApi definition (#2053)
 - Added documentation of exceptions to the platform developers guide (#1210)
+- Extended documentation of autostarted agent settings (#2040)
 
 
 # v 2020.2 (2020-04-24) Changes in this release:
