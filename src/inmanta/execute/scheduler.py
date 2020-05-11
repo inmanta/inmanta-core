@@ -21,10 +21,10 @@ import logging
 import os
 import time
 from collections import deque
-from typing import Dict, List, Set, Tuple
+from typing import TYPE_CHECKING, Any, Deque, Dict, Generator, List, Sequence, Set, Tuple, Union
 
 from inmanta import plugins
-from inmanta.ast import CompilerException, CycleExcpetion, Location, MultiException, RuntimeException
+from inmanta.ast import Anchor, CompilerException, CycleExcpetion, Location, MultiException, RuntimeException
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from inmanta.ast.statements.define import (
@@ -38,8 +38,21 @@ from inmanta.ast.statements.define import (
 from inmanta.ast.type import TYPES, Type
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.proxy import UnsetException
-from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver
+from inmanta.execute.runtime import (
+    DelayedResultVariable,
+    ExecutionContext,
+    ExecutionUnit,
+    QueueScheduler,
+    Resolver,
+    ResultVariable,
+    Waiter,
+)
 from inmanta.execute.tracking import ModuleTracker
+
+if TYPE_CHECKING:
+    from inmanta.compiler import Compiler  # noqa: F401
+    from inmanta.ast import Statement, BasicBlock, NamedType  # noqa: F401
+
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
@@ -55,8 +68,9 @@ class Scheduler(object):
 
     def __init__(self, track_dataflow: bool = False):
         self.track_dataflow: bool = track_dataflow
+        self.types: Dict[str, Type] = {}
 
-    def freeze_all(self, exns):
+    def freeze_all(self, exns: List[CompilerException]) -> None:
         for t in [t for t in self.types.values() if isinstance(t, Entity)]:
             t.final(exns)
 
@@ -80,7 +94,7 @@ class Scheduler(object):
 
         return notdone
 
-    def get_types(self):
+    def get_types(self) -> Dict[str, Type]:
         return self.types
 
     def get_scopes(self):
@@ -117,13 +131,13 @@ class Scheduler(object):
             ce.add(nexte)
             raise
 
-    def define_types(self, compiler, statements, blocks):
+    def define_types(self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]) -> None:
         """
             This is the first compiler stage that defines all types_and_impl
         """
         # get all relevant stmts
-        definitions = [d for d in statements if isinstance(d, DefinitionStatement)]
-        others = [d for d in statements if not isinstance(d, DefinitionStatement)]
+        definitions: List["DefinitionStatement"] = [d for d in statements if isinstance(d, DefinitionStatement)]
+        others: List["Statement"] = [d for d in statements if not isinstance(d, DefinitionStatement)]
 
         if not len(others) == 0:
             raise Exception("others not empty %s" % repr(others))
@@ -135,7 +149,7 @@ class Scheduler(object):
         compiler.get_ns().set_primitives(TYPES)
 
         # all stmts contributing types and impls
-        newtypes = [
+        newtypes: List[Tuple[str, NamedType]] = [
             k for k in [t.register_types() for t in definitions if isinstance(t, TypeDefinitionStatement)] if k is not None
         ]
 
@@ -144,36 +158,38 @@ class Scheduler(object):
 
         # now that we have objects for all types, populate them
         implements = [t for t in definitions if isinstance(t, DefineImplement)]
-        others = [t for t in definitions if not isinstance(t, DefineImplement)]
-        entities = {t.fullName: t for t in others if isinstance(t, DefineEntity)}
-        type_constraints = [t for t in others if isinstance(t, DefineTypeConstraint)]
-        typedefaults = [t for t in others if isinstance(t, DefineTypeDefault)]
-        others = [t for t in others if not isinstance(t, (DefineEntity, DefineTypeDefault, DefineTypeConstraint))]
-        indices = [t for t in others if isinstance(t, DefineIndex)]
-        others = [t for t in others if not isinstance(t, DefineIndex)]
+        other_definitions = [t for t in definitions if not isinstance(t, DefineImplement)]
+        entities: Dict[str, DefineEntity] = {t.fullName: t for t in other_definitions if isinstance(t, DefineEntity)}
+        type_constraints = [t for t in other_definitions if isinstance(t, DefineTypeConstraint)]
+        typedefaults = [t for t in other_definitions if isinstance(t, DefineTypeDefault)]
+        other_definitions = [
+            t for t in other_definitions if not isinstance(t, (DefineEntity, DefineTypeDefault, DefineTypeConstraint))
+        ]
+        indices = [t for t in other_definitions if isinstance(t, DefineIndex)]
+        other_definitions = [t for t in other_definitions if not isinstance(t, DefineIndex)]
 
         # first type constraints so attribute defaults can be type checked
-        for d in type_constraints:
-            d.evaluate()
+        for tc in type_constraints:
+            tc.evaluate()
 
         # then entities, so we have inheritance
         # parents first
-        for d in self.sort_entities(entities):
-            d.evaluate()
+        for entity in self.sort_entities(entities):
+            entity.evaluate()
 
-        for d in typedefaults:
-            d.evaluate()
+        for typedefault in typedefaults:
+            typedefault.evaluate()
 
-        for d in others:
-            d.evaluate()
+        for other in other_definitions:
+            other.evaluate()
 
         # indices late, as they require all attributes
-        for d in indices:
-            d.evaluate()
+        for index in indices:
+            index.evaluate()
 
         # lastly the implements, as they require implementations
-        for d in implements:
-            d.evaluate()
+        for implement in implements:
+            implement.evaluate()
 
         compiler.plugins = {k: v for k, v in types_and_impl.items() if isinstance(v, plugins.Plugin)}
         types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
@@ -192,17 +208,20 @@ class Scheduler(object):
 
         self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
-    def anchormap(self, compiler, statements, blocks) -> List[Tuple[Location, Location]]:
+    def anchormap(
+        self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
+    ) -> Sequence[Tuple[Location, Location]]:
         prev = time.time()
 
         # first evaluate all definitions, this should be done in one iteration
         self.define_types(compiler, statements, blocks)
 
         # relations are also in blocks
-        statements = (s for s in statements if not isinstance(s, DefineRelation))
-        anchors = (
+        not_relation_statements: Generator[Statement, Any, Any] = (s for s in statements if not isinstance(s, DefineRelation))
+
+        anchors: Generator[Anchor, Any, Any] = (
             anchor
-            for container in itertools.chain(statements, blocks)
+            for container in itertools.chain(not_relation_statements, blocks)  # container: Union[Statement, BasicBlock]
             for anchor in container.get_anchors()
             if anchor is not None
         )
@@ -215,7 +234,7 @@ class Scheduler(object):
 
         return rangetorange
 
-    def run(self, compiler, statements, blocks):
+    def run(self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]) -> bool:
         """
             Evaluate the current graph
         """
@@ -237,13 +256,13 @@ class Scheduler(object):
 
         # setup queues
         # queue for runnable items
-        basequeue = deque()
+        basequeue: Deque[Waiter] = deque()
         # queue for RV's that are delayed
-        waitqueue = deque()
+        waitqueue: Deque[DelayedResultVariable[Any]] = deque()
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
-        zerowaiters = deque()
+        zerowaiters: Deque[DelayedResultVariable[Any]] = deque()
         # queue containing everything, to find hanging statements
-        all_statements = set()
+        all_statements: Set[Waiter] = set()
 
         # Wrap in object to pass around
         queue = QueueScheduler(compiler, basequeue, waitqueue, self.types, all_statements)
@@ -292,46 +311,46 @@ class Scheduler(object):
 
             # find a RV that has waiters, so freezing creates progress
             while len(waitqueue) > 0 and not progress:
-                next = waitqueue.popleft()
-                if next.hasValue:
+                next_rv = waitqueue.popleft()
+                if next_rv.hasValue:
                     # already froze itself
                     continue
-                if next.get_progress_potential() <= 0:
-                    zerowaiters.append(next)
-                elif next.get_waiting_providers() > 0:
+                if next_rv.get_progress_potential() <= 0:
+                    zerowaiters.append(next_rv)
+                elif next_rv.get_waiting_providers() > 0:
                     # definitely not done
                     # drop from queue
                     # will requeue when value is added
-                    next.unqueue()
+                    next_rv.unqueue()
                 else:
                     # freeze it and go to next iteration, new statements will be on the basequeue
-                    LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next)
-                    next.freeze()
+                    LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next_rv)
+                    next_rv.freeze()
                     progress = True
 
             # no waiters in waitqueue,...
             # see if any zerowaiters have become gotten waiters
             if not progress:
-                zerowaiters = [w for w in zerowaiters if not w.hasValue]
-                waitqueue = deque(w for w in zerowaiters if w.get_progress_potential() > 0)
+                zerowaiters_tmp = [w for w in zerowaiters if not w.hasValue]
+                waitqueue = deque(w for w in zerowaiters_tmp if w.get_progress_potential() > 0)
                 queue.waitqueue = waitqueue
-                zerowaiters = deque(w for w in zerowaiters if w.get_progress_potential() <= 0)
+                zerowaiters = deque(w for w in zerowaiters_tmp if w.get_progress_potential() <= 0)
                 while len(waitqueue) > 0 and not progress:
                     LOGGER.debug("Moved zerowaiters to waiters")
-                    next = waitqueue.popleft()
-                    if next.get_waiting_providers() > 0:
-                        next.unqueue()
+                    next_rv = waitqueue.popleft()
+                    if next_rv.get_waiting_providers() > 0:
+                        next_rv.unqueue()
                     else:
-                        LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next)
-                        next.freeze()
+                        LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next_rv)
+                        next_rv.freeze()
                         progress = True
 
             # no one waiting anymore, all done, freeze and finish
             if not progress:
                 LOGGER.debug("Finishing statements with no waiters")
                 while len(zerowaiters) > 0:
-                    next = zerowaiters.pop()
-                    next.freeze()
+                    next_rv = zerowaiters.pop()
+                    next_rv.freeze()
 
         now = time.time()
         LOGGER.info(
@@ -356,7 +375,7 @@ class Scheduler(object):
         # self.dump()
         # rint(len(self.types["std::Entity"].get_all_instances()))
 
-        excns = []
+        excns: List[CompilerException] = []
         self.freeze_all(excns)
 
         if len(excns) == 0:
@@ -372,6 +391,8 @@ class Scheduler(object):
                 if isinstance(st, ExecutionUnit):
                     stmt = st
                     break
+
+            assert stmt is not None
 
             raise RuntimeException(stmt.expression, "not all statements executed %s" % all_statements)
         # self.dump("std::File")

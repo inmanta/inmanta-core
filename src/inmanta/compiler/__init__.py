@@ -19,7 +19,7 @@ import logging
 import os
 import sys
 from itertools import chain
-from typing import Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -44,14 +44,19 @@ from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ResultVariable
 from inmanta.module import Project
 from inmanta.parser import ParserException
-from inmanta.plugins import PluginMeta
+from inmanta.plugins import Plugin, PluginMeta
 
 LOGGER = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from inmanta.ast import Statement, BasicBlock  # noqa: F401
 
 
 def do_compile(refs={}):
     """
-        Run run run
+        Perform a complete compilation run for the current project (as returned by :py:meth:`inmanta.module.Project.get`)
+
+
     """
     project = Project.get()
     compiler = Compiler(os.path.join(project.project_path, project.main_file), refs=refs)
@@ -116,45 +121,41 @@ class Compiler(object):
     """
         An inmanta compiler
 
-        :param options: Options passed to the application
-        :param config: The parsed configuration file
+        :param cf_file: DEPRECATED
+        :param refs: DEPRECATED
     """
 
     def __init__(self, cf_file="main.cf", refs={}):
-        self.__init_cf = "_init.cf"
-
-        self.__cf_file = cf_file
-        self.__root_ns = None
+        self.__root_ns: Optional[Namespace] = None
         self._data: CompileData = CompileData()
-        self.refs = refs
+        self.plugins: Dict[str, Plugin] = {}
 
-    def get_plugins(self):
+    def get_plugins(self) -> Dict[str, Plugin]:
         return self.plugins
 
-    def is_loaded(self):
+    def is_loaded(self) -> bool:
         """
             Is everything loaded and the namespace structure built?
         """
         return self.__root_ns is not None
 
-    def get_ns(self):
+    def get_ns(self) -> Namespace:
         """
             Get the root namespace
         """
-        if not self.is_loaded():
-            self.load()
+        assert self.__root_ns is not None
         return self.__root_ns
 
     ns = property(get_ns)
 
-    def read(self, path):
+    def read(self, path: str) -> str:
         """
             Return the content of the given file
         """
         with open(path, "r", encoding="utf-8") as file_d:
             return file_d.read()
 
-    def compile(self):
+    def compile(self) -> Tuple[List["Statement"], List["BasicBlock"]]:
         """
             This method will compile and prepare everything to start evaluation
             the configuration specification.
@@ -181,7 +182,7 @@ class Compiler(object):
 
             mod_ns = mod_ns[1:]
 
-            ns = self.__root_ns
+            ns: Optional[Namespace] = self.__root_ns
             for part in mod_ns:
                 if ns is None:
                     break
@@ -189,8 +190,6 @@ class Compiler(object):
 
             if ns is None:
                 raise Exception("Unable to find namespace for plugin module %s" % (cls.__module__))
-
-            cls.namespace = ns
 
             name = name.split("::")[-1]
             statement = PluginStatement(ns, name, cls)
@@ -200,13 +199,17 @@ class Compiler(object):
         ns = self.__root_ns.get_child_or_create("std")
         nullrange = Range("internal", 1, 0, 0, 0)
         entity = DefineEntity(
-            ns, LocatableString("Entity", nullrange, 0, ns), "The entity all other entities inherit from.", [], []
+            ns,
+            LocatableString("Entity", nullrange, 0, ns),
+            LocatableString("The entity all other entities inherit from.", nullrange, 0, ns),
+            [],
+            [],
         )
         str_std_entity = LocatableString("std::Entity", nullrange, 0, ns)
 
         requires_rel = DefineRelation(
-            (str_std_entity, LocatableString("requires", nullrange, 0, ns), [0, None], False),
-            (str_std_entity, LocatableString("provides", nullrange, 0, ns), [0, None], False),
+            (str_std_entity, LocatableString("requires", nullrange, 0, ns), (0, None)),
+            (str_std_entity, LocatableString("provides", nullrange, 0, ns), (0, None)),
         )
         requires_rel.namespace = self.__root_ns.get_ns_from_string("std")
 
