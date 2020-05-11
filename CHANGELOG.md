@@ -20,6 +20,7 @@
 - Added method names as Operation Id to OpenApi definition (#2053)
 - Added documentation of exceptions to the platform developers guide (#1210)
 - Extended documentation of autostarted agent settings (#2040)
+- Typing Improvements
 
 
 # v 2020.2 (2020-04-24) Changes in this release:
