@@ -825,7 +825,8 @@ class Environment(BaseDocument):
             name=AUTOSTART_AGENT_REPAIR_INTERVAL,
             typ="int",
             default=86400,
-            doc="The repair interval of the autostarted agents. See also: :inmanta.config:option:`config.agent-repair-interval`",
+            doc="The repair interval of the autostarted agents."
+            " See also: :inmanta.config:option:`config.agent-repair-interval`",
             validator=convert_int,
             agent_restart=True,
         ),
