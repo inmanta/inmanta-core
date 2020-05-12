@@ -21,7 +21,7 @@ import logging
 import os
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Any, Deque, Dict, Generator, Iterator, List, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Any, Deque, Dict, Iterator, List, Sequence, Set, Tuple
 
 from inmanta import plugins
 from inmanta.ast import Anchor, CompilerException, CycleExcpetion, Location, MultiException, RuntimeException
@@ -213,7 +213,7 @@ class Scheduler(object):
         self.define_types(compiler, statements, blocks)
 
         # relations are also in blocks
-        not_relation_statements: Generator[Statement, Any, Any] = (s for s in statements if not isinstance(s, DefineRelation))
+        not_relation_statements: Iterator[Statement] = (s for s in statements if not isinstance(s, DefineRelation))
 
         anchors: Iterator[Anchor] = (
             anchor

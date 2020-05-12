@@ -164,7 +164,7 @@ class Compiler(object):
             the configuration specification.
 
             This method will:
-            - load all module using Project.get().get_complete_ast()
+            - load all modules using Project.get().get_complete_ast()
             - add all plugins
             - create std::Entity
         """
