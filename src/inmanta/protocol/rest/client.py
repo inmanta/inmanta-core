@@ -147,8 +147,10 @@ class RESTClient(RESTBase):
 
         if content_type is None or content_type == common.JSON_CONTENT:
             return common.Result(code=response.code, result=self._decode(response.body))
-        elif content_type == common.HTML_CONTENT or content_type == common.HTML_CONTENT_WITH_UTF8_CHARSET:
+        elif content_type == common.HTML_CONTENT:
             return common.Result(code=response.code, result=response.body.decode(common.HTML_ENCODING))
+        elif content_type == common.HTML_CONTENT_WITH_UTF8_CHARSET:
+            return common.Result(code=response.code, result=response.body.decode(common.UTF8_ENCODING))
         else:
             # Any other content-type will leave the encoding unchanged
             return common.Result(code=response.code, result=response.body)
