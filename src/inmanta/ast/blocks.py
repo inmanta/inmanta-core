@@ -17,12 +17,16 @@
 """
 
 from itertools import chain
-from typing import Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple
 
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException, VariableShadowWarning
 from inmanta.ast.statements import DefinitionStatement, DynamicStatement, Statement
 from inmanta.execute.runtime import QueueScheduler, Resolver
+
+if TYPE_CHECKING:
+
+    from inmanta.execute.runtime import ExecutionContext
 
 
 class BasicBlock(object):
@@ -31,6 +35,7 @@ class BasicBlock(object):
         self.__definition_stmts = []  # type: List[DefinitionStatement]
         self.__variables = []  # type: List[Tuple[str, Statement]]
         self.namespace = namespace
+        self.context: "ExecutionContext" = None
 
         for st in stmts:
             self.add(st)

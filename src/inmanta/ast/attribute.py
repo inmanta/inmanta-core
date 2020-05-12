@@ -18,7 +18,7 @@
 
 from typing import List, Optional, Tuple
 
-from inmanta.ast import Locatable, RuntimeException, TypingException
+from inmanta.ast import CompilerException, Locatable, RuntimeException, TypingException
 from inmanta.ast.type import NullableType, TypedList
 from inmanta.execute.runtime import (
     AttributeVariable,
@@ -135,7 +135,7 @@ class Attribute(Locatable):
     def is_multi(self) -> bool:
         return self.__multi
 
-    def final(self, excns: List[Exception]) -> None:
+    def final(self, excns: List[CompilerException]) -> None:
         pass
 
 
@@ -182,7 +182,7 @@ class RelationAttribute(Attribute):
     def is_multi(self) -> bool:
         return self.high != 1
 
-    def final(self, excns: List[Exception]) -> None:
+    def final(self, excns: List[CompilerException]) -> None:
         for rv in self.source_annotations:
             try:
                 if isinstance(rv.get_value(), Unknown):
