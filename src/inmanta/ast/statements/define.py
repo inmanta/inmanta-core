@@ -18,6 +18,7 @@
 # pylint: disable-msg=R0923,W0613
 
 import logging
+import typing
 from typing import Dict, Iterator, List, Optional, Tuple
 
 import inmanta.warnings as inmanta_warnings
@@ -45,6 +46,7 @@ from inmanta.ast.statements import BiStatement, ExpressionStatement, Literal, St
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.type import TYPES, ConstraintType, NullableType, Type, TypedList
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
+from inmanta.plugins import Plugin
 
 from . import DefinitionStatement
 
@@ -688,7 +690,7 @@ class PluginStatement(TypeDefinitionStatement):
         This statement defines a plugin function
     """
 
-    def __init__(self, namespace: Namespace, name: str, function_class) -> None:
+    def __init__(self, namespace: Namespace, name: str, function_class: typing.Type[Plugin]) -> None:
         TypeDefinitionStatement.__init__(self, namespace, name)
         self._name = name
         self._function_class = function_class

@@ -16,10 +16,9 @@
     Contact: code@inmanta.com
 """
 import logging
-import os
 import sys
 from itertools import chain
-from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -29,6 +28,7 @@ from inmanta.ast import (
     CompilerException,
     DoubleSetException,
     LocatableString,
+    Location,
     MultiException,
     Namespace,
     Range,
@@ -46,20 +46,20 @@ from inmanta.module import Project
 from inmanta.parser import ParserException
 from inmanta.plugins import Plugin, PluginMeta
 
-LOGGER = logging.getLogger(__name__)
+LOGGER: logging.Logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from inmanta.ast import Statement, BasicBlock  # noqa: F401
 
 
-def do_compile(refs={}):
+def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
     """
         Perform a complete compilation run for the current project (as returned by :py:meth:`inmanta.module.Project.get`)
 
+        :param refs: DEPRECATED
 
     """
-    project = Project.get()
-    compiler = Compiler(os.path.join(project.project_path, project.main_file), refs=refs)
+    compiler = Compiler()
 
     LOGGER.debug("Starting compile")
 
@@ -87,7 +87,7 @@ def do_compile(refs={}):
     return (sched.get_types(), compiler.get_ns())
 
 
-def show_dataflow_graphic(scheduler, compiler):
+def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") -> None:
     from inmanta.execute.dataflow.graphic import GraphicRenderer
 
     types: Dict[str, inmanta_type.Type] = scheduler.get_types()
@@ -103,12 +103,15 @@ def show_dataflow_graphic(scheduler, compiler):
     )
 
 
-def anchormap(refs={}):
+def anchormap(refs: Dict[Any, Any] = {}) -> Sequence[Tuple[Location, Location]]:
     """
-        Run run run
+        Return all lexical references
+
+        Performs compilation up to and including the type resolution, but doesn't start executing
+
+        :param refs: DEPRECATED
     """
-    project = Project.get()
-    compiler = Compiler(os.path.join(project.project_path, project.main_file), refs=refs)
+    compiler = Compiler()
 
     LOGGER.debug("Starting compile")
 
@@ -125,7 +128,7 @@ class Compiler(object):
         :param refs: DEPRECATED
     """
 
-    def __init__(self, cf_file="main.cf", refs={}):
+    def __init__(self, cf_file: str = "main.cf", refs: Dict[Any, Any] = {}) -> None:
         self.__root_ns: Optional[Namespace] = None
         self._data: CompileData = CompileData()
         self.plugins: Dict[str, Plugin] = {}
@@ -157,13 +160,13 @@ class Compiler(object):
 
     def compile(self) -> Tuple[List["Statement"], List["BasicBlock"]]:
         """
-            This method will compile and prepare everything to start evaluation
+            This method will parse and prepare everything to start evaluation
             the configuration specification.
 
             This method will:
-            - load all namespaces
-            - compile the __config__ namespace
-            - start resolving it and importing unknown namespaces
+            - load all module using Project.get().get_complete_ast()
+            - add all plugins
+            - create std::Entity
         """
         project = Project.get()
         self.__root_ns = project.get_root_namespace()

@@ -21,7 +21,7 @@ import logging
 import os
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Any, Deque, Dict, Generator, List, Sequence, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Deque, Dict, Generator, Iterator, List, Sequence, Set, Tuple
 
 from inmanta import plugins
 from inmanta.ast import Anchor, CompilerException, CycleExcpetion, Location, MultiException, RuntimeException
@@ -42,9 +42,9 @@ from inmanta.execute.runtime import (
     DelayedResultVariable,
     ExecutionContext,
     ExecutionUnit,
+    Instance,
     QueueScheduler,
     Resolver,
-    ResultVariable,
     Waiter,
 )
 from inmanta.execute.tracking import ModuleTracker
@@ -74,19 +74,19 @@ class Scheduler(object):
         for t in [t for t in self.types.values() if isinstance(t, Entity)]:
             t.final(exns)
 
-        instances = self.types["std::Entity"].get_all_instances()
+        instances: List[Instance] = self.types["std::Entity"].get_all_instances()
 
         for i in instances:
             i.final(exns)
 
-    def dump(self, type="std::Entity"):
-        instances = self.types[type].get_all_instances()
+    def dump(self, type: str = "std::Entity") -> None:
+        instances: List[Instance] = self.types[type].get_all_instances()
 
         for i in instances:
             i.dump()
 
-    def verify_done(self):
-        instances = self.types["std::Entity"].get_all_instances()
+    def verify_done(self) -> List[Instance]:
+        instances: List[Instance] = self.types["std::Entity"].get_all_instances()
         notdone = []
         for i in instances:
             if not i.verify_done():
@@ -97,11 +97,7 @@ class Scheduler(object):
     def get_types(self) -> Dict[str, Type]:
         return self.types
 
-    def get_scopes(self):
-        return self.scopes
-
-    def dump_not_done(self):
-
+    def dump_not_done(self) -> None:
         for i in self.verify_done():
             i.dump()
 
@@ -219,7 +215,7 @@ class Scheduler(object):
         # relations are also in blocks
         not_relation_statements: Generator[Statement, Any, Any] = (s for s in statements if not isinstance(s, DefineRelation))
 
-        anchors: Generator[Anchor, Any, Any] = (
+        anchors: Iterator[Anchor] = (
             anchor
             for container in itertools.chain(not_relation_statements, blocks)  # container: Union[Statement, BasicBlock]
             for anchor in container.get_anchors()

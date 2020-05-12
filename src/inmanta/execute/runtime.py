@@ -954,7 +954,7 @@ class Instance(ExecutionContext):
         self.implementations.add(impl)
         return True
 
-    def final(self, excns: List[RuntimeException]) -> None:
+    def final(self, excns: List[CompilerException]) -> None:
         """
             The object should be complete, freeze all attributes
         """
