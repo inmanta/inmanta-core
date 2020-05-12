@@ -7,7 +7,7 @@
 - Fix agent-names config type (#2071)
 - Ensure the internal agent is always present in the autostart_agent_map of auto-started agents (#2101)
 - Cancel scheduled ResourceActions when AgentInstance is stopped (#2106)
-- Decoding of REST return value for content type html with charset set (#2074)
+- Decoding of REST return value for content type html with utf-8 charset (#2074)
 
 ## Added
 - Added cleanup mechanism of old compile reports (#2054)
