@@ -100,6 +100,8 @@ class RESTHandler(tornado.web.RequestHandler):
             return common.json_encode(body)
         if content_type == common.HTML_CONTENT:
             return body.encode(common.HTML_ENCODING)
+        if content_type == common.HTML_CONTENT_WITH_UTF8_CHARSET:
+            return body.encode(common.UTF8_ENCODING)
         return body
 
     async def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> None:

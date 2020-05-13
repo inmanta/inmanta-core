@@ -1356,7 +1356,7 @@ async def test_html_content_type_with_utf8_encoding(unused_tcp_port, postgres_db
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
 
-    html_content = "<html><body>test</body></html>".encode(encoding="utf-8")
+    html_content = "<html><body>test</body></html>"
 
     @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
     def test_method() -> ReturnValue[str]:  # NOQA

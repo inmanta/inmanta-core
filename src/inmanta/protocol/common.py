@@ -73,6 +73,7 @@ if TYPE_CHECKING:
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
 HTML_ENCODING = "ISO-8859-1"
+UTF8_ENCODING = "UTF-8"
 CONTENT_TYPE = "Content-Type"
 JSON_CONTENT = "application/json"
 HTML_CONTENT = "text/html"
