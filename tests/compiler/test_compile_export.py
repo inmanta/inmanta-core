@@ -17,8 +17,8 @@
 """
 
 import json
-from tempfile import mkstemp
-from typing import Optional, Type
+from pathlib import Path
+from typing import Callable, Optional, Type
 
 import pytest
 
@@ -30,53 +30,57 @@ from inmanta.config import Config
 from inmanta.parser import ParserException
 
 
-def export_to_file(file: str, expected_error_type: Optional[Type[CompilerException]] = None) -> ExportCompileData:
+def export_to_file(path: Path, expected_error_type: Optional[Type[CompilerException]] = None) -> ExportCompileData:
     """
         Compiles, exporting to a file, and returns the file contents, loaded as ExportCompileData.
     """
     Config.set("compiler", "json", "true")
-    Config.set("compiler", "json_file", file)
+    Config.set("compiler", "json_file", str(path))
     if expected_error_type is None:
         compiler.do_compile()
     else:
         with pytest.raises(CompilerException):
             compiler.do_compile()
-    with open(file) as f:
+    with path.open() as f:
         return ExportCompileData(**json.loads(f.read()))
 
 
-def export_to_tempfile(expected_error_type: Optional[Type[CompilerException]] = None) -> ExportCompileData:
-    return export_to_file(mkstemp(text=True)[1], expected_error_type)
+@pytest.fixture
+def tempfile_export(tmp_path: Path) -> Callable[[Optional[Type[CompilerException]]], ExportCompileData]:
+    def do_export(expected_error_type: Optional[Type[CompilerException]] = None) -> ExportCompileData:
+        return export_to_file(tmp_path / "myfile", expected_error_type)
+
+    return do_export
 
 
-def test_export_compile_data_to_file(snippetcompiler) -> None:
+def test_export_compile_data_to_file(snippetcompiler, tempfile_export) -> None:
     snippetcompiler.setup_for_snippet(
         """
 x = 0
         """,
     )
-    assert len(export_to_tempfile().errors) == 0
+    assert len(tempfile_export().errors) == 0
 
 
-def test_export_compile_data_to_file_overwrite(snippetcompiler) -> None:
-    file: str = mkstemp(text=True)[1]
+def test_export_compile_data_to_file_overwrite(snippetcompiler, tmp_path: Path) -> None:
+    path: Path = tmp_path / "myfile"
     for _ in range(2):
         snippetcompiler.setup_for_snippet(
             """
 x = 0
             """,
         )
-        assert len(export_to_file(file).errors) == 0
+        assert len(export_to_file(path).errors) == 0
 
 
-def test_export_compile_data_to_file_error(snippetcompiler) -> None:
+def test_export_compile_data_to_file_error(snippetcompiler, tempfile_export) -> None:
     snippetcompiler.setup_for_snippet(
         """
 x = 0
 x = 1
         """,
     )
-    compile_data: ExportCompileData = export_to_tempfile(DoubleSetException)
+    compile_data: ExportCompileData = tempfile_export(DoubleSetException)
     assert len(compile_data.errors) == 1
     error: ast_export.Error = compile_data.errors[0]
     assert error.category == ast_export.ErrorCategory.runtime
@@ -100,9 +104,9 @@ x = 1
     ],
 )
 def test_export_compile_data_to_file_categories(
-    snippetcompiler, snippet: str, exception: Type[CompilerException], category: ast_export.ErrorCategory
+    snippetcompiler, snippet: str, exception: Type[CompilerException], category: ast_export.ErrorCategory, tempfile_export
 ) -> None:
     snippetcompiler.setup_for_snippet(snippet)
-    compile_data: ExportCompileData = export_to_tempfile(exception)
+    compile_data: ExportCompileData = tempfile_export(exception)
     assert len(compile_data.errors) == 1
     assert compile_data.errors[0].category == category
