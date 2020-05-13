@@ -22,6 +22,7 @@
 - Added documentation of exceptions to the platform developers guide (#1210)
 - Extended documentation of autostarted agent settings (#2040)
 - Typing Improvements
+- Redirect stdout and stderr to /var/log/inmanta/agent.{out,err} for agent service (#2091)
 
 
 # v 2020.2 (2020-04-24) Changes in this release:
