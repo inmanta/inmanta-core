@@ -201,7 +201,7 @@ def is_bool(value: str) -> bool:
 
 def is_list(value: str) -> List[str]:
     """List of comma-separated values"""
-    return [x.strip() for x in value.split(",")]
+    return [] if value == "" else [x.strip() for x in value.split(",")]
 
 
 def is_map(map_in: str) -> Dict[str, str]:
