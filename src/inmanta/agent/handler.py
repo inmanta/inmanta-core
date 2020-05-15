@@ -327,7 +327,7 @@ class HandlerContext(object):
         else:
             exc_info = False
         log = data.LogLine.log(level, msg, **kwargs)
-        LOGGER.log(level, log._data["msg"], exc_info=exc_info)
+        self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
         self._logs.append(log)
 
     def debug(self, msg: str, *args, **kwargs) -> None:
