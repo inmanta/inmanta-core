@@ -184,6 +184,11 @@ class RelationAttribute(Attribute):
         out.set_type(self.get_basetype())
         return out
 
+    def get_type(self) -> "Type":
+        return self.get_basetype()
+
+    type: "Type" = property(get_type)
+
     def is_optional(self) -> bool:
         return self.low == 0
 
