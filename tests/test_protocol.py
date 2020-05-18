@@ -767,6 +767,8 @@ async def test_nested_paths(unused_tcp_port, postgres_db, database_name, async_f
 
         @protocol.handle(test_method)
         async def test_method(self, data: str) -> Project:
+            # verify that URL encoded data is properly decoded
+            assert "%20" not in data
             return Project(name="test_method")
 
         @protocol.handle(test_method2)
@@ -781,7 +783,7 @@ async def test_nested_paths(unused_tcp_port, postgres_db, database_name, async_f
     async_finalizer.add(rs.stop)
 
     client = protocol.Client("client")
-    result = await client.test_method({"data": "test"})
+    result = await client.test_method({"data": "test "})
     assert result.code == 200
     assert "test_method" == result.result["data"]["name"]
 

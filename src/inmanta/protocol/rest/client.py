@@ -20,6 +20,7 @@ import logging
 import re
 from asyncio import CancelledError
 from typing import TYPE_CHECKING, Any, AnyStr, Dict, List, Optional, Set, Tuple
+from urllib.parse import unquote
 
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
 
@@ -70,7 +71,7 @@ class RESTClient(RESTBase):
                     url_re += "$"
                 match = re.match(url_re, url)
                 if match and method in handlers:
-                    return match.groupdict(), handlers[method]
+                    return {unquote(k): unquote(v) for k, v in match.groupdict().items()}, handlers[method]
 
         return None, None
 
