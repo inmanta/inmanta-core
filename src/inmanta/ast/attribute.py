@@ -53,18 +53,31 @@ class Attribute(Locatable):
         self.__name: str = name
         entity.add_attribute(self)
         self.__entity = entity
-        self.__type = value_type
+        self.__basetype = value_type
         self.__multi = multi
         self.__nullable = nullable
         self.low = 0 if nullable else 1
         self.comment = None  # type: Optional[str]
         self.end: Optional[RelationAttribute] = None
 
+    def get_basetype(self) -> "Type":
+        """
+            Get the base type of this attribute, not taking into account modifiers such as `[]` and `?`.
+        """
+        return self.__basetype
+
+    basetype: "Type" = property(get_basetype)
+
     def get_type(self) -> "Type":
         """
-            Get the type of this data item
+            Get the type of this attribute.
         """
-        return self.__type
+        tp: Type = self.basetype
+        if self.is_multi():
+            tp = TypedList(tp)
+        if self.is_optional():
+            tp = NullableType(tp)
+        return tp
 
     type: "Type" = property(get_type)
 
@@ -101,18 +114,13 @@ class Attribute(Locatable):
         """
         if isinstance(value, Unknown):
             return
-        validation_type: Type = self.type
-        if self.is_multi():
-            validation_type = TypedList(validation_type)
-        if self.is_optional():
-            validation_type = NullableType(validation_type)
-        validation_type.validate(value)
+        self.type.validate(value)
 
     def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
         if self.__multi:
-            mytype = TypedList(self.__type)
+            mytype = TypedList(self.__basetype)
         else:
-            mytype = self.__type
+            mytype = self.__basetype
 
         out: ResultVariable["Instance"]
 
@@ -173,7 +181,7 @@ class RelationAttribute(Attribute):
             out = OptionVariable(self, instance, queue)  # type: ResultVariable
         else:
             out = ListVariable(self, instance, queue)  # type: ResultVariable
-        out.set_type(self.get_type())
+        out.set_type(self.get_basetype())
         return out
 
     def is_optional(self) -> bool:

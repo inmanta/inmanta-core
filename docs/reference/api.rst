@@ -80,7 +80,7 @@ Attributes
 ----------
 
 .. autoclass:: inmanta.ast.attribute.Attribute
-    :members: validate
+    :members: validate, get_basetype, basetype, get_type, type
     :undoc-members:
 
 
