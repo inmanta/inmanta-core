@@ -227,7 +227,7 @@ class DefineEntity(TypeDefinitionStatement):
                         # allow compatible attributes
                         my_attr = add_attributes[attr_name]
 
-                        if my_attr.basetype == other_attr.basetype:
+                        if my_attr.type == other_attr.type:
                             add_attributes[attr_name] = other_attr
                         else:
                             raise DuplicateException(my_attr, other_attr, "Incompatible attributes")
