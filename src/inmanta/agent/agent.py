@@ -1280,10 +1280,11 @@ class Agent(SessionEndpoint):
         changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]],
     ) -> Apireturn:
         if env != self._env_id:
-            LOGGER.warning(
-                "received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
+            LOGGER.error(
+                "The agent process for the environment %s has received a cross agent dependency event that was intended for "
+                "another environment %s. It originated from the resource: %s, that is in state: %s",
+                self._env_id,
                 env,
-                agent,
                 resource,
                 state,
             )
@@ -1292,8 +1293,9 @@ class Agent(SessionEndpoint):
         instance = self._instances.get(agent)
         if not instance:
             LOGGER.warning(
-                "received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
-                env,
+                "The agent process for the environment %s has received a cross agent dependency event that was intended for "
+                "an agent that is not present here %s. It originated from the resource: %s, that is in state: %s",
+                self._env_id,
                 agent,
                 resource,
                 state,

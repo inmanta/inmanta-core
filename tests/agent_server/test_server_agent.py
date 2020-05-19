@@ -1114,6 +1114,8 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
 async def test_cross_agent_deps(resource_container, server, client, environment, clienthelper, no_agent_backoff):
     """
         deploy a configuration model with cross host dependency
+
+        This test also verifies correct handling of spaces in url parameters on the return channel
     """
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
@@ -1123,8 +1125,8 @@ async def test_cross_agent_deps(resource_container, server, client, environment,
 
     env_id = environment
 
-    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
-    await agent.add_end_point_name("agent1")
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent 1": "localhost"}, code_loader=False)
+    await agent.add_end_point_name("agent 1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -1133,8 +1135,8 @@ async def test_cross_agent_deps(resource_container, server, client, environment,
     await agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
-    resource_container.Provider.set("agent1", "key2", "incorrect_value")
-    resource_container.Provider.set("agent1", "key3", "value")
+    resource_container.Provider.set("agent 1", "key2", "incorrect_value")
+    resource_container.Provider.set("agent 1", "key3", "value")
 
     version = await clienthelper.get_version()
 
@@ -1142,15 +1144,15 @@ async def test_cross_agent_deps(resource_container, server, client, environment,
         {
             "key": "key1",
             "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "id": "test::Resource[agent 1,key=key1],v=%d" % version,
             "purged": False,
             "send_event": False,
-            "requires": ["test::Wait[agent1,key=key2],v=%d" % version, "test::Resource[agent2,key=key3],v=%d" % version],
+            "requires": ["test::Wait[agent 1,key=key2],v=%d" % version, "test::Resource[agent2,key=key3],v=%d" % version],
         },
         {
             "key": "key2",
             "value": "value2",
-            "id": "test::Wait[agent1,key=key2],v=%d" % version,
+            "id": "test::Wait[agent 1,key=key2],v=%d" % version,
             "requires": [],
             "purged": False,
             "send_event": False,
@@ -1198,9 +1200,9 @@ async def test_cross_agent_deps(resource_container, server, client, environment,
     assert result.result["model"]["done"] == len(resources)
     assert result.result["model"]["result"] == const.VersionState.success.name
 
-    assert resource_container.Provider.isset("agent1", "key1")
-    assert resource_container.Provider.get("agent1", "key1") == "value1"
-    assert resource_container.Provider.get("agent1", "key2") == "value2"
+    assert resource_container.Provider.isset("agent 1", "key1")
+    assert resource_container.Provider.get("agent 1", "key1") == "value1"
+    assert resource_container.Provider.get("agent 1", "key2") == "value2"
     assert resource_container.Provider.get("agent2", "key3") == "value3"
 
     await agent.stop()
