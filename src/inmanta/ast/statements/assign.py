@@ -434,7 +434,7 @@ vm.files[path="/etc/motd"]
                 self, "short index lookup is only possible on bi-drectional relations, %s is unidirectional" % relation
             )
 
-        self.type = relation.get_basetype()
+        self.type = relation.type
 
         self.type.lookup_index(
             list(
