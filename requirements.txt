@@ -51,7 +51,7 @@ mypy==0.770
 setuptools==46.4.0
 pip==20.1
 docstring-parser==0.7.1
-bumpversion==0.5.3
+bumpversion==0.6.0
 sphinx-click==2.3.2
 
 # Transitive dependencies
