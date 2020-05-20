@@ -1513,4 +1513,7 @@ async def test_malformed_json(server):
     client = AsyncHTTPClient()
     response = await client.fetch(request, raise_error=False)
     assert response.code == 400
-    assert json.loads(response.body)["message"] == "The request body couldn\'t be decoded as a JSON: Expecting value: line 1 column 10 (char 9)"
+    assert (
+        json.loads(response.body)["message"]
+        == "The request body couldn't be decoded as a JSON: Expecting value: line 1 column 10 (char 9)"
+    )
