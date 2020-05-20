@@ -53,7 +53,6 @@ class Attribute(Locatable):
         self.__name: str = name
         entity.add_attribute(self)
         self.__entity = entity
-        self.__multi = multi
         self.__nullable = nullable
 
         self.__type: Type = value_type
@@ -136,7 +135,7 @@ class Attribute(Locatable):
             Returns true iff this attribute expects a list of values of its type.
             Deprecated but still used internally.
         """
-        return self.__multi
+        return self.type.is_multi()
 
     def final(self, excns: List[CompilerException]) -> None:
         pass

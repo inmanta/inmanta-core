@@ -31,6 +31,7 @@ from inmanta.ast import (
     NotFoundException,
     RuntimeException,
     TypeNotFoundException,
+    TypingException,
 )
 from inmanta.execute.util import AnyType, NoneValue
 
@@ -123,6 +124,12 @@ class Type(Locatable):
         """
         return False
 
+    def is_multi(self) -> bool:
+        """
+          Returns true iff this type accepts multiple of values
+        """
+        return False
+
     def get_base_type(self) -> "Type":
         """
             Returns the base type for this type, i.e. the plain type without modifiers such as expressed by
@@ -176,6 +183,9 @@ class NullableType(Type):
 
     def with_base_type(self, base_type: Type) -> Type:
         return NullableType(self.element_type.with_base_type(base_type))
+
+    def is_multi(self) -> bool:
+        return self.element_type.is_multi()
 
 
 class Primitive(Type):
@@ -364,6 +374,9 @@ class List(Type):
     def get_location(self) -> Location:
         return None
 
+    def is_multi(self) -> bool:
+        return True
+
 
 class TypedList(List):
     """
@@ -373,6 +386,8 @@ class TypedList(List):
 
     def __init__(self, element_type: Type) -> None:
         List.__init__(self)
+        if element_type.is_multi():
+            raise TypingException(None, "Making lists of lists is not allowed")
         self.element_type: Type = element_type
 
     def normalize(self) -> None:
@@ -416,17 +431,10 @@ class LiteralList(TypedList):
     """
 
     def __init__(self) -> None:
-        TypedList.__init__(self, Literal())
+        TypedList.__init__(self, SingularLiteral())
 
     def type_string(self) -> str:
         return "list"
-
-    def get_base_type(self) -> Type:
-        # The `list` type is not multi, thus it is the base type itself
-        return self
-
-    def with_base_type(self, base_type: Type) -> Type:
-        return self
 
 
 class Dict(Type):
@@ -508,8 +516,8 @@ class Union(Type):
     """
 
     def __init__(self, types: PythonList[Type]) -> None:
-        Type.__init__(self)
         self.types: PythonList[Type] = types
+        Type.__init__(self)
 
     def validate(self, value: object) -> bool:
         for typ in self.types:
@@ -523,6 +531,22 @@ class Union(Type):
     def type_string_internal(self) -> str:
         return "Union[%s]" % ",".join((t.type_string_internal() for t in self.types))
 
+    def is_multi(self) -> bool:
+        return any((child.is_multi() for child in self.types))
+
+
+class SingularLiteral(Union):
+    """
+        Instances of this class represent a literal in the configuration model. A literal is a primitive or a list or dict
+        where all values are literals themselves.
+    """
+
+    def __init__(self) -> None:
+        Union.__init__(self, [Number(), Bool(), String()])
+
+    def type_string_internal(self) -> str:
+        return "Literal"
+
 
 class Literal(Union):
     """
@@ -531,7 +555,7 @@ class Literal(Union):
     """
 
     def __init__(self) -> None:
-        Union.__init__(self, [NullableType(Number()), Bool(), String(), TypedList(self), TypedDict(self)])
+        Union.__init__(self, [SingularLiteral(), TypedList(SingularLiteral()), TypedDict(self)])
 
     def type_string_internal(self) -> str:
         return "Literal"
@@ -607,6 +631,9 @@ class ConstraintType(NamedType):
 
     def get_double_defined_exception(self, other: "NamedType") -> DuplicateException:
         return DuplicateException(self, other, "TypeConstraint %s is already defined" % (self.get_full_name()))
+
+    def is_multi(self) -> bool:
+        return self.basetype.is_multi()
 
 
 def create_function(tp: ConstraintType, expression: "ExpressionStatement"):

@@ -526,3 +526,47 @@ x.lst = [x]
         "  Invalid value '__config__::ListContainer (instantiated at {dir}/main.cf:12)', expected Literal"
         " (reported in x.lst = List() ({dir}/main.cf:13))",
     )
+
+
+def test_higher_order_list(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity A:
+    list[] it
+end
+        """,
+        "Making lists of lists is not allowed",
+    )
+
+
+def test_constrained_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+typedef sneakylist as list matching "b" in self
+
+        
+entity A:
+    sneakylist it
+end
+
+implement A using std::none
+
+A(it=["b","a"])
+        """,
+    )
+
+    compiler.do_compile()
+
+
+def test_higher_order_constrained_list(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+typedef sneakylist as list matching "b" in self
+
+        
+entity A:
+    sneakylist[] it
+end
+        """,
+        "Making lists of lists is not allowed",
+    )
