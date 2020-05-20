@@ -259,3 +259,21 @@ int("0.0")
         """,
         "Failed to cast '0.0' to int (reported in int('0.0') ({dir}/main.cf:2))",
     )
+
+
+@pytest.mark.parametrize(
+    "parent_modifier,child_modifier", [("[]", ""), ("", "[]"), ("?", ""), ("", "?"),],
+)
+def test_2132_inheritance_type_override(snippetcompiler, parent_modifier: str, child_modifier: str):
+    snippetcompiler.setup_for_error(
+        f"""
+entity Parent:
+    number{parent_modifier} n
+end
+
+entity Child extends Parent:
+    number{child_modifier} n
+end
+        """,
+        "Incompatible attributes (original at ({dir}/main.cf:7)) (duplicate at ({dir}/main.cf:3))",
+    )
