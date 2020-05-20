@@ -21,6 +21,7 @@ import ssl
 import uuid
 from asyncio import CancelledError
 from collections import defaultdict
+from json import JSONDecodeError
 from typing import Dict, List, MutableMapping, Optional, Union
 
 import tornado
@@ -139,6 +140,11 @@ class RESTHandler(tornado.web.RequestHandler):
                     self.respond(result.body, result.headers, result.status_code)
                 else:
                     raise exceptions.UnauthorizedException("Access to this resource is unauthorized.")
+
+            except JSONDecodeError:
+                error_message = "The request body couldn't be decoded as a JSON"
+                LOGGER.exception(error_message)
+                self.respond({"message": error_message}, {}, 400)
 
             except ValueError:
                 LOGGER.exception("An exception occured")
