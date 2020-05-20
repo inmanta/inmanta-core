@@ -141,8 +141,8 @@ class RESTHandler(tornado.web.RequestHandler):
                 else:
                     raise exceptions.UnauthorizedException("Access to this resource is unauthorized.")
 
-            except JSONDecodeError:
-                error_message = "The request body couldn't be decoded as a JSON"
+            except JSONDecodeError as e:
+                error_message = f"The request body couldn't be decoded as a JSON: {e}"
                 LOGGER.exception(error_message)
                 self.respond({"message": error_message}, {}, 400)
 
