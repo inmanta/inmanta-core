@@ -26,6 +26,7 @@
 - Typing Improvements
 - Redirect stdout and stderr to /var/log/inmanta/agent.{out,err} for agent service (#2091)
 - Added resource name to log lines in agent log.
+- Better reporting of json decoding errors on requests (#2107)
 
 
 # v 2020.2 (2020-04-24) Changes in this release:

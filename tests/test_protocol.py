@@ -1501,3 +1501,21 @@ async def test_required_header_not_present(server):
     client = AsyncHTTPClient()
     response = await client.fetch(f"http://localhost:{server_bind_port.get()}/api/v2/environment_settings", raise_error=False)
     assert response.code == 400
+
+
+@pytest.mark.asyncio
+async def test_malformed_json(server):
+    """
+        Tests sending malformed json to the server
+    """
+    port = opt.get_bind_port()
+    url = f"http://localhost:{port}/api/v2/environment"
+
+    request = HTTPRequest(url=url, method="PUT", body='{"name": env}')
+    client = AsyncHTTPClient()
+    response = await client.fetch(request, raise_error=False)
+    assert response.code == 400
+    assert (
+        json.loads(response.body)["message"]
+        == "The request body couldn't be decoded as a JSON: Expecting value: line 1 column 10 (char 9)"
+    )
