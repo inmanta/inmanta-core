@@ -143,7 +143,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
             except JSONDecodeError as e:
                 error_message = f"The request body couldn't be decoded as a JSON: {e}"
-                LOGGER.exception(error_message)
+                LOGGER.info(error_message, exc_info=True)
                 self.respond({"message": error_message}, {}, 400)
 
             except ValueError:
