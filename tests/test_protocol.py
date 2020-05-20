@@ -1504,7 +1504,7 @@ async def test_required_header_not_present(server):
 @pytest.mark.asyncio
 async def test_malformed_json(server):
     """
-        Tests sending malformed json to the sender
+        Tests sending malformed json to the server
     """
     port = opt.get_bind_port()
     url = f"http://localhost:{port}/api/v2/environment"
