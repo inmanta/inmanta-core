@@ -133,7 +133,7 @@ class Attribute(Locatable):
 
     def is_multi(self) -> bool:
         """
-            Returns true iff this attribute expects a list of values of its type.
+            Returns true iff this attribute expects a list of values of its base type.
             Deprecated but still used internally.
         """
         return self.__multi
