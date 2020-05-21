@@ -36,7 +36,7 @@ pytest-postgresql==2.4.0
 pytest-env==0.6.2
 jinja2==2.11.2
 pep8-naming==0.10.0
-flake8==3.7.9
+flake8==3.8.1
 flake8-black==0.2.0
 flake8-copyright==0.2.2
 psutil==5.7.0
