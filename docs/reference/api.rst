@@ -80,7 +80,7 @@ Attributes
 ----------
 
 .. autoclass:: inmanta.ast.attribute.Attribute
-    :members: validate
+    :members: validate, get_type, type
     :undoc-members:
 
 
@@ -91,7 +91,7 @@ The `inmanta.ast.type` module contains a representation of inmanta types, as wel
 those types.
 
 .. autoclass:: inmanta.ast.type.Type
-    :members: validate, type_string, is_primitive
+    :members: validate, type_string, is_primitive, get_base_type, with_base_type
     :undoc-members:
 
 .. autoclass:: inmanta.ast.type.NullableType

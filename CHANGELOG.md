@@ -28,6 +28,11 @@
 - Added resource name to log lines in agent log.
 - Better reporting of json decoding errors on requests (#2107)
 
+## Breaking changes
+- Updated Attribute.get_type() to return the full type instead of just the base type (inmanta/inmanta-sphinx#29)
+- Overriding parent attribute type with the same base type but different modifiers (e.g. override `number` with `number[]`)
+    is no longer allowed. This was previously possible due to bug (#2132)
+
 
 # v 2020.2 (2020-04-24) Changes in this release:
 

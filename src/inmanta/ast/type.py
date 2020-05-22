@@ -123,6 +123,19 @@ class Type(Locatable):
         """
         return False
 
+    def get_base_type(self) -> "Type":
+        """
+            Returns the base type for this type, i.e. the plain type without modifiers such as expressed by
+            `[]` and `?` in the :term:`DSL`.
+        """
+        return self
+
+    def with_base_type(self, base_type: "Type") -> "Type":
+        """
+            Returns the type formed by replacing this type's base type with the supplied type.
+        """
+        return base_type
+
 
 class NamedType(Type, Named):
     def get_double_defined_exception(self, other: "NamedType") -> "DuplicateException":
@@ -135,28 +148,34 @@ class NullableType(Type):
         Represents a nullable type in the Inmanta :term:`DSL`. For example `NullableType(Number())` represents `number?`.
     """
 
-    def __init__(self, basetype: Type) -> None:
+    def __init__(self, element_type: Type) -> None:
         Type.__init__(self)
-        self.basetype: Type = basetype
+        self.element_type: Type = element_type
 
     def validate(self, value: Optional[object]) -> bool:
         if isinstance(value, NoneValue):
             return True
 
-        return self.basetype.validate(value)
+        return self.element_type.validate(value)
 
     def _wrap_type_string(self, string: str) -> str:
         return "%s?" % string
 
     def type_string(self) -> Optional[str]:
-        base_type_string: Optional[str] = self.basetype.type_string()
+        base_type_string: Optional[str] = self.element_type.type_string()
         return None if base_type_string is None else self._wrap_type_string(base_type_string)
 
     def type_string_internal(self) -> str:
-        return self._wrap_type_string(self.basetype.type_string_internal())
+        return self._wrap_type_string(self.element_type.type_string_internal())
 
     def normalize(self) -> None:
-        self.basetype.normalize()
+        self.element_type.normalize()
+
+    def get_base_type(self) -> Type:
+        return self.element_type.get_base_type()
+
+    def with_base_type(self, base_type: Type) -> Type:
+        return NullableType(self.element_type.with_base_type(base_type))
 
 
 class Primitive(Type):
@@ -383,6 +402,12 @@ class TypedList(List):
     def get_location(self) -> Location:
         return None
 
+    def get_base_type(self) -> Type:
+        return self.element_type
+
+    def with_base_type(self, base_type: Type) -> Type:
+        return TypedList(base_type)
+
 
 class LiteralList(TypedList):
     """
@@ -395,6 +420,13 @@ class LiteralList(TypedList):
 
     def type_string(self) -> str:
         return "list"
+
+    def get_base_type(self) -> Type:
+        # The `list` type is not multi, thus it is the base type itself
+        return self
+
+    def with_base_type(self, base_type: Type) -> Type:
+        return self
 
 
 class Dict(Type):
