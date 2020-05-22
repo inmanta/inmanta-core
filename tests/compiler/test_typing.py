@@ -324,3 +324,18 @@ end
 
     assert "lst" in attrs
     assert isinstance(attrs["lst"].type, inmanta_type.List)
+
+
+@pytest.mark.parametrize("base_type", inmanta_type.TYPES.values())
+def test_types_base_type(snippetcompiler, base_type: inmanta_type.Type) -> None:
+    modified_types: typing.List[inmanta_type.Type] = [
+        base_type,
+        inmanta_type.TypedList(base_type),
+        inmanta_type.NullableType(base_type),
+        inmanta_type.NullableType(inmanta_type.TypedList(base_type)),
+    ]
+    for t in modified_types:
+        # verify get_base_type returns the inmanta base type
+        assert t.get_base_type().type_string() == base_type.type_string()
+        # verify with_base_type is round-trip compatible
+        assert t.with_base_type(base_type).type_string() == t.type_string()

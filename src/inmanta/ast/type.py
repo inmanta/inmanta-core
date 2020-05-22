@@ -172,7 +172,7 @@ class NullableType(Type):
         self.element_type.normalize()
 
     def get_base_type(self) -> Type:
-        return self.element_type
+        return self.element_type.get_base_type()
 
     def with_base_type(self, base_type: Type) -> Type:
         return NullableType(self.element_type.with_base_type(base_type))
