@@ -16,8 +16,9 @@
     Contact: code@inmanta.com
 """
 
-import pytest
 import typing
+
+import pytest
 
 import inmanta.ast.type as inmanta_type
 import inmanta.compiler as compiler
