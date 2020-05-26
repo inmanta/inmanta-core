@@ -100,6 +100,7 @@ class AgentCache(object):
         for version in list(self.counterforVersion.keys()):
             while self.is_open(version):
                 self.close_version(version)
+        self.nextAction: float = sys.maxsize
         self.timerqueue.clear()
         for key in list(self.cache.keys()):
             self._evict_item(key)
