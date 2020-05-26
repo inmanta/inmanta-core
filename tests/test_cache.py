@@ -376,6 +376,17 @@ def test_decorator():
             return my_closable_2
 
     test = DT(xcache)
+
+    xcache.open_version(3)
+    test.test_close(version=3)
+    test.test_close_2()
+    xcache.close()
+    assert my_closable.closed
+    assert my_closable_2.closed
+
+    test.count = 0
+    my_closable.closed = False
+
     assert "x" == test.test_method()
     assert "x" == test.test_method()
     assert "x" == test.test_method()
@@ -411,12 +422,3 @@ def test_decorator():
     xcache.close_version(3)
     assert my_closable.closed
 
-    xcache = AgentCache()
-    test = DT(xcache)
-    xcache.open_version(3)
-    my_closable.closed = False
-    test.test_close(version=3)
-    test.test_close_2()
-    xcache.close()
-    assert my_closable.closed
-    assert my_closable_2.closed
