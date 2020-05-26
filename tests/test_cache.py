@@ -420,5 +420,3 @@ def test_decorator():
     xcache.close()
     assert my_closable.closed
     assert my_closable_2.closed
-
-
