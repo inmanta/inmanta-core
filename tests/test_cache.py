@@ -421,4 +421,3 @@ def test_decorator():
     assert not my_closable.closed
     xcache.close_version(3)
     assert my_closable.closed
-
