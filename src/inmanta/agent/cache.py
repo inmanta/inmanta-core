@@ -93,6 +93,17 @@ class AgentCache(object):
         self.addLock = Lock()
         self.addLocks: Dict[str, Lock] = {}
 
+    def close(self) -> None:
+        """
+            Cleanly terminate the cache
+        """
+        for version in list(self.counterforVersion.keys()):
+            while self.is_open(version):
+                self.close_version(version)
+        self.timerqueue.clear()
+        for key in list(self.cache.keys()):
+            self._evict_item(key)
+
     def is_open(self, version: int) -> bool:
         """
             Is the given version open in the cache?
@@ -133,26 +144,25 @@ class AgentCache(object):
 
         LOGGER.debug("Cache close version %d", version)
         for x in self.keysforVersion[version]:
-            try:
-                item = self.cache[x]
-                item.delete()
-                del self.cache[x]
-            except KeyError:
-                # already gone
-                pass
+            self._evict_item(x)
 
         del self.counterforVersion[version]
         del self.keysforVersion[version]
+
+    def _evict_item(self, key: str) -> None:
+        try:
+            item = self.cache[key]
+            item.delete()
+            del self.cache[key]
+        except KeyError:
+            # already gone
+            pass
 
     def _advance_time(self) -> None:
         now = time.time()
         while now > self.nextAction and len(self.timerqueue) > 0:
             item = self.timerqueue.pop(0)
-            try:
-                del self.cache[item.key]
-            except KeyError:
-                # already gone
-                pass
+            self._evict_item(item.key)
             if len(self.timerqueue) > 0:
                 self.nextAction = self.timerqueue[0].time
             else:
