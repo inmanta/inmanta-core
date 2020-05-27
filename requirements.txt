@@ -24,7 +24,7 @@ sphinx-argparse==0.2.5
 sphinx-autodoc-annotation==1.0-1
 sphinx-rtd-theme==0.4.3
 sphinx-tabs==1.1.13
-sphinx==3.0.3
+sphinx==3.0.4
 sphinxcontrib-serializinghtml==1.1.4
 sphinxcontrib-redoc==1.6.0
 texttable==1.6.2
