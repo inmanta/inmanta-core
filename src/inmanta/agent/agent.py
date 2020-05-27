@@ -613,6 +613,7 @@ class AgentInstance(object):
         self._enabled = False
         self._disable_time_triggers()
         self._nq.cancel()
+        self._cache.close()
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
 

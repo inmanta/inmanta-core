@@ -10,6 +10,7 @@
 - Cancel scheduled ResourceActions when AgentInstance is stopped (#2106)
 - Decoding of REST return value for content type html with utf-8 charset (#2074)
 - Empty list option in config no longer interpreted as list of empty string (#2097)
+- Correct closing of agentcache 
 
 ## Added
 - Added cleanup mechanism of old compile reports (#2054)
