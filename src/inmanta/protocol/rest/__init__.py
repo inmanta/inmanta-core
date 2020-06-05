@@ -184,6 +184,9 @@ class CallArguments(object):
                     value = self._message[arg]
                     all_fields.remove(arg)
 
+                elif i < defaults_start:
+                    raise exceptions.BadRequest("Malformed request. There might be an argument missing.")
+
                 else:  # get default value
                     value = self.get_default_value(arg, i, defaults_start)
 
