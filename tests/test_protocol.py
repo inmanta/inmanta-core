@@ -1555,5 +1555,5 @@ async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_n
     response = await client.fetch(request, raise_error=False)
     assert response.code == 400
     assert (
-        json.loads(response.body)["message"] == "Invalid request: Malformed request. There might be an argument missing."
+        json.loads(response.body)["message"] == "Invalid request: Field 'tid' is required."
     )
