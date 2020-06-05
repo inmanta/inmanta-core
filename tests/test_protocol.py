@@ -43,6 +43,7 @@ from inmanta.protocol.common import (
     InvalidPathException,
     ReturnValue,
 )
+from inmanta.protocol.methods import ENV_OPTS
 from inmanta.protocol.rest import CallArguments
 from inmanta.server import config as opt
 from inmanta.server.config import server_bind_port
@@ -1519,3 +1520,38 @@ async def test_malformed_json(server):
         json.loads(response.body)["message"]
         == "The request body couldn't be decoded as a JSON: Expecting value: line 1 column 10 (char 9)"
     )
+
+@pytest.mark.asyncio
+async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        name: str
+        value: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(
+            api_prefix="test", path="/project/<project>", operation="GET", arg_options=ENV_OPTS, client_types=["api"]
+        )
+        def test_method(tid: uuid.UUID, project: str, include_deleted: bool = False) -> List[Union[uuid.UUID, Project, bool]]: # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(tid: uuid.UUID, project: Project, include_deleted: bool = False) -> List[Union[uuid.UUID, Project, bool]]:  # NOQA
+            return [tid, project, include_deleted]
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    port = opt.get_bind_port()
+    url = f"http://localhost:{port}/test/v1/project/afcb51dc-1043-42b6-bb99-b4fc88603126"
+
+    request = HTTPRequest(url=url, method="GET")
+    client = AsyncHTTPClient()
+    response = await client.fetch(request, raise_error=False)
+    print(response)
+    assert response.code == 400
