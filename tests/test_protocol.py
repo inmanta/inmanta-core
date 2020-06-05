@@ -1521,6 +1521,7 @@ async def test_malformed_json(server):
         == "The request body couldn't be decoded as a JSON: Expecting value: line 1 column 10 (char 9)"
     )
 
+
 @pytest.mark.asyncio
 async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_name, async_finalizer):
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1533,11 +1534,15 @@ async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_n
         @protocol.typedmethod(
             api_prefix="test", path="/project/<project>", operation="GET", arg_options=ENV_OPTS, client_types=["api"]
         )
-        def test_method(tid: uuid.UUID, project: str, include_deleted: bool = False) -> List[Union[uuid.UUID, Project, bool]]: # NOQA
+        def test_method(
+            tid: uuid.UUID, project: str, include_deleted: bool = False
+        ) -> List[Union[uuid.UUID, Project, bool]]:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(tid: uuid.UUID, project: Project, include_deleted: bool = False) -> List[Union[uuid.UUID, Project, bool]]:  # NOQA
+        async def test_method(
+            tid: uuid.UUID, project: Project, include_deleted: bool = False
+        ) -> List[Union[uuid.UUID, Project, bool]]:  # NOQA
             return [tid, project, include_deleted]
 
     rs = Server()
@@ -1554,6 +1559,4 @@ async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_n
     client = AsyncHTTPClient()
     response = await client.fetch(request, raise_error=False)
     assert response.code == 400
-    assert (
-        json.loads(response.body)["message"] == "Invalid request: Field 'tid' is required."
-    )
+    assert json.loads(response.body)["message"] == "Invalid request: Field 'tid' is required."
