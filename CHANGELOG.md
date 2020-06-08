@@ -11,7 +11,8 @@
 - Decoding of REST return value for content type html with utf-8 charset (#2074)
 - Empty list option in config no longer interpreted as list of empty string (#2097)
 - Correct closing of agentcache
-- Agent cross environment comminication bug (#2163) 
+- Agent cross environment communication bug (#2163) 
+- Fixed an issue where an argument missing from a request would result in a http-500 error instead of 400 (#2152)
 
 ## Added
 - Added cleanup mechanism of old compile reports (#2054)
