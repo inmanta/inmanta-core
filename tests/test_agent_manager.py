@@ -381,8 +381,8 @@ async def test_api(init_dataclasses_and_load_schema):
             {
                 "name": "agent3",
                 "paused": False,
-                "last_failover": UNKWN,
-                "primary": UNKWN,
+                "last_failover": "",
+                "primary": "",
                 "environment": env4.id,
                 "state": "down",
             },
