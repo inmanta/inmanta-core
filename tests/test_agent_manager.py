@@ -378,14 +378,7 @@ async def test_api(init_dataclasses_and_load_schema):
                 "environment": env4.id,
                 "state": "up",
             },
-            {
-                "name": "agent3",
-                "paused": False,
-                "last_failover": "",
-                "primary": "",
-                "environment": env4.id,
-                "state": "down",
-            },
+            {"name": "agent3", "paused": False, "last_failover": "", "primary": "", "environment": env4.id, "state": "down",},
             {"name": "agent4", "paused": False, "last_failover": "", "primary": "", "environment": env2.id, "state": "down"},
         ]
     }
