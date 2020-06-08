@@ -141,10 +141,10 @@ class CallArguments(object):
         """
             Get a default value for an argument
         """
-        if default_start >= 0 and (arg_position - default_start) < len(self._argspec.defaults):
+        if default_start >= 0 and 0 <= (arg_position - default_start) < len(self._argspec.defaults):
             return self._argspec.defaults[arg_position - default_start]
         else:
-            raise exceptions.BadRequest("Invalid request. Field '%s' is required." % arg_name)
+            raise exceptions.BadRequest("Field '%s' is required." % arg_name)
 
     async def _run_getters(self, arg: str, value: Optional[Any]) -> Optional[Any]:
         """
