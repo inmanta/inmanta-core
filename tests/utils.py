@@ -64,7 +64,7 @@ def assert_equal_ish(minimal, actual, sortby=[]):
         for k in minimal.keys():
             assert_equal_ish(minimal[k], actual[k], sortby)
     elif isinstance(minimal, list):
-        assert len(minimal) == len(actual), "list not equal %s != %s" % (minimal, actual)
+        assert len(minimal) == len(actual), "list not equal %d!=%d  %s != %s" % (len(minimal), len(actual), minimal, actual)
         if len(sortby) > 0:
 
             def keyfunc(val):
@@ -73,6 +73,7 @@ def assert_equal_ish(minimal, actual, sortby=[]):
                 key = [str(val[x]) for x in sortby if x in val]
                 return "_".join(key)
 
+            minimal = sorted(minimal, key=keyfunc)
             actual = sorted(actual, key=keyfunc)
         for (m, a) in zip(minimal, actual):
             assert_equal_ish(m, a, sortby)
