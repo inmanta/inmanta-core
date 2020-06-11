@@ -191,7 +191,7 @@ async def test_hostname(server, environment, agent_factory):
 @pytest.mark.asyncio
 async def test_update_agent_map(server, environment, agent_factory):
     """
-
+        If the URI of an enabled agent changes, it should still be enabled after the change
     """
     env_id = uuid.UUID(environment)
     agent_map = {"node1": "localhost"}
