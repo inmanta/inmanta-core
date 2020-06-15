@@ -105,6 +105,13 @@ def no_tid_check():
     ENV_OPTS["tid"].getter = old_get_env
 
 
+async def assert_agent_counter(agent: Agent, reconnect: int, disconnected: int) -> None:
+    def is_same():
+        return agent.disconnect == disconnected and agent.reconnect == reconnect
+
+    await retry_limited(is_same, 10)
+
+
 @pytest.mark.asyncio
 async def test_2way_protocol(unused_tcp_port, no_tid_check, postgres_db, database_name):
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -122,6 +129,7 @@ async def test_2way_protocol(unused_tcp_port, no_tid_check, postgres_db, databas
 
     await retry_limited(lambda: len(server.get_sessions()) == 1, 10)
     assert len(server.get_sessions()) == 1
+    await assert_agent_counter(agent, 1, 0)
 
     client = protocol.Client("client")
     status = await client.get_status_x(str(agent.environment))
@@ -133,6 +141,7 @@ async def test_2way_protocol(unused_tcp_port, no_tid_check, postgres_db, databas
 
     await rs.stop()
     await agent.stop()
+    await assert_agent_counter(agent, 1, 0)
 
 
 async def check_sessions(sessions):
@@ -169,6 +178,7 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
     # wait till up
     await retry_limited(lambda: len(server.get_sessions()) == 1, 10)
     assert len(server.get_sessions()) == 1
+    await assert_agent_counter(agent, 1, 0)
 
     # agent 2
     agent2 = Agent("agent")
@@ -180,6 +190,8 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
     # wait till up
     await retry_limited(lambda: len(server.get_sessions()) == 2, 10)
     assert len(server.get_sessions()) == 2
+    await assert_agent_counter(agent, 1, 0)
+    await assert_agent_counter(agent2, 1, 0)
 
     # see if it stays up
     await check_sessions(server.get_sessions())
@@ -197,6 +209,8 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
     print(server.get_sessions())
     await check_sessions(server.get_sessions())
     assert server.expires == 1
+    await assert_agent_counter(agent, 1, 0)
+    await assert_agent_counter(agent2, 1, 0)
 
 
 @pytest.mark.slowtest
@@ -208,12 +222,16 @@ async def test_server_timeout(unused_tcp_port, no_tid_check, async_finalizer, po
 
     Config.set("server", "agent-timeout", "1")
 
-    rs = Server()
-    server = SessionSpy()
-    rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
-    rs.add_slice(server)
-    await rs.start()
-    async_finalizer(rs.stop)
+    async def start_server():
+        rs = Server()
+        server = SessionSpy()
+        rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
+        rs.add_slice(server)
+        await rs.start()
+        async_finalizer(rs.stop)
+        return server, rs
+
+    server, rs = await start_server()
 
     env = uuid.uuid4()
 
@@ -224,13 +242,23 @@ async def test_server_timeout(unused_tcp_port, no_tid_check, async_finalizer, po
     await agent.start()
     async_finalizer(agent.stop)
 
+    await assert_agent_counter(agent, 1, 0)
+
     # wait till up
     await retry_limited(lambda: len(server.get_sessions()) == 1, 10)
     assert len(server.get_sessions()) == 1
 
     await rs.stop()
 
-    # timout
+    # timeout
     await sleep(1.1)
 
-    assert agent.disconnect == 1
+    # check agent disconnected
+    await assert_agent_counter(agent, 1, 1)
+
+    # recover
+    server, rs = await start_server()
+    await retry_limited(lambda: len(server.get_sessions()) == 1, 10)
+    assert len(server.get_sessions()) == 1
+
+    await assert_agent_counter(agent, 2, 1)

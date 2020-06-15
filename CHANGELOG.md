@@ -30,6 +30,7 @@
 - Redirect stdout and stderr to /var/log/inmanta/agent.{out,err} for agent service (#2091)
 - Added resource name to log lines in agent log.
 - Better reporting of json decoding errors on requests (#2107)
+- Faster recovery of agent sessions 
 
 ## Breaking changes
 - Updated Attribute.get_type() to return the full type instead of just the base type (inmanta/inmanta-sphinx#29)
