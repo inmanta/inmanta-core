@@ -375,15 +375,15 @@ class CompilerService(ServerSlice):
             """
             async with self._global_lock:
                 next_compiles: List[data.Compile] = await data.Compile.get_next_compiles_for_environment(env.id)
-                waiting_compiles: List[data.Compile]
+                waiting_compiles: Iterator[data.Compile]
                 if self.is_compiling(env.id):
                     current_compile = await data.Compile.get_next_run(env.id)
-                    waiting_compiles = [compile for compile in next_compiles if compile.id != current_compile.id]
+                    waiting_compiles = (compile for compile in next_compiles if compile.id != current_compile.id)
                 else:
-                    waiting_compiles = [compile for compile in next_compiles]
+                    waiting_compiles = iter(next_compiles)
                 similar_requests: Iterator[data.Compile] = filter(
                     lambda c: len(c.metadata) == 0 and c.do_export == do_export and c.environment_variables == env_vars,
-                    reversed(waiting_compiles),
+                    waiting_compiles,
                 )
                 to_merge: Optional[data.Compile] = next(similar_requests, None)
                 if to_merge is not None:
