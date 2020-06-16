@@ -136,7 +136,8 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     async def request_compile(env: data.Environment) -> uuid.UUID:
         """Request compile for given env, return remote_id"""
         u1 = uuid.uuid4()
-        await cs.request_recompile(env, False, False, u1)
+        # add unique environment variables to prevent merging in request_recompile
+        await cs.request_recompile(env, False, False, u1, env_vars={"uuid": u1})
         results = await data.Compile.get_by_remote_id(env.id, u1)
         assert len(results) == 1
         assert results[0].remote_id == u1
