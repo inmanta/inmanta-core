@@ -1396,7 +1396,7 @@ class Compile(BaseDocument):
         :param do_export: should this compiler perform an export
         :param force_update: should this compile definitely update
         :param metadata: exporter metadata to be passed to the compiler
-        :param environment_variable: environment variables to be passed to the compiler
+        :param environment_variables: environment variables to be passed to the compiler
         :param succes: was the compile successful
         :param handled: were all registered handlers executed?
         :param version: version exported by this compile
