@@ -426,7 +426,7 @@ class Session(object):
 
         return future
 
-    async def get_calls(self, no_hang) -> Optional[List[common.Request]]:
+    async def get_calls(self, no_hang: bool) -> Optional[List[common.Request]]:
         """
             Get all calls queued for a node. If no work is available, wait until timeout. This method returns none if a call
             fails.
