@@ -280,7 +280,7 @@ def clear_environment(id: uuid.UUID):
     arg_options=ENV_OPTS,
     client_types=[const.ClientType.agent],
 )
-def heartbeat(sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: str):
+def heartbeat(sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: str, no_hang: bool = False):
     """
         Send a heartbeat to the server
 
@@ -288,6 +288,7 @@ def heartbeat(sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: st
         :param tid: The environment this node and its agents belongs to
         :param endpoint_names: The names of the endpoints on this node
         :param nodename: The name of the node from which the heart beat comes
+        :param no_hang: don't use this call for long polling, but for connectivity check
 
         also registered as API method, because it is called with an invalid SID the first time
     """
