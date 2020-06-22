@@ -242,11 +242,11 @@ async def test_server_timeout(unused_tcp_port, no_tid_check, async_finalizer, po
     await agent.start()
     async_finalizer(agent.stop)
 
-    await assert_agent_counter(agent, 1, 0)
-
     # wait till up
     await retry_limited(lambda: len(server.get_sessions()) == 1, 10)
     assert len(server.get_sessions()) == 1
+
+    await assert_agent_counter(agent, 1, 0)
 
     await rs.stop()
 
