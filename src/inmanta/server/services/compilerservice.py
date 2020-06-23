@@ -29,11 +29,13 @@ import uuid
 from asyncio import CancelledError, Task
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Dict, Iterator, List, Optional, Tuple, cast
+from typing import Callable, Dict, Iterator, List, Optional, Tuple, TypeVar, cast
 
 import dateutil
 import dateutil.parser
+from more_itertools import bucket, first
 
+import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
 from inmanta.protocol import encode_token, methods
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
@@ -286,6 +288,9 @@ class CompileRun(object):
             return success
 
 
+T = TypeVar("T")
+
+
 class CompilerService(ServerSlice):
     """
     Compiler services offers:
@@ -364,6 +369,7 @@ class CompilerService(ServerSlice):
 
             :return: the compile id of the requested compile and any warnings produced during the request
         """
+        # TODO: revert this to its original implementation
         server_compile: bool = await env.get(data.SERVER_COMPILE)
         if not server_compile:
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
@@ -408,6 +414,31 @@ class CompilerService(ServerSlice):
         await compile.insert()
         await self._queue(compile)
         return compile.id, None
+
+    @staticmethod
+    def _compile_merge_key(c: data.Compile) -> Tuple:
+        return (c.do_export, c.environment_variables)
+
+    @staticmethod
+    async def _next_compile_buckets(environment: uuid.UUID, key: Callable[[data.Compile], T]) -> bucket[data.Compile, T]:
+        """
+            Returns buckets for the next compile requests for environment, grouped by key.
+        """
+        return bucket(await data.Compile.get_next_compiles_for_environment(environment), key)
+
+    @staticmethod
+    async def _next_compile_merge_candidates(compile: data.Compile) -> Iterator[data.Compile]:
+        """
+            Returns an iterator over the supplied compile's merge candidates in the queue.
+        """
+        buckets: bucket[data.Compile, object] = await CompilerService._next_compile_buckets(
+            compile.environment, CompilerService._compile_merge_key
+        )
+        return (
+            merge_candidate
+            for merge_candidate in buckets[CompilerService._compile_merge_key(compile)]
+            if merge_candidate is not compile
+        )
 
     async def _queue(self, compile: data.Compile) -> None:
         async with self._global_lock:
@@ -477,9 +508,26 @@ class CompilerService(ServerSlice):
 
         end = datetime.datetime.now()
         await compile.update_fields(completed=end, success=success, version=version)
+        merge_candidates: List[data.Compile] = list(
+            merge_candidate
+            for merge_candidate in await CompilerService._next_compile_merge_candidates(compile)
+            if (
+                merge_candidate.requested is not None
+                and compile.started is not None
+                and merge_candidate.requested < compile.started
+            )
+        )
+        awaitables = (
+            merge_candidate.update_fields(completed=end, success=success, version=version)
+            for merge_candidate in merge_candidates
+        )
+        # TODO: attach report somehow
+        await asyncio.gather(awaitables)
         if self.is_stopping():
             return
         self.add_background_task(self._notify_listeners(compile))
+        for merge_candidate in merge_candidates:
+            self.add_background_task(self._notify_listeners(merge_candidate))
         await self._dequeue(compile.environment)
 
     def _get_compile_runner(self, compile: data.Compile, project_dir: str) -> CompileRun:
@@ -515,9 +563,13 @@ class CompilerService(ServerSlice):
         return 200, {"report": report}
 
     @protocol.handle(methods.get_compile_queue, env="tid")
-    async def get_compile_queue(self, env: data.Environment) -> List[CompileRun]:
+    async def get_compile_queue(self, env: data.Environment) -> List[model.CompileRun]:
         """
             Get the current compiler queue on the server
         """
-        compiles = await data.Compile.get_next_compiles_for_environment(env.id)
+        # return only the first of mergeable compile requests
+        buckets: bucket[data.Compile, object] = await CompilerService._next_compile_buckets(
+            env.id, CompilerService._compile_merge_key
+        )
+        compiles = (first(buckets[key]) for key in buckets)
         return [x.to_dto() for x in compiles]
