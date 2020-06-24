@@ -388,7 +388,7 @@ class CompilerService(ServerSlice):
 
     @staticmethod
     def _compile_merge_key(c: data.Compile) -> Hashable:
-        return c.to_dto().json(include={"environment", "do_export", "environment_variables"})
+        return c.to_dto().json(include={"environment", "started", "do_export", "environment_variables"})
 
     async def _queue(self, compile: data.Compile) -> None:
         async with self._global_lock:
