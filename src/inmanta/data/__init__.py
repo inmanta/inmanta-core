@@ -1419,6 +1419,10 @@ class Compile(BaseDocument):
     handled: bool = Field(field_type=bool, default=False)
     version: Optional[int] = Field(field_type=int)
 
+    # Compile queue might be collapsed if it contains similar compile requests.
+    # In that case, substitute_compile_id will reference the actually compiled request.
+    substitute_compile_id: Optional[uuid.UUID] = Field(field_type=uuid.UUID)
+
     @classmethod
     async def get_reports(
         cls,
@@ -1451,9 +1455,12 @@ class Compile(BaseDocument):
         """
             Get the compile and the associated reports from the database
         """
-        result = await cls.get_by_id(compile_id)
+        result: Optional[Compile] = await cls.get_by_id(compile_id)
         if result is None:
             return None
+
+        if result.substitute_compile_id is not None:
+            return await cls.get_report(result.substitute_compile_id)
 
         dict_model = result.to_dict()
         reports = await Report.get_list(compile=result.id)

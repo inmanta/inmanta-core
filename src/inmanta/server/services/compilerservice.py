@@ -30,7 +30,7 @@ from asyncio import CancelledError, Task
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Dict, Hashable, List, Optional, Tuple, TypeVar, cast
+from typing import Dict, Hashable, List, Optional, Tuple, cast
 
 import dateutil
 import dateutil.parser
@@ -471,10 +471,11 @@ class CompilerService(ServerSlice):
         end = datetime.datetime.now()
         await compile.update_fields(completed=end, success=success, version=version)
         awaitables = [
-            merge_candidate.update_fields(started=compile.started, completed=end, success=success, version=version)
+            merge_candidate.update_fields(
+                started=compile.started, completed=end, success=success, version=version, substitute_compile_id=compile.id
+            )
             for merge_candidate in merge_candidates
         ]
-        # TODO: attach report somehow
         await asyncio.gather(*awaitables)
         if self.is_stopping():
             return
