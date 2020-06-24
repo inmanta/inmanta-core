@@ -294,7 +294,9 @@ class ResourceAction(object):
 
                 if ctx.facts:
                     ctx.debug("Sending facts to the server")
-                    set_fact_response = await self.scheduler.get_client().set_parameters(tid=self.scheduler._env_id, parameters=ctx.facts)
+                    set_fact_response = await self.scheduler.get_client().set_parameters(
+                        tid=self.scheduler._env_id, parameters=ctx.facts
+                    )
                     if set_fact_response.code != 200:
                         ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
