@@ -369,38 +369,11 @@ class CompilerService(ServerSlice):
 
             :return: the compile id of the requested compile and any warnings produced during the request
         """
-        # TODO: revert this to its original implementation
         server_compile: bool = await env.get(data.SERVER_COMPILE)
         if not server_compile:
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
             return None, ["Skipping compile because server compile not enabled for this environment."]
 
-        async def merge() -> Optional[uuid.UUID]:
-            """
-                Tries merging this compile request with an existing one.
-            """
-            async with self._global_lock:
-                next_compiles: List[data.Compile] = await data.Compile.get_next_compiles_for_environment(env.id)
-                waiting_compiles: Iterator[data.Compile]
-                if self.is_compiling(env.id):
-                    current_compile = await data.Compile.get_next_run(env.id)
-                    waiting_compiles = (compile for compile in next_compiles if compile.id != current_compile.id)
-                else:
-                    waiting_compiles = iter(next_compiles)
-                similar_requests: Iterator[data.Compile] = filter(
-                    lambda c: len(c.metadata) == 0 and c.do_export == do_export and c.environment_variables == env_vars,
-                    waiting_compiles,
-                )
-                to_merge: Optional[data.Compile] = next(similar_requests, None)
-                if to_merge is not None:
-                    if force_update and not to_merge.force_update:
-                        await to_merge.update(force_update=True)
-                    return to_merge.id
-                return None
-
-        merged_compile_id = await merge()
-        if merged_compile_id is not None:
-            return merged_compile_id, None
         requested = datetime.datetime.now()
         compile = data.Compile(
             environment=env.id,
