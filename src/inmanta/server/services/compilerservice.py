@@ -29,12 +29,12 @@ import uuid
 from asyncio import CancelledError, Task
 from itertools import chain
 from logging import Logger
+from more_itertools import unique_everseen
 from tempfile import NamedTemporaryFile
 from typing import Dict, Hashable, List, Optional, Tuple, cast
 
 import dateutil
 import dateutil.parser
-from more_itertools import unique_everseen
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
