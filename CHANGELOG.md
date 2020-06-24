@@ -13,6 +13,7 @@
 - Correct closing of agentcache
 - Agent cross environment communication bug (#2163)
 - Fixed an issue where an argument missing from a request would result in a http-500 error instead of 400 (#2152)
+- Ensure agent is in proper state after URI change (#2138)
 
 ## Added
 - Added cleanup mechanism of old compile reports (#2054)
@@ -31,6 +32,7 @@
 - Added resource name to log lines in agent log.
 - Better reporting of json decoding errors on requests (#2107)
 - Added merging of similar compile requests to the compile queue (#2137)
+- Faster recovery of agent sessions 
 
 ## Breaking changes
 - Updated Attribute.get_type() to return the full type instead of just the base type (inmanta/inmanta-sphinx#29)

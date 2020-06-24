@@ -1159,11 +1159,18 @@ class Agent(SessionEndpoint):
                     LOGGER.info("Updating the URI of the endpoint %s from %s to %s", agent_name, current_uri, uri)
                     update_uri_agents.append(agent_name)
 
+            updated_uri_agents_to_enable = [
+                agent_name for agent_name in update_uri_agents if self._instances[agent_name].is_enabled()
+            ]
+
             to_be_gathered = [self._add_end_point_name(agent_name) for agent_name in agents_to_add]
             to_be_gathered += [self._remove_end_point_name(agent_name) for agent_name in agents_to_remove + update_uri_agents]
             await asyncio.gather(*to_be_gathered)
             # Re-add agents with updated URI
             await asyncio.gather(*[self._add_end_point_name(agent_name) for agent_name in update_uri_agents])
+            # Enable agents with updated URI that were enabled before
+            for agent_to_enable in updated_uri_agents_to_enable:
+                self.unpause(agent_to_enable)
 
     def unpause(self, name: str) -> Apireturn:
         instance = self._instances.get(name)

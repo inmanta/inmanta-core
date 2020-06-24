@@ -186,3 +186,21 @@ async def test_hostname(server, environment, agent_factory):
     # When both are set, the constructor takes precedence
     agent3 = await agent_factory(hostname="node3", environment=env_id)
     assert list(agent3.get_end_point_names()) == ["node3"]
+
+
+@pytest.mark.asyncio
+async def test_update_agent_map(server, environment, agent_factory):
+    """
+        If the URI of an enabled agent changes, it should still be enabled after the change
+    """
+    env_id = uuid.UUID(environment)
+    agent_map = {"node1": "localhost"}
+
+    agent1 = await agent_factory(hostname="node1", environment=env_id, agent_map=agent_map)
+    assert agent1.agent_map == agent_map
+
+    agent1.unpause("node1")
+
+    await agent1._update_agent_map({"node1": "localhost2"})
+
+    assert agent1._instances["node1"].is_enabled()

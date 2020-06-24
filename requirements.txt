@@ -19,11 +19,11 @@ pytest-xdist==1.32.0
 pytest==5.4.3
 python-dateutil==2.8.1
 pyyaml==5.3.1
-pytest-timeout==1.4.0
+pytest-timeout==1.4.1
 six==1.15.0
 sphinx-argparse==0.2.5
 sphinx-autodoc-annotation==1.0-1
-sphinx-rtd-theme==0.4.3
+sphinx-rtd-theme==0.5.0
 sphinx-tabs==1.1.13
 sphinx==3.1.1
 sphinxcontrib-serializinghtml==1.1.4
@@ -36,7 +36,7 @@ asyncpg==0.20.1
 pytest-postgresql==2.4.0
 pytest-env==0.6.2
 jinja2==2.11.2
-pep8-naming==0.10.0
+pep8-naming==0.11.1
 flake8==3.7.9
 flake8-black==0.2.0
 flake8-copyright==0.2.2
@@ -49,7 +49,7 @@ black==19.10b0
 typing_inspect==0.6.0
 importlib_metadata==1.6.1
 mypy==0.780
-setuptools==47.1.1
+setuptools==47.3.1
 pip==20.1.1
 docstring-parser==0.7.1
 bumpversion==0.6.0
