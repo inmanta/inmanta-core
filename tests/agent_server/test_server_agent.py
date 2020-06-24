@@ -20,7 +20,7 @@ import logging
 import time
 import uuid
 from itertools import groupby
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 import psutil
 import pytest
@@ -3433,23 +3433,24 @@ async def test_agentinstance_stops_deploying_when_stopped(
 
 
 @pytest.mark.asyncio
-async def test_set_fact_in_handler(
-    server, client, environment, agent, clienthelper, resource_container, no_agent_backoff
-):
+async def test_set_fact_in_handler(server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):
     """
         Test whether facts set in the handler via the ctx.set_fact() method arrive on the server.
     """
+
     def get_resources(version: str, params: List[data.Parameter]) -> List[Dict[str, Any]]:
-        return [{
-            "key": param.name,
-            "value": param.value,
-            "metadata": param.metadata,
-            "id": f"{param.resource_id},v={version}",
-            "send_event": False,
-            "purged": False,
-            "purge_on_delete": False,
-            "requires": [],
-        } for param in params
+        return [
+            {
+                "key": param.name,
+                "value": param.value,
+                "metadata": param.metadata,
+                "id": f"{param.resource_id},v={version}",
+                "send_event": False,
+                "purged": False,
+                "purge_on_delete": False,
+                "requires": [],
+            }
+            for param in params
         ]
 
     def compare_params(actual_params: List[data.Parameter], expected_params: List[data.Parameter]) -> None:
@@ -3470,7 +3471,7 @@ async def test_set_fact_in_handler(
         environment=uuid.UUID(environment),
         resource_id=f"test::SetFact[agent1,key=key1]",
         source="agent",
-        metadata={}
+        metadata={},
     )
     param2 = data.Parameter(
         name="key2",
@@ -3478,7 +3479,7 @@ async def test_set_fact_in_handler(
         environment=uuid.UUID(environment),
         resource_id=f"test::SetFact[agent1,key=key2]",
         source="agent",
-        metadata={"key": "test"}
+        metadata={"key": "test"},
     )
 
     version = await clienthelper.get_version()

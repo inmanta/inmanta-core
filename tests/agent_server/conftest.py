@@ -134,7 +134,7 @@ def resource_container():
         fields = ("key", "value", "purged", "skip", "factvalue", "skipFact")
 
     @resource("test::SetFact", agent="agent", id_attribute="key")
-    class FactResource(PurgeableResource):
+    class SetFactResource(PurgeableResource):
         """
             A file on a filesystem
         """
@@ -389,7 +389,7 @@ def resource_container():
             return {"fact": resource.factvalue}
 
     @provider("test::SetFact", name="test_set_fact")
-    class Fact(CRUDHandler):
+    class SetFact(CRUDHandler):
         def read_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
             ctx.set_fact(fact_id=resource.key, value=resource.value, metadata=resource.metadata)
 

@@ -190,11 +190,12 @@ class HandlerContext(object):
             :param metadata: Metadata about the fact.
         """
         resource_id = self._resource.id.resource_str()
-        fact = {"id": fact_id,
-                "source": "agent",
-                "value": value,
-                "resource_id": resource_id,
-                "metadata": metadata,
+        fact = {
+            "id": fact_id,
+            "source": "agent",
+            "value": value,
+            "resource_id": resource_id,
+            "metadata": metadata,
         }
         self._facts.append(fact)
 
