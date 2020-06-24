@@ -30,11 +30,11 @@ from asyncio import CancelledError, Task
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Callable, Dict, Hashable, Iterator, List, Optional, Tuple, TypeVar, cast
+from typing import Dict, Hashable, List, Optional, Tuple, TypeVar, cast
 
 import dateutil
 import dateutil.parser
-from more_itertools import bucket, first
+from more_itertools import unique_everseen
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
@@ -289,9 +289,6 @@ class CompileRun(object):
             return success
 
 
-T = TypeVar("T", bound=Hashable)
-
-
 class CompilerService(ServerSlice):
     """
     Compiler services offers:
@@ -390,29 +387,8 @@ class CompilerService(ServerSlice):
         return compile.id, None
 
     @staticmethod
-    def _compile_merge_key(c: data.Compile) -> str:
+    def _compile_merge_key(c: data.Compile) -> Hashable:
         return c.to_dto().json(include={"environment", "do_export", "environment_variables"})
-
-    @staticmethod
-    async def _next_compile_buckets(environment: uuid.UUID, key: Callable[[data.Compile], T]) -> "bucket[data.Compile, T]":
-        """
-            Returns buckets for the next compile requests for environment, grouped by key.
-        """
-        return bucket(await data.Compile.get_next_compiles_for_environment(environment), key)
-
-    @staticmethod
-    async def _next_compile_merge_candidates(compile: data.Compile) -> Iterator[data.Compile]:
-        """
-            Returns an iterator over the supplied compile's merge candidates in the queue.
-        """
-        buckets: bucket[data.Compile, Hashable] = await CompilerService._next_compile_buckets(
-            compile.environment, CompilerService._compile_merge_key
-        )
-        return (
-            merge_candidate
-            for merge_candidate in buckets[CompilerService._compile_merge_key(compile)]
-            if not merge_candidate.id == compile.id
-        )
 
     async def _queue(self, compile: data.Compile) -> None:
         async with self._global_lock:
@@ -475,7 +451,11 @@ class CompilerService(ServerSlice):
             )
         await asyncio.sleep(wait)
 
-        merge_candidates: List[data.Compile] = list(await CompilerService._next_compile_merge_candidates(compile))
+        merge_candidates: List[data.Compile] = [
+            c
+            for c in await data.Compile.get_next_compiles_for_environment(compile.environment)
+            if not c.id == compile.id and CompilerService._compile_merge_key(c) == CompilerService._compile_merge_key(compile)
+        ]
         force_update: bool = any(c.force_update for c in chain([compile], merge_candidates))
         if force_update:
             awaitables = [
@@ -540,9 +520,5 @@ class CompilerService(ServerSlice):
         """
             Get the current compiler queue on the server
         """
-        # return only the first of mergeable compile requests
-        buckets: bucket[data.Compile, Hashable] = await CompilerService._next_compile_buckets(
-            env.id, CompilerService._compile_merge_key
-        )
-        compiles = (first(buckets[key]) for key in buckets)
-        return [x.to_dto() for x in compiles]
+        compiles = await data.Compile.get_next_compiles_for_environment(env.id)
+        return [x.to_dto() for x in unique_everseen(compiles, CompilerService._compile_merge_key)]
