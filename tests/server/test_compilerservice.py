@@ -400,9 +400,9 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
     await env.insert()
 
     u1 = uuid.uuid4()
-    await compilerservice.request_recompile(env, False, False, u1)
+    await compilerservice.request_recompile(env, False, False, u1, env_vars={"my_unique_var": str(u1)})
     u2 = uuid.uuid4()
-    await compilerservice.request_recompile(env, False, False, u2)
+    await compilerservice.request_recompile(env, False, False, u2, env_vars={"my_unique_var": str(u2)})
 
     assert await compilerservice.is_compiling(env.id) == 200
 
