@@ -29,7 +29,6 @@ import uuid
 from asyncio import CancelledError, Task
 from itertools import chain
 from logging import Logger
-from more_itertools import unique_everseen
 from tempfile import NamedTemporaryFile
 from typing import Dict, Hashable, List, Optional, Tuple, cast
 
@@ -44,6 +43,7 @@ from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
 from inmanta.util import ensure_directory_exist
+from more_itertools import unique_everseen
 
 RETURNCODE_INTERNAL_ERROR = -1
 
