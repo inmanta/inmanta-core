@@ -27,9 +27,10 @@ import sys
 import traceback
 import uuid
 from asyncio import CancelledError, Task
+from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Callable, Dict, Iterator, List, Optional, Tuple, TypeVar, cast
+from typing import Callable, Dict, Hashable, Iterator, List, Optional, Tuple, TypeVar, cast
 
 import dateutil
 import dateutil.parser
@@ -288,7 +289,7 @@ class CompileRun(object):
             return success
 
 
-T = TypeVar("T")
+T = TypeVar("T", bound=Hashable)
 
 
 class CompilerService(ServerSlice):
@@ -389,11 +390,11 @@ class CompilerService(ServerSlice):
         return compile.id, None
 
     @staticmethod
-    def _compile_merge_key(c: data.Compile) -> Tuple:
-        return (c.do_export, c.environment_variables)
+    def _compile_merge_key(c: data.Compile) -> str:
+        return c.to_dto().json(include={"environment", "do_export", "environment_variables"})
 
     @staticmethod
-    async def _next_compile_buckets(environment: uuid.UUID, key: Callable[[data.Compile], T]) -> bucket[data.Compile, T]:
+    async def _next_compile_buckets(environment: uuid.UUID, key: Callable[[data.Compile], T]) -> "bucket[data.Compile, T]":
         """
             Returns buckets for the next compile requests for environment, grouped by key.
         """
@@ -404,13 +405,13 @@ class CompilerService(ServerSlice):
         """
             Returns an iterator over the supplied compile's merge candidates in the queue.
         """
-        buckets: bucket[data.Compile, object] = await CompilerService._next_compile_buckets(
+        buckets: bucket[data.Compile, Hashable] = await CompilerService._next_compile_buckets(
             compile.environment, CompilerService._compile_merge_key
         )
         return (
             merge_candidate
             for merge_candidate in buckets[CompilerService._compile_merge_key(compile)]
-            if merge_candidate is not compile
+            if not merge_candidate.id == compile.id
         )
 
     async def _queue(self, compile: data.Compile) -> None:
@@ -474,6 +475,14 @@ class CompilerService(ServerSlice):
             )
         await asyncio.sleep(wait)
 
+        merge_candidates: List[data.Compile] = list(await CompilerService._next_compile_merge_candidates(compile))
+        force_update: bool = any(c.force_update for c in chain([compile], merge_candidates))
+        if force_update:
+            awaitables = [
+                c.update_fields(force_update=True) for c in chain([compile], merge_candidates) if c.force_update is not True
+            ]
+            await asyncio.gather(*awaitables)
+
         runner = self._get_compile_runner(compile, project_dir=os.path.join(self._env_folder, str(compile.environment)))
         success = await runner.run()
 
@@ -481,21 +490,12 @@ class CompilerService(ServerSlice):
 
         end = datetime.datetime.now()
         await compile.update_fields(completed=end, success=success, version=version)
-        merge_candidates: List[data.Compile] = list(
-            merge_candidate
-            for merge_candidate in await CompilerService._next_compile_merge_candidates(compile)
-            if (
-                merge_candidate.requested is not None
-                and compile.started is not None
-                and merge_candidate.requested < compile.started
-            )
-        )
-        awaitables = (
-            merge_candidate.update_fields(completed=end, success=success, version=version)
+        awaitables = [
+            merge_candidate.update_fields(started=compile.started, completed=end, success=success, version=version)
             for merge_candidate in merge_candidates
-        )
+        ]
         # TODO: attach report somehow
-        await asyncio.gather(awaitables)
+        await asyncio.gather(*awaitables)
         if self.is_stopping():
             return
         self.add_background_task(self._notify_listeners(compile))
@@ -541,7 +541,7 @@ class CompilerService(ServerSlice):
             Get the current compiler queue on the server
         """
         # return only the first of mergeable compile requests
-        buckets: bucket[data.Compile, object] = await CompilerService._next_compile_buckets(
+        buckets: bucket[data.Compile, Hashable] = await CompilerService._next_compile_buckets(
             env.id, CompilerService._compile_merge_key
         )
         compiles = (first(buckets[key]) for key in buckets)
