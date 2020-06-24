@@ -179,6 +179,29 @@ class HandlerContext(object):
         else:
             self.logger = logger
 
+        self._facts: List[Dict[str, Any]] = []
+
+    def set_fact(self, fact_id: str, value: str, metadata: dict = {}) -> None:
+        """
+            Send a fact to the Inmanta server.
+
+            :param fact_id: The name of the fact.
+            :param value: The actual value of the fact.
+            :param metadata: Metadata about the fact.
+        """
+        resource_id = self._resource.id.resource_str()
+        fact = {"id": fact_id,
+                "source": "agent",
+                "value": value,
+                "resource_id": resource_id,
+                "metadata": metadata,
+        }
+        self._facts.append(fact)
+
+    @property
+    def facts(self) -> List[Dict[str, Any]]:
+        return self._facts
+
     @property
     def action_id(self) -> uuid.UUID:
         return self._action_id

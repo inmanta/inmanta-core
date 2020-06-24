@@ -133,6 +133,14 @@ def resource_container():
 
         fields = ("key", "value", "purged", "skip", "factvalue", "skipFact")
 
+    @resource("test::SetFact", agent="agent", id_attribute="key")
+    class FactResource(PurgeableResource):
+        """
+            A file on a filesystem
+        """
+
+        fields = ("key", "value", "metadata", "purged", "purge_on_delete")
+
     @resource("test::Fail", agent="agent", id_attribute="key")
     class FailR(Resource):
         """
@@ -379,6 +387,20 @@ def resource_container():
             elif resource.skipFact:
                 raise SkipResource("Not ready")
             return {"fact": resource.factvalue}
+
+    @provider("test::SetFact", name="test_set_fact")
+    class Fact(CRUDHandler):
+        def read_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+            ctx.set_fact(fact_id=resource.key, value=resource.value, metadata=resource.metadata)
+
+        def create_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+            pass
+
+        def delete_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+            pass
+
+        def update_resource(self, ctx: HandlerContext, changes: dict, resource: PurgeableResource) -> None:
+            pass
 
     @provider("test::BadEvents", name="test_bad_events")
     class BadEvents(ResourceHandler):

@@ -20,7 +20,7 @@ import logging
 import time
 import uuid
 from itertools import groupby
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 
 import psutil
 import pytest
@@ -3430,3 +3430,62 @@ async def test_agentinstance_stops_deploying_when_stopped(
     await resource_container.wait_for_done_with_waiters(
         client, environment, version, wait_for_this_amount_of_resources_in_done=2
     )
+
+
+@pytest.mark.asyncio
+async def test_set_fact_in_handler(
+    server, client, environment, agent, clienthelper, resource_container, no_agent_backoff
+):
+    """
+        Test whether facts set in the handler via the ctx.set_fact() method arrive on the server.
+    """
+    def get_resources(version: str, params: List[data.Parameter]) -> List[Dict[str, Any]]:
+        return [{
+            "key": param.name,
+            "value": param.value,
+            "metadata": param.metadata,
+            "id": f"{param.resource_id},v={version}",
+            "send_event": False,
+            "purged": False,
+            "purge_on_delete": False,
+            "requires": [],
+        } for param in params
+        ]
+
+    def compare_params(actual_params: List[data.Parameter], expected_params: List[data.Parameter]) -> None:
+        actual_params = sorted(actual_params, key=lambda p: p.name)
+        expected_params = sorted(expected_params, key=lambda p: p.name)
+        assert len(expected_params) == len(actual_params)
+        for i in range(len(expected_params)):
+            for attr_name in ["name", "value", "environment", "resource_id", "source", "metadata"]:
+                assert expected_params[i].__getattribute__(attr_name) == actual_params[i].__getattribute__(attr_name)
+
+    # Assert initial state
+    params = await data.Parameter.get_list()
+    assert len(params) == 0
+
+    param1 = data.Parameter(
+        name="key1",
+        value="value1",
+        environment=uuid.UUID(environment),
+        resource_id=f"test::SetFact[agent1,key=key1]",
+        source="agent",
+        metadata={}
+    )
+    param2 = data.Parameter(
+        name="key2",
+        value="value2",
+        environment=uuid.UUID(environment),
+        resource_id=f"test::SetFact[agent1,key=key2]",
+        source="agent",
+        metadata={"key": "test"}
+    )
+
+    version = await clienthelper.get_version()
+    resources = get_resources(version, [param1, param2])
+
+    await _deploy_resources(client, environment, resources, version, push=True)
+    await wait_for_n_deployed_resources(client, environment, version, n=2)
+
+    params = await data.Parameter.get_list()
+    compare_params(params, [param1, param2])

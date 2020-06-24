@@ -291,6 +291,13 @@ class ResourceAction(object):
                 changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
                     self.resource.id.resource_version_str(): ctx.changes
                 }
+
+                if ctx.facts:
+                    ctx.debug("Sending facts to the server")
+                    result = await self.scheduler.get_client().set_parameters(tid=self.scheduler._env_id, parameters=ctx.facts)
+                    if result.code != 200:
+                        ctx.error("Failed to send facts to the server %s", result.result)
+
                 response = await self.scheduler.get_client().resource_action_update(
                     tid=self.scheduler._env_id,
                     resource_ids=[self.resource.id.resource_version_str()],
