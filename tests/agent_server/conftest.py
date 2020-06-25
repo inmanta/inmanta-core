@@ -390,7 +390,6 @@ def resource_container():
 
     @provider("test::SetFact", name="test_set_fact")
     class SetFact(CRUDHandler):
-
         def read_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
             self._do_set_fact(ctx, resource)
 
