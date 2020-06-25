@@ -923,6 +923,9 @@ class AgentInstance(object):
                         {"id": name, "value": value, "resource_id": resource_obj.id.resource_str(), "source": "fact"}
                         for name, value in result.items()
                     ]
+                    # Add facts set via the set_fact() method of the HandlerContext
+                    parameters.extend(ctx.facts)
+
                     await self.get_client().set_parameters(tid=self._env_id, parameters=parameters)
                     finished = datetime.datetime.now()
                     await self.get_client().resource_action_update(

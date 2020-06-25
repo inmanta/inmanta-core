@@ -3483,8 +3483,47 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
     version = await clienthelper.get_version()
     resources = get_resources(version, [param1, param2])
 
+    # Ensure that facts are pushed when ctx.set_fact() is called during resource deployment
     await _deploy_resources(client, environment, resources, version, push=True)
     await wait_for_n_deployed_resources(client, environment, version, n=2)
 
     params = await data.Parameter.get_list()
     compare_params(params, [param1, param2])
+
+    # Ensure that:
+    # * Facts set in the handler.facts() method via ctx.set_fact() method are pushed to the Inmanta server.
+    # * Facts returned via the handler.facts() method are pushed to the Inmanta server.
+    await asyncio.gather(*[p.delete() for p in params])
+    params = await data.Parameter.get_list()
+    assert len(params) == 0
+    agent_manager = server.get_slice(name=SLICE_AGENT_MANAGER)
+    agent_manager._fact_resource_block = 0
+
+    result = await client.get_param(tid=environment, id="key1", resource_id="test::SetFact[agent1,key=key1]")
+    assert result.code == 503
+    result = await client.get_param(tid=environment, id="key2", resource_id="test::SetFact[agent1,key=key2]")
+    assert result.code == 503
+
+    async def _wait_until_facts_are_available():
+        params = await data.Parameter.get_list()
+        return len(params) == 4
+
+    await retry_limited(_wait_until_facts_are_available, 10)
+
+    param3 = data.Parameter(
+        name="returned_fact_key1",
+        value="test",
+        environment=uuid.UUID(environment),
+        resource_id=f"test::SetFact[agent1,key=key1]",
+        source="fact",
+    )
+    param4 = data.Parameter(
+        name="returned_fact_key2",
+        value="test",
+        environment=uuid.UUID(environment),
+        resource_id=f"test::SetFact[agent1,key=key2]",
+        source="fact",
+    )
+
+    params = await data.Parameter.get_list()
+    compare_params(params, [param1, param2, param3, param4])

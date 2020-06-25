@@ -390,8 +390,9 @@ def resource_container():
 
     @provider("test::SetFact", name="test_set_fact")
     class SetFact(CRUDHandler):
+
         def read_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
-            ctx.set_fact(fact_id=resource.key, value=resource.value)
+            self._do_set_fact(ctx, resource)
 
         def create_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
             pass
@@ -401,6 +402,13 @@ def resource_container():
 
         def update_resource(self, ctx: HandlerContext, changes: dict, resource: PurgeableResource) -> None:
             pass
+
+        def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
+            self._do_set_fact(ctx, resource)
+            return {f"returned_fact_{resource.key}": "test"}
+
+        def _do_set_fact(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+            ctx.set_fact(fact_id=resource.key, value=resource.value)
 
     @provider("test::BadEvents", name="test_bad_events")
     class BadEvents(ResourceHandler):
