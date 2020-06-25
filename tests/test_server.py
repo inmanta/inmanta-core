@@ -26,9 +26,9 @@ import pytest
 from dateutil import parser
 
 from inmanta import config, const, data, loader, resources
-from inmanta.const import ParameterSource
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
+from inmanta.const import ParameterSource
 from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import (

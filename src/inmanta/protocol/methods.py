@@ -681,8 +681,13 @@ def get_param(tid: uuid.UUID, id: str, resource_id: str = None):
     client_types=[const.ClientType.api, const.ClientType.compiler, const.ClientType.agent],
 )
 def set_param(
-    tid: uuid.UUID, id: str, source: const.ParameterSource, value: str, resource_id: str = None, metadata: dict = {},
-    recompile: bool = False
+    tid: uuid.UUID,
+    id: str,
+    source: const.ParameterSource,
+    value: str,
+    resource_id: str = None,
+    metadata: dict = {},
+    recompile: bool = False,
 ):
     """
         Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.

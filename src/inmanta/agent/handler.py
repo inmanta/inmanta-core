@@ -31,7 +31,7 @@ from tornado import concurrent
 from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
-from inmanta.const import ResourceState, ParameterSource
+from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange
 from inmanta.protocol import Result
 from inmanta.types import SimpleTypes

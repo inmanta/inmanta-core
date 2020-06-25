@@ -32,7 +32,7 @@ from inmanta.agent import config as agent_config
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.const import AgentAction, AgentStatus, ResourceState, ParameterSource
+from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
