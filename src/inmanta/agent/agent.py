@@ -31,14 +31,13 @@ from tornado import ioloop
 from tornado.concurrent import Future
 
 from inmanta import const, data, env, protocol
-from inmanta.const import ParameterSource
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import ResourceHandler
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
-from inmanta.const import ResourceState
+from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, Event, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
@@ -921,8 +920,12 @@ class AgentInstance(object):
                     )
 
                     parameters = [
-                        {"id": name,"value": value, "resource_id": resource_obj.id.resource_str(), "source":
-                            ParameterSource.fact.value}
+                        {
+                            "id": name,
+                            "value": value,
+                            "resource_id": resource_obj.id.resource_str(),
+                            "source": ParameterSource.fact.value,
+                        }
                         for name, value in result.items()
                     ]
                     # Add facts set via the set_fact() method of the HandlerContext
