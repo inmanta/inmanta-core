@@ -3459,7 +3459,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         assert len(expected_params) == len(actual_params)
         for i in range(len(expected_params)):
             for attr_name in ["name", "value", "environment", "resource_id", "source", "metadata"]:
-                assert expected_params[i].__getattribute__(attr_name) == actual_params[i].__getattribute__(attr_name)
+                assert getattr(expected_params[i], attr_name) == getattr(actual_params[i], attr_name)
 
     # Assert initial state
     params = await data.Parameter.get_list()
