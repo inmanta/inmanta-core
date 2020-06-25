@@ -725,6 +725,8 @@ def pytest_runtest_makereport(item, call):
 
 
 async def off_main_thread(func):
+    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
+    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
     return await asyncio.get_event_loop().run_in_executor(None, func)
 
 
