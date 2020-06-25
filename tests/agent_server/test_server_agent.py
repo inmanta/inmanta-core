@@ -716,7 +716,7 @@ async def test_get_set_param(resource_container, environment, client, server):
     resource_container.Provider.reset()
     await client.set_setting(environment, data.SERVER_COMPILE, False)
 
-    result = await client.set_param(tid=environment, id="key10", value="value10", source="user")
+    result = await client.set_param(tid=environment, id="key10", value="value10", source=ParameterSource.user)
     assert result.code == 200
 
     result = await client.get_param(tid=environment, id="key10")

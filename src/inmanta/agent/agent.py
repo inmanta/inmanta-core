@@ -31,6 +31,7 @@ from tornado import ioloop
 from tornado.concurrent import Future
 
 from inmanta import const, data, env, protocol
+from inmanta.const import ParameterSource
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
@@ -920,7 +921,8 @@ class AgentInstance(object):
                     )
 
                     parameters = [
-                        {"id": name, "value": value, "resource_id": resource_obj.id.resource_str(), "source": "fact"}
+                        {"id": name,"value": value, "resource_id": resource_obj.id.resource_str(), "source":
+                            ParameterSource.fact.value}
                         for name, value in result.items()
                     ]
                     # Add facts set via the set_fact() method of the HandlerContext
