@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import base64
 import json
 import os
@@ -30,8 +31,8 @@ import tornado
 from pydantic.types import StrictBool
 from tornado import gen, web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
-from conftest import off_main_thread
 from inmanta import config, protocol
 from inmanta.data.model import BaseModel
 from inmanta.protocol import VersionMatch, exceptions, json_encode
@@ -103,6 +104,9 @@ async def test_client_files_lost(client):
 
 @pytest.mark.asyncio
 async def test_sync_client_files(client):
+    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
+    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
+
     done = []
     limit = 100
     sleep = 0.01
@@ -128,7 +132,15 @@ async def test_sync_client_files(client):
 
         done.append(True)
 
-    off_main_thread(do_test)
+    thread = threading.Thread(target=do_test)
+    thread.start()
+
+    while len(done) == 0 and limit > 0:
+        await gen.sleep(sleep)
+        limit -= 1
+
+    thread.join()
+    assert len(done) > 0
 
 
 @pytest.mark.asyncio
