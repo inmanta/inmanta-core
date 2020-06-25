@@ -1010,9 +1010,6 @@ RETURNING last_version;
         return version
 
 
-SOURCE = ("fact", "plugin", "user", "report")
-
-
 class Parameter(BaseDocument):
     """
         A parameter that can be used in the configuration model

@@ -681,7 +681,8 @@ def get_param(tid: uuid.UUID, id: str, resource_id: str = None):
     client_types=[const.ClientType.api, const.ClientType.compiler, const.ClientType.agent],
 )
 def set_param(
-    tid: uuid.UUID, id: str, source: str, value: str, resource_id: str = None, metadata: dict = {}, recompile: bool = False
+    tid: uuid.UUID, id: str, source: const.ParameterSource, value: str, resource_id: str = None, metadata: dict = {},
+    recompile: bool = False
 ):
     """
         Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
@@ -690,7 +691,7 @@ def set_param(
         :param tid: The id of the environment
         :param id: The name of the parameter
         :param resource_id: Optionally, scope the parameter to resource (fact)
-        :param source: The source of the parameter. Valid values are defined in the SOURCE list in inmanta/data/init.py
+        :param source: The source of the parameter.
         :param value: The value of the parameter
         :param metadata: metadata about the parameter
         :param recompile: Whether to trigger a recompile
@@ -742,7 +743,7 @@ def set_parameters(tid: uuid.UUID, parameters: list):
         :param tid: The id of the environment
         :param parameters: A list of dicts with the following keys:
             - id The name of the parameter
-            - source The source of the parameter. Valid values are defined in the SOURCE list in inmanta/data/init.py
+            - source The source of the parameter. Valid values are defined in the ParameterSource enum (see: inmanta/const.py)
             - value The value of the parameter
             - resource_id Optionally, scope the parameter to resource (fact)
             - metadata metadata about the parameter

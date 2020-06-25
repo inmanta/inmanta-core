@@ -32,7 +32,7 @@ from inmanta.agent import config as agent_config
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.const import AgentAction, AgentStatus, ResourceState
+from inmanta.const import AgentAction, AgentStatus, ResourceState, ParameterSource
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
@@ -3470,14 +3470,14 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         value="value1",
         environment=uuid.UUID(environment),
         resource_id=f"test::SetFact[agent1,key=key1]",
-        source="fact",
+        source=ParameterSource.fact.value,
     )
     param2 = data.Parameter(
         name="key2",
         value="value2",
         environment=uuid.UUID(environment),
         resource_id=f"test::SetFact[agent1,key=key2]",
-        source="fact",
+        source=ParameterSource.fact.value,
     )
 
     version = await clienthelper.get_version()
@@ -3515,14 +3515,14 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         value="test",
         environment=uuid.UUID(environment),
         resource_id=f"test::SetFact[agent1,key=key1]",
-        source="fact",
+        source=ParameterSource.fact.value,
     )
     param4 = data.Parameter(
         name="returned_fact_key2",
         value="test",
         environment=uuid.UUID(environment),
         resource_id=f"test::SetFact[agent1,key=key2]",
-        source="fact",
+        source=ParameterSource.fact.value,
     )
 
     params = await data.Parameter.get_list()

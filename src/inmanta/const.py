@@ -231,3 +231,10 @@ class AgentStatus(str, Enum):
     paused = "paused"
     up = "up"
     down = "down"
+
+
+class ParameterSource(str, Enum):
+    fact = "fact"
+    plugin = "plugin"
+    user = "user"
+    report = "report"
