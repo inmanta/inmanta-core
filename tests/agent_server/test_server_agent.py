@@ -3470,16 +3470,14 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         value="value1",
         environment=uuid.UUID(environment),
         resource_id=f"test::SetFact[agent1,key=key1]",
-        source="agent",
-        metadata={},
+        source="fact",
     )
     param2 = data.Parameter(
         name="key2",
         value="value2",
         environment=uuid.UUID(environment),
         resource_id=f"test::SetFact[agent1,key=key2]",
-        source="agent",
-        metadata={"key": "test"},
+        source="fact",
     )
 
     version = await clienthelper.get_version()

@@ -181,13 +181,12 @@ class HandlerContext(object):
 
         self._facts: List[Dict[str, Any]] = []
 
-    def set_fact(self, fact_id: str, value: str, metadata: dict = {}) -> None:
+    def set_fact(self, fact_id: str, value: str) -> None:
         """
             Send a fact to the Inmanta server.
 
             :param fact_id: The name of the fact.
             :param value: The actual value of the fact.
-            :param metadata: Metadata about the fact.
         """
         resource_id = self._resource.id.resource_str()
         fact = {
@@ -195,7 +194,6 @@ class HandlerContext(object):
             "source": "fact",
             "value": value,
             "resource_id": resource_id,
-            "metadata": metadata,
         }
         self._facts.append(fact)
 
