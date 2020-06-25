@@ -31,6 +31,7 @@ from pydantic.types import StrictBool
 from tornado import gen, web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
+from conftest import off_main_thread
 from inmanta import config, protocol
 from inmanta.data.model import BaseModel
 from inmanta.protocol import VersionMatch, exceptions, json_encode
@@ -127,15 +128,7 @@ async def test_sync_client_files(client):
 
         done.append(True)
 
-    thread = threading.Thread(target=do_test)
-    thread.start()
-
-    while len(done) == 0 and limit > 0:
-        await gen.sleep(sleep)
-        limit -= 1
-
-    thread.join()
-    assert len(done) > 0
+    off_main_thread(do_test)
 
 
 @pytest.mark.asyncio
