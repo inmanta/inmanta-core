@@ -28,6 +28,7 @@ from typing import List
 import pytest
 
 from inmanta import config, data
+from inmanta.const import ParameterSource
 from inmanta.data import Compile, Report
 from inmanta.deploy import cfg_env
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
@@ -499,25 +500,25 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert value_env_var in report_map["Recompiling configuration model"]["outstream"]
 
     # set a parameter without requesting a recompile
-    await client.set_param(environment, id="param1", value="test", source="plugin")
+    await client.set_param(environment, id="param1", value="test", source=ParameterSource.plugin)
     versions = await wait_for_version(client, environment, 1)
     assert versions["count"] == 1
 
     logger.info("request second compile")
     # set a new parameter and request a recompile
-    await client.set_param(environment, id="param2", value="test", source="plugin", recompile=True)
+    await client.set_param(environment, id="param2", value="test", source=ParameterSource.plugin, recompile=True)
     logger.info("wait for 2")
     versions = await wait_for_version(client, environment, 2)
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
     assert versions["count"] == 2
 
     # update the parameter to the same value -> no compile
-    await client.set_param(environment, id="param2", value="test", source="plugin", recompile=True)
+    await client.set_param(environment, id="param2", value="test", source=ParameterSource.plugin, recompile=True)
     versions = await wait_for_version(client, environment, 2)
     assert versions["count"] == 2
 
     # update the parameter to a new value
-    await client.set_param(environment, id="param2", value="test2", source="plugin", recompile=True)
+    await client.set_param(environment, id="param2", value="test2", source=ParameterSource.plugin, recompile=True)
     versions = await wait_for_version(client, environment, 3)
     logger.info("wait for 3")
     assert versions["count"] == 3
