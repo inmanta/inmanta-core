@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+from collections import defaultdict
+
 from inmanta import compiler
 
 
@@ -112,3 +114,71 @@ implement Test using a
     verify_anchor(11, 22, 26, 2)
     verify_anchor(15, 22, 23, 11)
     verify_anchor(15, 11, 15, 2)
+
+
+def test_get_types_and_scopes(snippetcompiler):
+    """
+        Test the get_types_and_scopes() entrypoint of the compiler.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+    entity Test:
+        string a = "a"
+        string b
+    end
+
+    entity Test2 extends Test:
+        foo c
+    end
+
+    Test.relation [0:1] -- Test2.reverse [0:]
+
+    typedef foo as string matching /^a+$/
+
+    a = Test(b="xx")
+    z = a.relation
+    u = a.b
+
+    implementation a for Test:
+
+    end
+
+    implement Test using a
+
+    typedef Test3 as Test(b="a")
+
+    y = Test3(a="xx")
+
+    """
+    )
+
+    (types, scopes) = compiler.get_types_and_scopes()
+
+    # Verify types
+    namespace_to_type_name = defaultdict(list)
+    for type_name in types.keys():
+        namespace = type_name.split("::")[0]
+        namespace_to_type_name[namespace].append(type_name)
+
+    assert len(namespace_to_type_name) == 2
+    assert "__config__" in namespace_to_type_name
+    assert "std" in namespace_to_type_name
+
+    # Assert types in namespace __config__
+    expected_types_in_config_ns = [
+        "__config__::Test",
+        "__config__::Test2",
+        "__config__::foo",
+        "__config__::a",
+        "__config__::Test3",
+    ]
+    assert sorted(namespace_to_type_name["__config__"]) == sorted(expected_types_in_config_ns)
+
+    # Assert types in namespace std
+    types_in_std_ns = namespace_to_type_name["std"]
+    assert len(types_in_std_ns) > 1
+    assert "std::Entity" in types_in_std_ns
+
+    # Verify scopes
+    assert scopes.get_name() == "__root__"
+    assert sorted([scope.get_name() for scope in scopes.children()]) == sorted(["__config__", "std"])

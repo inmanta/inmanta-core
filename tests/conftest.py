@@ -71,7 +71,6 @@ if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
 else:
     import utils
 
-asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes]
@@ -725,6 +724,8 @@ def pytest_runtest_makereport(item, call):
 
 
 async def off_main_thread(func):
+    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
+    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
     return await asyncio.get_event_loop().run_in_executor(None, func)
 
 
@@ -899,6 +900,8 @@ class CLI(object):
 
 @pytest.fixture
 def cli():
+    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
+    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
     o = CLI()
     yield o
 

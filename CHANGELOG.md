@@ -32,6 +32,7 @@
 - Added resource name to log lines in agent log.
 - Better reporting of json decoding errors on requests (#2107)
 - Faster recovery of agent sessions
+- Add compiler entrypoint to get types and scopes (#2114)
 - Add support to push facts via the handler context (#593)
 
 ## Breaking changes
