@@ -15,8 +15,9 @@
 
     Contact: code@inmanta.com
 """
-from inmanta import compiler
 from collections import defaultdict
+
+from inmanta import compiler
 
 
 def test_anchors_basic(snippetcompiler):
@@ -120,7 +121,7 @@ def test_get_types_and_scopes(snippetcompiler):
         Test the get_types_and_scopes() entrypoint of the compiler.
     """
     snippetcompiler.setup_for_snippet(
-            """
+        """
     entity Test:
         string a = "a"
         string b
@@ -148,7 +149,8 @@ def test_get_types_and_scopes(snippetcompiler):
 
     y = Test3(a="xx")
 
-    """)
+    """
+    )
 
     (types, scopes) = compiler.get_types_and_scopes()
 
@@ -164,7 +166,11 @@ def test_get_types_and_scopes(snippetcompiler):
 
     # Assert types in namespace __config__
     expected_types_in_config_ns = [
-        "__config__::Test", "__config__::Test2", "__config__::foo", "__config__::a", "__config__::Test3"
+        "__config__::Test",
+        "__config__::Test2",
+        "__config__::foo",
+        "__config__::a",
+        "__config__::Test3",
     ]
     assert sorted(namespace_to_type_name["__config__"]) == sorted(expected_types_in_config_ns)
 
