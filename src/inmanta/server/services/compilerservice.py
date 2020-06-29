@@ -459,10 +459,11 @@ class CompilerService(ServerSlice):
             )
         await asyncio.sleep(wait)
 
+        compile_merge_key: Hashable = CompilerService._compile_merge_key(compile)
         merge_candidates: List[data.Compile] = [
             c
             for c in await data.Compile.get_next_compiles_for_environment(compile.environment)
-            if not c.id == compile.id and CompilerService._compile_merge_key(c) == CompilerService._compile_merge_key(compile)
+            if not c.id == compile.id and CompilerService._compile_merge_key(c) == compile_merge_key
         ]
         # set force_update == True iff any compile request has force_update == True
         force_update: bool = any(c.force_update for c in chain([compile], merge_candidates))
