@@ -23,7 +23,7 @@ import shutil
 import subprocess
 import uuid
 from asyncio import Semaphore
-from typing import List
+from typing import List, Optional
 
 import pytest
 
@@ -98,7 +98,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
             self.done = False
             self.version = None
 
-        async def run(self):
+        async def run(self, force_update: Optional[bool] = False):
             self.started = True
             await self.lock.acquire()
             self.done = True
