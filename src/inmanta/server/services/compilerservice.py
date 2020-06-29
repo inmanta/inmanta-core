@@ -43,7 +43,6 @@ from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
 from inmanta.util import ensure_directory_exist
-from more_itertools import unique_everseen
 
 RETURNCODE_INTERNAL_ERROR = -1
 
@@ -532,4 +531,4 @@ class CompilerService(ServerSlice):
             Get the current compiler queue on the server
         """
         compiles = await data.Compile.get_next_compiles_for_environment(env.id)
-        return [x.to_dto() for x in unique_everseen(compiles, CompilerService._compile_merge_key)]
+        return [x.to_dto() for x in compiles]
