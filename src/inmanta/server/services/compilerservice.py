@@ -170,7 +170,7 @@ class CompileRun(object):
             await self._error("".join(traceback.format_exception(type(e), e, e.__traceback__)))
             return await self._end_stage(RETURNCODE_INTERNAL_ERROR)
 
-    async def run(self) -> bool:
+    async def run(self, force_update: Optional[bool] = False) -> bool:
         success = False
         now = datetime.datetime.now()
         await self.request.update_fields(started=now)
@@ -215,7 +215,7 @@ class CompileRun(object):
                     if result.returncode is None or result.returncode > 0:
                         return False
 
-                elif self.request.force_update:
+                elif force_update or self.request.force_update:
                     result = await self._run_compile_stage("Fetching changes", ["git", "fetch", repo_url], project_dir)
                 if repo_branch:
                     branch = await self.get_branch()
@@ -224,7 +224,7 @@ class CompileRun(object):
                             f"switching branch from {branch} to {repo_branch}", ["git", "checkout", repo_branch], project_dir
                         )
 
-                if self.request.force_update:
+                if force_update or self.request.force_update:
                     await self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
                     LOGGER.info("Installing and updating modules")
                     await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
@@ -464,16 +464,10 @@ class CompilerService(ServerSlice):
             for c in await data.Compile.get_next_compiles_for_environment(compile.environment)
             if not c.id == compile.id and CompilerService._compile_merge_key(c) == compile_merge_key
         ]
-        # set force_update == True iff any compile request has force_update == True
-        force_update: bool = any(c.force_update for c in chain([compile], merge_candidates))
-        if force_update:
-            awaitables = [
-                c.update_fields(force_update=True) for c in chain([compile], merge_candidates) if c.force_update is not True
-            ]
-            await asyncio.gather(*awaitables)
 
         runner = self._get_compile_runner(compile, project_dir=os.path.join(self._env_folder, str(compile.environment)))
-        success = await runner.run()
+        # set force_update == True iff any compile request has force_update == True
+        success = await runner.run(force_update=any(c.force_update for c in chain([compile], merge_candidates)))
 
         version = runner.version
 
