@@ -388,6 +388,10 @@ class CompilerService(ServerSlice):
 
     @staticmethod
     def _compile_merge_key(c: data.Compile) -> Hashable:
+        """
+            Returns a key used to determine whether two compiles c1 and c2 are eligible for merging. They are iff
+            _compile_merge_key(c1) == _compile_merge_key(c2).
+        """
         return c.to_dto().json(include={"environment", "started", "do_export", "environment_variables"})
 
     async def _queue(self, compile: data.Compile) -> None:
@@ -435,6 +439,10 @@ class CompilerService(ServerSlice):
         return 204
 
     async def _run(self, compile: data.Compile) -> None:
+        """
+            Runs a compile request. At completion, looks for similar compile requests based on _compile_merge_key and marks
+            those as completed as well.
+        """
         now = datetime.datetime.now()
 
         wait_time = opt.server_autrecompile_wait.get()
@@ -456,6 +464,7 @@ class CompilerService(ServerSlice):
             for c in await data.Compile.get_next_compiles_for_environment(compile.environment)
             if not c.id == compile.id and CompilerService._compile_merge_key(c) == CompilerService._compile_merge_key(compile)
         ]
+        # set force_update == True iff any compile request has force_update == True
         force_update: bool = any(c.force_update for c in chain([compile], merge_candidates))
         if force_update:
             awaitables = [
