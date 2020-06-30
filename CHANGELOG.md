@@ -14,6 +14,7 @@
 - Agent cross environment communication bug (#2163)
 - Fixed an issue where an argument missing from a request would result in a http-500 error instead of 400 (#2152)
 - Ensure agent is in proper state after URI change (#2138)
+- Removed warning about collecting requirements for project that has not been loaded completely on initial compile (#2125)
 
 ## Added
 - Added cleanup mechanism of old compile reports (#2054)
