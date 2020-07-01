@@ -36,7 +36,7 @@
 - Add compiler entrypoint to get types and scopes (#2114)
 - Add support to push facts via the handler context (#593)
 
-## Breaking changes
+## Upgrade notes
 - Updated Attribute.get_type() to return the full type instead of just the base type (inmanta/inmanta-sphinx#29)
 - Overriding parent attribute type with the same base type but different modifiers (e.g. override `number` with `number[]`)
     is no longer allowed. This was previously possible due to bug (#2132)
