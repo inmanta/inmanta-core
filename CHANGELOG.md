@@ -1,4 +1,4 @@
-# v 2020.3 (?) Changes in this release:
+# Release 2020.3 (?)
 
 ## New features
 - Added cleanup mechanism of old compile reports (#2054)
