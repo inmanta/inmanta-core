@@ -122,14 +122,23 @@ class CallArguments(object):
 
         return self._metadata
 
-    def _map_headers(self, arg: str) -> Optional[Any]:
+    def _is_header_param(self, arg: str) -> bool:
         if arg not in self._properties.arg_options:
-            return None
+            return False
 
         opts = self._properties.arg_options[arg]
 
         if opts.header is None:
+            return False
+
+        return True
+
+    def _map_headers(self, arg: str) -> Optional[Any]:
+        if not self._is_header_param(arg):
             return None
+
+        opts = self._properties.arg_options[arg]
+        assert opts.header is not None
 
         value = self._request_headers.get(opts.header)
         if opts.reply_header and value is not None:
@@ -180,7 +189,7 @@ class CallArguments(object):
             # get value from headers, defaults or message
             value = self._map_headers(arg)
             if value is None:
-                if arg not in self._properties.arg_options and arg in self._message:
+                if not self._is_header_param(arg) and arg in self._message:
                     value = self._message[arg]
                     all_fields.remove(arg)
 
