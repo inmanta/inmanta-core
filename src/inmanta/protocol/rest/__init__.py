@@ -180,7 +180,7 @@ class CallArguments(object):
             # get value from headers, defaults or message
             value = self._map_headers(arg)
             if value is None:
-                if arg in self._message:
+                if arg not in self._properties.arg_options and arg in self._message:
                     value = self._message[arg]
                     all_fields.remove(arg)
 
