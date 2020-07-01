@@ -27,7 +27,6 @@ import pytest
 import tornado
 from dateutil import parser
 
-from conftest import AsyncCleaner
 from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
@@ -716,7 +715,7 @@ async def test_server_logs_address(server_config, caplog):
 
 
 @pytest.mark.asyncio(timeout=5)
-async def test_2151_method_header_parameter_in_body(async_finalizer: AsyncCleaner) -> None:
+async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
     async def _id(x: object, dct: Dict[str, str]) -> object:
         return x
 
