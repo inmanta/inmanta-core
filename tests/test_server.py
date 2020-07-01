@@ -33,7 +33,7 @@ from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
 from inmanta.export import upload_code
-from inmanta.protocol import Client, Result, json_encode, handle, method
+from inmanta.protocol import Client, handle, json_encode, method
 from inmanta.protocol.common import ArgOption
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
