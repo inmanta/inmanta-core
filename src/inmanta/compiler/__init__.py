@@ -16,10 +16,9 @@
     Contact: code@inmanta.com
 """
 import logging
-import os
 import sys
 from itertools import chain
-from typing import Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -29,6 +28,7 @@ from inmanta.ast import (
     CompilerException,
     DoubleSetException,
     LocatableString,
+    Location,
     MultiException,
     Namespace,
     Range,
@@ -36,27 +36,37 @@ from inmanta.ast import (
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.compiler import config as compiler_config
+from inmanta.compiler.data import CompileData
 from inmanta.execute import scheduler
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
 from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ResultVariable
 from inmanta.module import Project
-from inmanta.plugins import PluginMeta
+from inmanta.parser import ParserException
+from inmanta.plugins import Plugin, PluginMeta
 
-LOGGER = logging.getLogger(__name__)
+LOGGER: logging.Logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from inmanta.ast import Statement, BasicBlock  # noqa: F401
 
 
-def do_compile(refs={}):
+def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
     """
-        Run run run
+        Perform a complete compilation run for the current project (as returned by :py:meth:`inmanta.module.Project.get`)
+
+        :param refs: DEPRECATED
+
     """
-    project = Project.get()
-    compiler = Compiler(os.path.join(project.project_path, project.main_file), refs=refs)
+    compiler = Compiler()
 
     LOGGER.debug("Starting compile")
 
-    (statements, blocks) = compiler.compile()
+    try:
+        (statements, blocks) = compiler.compile()
+    except ParserException as e:
+        compiler.handle_exception(e)
     sched = scheduler.Scheduler(compiler_config.track_dataflow())
     try:
         success = sched.run(compiler, statements, blocks)
@@ -64,17 +74,20 @@ def do_compile(refs={}):
         if compiler_config.dataflow_graphic_enable.get():
             show_dataflow_graphic(sched, compiler)
         compiler.handle_exception(e)
+        success = False
 
     LOGGER.debug("Compile done")
 
     if not success:
         sys.stderr.write("Unable to execute all statements.\n")
+    if compiler_config.json.get():
+        compiler.export_data()
     if compiler_config.dataflow_graphic_enable.get():
         show_dataflow_graphic(sched, compiler)
     return (sched.get_types(), compiler.get_ns())
 
 
-def show_dataflow_graphic(scheduler, compiler):
+def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") -> None:
     from inmanta.execute.dataflow.graphic import GraphicRenderer
 
     types: Dict[str, inmanta_type.Type] = scheduler.get_types()
@@ -90,12 +103,15 @@ def show_dataflow_graphic(scheduler, compiler):
     )
 
 
-def anchormap(refs={}):
+def anchormap(refs: Dict[Any, Any] = {}) -> Sequence[Tuple[Location, Location]]:
     """
-        Run run run
+        Return all lexical references
+
+        Performs compilation up to and including the type resolution, but doesn't start executing
+
+        :param refs: DEPRECATED
     """
-    project = Project.get()
-    compiler = Compiler(os.path.join(project.project_path, project.main_file), refs=refs)
+    compiler = Compiler()
 
     LOGGER.debug("Starting compile")
 
@@ -104,56 +120,64 @@ def anchormap(refs={}):
     return sched.anchormap(compiler, statements, blocks)
 
 
+def get_types_and_scopes() -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
+    """
+        Only run the compilation steps required to extract the different types and scopes.
+    """
+    compiler = Compiler()
+    (statements, blocks) = compiler.compile()
+    sched = scheduler.Scheduler(compiler_config.track_dataflow())
+    sched.define_types(compiler, statements, blocks)
+    return sched.get_types(), compiler.get_ns()
+
+
 class Compiler(object):
     """
         An inmanta compiler
 
-        :param options: Options passed to the application
-        :param config: The parsed configuration file
+        :param cf_file: DEPRECATED
+        :param refs: DEPRECATED
     """
 
-    def __init__(self, cf_file="main.cf", refs={}):
-        self.__init_cf = "_init.cf"
+    def __init__(self, cf_file: str = "main.cf", refs: Dict[Any, Any] = {}) -> None:
+        self.__root_ns: Optional[Namespace] = None
+        self._data: CompileData = CompileData()
+        self.plugins: Dict[str, Plugin] = {}
 
-        self.__cf_file = cf_file
-        self.__root_ns = None
-        self.refs = refs
-
-    def get_plugins(self):
+    def get_plugins(self) -> Dict[str, Plugin]:
         return self.plugins
 
-    def is_loaded(self):
+    def is_loaded(self) -> bool:
         """
             Is everything loaded and the namespace structure built?
         """
         return self.__root_ns is not None
 
-    def get_ns(self):
+    def get_ns(self) -> Namespace:
         """
             Get the root namespace
         """
-        if not self.is_loaded():
-            self.load()
+        assert self.__root_ns is not None
         return self.__root_ns
 
     ns = property(get_ns)
 
-    def read(self, path):
+    def read(self, path: str) -> str:
         """
             Return the content of the given file
         """
         with open(path, "r", encoding="utf-8") as file_d:
             return file_d.read()
 
-    def compile(self):
+    def compile(self) -> Tuple[List["Statement"], List["BasicBlock"]]:
         """
-            This method will compile and prepare everything to start evaluation
+            This method will parse and prepare everything to start evaluation
             the configuration specification.
 
             This method will:
-            - load all namespaces
-            - compile the __config__ namespace
-            - start resolving it and importing unknown namespaces
+            - load all modules using Project.get().get_complete_ast()
+            - add all plugins
+            - create std::Entity
         """
         project = Project.get()
         self.__root_ns = project.get_root_namespace()
@@ -172,7 +196,7 @@ class Compiler(object):
 
             mod_ns = mod_ns[1:]
 
-            ns = self.__root_ns
+            ns: Optional[Namespace] = self.__root_ns
             for part in mod_ns:
                 if ns is None:
                     break
@@ -180,8 +204,6 @@ class Compiler(object):
 
             if ns is None:
                 raise Exception("Unable to find namespace for plugin module %s" % (cls.__module__))
-
-            cls.namespace = ns
 
             name = name.split("::")[-1]
             statement = PluginStatement(ns, name, cls)
@@ -191,13 +213,17 @@ class Compiler(object):
         ns = self.__root_ns.get_child_or_create("std")
         nullrange = Range("internal", 1, 0, 0, 0)
         entity = DefineEntity(
-            ns, LocatableString("Entity", nullrange, 0, ns), "The entity all other entities inherit from.", [], []
+            ns,
+            LocatableString("Entity", nullrange, 0, ns),
+            LocatableString("The entity all other entities inherit from.", nullrange, 0, ns),
+            [],
+            [],
         )
         str_std_entity = LocatableString("std::Entity", nullrange, 0, ns)
 
         requires_rel = DefineRelation(
-            (str_std_entity, LocatableString("requires", nullrange, 0, ns), [0, None], False),
-            (str_std_entity, LocatableString("provides", nullrange, 0, ns), [0, None], False),
+            (str_std_entity, LocatableString("requires", nullrange, 0, ns), (0, None)),
+            (str_std_entity, LocatableString("provides", nullrange, 0, ns), (0, None)),
         )
         requires_rel.namespace = self.__root_ns.get_ns_from_string("std")
 
@@ -205,7 +231,26 @@ class Compiler(object):
         statements.append(requires_rel)
         return (statements, blocks)
 
+    def export_data(self) -> None:
+        """
+            Exports compiler data if the option has been set.
+        """
+        with open(compiler_config.json_file.get(), "w") as file:
+            file.write("%s\n" % self._data.export().json())
+
     def handle_exception(self, exception: CompilerException) -> None:
+        try:
+            self._handle_exception_datatrace(exception)
+        except CompilerException as e:
+            self._handle_exception_export(e)
+
+    def _handle_exception_export(self, exception: CompilerException) -> None:
+        self._data.add_error(exception)
+        if compiler_config.json.get():
+            self.export_data()
+        raise exception
+
+    def _handle_exception_datatrace(self, exception: CompilerException) -> None:
         if not compiler_config.datatrace_enable.get():
             raise exception
 

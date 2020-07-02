@@ -18,7 +18,7 @@
 
 from typing import List, Optional, Tuple
 
-from inmanta.ast import Locatable, RuntimeException, TypingException
+from inmanta.ast import CompilerException, Locatable, RuntimeException, TypingException
 from inmanta.ast.type import NullableType, TypedList
 from inmanta.execute.runtime import (
     AttributeVariable,
@@ -53,16 +53,22 @@ class Attribute(Locatable):
         self.__name: str = name
         entity.add_attribute(self)
         self.__entity = entity
-        self.__type = value_type
         self.__multi = multi
         self.__nullable = nullable
+
+        self.__type: Type = value_type
+        if multi:
+            self.__type = TypedList(self.__type)
+        if nullable:
+            self.__type = NullableType(self.__type)
+
         self.low = 0 if nullable else 1
         self.comment = None  # type: Optional[str]
         self.end: Optional[RelationAttribute] = None
 
     def get_type(self) -> "Type":
         """
-            Get the type of this data item
+            Get the type of this attribute.
         """
         return self.__type
 
@@ -96,45 +102,43 @@ class Attribute(Locatable):
 
     def validate(self, value: object) -> None:
         """
-            Validate a value that is going to be assigned to this attribute
+            Validate a value that is going to be assigned to this attribute. Raises a :py:class:`inmanta.ast.RuntimeException`
+            if validation fails.
         """
         if isinstance(value, Unknown):
             return
-        validation_type: Type = self.type
-        if self.is_multi():
-            validation_type = TypedList(validation_type)
-        if self.is_optional():
-            validation_type = NullableType(validation_type)
-        validation_type.validate(value)
+        self.type.validate(value)
 
     def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
-        if self.__multi:
-            mytype = TypedList(self.__type)
-        else:
-            mytype = self.__type
-
         out: ResultVariable["Instance"]
 
-        if self.__nullable:
+        if self.is_optional():
             # be a 0-1 relation
             self.end = None
             self.low = 0
             self.high = 1
             out = DeprecatedOptionVariable(self, instance, queue)
-            mytype = NullableType(mytype)
         else:
             out = ResultVariable()
 
-        out.set_type(mytype)
+        out.set_type(self.type)
         return out
 
     def is_optional(self) -> bool:
+        """
+            Returns true iff this attribute accepts null values.
+            Deprecated but still used internally.
+        """
         return self.__nullable
 
     def is_multi(self) -> bool:
+        """
+            Returns true iff this attribute expects a list of values of its base type.
+            Deprecated but still used internally.
+        """
         return self.__multi
 
-    def final(self, excns: List[Exception]) -> None:
+    def final(self, excns: List[CompilerException]) -> None:
         pass
 
 
@@ -172,7 +176,7 @@ class RelationAttribute(Attribute):
             out = OptionVariable(self, instance, queue)  # type: ResultVariable
         else:
             out = ListVariable(self, instance, queue)  # type: ResultVariable
-        out.set_type(self.get_type())
+        out.set_type(self.type)
         return out
 
     def is_optional(self) -> bool:
@@ -181,7 +185,7 @@ class RelationAttribute(Attribute):
     def is_multi(self) -> bool:
         return self.high != 1
 
-    def final(self, excns: List[Exception]) -> None:
+    def final(self, excns: List[CompilerException]) -> None:
         for rv in self.source_annotations:
             try:
                 if isinstance(rv.get_value(), Unknown):

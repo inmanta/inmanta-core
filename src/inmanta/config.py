@@ -188,24 +188,24 @@ def is_float(value: str) -> float:
 
 
 def is_time(value: str) -> int:
-    """time"""
+    """Time, the number of seconds represented as an integer value"""
     return int(value)
 
 
 def is_bool(value: str) -> bool:
-    """bool"""
+    """Boolean value, represented as any of true, false, on, off, yes, no, 1, 0. (Case-insensitive)"""
     if type(value) == bool:
         return cast(bool, value)
     return Config._get_instance()._convert_to_boolean(value)
 
 
 def is_list(value: str) -> List[str]:
-    """list"""
-    return [x.strip() for x in value.split(",")]
+    """List of comma-separated values"""
+    return [] if value == "" else [x.strip() for x in value.split(",")]
 
 
 def is_map(map_in: str) -> Dict[str, str]:
-    """map"""
+    """List of comma-separated key=value pairs"""
     map_out = {}
     if map_in is not None:
         mappings = map_in.split(",")
@@ -510,7 +510,7 @@ class AuthJWTConfig(object):
 
         self.client_types = is_list(self._config["client_types"])
         for ct in self.client_types:
-            if ct not in const.VALID_CLIENT_TYPES:
+            if ct not in [client_type for client_type in const.ClientType]:
                 raise ValueError("invalid client_type %s in %s" % (ct, self.section))
 
         if "expire" in self._config:

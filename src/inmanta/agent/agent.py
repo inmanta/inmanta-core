@@ -37,7 +37,7 @@ from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import ResourceHandler
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
-from inmanta.const import ResourceState
+from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, Event, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
@@ -291,6 +291,15 @@ class ResourceAction(object):
                 changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
                     self.resource.id.resource_version_str(): ctx.changes
                 }
+
+                if ctx.facts:
+                    ctx.debug("Sending facts to the server")
+                    set_fact_response = await self.scheduler.get_client().set_parameters(
+                        tid=self.scheduler._env_id, parameters=ctx.facts
+                    )
+                    if set_fact_response.code != 200:
+                        ctx.error("Failed to send facts to the server %s", set_fact_response.result)
+
                 response = await self.scheduler.get_client().resource_action_update(
                     tid=self.scheduler._env_id,
                     resource_ids=[self.resource.id.resource_version_str()],
@@ -613,6 +622,7 @@ class AgentInstance(object):
         self._enabled = False
         self._disable_time_triggers()
         self._nq.cancel()
+        self._cache.close()
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
 
@@ -910,9 +920,17 @@ class AgentInstance(object):
                     )
 
                     parameters = [
-                        {"id": name, "value": value, "resource_id": resource_obj.id.resource_str(), "source": "fact"}
+                        {
+                            "id": name,
+                            "value": value,
+                            "resource_id": resource_obj.id.resource_str(),
+                            "source": ParameterSource.fact.value,
+                        }
                         for name, value in result.items()
                     ]
+                    # Add facts set via the set_fact() method of the HandlerContext
+                    parameters.extend(ctx.facts)
+
                     await self.get_client().set_parameters(tid=self._env_id, parameters=parameters)
                     finished = datetime.datetime.now()
                     await self.get_client().resource_action_update(
@@ -1064,8 +1082,7 @@ class Agent(SessionEndpoint):
             # load agent names from the config file
             agent_names = cfg.agent_names.get()
             if agent_names is not None:
-                names = [x.strip() for x in agent_names.split(",")]
-                for name in names:
+                for name in agent_names:
                     if "$" in name:
                         name = name.replace("$node-name", self.node_name)
                     await self.add_end_point_name(name)
@@ -1159,11 +1176,18 @@ class Agent(SessionEndpoint):
                     LOGGER.info("Updating the URI of the endpoint %s from %s to %s", agent_name, current_uri, uri)
                     update_uri_agents.append(agent_name)
 
+            updated_uri_agents_to_enable = [
+                agent_name for agent_name in update_uri_agents if self._instances[agent_name].is_enabled()
+            ]
+
             to_be_gathered = [self._add_end_point_name(agent_name) for agent_name in agents_to_add]
             to_be_gathered += [self._remove_end_point_name(agent_name) for agent_name in agents_to_remove + update_uri_agents]
             await asyncio.gather(*to_be_gathered)
             # Re-add agents with updated URI
             await asyncio.gather(*[self._add_end_point_name(agent_name) for agent_name in update_uri_agents])
+            # Enable agents with updated URI that were enabled before
+            for agent_to_enable in updated_uri_agents_to_enable:
+                self.unpause(agent_to_enable)
 
     def unpause(self, name: str) -> Apireturn:
         instance = self._instances.get(name)
@@ -1281,10 +1305,11 @@ class Agent(SessionEndpoint):
         changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]],
     ) -> Apireturn:
         if env != self._env_id:
-            LOGGER.warning(
-                "received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
+            LOGGER.error(
+                "The agent process for the environment %s has received a cross agent dependency event that was intended for "
+                "another environment %s. It originated from the resource: %s, that is in state: %s",
+                self._env_id,
                 env,
-                agent,
                 resource,
                 state,
             )
@@ -1293,8 +1318,9 @@ class Agent(SessionEndpoint):
         instance = self._instances.get(agent)
         if not instance:
             LOGGER.warning(
-                "received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
-                env,
+                "The agent process for the environment %s has received a cross agent dependency event that was intended for "
+                "an agent that is not present here %s. It originated from the resource: %s, that is in state: %s",
+                self._env_id,
                 agent,
                 resource,
                 state,

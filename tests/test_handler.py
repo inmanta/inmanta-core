@@ -15,12 +15,14 @@
 
     Contact: code@inmanta.com
 """
+import logging
+
 import pytest
 
 from inmanta import resources
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourcePurged
 from inmanta.resources import Id, PurgeableResource, resource
-from utils import no_error_in_logs
+from utils import log_contains, no_error_in_logs
 
 
 @pytest.mark.parametrize(
@@ -41,6 +43,7 @@ def test_CRUD_handler_purged_response(purged_desired, purged_actual, excn, creat
     """
     purged_actual and excn are conceptually equivalent, this test case serves to prove that they are in fact, equivalent
     """
+    caplog.set_level(logging.DEBUG)
 
     class DummyCrud(CRUDHandler):
         def __init__(self):
@@ -81,3 +84,4 @@ def test_CRUD_handler_purged_response(purged_desired, purged_actual, excn, creat
     assert handler.created == create
     assert handler.deleted == delete
     no_error_in_logs(caplog)
+    log_contains(caplog, "inmanta.agent.handler", logging.DEBUG, "resource aa::Aa[aa,aa=aa],v=1: Calling read_resource")

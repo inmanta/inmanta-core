@@ -17,7 +17,7 @@ syn region String start="\"\"\"" end="\"\"\""
 syn region regex start="/" skip="\\/" end="/"
 syn match number "\<[0123456789]*\>'\@!"
 
-syn keyword Keyword implementation end using entity when implement extends in or and as matching index for parents if else is defined
+syn keyword Keyword implementation end using entity when implement extends in not or and as matching index for parents if else is defined
 syn keyword PreProc import
 syn keyword Typedef typedef
 syn keyword Boolean true false

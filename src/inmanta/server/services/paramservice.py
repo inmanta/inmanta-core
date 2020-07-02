@@ -20,6 +20,7 @@ import logging
 from typing import Any, Dict, List, Optional, cast
 
 from inmanta import data
+from inmanta.const import ParameterSource
 from inmanta.protocol import methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PARAM, SLICE_SERVER, SLICE_TRANSPORT
@@ -185,7 +186,7 @@ class ParameterService(protocol.ServerSlice):
         self,
         env: data.Environment,
         param_id: str,
-        source: str,
+        source: ParameterSource,
         value: str,
         resource_id: str,
         metadata: JsonType,

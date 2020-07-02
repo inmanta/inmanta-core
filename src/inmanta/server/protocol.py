@@ -286,8 +286,8 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         return self._handlers
 
     # utility methods for extensions developers
-    def schedule(self, call: Union[Callable, Coroutine], interval: int = 60) -> None:
-        self._sched.add_action(call, interval)
+    def schedule(self, call: Union[Callable, Coroutine], interval: int = 60, initial_delay: Optional[float] = None) -> None:
+        self._sched.add_action(call, interval, initial_delay)
 
     def add_static_handler(self, location: str, path: str, default_filename: Optional[str] = None, start: bool = False) -> None:
         """
@@ -426,14 +426,20 @@ class Session(object):
 
         return future
 
-    async def get_calls(self) -> Optional[List[common.Request]]:
+    async def get_calls(self, no_hang: bool) -> Optional[List[common.Request]]:
         """
             Get all calls queued for a node. If no work is available, wait until timeout. This method returns none if a call
             fails.
         """
         try:
             call_list: List[common.Request] = []
-            call = await self._queue.get(timeout=IOLoop.current().time() + self._interval)
+
+            if no_hang:
+                timeout = IOLoop.current().time() + 0.1
+            else:
+                timeout = IOLoop.current().time() + self._interval
+
+            call = await self._queue.get(timeout=timeout)
             if call is None:
                 # aborting session
                 return None
@@ -634,14 +640,14 @@ class SessionManager(ServerSlice):
 
     @handle(methods.heartbeat, env="tid")
     async def heartbeat(
-        self, sid: uuid.UUID, env: "inmanta.data.Environment", endpoint_names: List[str], nodename: str
+        self, sid: uuid.UUID, env: "inmanta.data.Environment", endpoint_names: List[str], nodename: str, no_hang: bool = False
     ) -> Union[int, Tuple[int, Dict[str, str]]]:
         LOGGER.debug("Received heartbeat from %s for agents %s in %s", nodename, ",".join(endpoint_names), env.id)
 
         session: Session = await self.get_or_create_session(sid, env.id, set(endpoint_names), nodename)
 
         LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
-        call_list = await session.get_calls()
+        call_list = await session.get_calls(no_hang=no_hang)
         if call_list is not None:
             LOGGER.debug("Pushing %d method calls to node %s", len(call_list), nodename)
             return 200, {"method_calls": call_list}

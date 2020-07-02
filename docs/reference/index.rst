@@ -15,5 +15,6 @@ Inmanta, please check out the :doc:`../quickstart` guide.
     environmentsettings
     projectyml
     api
+    json
     modules
     REST API Reference <openapi.html#http://>

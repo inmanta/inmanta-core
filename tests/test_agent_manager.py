@@ -17,6 +17,7 @@
 """
 import asyncio
 import datetime
+import logging
 import typing
 from typing import Dict, List, Optional, Set, Tuple
 from unittest.mock import Mock
@@ -136,6 +137,12 @@ async def test_primary_selection(server, environment):
     env = await data.Environment.get_by_id(env_id)
     am = server.get_slice(SLICE_AGENT_MANAGER)
 
+    # second env to detect crosstalk
+    project = data.Project(name="test_x")
+    await project.insert()
+    env2 = data.Environment(name="testenv_x", project=project.id)
+    await env2.insert()
+
     await data.Agent(environment=env.id, name="agent1", paused=True).insert()
     await data.Agent(environment=env.id, name="agent2", paused=False).insert()
     await data.Agent(environment=env.id, name="agent3", paused=False).insert()
@@ -145,6 +152,13 @@ async def test_primary_selection(server, environment):
     await am.new_session(ts1, set(ts1.endpoint_names))
     await am._session_listener_actions.join()
     assert len(am.sessions) == 1
+
+    # cross talk session
+    ts2 = MockSession(uuid4(), env2.id, {"agent1", "agent2"}, "ts2")
+    await am.new_session(ts2, set(ts2.endpoint_names))
+    await am._session_listener_actions.join()
+    assert len(am.sessions) == 2
+
     ts1.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts1.get_client().reset_mock()
     await retry_limited(
@@ -159,7 +173,7 @@ async def test_primary_selection(server, environment):
     # alive
     await am.seen(ts1, set(ts1.endpoint_names))
     await am._session_listener_actions.join()
-    assert len(am.sessions) == 1
+    assert len(am.sessions) == 2
     await retry_limited(
         assert_state_agents_retry(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id), 10
     )
@@ -168,7 +182,7 @@ async def test_primary_selection(server, environment):
     ts2 = MockSession(uuid4(), env.id, {"agent3", "agent2"}, "ts2")
     await am.new_session(ts2, set(ts2.endpoint_names))
     await am._session_listener_actions.join()
-    assert len(am.sessions) == 2
+    assert len(am.sessions) == 3
     ts2.get_client().set_state.assert_called_with("agent3", enabled=True)
     ts2.get_client().reset_mock()
     await retry_limited(
@@ -184,7 +198,7 @@ async def test_primary_selection(server, environment):
     # expire first
     await am.expire(ts1, set(ts1.endpoint_names))
     await am._session_listener_actions.join()
-    assert len(am.sessions) == 1
+    assert len(am.sessions) == 2
     ts2.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts2.get_client().reset_mock()
     await retry_limited(
@@ -194,7 +208,7 @@ async def test_primary_selection(server, environment):
     # expire second
     await am.expire(ts2, set(ts2.endpoint_names))
     await am._session_listener_actions.join()
-    assert len(am.sessions) == 0
+    assert len(am.sessions) == 1
     await retry_limited(assert_state_agents_retry(env.id, AgentStatus.paused, AgentStatus.down, AgentStatus.down), 10)
 
     # test is_primary
@@ -213,10 +227,16 @@ async def test_api(init_dataclasses_and_load_schema):
     await env2.insert()
     env3 = data.Environment(name="testenv3", project=project.id)
     await env3.insert()
+    # Exact replica of one to detect crosstalk
+    env4 = data.Environment(name="testenv4", project=project.id)
+    await env4.insert()
     await data.Agent(environment=env.id, name="agent1", paused=True).insert()
     await data.Agent(environment=env.id, name="agent2", paused=False).insert()
     await data.Agent(environment=env.id, name="agent3", paused=False).insert()
     await data.Agent(environment=env2.id, name="agent4", paused=False).insert()
+    await data.Agent(environment=env4.id, name="agent1", paused=True).insert()
+    await data.Agent(environment=env4.id, name="agent2", paused=False).insert()
+    await data.Agent(environment=env4.id, name="agent3", paused=False).insert()
 
     server = Mock()
     futures = Collector()
@@ -234,9 +254,12 @@ async def test_api(init_dataclasses_and_load_schema):
     # third session
     ts3 = MockSession(uuid4(), env3.id, ["agentx"], "ts3")
     await am._register_session(ts3, set(ts3.endpoint_names), datetime.datetime.now())
+    # fourth session
+    ts4 = MockSession(uuid4(), env4.id, {"agent1", "agent2"}, "ts4")
+    await am._register_session(ts4, set(ts4.endpoint_names), datetime.datetime.now())
 
     await futures.proccess()
-    assert len(am.sessions) == 3
+    assert len(am.sessions) == 4
 
     code, all_agents = await am.list_agent_processes(None, None)
     assert code == 200
@@ -272,6 +295,17 @@ async def test_api(init_dataclasses_and_load_schema):
                 "last_seen": UNKWN,
                 "endpoints": [{"id": UNKWN, "name": "agentx", "process": UNKWN}],
                 "environment": env3.id,
+            },
+            {
+                "first_seen": UNKWN,
+                "expired": None,
+                "hostname": "ts4",
+                "last_seen": UNKWN,
+                "endpoints": [
+                    {"id": UNKWN, "name": "agent1", "process": UNKWN},
+                    {"id": UNKWN, "name": "agent2", "process": UNKWN},
+                ],
+                "environment": env4.id,
             },
         ]
     }
@@ -335,10 +369,20 @@ async def test_api(init_dataclasses_and_load_schema):
             {"name": "agent1", "paused": True, "last_failover": "", "primary": "", "environment": env.id, "state": "paused"},
             {"name": "agent2", "paused": False, "last_failover": UNKWN, "primary": UNKWN, "environment": env.id, "state": "up"},
             {"name": "agent3", "paused": False, "last_failover": UNKWN, "primary": UNKWN, "environment": env.id, "state": "up"},
+            {"name": "agent1", "paused": True, "last_failover": "", "primary": "", "environment": env4.id, "state": "paused"},
+            {
+                "name": "agent2",
+                "paused": False,
+                "last_failover": UNKWN,
+                "primary": UNKWN,
+                "environment": env4.id,
+                "state": "up",
+            },
+            {"name": "agent3", "paused": False, "last_failover": "", "primary": "", "environment": env4.id, "state": "down"},
             {"name": "agent4", "paused": False, "last_failover": "", "primary": "", "environment": env2.id, "state": "down"},
         ]
     }
-    assert_equal_ish(shouldbe, all_agents, sortby=["name"])
+    assert_equal_ish(shouldbe, all_agents, sortby=["environment", "name"])
 
     code, all_agents = await am.list_agents(env2)
     assert code == 200
@@ -791,6 +835,27 @@ async def test_exception_occurs_while_processing_session_action(server, environm
 
     # Verify that session is created successfully -> Consumer didn't crash
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+
+@pytest.mark.asyncio
+async def test_restart_on_environment_setting(server, client, environment, caplog):
+    with caplog.at_level(logging.DEBUG):
+        response = await client.environment_settings_set(tid=environment, id="autostart_agent_deploy_interval", value=300)
+        assert response.code == 200
+
+        def check_log_contains(caplog, loggerpart, level, msg):
+            for record in caplog.get_records("call"):
+                logger_name, log_level, message = record.name, record.levelno, record.message
+                if msg in message and loggerpart in logger_name and level == log_level:
+                    return True
+            return False
+
+        await retry_limited(
+            lambda: check_log_contains(
+                caplog, "inmanta.server.agentmanager", logging.DEBUG, "Restarting agents in environment"
+            ),
+            10,
+        )
 
 
 @pytest.mark.asyncio

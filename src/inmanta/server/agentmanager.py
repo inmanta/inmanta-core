@@ -516,7 +516,7 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             # Maybe session exists for a paused agent
             for session in self.sessions.values():
-                if endpoint in session.endpoint_names:
+                if endpoint in session.endpoint_names and session.tid == tid:
                     return session
             # Agent is down
             return None
@@ -524,7 +524,7 @@ class AgentManager(ServerSlice, SessionListener):
     def _get_session_to_failover_agent(self, tid: uuid.UUID, endpoint: str) -> Optional[protocol.Session]:
         current_active_session = self.tid_endpoint_to_session[(tid, endpoint)]
         for session in self.sessions.values():
-            if endpoint in session.endpoint_names:
+            if endpoint in session.endpoint_names and session.tid == tid:
                 if not current_active_session or session.id != current_active_session.id:
                     return session
         return None
@@ -761,11 +761,10 @@ class AutostartedAgentManager(ServerSlice):
                 await self._ensure_agents(env, agent_list)
 
     async def restart_agents(self, env: data.Environment) -> None:
-        autostart = await env.get(data.AUTOSTART_ON_START)
-        if autostart:
-            agents = await data.Agent.get_list(environment=env.id)
-            agent_list = [a.name for a in agents]
-            await self._ensure_agents(env, agent_list, True)
+        LOGGER.debug("Restarting agents in environment %s", env.id)
+        agents = await data.Agent.get_list(environment=env.id)
+        agent_list = [a.name for a in agents]
+        await self._ensure_agents(env, agent_list, True)
 
     async def stop_agents(self, env: data.Environment) -> None:
         """

@@ -163,7 +163,7 @@ class PluginMeta(type):
         cls.__functions[name] = plugin_class
 
     @classmethod
-    def get_functions(cls):
+    def get_functions(cls) -> Dict[str, "Type[Plugin]"]:
         """
             Get all functions that are registered
         """
@@ -181,6 +181,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
     def __init__(self, namespace: Namespace) -> None:
         self.ns = namespace
+        self.namespace = namespace
 
         self._context = -1
         self._return = None
@@ -455,6 +456,10 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
 
 class PluginException(Exception):
+    """
+        Base class for custom exceptions raised from a plugin.
+    """
+
     def __init__(self, message: str) -> None:
         self.message = message
 

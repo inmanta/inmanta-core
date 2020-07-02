@@ -17,7 +17,7 @@
 """
 
 from abc import abstractmethod
-from typing import Dict, Generic, List, Optional, Set, TypeVar, Union, cast
+from typing import Deque, Dict, Generic, List, Optional, Set, TypeVar, Union, cast
 
 import inmanta.execute.dataflow as dataflow
 import inmanta.warnings as inmanta_warnings
@@ -532,8 +532,8 @@ class QueueScheduler(object):
     def __init__(
         self,
         compiler: "Compiler",
-        runqueue: "List[Waiter]",
-        waitqueue: List[ResultVariable],
+        runqueue: "Deque[Waiter]",
+        waitqueue: Deque[DelayedResultVariable],
         types: Dict[str, Type],
         allwaiters: "Set[Waiter]",
     ) -> None:
@@ -546,7 +546,7 @@ class QueueScheduler(object):
     def add_running(self, item: "Waiter") -> None:
         self.runqueue.append(item)
 
-    def add_possible(self, rv: ResultVariable) -> None:
+    def add_possible(self, rv: DelayedResultVariable) -> None:
         self.waitqueue.append(rv)
 
     def get_compiler(self) -> "Compiler":
@@ -578,7 +578,7 @@ class DelegateQueueScheduler(QueueScheduler):
     def add_running(self, item: "Waiter") -> None:
         self.__delegate.add_running(item)
 
-    def add_possible(self, rv: ResultVariable) -> None:
+    def add_possible(self, rv: DelayedResultVariable) -> None:
         self.__delegate.add_possible(rv)
 
     def get_compiler(self) -> "Compiler":
@@ -954,7 +954,7 @@ class Instance(ExecutionContext):
         self.implementations.add(impl)
         return True
 
-    def final(self, excns: List[RuntimeException]) -> None:
+    def final(self, excns: List[CompilerException]) -> None:
         """
             The object should be complete, freeze all attributes
         """
