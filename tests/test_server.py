@@ -754,7 +754,7 @@ async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
     response: tornado.httpclient.HTTPResponse = await client.fetch(request)
     assert response.code == 200
 
-    # invalidvalid request should succeed
+    # invalid request should fail
     request = tornado.httpclient.HTTPRequest(
         url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
         method="POST",
