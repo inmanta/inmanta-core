@@ -18,7 +18,7 @@
 import uuid
 from typing import Dict, List, Optional, Union
 
-from inmanta.const import AgentAction
+from inmanta.const import AgentAction, ClientType
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
 
@@ -28,7 +28,7 @@ from .openapi.model import OpenAPI
 
 
 # Method for working with projects
-@typedmethod(path="/project", operation="PUT", client_types=["api"], api_version=2)
+@typedmethod(path="/project", operation="PUT", client_types=[ClientType.api], api_version=2)
 def project_create(name: str, project_id: uuid.UUID = None) -> model.Project:
     """
         Create a new project
@@ -38,28 +38,28 @@ def project_create(name: str, project_id: uuid.UUID = None) -> model.Project:
     """
 
 
-@typedmethod(path="/project/<id>", operation="POST", client_types=["api"], api_version=2)
+@typedmethod(path="/project/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
 def project_modify(id: uuid.UUID, name: str) -> model.Project:
     """
         Modify the given project
     """
 
 
-@typedmethod(path="/project/<id>", operation="DELETE", client_types=["api"], api_version=2)
+@typedmethod(path="/project/<id>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def project_delete(id: uuid.UUID) -> None:
     """
         Delete the given project and all related data
     """
 
 
-@typedmethod(path="/project", operation="GET", client_types=["api"], api_version=2)
+@typedmethod(path="/project", operation="GET", client_types=[ClientType.api], api_version=2)
 def project_list() -> List[model.Project]:
     """
         Create a list of projects
     """
 
 
-@typedmethod(path="/project/<id>", operation="GET", client_types=["api"], api_version=2)
+@typedmethod(path="/project/<id>", operation="GET", client_types=[ClientType.api], api_version=2)
 def project_get(id: uuid.UUID) -> model.Project:
     """
         Get a project and a list of the ids of all environments
@@ -67,7 +67,7 @@ def project_get(id: uuid.UUID) -> model.Project:
 
 
 # Methods for working with environments
-@typedmethod(path="/environment", operation="PUT", client_types=["api"], api_version=2)
+@typedmethod(path="/environment", operation="PUT", client_types=[ClientType.api], api_version=2)
 def environment_create(
     project_id: uuid.UUID,
     name: str,
@@ -86,7 +86,7 @@ def environment_create(
     """
 
 
-@typedmethod(path="/environment/<id>", operation="POST", client_types=["api"], api_version=2)
+@typedmethod(path="/environment/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
 def environment_modify(id: uuid.UUID, name: str, repository: str = None, branch: str = None) -> model.Environment:
     """
         Modify the given environment
@@ -98,7 +98,7 @@ def environment_modify(id: uuid.UUID, name: str, repository: str = None, branch:
     """
 
 
-@typedmethod(path="/environment/<id>", operation="DELETE", client_types=["api"], api_version=2)
+@typedmethod(path="/environment/<id>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def environment_delete(id: uuid.UUID) -> None:
     """
         Delete the given environment and all related data.
@@ -110,7 +110,7 @@ def environment_delete(id: uuid.UUID) -> None:
     """
 
 
-@typedmethod(path="/environment", operation="GET", client_types=["api"], api_version=2)
+@typedmethod(path="/environment", operation="GET", client_types=[ClientType.api], api_version=2)
 def environment_list() -> List[model.Environment]:
     """
         Create a list of environments
@@ -120,7 +120,7 @@ def environment_list() -> List[model.Environment]:
 @typedmethod(
     path="/environment/<id>",
     operation="GET",
-    client_types=["api"],
+    client_types=[ClientType.api],
     arg_options={"id": methods.ArgOption(getter=methods.add_env)},
     api_version=2,
 )
@@ -136,7 +136,7 @@ def environment_get(id: uuid.UUID) -> model.Environment:
     path="/decommission/<id>",
     operation="POST",
     arg_options={"id": methods.ArgOption(getter=methods.convert_environment)},
-    client_types=["api"],
+    client_types=[ClientType.api],
     api_version=2,
 )
 def environment_decommission(id: uuid.UUID, metadata: Optional[model.ModelMetadata] = None) -> int:
@@ -150,7 +150,7 @@ def environment_decommission(id: uuid.UUID, metadata: Optional[model.ModelMetada
     path="/decommission/<id>",
     operation="DELETE",
     arg_options={"id": methods.ArgOption(getter=methods.convert_environment)},
-    client_types=["api"],
+    client_types=[ClientType.api],
     api_version=2,
 )
 def environment_clear(id: uuid.UUID) -> None:
@@ -166,7 +166,11 @@ def environment_clear(id: uuid.UUID) -> None:
 
 # Method for listing and creating auth tokens for an environment that can be used by the agent and compilers
 @typedmethod(
-    path="/environment_auth", operation="POST", arg_options=methods.ENV_OPTS, client_types=["api", "compiler"], api_version=2
+    path="/environment_auth",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api, ClientType.compiler],
+    api_version=2,
 )
 def environment_create_token(tid: uuid.UUID, client_types: List[str], idempotent: bool = True) -> str:
     """
@@ -188,7 +192,7 @@ def environment_create_token(tid: uuid.UUID, client_types: List[str], idempotent
     arg_options=methods.ENV_OPTS,
     api=True,
     agent_server=True,
-    client_types=["api", "agent", "compiler"],
+    client_types=[ClientType.api, ClientType.agent, ClientType.compiler],
     api_version=2,
 )
 def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsReponse:
@@ -203,7 +207,7 @@ def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsRepons
     arg_options=methods.ENV_OPTS,
     api=True,
     agent_server=True,
-    client_types=["api", "agent", "compiler"],
+    client_types=[ClientType.api, ClientType.agent, ClientType.compiler],
     api_version=2,
 )
 def environment_settings_set(tid: uuid.UUID, id: str, value: model.EnvSettingType) -> ReturnValue[None]:
@@ -218,7 +222,7 @@ def environment_settings_set(tid: uuid.UUID, id: str, value: model.EnvSettingTyp
     arg_options=methods.ENV_OPTS,
     api=True,
     agent_server=True,
-    client_types=["api", "agent"],
+    client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
 def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSettingsReponse:
@@ -233,7 +237,7 @@ def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSetting
     arg_options=methods.ENV_OPTS,
     api=True,
     agent_server=True,
-    client_types=["api", "agent"],
+    client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
 def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
@@ -242,14 +246,16 @@ def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
     """
 
 
-@typedmethod(path="/reserve_version", operation="POST", arg_options=methods.ENV_OPTS, client_types=["compiler"], api_version=2)
+@typedmethod(
+    path="/reserve_version", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.compiler], api_version=2
+)
 def reserve_version(tid: uuid.UUID) -> int:
     """
         Reserve a version number in this environment.
     """
 
 
-@typedmethod(path="/docs", operation="GET", client_types=["api"], api_version=2)
+@typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2)
 def get_api_docs(format: Optional[str] = None) -> ReturnValue[Union[OpenAPI, str]]:
     """
        Get the OpenAPI definition of the API
@@ -257,7 +263,9 @@ def get_api_docs(format: Optional[str] = None) -> ReturnValue[Union[OpenAPI, str
     """
 
 
-@typedmethod(path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=["api"], api_version=2)
+@typedmethod(
+    path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
 def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
     """
         Execute an action on an agent
@@ -270,7 +278,9 @@ def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
     """
 
 
-@typedmethod(path="/agents/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=["api"], api_version=2)
+@typedmethod(
+    path="/agents/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
 def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
     """
         Execute an action on all agents in the given environment.

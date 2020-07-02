@@ -618,9 +618,9 @@ class ModelExporter(object):
                 return model.DirectValue(value)
 
         def convert_attribute(attr):
-            type_string: Optional[str] = attr.type.type_string()
+            type_string: Optional[str] = attr.type.get_base_type().type_string()
             if type_string is None:
-                raise Exception("Type %s can not be represented in the inmanta DSL" % attr.type)
+                raise Exception("Type %s can not be represented in the inmanta DSL" % attr.type.get_base_type())
             return model.Attribute(
                 type_string, attr.is_optional(), attr.is_multi(), convert_comment(attr.comment), location(attr)
             )

@@ -16,10 +16,15 @@
     Contact: code@inmanta.com
 """
 
+import typing
+
 import pytest
 
+import inmanta.ast.type as inmanta_type
 import inmanta.compiler as compiler
 from inmanta.ast import AttributeException, Namespace, TypingException
+from inmanta.ast.attribute import Attribute
+from inmanta.ast.entity import Entity
 from inmanta.ast.type import Bool, Integer, Number, String
 
 
@@ -259,3 +264,79 @@ int("0.0")
         """,
         "Failed to cast '0.0' to int (reported in int('0.0') ({dir}/main.cf:2))",
     )
+
+
+@pytest.mark.parametrize(
+    "parent_modifier,child_modifier", [("[]", ""), ("", "[]"), ("?", ""), ("", "?")],
+)
+def test_2132_inheritance_type_override(snippetcompiler, parent_modifier: str, child_modifier: str) -> None:
+    snippetcompiler.setup_for_error(
+        f"""
+entity Parent:
+    number{parent_modifier} n
+end
+
+entity Child extends Parent:
+    number{child_modifier} n
+end
+        """,
+        "Incompatible attributes (original at ({dir}/main.cf:7)) (duplicate at ({dir}/main.cf:3))",
+    )
+
+
+def test_attribute_type(snippetcompiler) -> None:
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    number n
+    number[] ns
+    number? maybe_n
+    number[]? maybe_ns
+    list lst
+end
+        """,
+    )
+    types: typing.Dict[str, inmanta_type.Type]
+    (types, scopes) = compiler.do_compile()
+    assert "__config__::A" in types
+    entity = types["__config__::A"]
+    assert isinstance(entity, Entity)
+    attrs: typing.Dict[str, Attribute] = entity.get_attributes()
+
+    assert "n" in attrs
+    assert isinstance(attrs["n"].type, Number)
+
+    assert "ns" in attrs
+    ns_type: inmanta_type.Type = attrs["ns"].type
+    assert isinstance(ns_type, inmanta_type.TypedList)
+    assert isinstance(ns_type.element_type, Number)
+
+    assert "maybe_n" in attrs
+    maybe_n_type: inmanta_type.Type = attrs["maybe_n"].type
+    assert isinstance(maybe_n_type, inmanta_type.NullableType)
+    assert isinstance(maybe_n_type.element_type, Number)
+
+    assert "maybe_ns" in attrs
+    maybe_ns_type: inmanta_type.Type = attrs["maybe_ns"].type
+    assert isinstance(maybe_ns_type, inmanta_type.NullableType)
+    maybe_ns_element_type: inmanta_type.Type = maybe_ns_type.element_type
+    assert isinstance(maybe_ns_element_type, inmanta_type.TypedList)
+    assert isinstance(maybe_ns_element_type.element_type, Number)
+
+    assert "lst" in attrs
+    assert isinstance(attrs["lst"].type, inmanta_type.List)
+
+
+@pytest.mark.parametrize("base_type", inmanta_type.TYPES.values())
+def test_types_base_type(snippetcompiler, base_type: inmanta_type.Type) -> None:
+    modified_types: typing.List[inmanta_type.Type] = [
+        base_type,
+        inmanta_type.TypedList(base_type),
+        inmanta_type.NullableType(base_type),
+        inmanta_type.NullableType(inmanta_type.TypedList(base_type)),
+    ]
+    for t in modified_types:
+        # verify get_base_type returns the inmanta base type
+        assert t.get_base_type().type_string() == base_type.type_string()
+        # verify with_base_type is round-trip compatible
+        assert t.with_base_type(base_type).type_string() == t.type_string()

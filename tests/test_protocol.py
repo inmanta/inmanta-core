@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import base64
 import json
 import os
@@ -30,6 +31,7 @@ import tornado
 from pydantic.types import StrictBool
 from tornado import gen, web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 from inmanta import config, protocol
 from inmanta.data.model import BaseModel
@@ -43,6 +45,7 @@ from inmanta.protocol.common import (
     InvalidPathException,
     ReturnValue,
 )
+from inmanta.protocol.methods import ENV_OPTS
 from inmanta.protocol.rest import CallArguments
 from inmanta.server import config as opt
 from inmanta.server.config import server_bind_port
@@ -101,6 +104,9 @@ async def test_client_files_lost(client):
 
 @pytest.mark.asyncio
 async def test_sync_client_files(client):
+    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
+    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
+
     done = []
     limit = 100
     sleep = 0.01
@@ -767,6 +773,8 @@ async def test_nested_paths(unused_tcp_port, postgres_db, database_name, async_f
 
         @protocol.handle(test_method)
         async def test_method(self, data: str) -> Project:
+            # verify that URL encoded data is properly decoded
+            assert "%20" not in data
             return Project(name="test_method")
 
         @protocol.handle(test_method2)
@@ -781,7 +789,7 @@ async def test_nested_paths(unused_tcp_port, postgres_db, database_name, async_f
     async_finalizer.add(rs.stop)
 
     client = protocol.Client("client")
-    result = await client.test_method({"data": "test"})
+    result = await client.test_method({"data": "test "})
     assert result.code == 200
     assert "test_method" == result.result["data"]["name"]
 
@@ -1356,7 +1364,7 @@ async def test_html_content_type_with_utf8_encoding(unused_tcp_port, postgres_db
     """
     configure(unused_tcp_port, database_name, postgres_db.port)
 
-    html_content = "<html><body>test</body></html>".encode(encoding="utf-8")
+    html_content = "<html><body>test</body></html>"
 
     @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
     def test_method() -> ReturnValue[str]:  # NOQA
@@ -1499,3 +1507,61 @@ async def test_required_header_not_present(server):
     client = AsyncHTTPClient()
     response = await client.fetch(f"http://localhost:{server_bind_port.get()}/api/v2/environment_settings", raise_error=False)
     assert response.code == 400
+
+
+@pytest.mark.asyncio
+async def test_malformed_json(server):
+    """
+        Tests sending malformed json to the server
+    """
+    port = opt.get_bind_port()
+    url = f"http://localhost:{port}/api/v2/environment"
+
+    request = HTTPRequest(url=url, method="PUT", body='{"name": env}')
+    client = AsyncHTTPClient()
+    response = await client.fetch(request, raise_error=False)
+    assert response.code == 400
+    assert (
+        json.loads(response.body)["message"]
+        == "The request body couldn't be decoded as a JSON: Expecting value: line 1 column 10 (char 9)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class Project(BaseModel):
+        name: str
+        value: str
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(
+            api_prefix="test", path="/project/<project>", operation="GET", arg_options=ENV_OPTS, client_types=["api"]
+        )
+        def test_method(
+            tid: uuid.UUID, project: str, include_deleted: bool = False
+        ) -> List[Union[uuid.UUID, Project, bool]]:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(
+            tid: uuid.UUID, project: Project, include_deleted: bool = False
+        ) -> List[Union[uuid.UUID, Project, bool]]:  # NOQA
+            return [tid, project, include_deleted]
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    port = opt.get_bind_port()
+    url = f"http://localhost:{port}/test/v1/project/afcb51dc-1043-42b6-bb99-b4fc88603126"
+
+    request = HTTPRequest(url=url, method="GET")
+    client = AsyncHTTPClient()
+    response = await client.fetch(request, raise_error=False)
+    assert response.code == 400
+    assert json.loads(response.body)["message"] == "Invalid request: Field 'tid' is required."

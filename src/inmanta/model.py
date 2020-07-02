@@ -64,7 +64,7 @@ class Attribute(object):
         :param bool nullable: can this attribute be null
         :param bool multi: is this attribute a list
         :param str comment: docstring for this attribute
-        :param Location location: source location where this attribute is defined
+        :param inmanta.model.Location location: source location where this attribute is defined
     """
 
     def __init__(self, mytype: str, nullable: bool, multi: bool, comment: str, location: Location) -> None:
@@ -187,7 +187,7 @@ class Relation(object):
     :param str mytype: the type this relation refers to
     :param Tuple[int, int] multi: the multiplicity of this relation in the form (lower,upper), -1 for unbounded
     :param str reverse: the fully qualified name of the inverse relation
-    :param Location location: source location this relation was defined at
+    :param inmanta.model.Location location: source location this relation was defined at
     :param List[Value] source_annotations: annotations on this relation on the source side
     :param List[Value] target_annotations: annotations on this relation on the target side
     """
@@ -269,7 +269,7 @@ class Entity(object):
         :param List[str] parents: parent types
         :param  Dict[str, Attribute]: all attributes declared on this entity directly, by name
         :param  Dict[str, Relation]: all relations declared on this entity directly, by name
-        :param Location location: source location this entity was defined at
+        :param inmanta.model.Location location: source location this entity was defined at
     """
 
     def __init__(

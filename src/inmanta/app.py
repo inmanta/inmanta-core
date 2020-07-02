@@ -52,6 +52,7 @@ from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 
+import inmanta.compiler as compiler
 from inmanta import const, module, moduletool, protocol
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, Commander, ShowUsageException, command
@@ -219,6 +220,18 @@ def compiler_config(parser: ArgumentParser) -> None:
     parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
     parser.add_argument(
+        "--json",
+        dest="compile_json",
+        help="Export structured json containing compile data such as occurred errors.",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--json-file",
+        dest="compile_json_file",
+        help="File to export compile json to. If omitted %s is used." % compiler.config.default_json_file,
+    )
+    parser.add_argument(
         "--experimental-data-trace",
         dest="datatrace",
         help="Experimental data trace tool useful for debugging",
@@ -259,6 +272,12 @@ def compile_project(options: argparse.Namespace):
 
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
+
+    if options.compile_json is True:
+        Config.set("compiler", "json", "true")
+
+    if options.compile_json_file is not None:
+        Config.set("compiler", "json_file", options.compile_json_file)
 
     if options.datatrace is True:
         Config.set("compiler", "datatrace_enable", "true")

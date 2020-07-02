@@ -501,7 +501,7 @@ class Entity(EntityLike, NamedType):
         """
         return self
 
-    def final(self, excns: List[Exception]) -> None:
+    def final(self, excns: List[CompilerException]) -> None:
         for key, indices in self.index_queue.items():
             for _, stmt in indices:
                 excns.append(

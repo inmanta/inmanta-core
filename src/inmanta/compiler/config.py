@@ -16,8 +16,7 @@
     Contact: code@inmanta.com
 """
 
-
-from inmanta.config import Option, is_bool
+from inmanta.config import Option, is_bool, is_str
 
 datatrace_enable: Option[bool] = Option(
     "compiler",
@@ -40,3 +39,20 @@ dataflow_graphic_enable: Option[bool] = Option(
 
 def track_dataflow() -> bool:
     return datatrace_enable.get() or dataflow_graphic_enable.get()
+
+
+json: Option[bool] = Option(
+    "compiler", "json", False, "Export structured json containing compile data such as occurred errors.", is_bool,
+)
+
+
+default_json_file: str = "compile_data.json"
+
+
+json_file: Option[str] = Option(
+    "compiler",
+    "json_file",
+    default_json_file,
+    "File to export compile json to. If omitted %s is used." % default_json_file,
+    is_str,
+)

@@ -37,6 +37,7 @@ from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, Resource
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.resources import Id
+from inmanta.server import config
 from inmanta.types import JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -251,7 +252,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if not cls._connection_pool:
             return
         try:
-            await cls._connection_pool.close()
+            await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
+        except asyncio.TimeoutError:
+            cls._connection_pool.terminate()
         finally:
             cls._connection_pool = None
 
@@ -804,7 +807,8 @@ class Environment(BaseDocument):
             name=AUTOSTART_AGENT_DEPLOY_INTERVAL,
             typ="int",
             default=600,
-            doc="The deployment interval of the autostarted agents.",
+            doc="The deployment interval of the autostarted agents."
+            " See also: :inmanta.config:option:`config.agent-deploy-interval`",
             validator=convert_int,
             agent_restart=True,
         ),
@@ -812,7 +816,8 @@ class Environment(BaseDocument):
             name=AUTOSTART_AGENT_DEPLOY_SPLAY_TIME,
             typ="int",
             default=10,
-            doc="The splay time on the deployment interval of the autostarted agents.",
+            doc="The splay time on the deployment interval of the autostarted agents."
+            " See also: :inmanta.config:option:`config.agent-deploy-splay-time`",
             validator=convert_int,
             agent_restart=True,
         ),
@@ -820,7 +825,8 @@ class Environment(BaseDocument):
             name=AUTOSTART_AGENT_REPAIR_INTERVAL,
             typ="int",
             default=86400,
-            doc="The repair interval of the autostarted agents.",
+            doc="The repair interval of the autostarted agents."
+            " See also: :inmanta.config:option:`config.agent-repair-interval`",
             validator=convert_int,
             agent_restart=True,
         ),
@@ -828,7 +834,8 @@ class Environment(BaseDocument):
             name=AUTOSTART_AGENT_REPAIR_SPLAY_TIME,
             typ="int",
             default=600,
-            doc="The splay time on the repair interval of the autostarted agents.",
+            doc="The splay time on the repair interval of the autostarted agents."
+            " See also: :inmanta.config:option:`config.agent-repair-splay-time`",
             validator=convert_int,
             agent_restart=True,
         ),
@@ -845,7 +852,7 @@ class Environment(BaseDocument):
             typ="dict",
             validator=convert_agent_map,
             doc="A dict with key the name of agents that should be automatically started. The value "
-            "is either an empty string or an agent map string.",
+            "is either an empty string or an agent map string. See also: :inmanta.config:option:`config.agent-map`",
             agent_restart=True,
         ),
         AUTOSTART_AGENT_INTERVAL: Setting(
@@ -1001,9 +1008,6 @@ RETURNING last_version;
         version = cast(int, record[0])
         self.last_version = version
         return version
-
-
-SOURCE = ("fact", "plugin", "user", "report")
 
 
 class Parameter(BaseDocument):
@@ -1523,6 +1527,13 @@ class Compile(BaseDocument):
             [cls._get_value(environment_id), cls._get_value(remote_id)],
         )
         return results
+
+    @classmethod
+    async def delete_older_than(
+        cls, oldest_retained_date: datetime.datetime, connection: Optional[asyncpg.Connection] = None
+    ) -> None:
+        query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::timestamp"
+        await cls._execute_query(query, oldest_retained_date, connection=connection)
 
     def to_dto(self) -> m.CompileRun:
         return m.CompileRun(

@@ -28,6 +28,7 @@ from dateutil import parser
 from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
+from inmanta.const import ParameterSource
 from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import (
@@ -675,8 +676,8 @@ async def test_invalid_sid(server, client, environment):
 @pytest.mark.asyncio(timeout=30)
 async def test_get_param(server, client, environment):
     metadata = {"key1": "val1", "key2": "val2"}
-    await client.set_param(environment, "param", "source", "val", "", metadata, False)
-    await client.set_param(environment, "param2", "source2", "val2", "", {"a": "b"}, False)
+    await client.set_param(environment, "param", ParameterSource.user, "val", "", metadata, False)
+    await client.set_param(environment, "param2", ParameterSource.user, "val2", "", {"a": "b"}, False)
 
     res = await client.list_params(tid=environment, query={"key1": "val1"})
     assert res.code == 200

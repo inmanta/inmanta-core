@@ -28,7 +28,6 @@ requires = [
     "pytest-env",
     "pytest-postgresql",
     "tornado",
-    "typing",
 ]
 
 this_directory = path.abspath(path.dirname(__file__))
@@ -36,7 +35,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
-    version="2020.2.1",
+    version="2020.3",
     python_requires=">=3.6",  # also update classifiers
     # Meta data
     name="pytest-inmanta-extensions",

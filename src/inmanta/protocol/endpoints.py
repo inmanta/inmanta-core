@@ -202,9 +202,16 @@ class SessionEndpoint(Endpoint, CallTarget):
         await super(SessionEndpoint, self).stop()
 
     async def on_reconnect(self) -> None:
+        """
+        Called when a connection becomes active. i.e. when a first heartbeat is received after startup or
+        a first hearbeat after an :py:`on_disconnect`
+        """
         pass
 
     async def on_disconnect(self) -> None:
+        """
+        Called when the connection is lost unexpectedly (not on shutdown)
+        """
         pass
 
     async def perform_heartbeat(self) -> None:
@@ -223,6 +230,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                     tid=str(self._env_id),
                     endpoint_names=list(self.end_point_names),
                     nodename=self.node_name,
+                    no_hang=not connected,
                 )
                 LOGGER.log(3, "returned heartbeat for %s", str(self.sessionid))
                 if result.code == 200:

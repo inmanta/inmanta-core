@@ -333,3 +333,15 @@ async def test_bind_port(unused_tcp_port, async_finalizer, client, caplog):
     log_sequence = LogSequence(caplog, allow_errors=False)
     log_sequence.assert_not("py.warnings", logging.WARNING, deprecation_line_log_line)
     log_sequence.assert_not("py.warnings", logging.WARNING, ignoring_log_line)
+
+
+def test_option_is_list():
+    option: Option = Option("test", "list", "default,values", "documentation", cfg.is_list)
+    option.set("some,values")
+    assert option.get() == ["some", "values"]
+
+
+def test_option_is_list_empty():
+    option: Option = Option("test", "list", "default,values", "documentation", cfg.is_list)
+    option.set("")
+    assert option.get() == []

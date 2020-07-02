@@ -43,10 +43,14 @@ CREATE TABLE IF NOT EXISTS public.schemamanager (
 
 
 class TableNotFound(Exception):
+    """ Raised when a table is not found in the database """
+
     pass
 
 
 class InvalidSchemaVersion(Exception):
+    """ Raised when an invalid database version is found """
+
     pass
 
 

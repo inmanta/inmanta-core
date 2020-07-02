@@ -1,3 +1,5 @@
+.. _ref-modules:
+
 Inmanta modules
 ===============
 
