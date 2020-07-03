@@ -1,23 +1,12 @@
-# v 2020.3 (?) Changes in this release:
+# Release 2020.4 (?)
 
-## Fixed
-- Various small issues (#2134)
-- Fixed issue of autostarted agents not being restarted on environment setting change (#2049)
-- Log primary for agent correctly in the database when pausing/unpausing agents (#2079)
-- Cancel scheduled deploy operations of an agent when that agent is paused (#2077)
-- Fix agent-names config type (#2071)
-- Ensure the internal agent is always present in the autostart_agent_map of auto-started agents (#2101)
-- Cancel scheduled ResourceActions when AgentInstance is stopped (#2106)
-- Decoding of REST return value for content type html with utf-8 charset (#2074)
-- Empty list option in config no longer interpreted as list of empty string (#2097)
-- Correct closing of agentcache
-- Agent cross environment communication bug (#2163)
-- Fixed an issue where an argument missing from a request would result in a http-500 error instead of 400 (#2152)
-- Ensure agent is in proper state after URI change (#2138)
-- Removed warning about collecting requirements for project that has not been loaded completely on initial compile (#2125)
+## Bug fixes
 - Disallow parameters mapped to a header to be passed via the body instead (#2151)
 
-## Added
+
+# Release 2020.3 (2020-07-02)
+
+## New features
 - Added cleanup mechanism of old compile reports (#2054)
 - Added `compiler.json` option and `--json` compile flag to export structured compile data such as occurred errors (#1206)
 - Added troubleshooting documentation (#1211)
@@ -37,11 +26,27 @@
 - Add compiler entrypoint to get types and scopes (#2114)
 - Add support to push facts via the handler context (#593)
 
-## Breaking changes
+## Upgrade notes
+- Ensure the database is backed up before executing an upgrade.
 - Updated Attribute.get_type() to return the full type instead of just the base type (inmanta/inmanta-sphinx#29)
 - Overriding parent attribute type with the same base type but different modifiers (e.g. override `number` with `number[]`)
     is no longer allowed. This was previously possible due to bug (#2132)
 
+## Bug fixes
+- Various small issues (#2134)
+- Fixed issue of autostarted agents not being restarted on environment setting change (#2049)
+- Log primary for agent correctly in the database when pausing/unpausing agents (#2079)
+- Cancel scheduled deploy operations of an agent when that agent is paused (#2077)
+- Fix agent-names config type (#2071)
+- Ensure the internal agent is always present in the autostart_agent_map of auto-started agents (#2101)
+- Cancel scheduled ResourceActions when AgentInstance is stopped (#2106)
+- Decoding of REST return value for content type html with utf-8 charset (#2074)
+- Empty list option in config no longer interpreted as list of empty string (#2097)
+- Correct closing of agentcache
+- Agent cross environment communication bug (#2163)
+- Fixed an issue where an argument missing from a request would result in a http-500 error instead of 400 (#2152)
+- Ensure agent is in proper state after URI change (#2138)
+- Removed warning about collecting requirements for project that has not been loaded completely on initial compile (#2125)
 
 # v 2020.2 (2020-04-24) Changes in this release:
 
