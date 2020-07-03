@@ -23,7 +23,7 @@ import shutil
 import subprocess
 import uuid
 from asyncio import Semaphore
-from typing import List
+from typing import List, Optional
 
 import pytest
 
@@ -99,7 +99,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
             self.done = False
             self.version = None
 
-        async def run(self):
+        async def run(self, force_update: Optional[bool] = False):
             self.started = True
             await self.lock.acquire()
             self.done = True
@@ -137,7 +137,8 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     async def request_compile(env: data.Environment) -> uuid.UUID:
         """Request compile for given env, return remote_id"""
         u1 = uuid.uuid4()
-        await cs.request_recompile(env, False, False, u1)
+        # add unique environment variables to prevent merging in request_recompile
+        await cs.request_recompile(env, False, False, u1, env_vars={"uuid": str(u1)})
         results = await data.Compile.get_by_remote_id(env.id, u1)
         assert len(results) == 1
         assert results[0].remote_id == u1
@@ -400,9 +401,9 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
     await env.insert()
 
     u1 = uuid.uuid4()
-    await compilerservice.request_recompile(env, False, False, u1)
+    await compilerservice.request_recompile(env, False, False, u1, env_vars={"my_unique_var": str(u1)})
     u2 = uuid.uuid4()
-    await compilerservice.request_recompile(env, False, False, u2)
+    await compilerservice.request_recompile(env, False, False, u2, env_vars={"my_unique_var": str(u2)})
 
     assert await compilerservice.is_compiling(env.id) == 200
 
@@ -548,23 +549,55 @@ async def test_compileservice_queue(mocked_compiler_service_block, server, clien
     assert result.code == 200
 
     # request a compile
-    compile_id1 = uuid.uuid4()
-    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=compile_id1)
+    remote_id1 = uuid.uuid4()
+    await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=False, remote_id=remote_id1, env_vars={"my_unique_var": "1"}
+    )
 
     # api should return one
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 1
-    assert result.result["queue"][0]["remote_id"] == str(compile_id1)
+    assert result.result["queue"][0]["remote_id"] == str(remote_id1)
     assert result.code == 200
 
     # request a compile
-    compile_id2 = uuid.uuid4()
-    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=compile_id2)
+    remote_id2 = uuid.uuid4()
+    compile_id2, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=remote_id2)
 
     # api should return two
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 2
-    assert result.result["queue"][1]["remote_id"] == str(compile_id2)
+    assert result.result["queue"][1]["remote_id"] == str(remote_id2)
+    assert result.code == 200
+
+    # request a compile with do_export=True
+    remote_id3 = uuid.uuid4()
+    compile_id3, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=remote_id3)
+
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 3
+    assert result.result["queue"][2]["remote_id"] == str(remote_id3)
+    assert result.code == 200
+
+    # request a compile with do_export=False -> expect merge with compile2
+    remote_id4 = uuid.uuid4()
+    compile_id4, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=remote_id4)
+
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 4
+    assert result.result["queue"][3]["remote_id"] == str(remote_id4)
+    assert result.code == 200
+
+    # request a compile with do_export=True -> expect merge with compile3, expect force_update == True for the compile
+    remote_id5 = uuid.uuid4()
+    compile_id5, _ = await compilerslice.request_recompile(env=env, force_update=True, do_export=True, remote_id=remote_id5)
+    remote_id6 = uuid.uuid4()
+    compile_id6, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=remote_id6)
+
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 6
+    assert result.result["queue"][4]["remote_id"] == str(remote_id5)
+    assert result.result["queue"][5]["remote_id"] == str(remote_id6)
     assert result.code == 200
 
     # finish a compile and wait for service to take on next
@@ -576,21 +609,36 @@ async def test_compileservice_queue(mocked_compiler_service_block, server, clien
     while current_task is compilerslice._recompiles[env.id]:
         await asyncio.sleep(0.01)
 
-    # api should return one when ready
+    # api should return five when ready
     result = await client.get_compile_queue(environment)
-    assert len(result.result["queue"]) == 1
+    assert len(result.result["queue"]) == 5
+    assert result.result["queue"][0]["remote_id"] == str(remote_id2)
     assert result.code == 200
 
-    # finish a compile
+    # finish second compile
     current_task = compilerslice._recompiles[env.id]
-
-    run = mocked_compiler_service_block.get()
+    run = mocked_compiler_service_block.get(block=True, timeout=2)
     run.block = False
 
-    while env.id in compilerslice._recompiles and current_task is compilerslice._recompiles[env.id]:
-        await asyncio.sleep(0.01)
+    while current_task is compilerslice._recompiles[env.id]:
+        await asyncio.sleep(0.2)
 
-    # return
+    assert await compilerslice.get_report(compile_id2) == await compilerslice.get_report(compile_id4)
+
+    # finish third compile
+    current_task = compilerslice._recompiles[env.id]
+    run = mocked_compiler_service_block.get(block=True, timeout=2)
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 3
+    assert result.result["queue"][0]["remote_id"] == str(remote_id3)
+    assert result.code == 200
+    run.block = False
+
+    while env.id in compilerslice._recompiles:
+        await asyncio.sleep(0.2)
+
+    assert await compilerslice.get_report(compile_id3) == await compilerslice.get_report(compile_id5)
+    assert await compilerslice.get_report(compile_id3) == await compilerslice.get_report(compile_id6)
 
     # api should return none
     result = await client.get_compile_queue(environment)

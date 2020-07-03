@@ -27,13 +27,15 @@ import sys
 import traceback
 import uuid
 from asyncio import CancelledError, Task
+from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Dict, List, Optional, Tuple, cast
+from typing import Dict, Hashable, List, Optional, Tuple, cast
 
 import dateutil
 import dateutil.parser
 
+import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
 from inmanta.protocol import encode_token, methods
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
@@ -168,7 +170,7 @@ class CompileRun(object):
             await self._error("".join(traceback.format_exception(type(e), e, e.__traceback__)))
             return await self._end_stage(RETURNCODE_INTERNAL_ERROR)
 
-    async def run(self) -> bool:
+    async def run(self, force_update: Optional[bool] = False) -> bool:
         success = False
         now = datetime.datetime.now()
         await self.request.update_fields(started=now)
@@ -213,7 +215,7 @@ class CompileRun(object):
                     if result.returncode is None or result.returncode > 0:
                         return False
 
-                elif self.request.force_update:
+                elif force_update or self.request.force_update:
                     result = await self._run_compile_stage("Fetching changes", ["git", "fetch", repo_url], project_dir)
                 if repo_branch:
                     branch = await self.get_branch()
@@ -222,7 +224,7 @@ class CompileRun(object):
                             f"switching branch from {branch} to {repo_branch}", ["git", "checkout", repo_branch], project_dir
                         )
 
-                if self.request.force_update:
+                if force_update or self.request.force_update:
                     await self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
                     LOGGER.info("Installing and updating modules")
                     await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
@@ -383,6 +385,14 @@ class CompilerService(ServerSlice):
         await self._queue(compile)
         return compile.id, None
 
+    @staticmethod
+    def _compile_merge_key(c: data.Compile) -> Hashable:
+        """
+            Returns a key used to determine whether two compiles c1 and c2 are eligible for merging. They are iff
+            _compile_merge_key(c1) == _compile_merge_key(c2).
+        """
+        return c.to_dto().json(include={"environment", "started", "do_export", "environment_variables"})
+
     async def _queue(self, compile: data.Compile) -> None:
         async with self._global_lock:
             if compile.environment not in self._recompiles or self._recompiles[compile.environment].done():
@@ -428,6 +438,10 @@ class CompilerService(ServerSlice):
         return 204
 
     async def _run(self, compile: data.Compile) -> None:
+        """
+            Runs a compile request. At completion, looks for similar compile requests based on _compile_merge_key and marks
+            those as completed as well.
+        """
         now = datetime.datetime.now()
 
         wait_time = opt.server_autrecompile_wait.get()
@@ -444,16 +458,33 @@ class CompilerService(ServerSlice):
             )
         await asyncio.sleep(wait)
 
+        compile_merge_key: Hashable = CompilerService._compile_merge_key(compile)
+        merge_candidates: List[data.Compile] = [
+            c
+            for c in await data.Compile.get_next_compiles_for_environment(compile.environment)
+            if not c.id == compile.id and CompilerService._compile_merge_key(c) == compile_merge_key
+        ]
+
         runner = self._get_compile_runner(compile, project_dir=os.path.join(self._env_folder, str(compile.environment)))
-        success = await runner.run()
+        # set force_update == True iff any compile request has force_update == True
+        success = await runner.run(force_update=any(c.force_update for c in chain([compile], merge_candidates)))
 
         version = runner.version
 
         end = datetime.datetime.now()
         await compile.update_fields(completed=end, success=success, version=version)
+        awaitables = [
+            merge_candidate.update_fields(
+                started=compile.started, completed=end, success=success, version=version, substitute_compile_id=compile.id
+            )
+            for merge_candidate in merge_candidates
+        ]
+        await asyncio.gather(*awaitables)
         if self.is_stopping():
             return
         self.add_background_task(self._notify_listeners(compile))
+        for merge_candidate in merge_candidates:
+            self.add_background_task(self._notify_listeners(merge_candidate))
         await self._dequeue(compile.environment)
 
     def _get_compile_runner(self, compile: data.Compile, project_dir: str) -> CompileRun:
@@ -489,7 +520,7 @@ class CompilerService(ServerSlice):
         return 200, {"report": report}
 
     @protocol.handle(methods.get_compile_queue, env="tid")
-    async def get_compile_queue(self, env: data.Environment) -> List[CompileRun]:
+    async def get_compile_queue(self, env: data.Environment) -> List[model.CompileRun]:
         """
             Get the current compiler queue on the server
         """
