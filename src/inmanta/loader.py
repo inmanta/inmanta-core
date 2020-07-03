@@ -24,7 +24,8 @@ import os
 import sys
 import types
 from importlib.abc import FileLoader, Finder
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from itertools import starmap
+from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
 import pkg_resources
 
@@ -88,6 +89,14 @@ class SourceInfo(object):
 
         return module_parts[1]
 
+    def get_siblings(self) -> Iterator["SourceInfo"]:
+        """
+            Returns an iterator over SourceInfo objects for all plugin source files in this Inmanta module (including this one).
+        """
+        from inmanta.module import Project
+
+        return starmap(SourceInfo, Project.get().modules[self._get_module_name()].get_plugin_files())
+
     @property
     def requires(self) -> List[str]:
         """ List of python requirements associated with this source file
@@ -127,7 +136,9 @@ class CodeManager(object):
         self.__type_file[type_name].add(file_name)
 
         if file_name not in self.__file_info:
-            self.__file_info[file_name] = SourceInfo(file_name, instance.__module__)
+            # don't just store this file, but all plugin files in its Inmanta module to allow for importing helper modules
+            for file_info in SourceInfo(file_name, instance.__module__).get_siblings():
+                self.__file_info[file_info.path] = file_info
 
     def get_object_source(self, instance: object) -> Optional[str]:
         """ Get the path of the source file in which type_object is defined

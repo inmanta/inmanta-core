@@ -28,7 +28,7 @@ from functools import lru_cache
 from io import BytesIO
 from subprocess import CalledProcessError
 from tarfile import TarFile
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple, Union
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Set, Tuple, Union
 
 import yaml
 from pkg_resources import parse_requirements, parse_version
@@ -1098,25 +1098,30 @@ class Module(ModuleLike):
 
         return modules
 
-    def load_plugins(self) -> None:
+    def get_plugin_files(self) -> Iterator[Tuple[str, str]]:
         """
-            Load all plug-ins from a configuration module
+            Returns a tuple (absolute_path, fq_mod_name) of all plugin files in this module.
         """
-        plugin_dir = os.path.join(self._path, "plugins")
+        plugin_dir: str = os.path.join(self._path, "plugins")
 
         if not os.path.exists(plugin_dir):
-            return
+            return iter(())
 
         if not os.path.exists(os.path.join(plugin_dir, "__init__.py")):
             raise CompilerException(
                 "The plugin directory %s should be a valid python package with a __init__.py file" % plugin_dir
             )
+        return (
+            (file_name, self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self._meta["name"]))
+            for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True)
+        )
 
+    def load_plugins(self) -> None:
+        """
+            Load all plug-ins from a configuration module
+        """
         try:
-            mod_name = self._meta["name"]
-            for py_file in glob.glob(os.path.join(plugin_dir, "**", "*.py"), recursive=True):
-                fq_mod_name = self._get_fq_mod_name_for_py_file(py_file, plugin_dir, mod_name)
-
+            for py_file, fq_mod_name in self.get_plugin_files():
                 LOGGER.debug("Loading module %s", fq_mod_name)
                 importlib.import_module(fq_mod_name)
 
