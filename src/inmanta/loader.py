@@ -199,9 +199,9 @@ class CodeLoader(object):
         for py in glob.iglob(os.path.join(mod_dir, "**", "*.py"), recursive=True):
             mod_name: str
             if mod_dir in py:
-                mod_name = PluginModuleLoader.convert_path_to_module(py[len(mod_dir) + 1 :])
+                mod_name = PluginModuleLoader.convert_relative_path_to_module(os.path.relpath(py, start=mod_dir))
             else:
-                mod_name = PluginModuleLoader.convert_path_to_module(py)
+                mod_name = PluginModuleLoader.convert_relative_path_to_module(py)
 
             with open(py, "r", encoding="utf-8") as fd:
                 source_code = fd.read().encode("utf-8")
@@ -244,7 +244,7 @@ class CodeLoader(object):
             LOGGER.info("Deploying code (hv=%s, module=%s)", hash_value, module_name)
 
             # Treat all modules as a package for simplicity
-            module_dir: str = os.path.join(self.__code_dir, MODULE_DIR, PluginModuleLoader.convert_module_to_path(module_name))
+            module_dir: str = os.path.join(self.__code_dir, MODULE_DIR, PluginModuleLoader.convert_module_to_relative_path(module_name))
             os.makedirs(module_dir, exist_ok=True)
             source_file = os.path.join(module_dir, "__init__.py")
 
@@ -282,18 +282,35 @@ class PluginModuleLoader(FileLoader):
         return os.path.basename(self.path) == "__init__.py"
 
     @classmethod
-    def convert_path_to_module(cls, path: str) -> str:
+    def convert_relative_path_to_module(cls, path: str) -> str:
         """
             Returns the fully qualified module name given a path, relative to the module directory.
-            For example for "my_mod/plugins/my_submod" returns "inmanta_plugins.my_mod.my_submod".
+            For example
+                convert_relative_path_to_module("my_mod/plugins/my_submod")
+                == convert_relative_path_to_module("my_mod/plugins/my_submod.py")
+                == convert_relative_path_to_module("my_mod/plugins/my_submod/__init__.py")
+                == "inmanta_plugins.my_mod.my_submod".
         """
-        parts: List[str] = path.split("/")
-        if len(parts) == 0:
+        if path.startswith("/"):
+            raise Exception("Error parsing module path: expected relative path, got %s" % path)
+
+        def split(path: str) -> Iterator[str]:
+            if path == "":
+                return iter(())
+            init, last = os.path.split(path)
+            yield from split(init)
+            if last != "":
+                yield last
+
+        parts: List[str] = list(split(path))
+
+        if parts == []:
             return const.PLUGINS_PACKAGE
+
         if len(parts) == 1 or parts[1] != PLUGIN_DIR:
             raise Exception("Error parsing module path: expected 'some_module/%s/some_submodule', got %s" % (PLUGIN_DIR, path))
 
-        def trim_py(module: List[str]) -> List[str]:
+        def strip_py(module: List[str]) -> List[str]:
             if module == []:
                 return []
             init, last = module[:-1], module[-1]
@@ -303,13 +320,14 @@ class PluginModuleLoader(FileLoader):
                 return list(chain(init, [last[:-3]]))
             return module
 
-        return const.PLUGINS_PACKAGE + ".".join(chain([parts[0]], trim_py(parts[2:])))
+        # my_mod/plugins/tail -> inmanta_plugins.my_mod.tail
+        return ".".join(chain([const.PLUGINS_PACKAGE, parts[0]], strip_py(parts[2:])))
 
     @classmethod
-    def convert_module_to_path(cls, full_mod_name: str) -> str:
+    def convert_module_to_relative_path(cls, full_mod_name: str) -> str:
         """
             Returns path to the module, relative to the module directory. Does not differentiate between modules and packages.
-            For example for "inmanta_plugins.my_mod.my_submod" returns "my_mod/plugins/my_submod".
+            For example convert_module_to_relative_path("inmanta_plugins.my_mod.my_submod") == "my_mod/plugins/my_submod".
         """
         full_module_parts = full_mod_name.split(".")
         if full_module_parts[0] != const.PLUGINS_PACKAGE:
@@ -330,7 +348,7 @@ class PluginModuleLoader(FileLoader):
         return os.path.join(*module_parts)
 
     def _get_path_to_module(self, fullname: str):
-        relative_path: str = self.convert_module_to_path(fullname)
+        relative_path: str = self.convert_module_to_relative_path(fullname)
         # special case: top-level package
         if relative_path == "":
             return ""

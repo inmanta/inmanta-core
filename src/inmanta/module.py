@@ -33,7 +33,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Set, 
 import yaml
 from pkg_resources import parse_requirements, parse_version
 
-from inmanta import const, env, loader, plugins
+from inmanta import env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, ModuleNotFoundException, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
@@ -1102,7 +1102,7 @@ class Module(ModuleLike):
         """
             Returns a tuple (absolute_path, fq_mod_name) of all plugin files in this module.
         """
-        plugin_dir: str = os.path.join(self._path, "plugins")
+        plugin_dir: str = os.path.join(self._path, loader.PLUGIN_DIR)
 
         if not os.path.exists(plugin_dir):
             return iter(())
@@ -1130,24 +1130,7 @@ class Module(ModuleLike):
 
     def _get_fq_mod_name_for_py_file(self, py_file: str, plugin_dir: str, mod_name: str) -> str:
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)
-
-        def add_prefix(prefix: str, item: str) -> str:
-            if item == "":
-                return prefix
-            else:
-                return f"{prefix}.{item}"
-
-        (head, tail) = os.path.split(rel_py_file)
-        if tail == "__init__.py":
-            result = ""
-        else:
-            result = tail[0:-3]  # Remove .py
-
-        while head != "":
-            (head, tail) = os.path.split(head)
-            result = add_prefix(tail, result)
-
-        return add_prefix(f"{const.PLUGINS_PACKAGE}.{mod_name}", result)
+        return loader.PluginModuleLoader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
 
     def versions(self):
         """
