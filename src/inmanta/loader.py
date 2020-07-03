@@ -130,15 +130,19 @@ class CodeManager(object):
         if type_name not in self.__type_file:
             self.__type_file[type_name] = set()
 
+        # if file_name is in there, all plugin files should be in there => return
         if file_name in self.__type_file[type_name]:
             return
 
-        self.__type_file[type_name].add(file_name)
+        # don't just store this file, but all plugin files in its Inmanta module to allow for importing helper modules
+        all_plugin_files: List[SourceInfo] = list(SourceInfo(file_name, instance.__module__).get_siblings())
+        self.__type_file[type_name].update(source_info.path for source_info in all_plugin_files)
 
-        if file_name not in self.__file_info:
-            # don't just store this file, but all plugin files in its Inmanta module to allow for importing helper modules
-            for file_info in SourceInfo(file_name, instance.__module__).get_siblings():
-                self.__file_info[file_info.path] = file_info
+        if file_name in self.__file_info:
+            return
+
+        for file_info in all_plugin_files:
+            self.__file_info[file_info.path] = file_info
 
     def get_object_source(self, instance: object) -> Optional[str]:
         """ Get the path of the source file in which type_object is defined
