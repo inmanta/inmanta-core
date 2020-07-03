@@ -3,6 +3,9 @@
 ## New features
 - Added merging of similar compile requests to the compile queue (#2137)
 
+## Bug fixes
+- Restore support to pass mocking information to the compiler
+
 # Release 2020.3 (2020-07-02)
 
 ## New features
