@@ -1,3 +1,8 @@
+# Release 2020.3.1 (2020-07-03)
+
+## Bug fixes
+- Restore support to pass mocking information to the compiler
+
 # Release 2020.3 (2020-07-02)
 
 ## New features
