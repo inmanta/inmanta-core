@@ -1,5 +1,8 @@
 # Release 2020.4 (?)
 
+## New features
+- Added merging of similar compile requests to the compile queue (#2137)
+
 ## Bug fixes
 - Disallow parameters mapped to a header to be passed via the body instead (#2151)
 
