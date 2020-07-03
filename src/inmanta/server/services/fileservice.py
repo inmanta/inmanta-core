@@ -129,7 +129,7 @@ class FileService(protocol.ServerSlice):
 
     def stat_file_internal(self, files: Iterable[str]) -> List[str]:
         """
-            Return which files in the list exist on the server
+            Return which files in the list don't exist on the server
         """
         response: List[str] = []
         for f in files:
