@@ -4,8 +4,8 @@
 - Added merging of similar compile requests to the compile queue (#2137)
 
 ## Bug fixes
+- Restore support to pass mocking information to the compiler
 - Disallow parameters mapped to a header to be passed via the body instead (#2151)
-
 
 # Release 2020.3 (2020-07-02)
 
