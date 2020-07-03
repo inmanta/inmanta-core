@@ -17,14 +17,14 @@
 """
 import glob
 import hashlib
-import imp
+import importlib
 import inspect
 import logging
 import os
 import sys
 import types
 from importlib.abc import FileLoader, Finder
-from itertools import starmap
+from itertools import chain, starmap
 from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
 import pkg_resources
@@ -33,6 +33,7 @@ from inmanta import const
 
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
+PLUGIN_DIR = "plugins"
 
 LOGGER = logging.getLogger(__name__)
 
@@ -191,13 +192,16 @@ class CodeLoader(object):
             Load all existing modules
         """
         mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
+        configure_module_finder([mod_dir])
+        # TODO: what is this? should it remain?
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
-        for py in glob.glob(os.path.join(mod_dir, "*.py")):
+        for py in glob.iglob(os.path.join(mod_dir, "**", "*.py"), recursive=True):
+            mod_name: str
             if mod_dir in py:
-                mod_name = py[len(mod_dir) + 1 : -3]
+                mod_name = PluginModuleLoader.convert_path_to_module(py[len(mod_dir) + 1 :])
             else:
-                mod_name = py[:-3]
+                mod_name = PluginModuleLoader.convert_path_to_module(py)
 
             with open(py, "r", encoding="utf-8") as fd:
                 source_code = fd.read().encode("utf-8")
@@ -207,7 +211,7 @@ class CodeLoader(object):
 
             hv = sha1sum.hexdigest()
 
-            self._load_module(mod_name, py, hv)
+            self._load_module(mod_name, hv)
 
     def __check_dir(self) -> None:
         """
@@ -221,12 +225,12 @@ class CodeLoader(object):
         if not os.path.exists(os.path.join(self.__code_dir, MODULE_DIR)):
             os.makedirs(os.path.join(self.__code_dir, MODULE_DIR), exist_ok=True)
 
-    def _load_module(self, mod_name: str, python_file: str, hv: str) -> None:
+    def _load_module(self, mod_name: str, hv: str) -> None:
         """
             Load or reload a module
         """
         try:
-            mod = imp.load_source(mod_name, python_file)
+            mod = importlib.import_module(mod_name)
             self.__modules[mod_name] = (hv, mod)
             LOGGER.info("Loaded module %s" % mod_name)
         except ImportError:
@@ -238,16 +242,20 @@ class CodeLoader(object):
         # if the module is new, or update
         if module_name not in self.__modules or hash_value != self.__modules[module_name][0]:
             LOGGER.info("Deploying code (hv=%s, module=%s)", hash_value, module_name)
-            # write the new source
-            source_file = os.path.join(self.__code_dir, MODULE_DIR, module_name + ".py")
 
-            fd = open(source_file, "w+", encoding="utf-8")
-            fd.write(module_source)
-            fd.close()
+            # Treat all modules as a package for simplicity
+            module_dir: str = os.path.join(self.__code_dir, MODULE_DIR, PluginModuleLoader.convert_module_to_path(module_name))
+            os.makedirs(module_dir, exist_ok=True)
+            source_file = os.path.join(module_dir, "__init__.py")
+
+            # write the new source
+            with open(source_file, "w+", encoding="utf-8") as fd:
+                fd.write(module_source)
 
             # (re)load the new source
-            self._load_module(module_name, source_file, hash_value)
+            self._load_module(module_name, hash_value)
 
+        # TODO: what is this? remove?
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
 
@@ -273,14 +281,61 @@ class PluginModuleLoader(FileLoader):
             return True
         return os.path.basename(self.path) == "__init__.py"
 
-    def _get_path_to_module(self, fullname: str):
-        module_parts = fullname.split(".")[1:]
+    @classmethod
+    def convert_path_to_module(cls, path: str) -> str:
+        """
+            Returns the fully qualified module name given a path, relative to the module directory.
+            For example for "my_mod/plugins/my_submod" returns "inmanta_plugins.my_mod.my_submod".
+        """
+        parts: List[str] = path.split("/")
+        if len(parts) == 0:
+            return const.PLUGINS_PACKAGE
+        if len(parts) == 1 or parts[1] != PLUGIN_DIR:
+            raise Exception("Error parsing module path: expected 'some_module/%s/some_submodule', got %s" % (PLUGIN_DIR, path))
+
+        def trim_py(module: List[str]) -> List[str]:
+            if module == []:
+                return []
+            init, last = module[:-1], module[-1]
+            if last == "__init__.py":
+                return init
+            if last.endswith(".py"):
+                return list(chain(init, [last[:-3]]))
+            return module
+
+        return const.PLUGINS_PACKAGE + ".".join(chain([parts[0]], trim_py(parts[2:])))
+
+    @classmethod
+    def convert_module_to_path(cls, full_mod_name: str) -> str:
+        """
+            Returns path to the module, relative to the module directory. Does not differentiate between modules and packages.
+            For example for "inmanta_plugins.my_mod.my_submod" returns "my_mod/plugins/my_submod".
+        """
+        full_module_parts = full_mod_name.split(".")
+        if full_module_parts[0] != const.PLUGINS_PACKAGE:
+            raise Exception(
+                "PluginModuleLoader is a loader for the inmanta_plugins package."
+                " Module %s is not part of the inmanta_plugins package." % full_mod_name,
+            )
+        module_parts = full_module_parts[1:]
         # No __init__.py exists for top level package
         if len(module_parts) == 0:
             return ""
-        module_parts.insert(1, "plugins")
+
+        module_parts.insert(1, PLUGIN_DIR)
+
+        if module_parts[-1] == "__init__":
+            module_parts = module_parts[:-1]
+
+        return os.path.join(*module_parts)
+
+    def _get_path_to_module(self, fullname: str):
+        relative_path: str = self.convert_module_to_path(fullname)
+        # special case: top-level package
+        if relative_path == "":
+            return ""
         for module_path in self._modulepaths:
-            path_to_module = os.path.join(module_path, *module_parts)
+            path_to_module = os.path.join(module_path, relative_path)
             if os.path.exists(f"{path_to_module}.py"):
                 return f"{path_to_module}.py"
             if os.path.isdir(path_to_module):
