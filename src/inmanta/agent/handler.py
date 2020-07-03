@@ -31,7 +31,7 @@ from tornado import concurrent
 from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
-from inmanta.const import ResourceState
+from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange
 from inmanta.protocol import Result
 from inmanta.types import SimpleTypes
@@ -178,6 +178,28 @@ class HandlerContext(object):
             self.logger = LOGGER
         else:
             self.logger = logger
+
+        self._facts: List[Dict[str, Any]] = []
+
+    def set_fact(self, fact_id: str, value: str) -> None:
+        """
+            Send a fact to the Inmanta server.
+
+            :param fact_id: The name of the fact.
+            :param value: The actual value of the fact.
+        """
+        resource_id = self._resource.id.resource_str()
+        fact = {
+            "id": fact_id,
+            "source": ParameterSource.fact.value,
+            "value": value,
+            "resource_id": resource_id,
+        }
+        self._facts.append(fact)
+
+    @property
+    def facts(self) -> List[Dict[str, Any]]:
+        return self._facts
 
     @property
     def action_id(self) -> uuid.UUID:
@@ -656,11 +678,12 @@ class ResourceHandler(object):
 
     def facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
         """
-            Returns facts about this resource. Override this method to implement fact querying.
-            :func:`~inmanta.agent.handler.ResourceHandler.pre` and :func:`~inmanta.agent.handler.ResourceHandler.post` are
-            called before and after this method.
+            Override this method to implement fact querying. A queried fact can be reported back in two different ways:
+            either via the return value of this method or by adding the fact to the HandlerContext via the
+            :func:`~inmanta.agent.handler.HandlerContext.set_fact` method. :func:`~inmanta.agent.handler.ResourceHandler.pre`
+            and :func:`~inmanta.agent.handler.ResourceHandler.post` are called before and after this method.
 
-            :param ctx: Context object to report changes and logs to the agent and server.
+            :param ctx: Context object to report changes, logs and facts to the agent and server.
             :param resource: The resource to query facts for.
             :return: A dict with fact names as keys and facts values.
         """

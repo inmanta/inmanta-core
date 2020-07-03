@@ -20,7 +20,7 @@ import logging
 import time
 import uuid
 from itertools import groupby
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import psutil
 import pytest
@@ -32,7 +32,7 @@ from inmanta.agent import config as agent_config
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.const import AgentAction, AgentStatus, ResourceState
+from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
@@ -716,7 +716,7 @@ async def test_get_set_param(resource_container, environment, client, server):
     resource_container.Provider.reset()
     await client.set_setting(environment, data.SERVER_COMPILE, False)
 
-    result = await client.set_param(tid=environment, id="key10", value="value10", source="user")
+    result = await client.set_param(tid=environment, id="key10", value="value10", source=ParameterSource.user)
     assert result.code == 200
 
     result = await client.get_param(tid=environment, id="key10")
@@ -3430,3 +3430,100 @@ async def test_agentinstance_stops_deploying_when_stopped(
     await resource_container.wait_for_done_with_waiters(
         client, environment, version, wait_for_this_amount_of_resources_in_done=2
     )
+
+
+@pytest.mark.asyncio
+async def test_set_fact_in_handler(server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):
+    """
+        Test whether facts set in the handler via the ctx.set_fact() method arrive on the server.
+    """
+
+    def get_resources(version: str, params: List[data.Parameter]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "key": param.name,
+                "value": param.value,
+                "metadata": param.metadata,
+                "id": f"{param.resource_id},v={version}",
+                "send_event": False,
+                "purged": False,
+                "purge_on_delete": False,
+                "requires": [],
+            }
+            for param in params
+        ]
+
+    def compare_params(actual_params: List[data.Parameter], expected_params: List[data.Parameter]) -> None:
+        actual_params = sorted(actual_params, key=lambda p: p.name)
+        expected_params = sorted(expected_params, key=lambda p: p.name)
+        assert len(expected_params) == len(actual_params)
+        for i in range(len(expected_params)):
+            for attr_name in ["name", "value", "environment", "resource_id", "source", "metadata"]:
+                assert getattr(expected_params[i], attr_name) == getattr(actual_params[i], attr_name)
+
+    # Assert initial state
+    params = await data.Parameter.get_list()
+    assert len(params) == 0
+
+    param1 = data.Parameter(
+        name="key1",
+        value="value1",
+        environment=uuid.UUID(environment),
+        resource_id=f"test::SetFact[agent1,key=key1]",
+        source=ParameterSource.fact.value,
+    )
+    param2 = data.Parameter(
+        name="key2",
+        value="value2",
+        environment=uuid.UUID(environment),
+        resource_id=f"test::SetFact[agent1,key=key2]",
+        source=ParameterSource.fact.value,
+    )
+
+    version = await clienthelper.get_version()
+    resources = get_resources(version, [param1, param2])
+
+    # Ensure that facts are pushed when ctx.set_fact() is called during resource deployment
+    await _deploy_resources(client, environment, resources, version, push=True)
+    await wait_for_n_deployed_resources(client, environment, version, n=2)
+
+    params = await data.Parameter.get_list()
+    compare_params(params, [param1, param2])
+
+    # Ensure that:
+    # * Facts set in the handler.facts() method via ctx.set_fact() method are pushed to the Inmanta server.
+    # * Facts returned via the handler.facts() method are pushed to the Inmanta server.
+    await asyncio.gather(*[p.delete() for p in params])
+    params = await data.Parameter.get_list()
+    assert len(params) == 0
+    agent_manager = server.get_slice(name=SLICE_AGENT_MANAGER)
+    agent_manager._fact_resource_block = 0
+
+    result = await client.get_param(tid=environment, id="key1", resource_id="test::SetFact[agent1,key=key1]")
+    assert result.code == 503
+    result = await client.get_param(tid=environment, id="key2", resource_id="test::SetFact[agent1,key=key2]")
+    assert result.code == 503
+
+    async def _wait_until_facts_are_available():
+        params = await data.Parameter.get_list()
+        return len(params) == 4
+
+    await retry_limited(_wait_until_facts_are_available, 10)
+
+    param3 = data.Parameter(
+        name="returned_fact_key1",
+        value="test",
+        environment=uuid.UUID(environment),
+        resource_id=f"test::SetFact[agent1,key=key1]",
+        source=ParameterSource.fact.value,
+    )
+    param4 = data.Parameter(
+        name="returned_fact_key2",
+        value="test",
+        environment=uuid.UUID(environment),
+        resource_id=f"test::SetFact[agent1,key=key2]",
+        source=ParameterSource.fact.value,
+    )
+
+    params = await data.Parameter.get_list()
+    compare_params(params, [param1, param2, param3, param4])

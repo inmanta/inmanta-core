@@ -120,6 +120,17 @@ def anchormap(refs: Dict[Any, Any] = {}) -> Sequence[Tuple[Location, Location]]:
     return sched.anchormap(compiler, statements, blocks)
 
 
+def get_types_and_scopes() -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
+    """
+        Only run the compilation steps required to extract the different types and scopes.
+    """
+    compiler = Compiler()
+    (statements, blocks) = compiler.compile()
+    sched = scheduler.Scheduler(compiler_config.track_dataflow())
+    sched.define_types(compiler, statements, blocks)
+    return sched.get_types(), compiler.get_ns()
+
+
 class Compiler(object):
     """
         An inmanta compiler
