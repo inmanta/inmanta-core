@@ -297,6 +297,9 @@ class PluginModuleLoader(FileLoader):
             raise Exception("Error parsing module path: expected relative path, got %s" % path)
 
         def split(path: str) -> Iterator[str]:
+            """
+                Returns an iterator over path's parts.
+            """
             if path == "":
                 return iter(())
             init, last = os.path.split(path)
@@ -313,6 +316,9 @@ class PluginModuleLoader(FileLoader):
             raise Exception("Error parsing module path: expected 'some_module/%s/some_submodule', got %s" % (PLUGIN_DIR, path))
 
         def strip_py(module: List[str]) -> List[str]:
+            """
+                Strip __init__.py or .py file extension from module parts.
+            """
             if module == []:
                 return []
             init, last = module[:-1], module[-1]
@@ -322,8 +328,11 @@ class PluginModuleLoader(FileLoader):
                 return list(chain(init, [last[:-3]]))
             return module
 
+        top_level_inmanta_module: str = parts[0]
+        inmanta_submodule: List[str] = parts[2:]
+
         # my_mod/plugins/tail -> inmanta_plugins.my_mod.tail
-        return ".".join(chain([const.PLUGINS_PACKAGE, parts[0]], strip_py(parts[2:])))
+        return ".".join(chain([const.PLUGINS_PACKAGE, top_level_inmanta_module], strip_py(inmanta_submodule)))
 
     @classmethod
     def convert_module_to_relative_path(cls, full_mod_name: str) -> str:

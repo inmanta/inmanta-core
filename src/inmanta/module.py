@@ -1121,7 +1121,7 @@ class Module(ModuleLike):
             Load all plug-ins from a configuration module
         """
         try:
-            for py_file, fq_mod_name in self.get_plugin_files():
+            for _, fq_mod_name in self.get_plugin_files():
                 LOGGER.debug("Loading module %s", fq_mod_name)
                 importlib.import_module(fq_mod_name)
 
