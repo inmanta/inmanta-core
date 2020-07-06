@@ -20,11 +20,13 @@ import inspect
 import os
 import shutil
 import sys
+from typing import List, Set
 
 import pytest
 from pytest import fixture
 
 from inmanta import loader
+from inmanta.loader import SourceInfo
 from inmanta.module import Project
 from inmanta.moduletool import ModuleTool
 
@@ -38,32 +40,45 @@ def test_code_manager():
     project.load()
 
     ModuleTool().install("single_plugin_file")
-    from inmanta_plugins.single_plugin_file import MyHandler
+    ModuleTool().install("multiple_plugin_files")
+    import inmanta_plugins.single_plugin_file as single
+    import inmanta_plugins.multiple_plugin_files as multi
+    import inmanta_plugins.multiple_plugin_files.handlers
 
     mgr = loader.CodeManager()
-    mgr.register_code("std::File", MyHandler)
+    mgr.register_code("std::File", single.MyHandler)
+    mgr.register_code("std::Directory", multi.handlers.MyHandler)
+
+    def assert_content(source_info: SourceInfo, handler) -> str:
+        filename = inspect.getsourcefile(handler)
+        content: str
+        with open(filename, "r", encoding="utf-8") as fd:
+            content = fd.read()
+            assert source_info.content == content
+            assert len(source_info.hash) > 0
+            return content
 
     # get types
-    types = mgr.get_types()
-    name, type_list = next(types)
-    assert name == "std::File"
-    assert len(type_list) == 1
+    types = dict(mgr.get_types())
+    assert "std::File" in types
+    assert "std::Directory" in types
 
-    source_info = type_list[0]
+    single_type_list: List[SourceInfo] = types["std::File"]
+    multi_type_list: List[SourceInfo] = types["std::Directory"]
 
-    def get_code():
-        filename = inspect.getsourcefile(MyHandler)
-        with open(filename, "r", encoding="utf-8") as fd:
-            return fd.read()
+    assert len(single_type_list) == 1
+    single_content: str = assert_content(single_type_list[0], single.MyHandler)
 
-    content = get_code()
-    assert source_info.content == content
-    assert len(source_info.hash) > 0
+    assert len(multi_type_list) == 3
+    multi_content: str = assert_content(
+        next(s for s in multi_type_list if s.module_name == "inmanta_plugins.multiple_plugin_files.handlers"),
+        multi.handlers.MyHandler,
+    )
 
     # get_file_hashes
-    hashes = mgr.get_file_hashes()
-    mgr_content = mgr.get_file_content(next(hashes))
-    assert mgr_content == content
+    mgr_contents: Set[str] = {mgr.get_file_content(hash) for hash in mgr.get_file_hashes()}
+    assert single_content in mgr_contents
+    assert multi_content in mgr_contents
 
     with pytest.raises(KeyError):
         mgr.get_file_content("test")
