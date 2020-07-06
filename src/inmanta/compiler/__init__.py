@@ -56,10 +56,11 @@ def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type],
     """
         Perform a complete compilation run for the current project (as returned by :py:meth:`inmanta.module.Project.get`)
 
-        :param refs: DEPRECATED
+        :param refs: Datastructure used to pass on mocking information to the compiler. Supported options:
+                        * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
 
     """
-    compiler = Compiler()
+    compiler = Compiler(refs=refs)
 
     LOGGER.debug("Starting compile")
 
@@ -109,9 +110,10 @@ def anchormap(refs: Dict[Any, Any] = {}) -> Sequence[Tuple[Location, Location]]:
 
         Performs compilation up to and including the type resolution, but doesn't start executing
 
-        :param refs: DEPRECATED
+        :param refs: Datastructure used to pass on mocking information to the compiler. Supported options:
+                        * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
     """
-    compiler = Compiler()
+    compiler = Compiler(refs=refs)
 
     LOGGER.debug("Starting compile")
 
@@ -136,13 +138,15 @@ class Compiler(object):
         An inmanta compiler
 
         :param cf_file: DEPRECATED
-        :param refs: DEPRECATED
+        :param refs: Datastructure used to pass on mocking information to the compiler. Supported keys:
+                        * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
     """
 
     def __init__(self, cf_file: str = "main.cf", refs: Dict[Any, Any] = {}) -> None:
         self.__root_ns: Optional[Namespace] = None
         self._data: CompileData = CompileData()
         self.plugins: Dict[str, Plugin] = {}
+        self.refs = refs
 
     def get_plugins(self) -> Dict[str, Plugin]:
         return self.plugins
