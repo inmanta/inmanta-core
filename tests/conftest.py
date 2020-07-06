@@ -934,7 +934,7 @@ class CompileRunnerMock(object):
         self._runner_queue = runner_queue
         self.block = False
 
-    async def run(self) -> bool:
+    async def run(self, force_update: Optional[bool] = False) -> bool:
         now = datetime.datetime.now()
         returncode = 1 if self._make_compile_fail else 0
         report = data.Report(
