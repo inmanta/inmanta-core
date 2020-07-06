@@ -244,7 +244,9 @@ class CodeLoader(object):
             LOGGER.info("Deploying code (hv=%s, module=%s)", hash_value, module_name)
 
             # Treat all modules as a package for simplicity
-            module_dir: str = os.path.join(self.__code_dir, MODULE_DIR, PluginModuleLoader.convert_module_to_relative_path(module_name))
+            module_dir: str = os.path.join(
+                self.__code_dir, MODULE_DIR, PluginModuleLoader.convert_module_to_relative_path(module_name)
+            )
             os.makedirs(module_dir, exist_ok=True)
             source_file = os.path.join(module_dir, "__init__.py")
 

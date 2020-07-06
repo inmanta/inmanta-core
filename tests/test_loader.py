@@ -42,12 +42,11 @@ def test_code_manager():
     ModuleTool().install("single_plugin_file")
     ModuleTool().install("multiple_plugin_files")
     import inmanta_plugins.single_plugin_file as single
-    import inmanta_plugins.multiple_plugin_files as multi
-    import inmanta_plugins.multiple_plugin_files.handlers
+    import inmanta_plugins.multiple_plugin_files.handlers as multi
 
     mgr = loader.CodeManager()
     mgr.register_code("std::File", single.MyHandler)
-    mgr.register_code("std::Directory", multi.handlers.MyHandler)
+    mgr.register_code("std::Directory", multi.MyHandler)
 
     def assert_content(source_info: SourceInfo, handler) -> str:
         filename = inspect.getsourcefile(handler)
@@ -71,8 +70,7 @@ def test_code_manager():
 
     assert len(multi_type_list) == 3
     multi_content: str = assert_content(
-        next(s for s in multi_type_list if s.module_name == "inmanta_plugins.multiple_plugin_files.handlers"),
-        multi.handlers.MyHandler,
+        next(s for s in multi_type_list if s.module_name == "inmanta_plugins.multiple_plugin_files.handlers"), multi.MyHandler
     )
 
     # get_file_hashes
