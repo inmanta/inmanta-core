@@ -616,13 +616,13 @@ async def test_batched_code_upload(
     for name, source_info in code_manager.get_types():
         res = await agent_multi._client.get_code(tid=environment_multi, id=version, resource=name)
         assert res.code == 200
-        assert len(source_info) == 1
-        info = source_info[0]
-        assert info.hash in res.result["sources"]
-        code = res.result["sources"][info.hash]
+        assert len(source_info) == 2
+        for info in source_info:
+            assert info.hash in res.result["sources"]
+            code = res.result["sources"][info.hash]
 
-        assert info.content == code[2]
-        assert info.requires == code[3]
+            assert info.content == code[2]
+            assert info.requires == code[3]
 
 
 @pytest.mark.asyncio(timeout=30)

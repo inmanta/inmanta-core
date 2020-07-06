@@ -237,7 +237,7 @@ class CodeLoader(object):
             LOGGER.exception("Unable to load module %s" % mod_name)
 
     def deploy_version(self, hash_value: str, module_name: str, module_source: str) -> None:
-        """ Deploy a new version of the modules
+        """ Deploy a new version of the modules. Module must be part of the `inmanta_plugins` package.
         """
         # if the module is new, or update
         if module_name not in self.__modules or hash_value != self.__modules[module_name][0]:

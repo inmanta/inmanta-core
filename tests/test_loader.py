@@ -26,35 +26,39 @@ from pytest import fixture
 
 from inmanta import loader
 from inmanta.module import Project
+from inmanta.moduletool import ModuleTool
 
 
 def test_code_manager():
     """ Verify the code manager
     """
+    project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
+    project: Project = Project(project_dir)
+    Project.set(project)
+    project.load()
+
+    ModuleTool().install("single_plugin_file")
+    from inmanta_plugins.single_plugin_file import MyHandler
+
     mgr = loader.CodeManager()
-    mgr.register_code("test", test_code_manager)
+    mgr.register_code("std::File", MyHandler)
 
     # get types
     types = mgr.get_types()
     name, type_list = next(types)
-    assert name == "test"
+    assert name == "std::File"
     assert len(type_list) == 1
 
     source_info = type_list[0]
 
     def get_code():
-        filename = inspect.getsourcefile(test_code_manager)
+        filename = inspect.getsourcefile(MyHandler)
         with open(filename, "r", encoding="utf-8") as fd:
             return fd.read()
 
     content = get_code()
     assert source_info.content == content
     assert len(source_info.hash) > 0
-
-    with pytest.raises(Exception):
-        # only available in a valid project. Other test cases with full project validate this. This one checks
-        # whether we give an error.
-        source_info.requires()
 
     # get_file_hashes
     hashes = mgr.get_file_hashes()
@@ -92,7 +96,7 @@ def test():
     with pytest.raises(ImportError):
         import inmanta_unit_test  # NOQA
 
-    cl.deploy_version(hv, "inmanta_unit_test", code)
+    cl.deploy_version(hv, "inmanta_plugins.inmanta_unit_test", code)
 
     import inmanta_unit_test  # NOQA
 
@@ -119,7 +123,7 @@ def test():
     with pytest.raises(ImportError):
         import inmanta_bad_unit_test  # NOQA
 
-    cl.deploy_version(hv, "inmanta_bad_unit_test", code)
+    cl.deploy_version(hv, "inmanta_plugins.inmanta_bad_unit_test", code)
 
     assert "ModuleNotFoundError: No module named 'badimmport'" in caplog.text
 
