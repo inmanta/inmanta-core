@@ -109,13 +109,13 @@ def test():
     hv = sha1sum.hexdigest()
 
     with pytest.raises(ImportError):
-        import inmanta_unit_test  # NOQA
+        import inmanta_plugins.inmanta_unit_test  # NOQA
 
     cl.deploy_version(hv, "inmanta_plugins.inmanta_unit_test", code)
 
-    import inmanta_unit_test  # NOQA
+    import inmanta_plugins.inmanta_unit_test  # NOQA
 
-    assert inmanta_unit_test.test() == 10
+    assert inmanta_plugins.inmanta_unit_test.test() == 10
 
     # reload cached code
     cl.load_modules()
