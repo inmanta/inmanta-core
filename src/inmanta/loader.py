@@ -193,8 +193,6 @@ class CodeLoader(object):
         """
         mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
         configure_module_finder([mod_dir])
-        # TODO: what is this? should it remain?
-        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
         for py in glob.iglob(os.path.join(mod_dir, "**", "*.py"), recursive=True):
             mod_name: str
@@ -256,9 +254,6 @@ class CodeLoader(object):
 
             # (re)load the new source
             self._load_module(module_name, hash_value)
-
-        # TODO: what is this? remove?
-        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
 
 class PluginModuleLoader(FileLoader):
