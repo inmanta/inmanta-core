@@ -228,7 +228,10 @@ class CodeLoader(object):
             Load or reload a module
         """
         try:
-            mod = importlib.import_module(mod_name)
+            if mod_name in self.__modules:
+                mod = importlib.reload(self.__modules[mod_name][1])
+            else:
+                mod = importlib.import_module(mod_name)
             self.__modules[mod_name] = (hv, mod)
             LOGGER.info("Loaded module %s" % mod_name)
         except ImportError:
@@ -253,6 +256,7 @@ class CodeLoader(object):
                 fd.write(module_source)
 
             # (re)load the new source
+            importlib.invalidate_caches()
             self._load_module(module_name, hash_value)
 
 

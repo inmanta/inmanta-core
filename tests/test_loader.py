@@ -97,19 +97,22 @@ def test_code_loader(tmp_path):
     """ Test loading a new module
     """
     cl = loader.CodeLoader(tmp_path)
-    code = """
-def test():
-    return 10
-    """
 
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(code.encode())
-    hv = sha1sum.hexdigest()
+    def deploy(code: str) -> None:
+        sha1sum = hashlib.new("sha1")
+        sha1sum.update(code.encode())
+        hv: str = sha1sum.hexdigest()
+        cl.deploy_version(hv, "inmanta_plugins.inmanta_unit_test", code)
 
     with pytest.raises(ImportError):
         import inmanta_plugins.inmanta_unit_test  # NOQA
 
-    cl.deploy_version(hv, "inmanta_plugins.inmanta_unit_test", code)
+    deploy(
+        """
+def test():
+    return 10
+        """
+    )
 
     import inmanta_plugins.inmanta_unit_test  # NOQA
 
@@ -117,6 +120,16 @@ def test():
 
     # reload cached code
     cl.load_modules()
+
+    # deploy new version
+    deploy(
+        """
+def test():
+    return 20
+        """
+    )
+
+    assert inmanta_plugins.inmanta_unit_test.test() == 20
 
 
 def test_code_loader_import_error(tmp_path, caplog):
