@@ -1100,7 +1100,7 @@ class Module(ModuleLike):
 
     def get_plugin_files(self) -> Iterator[Tuple[str, str]]:
         """
-            Returns a tuple (absolute_path, fq_mod_name) of all plugin files in this module.
+            Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
         """
         plugin_dir: str = os.path.join(self._path, loader.PLUGIN_DIR)
 
