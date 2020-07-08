@@ -28,7 +28,7 @@ from functools import lru_cache
 from io import BytesIO
 from subprocess import CalledProcessError
 from tarfile import TarFile
-from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Set, Tuple, Union
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, NewType, Optional, Set, Tuple, Union
 
 import yaml
 from pkg_resources import parse_requirements, parse_version
@@ -54,6 +54,9 @@ if TYPE_CHECKING:
 
 
 LOGGER = logging.getLogger(__name__)
+
+Path = NewType("Path", str)
+ModuleName = NewType("ModuleName", str)
 
 
 class InvalidModuleException(CompilerException):
@@ -1098,7 +1101,7 @@ class Module(ModuleLike):
 
         return modules
 
-    def get_plugin_files(self) -> Iterator[Tuple[str, str]]:
+    def get_plugin_files(self) -> Iterator[Tuple[Path, ModuleName]]:
         """
             Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
         """
@@ -1112,7 +1115,7 @@ class Module(ModuleLike):
                 "The plugin directory %s should be a valid python package with a __init__.py file" % plugin_dir
             )
         return (
-            (file_name, self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self._meta["name"]))
+            (Path(file_name), ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self._meta["name"])),)
             for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True)
         )
 
