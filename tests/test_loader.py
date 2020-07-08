@@ -26,7 +26,7 @@ import pytest
 from pytest import fixture
 
 from inmanta import loader
-from inmanta.loader import SourceInfo
+from inmanta.loader import ModuleSource, SourceInfo
 from inmanta.module import Project
 from inmanta.moduletool import ModuleTool
 
@@ -102,7 +102,7 @@ def test_code_loader(tmp_path):
         sha1sum = hashlib.new("sha1")
         sha1sum.update(code.encode())
         hv: str = sha1sum.hexdigest()
-        cl.deploy_version(hv, "inmanta_plugins.inmanta_unit_test", code)
+        cl.deploy_version([ModuleSource("inmanta_plugins.inmanta_unit_test", code, hv)])
 
     with pytest.raises(ImportError):
         import inmanta_plugins.inmanta_unit_test  # NOQA
@@ -132,6 +132,49 @@ def test():
     assert inmanta_plugins.inmanta_unit_test.test() == 20
 
 
+def test_code_loader_dependency(tmp_path, caplog):
+    """ Test loading two modules with a dependency between them
+    """
+    cl = loader.CodeLoader(tmp_path)
+
+    def get_module_source(module: str, code: str) -> ModuleSource:
+        sha1sum = hashlib.new("sha1")
+        sha1sum.update(code.encode())
+        hv: str = sha1sum.hexdigest()
+        return ModuleSource(module, code, hv)
+
+    source_init: ModuleSource = get_module_source(
+        "inmanta_plugins.inmanta_unit_test_modular",
+        """
+        """,
+    )
+
+    source_tests: ModuleSource = get_module_source(
+        "inmanta_plugins.inmanta_unit_test_modular.tests",
+        """
+from inmanta_plugins.inmanta_unit_test_modular.helpers import helper
+
+def test():
+    return 10 + helper()
+        """,
+    )
+
+    source_helpers: ModuleSource = get_module_source(
+        "inmanta_plugins.inmanta_unit_test_modular.helpers",
+        """
+def helper():
+    return 1
+        """,
+    )
+
+    cl.deploy_version([source_tests, source_helpers, source_init])
+
+    import inmanta_plugins.inmanta_unit_test_modular.tests  # NOQA
+
+    assert inmanta_plugins.inmanta_unit_test_modular.tests.test() == 11
+    assert caplog.text == ""
+
+
 def test_code_loader_import_error(tmp_path, caplog):
     """ Test loading code with an import error
     """
@@ -149,7 +192,7 @@ def test():
     with pytest.raises(ImportError):
         import inmanta_bad_unit_test  # NOQA
 
-    cl.deploy_version(hv, "inmanta_plugins.inmanta_bad_unit_test", code)
+    cl.deploy_version([ModuleSource("inmanta_plugins.inmanta_bad_unit_test", code, hv)])
 
     assert "ModuleNotFoundError: No module named 'badimmport'" in caplog.text
 

@@ -23,11 +23,10 @@ import logging
 import os
 import sys
 import types
+from dataclasses import dataclass
 from importlib.abc import FileLoader, Finder
 from itertools import chain, starmap
 from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple
-
-import pkg_resources
 
 from inmanta import const
 
@@ -173,6 +172,13 @@ class CodeManager(object):
         return ((type_name, [self.__file_info[path] for path in files]) for type_name, files in self.__type_file.items())
 
 
+@dataclass
+class ModuleSource:
+    name: str
+    source: str
+    hash_value: str
+
+
 class CodeLoader(object):
     """
         Class responsible for managing code loaded from modules received from the compiler
@@ -237,27 +243,31 @@ class CodeLoader(object):
         except ImportError:
             LOGGER.exception("Unable to load module %s" % mod_name)
 
-    def deploy_version(self, hash_value: str, module_name: str, module_source: str) -> None:
-        """ Deploy a new version of the modules. Module must be part of the `inmanta_plugins` package.
-        """
-        # if the module is new, or update
-        if module_name not in self.__modules or hash_value != self.__modules[module_name][0]:
-            LOGGER.info("Deploying code (hv=%s, module=%s)", hash_value, module_name)
+    def deploy_version(self, module_sources: Iterable[ModuleSource]) -> None:
+        to_reload: List[ModuleSource] = []
 
-            # Treat all modules as a package for simplicity
-            module_dir: str = os.path.join(
-                self.__code_dir, MODULE_DIR, PluginModuleLoader.convert_module_to_relative_path(module_name)
-            )
-            os.makedirs(module_dir, exist_ok=True)
-            source_file = os.path.join(module_dir, "__init__.py")
+        for module_source in module_sources:
+            # if the module is new, or update
+            if module_source.name not in self.__modules or module_source.hash_value != self.__modules[module_source.name][0]:
+                LOGGER.info("Deploying code (hv=%s, module=%s)", module_source.hash_value, module_source.name)
 
-            # write the new source
-            with open(source_file, "w+", encoding="utf-8") as fd:
-                fd.write(module_source)
+                # Treat all modules as a package for simplicity
+                module_dir: str = os.path.join(
+                    self.__code_dir, MODULE_DIR, PluginModuleLoader.convert_module_to_relative_path(module_source.name)
+                )
+                os.makedirs(module_dir, exist_ok=True)
+                source_file = os.path.join(module_dir, "__init__.py")
 
+                # write the new source
+                with open(source_file, "w+", encoding="utf-8") as fd:
+                    fd.write(module_source.source)
+
+                to_reload.append(module_source)
+
+        for module_source in to_reload:
             # (re)load the new source
             importlib.invalidate_caches()
-            self._load_module(module_name, hash_value)
+            self._load_module(module_source.name, module_source.hash_value)
 
 
 class PluginModuleLoader(FileLoader):
