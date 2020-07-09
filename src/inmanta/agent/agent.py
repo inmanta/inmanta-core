@@ -1257,10 +1257,10 @@ class Agent(SessionEndpoint):
             if result.code == 200:
                 try:
                     LOGGER.debug("Installing handler %s", rt)
-                    await self._install(
+                    await self._install([
                         (ModuleSource(name, content, hash_value), requires)
                         for hash_value, (path, name, content, requires) in result.result["sources"].items()
-                    )
+                    ])
                     LOGGER.debug("Installed handler %s", rt)
                 except Exception:
                     LOGGER.exception("Failed to install handler %s", rt)
@@ -1268,7 +1268,7 @@ class Agent(SessionEndpoint):
 
         return failed_to_load
 
-    async def _install(self, modules: Iterable[Tuple[ModuleSource, List[str]]]) -> None:
+    async def _install(self, modules: List[Tuple[ModuleSource, List[str]]]) -> None:
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 

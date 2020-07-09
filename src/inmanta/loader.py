@@ -264,10 +264,11 @@ class CodeLoader(object):
 
                 to_reload.append(module_source)
 
-        for module_source in to_reload:
-            # (re)load the new source
+        if len(to_reload) > 0:
             importlib.invalidate_caches()
-            self._load_module(module_source.name, module_source.hash_value)
+            for module_source in to_reload:
+                # (re)load the new source
+                self._load_module(module_source.name, module_source.hash_value)
 
 
 class PluginModuleLoader(FileLoader):
