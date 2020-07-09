@@ -37,6 +37,7 @@ from inmanta.ast.type import NamedType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver
 from inmanta.execute.util import AnyType
 from inmanta.util import memoize
+from inmanta.execute.runtime import dataflow
 
 try:
     from typing import TYPE_CHECKING
@@ -44,7 +45,7 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from inmanta.execute.runtime import ExecutionContext, ResultVariable, dataflow  # noqa: F401
+    from inmanta.execute.runtime import ExecutionContext, ResultVariable  # noqa: F401
     from inmanta.ast.statements import Statement, ExpressionStatement  # noqa: F401
     from inmanta.ast.statements.define import DefineAttribute, DefineImport  # noqa: F401
     from inmanta.ast.attribute import Attribute  # noqa: F401
