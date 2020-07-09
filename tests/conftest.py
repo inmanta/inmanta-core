@@ -75,6 +75,7 @@ logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes]
 
+
 # Database
 @pytest.fixture
 def postgres_proc(unused_tcp_port_factory):

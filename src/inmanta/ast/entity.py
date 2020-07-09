@@ -34,7 +34,7 @@ from inmanta.ast import (
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import NamedType, Type
-from inmanta.execute.runtime import Instance, QueueScheduler, Resolver
+from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, dataflow
 from inmanta.execute.util import AnyType
 from inmanta.util import memoize
 
@@ -342,7 +342,7 @@ class Entity(EntityLike, NamedType):
         resolver: Resolver,
         queue: QueueScheduler,
         location: Location,
-        node: Optional["dataflow.InstanceNodeReference"] = None,
+        node: Optional[dataflow.InstanceNodeReference] = None,
     ) -> "Instance":
         """
             Return an instance of the class defined in this entity.

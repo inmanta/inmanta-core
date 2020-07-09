@@ -666,15 +666,15 @@ def param_get(client: Client, environment: str, name: str, resource: str) -> Non
 @version.command(name="report", help="Get a report about a version, describing the involved resources, agents and actions")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option("--version", "-i", help="The version to create a report from", required=True)
-@click.option("-l", is_flag=True, help="Show a detailed version of the report")
+@click.option("-l", "show_detailed_report", is_flag=True, help="Show a detailed version of the report")
 @click.pass_obj
-def version_report(client: Client, environment: str, version: str, l: bool) -> None:
+def version_report(client: Client, environment: str, version: str, show_detailed_report: bool) -> None:
     tid = client.to_environment_id(environment)
     result = client.do_request("get_version", arguments=dict(tid=tid, id=version, include_logs=True))
 
     agents: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(lambda: []))
     for res in result["resources"]:
-        if len(res["actions"]) > 0 or l:
+        if len(res["actions"]) > 0 or show_detailed_report:
             agents[res["agent"]][res["resource_type"]].append(res)
 
     for agent in sorted(agents.keys()):

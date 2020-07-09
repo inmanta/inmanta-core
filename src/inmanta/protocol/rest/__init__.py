@@ -271,7 +271,7 @@ class CallArguments(object):
             el_type = typing_inspect.get_args(arg_type, evaluate=True)[1]
             for k, v in value.items():
                 if not isinstance(k, str):
-                    raise exceptions.ServerError(f"Keys of return dict need to be strings.")
+                    raise exceptions.ServerError("Keys of return dict need to be strings.")
 
                 if typing_inspect.is_union_type(el_type):
                     self._validate_union_return(el_type, v)

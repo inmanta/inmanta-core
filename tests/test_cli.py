@@ -290,7 +290,7 @@ async def test_pause_agent(server, cli):
         result = await cli.run("agent", "list", "-e", str(env_id))
         assert result.exit_code == 0
         output = result.stdout.replace(" ", "")
-        assert f"Agent|Environment|Paused" in output
+        assert "Agent|Environment|Paused" in output
         for (agent_name, paused) in expected_records.items():
             assert f"{agent_name}|{env_id}|{paused}" in output
 

@@ -1069,7 +1069,7 @@ class Agent(SessionEndpoint):
             result = await self._client.environment_setting_get(env_id, data.AUTOSTART_AGENT_MAP)
             if result.code != 200:
                 error_msg = result.result["message"]
-                LOGGER.error(f"Failed to retrieve the autostart_agent_map setting from the server. %s", error_msg)
+                LOGGER.error("Failed to retrieve the autostart_agent_map setting from the server. %s", error_msg)
                 raise CouldNotConnectToServer()
             self.agent_map = result.result["data"]["settings"][data.AUTOSTART_AGENT_MAP]
         elif self.agent_map is None:
