@@ -20,46 +20,63 @@ import inspect
 import os
 import shutil
 import sys
+from typing import List, Set
 
 import pytest
 from pytest import fixture
 
 from inmanta import loader
+from inmanta.loader import ModuleSource, SourceInfo
 from inmanta.module import Project
+from inmanta.moduletool import ModuleTool
 
 
 def test_code_manager():
     """ Verify the code manager
     """
+    project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
+    project: Project = Project(project_dir)
+    Project.set(project)
+    project.load()
+
+    ModuleTool().install("single_plugin_file")
+    ModuleTool().install("multiple_plugin_files")
+    import inmanta_plugins.single_plugin_file as single
+    import inmanta_plugins.multiple_plugin_files.handlers as multi
+
     mgr = loader.CodeManager()
-    mgr.register_code("test", test_code_manager)
+    mgr.register_code("std::File", single.MyHandler)
+    mgr.register_code("std::Directory", multi.MyHandler)
+
+    def assert_content(source_info: SourceInfo, handler) -> str:
+        filename = inspect.getsourcefile(handler)
+        content: str
+        with open(filename, "r", encoding="utf-8") as fd:
+            content = fd.read()
+            assert source_info.content == content
+            assert len(source_info.hash) > 0
+            return content
 
     # get types
-    types = mgr.get_types()
-    name, type_list = next(types)
-    assert name == "test"
-    assert len(type_list) == 1
+    types = dict(mgr.get_types())
+    assert "std::File" in types
+    assert "std::Directory" in types
 
-    source_info = type_list[0]
+    single_type_list: List[SourceInfo] = types["std::File"]
+    multi_type_list: List[SourceInfo] = types["std::Directory"]
 
-    def get_code():
-        filename = inspect.getsourcefile(test_code_manager)
-        with open(filename, "r", encoding="utf-8") as fd:
-            return fd.read()
+    assert len(single_type_list) == 1
+    single_content: str = assert_content(single_type_list[0], single.MyHandler)
 
-    content = get_code()
-    assert source_info.content == content
-    assert len(source_info.hash) > 0
-
-    with pytest.raises(Exception):
-        # only available in a valid project. Other test cases with full project validate this. This one checks
-        # whether we give an error.
-        source_info.requires()
+    assert len(multi_type_list) == 3
+    multi_content: str = assert_content(
+        next(s for s in multi_type_list if s.module_name == "inmanta_plugins.multiple_plugin_files.handlers"), multi.MyHandler
+    )
 
     # get_file_hashes
-    hashes = mgr.get_file_hashes()
-    mgr_content = mgr.get_file_content(next(hashes))
-    assert mgr_content == content
+    mgr_contents: Set[str] = {mgr.get_file_content(hash) for hash in mgr.get_file_hashes()}
+    assert single_content in mgr_contents
+    assert multi_content in mgr_contents
 
     with pytest.raises(KeyError):
         mgr.get_file_content("test")
@@ -80,26 +97,82 @@ def test_code_loader(tmp_path):
     """ Test loading a new module
     """
     cl = loader.CodeLoader(tmp_path)
-    code = """
-def test():
-    return 10
-    """
 
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(code.encode())
-    hv = sha1sum.hexdigest()
+    def deploy(code: str) -> None:
+        sha1sum = hashlib.new("sha1")
+        sha1sum.update(code.encode())
+        hv: str = sha1sum.hexdigest()
+        cl.deploy_version([ModuleSource("inmanta_plugins.inmanta_unit_test", code, hv)])
 
     with pytest.raises(ImportError):
-        import inmanta_unit_test  # NOQA
+        import inmanta_plugins.inmanta_unit_test  # NOQA
 
-    cl.deploy_version(hv, "inmanta_unit_test", code)
+    deploy(
+        """
+def test():
+    return 10
+        """
+    )
 
-    import inmanta_unit_test  # NOQA
+    import inmanta_plugins.inmanta_unit_test  # NOQA
 
-    assert inmanta_unit_test.test() == 10
+    assert inmanta_plugins.inmanta_unit_test.test() == 10
 
     # reload cached code
     cl.load_modules()
+
+    # deploy new version
+    deploy(
+        """
+def test():
+    return 20
+        """
+    )
+
+    assert inmanta_plugins.inmanta_unit_test.test() == 20
+
+
+def test_code_loader_dependency(tmp_path, caplog):
+    """ Test loading two modules with a dependency between them
+    """
+    cl = loader.CodeLoader(tmp_path)
+
+    def get_module_source(module: str, code: str) -> ModuleSource:
+        sha1sum = hashlib.new("sha1")
+        sha1sum.update(code.encode())
+        hv: str = sha1sum.hexdigest()
+        return ModuleSource(module, code, hv)
+
+    source_init: ModuleSource = get_module_source(
+        "inmanta_plugins.inmanta_unit_test_modular",
+        """
+        """,
+    )
+
+    source_tests: ModuleSource = get_module_source(
+        "inmanta_plugins.inmanta_unit_test_modular.tests",
+        """
+from inmanta_plugins.inmanta_unit_test_modular.helpers import helper
+
+def test():
+    return 10 + helper()
+        """,
+    )
+
+    source_helpers: ModuleSource = get_module_source(
+        "inmanta_plugins.inmanta_unit_test_modular.helpers",
+        """
+def helper():
+    return 1
+        """,
+    )
+
+    cl.deploy_version([source_tests, source_helpers, source_init])
+
+    import inmanta_plugins.inmanta_unit_test_modular.tests  # NOQA
+
+    assert inmanta_plugins.inmanta_unit_test_modular.tests.test() == 11
+    assert "ModuleNotFoundError: No module named" not in caplog.text
 
 
 def test_code_loader_import_error(tmp_path, caplog):
@@ -119,7 +192,7 @@ def test():
     with pytest.raises(ImportError):
         import inmanta_bad_unit_test  # NOQA
 
-    cl.deploy_version(hv, "inmanta_bad_unit_test", code)
+    cl.deploy_version([ModuleSource("inmanta_plugins.inmanta_bad_unit_test", code, hv)])
 
     assert "ModuleNotFoundError: No module named 'badimmport'" in caplog.text
 
