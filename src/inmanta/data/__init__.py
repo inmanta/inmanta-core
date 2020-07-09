@@ -2311,19 +2311,17 @@ class ConfigurationModel(BaseDocument):
 
     async def mark_done(self) -> None:
         """ mark this deploy as done """
-        subquery = (
-            f"(EXISTS("
-            + f"SELECT 1 "
-            + f"FROM {Resource.table_name()} "
-            + f"WHERE environment=$1 AND model=$2 AND status != $3"
-            + f"))::boolean"
-        )
-        query = (
-            f"UPDATE {self.table_name()} "
-            + f"SET "
-            + f"deployed=True, result=(CASE WHEN {subquery} THEN $4::versionstate ELSE $5::versionstate END) "
-            f"WHERE environment=$1 AND version=$2 RETURNING result"
-        )
+        subquery = f"""(EXISTS(
+                    SELECT 1
+                    FROM {Resource.table_name()}
+                    WHERE environment=$1 AND model=$2 AND status != $3
+                ))::boolean
+            """
+        query = f"""UPDATE {self.table_name()}
+                SET
+                deployed=True, result=(CASE WHEN {subquery} THEN $4::versionstate ELSE $5::versionstate END)
+                WHERE environment=$1 AND version=$2 RETURNING result
+            """
         values = [
             self._get_value(self.environment),
             self._get_value(self.version),

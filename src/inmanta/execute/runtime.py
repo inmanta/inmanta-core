@@ -360,8 +360,8 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
         self.value.append(value)
 
-        for l in self.listeners:
-            l.receive_result(value, location)
+        for listener in self.listeners:
+            listener.receive_result(value, location)
 
         return True
 
@@ -946,7 +946,7 @@ class Instance(ExecutionContext):
         return "%s %02x" % (self.type, self.sid)
 
     def __str__(self) -> str:
-        return "%s (instantiated at %s)" % (self.type, ",".join([str(l) for l in self.get_locations()]))
+        return "%s (instantiated at %s)" % (self.type, ",".join([str(location) for location in self.get_locations()]))
 
     def add_implementation(self, impl: "Implementation") -> bool:
         if impl in self.implementations:

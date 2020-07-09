@@ -3469,14 +3469,14 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         name="key1",
         value="value1",
         environment=uuid.UUID(environment),
-        resource_id=f"test::SetFact[agent1,key=key1]",
+        resource_id="test::SetFact[agent1,key=key1]",
         source=ParameterSource.fact.value,
     )
     param2 = data.Parameter(
         name="key2",
         value="value2",
         environment=uuid.UUID(environment),
-        resource_id=f"test::SetFact[agent1,key=key2]",
+        resource_id="test::SetFact[agent1,key=key2]",
         source=ParameterSource.fact.value,
     )
 
@@ -3514,14 +3514,14 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         name="returned_fact_key1",
         value="test",
         environment=uuid.UUID(environment),
-        resource_id=f"test::SetFact[agent1,key=key1]",
+        resource_id="test::SetFact[agent1,key=key1]",
         source=ParameterSource.fact.value,
     )
     param4 = data.Parameter(
         name="returned_fact_key2",
         value="test",
         environment=uuid.UUID(environment),
-        resource_id=f"test::SetFact[agent1,key=key2]",
+        resource_id="test::SetFact[agent1,key=key2]",
         source=ParameterSource.fact.value,
     )
 

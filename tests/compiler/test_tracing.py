@@ -154,4 +154,4 @@ c= Alpha(name="A")
     root = scopes.get_child("__config__")
     a = root.lookup("a").get_value()
     assert len(a.get_locations()) == 3
-    assert sorted([l.lnr for l in a.get_locations()]) == [12, 13, 14]
+    assert sorted([location.lnr for location in a.get_locations()]) == [12, 13, 14]
