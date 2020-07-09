@@ -172,7 +172,7 @@ def helper():
     import inmanta_plugins.inmanta_unit_test_modular.tests  # NOQA
 
     assert inmanta_plugins.inmanta_unit_test_modular.tests.test() == 11
-    assert caplog.text == ""
+    assert "ModuleNotFoundError: No module named" not in caplog.text
 
 
 def test_code_loader_import_error(tmp_path, caplog):
