@@ -1257,10 +1257,12 @@ class Agent(SessionEndpoint):
             if result.code == 200:
                 try:
                     LOGGER.debug("Installing handler %s", rt)
-                    await self._install([
-                        (ModuleSource(name, content, hash_value), requires)
-                        for hash_value, (path, name, content, requires) in result.result["sources"].items()
-                    ])
+                    await self._install(
+                        [
+                            (ModuleSource(name, content, hash_value), requires)
+                            for hash_value, (path, name, content, requires) in result.result["sources"].items()
+                        ]
+                    )
                     LOGGER.debug("Installed handler %s", rt)
                 except Exception:
                     LOGGER.exception("Failed to install handler %s", rt)
