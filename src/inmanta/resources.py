@@ -276,8 +276,6 @@ class Resource(metaclass=ResourceMeta):
                 raise e
             except UnknownException as e:
                 raise e
-            except ResourceException as e:
-                raise e
             except Exception:
                 raise Exception(
                     "Unable to get the name of agent %s belongs to. In path %s, '%s' does not exist"
