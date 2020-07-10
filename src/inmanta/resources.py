@@ -72,6 +72,8 @@ class resource(object):  # noqa: N801
     _resources: Dict[str, Tuple[Type["Resource"], Dict[str, str]]] = {}
 
     def __init__(self, name: str, id_attribute: str, agent: str):
+        if type(agent) != str:
+            raise ResourceException(f"The agent parameter has to be a string, got {agent} of type {type(agent)}")
         self._cls_name = name
         self._options = {"agent": agent, "name": id_attribute}
 
@@ -269,10 +271,16 @@ class Resource(metaclass=ResourceMeta):
                     agent_value = agent_value[0]
 
                 agent_value = getattr(agent_value, el)
+                if type(agent_value) != str and type(agent_value) != DynamicProxy:
+                    raise ResourceException(
+                        f"The agent attribute should be a string or DynamicProxy, got {agent_value} of type {type(agent_value)}"
+                    )
 
             except UnsetException as e:
                 raise e
             except UnknownException as e:
+                raise e
+            except ResourceException as e:
                 raise e
             except Exception:
                 raise Exception(

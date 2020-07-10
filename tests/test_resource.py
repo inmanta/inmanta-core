@@ -19,6 +19,7 @@
 import pytest
 
 from inmanta import resources
+from inmanta.ast import ExternalException
 from inmanta.resources import ResourceException, resource
 
 
@@ -229,3 +230,44 @@ def test_object_to_id(snippetcompiler):
     )
 
     snippetcompiler.do_export()
+
+
+def test_resource_invalid_agent_name_annotation(snippetcompiler):
+
+    import inmanta.resources
+
+    with pytest.raises(ResourceException):
+
+        @resource("__config__::XResource", agent=42, id_attribute="key")
+        class MyResource(inmanta.resources.Resource):
+            """
+                A file on a filesystem
+            """
+
+            fields = ("key", "value", "agent")
+
+
+def test_resource_invalid_agent_name_attribute_type(snippetcompiler):
+    import inmanta.resources
+
+    @resource("__config__::MYResource", agent="agent", id_attribute="key")
+    class MyResource(inmanta.resources.Resource):
+        fields = ("key", "value", "agent")
+
+    snippetcompiler.setup_for_snippet(
+        """
+        import tests
+        entity MYResource:
+            string key
+            int agent
+            string value
+        end
+
+        implement MYResource using std::none
+
+        x = MYResource(key="key", agent=47, value="value")
+        std::print(tests::get_id(x))
+        """
+    )
+    with pytest.raises(ExternalException):
+        snippetcompiler.do_export()
