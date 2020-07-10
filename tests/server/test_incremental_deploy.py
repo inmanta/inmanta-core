@@ -52,13 +52,14 @@ class MultiVersionSetup(object):
       UD - undefined
     """
 
+    scenario_step_regex = re.compile(r"(A|E|D|d|p|S|SU|UA|UD)([0-9]+)")
+
     def __init__(self):
         self.firstversion: int = 100
         self.versions: List[List[Dict[str, Any]]] = [[] for _ in range(100)]
         self.states: Dict[str, ResourceState] = {}
         self.results: Dict[str, List[str]] = defaultdict(lambda: [])
         self.sid = uuid4()
-        self.scenario_step_regex = re.compile(r"(A|E|D|d|p|S|SU|UA|UD)([0-9]+)")
 
     def get_version(self, v: int) -> List[Dict[str, Any]]:
         return self.versions[v]
@@ -202,10 +203,6 @@ class MultiVersionSetup(object):
             result, payload = await resource_service.get_resources_for_agent(
                 env, agent, version=None, incremental_deploy=True, sid=sid
             )
-            print()
-            print(sorted([x["resource_id"] for x in payload["resources"]]))
-            print(sorted(results))
-
             assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(results)
             allresources.update({r["resource_id"]: r for r in payload["resources"]})
 
@@ -480,24 +477,3 @@ async def test_deploy_scenarios_added_by_send_event_cad(server, agent: Agent, en
 
     for record in caplog.records:
         assert record.levelname != "WARNING"
-
-
-# @pytest.mark.asyncio
-# async def issue_2184_handle_skipped_and_unavailable_as_failures(server, agent: Agent, environment, caplog):
-#     with caplog.at_level(logging.WARNING):
-#         # acquire raw server
-#         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
-#         resource_service = server.get_slice(SLICE_RESOURCE)
-#         sid = agent.sessionid
-#
-#         # acquire env object
-#         env = await data.Environment.get_by_id(uuid.UUID(environment))
-#
-#         setup = MultiVersionSetup()
-#
-#
-#
-#         await setup.setup(orchestration_service, resource_service, env, sid)
-#
-#     for record in caplog.records:
-#         assert record.levelname != "WARNING"

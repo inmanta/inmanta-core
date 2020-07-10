@@ -2436,7 +2436,6 @@ class ConfigurationModel(BaseDocument):
                 ores = id_to_resource[res["resource_id"]]
 
                 status = ores["status"]
-                # TODO: move to increment + update in-line documentation
                 # available -> next version
                 if status in [ResourceState.available.name]:
                     next.append(res)
