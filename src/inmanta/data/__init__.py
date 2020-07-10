@@ -2393,10 +2393,10 @@ class ConfigurationModel(BaseDocument):
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
-        :param negative: find deployable resources not in the increment
-
-        available/skipped/unavailable -> next version
+        available -> next version
         not present -> increment
+        skipped -> increment
+        unavailable -> increment
         error -> increment
         Deployed and same hash -> not increment
         deployed and different hash -> increment
@@ -2409,8 +2409,8 @@ class ConfigurationModel(BaseDocument):
 
         # to increment
         increment = []
-        not_incrememt = []
-        # todo in this verions
+        not_increment = []
+        # todo in this version
         work = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
 
         # get versions
@@ -2421,7 +2421,7 @@ class ConfigurationModel(BaseDocument):
         versions = [record["version"] for record in version_records]
 
         for version in versions:
-            # todo in next verion
+            # todo in next version
             next = []
 
             vresources = await Resource.get_resources_for_version_raw(environment, version, projection)
@@ -2436,11 +2436,11 @@ class ConfigurationModel(BaseDocument):
                 ores = id_to_resource[res["resource_id"]]
 
                 status = ores["status"]
-                # available/skipped/unavailable -> next version
-                if status in [ResourceState.available.name, ResourceState.skipped.name, ResourceState.unavailable.name]:
+                # available -> next version
+                if status in [ResourceState.available.name]:
                     next.append(res)
 
-                # error/undeployable -> increment
+                # -> increment
                 elif status in [
                     ResourceState.failed.name,
                     ResourceState.cancelled.name,
@@ -2448,14 +2448,15 @@ class ConfigurationModel(BaseDocument):
                     ResourceState.processing_events.name,
                     ResourceState.skipped_for_undefined.name,
                     ResourceState.undefined.name,
+                    ResourceState.skipped.name,
+                    ResourceState.unavailable.name,
                 ]:
                     increment.append(res)
-                # undefined -> not in increment
 
                 elif status == ResourceState.deployed.name:
                     if res["attribute_hash"] == ores["attribute_hash"]:
                         #  Deployed and same hash -> not increment
-                        not_incrememt.append(res)
+                        not_increment.append(res)
                     else:
                         # Deployed and different hash -> increment
                         increment.append(res)
@@ -2469,7 +2470,7 @@ class ConfigurationModel(BaseDocument):
         if work:
             increment.extend(work)
 
-        negative = [res["resource_version_id"] for res in not_incrememt]
+        negative = [res["resource_version_id"] for res in not_increment]
 
         # patch up the graph
         # 1-include stuff for send-events.

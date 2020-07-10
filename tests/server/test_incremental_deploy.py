@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import logging
+import re
 import uuid
 from collections import defaultdict
 from datetime import datetime
@@ -39,15 +40,19 @@ class MultiVersionSetup(object):
     """
       create scenarios by describing the history of a resource, from newest to oldest state
 
-      V = void, nothing
-      A - available/skipped/unavailable
-      E - error
-      D - deployed
-      d - deploying
-      p - processing events
-      S - skipped for undefined
-      U - undefined
+      V  = void, nothing
+      A  - available
+      S  - skipped
+      UA - unavailable
+      E  - error
+      D  - deployed
+      d  - deploying
+      p  - processing events
+      SU - skipped for undefined
+      UD - undefined
     """
+
+    scenario_step_regex = re.compile(r"(A|E|D|d|p|S|SU|UA|UD)([0-9]+)")
 
     def __init__(self):
         self.firstversion: int = 100
@@ -76,12 +81,18 @@ class MultiVersionSetup(object):
             return ResourceState.processing_events
 
         if code == "S":
+            return ResourceState.skipped
+
+        if code == "SU":
             return ResourceState.skipped_for_undefined
 
-        if code == "U":
+        if code == "UA":
+            return ResourceState.unavailable
+
+        if code == "UD":
             return ResourceState.undefined
 
-        assert False
+        assert False, f"Unknown code {code}"
 
     def make_resource(
         self, name: str, value: str, version: int, agent: str = "agent1", requires: List[str] = [], send_event: bool = False
@@ -111,10 +122,13 @@ class MultiVersionSetup(object):
 
         for step in scenario.split():
             v -= 1
-            code = step[0]
-            if code == "V":
+            if step.startswith("V"):
                 continue
-            value = step[1:]
+            match = self.scenario_step_regex.fullmatch(step)
+            if match is None:
+                raise Exception(f"Syntax error in scenario '{scenario}' of resource {name} at '{step}'")
+            code = match.group(1)
+            value = match.group(2)
             rvid = self.make_resource(name, value, v, agent, requires, send_event)
             self.states[rvid] = self.expand_code(code)
         return rid
@@ -189,7 +203,6 @@ class MultiVersionSetup(object):
             result, payload = await resource_service.get_resources_for_agent(
                 env, agent, version=None, incremental_deploy=True, sid=sid
             )
-
             assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(results)
             allresources.update({r["resource_id"]: r for r in payload["resources"]})
 
@@ -338,12 +351,18 @@ async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
         setup.add_resource("R13", "A1 A1 A1 A1 A1", True)
         setup.add_resource("R14", "A1 A1 d1 D1", True)
         setup.add_resource("R15", "A1 A1 p1 D1", True)
-        setup.add_resource("R16", "S1 A1", False)
-        setup.add_resource("R17", "A1 S1 A1", True)
-        setup.add_resource("R18", "D1 S1 A1", False)
-        setup.add_resource("R19", "U1 A1", False)
-        setup.add_resource("R20", "U1 D1", False)
-        setup.add_resource("R21", "A1 U1", True)
+        setup.add_resource("R16", "SU1 A1", False)
+        setup.add_resource("R17", "A1 SU1 A1", True)
+        setup.add_resource("R18", "D1 SU1 A1", False)
+        setup.add_resource("R19", "UD1 A1", False)
+        setup.add_resource("R20", "UD1 D1", False)
+        setup.add_resource("R21", "A1 UD1", True)
+        setup.add_resource("R22", "S1", True)
+        setup.add_resource("R23", "S1 D1", True)
+        setup.add_resource("R24", "A1 S1 D1", True)
+        setup.add_resource("R25", "UA1", True)
+        setup.add_resource("R26", "UA1 D1", True)
+        setup.add_resource("R27", "A1 UA1 D1", True)
 
         await setup.setup(orchestration_service, resource_service, env, sid)
 

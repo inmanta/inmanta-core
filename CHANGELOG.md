@@ -7,6 +7,7 @@
 ## Bug fixes
 - Restore support to pass mocking information to the compiler
 - Disallow parameters mapped to a header to be passed via the body instead (#2151)
+- Handle skipped and unavailable as failures when calculating increments (#2184)
 
 # Release 2020.3 (2020-07-02)
 
