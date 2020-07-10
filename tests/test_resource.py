@@ -271,3 +271,33 @@ def test_resource_invalid_agent_name_attribute_type(snippetcompiler):
     )
     with pytest.raises(ExternalException):
         snippetcompiler.do_export()
+
+
+def test_resource_invalid_agent_name_entity(snippetcompiler):
+    import inmanta.resources
+
+    @resource("__config__::MYResource", agent="agent", id_attribute="key")
+    class MyResource(inmanta.resources.Resource):
+        fields = ("key", "value", "agent")
+
+    snippetcompiler.setup_for_snippet(
+        """
+        import tests
+        entity AgentResource:
+        end
+        entity MYResource:
+            string key
+            # AgentResource agent
+            string value
+        end
+        MYResource.agent [1] -- AgentResource.myresource [1]
+
+        implement MYResource using std::none
+        implement AgentResource using std::none
+
+        x = MYResource(key="key", agent=AgentResource(), value="value")
+        std::print(tests::get_id(x))
+        """
+    )
+    with pytest.raises(ExternalException):
+        snippetcompiler.do_export()

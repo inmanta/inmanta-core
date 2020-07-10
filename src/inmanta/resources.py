@@ -72,7 +72,7 @@ class resource(object):  # noqa: N801
     _resources: Dict[str, Tuple[Type["Resource"], Dict[str, str]]] = {}
 
     def __init__(self, name: str, id_attribute: str, agent: str):
-        if type(agent) != str:
+        if not isinstance(agent, str):
             raise ResourceException(f"The agent parameter has to be a string, got {agent} of type {type(agent)}")
         self._cls_name = name
         self._options = {"agent": agent, "name": id_attribute}
@@ -271,10 +271,6 @@ class Resource(metaclass=ResourceMeta):
                     agent_value = agent_value[0]
 
                 agent_value = getattr(agent_value, el)
-                if type(agent_value) != str and type(agent_value) != DynamicProxy:
-                    raise ResourceException(
-                        f"The agent attribute should be a string or DynamicProxy, got {agent_value} of type {type(agent_value)}"
-                    )
 
             except UnsetException as e:
                 raise e
@@ -291,6 +287,10 @@ class Resource(metaclass=ResourceMeta):
         attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
         if isinstance(attribute_value, util.Unknown):
             raise UnknownException(attribute_value)
+        if not isinstance(agent_value, str):
+            raise ResourceException(
+                f"The agent attribute should lead to a string, got {agent_value} of type {type(agent_value)}"
+            )
 
         # agent_value is no longer a DynamicProxy here, force this for mypy validation
         return Id(entity_name, str(agent_value), attribute_name, attribute_value)
