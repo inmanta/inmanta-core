@@ -14,7 +14,7 @@ pytest-instafail==0.4.2
 pytest-randomly==3.4.0
 pytest-sugar==0.9.4
 pytest-asyncio==0.14.0
-pytest-xdist==1.32.0
+pytest-xdist==1.33.0
 pytest==5.4.3
 python-dateutil==2.8.1
 pyyaml==5.3.1
