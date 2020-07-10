@@ -39,7 +39,7 @@ from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, Event, ResourceIdStr, ResourceVersionIdStr
-from inmanta.loader import CodeLoader
+from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
@@ -1255,24 +1255,29 @@ class Agent(SessionEndpoint):
             result: protocol.Result = await self._client.get_code(environment, version, rt)
 
             if result.code == 200:
-                for hash_value, (path, name, content, requires) in result.result["sources"].items():
-                    try:
-                        LOGGER.debug("Installing handler %s for %s", rt, name)
-                        await self._install(hash_value, name, content, requires)
-                        LOGGER.debug("Installed handler %s for %s", rt, name)
-                    except Exception:
-                        LOGGER.exception("Failed to install handler %s for %s", rt, name)
-                        failed_to_load.add(rt)
+                try:
+                    LOGGER.debug("Installing handler %s", rt)
+                    await self._install(
+                        [
+                            (ModuleSource(name, content, hash_value), requires)
+                            for hash_value, (path, name, content, requires) in result.result["sources"].items()
+                        ]
+                    )
+                    LOGGER.debug("Installed handler %s", rt)
+                except Exception:
+                    LOGGER.exception("Failed to install handler %s", rt)
+                    failed_to_load.add(rt)
 
         return failed_to_load
 
-    async def _install(self, hash_value: str, module_name: str, module_source: str, module_requires: List[str]):
+    async def _install(self, modules: List[Tuple[ModuleSource, List[str]]]) -> None:
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(self.thread_pool, self._env.install_from_list, module_requires, True)
-        await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, hash_value, module_name, module_source)
+        for module, module_requires in modules:
+            await loop.run_in_executor(self.thread_pool, self._env.install_from_list, module_requires, True)
+        await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, (source for source, _ in modules))
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
     async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:

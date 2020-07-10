@@ -2,6 +2,7 @@
 
 ## New features
 - Added merging of similar compile requests to the compile queue (#2137)
+- Export all handler's / resource's module's plugin source files so helper functions can be used from sibling modules (#2162)
 
 ## Bug fixes
 - Restore support to pass mocking information to the compiler

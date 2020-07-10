@@ -174,6 +174,7 @@ async def test_resource_evolution(server, client, environment, no_agent_backoff,
 
     # override origin check
     monkeypatch.setattr(SourceInfo, "_get_module_name", lambda s: s.module_name)
+    monkeypatch.setattr(SourceInfo, "get_siblings", lambda s: iter([s]))
     monkeypatch.setattr(SourceInfo, "requires", [])
 
     snippetcompiler.setup_for_snippet(
