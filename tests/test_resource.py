@@ -283,11 +283,12 @@ def test_resource_invalid_agent_name_entity(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
         import tests
+
         entity AgentResource:
         end
+
         entity MYResource:
             string key
-            # AgentResource agent
             string value
         end
         MYResource.agent [1] -- AgentResource.myresource [1]
