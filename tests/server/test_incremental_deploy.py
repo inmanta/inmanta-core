@@ -16,10 +16,10 @@
     Contact: code@inmanta.com
 """
 import logging
+import re
 import uuid
 from collections import defaultdict
 from datetime import datetime
-import re
 from re import sub
 from typing import Any, Dict, List
 from uuid import UUID, uuid4
