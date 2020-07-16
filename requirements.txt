@@ -42,7 +42,7 @@ flake8-copyright==0.2.2
 psutil==5.7.0
 pyformance==0.4
 pydantic==1.5.1
-isort==4.3.21
+isort==5.1.1
 flake8-isort==3.0.1
 black==19.10b0
 typing_inspect==0.6.0
