@@ -128,6 +128,9 @@ Constrained primitive types add additional constraints to the basic primitive ty
 :ref:`condition<lang-conditions>`. The name of the constrained primitive type must not collide with the name of a variable or
 type in the same lexical scope.
 
+A regex matches a given string when zero or more characters at the beginning of that string match the regular expression. A
+dollar sign should be used at the end of the regex if a full string match is required.
+
 .. code-block:: antlr
 
     typedef : 'typedef' ID 'as' PRIMITIVE 'matching' condition|regex;
