@@ -11,7 +11,7 @@ netifaces==0.10.9
 ply==3.11
 pytest-cover==3.0.0
 pytest-instafail==0.4.2
-pytest-randomly==3.4.0
+pytest-randomly==3.4.1
 pytest-sugar==0.9.4
 pytest-asyncio==0.14.0
 pytest-xdist==1.33.0
