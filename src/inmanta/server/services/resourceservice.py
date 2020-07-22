@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
 
 from inmanta import const, data
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
-from inmanta.data.model import Resource, ResourceType, ResourceVersionIdStr
+from inmanta.data.model import Resource, ResourceAction, ResourceType, ResourceVersionIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.resources import Id
@@ -557,7 +557,7 @@ class ResourceService(protocol.ServerSlice):
         attribute_value: Optional[str] = None,
         limit: int = 0,
         last_timestamp: Optional[datetime.datetime] = None,
-    ) -> Apireturn:
+    ) -> List[ResourceAction]:
         if (attribute and not attribute_value) or (not attribute and attribute_value):
             raise BadRequest(
                 f"Attribute and attribute_value should both be supplied to use them filtering. "
@@ -572,4 +572,4 @@ class ResourceService(protocol.ServerSlice):
             limit=limit,
             last_timestamp=last_timestamp,
         )
-        return 200, resource_actions
+        return [resource_action.to_dto() for resource_action in resource_actions]

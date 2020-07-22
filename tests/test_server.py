@@ -765,12 +765,10 @@ async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment):
+async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, agent):
     """
         Test querying resource actions via the API
     """
-    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    await agent.start()
     aclient = agent._client
 
     version = await clienthelper.get_version()

@@ -24,6 +24,7 @@ from inmanta import const, data
 from inmanta.data import model
 from inmanta.types import JsonType, PrimitiveTypes
 
+from ..data.model import ResourceAction
 from . import exceptions
 from .common import ArgOption
 from .decorators import method, typedmethod
@@ -457,8 +458,8 @@ def resource_action_update(
     """
 
 
-@method(
-    path="/resource_actions", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api], envelope=True,
+@typedmethod(
+    path="/resource_actions", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api],
 )
 def get_resource_actions(
     tid: uuid.UUID,
@@ -468,7 +469,7 @@ def get_resource_actions(
     attribute_value: Optional[str] = None,
     limit: int = 0,
     last_timestamp: Optional[datetime.datetime] = None,
-):
+) -> List[ResourceAction]:
     """
         Return resource actions matching the search criteria.
 

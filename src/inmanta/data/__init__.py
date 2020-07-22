@@ -1754,6 +1754,22 @@ class ResourceAction(BaseDocument):
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
+    def to_dto(self) -> m.ResourceAction:
+        return m.ResourceAction(
+            environment=self.environment,
+            version=self.version,
+            resource_version_ids=self.resource_version_ids,
+            action_id=self.action_id,
+            action=self.action,
+            started=self.started,
+            finished=self.finished,
+            messages=self.messages,
+            status=self.status,
+            changes=self.changes,
+            change=self.change,
+            send_event=self.send_event,
+        )
+
 
 class Resource(BaseDocument):
     """
