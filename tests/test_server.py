@@ -762,3 +762,70 @@ async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
     )
     with pytest.raises(tornado.httpclient.HTTPClientError):
         await client.fetch(request)
+
+
+@pytest.mark.asyncio
+async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment):
+    """
+        Test querying resource actions via the API
+    """
+    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
+    await agent.start()
+    aclient = agent._client
+
+    version = await clienthelper.get_version()
+
+    resources = []
+    for j in range(10):
+        resources.append(
+            {
+                "group": "root",
+                "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+                "id": "std::File[vm1,path=/tmp/file%d],v=%d" % (j, version),
+                "owner": "root",
+                "path": "/tmp/file%d" % j,
+                "permissions": 644,
+                "purged": False,
+                "reload": False,
+                "requires": [],
+                "version": version,
+            }
+        )
+
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert res.code == 200
+
+    result = await client.release_version(environment, version, False)
+    assert result.code == 200
+
+    resource_ids = [x["id"] for x in resources]
+
+    # Start the deploy
+    action_id = uuid.uuid4()
+    now = datetime.now()
+    result = await aclient.resource_action_update(
+        environment, resource_ids, action_id, "deploy", now, status=const.ResourceState.deploying
+    )
+    assert result.code == 200
+
+    # Get the status from a resource
+    result = await client.get_resource_actions(tid=environment)
+    assert result.code == 200
+
+    result = await client.get_resource_actions(tid=environment, attribute="path")
+    assert result.code == 400
+    result = await client.get_resource_actions(tid=environment, attribute_value="/tmp/file")
+    assert result.code == 400
+    result = await client.get_resource_actions(tid=environment, attribute="path", attribute_value="/tmp/file1")
+    assert result.code == 200
+    assert len(result.result["data"]) == 2
+    result = await client.get_resource_actions(tid=environment, last_timestamp=now)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1

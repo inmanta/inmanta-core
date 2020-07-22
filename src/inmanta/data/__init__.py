@@ -1703,6 +1703,57 @@ class ResourceAction(BaseDocument):
             value = cls._get_value(keep_logs_until)
             await cls._execute_query(query, value)
 
+    @classmethod
+    async def query_resource_actions(
+        cls,
+        environment: uuid.UUID,
+        resource_type: Optional[str] = None,
+        agent: Optional[str] = None,
+        attribute: Optional[str] = None,
+        attribute_value: Optional[str] = None,
+        limit: int = 0,
+        last_timestamp: Optional[datetime.datetime] = None,
+    ) -> List["ResourceAction"]:
+
+        query = f"""SELECT DISTINCT action_id, action, started, finished, messages, ra.status, changes, change, send_event,
+                    ra.environment, version, resource_version_ids
+                        FROM
+                        (SELECT *, unnest(resource_version_ids) AS resource_version_id
+                            FROM   {cls.table_name()}
+                            WHERE environment=$1) ra
+                        INNER JOIN
+                        {Resource.table_name()} r on ra.resource_version_id = r.resource_version_id
+                        WHERE r.environment=$1
+                     """
+        values = [cls._get_value(environment)]
+
+        parameter_index = 2
+        if resource_type:
+            query += f" AND resource_type=${parameter_index}"
+            values.append(cls._get_value(resource_type))
+            parameter_index += 1
+        if agent:
+            query += f" AND agent=${parameter_index}"
+            values.append(cls._get_value(agent))
+            parameter_index += 1
+        if attribute and attribute_value:
+            query += f" AND attributes->>${parameter_index} LIKE ${parameter_index + 1}::varchar"
+            values.append(cls._get_value(attribute))
+            values.append(cls._get_value(attribute_value))
+            parameter_index += 2
+        if last_timestamp:
+            query += f" AND started < ${parameter_index}"
+            values.append(cls._get_value(last_timestamp))
+            parameter_index += 1
+        query += " ORDER BY started DESC"
+        if limit is not None and limit > 0:
+            query += " LIMIT $%d" % parameter_index
+            values.append(cls._get_value(limit))
+
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
+
 
 class Resource(BaseDocument):
     """

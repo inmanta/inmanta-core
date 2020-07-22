@@ -546,3 +546,30 @@ class ResourceService(protocol.ServerSlice):
                     await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
 
         return 200
+
+    @protocol.handle(methods.get_resource_actions, env="tid")
+    async def get_resource_actions(
+        self,
+        env: data.Environment,
+        resource_type: Optional[str] = None,
+        agent: Optional[str] = None,
+        attribute: Optional[str] = None,
+        attribute_value: Optional[str] = None,
+        limit: int = 0,
+        last_timestamp: Optional[datetime.datetime] = None,
+    ) -> Apireturn:
+        if (attribute and not attribute_value) or (not attribute and attribute_value):
+            raise BadRequest(
+                f"Attribute and attribute_value should both be supplied to use them filtering. "
+                f"Received attribute: {attribute}, attribute_value: {attribute_value}"
+            )
+        resource_actions = await data.ResourceAction.query_resource_actions(
+            env.id,
+            resource_type,
+            agent,
+            attribute=attribute,
+            attribute_value=attribute_value,
+            limit=limit,
+            last_timestamp=last_timestamp,
+        )
+        return 200, resource_actions

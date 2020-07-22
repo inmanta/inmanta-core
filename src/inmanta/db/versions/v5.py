@@ -26,5 +26,8 @@ async def update(connection: Connection) -> None:
 -- Compile queue might be collapsed if it contains similar compile requests.
 -- In that case, substitute_compile_id will reference the actually compiled request.
 ALTER TABLE public.compile ADD COLUMN substitute_compile_id uuid REFERENCES public.compile (id);
+
+-- Add index to resourceaction for pagination
+CREATE INDEX resourceaction_started ON public.resourceaction (started);
         """
     )

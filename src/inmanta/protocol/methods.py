@@ -18,7 +18,7 @@
 
 import datetime
 import uuid
-from typing import Any, List, Union
+from typing import Any, List, Optional, Union
 
 from inmanta import const, data
 from inmanta.data import model
@@ -454,6 +454,32 @@ def resource_action_update(
                        have been changed. The value contains the new value and/or the original value.
         :param change: The result of the changes
         :param send_events: Send events to the dependents of this resource
+    """
+
+
+@method(
+    path="/resource_actions", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api], envelope=True,
+)
+def get_resource_actions(
+    tid: uuid.UUID,
+    resource_type: Optional[str] = None,
+    agent: Optional[str] = None,
+    attribute: Optional[str] = None,
+    attribute_value: Optional[str] = None,
+    limit: int = 0,
+    last_timestamp: Optional[datetime.datetime] = None,
+):
+    """
+        Return resource actions matching the search criteria.
+
+        :param tid: The id of the environment this resource belongs to
+        :param resource_type: The resource entity type that should be queried
+        :param agent: Agent name that is used to filter the results
+        :param attribute: Attribute name used for filtering
+        :param attribute_value: Attribute value used for filtering. Attribute and attribute value should be supplied together.
+        :param limit: Limit the number of resource actions included in the response
+        :param last_timestamp: Limit the results to resource actions that started earlier than the value of this parameter
+
     """
 
 
