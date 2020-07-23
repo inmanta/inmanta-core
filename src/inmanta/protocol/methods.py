@@ -467,7 +467,9 @@ def get_resource_actions(
     agent: Optional[str] = None,
     attribute: Optional[str] = None,
     attribute_value: Optional[str] = None,
+    log_severity: Optional[str] = None,
     limit: int = 0,
+    first_timestamp: Optional[datetime.datetime] = None,
     last_timestamp: Optional[datetime.datetime] = None,
 ) -> List[ResourceAction]:
     """
@@ -478,8 +480,12 @@ def get_resource_actions(
         :param agent: Agent name that is used to filter the results
         :param attribute: Attribute name used for filtering
         :param attribute_value: Attribute value used for filtering. Attribute and attribute value should be supplied together.
+        :param log_severity: Only include log messages with this severity
         :param limit: Limit the number of resource actions included in the response
-        :param last_timestamp: Limit the results to resource actions that started earlier than the value of this parameter
+        :param first_timestamp: Limit the results to resource actions that started later
+                than the value of this parameter (inclusive)
+        :param last_timestamp: Limit the results to resource actions that started earlier
+                than the value of this parameter (exclusive)
 
     """
 

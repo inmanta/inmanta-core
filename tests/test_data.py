@@ -2459,3 +2459,34 @@ async def test_query_resource_actions(init_dataclasses_and_load_schema):
     )
     assert len(resource_actions) == 5
     assert [resource_action.version for resource_action in resource_actions] == [5, 4, 3, 2, 1]
+
+    # Query with first_timestamp
+    resource_actions = await data.ResourceAction.query_resource_actions(
+        env.id,
+        resource_type="std::File",
+        attribute="path",
+        attribute_value="/etc/motd",
+        limit=5,
+        first_timestamp=motd_first_start_time,
+    )
+    assert len(resource_actions) == 5
+    # DESC ordering
+    assert [resource_action.version for resource_action in resource_actions] == [10, 9, 8, 7, 6]
+
+    # Query with time interval
+    resource_actions = await data.ResourceAction.query_resource_actions(
+        env.id,
+        resource_type="std::File",
+        attribute="path",
+        attribute_value="/etc/motd",
+        limit=5,
+        first_timestamp=motd_first_start_time + datetime.timedelta(minutes=2),
+        last_timestamp=motd_first_start_time + datetime.timedelta(minutes=6),
+    )
+    assert len(resource_actions) == 4
+    assert [resource_action.version for resource_action in resource_actions] == [5, 4, 3, 2]
+
+    # Query actions with WARNING level logs
+    resource_actions = await data.ResourceAction.query_resource_actions(env.id, log_severity="WARNING")
+    assert len(resource_actions) == 1
+    assert resource_actions[0].messages[0]["level"] == "WARNING"

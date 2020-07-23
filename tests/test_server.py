@@ -20,7 +20,7 @@ import asyncio
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict
 
 import pytest
@@ -825,5 +825,13 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     assert result.code == 200
     assert len(result.result["data"]) == 2
     result = await client.get_resource_actions(tid=environment, last_timestamp=now)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    result = await client.get_resource_actions(tid=environment, first_timestamp=now, last_timestamp=now)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
+    result = await client.get_resource_actions(tid=environment, first_timestamp=now + timedelta(days=1), last_timestamp=now)
+    assert result.code == 400
+    result = await client.get_resource_actions(tid=environment, first_timestamp=now)
     assert result.code == 200
     assert len(result.result["data"]) == 1

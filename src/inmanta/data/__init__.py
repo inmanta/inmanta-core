@@ -1711,18 +1711,16 @@ class ResourceAction(BaseDocument):
         agent: Optional[str] = None,
         attribute: Optional[str] = None,
         attribute_value: Optional[str] = None,
+        log_severity: Optional[str] = None,
         limit: int = 0,
+        first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
     ) -> List["ResourceAction"]:
 
-        query = f"""SELECT DISTINCT action_id, action, started, finished, messages, ra.status, changes, change, send_event,
-                    ra.environment, version, resource_version_ids
-                        FROM
-                        (SELECT *, unnest(resource_version_ids) AS resource_version_id
-                            FROM   {cls.table_name()}
-                            WHERE environment=$1) ra
+        query = f"""SELECT DISTINCT ra.*
+                        FROM {cls.table_name()} ra
                         INNER JOIN
-                        {Resource.table_name()} r on ra.resource_version_id = r.resource_version_id
+                        {Resource.table_name()} r on  r.resource_version_id = ANY(ra.resource_version_ids)
                         WHERE r.environment=$1
                      """
         values = [cls._get_value(environment)]
@@ -1741,6 +1739,15 @@ class ResourceAction(BaseDocument):
             values.append(cls._get_value(attribute))
             values.append(cls._get_value(attribute_value))
             parameter_index += 2
+        if log_severity:
+            # <@ Is contained by
+            query += f" AND ${parameter_index} <@ ANY(messages)"
+            values.append(cls._get_value({"level": log_severity.upper()}))
+            parameter_index += 1
+        if first_timestamp:
+            query += f" AND started >= ${parameter_index}"
+            values.append(cls._get_value(first_timestamp))
+            parameter_index += 1
         if last_timestamp:
             query += f" AND started < ${parameter_index}"
             values.append(cls._get_value(last_timestamp))

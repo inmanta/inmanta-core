@@ -555,7 +555,9 @@ class ResourceService(protocol.ServerSlice):
         agent: Optional[str] = None,
         attribute: Optional[str] = None,
         attribute_value: Optional[str] = None,
+        log_severity: Optional[str] = None,
         limit: int = 0,
+        first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
     ) -> List[ResourceAction]:
         if (attribute and not attribute_value) or (not attribute and attribute_value):
@@ -563,13 +565,20 @@ class ResourceService(protocol.ServerSlice):
                 f"Attribute and attribute_value should both be supplied to use them filtering. "
                 f"Received attribute: {attribute}, attribute_value: {attribute_value}"
             )
+        if (first_timestamp and last_timestamp) and first_timestamp > last_timestamp:
+            raise BadRequest(
+                f"Parameter first_timestamp should point to an earlier time than the last_timestamp. "
+                f"Received first_timestamp: {first_timestamp}, last_timestamp: {last_timestamp}"
+            )
         resource_actions = await data.ResourceAction.query_resource_actions(
             env.id,
             resource_type,
             agent,
             attribute=attribute,
             attribute_value=attribute_value,
+            log_severity=log_severity,
             limit=limit,
+            first_timestamp=first_timestamp,
             last_timestamp=last_timestamp,
         )
         return [resource_action.to_dto() for resource_action in resource_actions]
