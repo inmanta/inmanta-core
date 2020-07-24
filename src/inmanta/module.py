@@ -326,6 +326,38 @@ class ModuleLike(object):
         else:
             return self._meta[name]
 
+    def _remove_comments(self, lines: List[str]) -> List[str]:
+        """
+            Remove comments from lines in requirements.txt file.
+        """
+        result = []
+        for line in lines:
+            if line.strip().startswith("#"):
+                continue
+            if " #" in line:
+                line_without_comment = line.split(" #", maxsplit=1)[0]
+                result.append(line_without_comment)
+            else:
+                result.append(line)
+        return result
+
+    def _remove_line_continuations(self, lines: List[str]) -> List[str]:
+        """
+            Remove line continuation from lines in requirements.txt file.
+        """
+        result = []
+        line_continuation_buffer = ""
+        for line in lines:
+            if line.endswith("\\"):
+                line_continuation_buffer = f"{line_continuation_buffer}{line[0:-1]}"
+            else:
+                if line_continuation_buffer:
+                    result.append(f"{line_continuation_buffer}{line}")
+                    line_continuation_buffer = ""
+                else:
+                    result.append(line)
+        return result
+
 
 INSTALL_RELEASES = "release"
 INSTALL_PRERELEASES = "prerelease"
@@ -667,38 +699,6 @@ class Project(ModuleLike):
         req_lines = self._remove_comments(req_lines)
         req_lines = self._remove_line_continuations(req_lines)
         return list(set(req_lines))
-
-    def _remove_comments(self, lines: List[str]) -> List[str]:
-        """
-            Remove comments from lines in requirements.txt file.
-        """
-        result = []
-        for line in lines:
-            if line.strip().startswith("#"):
-                continue
-            if " #" in line:
-                line_without_comment = line.split(" #", maxsplit=1)[0]
-                result.append(line_without_comment)
-            else:
-                result.append(line)
-        return result
-
-    def _remove_line_continuations(self, lines: List[str]) -> List[str]:
-        """
-            Remove line continuation from lines in requirements.txt file.
-        """
-        result = []
-        line_continuation_buffer = ""
-        for line in lines:
-            if line.endswith("\\"):
-                line_continuation_buffer = f"{line_continuation_buffer}{line[0:-1]}"
-            else:
-                if line_continuation_buffer:
-                    result.append(f"{line_continuation_buffer}{line}")
-                    line_continuation_buffer = ""
-                else:
-                    result.append(line)
-        return result
 
     def get_name(self) -> str:
         return "project.yml"
@@ -1204,7 +1204,10 @@ class Module(ModuleLike):
         if raw is None:
             return []
         else:
-            return [y for y in [x.strip() for x in raw.split("\n")] if len(y) != 0]
+            requirements_lines = [y for y in [x.strip() for x in raw.split("\n")] if len(y) != 0]
+            requirements_lines = self._remove_comments(requirements_lines)
+            requirements_lines = self._remove_line_continuations(requirements_lines)
+            return requirements_lines
 
     def execute_command(self, cmd: str) -> None:
         print("executing %s on %s in %s" % (cmd, self.get_name(), self._path))
