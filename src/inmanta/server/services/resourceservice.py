@@ -556,7 +556,8 @@ class ResourceService(protocol.ServerSlice):
         attribute: Optional[str] = None,
         attribute_value: Optional[str] = None,
         log_severity: Optional[str] = None,
-        limit: int = 0,
+        limit: Optional[int] = 0,
+        offset: Optional[int] = 0,
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
     ) -> List[ResourceAction]:
@@ -578,6 +579,7 @@ class ResourceService(protocol.ServerSlice):
             attribute_value=attribute_value,
             log_severity=log_severity,
             limit=limit,
+            offset=offset,
             first_timestamp=first_timestamp,
             last_timestamp=last_timestamp,
         )

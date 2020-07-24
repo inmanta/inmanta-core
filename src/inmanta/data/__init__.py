@@ -1713,6 +1713,7 @@ class ResourceAction(BaseDocument):
         attribute_value: Optional[str] = None,
         log_severity: Optional[str] = None,
         limit: int = 0,
+        offset: Optional[int] = None,
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
     ) -> List["ResourceAction"]:
@@ -1752,10 +1753,15 @@ class ResourceAction(BaseDocument):
             query += f" AND started < ${parameter_index}"
             values.append(cls._get_value(last_timestamp))
             parameter_index += 1
-        query += " ORDER BY started DESC"
+        query += " ORDER BY started DESC, action_id"
         if limit is not None and limit > 0:
             query += " LIMIT $%d" % parameter_index
             values.append(cls._get_value(limit))
+            parameter_index += 1
+        if offset is not None and offset > 0:
+            query += f" OFFSET ${parameter_index}"
+            values.append(cls._get_value(offset))
+            parameter_index += 1
 
         async with cls._connection_pool.acquire() as con:
             async with con.transaction():

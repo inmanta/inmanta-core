@@ -2277,7 +2277,7 @@ async def test_update_to_none_value(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
-async def test_query_resource_actions(init_dataclasses_and_load_schema):
+async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -2490,3 +2490,152 @@ async def test_query_resource_actions(init_dataclasses_and_load_schema):
     resource_actions = await data.ResourceAction.query_resource_actions(env.id, log_severity="WARNING")
     assert len(resource_actions) == 1
     assert resource_actions[0].messages[0]["level"] == "WARNING"
+
+
+@pytest.mark.asyncio
+async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and_load_schema):
+    """
+        Test querying resource actions that have non unique timestamps, with pagination, using an explicit time interval
+        as well as offset and limit.
+    """
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    version = int(time.time())
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    await cm.insert()
+    # Add multiple versions of model
+    for i in range(0, 11):
+        cm = data.ConfigurationModel(environment=env.id, version=i, date=datetime.datetime.now(), total=1, version_info={},)
+        await cm.insert()
+
+    action_ids_with_the_same_timestamp = []
+    # Add resource actions for motd
+    motd_first_start_time = datetime.datetime.now()
+    earliest_action_id = uuid.uuid4()
+    resource_action = data.ResourceAction(
+        environment=env.id,
+        version=0,
+        resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={0}"],
+        action_id=earliest_action_id,
+        action=const.ResourceAction.deploy,
+        started=motd_first_start_time - datetime.timedelta(minutes=1),
+    )
+    await resource_action.insert()
+    resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=0)])
+    await resource_action.save()
+
+    for i in range(1, 6):
+        action_id = uuid.uuid4()
+        action_ids_with_the_same_timestamp.append(action_id)
+        resource_action = data.ResourceAction(
+            environment=env.id,
+            version=i,
+            resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={i}"],
+            action_id=action_id,
+            action=const.ResourceAction.deploy,
+            started=motd_first_start_time,
+        )
+        await resource_action.insert()
+        resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=i)])
+        await resource_action.save()
+
+    for i in range(6, 11):
+        action_id = uuid.uuid4()
+        resource_action = data.ResourceAction(
+            environment=env.id,
+            version=i,
+            resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={i}"],
+            action_id=action_id,
+            action=const.ResourceAction.deploy,
+            started=motd_first_start_time + datetime.timedelta(minutes=i),
+        )
+        await resource_action.insert()
+        resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=i)])
+        await resource_action.save()
+
+    for i in range(0, 11):
+        res1 = data.Resource.new(
+            environment=env.id,
+            resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
+            status=const.ResourceState.deployed,
+            last_deploy=datetime.datetime.now() + datetime.timedelta(minutes=i),
+            attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
+        )
+        await res1.insert()
+
+    # Query actions that have the same 'started' time
+    resource_actions = await data.ResourceAction.query_resource_actions(
+        env.id,
+        resource_type="std::File",
+        attribute="path",
+        attribute_value="/etc/motd",
+        limit=2,
+        last_timestamp=motd_first_start_time + datetime.timedelta(minutes=6),
+    )
+    assert len(resource_actions) == 2
+    assert (
+        sorted([resource_action.action_id for resource_action in resource_actions])
+        == sorted(action_ids_with_the_same_timestamp)[:2]
+    )
+    # Querying pages with offset in the same time interval
+    resource_actions = await data.ResourceAction.query_resource_actions(
+        env.id,
+        resource_type="std::File",
+        attribute="path",
+        attribute_value="/etc/motd",
+        limit=2,
+        offset=2,
+        first_timestamp=motd_first_start_time,
+        last_timestamp=motd_first_start_time + datetime.timedelta(minutes=6),
+    )
+    assert len(resource_actions) == 2
+    assert (
+        sorted([resource_action.action_id for resource_action in resource_actions])
+        == sorted(action_ids_with_the_same_timestamp)[2:4]
+    )
+
+    resource_actions = await data.ResourceAction.query_resource_actions(
+        env.id,
+        resource_type="std::File",
+        attribute="path",
+        attribute_value="/etc/motd",
+        limit=2,
+        offset=4,
+        first_timestamp=motd_first_start_time,
+        last_timestamp=motd_first_start_time + datetime.timedelta(minutes=6),
+    )
+    assert len(resource_actions) == 1
+    assert sorted([resource_action.action_id for resource_action in resource_actions]) == [
+        sorted(action_ids_with_the_same_timestamp)[4]
+    ]
+    timestamp = resource_actions[-1].started
+
+    # Reach the end of the interval
+    resource_actions = await data.ResourceAction.query_resource_actions(
+        env.id,
+        resource_type="std::File",
+        attribute="path",
+        attribute_value="/etc/motd",
+        limit=2,
+        offset=6,
+        first_timestamp=motd_first_start_time,
+        last_timestamp=motd_first_start_time + datetime.timedelta(minutes=6),
+    )
+    assert len(resource_actions) == 0
+
+    # Go back in time
+    resource_actions = await data.ResourceAction.query_resource_actions(
+        env.id,
+        resource_type="std::File",
+        attribute="path",
+        attribute_value="/etc/motd",
+        limit=2,
+        first_timestamp=timestamp - datetime.timedelta(minutes=5),
+        last_timestamp=timestamp,
+    )
+    assert len(resource_actions) == 1
+    assert resource_actions[0].action_id == earliest_action_id
