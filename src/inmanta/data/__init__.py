@@ -1713,7 +1713,7 @@ class ResourceAction(BaseDocument):
         attribute_value: Optional[str] = None,
         log_severity: Optional[str] = None,
         limit: int = 0,
-        offset: Optional[int] = None,
+        action_id: Optional[uuid.UUID] = None,
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
     ) -> List["ResourceAction"]:
@@ -1745,22 +1745,31 @@ class ResourceAction(BaseDocument):
             query += f" AND ${parameter_index} <@ ANY(messages)"
             values.append(cls._get_value({"level": log_severity.upper()}))
             parameter_index += 1
-        if first_timestamp:
-            query += f" AND started >= ${parameter_index}"
+        if first_timestamp and action_id:
+            query += f" AND (started, action_id) > (${parameter_index}, ${parameter_index+1})"
+            values.append(cls._get_value(first_timestamp))
+            values.append(cls._get_value(action_id))
+            parameter_index += 2
+        elif first_timestamp:
+            query += f" AND started > ${parameter_index}"
             values.append(cls._get_value(first_timestamp))
             parameter_index += 1
-        if last_timestamp:
+        if last_timestamp and action_id:
+            query += f" AND (started, action_id) < (${parameter_index}, ${parameter_index+1})"
+            values.append(cls._get_value(last_timestamp))
+            values.append(cls._get_value(action_id))
+            parameter_index += 2
+        elif last_timestamp:
             query += f" AND started < ${parameter_index}"
             values.append(cls._get_value(last_timestamp))
             parameter_index += 1
-        query += " ORDER BY started DESC, action_id"
+        if first_timestamp:
+            query += " ORDER BY started, action_id"
+        else:
+            query += " ORDER BY started DESC, action_id DESC"
         if limit is not None and limit > 0:
             query += " LIMIT $%d" % parameter_index
             values.append(cls._get_value(limit))
-            parameter_index += 1
-        if offset is not None and offset > 0:
-            query += f" OFFSET ${parameter_index}"
-            values.append(cls._get_value(offset))
             parameter_index += 1
 
         async with cls._connection_pool.acquire() as con:

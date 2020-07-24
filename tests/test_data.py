@@ -2470,21 +2470,7 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
         first_timestamp=motd_first_start_time,
     )
     assert len(resource_actions) == 5
-    # DESC ordering
-    assert [resource_action.version for resource_action in resource_actions] == [10, 9, 8, 7, 6]
-
-    # Query with time interval
-    resource_actions = await data.ResourceAction.query_resource_actions(
-        env.id,
-        resource_type="std::File",
-        attribute="path",
-        attribute_value="/etc/motd",
-        limit=5,
-        first_timestamp=motd_first_start_time + datetime.timedelta(minutes=2),
-        last_timestamp=motd_first_start_time + datetime.timedelta(minutes=6),
-    )
-    assert len(resource_actions) == 4
-    assert [resource_action.version for resource_action in resource_actions] == [5, 4, 3, 2]
+    assert [resource_action.version for resource_action in resource_actions] == [version, 1, 2, 3, 4]
 
     # Query actions with WARNING level logs
     resource_actions = await data.ResourceAction.query_resource_actions(env.id, log_severity="WARNING")
@@ -2512,7 +2498,6 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
         cm = data.ConfigurationModel(environment=env.id, version=i, date=datetime.datetime.now(), total=1, version_info={},)
         await cm.insert()
 
-    action_ids_with_the_same_timestamp = []
     # Add resource actions for motd
     motd_first_start_time = datetime.datetime.now()
     earliest_action_id = uuid.uuid4()
@@ -2528,6 +2513,7 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=0)])
     await resource_action.save()
 
+    action_ids_with_the_same_timestamp = []
     for i in range(1, 6):
         action_id = uuid.uuid4()
         action_ids_with_the_same_timestamp.append(action_id)
@@ -2542,9 +2528,11 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
         await resource_action.insert()
         resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=i)])
         await resource_action.save()
-
+    action_ids_with_the_same_timestamp = sorted(action_ids_with_the_same_timestamp, reverse=True)
+    action_ids_with_increasing_timestamps = []
     for i in range(6, 11):
         action_id = uuid.uuid4()
+        action_ids_with_increasing_timestamps.append(action_id)
         resource_action = data.ResourceAction(
             environment=env.id,
             version=i,
@@ -2556,7 +2544,7 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
         await resource_action.insert()
         resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=i)])
         await resource_action.save()
-
+    action_ids_with_increasing_timestamps = action_ids_with_increasing_timestamps[::-1]
     for i in range(0, 11):
         res1 = data.Resource.new(
             environment=env.id,
@@ -2567,7 +2555,7 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
         )
         await res1.insert()
 
-    # Query actions that have the same 'started' time
+    # Query actions with pagination, going backwards in time
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
         resource_type="std::File",
@@ -2577,65 +2565,60 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
         last_timestamp=motd_first_start_time + datetime.timedelta(minutes=6),
     )
     assert len(resource_actions) == 2
-    assert (
-        sorted([resource_action.action_id for resource_action in resource_actions])
-        == sorted(action_ids_with_the_same_timestamp)[:2]
-    )
-    # Querying pages with offset in the same time interval
+    assert [resource_action.action_id for resource_action in resource_actions] == action_ids_with_the_same_timestamp[:2]
+    # Querying pages based on last_timestamp and action_id from the previous query
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
         resource_type="std::File",
         attribute="path",
         attribute_value="/etc/motd",
         limit=2,
-        offset=2,
-        first_timestamp=motd_first_start_time,
-        last_timestamp=motd_first_start_time + datetime.timedelta(minutes=6),
+        action_id=resource_actions[1].action_id,
+        last_timestamp=resource_actions[1].started,
     )
     assert len(resource_actions) == 2
-    assert (
-        sorted([resource_action.action_id for resource_action in resource_actions])
-        == sorted(action_ids_with_the_same_timestamp)[2:4]
-    )
-
+    assert [resource_action.action_id for resource_action in resource_actions] == action_ids_with_the_same_timestamp[2:4]
+    #
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
         resource_type="std::File",
         attribute="path",
         attribute_value="/etc/motd",
         limit=2,
-        offset=4,
-        first_timestamp=motd_first_start_time,
-        last_timestamp=motd_first_start_time + datetime.timedelta(minutes=6),
+        action_id=resource_actions[1].action_id,
+        last_timestamp=resource_actions[1].started,
     )
-    assert len(resource_actions) == 1
-    assert sorted([resource_action.action_id for resource_action in resource_actions]) == [
-        sorted(action_ids_with_the_same_timestamp)[4]
+    assert len(resource_actions) == 2
+    assert [resource_action.action_id for resource_action in resource_actions] == [
+        action_ids_with_the_same_timestamp[-1],
+        earliest_action_id,
     ]
-    timestamp = resource_actions[-1].started
 
-    # Reach the end of the interval
+    # Query actions going forward in time
+    action_ids_with_the_same_timestamp = action_ids_with_the_same_timestamp[::-1]
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
         resource_type="std::File",
         attribute="path",
         attribute_value="/etc/motd",
-        limit=2,
-        offset=6,
-        first_timestamp=motd_first_start_time,
-        last_timestamp=motd_first_start_time + datetime.timedelta(minutes=6),
+        limit=4,
+        first_timestamp=motd_first_start_time - datetime.timedelta(seconds=30),
     )
-    assert len(resource_actions) == 0
-
-    # Go back in time
+    assert len(resource_actions) == 4
+    assert [resource_action.action_id for resource_action in resource_actions] == action_ids_with_the_same_timestamp[:4]
+    # Page forward
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
         resource_type="std::File",
         attribute="path",
         attribute_value="/etc/motd",
-        limit=2,
-        first_timestamp=timestamp - datetime.timedelta(minutes=5),
-        last_timestamp=timestamp,
+        limit=4,
+        action_id=resource_actions[-1].action_id,
+        first_timestamp=resource_actions[-1].started,
     )
-    assert len(resource_actions) == 1
-    assert resource_actions[0].action_id == earliest_action_id
+    assert len(resource_actions) == 4
+    # The last of the ones that share a timestamp
+    expected_ids_on_page = [action_ids_with_the_same_timestamp[-1]]
+    # First three of the next ones
+    expected_ids_on_page.extend(action_ids_with_increasing_timestamps[::-1][:3])
+    assert [resource_action.action_id for resource_action in resource_actions] == expected_ids_on_page

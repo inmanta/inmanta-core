@@ -557,7 +557,7 @@ class ResourceService(protocol.ServerSlice):
         attribute_value: Optional[str] = None,
         log_severity: Optional[str] = None,
         limit: Optional[int] = 0,
-        offset: Optional[int] = 0,
+        action_id: Optional[uuid.UUID] = None,
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
     ) -> List[ResourceAction]:
@@ -566,10 +566,15 @@ class ResourceService(protocol.ServerSlice):
                 f"Attribute and attribute_value should both be supplied to use them filtering. "
                 f"Received attribute: {attribute}, attribute_value: {attribute_value}"
             )
-        if (first_timestamp and last_timestamp) and first_timestamp > last_timestamp:
+        if first_timestamp and last_timestamp:
             raise BadRequest(
-                f"Parameter first_timestamp should point to an earlier time than the last_timestamp. "
+                f"Only one of the parameters first_timestamp and last_timestamp should be used "
                 f"Received first_timestamp: {first_timestamp}, last_timestamp: {last_timestamp}"
+            )
+        if action_id and not (first_timestamp or last_timestamp):
+            raise BadRequest(
+                f"The action_id parameter should be used in combination with either the first_timestamp or the last_timestamp "
+                f"Received action_id: {action_id}, first_timestamp: {first_timestamp}, last_timestamp: {last_timestamp}"
             )
         resource_actions = await data.ResourceAction.query_resource_actions(
             env.id,
@@ -579,7 +584,7 @@ class ResourceService(protocol.ServerSlice):
             attribute_value=attribute_value,
             log_severity=log_severity,
             limit=limit,
-            offset=offset,
+            action_id=action_id,
             first_timestamp=first_timestamp,
             last_timestamp=last_timestamp,
         )

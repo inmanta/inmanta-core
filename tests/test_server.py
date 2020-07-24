@@ -827,11 +827,13 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     result = await client.get_resource_actions(tid=environment, last_timestamp=now)
     assert result.code == 200
     assert len(result.result["data"]) == 1
-    result = await client.get_resource_actions(tid=environment, first_timestamp=now, last_timestamp=now)
+    result = await client.get_resource_actions(tid=environment, first_timestamp=now - timedelta(minutes=1))
     assert result.code == 200
-    assert len(result.result["data"]) == 0
-    result = await client.get_resource_actions(tid=environment, first_timestamp=now + timedelta(days=1), last_timestamp=now)
+    assert len(result.result["data"]) == 2
+    result = await client.get_resource_actions(tid=environment, first_timestamp=now - timedelta(minutes=1), last_timestamp=now)
     assert result.code == 400
-    result = await client.get_resource_actions(tid=environment, first_timestamp=now)
+    result = await client.get_resource_actions(tid=environment, action_id=action_id)
+    assert result.code == 400
+    result = await client.get_resource_actions(tid=environment, first_timestamp=now - timedelta(minutes=1), action_id=action_id)
     assert result.code == 200
-    assert len(result.result["data"]) == 1
+    assert len(result.result["data"]) == 2
