@@ -2481,8 +2481,8 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
 @pytest.mark.asyncio
 async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and_load_schema):
     """
-        Test querying resource actions that have non unique timestamps, with pagination, using an explicit time interval
-        as well as offset and limit.
+        Test querying resource actions that have non unique timestamps, with pagination, using an explicit start and end time
+        as well as limit.
     """
     project = data.Project(name="test")
     await project.insert()
@@ -2578,7 +2578,6 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     )
     assert len(resource_actions) == 2
     assert [resource_action.action_id for resource_action in resource_actions] == action_ids_with_the_same_timestamp[2:4]
-    #
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
         resource_type="std::File",

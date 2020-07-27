@@ -26,7 +26,7 @@ from inmanta.types import JsonType, PrimitiveTypes
 
 from ..data.model import ResourceAction
 from . import exceptions
-from .common import ArgOption
+from .common import ArgOption, ReturnValue
 from .decorators import method, typedmethod
 
 
@@ -472,7 +472,7 @@ def get_resource_actions(
     action_id: Optional[uuid.UUID] = None,
     first_timestamp: Optional[datetime.datetime] = None,
     last_timestamp: Optional[datetime.datetime] = None,
-) -> List[ResourceAction]:
+) -> ReturnValue[List[ResourceAction]]:
     """
         Return resource actions matching the search criteria.
 
@@ -481,7 +481,7 @@ def get_resource_actions(
         :param agent: Agent name that is used to filter the results
         :param attribute: Attribute name used for filtering
         :param attribute_value: Attribute value used for filtering. Attribute and attribute value should be supplied together.
-        :param log_severity: Only include log messages with this severity
+        :param log_severity: Only include ResourceActions which have a log message with this severity.
         :param limit: Limit the number of resource actions included in the response
         :param action_id: Start the query from this action_id.
                 To be used in combination with either the first or last timestamp.
@@ -489,8 +489,11 @@ def get_resource_actions(
                 than the value of this parameter (exclusive)
         :param last_timestamp: Limit the results to resource actions that started earlier
                 than the value of this parameter (exclusive).
-                Only the first_timestamp or last_timestamp paramater should be supplied
-        :return: the list of matching Resource Actions, in a descending order according to the 'started' timestamps
+                Only the first_timestamp or last_timestamp parameter should be supplied
+        :return: the list of matching Resource Actions in a descending order.
+                If a limit was specified, also return the links to the next and previous pages.
+                The "next" page always refers to the actions that started earlier,
+                while the "prev" page refers to actions that started later, regardless of the sort_order.
 
         :raises BadRequest: When the supplied parameters are not valid.
 

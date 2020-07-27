@@ -178,6 +178,7 @@ class ReturnValue(Generic[T]):
         headers: MutableMapping[str, str] = {},
         response: Optional[T] = None,
         content_type: str = JSON_CONTENT,
+        links: Optional[Dict[str, str]] = None,
     ) -> None:
         self._status_code = status_code
         self._warnings: List[str] = []
@@ -185,6 +186,7 @@ class ReturnValue(Generic[T]):
         self._headers[CONTENT_TYPE] = content_type
         self._content_type = content_type
         self._response = response
+        self._links = links
 
     @property
     def status_code(self) -> int:
@@ -216,6 +218,8 @@ class ReturnValue(Generic[T]):
 
         if len(self._warnings):
             response["metadata"] = {"warnings": self._warnings}
+        if self._links:
+            response["links"] = self._links
 
         return response
 

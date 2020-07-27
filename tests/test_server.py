@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import json
 import logging
 import os
 import uuid
@@ -26,6 +27,7 @@ from typing import Dict
 import pytest
 import tornado
 from dateutil import parser
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
@@ -824,9 +826,12 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     result = await client.get_resource_actions(tid=environment, attribute="path", attribute_value="/tmp/file1")
     assert result.code == 200
     assert len(result.result["data"]) == 2
+    # Query actions happening earlier than the deploy
     result = await client.get_resource_actions(tid=environment, last_timestamp=now)
     assert result.code == 200
     assert len(result.result["data"]) == 1
+    assert result.result["data"][0]["action"] == "store"
+    # Query actions happening later than the start of the test case
     result = await client.get_resource_actions(tid=environment, first_timestamp=now - timedelta(minutes=1))
     assert result.code == 200
     assert len(result.result["data"]) == 2
@@ -837,3 +842,126 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     result = await client.get_resource_actions(tid=environment, first_timestamp=now - timedelta(minutes=1), action_id=action_id)
     assert result.code == 200
     assert len(result.result["data"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_resource_action_pagination(postgresql_client, client, clienthelper, server, agent):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    # Add multiple versions of model
+    for i in range(0, 11):
+        cm = data.ConfigurationModel(environment=env.id, version=i, date=datetime.now(), total=1, version_info={},)
+        await cm.insert()
+
+    # Add resource actions for motd
+    motd_first_start_time = datetime.now()
+    earliest_action_id = uuid.uuid4()
+    resource_action = data.ResourceAction(
+        environment=env.id,
+        version=0,
+        resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={0}"],
+        action_id=earliest_action_id,
+        action=const.ResourceAction.deploy,
+        started=motd_first_start_time - timedelta(minutes=1),
+    )
+    await resource_action.insert()
+    resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=0)])
+    await resource_action.save()
+
+    action_ids_with_the_same_timestamp = []
+    for i in range(1, 6):
+        action_id = uuid.uuid4()
+        action_ids_with_the_same_timestamp.append(action_id)
+        resource_action = data.ResourceAction(
+            environment=env.id,
+            version=i,
+            resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={i}"],
+            action_id=action_id,
+            action=const.ResourceAction.deploy,
+            started=motd_first_start_time,
+        )
+        await resource_action.insert()
+        resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=i)])
+        await resource_action.save()
+    action_ids_with_the_same_timestamp = sorted(action_ids_with_the_same_timestamp, reverse=True)
+    action_ids_with_increasing_timestamps = []
+    for i in range(6, 11):
+        action_id = uuid.uuid4()
+        action_ids_with_increasing_timestamps.append(action_id)
+        resource_action = data.ResourceAction(
+            environment=env.id,
+            version=i,
+            resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={i}"],
+            action_id=action_id,
+            action=const.ResourceAction.deploy,
+            started=motd_first_start_time + timedelta(minutes=i),
+        )
+        await resource_action.insert()
+        resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=i)])
+        await resource_action.save()
+    action_ids_with_increasing_timestamps = action_ids_with_increasing_timestamps[::-1]
+    for i in range(0, 11):
+        res1 = data.Resource.new(
+            environment=env.id,
+            resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
+            status=const.ResourceState.deployed,
+            last_deploy=datetime.now() + timedelta(minutes=i),
+            attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
+        )
+        await res1.insert()
+
+    result = await client.get_resource_actions(
+        tid=env.id,
+        resource_type="std::File",
+        attribute="path",
+        attribute_value="/etc/motd",
+        last_timestamp=motd_first_start_time + timedelta(minutes=7),
+        limit=2,
+    )
+    assert result.code == 200
+    resource_actions = result.result["data"]
+    expected_action_ids = [action_ids_with_increasing_timestamps[-1]] + action_ids_with_the_same_timestamp[:1]
+    assert [uuid.UUID(resource_action["action_id"]) for resource_action in resource_actions] == expected_action_ids
+
+    # Use the next link for pagination
+    next_page = result.result["links"]["next"]
+    port = opt.get_bind_port()
+    base_url = "http://localhost:%s" % (port,)
+    url = f"{base_url}{next_page}"
+    client = AsyncHTTPClient()
+    request = HTTPRequest(url=url, headers={"X-Inmanta-tid": str(env.id)},)
+    response = await client.fetch(request, raise_error=False)
+    assert response.code == 200
+    response = json.loads(response.body.decode("utf-8"))
+    second_page_action_ids = [uuid.UUID(resource_action["action_id"]) for resource_action in response["data"]]
+    assert second_page_action_ids == action_ids_with_the_same_timestamp[1:3]
+    next_page = response["links"]["next"]
+    url = f"{base_url}{next_page}"
+    request.url = url
+    response = await client.fetch(request, raise_error=False)
+    assert response.code == 200
+    response = json.loads(response.body.decode("utf-8"))
+    third_page_action_ids = [uuid.UUID(resource_action["action_id"]) for resource_action in response["data"]]
+    assert third_page_action_ids == action_ids_with_the_same_timestamp[3:5]
+    # Go back to the previous page
+    prev_page = response["links"]["prev"]
+    url = f"{base_url}{prev_page}"
+    request.url = url
+    response = await client.fetch(request, raise_error=False)
+    assert response.code == 200
+    response = json.loads(response.body.decode("utf-8"))
+    action_ids = [uuid.UUID(resource_action["action_id"]) for resource_action in response["data"]]
+    assert action_ids == second_page_action_ids
+    # And back to the third
+    prev_page = response["links"]["next"]
+    url = f"{base_url}{prev_page}"
+    request.url = url
+    response = await client.fetch(request, raise_error=False)
+    assert response.code == 200
+    response = json.loads(response.body.decode("utf-8"))
+    action_ids = [uuid.UUID(resource_action["action_id"]) for resource_action in response["data"]]
+    assert action_ids == third_page_action_ids
