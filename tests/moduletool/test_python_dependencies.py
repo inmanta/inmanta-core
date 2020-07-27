@@ -58,18 +58,19 @@ dummy-yummy # A comment
 
 
 def test_requirements_from_source_info(tmpdir):
+    """Test the code path used by the exporter"""
     common.makeproject(tmpdir, "test-project", deps=[("mod1", "")], imports=["mod1"])
     project_dir = os.path.join(tmpdir, "test-project")
     libs_dir = os.path.join(project_dir, "libs")
     common.makemodule(libs_dir, "mod1", project=False)
     mod1 = os.path.join(libs_dir, "mod1")
     mod1_req_txt = """# I'm a comment
-    pytest\
-    >=\
-    1.5
+pytest\
+>=\
+1.5
 
 
-    iplib>=0.0.1
+iplib>=0.0.1
 
         """
     common.add_file(mod1, "requirements.txt", mod1_req_txt, msg="initial commit")
@@ -77,7 +78,7 @@ def test_requirements_from_source_info(tmpdir):
     project.load_module("mod1")
     Project.set(project)
     requirements = SourceInfo(mod1, "inmanta_plugins.mod1").requires
-    assert "# I'm a comment" not in requirements
+    assert sorted(requirements) == sorted(["pytest>=1.5", "iplib>=0.0.1"])
     project.virtualenv.init_env()
     # This would fail if the comments weren't filtered out
     project.virtualenv.install_from_list(requirements)
