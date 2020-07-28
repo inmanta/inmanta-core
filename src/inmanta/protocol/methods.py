@@ -490,10 +490,10 @@ def get_resource_actions(
         :param last_timestamp: Limit the results to resource actions that started earlier
                 than the value of this parameter (exclusive).
                 Only the first_timestamp or last_timestamp parameter should be supplied
-        :return: the list of matching Resource Actions in a descending order.
+        :return: the list of matching Resource Actions in a descending order according to the 'started' timestamp.
                 If a limit was specified, also return the links to the next and previous pages.
                 The "next" page always refers to the actions that started earlier,
-                while the "prev" page refers to actions that started later, regardless of the sort_order.
+                while the "prev" page refers to actions that started later.
 
         :raises BadRequest: When the supplied parameters are not valid.
 

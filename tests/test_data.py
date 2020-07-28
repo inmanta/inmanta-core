@@ -2605,7 +2605,7 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     )
     assert len(resource_actions) == 4
     assert [resource_action.action_id for resource_action in resource_actions] == action_ids_with_the_same_timestamp[:4]
-    # Page forward
+    # Page forward in time
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
         resource_type="std::File",
