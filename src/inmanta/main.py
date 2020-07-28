@@ -821,20 +821,11 @@ def validate_resource_version_id(ctx: click.Context, param: str, value: str) -> 
 @resource_action_log.command(name="list")
 @click.option("--environment", "-e", help="The ID or name of the environment to use", required=True)
 @click.option(
-    "--rvid",
-    help="The resource version ID of the resource",
-    callback=validate_resource_version_id,
-    required=True,
+    "--rvid", help="The resource version ID of the resource", callback=validate_resource_version_id, required=True,
 )
-@click.option(
-    "--action",
-    help="Only list this resource action",
-    type=click.Choice([ra.value for ra in ResourceAction])
-)
+@click.option("--action", help="Only list this resource action", type=click.Choice([ra.value for ra in ResourceAction]))
 @click.pass_obj
-def resource_action_log_list(
-    client: Client, environment: str, rvid: ResourceVersionIdStr, action: Optional[str]
-) -> None:
+def resource_action_log_list(client: Client, environment: str, rvid: ResourceVersionIdStr, action: Optional[str]) -> None:
     tid = client.to_environment_id(environment)
     """
         List the resource action log for a specific Resource.
@@ -851,24 +842,18 @@ def resource_action_log_list(
 @resource_action_log.command(name="show-messages")
 @click.option("--environment", "-e", help="The ID or name of the environment to use", required=True)
 @click.option(
-    "--rvid",
-    help="The resource version ID of the resource",
-    callback=validate_resource_version_id,
-    required=True,
+    "--rvid", help="The resource version ID of the resource", callback=validate_resource_version_id, required=True,
 )
 @click.option("--action-id", type=click.UUID, help="The ID of the resource action record", required=True)
 @click.pass_obj
-def resource_action_log_show(
-    client: Client, environment: str, rvid: ResourceVersionIdStr, action_id: uuid.UUID
-) -> None:
+def resource_action_log_show(client: Client, environment: str, rvid: ResourceVersionIdStr, action_id: uuid.UUID) -> None:
     """
         Show the log messages for a specific entry in the resource action log.
     """
     tid = client.to_environment_id(environment)
     action_logs = [
         action_log
-        for action_log
-        in client.get_list("get_resource", "logs", arguments=dict(tid=tid, id=rvid, logs=True))
+        for action_log in client.get_list("get_resource", "logs", arguments=dict(tid=tid, id=rvid, logs=True))
         if action_log["action_id"] == str(action_id)
     ]
     if not action_logs:

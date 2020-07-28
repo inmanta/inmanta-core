@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import datetime
 import logging
 import os
 import uuid
@@ -22,12 +23,11 @@ from typing import Dict
 
 import pytest
 
-import datetime
+from conftest import get_resource
 from inmanta import data
+from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.util import get_compiler_version
 from utils import log_contains
-from inmanta.const import ResourceAction, ResourceState, Change
-from conftest import get_resource
 
 
 @pytest.mark.asyncio
@@ -375,12 +375,12 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
                 "msg": "Deployment failed",
                 "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
                 "args": [],
-                "status": ResourceState.failed.value
+                "status": ResourceState.failed.value,
             },
         ],
         changes={},
         change=Change.nochange,
-        send_events=False
+        send_events=False,
     )
     assert result.code == 200
     result = await agent._client.resource_action_update(
@@ -401,7 +401,7 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
         ],
         changes={},
         change=Change.nochange,
-        send_events=False
+        send_events=False,
     )
     assert result.code == 200
 
@@ -411,9 +411,7 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
     assert_nr_records_in_output_table(result.output, nr_records=2)  # 1 store action + 1 deploy action
 
     # Get deploy resource actions for resource1
-    result = await cli.run(
-        "action-log", "list", "-e", str(environment), "--rvid", resource1["id"], "--action", "deploy"
-    )
+    result = await cli.run("action-log", "list", "-e", str(environment), "--rvid", resource1["id"], "--action", "deploy")
     assert result.exit_code == 0
     assert_nr_records_in_output_table(result.output, nr_records=1)  # 1 deploy action
 
@@ -462,7 +460,7 @@ async def test_show_messages_actionlog(server, environment, client, cli, agent, 
         ],
         changes={},
         change=Change.nochange,
-        send_events=False
+        send_events=False,
     )
     assert result.code == 200
 
@@ -473,14 +471,7 @@ async def test_show_messages_actionlog(server, environment, client, cli, agent, 
     action_id = result.result["logs"][0]["action_id"]
 
     result = await cli.run(
-        "action-log",
-        "show-messages",
-        "-e",
-        str(environment),
-        "--rvid",
-        resource1["id"],
-        "--action-id",
-        str(action_id)
+        "action-log", "show-messages", "-e", str(environment), "--rvid", resource1["id"], "--action-id", str(action_id)
     )
     assert result.exit_code == 0
     assert "DEBUG Started deployment" in result.output
