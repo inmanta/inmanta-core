@@ -26,7 +26,7 @@ import pytest
 from inmanta import data
 from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.util import get_compiler_version
-from utils import log_contains, get_resource
+from utils import get_resource, log_contains
 
 
 @pytest.mark.asyncio

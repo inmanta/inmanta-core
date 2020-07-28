@@ -21,12 +21,11 @@ import json
 import logging
 import time
 import uuid
+from typing import Any, Dict
 
 from inmanta import data
 from inmanta.protocol import Client
 from inmanta.util import get_compiler_version
-
-from typing import Dict, Any
 
 
 async def retry_limited(fun, timeout):
