@@ -17,6 +17,7 @@
 """
 import abc
 import asyncio
+import asyncpg
 import datetime
 import json
 import logging
@@ -29,7 +30,7 @@ import uuid
 from asyncio import CancelledError, Task
 from itertools import chain
 from logging import Logger
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, mkstemp
 from typing import Dict, Hashable, List, Optional, Tuple, cast
 
 import dateutil
@@ -151,9 +152,12 @@ class CompileRun(object):
         else:
             return None
 
-    async def _run_compile_stage(self, name: str, cmd: List[str], cwd: str, env: Dict[str, str] = {}) -> data.Report:
+    async def _run_compile_stage(
+        self, name: str, cmd: List[str], cwd: str, env: Dict[str, str] = {}, compile_data_file: Optional[str] = None,
+    ) -> data.Report:
         await self._start_stage(name, " ".join(cmd))
 
+        returncode: int
         try:
             env_all = os.environ.copy()
             if env is not None:
@@ -165,10 +169,24 @@ class CompileRun(object):
 
             returncode = await self.drain(sub_process)
 
-            return await self._end_stage(returncode)
         except Exception as e:
             await self._error("".join(traceback.format_exception(type(e), e, e.__traceback__)))
-            return await self._end_stage(RETURNCODE_INTERNAL_ERROR)
+            returncode = RETURNCODE_INTERNAL_ERROR
+
+        finally:
+            if compile_data_file is not None:
+                with open(compile_data_file, "r") as file:
+                    compile_data_json: str = file.read()
+                    if compile_data_json:
+                        assert self.stage is not None
+                        try:
+                            await self.stage.update_fields(compile_data=compile_data_json)
+                        except asyncpg.InvalidTextRepresentationError:
+                            LOGGER.debug(
+                                "Failed to load compile data json for compile %s. Invalid json: '%s'",
+                                (self.request.id, compile_data_json),
+                            )
+            return await self._end_stage(returncode)
 
     async def run(self, force_update: Optional[bool] = False) -> bool:
         success = False
@@ -229,6 +247,8 @@ class CompileRun(object):
                     LOGGER.info("Installing and updating modules")
                     await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
 
+            _, compile_data_json_file = mkstemp()
+
             server_address = opt.server_address.get()
             server_port = opt.get_bind_port()
             cmd = inmanta_path + [
@@ -243,6 +263,9 @@ class CompileRun(object):
                 str(server_port),
                 "--metadata",
                 json.dumps(self.request.metadata),
+                "--compiler-json",
+                "--compiler-json-file",
+                compile_data_json_file,
             ]
 
             if not self.request.do_export:
@@ -267,7 +290,13 @@ class CompileRun(object):
             env_vars_compile: Dict[str, str] = os.environ.copy()
             env_vars_compile.update(self.request.environment_variables)
 
-            result = await self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=env_vars_compile)
+            result = await self._run_compile_stage(
+                "Recompiling configuration model",
+                cmd,
+                project_dir,
+                env=env_vars_compile,
+                compile_data_file=compile_data_json_file,
+            )
             success = result.returncode == 0
             if not success:
                 LOGGER.debug("Compile %s failed", self.request.id)

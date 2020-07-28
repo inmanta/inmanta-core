@@ -1359,6 +1359,7 @@ class Report(BaseDocument):
         :param name: The name of this step
         :param errstream: what was reported on system err
         :param outstream: what was reported on system out
+        :param compile_data: json data as exported by compiling with the --json parameter
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1368,6 +1369,7 @@ class Report(BaseDocument):
     name: str = Field(field_type=str, required=True)
     errstream: str = Field(field_type=str, default="")
     outstream: str = Field(field_type=str, default="")
+    compile_data: Optional[str] = Field(field_type=str)
     returncode: Optional[int] = Field(field_type=int)
     compile: uuid.UUID = Field(field_type=uuid.UUID, required=True)
 

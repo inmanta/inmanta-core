@@ -425,6 +425,19 @@ def export_parser_config(parser: ArgumentParser) -> None:
         default=None,
     )
 
+    parser.add_argument(
+        "--compile-json",
+        dest="compile_json",
+        help="Export structured json containing compile data such as occurred errors.",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--compile-json-file",
+        dest="compile_json_file",
+        help="File to export compile json to. If omitted %s is used." % compiler.config.default_json_file,
+    )
+
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
 def export(options: argparse.Namespace) -> None:
@@ -445,6 +458,12 @@ def export(options: argparse.Namespace) -> None:
 
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
+
+    if options.compile_json is True:
+        Config.set("compiler", "json", "true")
+
+    if options.compile_json_file is not None:
+        Config.set("compiler", "json_file", options.compile_json_file)
 
     # try to parse the metadata as json. If a normal string, create json for it.
     if options.metadata is not None and len(options.metadata) > 0:
