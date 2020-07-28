@@ -23,11 +23,10 @@ from typing import Dict
 
 import pytest
 
-from conftest import get_resource
 from inmanta import data
 from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.util import get_compiler_version
-from utils import log_contains
+from utils import log_contains, get_resource
 
 
 @pytest.mark.asyncio
