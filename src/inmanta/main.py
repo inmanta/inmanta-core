@@ -22,7 +22,7 @@ import os
 import uuid
 from collections import defaultdict
 from time import sleep
-from typing import Callable, Dict, List, Optional, cast, Any, Union
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 import click
 import texttable

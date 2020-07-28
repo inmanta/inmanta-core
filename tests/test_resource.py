@@ -20,7 +20,7 @@ import pytest
 
 from inmanta import resources
 from inmanta.ast import ExternalException
-from inmanta.resources import ResourceException, resource, Id
+from inmanta.resources import Id, ResourceException, resource
 
 
 class Base(resources.Resource):
