@@ -20,7 +20,7 @@ import pytest
 
 from inmanta import resources
 from inmanta.ast import ExternalException
-from inmanta.resources import ResourceException, resource
+from inmanta.resources import ResourceException, resource, Id
 
 
 class Base(resources.Resource):
@@ -302,3 +302,12 @@ def test_resource_invalid_agent_name_entity(snippetcompiler):
     )
     with pytest.raises(ExternalException):
         snippetcompiler.do_export()
+
+
+def test_is_resource_version_id():
+    """
+         Test whether the is_resource_version_id() method of the Id class works correctly.
+    """
+    assert Id.is_resource_version_id("test::Resource[agent,key=id],v=3")
+    assert not Id.is_resource_version_id("test::Resource[agent,key=id]")
+    assert not Id.is_resource_version_id("test::Resource")

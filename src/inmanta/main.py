@@ -22,7 +22,7 @@ import os
 import uuid
 from collections import defaultdict
 from time import sleep
-from typing import Callable, Dict, List, Optional, cast
+from typing import Callable, Dict, List, Optional, cast, Any, Union
 
 import click
 import texttable
@@ -91,11 +91,11 @@ class Client(object):
 
             raise Exception(("An error occurred while requesting %s" % key_name) + msg)
 
-    def get_list(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> List[Dict[str, str]]:
+    def get_list(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> List[Dict[str, Any]]:
         """
             Same as do request, but return type is a list of dicts
         """
-        return cast(List[Dict[str, str]], self.do_request(method_name, key_name, arguments, False))
+        return cast(List[Dict[str, Any]], self.do_request(method_name, key_name, arguments, False))
 
     def get_dict(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> Dict[str, str]:
         """
@@ -807,15 +807,12 @@ def resource_action_log(ctx: click.Context) -> None:
     pass
 
 
-def validate_resource_version_id(ctx: click.Context, param: str, value: str) -> ResourceVersionIdStr:
-    try:
-        rvid = Id.parse_id(value)
-    except Exception:
+def validate_resource_version_id(
+    ctx: click.Context, option: Union[click.Option, click.Parameter], value: Any
+) -> ResourceVersionIdStr:
+    if not Id.is_resource_version_id(value):
         raise click.BadParameter(value)
-    if rvid.resource_version_str() != value:
-        raise click.BadParameter(f"Version is missing in resource version id ({value})")
-    else:
-        return value
+    return value
 
 
 @resource_action_log.command(name="list")

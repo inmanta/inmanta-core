@@ -419,7 +419,7 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
     resource_id = resource1["id"].rsplit(",", maxsplit=1)[0]
     result = await cli.run("action-log", "list", "-e", str(environment), "--rvid", resource_id)
     assert result.exit_code != 0
-    assert "Invalid value for '--rvid': Version is missing in resource version id" in result.stderr
+    assert f"Invalid value for '--rvid': {resource_id}" in result.stderr
 
     # Incorrect format resource version id
     result = await cli.run("action-log", "list", "-e", str(environment), "--rvid", "test")

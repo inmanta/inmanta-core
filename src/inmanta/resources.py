@@ -476,6 +476,11 @@ PARSE_ID_REGEX = re.compile(
     r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\])(,v=(?P<version>[0-9]+))?$"
 )
 
+PARSE_RVID_REGEX = re.compile(
+    r"^(?P<id>(?P<type>(?P<ns>[\w-]+::)+(?P<class>[\w-]+))\[(?P<hostname>[^,]+),"
+    r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\]),v=(?P<version>[0-9]+)$"
+)
+
 
 class Id(object):
     """
@@ -599,6 +604,14 @@ class Id(object):
 
         id_obj = Id(parts["type"], parts["hostname"], parts["attr"], parts["value"], version)
         return id_obj
+
+    @classmethod
+    def is_resource_version_id(cls, value: str) -> bool:
+        """
+            Check whether the given value is a resource version id
+        """
+        result = PARSE_RVID_REGEX.search(value)
+        return result is not None
 
     entity_type = property(get_entity_type)
     agent_name = property(get_agent_name)
