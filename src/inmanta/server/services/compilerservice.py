@@ -17,7 +17,6 @@
 """
 import abc
 import asyncio
-import asyncpg
 import datetime
 import json
 import logging
@@ -35,9 +34,11 @@ from typing import Dict, Hashable, List, Optional, Tuple, cast
 
 import dateutil
 import dateutil.parser
+import pydantic
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
+from inmanta.compiler.data import ExportCompileData
 from inmanta.protocol import encode_token, methods
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.server import config as opt
@@ -152,12 +153,9 @@ class CompileRun(object):
         else:
             return None
 
-    async def _run_compile_stage(
-        self, name: str, cmd: List[str], cwd: str, env: Dict[str, str] = {}, compile_data_file: Optional[str] = None,
-    ) -> data.Report:
+    async def _run_compile_stage(self, name: str, cmd: List[str], cwd: str, env: Dict[str, str] = {}) -> data.Report:
         await self._start_stage(name, " ".join(cmd))
 
-        returncode: int
         try:
             env_all = os.environ.copy()
             if env is not None:
@@ -168,27 +166,13 @@ class CompileRun(object):
             )
 
             returncode = await self.drain(sub_process)
+            return await self._end_stage(returncode)
 
         except Exception as e:
             await self._error("".join(traceback.format_exception(type(e), e, e.__traceback__)))
-            returncode = RETURNCODE_INTERNAL_ERROR
+            return await self._end_stage(RETURNCODE_INTERNAL_ERROR)
 
-        finally:
-            if compile_data_file is not None:
-                with open(compile_data_file, "r") as file:
-                    compile_data_json: str = file.read()
-                    if compile_data_json:
-                        assert self.stage is not None
-                        try:
-                            await self.stage.update_fields(compile_data=compile_data_json)
-                        except asyncpg.InvalidTextRepresentationError:
-                            LOGGER.debug(
-                                "Failed to load compile data json for compile %s. Invalid json: '%s'",
-                                (self.request.id, compile_data_json),
-                            )
-            return await self._end_stage(returncode)
-
-    async def run(self, force_update: Optional[bool] = False) -> bool:
+    async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, Optional[ExportCompileData]]:
         success = False
         now = datetime.datetime.now()
         await self.request.update_fields(started=now)
@@ -207,7 +191,7 @@ class CompileRun(object):
             if env is None:
                 await self._error("Environment %s does not exist." % environment_id)
                 await self._end_stage(-1)
-                return False
+                return False, None
 
             inmanta_path = [sys.executable, "-m", "inmanta.app"]
 
@@ -231,7 +215,7 @@ class CompileRun(object):
                         cmd.extend(["-b", repo_branch])
                     result = await self._run_compile_stage("Cloning repository", cmd, project_dir)
                     if result.returncode is None or result.returncode > 0:
-                        return False
+                        return False, None
 
                 elif force_update or self.request.force_update:
                     result = await self._run_compile_stage("Fetching changes", ["git", "fetch", repo_url], project_dir)
@@ -290,13 +274,7 @@ class CompileRun(object):
             env_vars_compile: Dict[str, str] = os.environ.copy()
             env_vars_compile.update(self.request.environment_variables)
 
-            result = await self._run_compile_stage(
-                "Recompiling configuration model",
-                cmd,
-                project_dir,
-                env=env_vars_compile,
-                compile_data_file=compile_data_json_file,
-            )
+            result = await self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=env_vars_compile)
             success = result.returncode == 0
             if not success:
                 LOGGER.debug("Compile %s failed", self.request.id)
@@ -314,7 +292,22 @@ class CompileRun(object):
             LOGGER.exception("An error occured while recompiling")
 
         finally:
-            return success
+            with open(compile_data_json_file, "r") as file:
+                compile_data_json: str = file.read()
+                if compile_data_json:
+                    try:
+                        return success, ExportCompileData.parse_raw(compile_data_json)
+                    except json.JSONDecodeError:
+                        LOGGER.debug(
+                            "Failed to load compile data json for compile %s. Invalid json: '%s'",
+                            (self.request.id, compile_data_json),
+                        )
+                    except pydantic.ValidationError:
+                        LOGGER.debug(
+                            "Failed to parse compile data for compile %s. Json does not match ExportCompileData model: '%s'",
+                            (self.request.id, compile_data_json),
+                        )
+            return success, None
 
 
 class CompilerService(ServerSlice):
@@ -496,15 +489,22 @@ class CompilerService(ServerSlice):
 
         runner = self._get_compile_runner(compile, project_dir=os.path.join(self._env_folder, str(compile.environment)))
         # set force_update == True iff any compile request has force_update == True
-        success = await runner.run(force_update=any(c.force_update for c in chain([compile], merge_candidates)))
+        compile_data: Optional[ExportCompileData]
+        success, compile_data = await runner.run(force_update=any(c.force_update for c in chain([compile], merge_candidates)))
 
         version = runner.version
 
         end = datetime.datetime.now()
-        await compile.update_fields(completed=end, success=success, version=version)
+        compile_data_json: Optional[str] = None if compile_data is None else compile_data.json()
+        await compile.update_fields(completed=end, success=success, version=version, compile_data=compile_data_json)
         awaitables = [
             merge_candidate.update_fields(
-                started=compile.started, completed=end, success=success, version=version, substitute_compile_id=compile.id
+                started=compile.started,
+                completed=end,
+                success=success,
+                version=version,
+                substitute_compile_id=compile.id,
+                compile_data=compile_data_json,
             )
             for merge_candidate in merge_candidates
         ]

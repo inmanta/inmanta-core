@@ -1359,7 +1359,6 @@ class Report(BaseDocument):
         :param name: The name of this step
         :param errstream: what was reported on system err
         :param outstream: what was reported on system out
-        :param compile_data: json data as exported by compiling with the --json parameter
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1369,7 +1368,6 @@ class Report(BaseDocument):
     name: str = Field(field_type=str, required=True)
     errstream: str = Field(field_type=str, default="")
     outstream: str = Field(field_type=str, default="")
-    compile_data: Optional[str] = Field(field_type=str)
     returncode: Optional[int] = Field(field_type=int)
     compile: uuid.UUID = Field(field_type=uuid.UUID, required=True)
 
@@ -1400,6 +1398,7 @@ class Compile(BaseDocument):
         :param handled: were all registered handlers executed?
         :param version: version exported by this compile
         :param remote_id: id as given by the requestor, used by the requestor to distinguish between different requests
+        :param compile_data: json data as exported by compiling with the --json parameter
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1421,6 +1420,8 @@ class Compile(BaseDocument):
     # Compile queue might be collapsed if it contains similar compile requests.
     # In that case, substitute_compile_id will reference the actually compiled request.
     substitute_compile_id: Optional[uuid.UUID] = Field(field_type=uuid.UUID)
+
+    compile_data: Optional[str] = Field(field_type=str)
 
     @classmethod
     async def get_reports(

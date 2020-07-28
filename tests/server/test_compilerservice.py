@@ -103,7 +103,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
             self.started = True
             await self.lock.acquire()
             self.done = True
-            return True
+            return True, None
 
         def release(self):
             self.lock.release()
