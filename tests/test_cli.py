@@ -344,6 +344,7 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
     """
         Test the `inmanta-cli action-log list` command.
     """
+
     def assert_nr_records_in_output_table(output: str, nr_records: int) -> None:
         lines = [line.strip() for line in output.split("\n") if line.strip() and line.strip().startswith("|")]
         actual_nr_of_records = len(lines) - 1  # Exclude the header
