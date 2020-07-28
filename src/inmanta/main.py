@@ -29,8 +29,8 @@ import texttable
 
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
-from inmanta.const import TIME_ISOFMT, AgentAction, AgentTriggerMethod
-from inmanta.resources import Id
+from inmanta.const import TIME_ISOFMT, AgentAction, AgentTriggerMethod, ResourceAction
+from inmanta.resources import Id, ResourceVersionIdStr
 from inmanta.types import JsonType
 
 
@@ -799,6 +799,83 @@ def bootstrap_token(client: Client) -> None:
         Generate a bootstrap token that provides access to everything. This token is only valid for 3600 seconds.
     """
     click.echo("Token: " + protocol.encode_token(["api", "compiler", "agent"], expire=3600))
+
+
+@cmd.group("action-log", help="Subcommand to view the resource action log")
+@click.pass_context
+def resource_action_log(ctx: click.Context) -> None:
+    pass
+
+
+def validate_resource_version_id(ctx: click.Context, param: str, value: str) -> ResourceVersionIdStr:
+    try:
+        rvid = Id.parse_id(value)
+    except Exception:
+        raise click.BadParameter(value)
+    if rvid.resource_version_str() != value:
+        raise click.BadParameter(f"Version is missing in resource version id ({value})")
+    else:
+        return value
+
+
+@resource_action_log.command(name="list")
+@click.option("--environment", "-e", help="The ID or name of the environment to use", required=True)
+@click.option(
+    "--rvid",
+    help="The resource version ID of the resource",
+    callback=validate_resource_version_id,
+    required=True,
+)
+@click.option(
+    "--action",
+    help="Only list this resource action",
+    type=click.Choice([ra.value for ra in ResourceAction])
+)
+@click.pass_obj
+def resource_action_log_list(
+    client: Client, environment: str, rvid: ResourceVersionIdStr, action: Optional[str]
+) -> None:
+    tid = client.to_environment_id(environment)
+    """
+        List the resource action log for a specific Resource.
+    """
+    ra_logs = client.get_list("get_resource", "logs", arguments=dict(tid=tid, id=rvid, logs=True, log_action=action))
+    headers = ["Action ID", "Action", "Started", "Finished", "Status"]
+    rows = [[log["action_id"], log["action"], log["started"], log["finished"], log.get("status", "")] for log in ra_logs]
+    if rows:
+        print_table(headers, rows)
+    else:
+        click.echo("No resource action log entry found.")
+
+
+@resource_action_log.command(name="show-messages")
+@click.option("--environment", "-e", help="The ID or name of the environment to use", required=True)
+@click.option(
+    "--rvid",
+    help="The resource version ID of the resource",
+    callback=validate_resource_version_id,
+    required=True,
+)
+@click.option("--action-id", type=click.UUID, help="The ID of the resource action record", required=True)
+@click.pass_obj
+def resource_action_log_show(
+    client: Client, environment: str, rvid: ResourceVersionIdStr, action_id: uuid.UUID
+) -> None:
+    """
+        Show the log messages for a specific entry in the resource action log.
+    """
+    tid = client.to_environment_id(environment)
+    action_logs = [
+        action_log
+        for action_log
+        in client.get_list("get_resource", "logs", arguments=dict(tid=tid, id=rvid, logs=True))
+        if action_log["action_id"] == str(action_id)
+    ]
+    if not action_logs:
+        click.echo(f"No log messages found for action-id {action_id}")
+    else:
+        for msg in action_logs[0]["messages"]:
+            click.echo(f"{msg['timestamp']} {msg['level']} {msg['msg']}")
 
 
 def main() -> None:

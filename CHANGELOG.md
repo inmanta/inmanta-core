@@ -4,6 +4,7 @@
 - Added merging of similar compile requests to the compile queue (#2137)
 - Export all handler's / resource's module's plugin source files so helper functions can be used from sibling modules (#2162)
 - Added documentation on how a string is matched against a regex defined in a regex-based typedef (#2214)
+- Added support to query the resource action log of a resource via the CLI (#2253)
 
 ## Bug fixes
 - Restore support to pass mocking information to the compiler

@@ -479,7 +479,7 @@ PARSE_ID_REGEX = re.compile(
 
 class Id(object):
     """
-        A unique id that idenfies a resource that is managed by an agent
+        A unique id that identifies a resource that is managed by an agent
     """
 
     def __init__(self, entity_type: str, agent_name: str, attribute: str, attribute_value: str, version: int = 0) -> None:

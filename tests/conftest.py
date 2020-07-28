@@ -979,3 +979,14 @@ async def mocked_compiler_service_block(server, monkeypatch):
     monkey_patch_compiler_service(monkeypatch, server, True, runner_queue)
 
     yield runner_queue
+
+
+def get_resource(version, key="key1", agent="agent1", value="value1"):
+    return {
+        "key": key,
+        "value": value,
+        "id": f"test::Resource[{agent},key={key}],v=%d" % version,
+        "send_event": False,
+        "purged": False,
+        "requires": [],
+    }
