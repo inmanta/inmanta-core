@@ -341,6 +341,9 @@ async def test_pause_agent(server, cli):
 
 @pytest.mark.asyncio
 async def test_list_actionlog(server, environment, client, cli, agent, clienthelper):
+    """
+        Test the `inmanta-cli action-log list` command.
+    """
     def assert_nr_records_in_output_table(output: str, nr_records: int) -> None:
         lines = [line.strip() for line in output.split("\n") if line.strip() and line.strip().startswith("|")]
         actual_nr_of_records = len(lines) - 1  # Exclude the header
@@ -428,6 +431,9 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
 
 @pytest.mark.asyncio
 async def test_show_messages_actionlog(server, environment, client, cli, agent, clienthelper):
+    """
+        Test the `inmanta-cli action-log show-messages` command.
+    """
     result = await client.reserve_version(tid=environment)
     assert result.code == 200
     version = result.result["data"]
