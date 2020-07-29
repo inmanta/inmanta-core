@@ -889,22 +889,18 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
         resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=i)])
         await resource_action.save()
     action_ids_with_the_same_timestamp = sorted(action_ids_with_the_same_timestamp, reverse=True)
-    action_ids_with_increasing_timestamps = []
-    for i in range(6, 11):
-        action_id = uuid.uuid4()
-        action_ids_with_increasing_timestamps.append(action_id)
-        resource_action = data.ResourceAction(
-            environment=env.id,
-            version=i,
-            resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={i}"],
-            action_id=action_id,
-            action=const.ResourceAction.deploy,
-            started=motd_first_start_time + timedelta(minutes=i),
-        )
-        await resource_action.insert()
-        resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=i)])
-        await resource_action.save()
-    action_ids_with_increasing_timestamps = action_ids_with_increasing_timestamps[::-1]
+    later_action_id = uuid.uuid4()
+    resource_action = data.ResourceAction(
+        environment=env.id,
+        version=6,
+        resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={6}"],
+        action_id=later_action_id,
+        action=const.ResourceAction.deploy,
+        started=motd_first_start_time + timedelta(minutes=6),
+    )
+    await resource_action.insert()
+    resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=6)])
+    await resource_action.save()
     for i in range(0, 11):
         res1 = data.Resource.new(
             environment=env.id,
@@ -925,7 +921,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     )
     assert result.code == 200
     resource_actions = result.result["data"]
-    expected_action_ids = [action_ids_with_increasing_timestamps[-1]] + action_ids_with_the_same_timestamp[:1]
+    expected_action_ids = [later_action_id] + action_ids_with_the_same_timestamp[:1]
     assert [uuid.UUID(resource_action["action_id"]) for resource_action in resource_actions] == expected_action_ids
 
     # Use the next link for pagination
