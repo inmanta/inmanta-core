@@ -400,7 +400,7 @@ def get_resource(
         :param tid: The id of the environment this resource belongs to
         :param id: Get the resource with the given id
         :param logs: Include the logs in the response
-        :param status: return only resources of this status
+        :param status: Only return the status of the resource
         :param log_action: The log action to include, leave empty/none for all actions. Valid actions are one of
                           the action strings in const.ResourceAction
         :param log_limit: Limit the number of logs included in the response
