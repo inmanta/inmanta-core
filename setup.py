@@ -4,7 +4,7 @@ from os import path
 requires = [
     "asyncpg",
     "click",
-    "click-plugins"
+    "click-plugins",
     "colorlog",
     "execnet",
     "netifaces",
