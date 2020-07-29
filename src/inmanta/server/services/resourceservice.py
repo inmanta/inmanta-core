@@ -630,5 +630,3 @@ class ResourceService(protocol.ServerSlice):
             links["prev"] = url_concat(base_url, previous_params)
         return_value = ReturnValue(response=resource_action_dtos, links=links if links else None)
         return return_value
-
-
