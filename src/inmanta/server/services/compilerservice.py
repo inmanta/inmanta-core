@@ -29,7 +29,7 @@ import uuid
 from asyncio import CancelledError, Task
 from itertools import chain
 from logging import Logger
-from tempfile import NamedTemporaryFile, mkstemp
+from tempfile import NamedTemporaryFile
 from typing import Dict, Hashable, List, Optional, Tuple, cast
 
 import dateutil
@@ -231,7 +231,7 @@ class CompileRun(object):
                     LOGGER.info("Installing and updating modules")
                     await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
 
-            _, compile_data_json_file = mkstemp()
+            compile_data_json_file = NamedTemporaryFile()
 
             server_address = opt.server_address.get()
             server_port = opt.get_bind_port()
@@ -249,7 +249,7 @@ class CompileRun(object):
                 json.dumps(self.request.metadata),
                 "--compiler-json",
                 "--compiler-json-file",
-                compile_data_json_file,
+                compile_data_json_file.name,
             ]
 
             if not self.request.do_export:
@@ -292,8 +292,8 @@ class CompileRun(object):
             LOGGER.exception("An error occured while recompiling")
 
         finally:
-            with open(compile_data_json_file, "r") as file:
-                compile_data_json: str = file.read()
+            with compile_data_json_file as file:
+                compile_data_json: str = file.read().decode()
                 if compile_data_json:
                     try:
                         return success, ExportCompileData.parse_raw(compile_data_json)
