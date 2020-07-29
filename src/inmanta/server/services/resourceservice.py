@@ -596,9 +596,29 @@ class ResourceService(protocol.ServerSlice):
         if first_timestamp:
             resource_action_dtos = sorted(resource_action_dtos, key=lambda ra: (ra.started, ra.action_id), reverse=True)
         links = {}
+
+        def _get_query_params(
+            resource_type: Optional[str] = None,
+            agent: Optional[str] = None,
+            attribute: Optional[str] = None,
+            attribute_value: Optional[str] = None,
+            log_severity: Optional[str] = None,
+            limit: Optional[int] = 0,
+        ) -> dict:
+            query_params = {
+                "resource_type": resource_type,
+                "agent": agent,
+                "attribute": attribute,
+                "attribute_value": attribute_value,
+                "log_severity": log_severity,
+                "limit": limit,
+            }
+            query_params = {param_key: param_value for param_key, param_value in query_params.items() if param_value}
+            return query_params
+
         if limit and resource_action_dtos:
             base_url = "/api/v1/resource_actions"
-            common_query_params = self._get_query_params(resource_type, agent, attribute, attribute_value, log_severity, limit)
+            common_query_params = _get_query_params(resource_type, agent, attribute, attribute_value, log_severity, limit)
             # Next is always earlier with regards to 'started' time
             next_params = common_query_params.copy()
             next_params["last_timestamp"] = resource_action_dtos[-1].started
@@ -611,22 +631,4 @@ class ResourceService(protocol.ServerSlice):
         return_value = ReturnValue(response=resource_action_dtos, links=links if links else None)
         return return_value
 
-    def _get_query_params(
-        self,
-        resource_type: Optional[str] = None,
-        agent: Optional[str] = None,
-        attribute: Optional[str] = None,
-        attribute_value: Optional[str] = None,
-        log_severity: Optional[str] = None,
-        limit: Optional[int] = 0,
-    ) -> dict:
-        query_params = {
-            "resource_type": resource_type,
-            "agent": agent,
-            "attribute": attribute,
-            "attribute_value": attribute_value,
-            "log_severity": log_severity,
-            "limit": limit,
-        }
-        query_params = {param_key: param_value for param_key, param_value in query_params.items() if param_value}
-        return query_params
+
