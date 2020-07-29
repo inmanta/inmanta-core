@@ -20,7 +20,7 @@ import pytest
 
 from inmanta import resources
 from inmanta.ast import ExternalException
-from inmanta.resources import Id, ResourceException, resource, PARSE_ID_REGEX, PARSE_RVID_REGEX
+from inmanta.resources import PARSE_ID_REGEX, PARSE_RVID_REGEX, Id, ResourceException, resource
 
 
 class Base(resources.Resource):
