@@ -592,7 +592,9 @@ class ResourceService(protocol.ServerSlice):
             last_timestamp=last_timestamp,
         )
         resource_action_dtos = [resource_action.to_dto() for resource_action in resource_actions]
-        resource_action_dtos = sorted(resource_action_dtos, key=lambda ra: (ra.started, ra.action_id), reverse=True)
+        # Return the results consistently in a descending order, whether we are paging forward or backward
+        if first_timestamp:
+            resource_action_dtos = sorted(resource_action_dtos, key=lambda ra: (ra.started, ra.action_id), reverse=True)
         links = {}
         if limit and resource_action_dtos:
             base_url = "/api/v1/resource_actions"
