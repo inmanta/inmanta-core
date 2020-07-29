@@ -823,10 +823,10 @@ def validate_resource_version_id(
 @click.option("--action", help="Only list this resource action", type=click.Choice([ra.value for ra in ResourceAction]))
 @click.pass_obj
 def resource_action_log_list(client: Client, environment: str, rvid: ResourceVersionIdStr, action: Optional[str]) -> None:
-    tid = client.to_environment_id(environment)
     """
         List the resource action log for a specific Resource.
     """
+    tid = client.to_environment_id(environment)
     ra_logs = client.get_list("get_resource", "logs", arguments=dict(tid=tid, id=rvid, logs=True, log_action=action))
     headers = ["Action ID", "Action", "Started", "Finished", "Status"]
     rows = [[log["action_id"], log["action"], log["started"], log["finished"], log.get("status", "")] for log in ra_logs]
