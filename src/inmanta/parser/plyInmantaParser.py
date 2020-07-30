@@ -60,7 +60,6 @@ namespace = None
 
 precedence = (
     ("right", ","),
-    ("nonassoc", "MATCHING"),
     ("nonassoc", ":"),
     ("nonassoc", "?"),
     ("left", "OR"),
