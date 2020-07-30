@@ -61,8 +61,8 @@ namespace = None
 precedence = (
     ("right", ","),
     ("nonassoc", "MATCHING"),
-    ("nonassoc", "ELSE"),
-    ("nonassoc", "IF"),
+    ("nonassoc", ":"),
+    ("nonassoc", "?"),
     ("left", "OR"),
     ("left", "AND"),
     ("left", "CMP_OP"),
@@ -680,8 +680,8 @@ def p_short_index_lookup(p: YaccProduction) -> None:
 
 
 def p_conditional_expression(p: YaccProduction) -> None:
-    " conditional_expression : expression IF expression ELSE expression"
-    p[0] = ConditionalExpression(p[3], p[1], p[5])
+    " conditional_expression : expression '?' expression ':' expression"
+    p[0] = ConditionalExpression(p[1], p[3], p[5])
     attach_from_string(p, 1)
 
 

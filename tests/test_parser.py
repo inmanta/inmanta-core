@@ -1797,7 +1797,7 @@ def test_conditional_expression():
     statements = parse_code(
         """
 y = 42
-x = y if y > 0 else -1 if y < 0 else 0
+x = y > 0 ? y : y < 0 ? -1 : 0
         """
     )
     assert len(statements) == 2
