@@ -6,6 +6,7 @@
 - Added documentation on how a string is matched against a regex defined in a regex-based typedef (#2214)
 - Added support to query the resource action log of a resource via the CLI (#2253)
 - Add support for inmanta-cli click plugins
+- Added link to the PDF version of the documentation
 
 ## Bug fixes
 - Restore support to pass mocking information to the compiler
