@@ -2470,7 +2470,7 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
         first_timestamp=motd_first_start_time,
     )
     assert len(resource_actions) == 5
-    assert [resource_action.version for resource_action in resource_actions] == [version, 1, 2, 3, 4]
+    assert [resource_action.version for resource_action in resource_actions] == [4, 3, 2, 1, version]
 
     # Query actions with WARNING level logs
     resource_actions = await data.ResourceAction.query_resource_actions(env.id, log_severity="WARNING")
@@ -2594,7 +2594,6 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     ]
 
     # Query actions going forward in time
-    action_ids_with_the_same_timestamp = action_ids_with_the_same_timestamp[::-1]
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
         resource_type="std::File",
@@ -2604,7 +2603,7 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
         first_timestamp=motd_first_start_time - datetime.timedelta(seconds=30),
     )
     assert len(resource_actions) == 4
-    assert [resource_action.action_id for resource_action in resource_actions] == action_ids_with_the_same_timestamp[:4]
+    assert [resource_action.action_id for resource_action in resource_actions] == action_ids_with_the_same_timestamp[1:5]
     # Page forward in time
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
@@ -2612,12 +2611,10 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
         attribute="path",
         attribute_value="/etc/motd",
         limit=4,
-        action_id=resource_actions[-1].action_id,
-        first_timestamp=resource_actions[-1].started,
+        action_id=resource_actions[0].action_id,
+        first_timestamp=resource_actions[0].started,
     )
     assert len(resource_actions) == 4
-    # The last of the ones that share a timestamp
-    expected_ids_on_page = [action_ids_with_the_same_timestamp[-1]]
-    # First three of the next ones
-    expected_ids_on_page.extend(action_ids_with_increasing_timestamps[::-1][:3])
+    #  First three of the increasing ones and the first of the ones that share a timestamp
+    expected_ids_on_page = action_ids_with_increasing_timestamps[2:] + [action_ids_with_the_same_timestamp[0]]
     assert [resource_action.action_id for resource_action in resource_actions] == expected_ids_on_page

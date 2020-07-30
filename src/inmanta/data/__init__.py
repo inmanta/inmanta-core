@@ -1771,6 +1771,9 @@ class ResourceAction(BaseDocument):
             query += " LIMIT $%d" % parameter_index
             values.append(cls._get_value(limit))
             parameter_index += 1
+        if first_timestamp:
+            query = f"""SELECT * FROM ({query}) AS matching_actions
+                        ORDER BY matching_actions.started DESC, matching_actions.action_id DESC"""
 
         async with cls._connection_pool.acquire() as con:
             async with con.transaction():
