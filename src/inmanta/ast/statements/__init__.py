@@ -148,7 +148,7 @@ class Resumer(ExpressionStatement):
 
 
 class RawResumer(ExpressionStatement):
-    def resume(self, equires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
+    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> None:
         pass
 
 

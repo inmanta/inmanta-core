@@ -36,11 +36,19 @@ from inmanta.ast import (
     TypingException,
 )
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import DynamicStatement, ExpressionStatement
+from inmanta.ast.statements import DynamicStatement, ExpressionStatement, RawResumer
 from inmanta.ast.statements.assign import SetAttributeHelper
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver, ResultCollector, ResultVariable
+from inmanta.execute.runtime import (
+    ExecutionContext,
+    ExecutionUnit,
+    QueueScheduler,
+    RawUnit,
+    Resolver,
+    ResultCollector,
+    ResultVariable,
+)
 from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
 
@@ -263,6 +271,77 @@ class If(ExpressionStatement):
     def nested_blocks(self) -> Iterator["BasicBlock"]:
         yield self.if_branch
         yield self.else_branch
+
+
+class ConditionalExpression(RawResumer, ExpressionStatement):
+    """
+        A conditional expression similar to Python's `x if c else y`.
+    """
+
+    def __init__(
+        self, condition: ExpressionStatement, if_expression: ExpressionStatement, else_expression: ExpressionStatement
+    ) -> None:
+        super().__init__()
+        self.condition: ExpressionStatement = condition
+        self.if_expression: ExpressionStatement = if_expression
+        self.else_expression: ExpressionStatement = else_expression
+        self.anchors.extend(condition.get_anchors())
+        self.anchors.extend(if_expression.get_anchors())
+        self.anchors.extend(else_expression.get_anchors())
+        self.condition_value: Optional[bool] = None
+        # This ResultVariable will receive the result of this expression
+        self.result: ResultVariable = ResultVariable()
+        self.result.set_provider(self)
+
+    def normalize(self) -> None:
+        self.condition.normalize()
+        self.if_expression.normalize()
+        self.else_expression.normalize()
+
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        # Schedule execution to resume when the condition can be executed
+        RawUnit(queue, resolver, self.condition.requires_emit(resolver, queue), self)
+
+        # Wait for the result variable to be populated
+        return {self: self.result}
+
+    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> None:
+        if self.condition_value is None:
+            condition_value: object = self.condition.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue)
+            if isinstance(condition_value, Unknown):
+                self.result.set_value(Unknown(self), self.location)
+                return
+            if not isinstance(condition_value, bool):
+                raise RuntimeException(
+                    self, "Invalid value `%s`: the condition for a conditional expression must be a boolean expression"
+                )
+            self.condition_value = condition_value
+
+            # Schedule execution of appropriate subexpression
+            RawUnit(
+                queue,
+                resolver,
+                (self.if_expression if self.condition_value else self.else_expression).requires_emit(resolver, queue),
+                self,
+            )
+        else:
+            value: object = (self.if_expression if self.condition_value else self.else_expression).execute(
+                {k: v.get_value() for k, v in requires.items()}, resolver, queue
+            )
+            self.result.set_value(value, self.location)
+
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        return requires[self]
+
+    def pretty_print(self) -> str:
+        return "%s if %s else %s" % (
+            self.if_expression.pretty_print(),
+            self.condition.pretty_print(),
+            self.else_expression.pretty_print(),
+        )
+
+    def __repr__(self) -> str:
+        return "%s if %s else %s" % (self.if_expression, self.condition, self.else_expression)
 
 
 class Constructor(ExpressionStatement):
