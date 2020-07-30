@@ -18,10 +18,10 @@
 
 import typing
 from functools import reduce
-from more_itertools import pairwise
 from typing import Tuple
 
 import pytest
+from more_itertools import pairwise
 
 from inmanta.ast import Namespace, RuntimeException
 from inmanta.ast.attribute import Attribute
