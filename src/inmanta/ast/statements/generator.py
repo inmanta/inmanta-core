@@ -298,6 +298,9 @@ class ConditionalExpression(RawResumer, ExpressionStatement):
         self.if_expression.normalize()
         self.else_expression.normalize()
 
+    def requires(self) -> List[str]:
+        return list(chain.from_iterable(sub.requires() for sub in [self.condition, self.if_expression, self.else_expression]))
+
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         # Schedule execution to resume when the condition can be executed
         RawUnit(queue, resolver, self.condition.requires_emit(resolver, queue), self)
@@ -333,15 +336,25 @@ class ConditionalExpression(RawResumer, ExpressionStatement):
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
 
+    def execute_direct(self, requires: Dict[object, object]) -> object:
+        condition_value: object = self.condition.execute_direct(requires)
+        if isinstance(condition_value, Unknown):
+            return Unknown(self)
+        if not isinstance(condition_value, bool):
+            raise RuntimeException(
+                self, "Invalid value `%s`: the condition for a conditional expression must be a boolean expression"
+            )
+        return (self.if_expression if condition_value else self.else_expression).execute_direct(requires)
+
     def pretty_print(self) -> str:
-        return "%s if %s else %s" % (
-            self.if_expression.pretty_print(),
+        return "%s ? %s : %s" % (
             self.condition.pretty_print(),
+            self.if_expression.pretty_print(),
             self.else_expression.pretty_print(),
         )
 
     def __repr__(self) -> str:
-        return "%s if %s else %s" % (self.if_expression, self.condition, self.else_expression)
+        return "%s ? %s : %s" % (self.condition, self.if_expression, self.else_expression)
 
 
 class Constructor(ExpressionStatement):
