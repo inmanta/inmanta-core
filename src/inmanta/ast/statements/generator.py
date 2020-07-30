@@ -273,7 +273,7 @@ class If(ExpressionStatement):
         yield self.else_branch
 
 
-class ConditionalExpression(RawResumer, ExpressionStatement):
+class ConditionalExpression(ExpressionStatement):
     """
         A conditional expression similar to Python's `x if c else y`.
     """
@@ -288,10 +288,6 @@ class ConditionalExpression(RawResumer, ExpressionStatement):
         self.anchors.extend(condition.get_anchors())
         self.anchors.extend(if_expression.get_anchors())
         self.anchors.extend(else_expression.get_anchors())
-        self.condition_value: Optional[bool] = None
-        # This ResultVariable will receive the result of this expression
-        self.result: ResultVariable = ResultVariable()
-        self.result.set_provider(self)
 
     def normalize(self) -> None:
         self.condition.normalize()
@@ -302,36 +298,17 @@ class ConditionalExpression(RawResumer, ExpressionStatement):
         return list(chain.from_iterable(sub.requires() for sub in [self.condition, self.if_expression, self.else_expression]))
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        # This ResultVariable will receive the result of this expression
+        result: ResultVariable = ResultVariable()
+        result.set_provider(self)
+
         # Schedule execution to resume when the condition can be executed
-        RawUnit(queue, resolver, self.condition.requires_emit(resolver, queue), self)
+        resumer: RawResumer = ConditionalExpressionResumer(self, result)
+        self.copy_location(resumer)
+        RawUnit(queue, resolver, self.condition.requires_emit(resolver, queue), resumer)
 
         # Wait for the result variable to be populated
-        return {self: self.result}
-
-    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> None:
-        if self.condition_value is None:
-            condition_value: object = self.condition.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue)
-            if isinstance(condition_value, Unknown):
-                self.result.set_value(Unknown(self), self.location)
-                return
-            if not isinstance(condition_value, bool):
-                raise RuntimeException(
-                    self, "Invalid value `%s`: the condition for a conditional expression must be a boolean expression"
-                )
-            self.condition_value = condition_value
-
-            # Schedule execution of appropriate subexpression
-            RawUnit(
-                queue,
-                resolver,
-                (self.if_expression if self.condition_value else self.else_expression).requires_emit(resolver, queue),
-                self,
-            )
-        else:
-            value: object = (self.if_expression if self.condition_value else self.else_expression).execute(
-                {k: v.get_value() for k, v in requires.items()}, resolver, queue
-            )
-            self.result.set_value(value, self.location)
+        return {self: result}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
@@ -355,6 +332,41 @@ class ConditionalExpression(RawResumer, ExpressionStatement):
 
     def __repr__(self) -> str:
         return "%s ? %s : %s" % (self.condition, self.if_expression, self.else_expression)
+
+
+class ConditionalExpressionResumer(RawResumer):
+    def __init__(self, expression: ConditionalExpression, result: ResultVariable) -> None:
+        super().__init__()
+        self.expression: ConditionalExpression = expression
+        self.condition_value: Optional[bool] = None
+        self.result: ResultVariable = result
+
+    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> None:
+        if self.condition_value is None:
+            condition_value: object = self.expression.condition.execute(
+                {k: v.get_value() for k, v in requires.items()}, resolver, queue
+            )
+            if isinstance(condition_value, Unknown):
+                self.result.set_value(Unknown(self), self.location)
+                return
+            if not isinstance(condition_value, bool):
+                raise RuntimeException(
+                    self, "Invalid value `%s`: the condition for a conditional expression must be a boolean expression"
+                )
+            self.condition_value = condition_value
+
+            # Schedule execution of appropriate subexpression
+            subexpression: ExpressionStatement = (
+                self.expression.if_expression if self.condition_value else self.expression.else_expression
+            )
+            RawUnit(
+                queue, resolver, subexpression.requires_emit(resolver, queue), self,
+            )
+        else:
+            value: object = (
+                self.expression.if_expression if self.condition_value else self.expression.else_expression
+            ).execute({k: v.get_value() for k, v in requires.items()}, resolver, queue)
+            self.result.set_value(value, self.location)
 
 
 class Constructor(ExpressionStatement):
