@@ -45,7 +45,7 @@ from inmanta.ast.statements.define import (
     DefineTypeDefault,
     TypeDeclaration,
 )
-from inmanta.ast.statements.generator import Constructor, If
+from inmanta.ast.statements.generator import ConditionalExpression, Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException, SyntaxDeprecationWarning
@@ -1744,7 +1744,7 @@ end
         ("x or y.u is defined", (Or, [(Reference, "x"), (IsDefined, [(Reference, "y")])])),
     ],
 )
-def test_1815_conditional_expressions(expression, expected_tree):
+def test_1815_boolean_expressions(expression, expected_tree):
     statements = parse_code(
         f"""
 __x__ = {expression}
@@ -1791,3 +1791,32 @@ A aa [1] -- [0:] B bb
             "The relation definition syntax `A aa [1:1] -- [0:] B bb` is deprecated."
             " Please use `A.bb [0:] -- B.aa [1:1]` instead. (test:8)"
         )
+
+
+def test_conditional_expression():
+    statements = parse_code(
+        """
+y = 42
+x = y if y > 0 else -1 if y < 0 else 0
+        """
+    )
+    assert len(statements) == 2
+    assign_stmt = statements[1]
+    assert isinstance(assign_stmt, Assign)
+
+    conditional_expression: ExpressionStatement = assign_stmt.value
+    assert isinstance(conditional_expression, ConditionalExpression)
+
+    condition: ExpressionStatement = conditional_expression.condition
+    assert isinstance(condition, GreaterThan)
+
+    if_expression: ExpressionStatement = conditional_expression.if_expression
+    assert isinstance(if_expression, Reference)
+
+    else_expression: ExpressionStatement = conditional_expression.else_expression
+    assert isinstance(else_expression, ConditionalExpression)
+
+    else_if_expression: ExpressionStatement = else_expression.if_expression
+    assert isinstance(else_if_expression, Literal)
+    else_else_expression: ExpressionStatement = else_expression.else_expression
+    assert isinstance(else_else_expression, Literal)

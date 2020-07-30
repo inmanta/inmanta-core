@@ -60,10 +60,13 @@ namespace = None
 
 precedence = (
     ("right", ","),
+    ("nonassoc", "MATCHING"),
+    ("nonassoc", "ELSE"),
+    ("nonassoc", "IF"),
     ("left", "OR"),
     ("left", "AND"),
     ("left", "CMP_OP"),
-    ("right", "NOT"),
+    ("nonassoc", "NOT"),
     ("left", "IN"),
     ("right", "MLS"),
     ("right", "MLS_END"),
