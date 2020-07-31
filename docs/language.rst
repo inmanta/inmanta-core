@@ -518,6 +518,26 @@ The syntax is:
 The :ref:`lang-conditions` section describes allowed forms for the condition.
 
 
+Conditional expressions
+=======================
+
+A conditional expression is an expression that evaluates to one of two subexpressions depending on its condition.
+
+.. code-block:: inmanta
+
+    x = n > 0 ? n : 0
+
+Which evaluates to n if n > 0 or to 0 otherwise.
+
+The syntax is:
+
+.. code-block:: antlr
+
+    conditional_expression : condition '?' expression ':' expression;
+
+The :ref:`lang-conditions` section describes allowed forms for the condition.
+
+
 Transformations
 ==============================================================
 

@@ -415,3 +415,104 @@ A()
         "Invalid value `some_string`: the condition for a conditional implementation can only be a boolean expression"
         " (reported in implement __config__::A using i when str ({dir}/main.cf:10:11))",
     )
+
+
+def test_conditional_expression(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    int n
+    int sign
+end
+
+implement A using a
+
+implementation a for A:
+    self.sign = self.n > 0 ? 1 : self.n < 0 ? -1 : 0
+    std::print(self.n)
+    std::print(self.n > 0)
+end
+
+
+x = A(n = 42)
+y = A(n = -42)
+z = A(n = 0)
+        """
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    assert root.lookup("x").get_value().lookup("sign").get_value() == 1
+    assert root.lookup("y").get_value().lookup("sign").get_value() == -1
+    assert root.lookup("z").get_value().lookup("sign").get_value() == 0
+
+
+def test_conditional_expression_when(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    int? primary = null
+    int secondary
+end
+
+A.others [0:] -- A
+
+implement A using std::none
+implement A using a when self.primary is defined ? self.primary > 0 : self.secondary > 0
+
+implementation a for A:
+    self.others = A(secondary = 0)
+end
+
+x = A(primary = 1, secondary = -1)
+y = A(primary = -1, secondary = 1)
+z = A(primary = null, secondary = 1)
+u = A(primary = null, secondary = -1)
+        """
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    assert len(root.lookup("x").get_value().lookup("others").get_value()) == 1
+    assert len(root.lookup("y").get_value().lookup("others").get_value()) == 0
+    assert len(root.lookup("z").get_value().lookup("others").get_value()) == 1
+    assert len(root.lookup("u").get_value().lookup("others").get_value()) == 0
+
+
+def test_conditional_expression_prevents_modify_after_freeze(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Base:
+end
+
+Base.x [0:] -- std::Entity
+
+implement Base using base
+
+
+entity A extends Base:
+end
+
+A.y [0:] -- std::Entity
+
+implement A using parents, a
+
+
+implementation base for Base:
+    n = std::count(self.x)
+end
+
+implementation a for A:
+    # using an if statement here causes a list modified after freeze error (sometimes) because the scheduler has
+    # no reason to prefer `y` over `x` when freezing:
+    #if std::count(self.y) > 0:
+    #    self.x += Base()
+    #end
+    # The use of the conditional expression allows the scheduler to infer that self.x must not be frozen yet
+    # because it is waiting for at least one other value.
+    self.x += std::count(self.y) > 0 ? [Base()] : []
+end
+
+
+A(y = A())
+        """
+    )
+    compiler.do_compile()

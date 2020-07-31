@@ -36,11 +36,19 @@ from inmanta.ast import (
     TypingException,
 )
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import DynamicStatement, ExpressionStatement
+from inmanta.ast.statements import DynamicStatement, ExpressionStatement, RawResumer
 from inmanta.ast.statements.assign import SetAttributeHelper
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import ExecutionContext, ExecutionUnit, QueueScheduler, Resolver, ResultCollector, ResultVariable
+from inmanta.execute.runtime import (
+    ExecutionContext,
+    ExecutionUnit,
+    QueueScheduler,
+    RawUnit,
+    Resolver,
+    ResultCollector,
+    ResultVariable,
+)
 from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
 
@@ -263,6 +271,102 @@ class If(ExpressionStatement):
     def nested_blocks(self) -> Iterator["BasicBlock"]:
         yield self.if_branch
         yield self.else_branch
+
+
+class ConditionalExpression(ExpressionStatement):
+    """
+        A conditional expression similar to Python's `x if c else y`.
+    """
+
+    def __init__(
+        self, condition: ExpressionStatement, if_expression: ExpressionStatement, else_expression: ExpressionStatement
+    ) -> None:
+        super().__init__()
+        self.condition: ExpressionStatement = condition
+        self.if_expression: ExpressionStatement = if_expression
+        self.else_expression: ExpressionStatement = else_expression
+        self.anchors.extend(condition.get_anchors())
+        self.anchors.extend(if_expression.get_anchors())
+        self.anchors.extend(else_expression.get_anchors())
+
+    def normalize(self) -> None:
+        self.condition.normalize()
+        self.if_expression.normalize()
+        self.else_expression.normalize()
+
+    def requires(self) -> List[str]:
+        return list(chain.from_iterable(sub.requires() for sub in [self.condition, self.if_expression, self.else_expression]))
+
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        # This ResultVariable will receive the result of this expression
+        result: ResultVariable = ResultVariable()
+        result.set_provider(self)
+
+        # Schedule execution to resume when the condition can be executed
+        resumer: RawResumer = ConditionalExpressionResumer(self, result)
+        self.copy_location(resumer)
+        RawUnit(queue, resolver, self.condition.requires_emit(resolver, queue), resumer)
+
+        # Wait for the result variable to be populated
+        return {self: result}
+
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        return requires[self]
+
+    def execute_direct(self, requires: Dict[object, object]) -> object:
+        condition_value: object = self.condition.execute_direct(requires)
+        if isinstance(condition_value, Unknown):
+            return Unknown(self)
+        if not isinstance(condition_value, bool):
+            raise RuntimeException(
+                self, "Invalid value `%s`: the condition for a conditional expression must be a boolean expression"
+            )
+        return (self.if_expression if condition_value else self.else_expression).execute_direct(requires)
+
+    def pretty_print(self) -> str:
+        return "%s ? %s : %s" % (
+            self.condition.pretty_print(),
+            self.if_expression.pretty_print(),
+            self.else_expression.pretty_print(),
+        )
+
+    def __repr__(self) -> str:
+        return "%s ? %s : %s" % (self.condition, self.if_expression, self.else_expression)
+
+
+class ConditionalExpressionResumer(RawResumer):
+    def __init__(self, expression: ConditionalExpression, result: ResultVariable) -> None:
+        super().__init__()
+        self.expression: ConditionalExpression = expression
+        self.condition_value: Optional[bool] = None
+        self.result: ResultVariable = result
+
+    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> None:
+        if self.condition_value is None:
+            condition_value: object = self.expression.condition.execute(
+                {k: v.get_value() for k, v in requires.items()}, resolver, queue
+            )
+            if isinstance(condition_value, Unknown):
+                self.result.set_value(Unknown(self), self.location)
+                return
+            if not isinstance(condition_value, bool):
+                raise RuntimeException(
+                    self, "Invalid value `%s`: the condition for a conditional expression must be a boolean expression"
+                )
+            self.condition_value = condition_value
+
+            # Schedule execution of appropriate subexpression
+            subexpression: ExpressionStatement = (
+                self.expression.if_expression if self.condition_value else self.expression.else_expression
+            )
+            RawUnit(
+                queue, resolver, subexpression.requires_emit(resolver, queue), self,
+            )
+        else:
+            value: object = (
+                self.expression.if_expression if self.condition_value else self.expression.else_expression
+            ).execute({k: v.get_value() for k, v in requires.items()}, resolver, queue)
+            self.result.set_value(value, self.location)
 
 
 class Constructor(ExpressionStatement):

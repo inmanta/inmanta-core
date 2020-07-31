@@ -44,7 +44,7 @@ from inmanta.ast.statements.define import (
     DefineTypeDefault,
     TypeDeclaration,
 )
-from inmanta.ast.statements.generator import Constructor, For, If, WrappedKwargs
+from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException, SyntaxDeprecationWarning, plyInmantaLex
@@ -60,10 +60,12 @@ namespace = None
 
 precedence = (
     ("right", ","),
+    ("nonassoc", ":"),
+    ("nonassoc", "?"),
     ("left", "OR"),
     ("left", "AND"),
     ("left", "CMP_OP"),
-    ("right", "NOT"),
+    ("nonassoc", "NOT"),
     ("left", "IN"),
     ("right", "MLS"),
     ("right", "MLS_END"),
@@ -577,7 +579,8 @@ def p_expression(p: YaccProduction) -> None:
             | list_def
             | map_def
             | map_lookup
-            | index_lookup """
+            | index_lookup
+            | conditional_expression """
     p[0] = p[1]
 
 
@@ -673,6 +676,12 @@ def p_short_index_lookup(p: YaccProduction) -> None:
     attref = p[1]
     p[0] = ShortIndexLookup(attref.instance, attref.attribute, p[3][0], p[3][1])
     attach_lnr(p, 2)
+
+
+def p_conditional_expression(p: YaccProduction) -> None:
+    " conditional_expression : expression '?' expression ':' expression"
+    p[0] = ConditionalExpression(p[1], p[3], p[5])
+    attach_from_string(p, 1)
 
 
 #######################
