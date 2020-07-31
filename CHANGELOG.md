@@ -6,6 +6,8 @@
 - Added documentation on how a string is matched against a regex defined in a regex-based typedef (#2214)
 - Added support to query the resource action log of a resource via the CLI (#2253)
 - Added conditional expression to the language with syntax condition ? x: y (#1987)
+- Add support for inmanta-cli click plugins
+- Added link to the PDF version of the documentation
 
 ## Bug fixes
 - Restore support to pass mocking information to the compiler
@@ -13,6 +15,7 @@
 - Handle skipped and unavailable as failures when calculating increments (#2184)
 - Constrain agent name to string values (#2172)
 - Fix for allowing comments in the requirements.txt file of modules (#2206)
+- Allow equality checks between types to support optional value overrides (#2243)
 
 # Release 2020.3 (2020-07-02)
 

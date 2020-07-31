@@ -58,3 +58,9 @@ Additional resources
 * `Inmanta User Mailinglist <https://groups.google.com/forum/#!forum/inmanta-users>`_
 * `Inmanta Developer Mailinglist <https://groups.google.com/forum/#!forum/inmanta-devel>`_
 * `Inmanta Twitter <https://twitter.com/inmanta_com>`_
+
+PDF version
+-----------
+
+Download: `inmanta.pdf <inmanta.pdf>`_
+

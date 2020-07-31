@@ -26,6 +26,8 @@ from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 import click
 import texttable
+from click_plugins import with_plugins
+from pkg_resources import iter_entry_points
 
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
@@ -170,6 +172,7 @@ def print_table(header: List[str], rows: List[List[str]], data_type: List[str] =
     click.echo(table.draw())
 
 
+@with_plugins(iter_entry_points("inmanta.cli_plugins"))
 @click.group(help="Base command")
 @click.option("--host", help="The server hostname to connect to")
 @click.option("--port", help="The server port to connect to")
