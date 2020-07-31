@@ -29,6 +29,6 @@ ALTER TABLE public.compile ADD COLUMN substitute_compile_id uuid REFERENCES publ
 
 
 -- Compile data json exported by compiling with the --json parameter.
-ALTER TABLE public.compile ADD COLUMN compile_data json;
+ALTER TABLE public.compile ADD COLUMN compile_data jsonb;
         """
     )
