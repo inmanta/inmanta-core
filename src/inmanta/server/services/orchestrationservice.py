@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Set, cast
 import asyncpg
 
 from inmanta import const, data
-from inmanta.data import PURGE_ON_DELETE
+from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DELETE
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import attach_warnings
@@ -445,8 +445,8 @@ class OrchestrationService(protocol.ServerSlice):
                 client = self.agentmanager_service.get_agent_client(env.id, agent)
                 if client is not None:
                     if not agent_trigger_method:
-                        # Ensure backward compatibility
-                        incremental_deploy = False
+                        env_agent_trigger_method = await env.get(ENVIRONMENT_AGENT_TRIGGER_METHOD)
+                        incremental_deploy = env_agent_trigger_method == const.AgentTriggerMethod.push_incremental_deploy
                     else:
                         incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
                     self.add_background_task(client.trigger(env.id, agent, incremental_deploy))

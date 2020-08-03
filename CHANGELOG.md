@@ -9,6 +9,7 @@
 - Added conditional expression to the language with syntax condition ? x: y (#1987)
 - Add support for inmanta-cli click plugins
 - Added link to the PDF version of the documentation
+- Added environment setting for agent_trigger_method (#2025)
 
 ## Bug fixes
 - Restore support to pass mocking information to the compiler
