@@ -662,6 +662,7 @@ TYPE_MAP = {"int": "integer", "bool": "boolean", "dict": "jsonb", "str": "varcha
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
 AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY = "agent_trigger_method_on_auto_deploy"
+ENVIRONMENT_AGENT_TRIGGER_METHOD = "environment_agent_trigger_method"
 AUTOSTART_SPLAY = "autostart_splay"
 AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
 AUTOSTART_AGENT_DEPLOY_SPLAY_TIME = "autostart_agent_deploy_splay_time"
@@ -794,6 +795,16 @@ class Environment(BaseDocument):
             default=const.AgentTriggerMethod.push_incremental_deploy.name,
             validator=convert_agent_trigger_method,
             doc="The agent trigger method to use when " + PUSH_ON_AUTO_DEPLOY + " is enabled",
+            allowed_values=[opt.name for opt in const.AgentTriggerMethod],
+        ),
+        ENVIRONMENT_AGENT_TRIGGER_METHOD: Setting(
+            name=ENVIRONMENT_AGENT_TRIGGER_METHOD,
+            typ="enum",
+            default=const.AgentTriggerMethod.push_full_deploy.name,
+            validator=convert_agent_trigger_method,
+            doc="The agent trigger method to use. "
+            f"If {PUSH_ON_AUTO_DEPLOY} is enabled, "
+            f"{AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} overrides this setting",
             allowed_values=[opt.name for opt in const.AgentTriggerMethod],
         ),
         AUTOSTART_SPLAY: Setting(
