@@ -223,3 +223,18 @@ class Resource(BaseModel):
     last_deploy: Optional[datetime.datetime]
     attributes: JsonType
     status: const.ResourceState
+
+
+class ResourceAction(BaseModel):
+    environment: uuid.UUID
+    version: int
+    resource_version_ids: List[ResourceVersionIdStr]
+    action_id: uuid.UUID
+    action: const.ResourceAction
+    started: datetime.datetime
+    finished: Optional[datetime.datetime]
+    messages: Optional[List[JsonType]]
+    status: Optional[const.ResourceState]
+    changes: Optional[JsonType]
+    change: Optional[const.Change]
+    send_event: Optional[bool]
