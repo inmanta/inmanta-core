@@ -30,6 +30,7 @@ from subprocess import CalledProcessError
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import pkg_resources
+from pkg_resources.extern.packaging.requirements import InvalidRequirement
 
 LOGGER = logging.getLogger(__name__)
 
@@ -177,7 +178,7 @@ class VirtualEnv(object):
                     version = item.specs
                     if hasattr(item, "url"):
                         url = item.url
-            except pkg_resources.RequirementParseError:
+            except InvalidRequirement:
                 url = req_spec
 
             if name not in modules:
