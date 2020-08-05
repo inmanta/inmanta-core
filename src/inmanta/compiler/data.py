@@ -17,9 +17,8 @@
 """
 from typing import List
 
-from pydantic import BaseModel
-
 import inmanta.ast.export as ast_export
+import inmanta.data.model as model
 from inmanta.ast import CompilerException
 
 
@@ -30,16 +29,5 @@ class CompileData(ast_export.Exportable):
     def add_error(self, error: CompilerException) -> None:
         self.errors.append(error)
 
-    def export(self) -> "ExportCompileData":
-        return ExportCompileData(errors=[e.export() for e in self.errors])
-
-
-class ExportCompileData(BaseModel):
-    """
-        Top level structure of compiler data to be exported.
-    """
-
-    errors: List[ast_export.Error]
-    """
-        All errors occurred while trying to compile.
-    """
+    def export(self) -> "model.CompileData":
+        return model.CompileData(errors=[e.export() for e in self.errors])

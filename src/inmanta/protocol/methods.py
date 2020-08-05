@@ -963,6 +963,20 @@ def get_server_status() -> model.StatusResponse:
 
 
 @typedmethod(
+    path="/compiledata/<id>",
+    operation="GET",
+    client_types=[const.ClientType.api],
+    api_version=1,
+)
+def get_compile_data(id: uuid.UUID) -> model.CompileData:
+    """
+        Get the compile data for the given compile request.
+
+        :param id: The id of the compile.
+    """
+
+
+@typedmethod(
     path="/compilequeue",
     operation="GET",
     arg_options=ENV_OPTS,

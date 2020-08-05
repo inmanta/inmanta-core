@@ -38,7 +38,6 @@ import pydantic
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
-from inmanta.compiler.data import ExportCompileData
 from inmanta.protocol import encode_token, methods
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.server import config as opt
@@ -172,7 +171,7 @@ class CompileRun(object):
             await self._error("".join(traceback.format_exception(type(e), e, e.__traceback__)))
             return await self._end_stage(RETURNCODE_INTERNAL_ERROR)
 
-    async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, Optional[ExportCompileData]]:
+    async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, Optional[model.CompileData]]:
         success = False
         now = datetime.datetime.now()
         await self.request.update_fields(started=now)
@@ -296,7 +295,7 @@ class CompileRun(object):
                 compile_data_json: str = file.read().decode()
                 if compile_data_json:
                     try:
-                        return success, ExportCompileData.parse_raw(compile_data_json)
+                        return success, model.CompileData.parse_raw(compile_data_json)
                     except json.JSONDecodeError:
                         LOGGER.debug(
                             "Failed to load compile data json for compile %s. Invalid json: '%s'",
@@ -304,7 +303,7 @@ class CompileRun(object):
                         )
                     except pydantic.ValidationError:
                         LOGGER.debug(
-                            "Failed to parse compile data for compile %s. Json does not match ExportCompileData model: '%s'",
+                            "Failed to parse compile data for compile %s. Json does not match CompileData model: '%s'",
                             (self.request.id, compile_data_json),
                         )
             return success, None
@@ -489,7 +488,7 @@ class CompilerService(ServerSlice):
 
         runner = self._get_compile_runner(compile, project_dir=os.path.join(self._env_folder, str(compile.environment)))
         # set force_update == True iff any compile request has force_update == True
-        compile_data: Optional[ExportCompileData]
+        compile_data: Optional[model.CompileData]
         success, compile_data = await runner.run(force_update=any(c.force_update for c in chain([compile], merge_candidates)))
 
         version = runner.version
@@ -547,6 +546,13 @@ class CompilerService(ServerSlice):
             return 404
 
         return 200, {"report": report}
+
+    @protocol.handle(methods.get_compile_data, compile_id="id")
+    async def get_compile_data(self, compile_id: uuid.UUID) -> Apireturn:
+        compile: Optional[data.Compile] = await data.Compile.get_by_id(compile_id)
+        if compile is None:
+            return 404, {"message": "The given compile id does not exist"}
+        return 200, {"data": compile.to_dto().compile_data}
 
     @protocol.handle(methods.get_compile_queue, env="tid")
     async def get_compile_queue(self, env: data.Environment) -> List[model.CompileRun]:

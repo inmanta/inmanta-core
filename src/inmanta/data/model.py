@@ -21,6 +21,7 @@ from typing import Any, Dict, List, NewType, Optional, Union
 
 import pydantic
 
+import inmanta.ast.export as ast_export
 from inmanta import const
 from inmanta.const import Change, ResourceState
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
@@ -80,6 +81,17 @@ class StatusResponse(BaseModel):
     features: List[FeatureStatus]
 
 
+class CompileData(BaseModel):
+    """
+        Top level structure of compiler data to be exported.
+    """
+
+    errors: List[ast_export.Error]
+    """
+        All errors occurred while trying to compile.
+    """
+
+
 class CompileRun(BaseModel):
     id: uuid.UUID
     remote_id: Optional[uuid.UUID]
@@ -91,6 +103,8 @@ class CompileRun(BaseModel):
     force_update: bool
     metadata: JsonType
     environment_variables: Dict[str, str]
+
+    compile_data: Optional[CompileData]
 
 
 ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)
