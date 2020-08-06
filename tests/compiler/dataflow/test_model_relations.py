@@ -16,9 +16,9 @@
     Contact: code@inmanta.com
 """
 
-from compiler.dataflow.conftest import DataflowTestHelper
-
 import pytest
+
+from compiler.dataflow.conftest import DataflowTestHelper
 
 
 @pytest.mark.parametrize("bidirectional", [True, False])

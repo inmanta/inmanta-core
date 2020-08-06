@@ -41,8 +41,8 @@ def test_code_manager():
 
     ModuleTool().install("single_plugin_file")
     ModuleTool().install("multiple_plugin_files")
-    import inmanta_plugins.single_plugin_file as single
     import inmanta_plugins.multiple_plugin_files.handlers as multi
+    import inmanta_plugins.single_plugin_file as single
 
     mgr = loader.CodeManager()
     mgr.register_code("std::File", single.MyHandler)

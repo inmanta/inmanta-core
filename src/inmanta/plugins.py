@@ -34,8 +34,8 @@ from inmanta.execute.util import Unknown
 T = TypeVar("T")
 
 if TYPE_CHECKING:
+    from inmanta.ast.statements import DynamicStatement, ExpressionStatement
     from inmanta.ast.statements.call import FunctionCall
-    from inmanta.ast.statements import ExpressionStatement, DynamicStatement
     from inmanta.compiler import Compiler
 
 

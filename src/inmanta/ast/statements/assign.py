@@ -55,8 +55,8 @@ except ImportError:
 
 
 if TYPE_CHECKING:
-    from inmanta.ast.variables import Reference  # noqa: F401
     from inmanta.ast.statements.generator import WrappedKwargs  # noqa: F401
+    from inmanta.ast.variables import Reference  # noqa: F401
 
 
 class CreateList(ReferenceStatement):

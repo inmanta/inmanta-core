@@ -16,11 +16,11 @@
     Contact: code@inmanta.com
 """
 
-from compiler.dataflow.conftest import DataflowTestHelper, get_dataflow_node
 from typing import List, Set
 
 import pytest
 
+from compiler.dataflow.conftest import DataflowTestHelper, get_dataflow_node
 from inmanta.ast import MultiException
 from inmanta.execute.dataflow import AssignableNode, AssignableNodeReference, AttributeNode, DataflowGraph
 from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
