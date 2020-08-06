@@ -43,6 +43,7 @@ from inmanta.protocol.common import (
     ZIP_CONTENT,
     InvalidMethodDefinition,
     InvalidPathException,
+    MethodProperties,
     ReturnValue,
 )
 from inmanta.protocol.methods import ENV_OPTS
@@ -1565,3 +1566,27 @@ async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_n
     response = await client.fetch(request, raise_error=False)
     assert response.code == 400
     assert json.loads(response.body)["message"] == "Invalid request: Field 'tid' is required."
+
+
+@pytest.mark.asyncio
+async def test_multiple_path_params(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+        def test_method(id: str, name: str, age: int) -> str:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_methodY(self, id: str, name: str, age: int) -> str:  # NOQA
+            return name
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    request = MethodProperties.methods["test_method"][0].build_call(args=[], kwargs={"id": "1", "name": "monty", "age": 42})
+    assert request.url == "/api/v1/test/1/monty?age=42"
