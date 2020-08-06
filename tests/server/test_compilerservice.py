@@ -23,14 +23,17 @@ import shutil
 import subprocess
 import uuid
 from asyncio import Semaphore
-from typing import List, Optional
+from typing import AsyncIterator, List, Optional
 
 import pytest
 
+import inmanta.ast.export as ast_export
+import inmanta.data.model as model
 from inmanta import config, data
 from inmanta.const import ParameterSource
 from inmanta.data import Compile, Report
 from inmanta.deploy import cfg_env
+from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server import config as server_config
 from inmanta.server import protocol
@@ -52,6 +55,58 @@ async def compilerservice(server_config, init_dataclasses_and_load_schema):
     yield cs
     await cs.prestop()
     await cs.stop()
+
+
+@pytest.fixture
+async def environment_factory(tmpdir) -> AsyncIterator["EnvironmentFactory"]:
+    """
+        Provides a factory for environments with a main.cf file.
+    """
+    yield EnvironmentFactory(str(tmpdir))
+
+
+class EnvironmentFactory:
+    def __init__(self, dir: str) -> None:
+        self.src_dir: str = os.path.join(dir, "src")
+        self.project: data.Project = data.Project(name="test")
+        self._ready: bool = False
+
+    async def setup(self) -> None:
+        if self._ready:
+            return
+
+        project_template = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
+        shutil.copytree(project_template, self.src_dir)
+
+        # Set up git
+        subprocess.check_output(["git", "init"], cwd=self.src_dir)
+        subprocess.check_output(["git", "add", "*"], cwd=self.src_dir)
+        subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=self.src_dir)
+        subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=self.src_dir)
+        subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=self.src_dir)
+
+        await self.project.insert()
+
+        self._ready = True
+
+    async def create_environment(self, main: str) -> data.Environment:
+        await self.setup()
+        branch: str = str(uuid.uuid4())
+        subprocess.check_output(["git", "checkout", "-b", branch], cwd=self.src_dir)
+        self.write_main(main)
+        environment: data.Environment = data.Environment(
+            name=branch, project=self.project.id, repo_url=self.src_dir, repo_branch=branch
+        )
+        await environment.insert()
+        return environment
+
+    def write_main(self, main: str, environment: Optional[data.Environment] = None) -> None:
+        if environment is not None:
+            subprocess.check_output(["git", "checkout", environment.repo_branch], cwd=self.src_dir)
+        with open(os.path.join(self.src_dir, "main.cf"), "w", encoding="utf-8") as fd:
+            fd.write(main)
+        subprocess.check_output(["git", "add", "main.cf"], cwd=self.src_dir)
+        subprocess.check_output(["git", "commit", "-m", "write main.cf", "--allow-empty"], cwd=self.src_dir)
 
 
 @pytest.mark.asyncio
@@ -241,19 +296,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
 
 @pytest.mark.asyncio
-async def test_compile_runner(server, tmpdir, client):
-    # create project, printing env
-    project_source_dir = os.path.join(tmpdir, "src")
-
-    project_template = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
-
-    shutil.copytree(project_template, project_source_dir)
-    subprocess.check_output(["git", "init"], cwd=project_source_dir)
-    subprocess.check_output(["git", "add", "*"], cwd=project_source_dir)
-    subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=project_source_dir)
-    subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=project_source_dir)
-    subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_source_dir)
-
+async def test_compile_runner(environment_factory: EnvironmentFactory, server, client, tmpdir):
     testmarker_env = "TESTMARKER"
     no_marker = "__no__marker__"
     marker_print = "_INM_MM:"
@@ -261,36 +304,19 @@ async def test_compile_runner(server, tmpdir, client):
     marker_print3 = "_INM_MM3:"
 
     def make_main(marker_print):
-        # add main.cf
-        with open(os.path.join(project_source_dir, "main.cf"), "w", encoding="utf-8") as fd:
-            fd.write(
-                f"""
+        return f"""
     marker = std::get_env("{testmarker_env}","{no_marker}")
     std::print("{marker_print} {{{{marker}}}}")
 
     host = std::Host(name="test", os=std::linux)
     std::ConfigFile(host=host, path="/etc/motd", content="1234")
-    """
-            )
+        """
 
-        subprocess.check_output(["git", "add", "main.cf"], cwd=project_source_dir)
-        subprocess.check_output(["git", "commit", "-m", "unit test 2"], cwd=project_source_dir)
-
-    make_main(marker_print)
-    subprocess.check_output("git checkout -b alt".split(), cwd=project_source_dir)
-    make_main(marker_print2)
+    env = await environment_factory.create_environment(make_main(marker_print))
+    env2 = await environment_factory.create_environment(make_main(marker_print2))
 
     project_work_dir = os.path.join(tmpdir, "work")
     ensure_directory_exist(project_work_dir)
-
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url=project_source_dir, repo_branch="master")
-    await env.insert()
-
-    env2 = data.Environment(name="devalt", project=project.id, repo_url=project_source_dir, repo_branch="alt")
-    await env2.insert()
 
     async def compile_and_assert(env, export=True, meta={}, env_vars={}, update=False):
         compile = data.Compile(
@@ -360,7 +386,7 @@ async def test_compile_runner(server, tmpdir, client):
     # switch branch
     compile, stages = await compile_and_assert(env2, False)
     assert stages["Init"]["returncode"] == 0
-    assert stages["switching branch from master to alt"]["returncode"] == 0
+    assert stages[f"switching branch from {env.repo_branch} to {env2.repo_branch}"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print2} {no_marker}" in out
@@ -379,7 +405,7 @@ async def test_compile_runner(server, tmpdir, client):
     assert len(stages) == 5
     assert compile.version is None
 
-    make_main(marker_print3)
+    environment_factory.write_main(make_main(marker_print3))
     compile, stages = await compile_and_assert(env2, False, update=True)
     assert stages["Init"]["returncode"] == 0
     assert stages["Fetching changes"]["returncode"] == 0
@@ -390,6 +416,39 @@ async def test_compile_runner(server, tmpdir, client):
     assert f"{marker_print3} {no_marker}" in out
     assert len(stages) == 5
     assert compile.version is None
+
+
+@pytest.mark.asyncio
+async def test_compilerservice_compile_data(environment_factory: EnvironmentFactory, client, server) -> None:
+    async def get_compile_data(main: str) -> model.CompileData:
+        env: data.Environment = await environment_factory.create_environment(main)
+        result: Result = await client.notify_change(env.id)
+        assert result.code == 200
+
+        async def compile_done():
+            return (await client.is_compiling(env.id)).code == 204
+
+        await retry_limited(compile_done, 10)
+
+        reports = await client.get_reports(env.id)
+        assert reports.code == 200
+        assert len(reports.result["reports"]) == 1
+        compile_id: str = reports.result["reports"][0]["id"]
+
+        result = await client.get_compile_data(uuid.UUID(compile_id))
+        assert result.code == 200
+        compile_data: model.CompileData = model.CompileData(**result.result)
+        return compile_data
+
+    errors0: List[ast_export.Error] = (await get_compile_data("x = 0")).errors
+    assert len(errors0) == 0
+
+    errors1: List[ast_export.Error] = (await get_compile_data("x = 0 x = 1")).errors
+    assert len(errors1) == 1
+    error: ast_export.Error = errors1[0]
+    assert error.category == ast_export.ErrorCategory.runtime
+    assert error.type == "inmanta.ast.DoubleSetException"
+    assert error.message == "value set twice:\n\told value: 0\n\t\tset at ./main.cf:1\n\tnew value: 1\n\t\tset at ./main.cf:1\n"
 
 
 @pytest.mark.asyncio

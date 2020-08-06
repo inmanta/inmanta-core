@@ -39,6 +39,7 @@ import pydantic
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
 from inmanta.protocol import encode_token, methods
+from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
@@ -246,8 +247,8 @@ class CompileRun(object):
                 str(server_port),
                 "--metadata",
                 json.dumps(self.request.metadata),
-                "--compiler-json",
-                "--compiler-json-file",
+                "--compile-json",
+                "--compile-json-file",
                 compile_data_json_file.name,
             ]
 
@@ -548,11 +549,11 @@ class CompilerService(ServerSlice):
         return 200, {"report": report}
 
     @protocol.handle(methods.get_compile_data, compile_id="id")
-    async def get_compile_data(self, compile_id: uuid.UUID) -> Apireturn:
+    async def get_compile_data(self, compile_id: uuid.UUID) -> Optional[model.CompileData]:
         compile: Optional[data.Compile] = await data.Compile.get_by_id(compile_id)
         if compile is None:
-            return 404, {"message": "The given compile id does not exist"}
-        return 200, {"data": compile.to_dto().compile_data}
+            raise NotFound("The given compile id does not exist")
+        return compile.to_dto().compile_data
 
     @protocol.handle(methods.get_compile_queue, env="tid")
     async def get_compile_queue(self, env: data.Environment) -> List[model.CompileRun]:

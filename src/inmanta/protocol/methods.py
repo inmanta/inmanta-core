@@ -18,7 +18,7 @@
 
 import datetime
 import uuid
-from typing import Any, List, Union
+from typing import Any, List, Optional, Union
 
 from inmanta import const, data
 from inmanta.data import model
@@ -962,13 +962,10 @@ def get_server_status() -> model.StatusResponse:
     """
 
 
-@typedmethod(
-    path="/compiledata/<id>",
-    operation="GET",
-    client_types=[const.ClientType.api],
-    api_version=1,
+@method(
+    path="/compiledata/<id>", operation="GET", client_types=[const.ClientType.api], api_version=1,
 )
-def get_compile_data(id: uuid.UUID) -> model.CompileData:
+def get_compile_data(id: uuid.UUID) -> Optional[model.CompileData]:
     """
         Get the compile data for the given compile request.
 
