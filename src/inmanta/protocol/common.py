@@ -734,6 +734,8 @@ class MethodProperties(object):
         for i in range(len(args)):
             msg[argspec.args[i]] = args[i]
 
+        path_params = {k for k, v in msg.items() if v is not None and f"<{k}>" in self._path.path}
+
         url = self.get_call_url(msg)
 
         headers = {}
@@ -749,7 +751,7 @@ class MethodProperties(object):
                     del msg[arg_name]
 
         if self.operation not in ("POST", "PUT", "PATCH"):
-            qs_map = {k: v for k, v in msg.items() if v is not None and k != "id"}
+            qs_map = {k: v for k, v in msg.items() if v is not None and k not in path_params}
 
             # encode arguments in url
             if len(qs_map) > 0:
