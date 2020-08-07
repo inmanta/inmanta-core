@@ -16,11 +16,11 @@
     Contact: code@inmanta.com
 """
 
-from compiler.dataflow.conftest import DataflowTestHelper
 from typing import Optional, Type
 
 import pytest
 
+from compiler.dataflow.conftest import DataflowTestHelper
 from inmanta.ast import AttributeException, CompilerException, DoubleSetException, NotFoundException
 from inmanta.execute.dataflow import VariableNodeReference
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer

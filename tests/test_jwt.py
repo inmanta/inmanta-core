@@ -113,7 +113,7 @@ validate_cert=false
             )
         )
 
-    from inmanta.config import Config, AuthJWTConfig
+    from inmanta.config import AuthJWTConfig, Config
 
     Config.load_config(config_file)
 

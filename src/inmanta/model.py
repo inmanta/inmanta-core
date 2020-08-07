@@ -18,7 +18,6 @@
 from builtins import str
 from typing import Dict, List, Tuple
 
-
 """
     Objects defining the serialization format for type information.
 

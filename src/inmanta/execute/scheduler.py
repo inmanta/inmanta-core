@@ -50,8 +50,8 @@ from inmanta.execute.runtime import (
 from inmanta.execute.tracking import ModuleTracker
 
 if TYPE_CHECKING:
+    from inmanta.ast import BasicBlock, NamedType, Statement  # noqa: F401
     from inmanta.compiler import Compiler  # noqa: F401
-    from inmanta.ast import Statement, BasicBlock, NamedType  # noqa: F401
 
 
 DEBUG = True

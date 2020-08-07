@@ -46,12 +46,11 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from inmanta.ast.entity import Default, Entity, Implement, EntityLike  # noqa: F401
-    from inmanta.ast.statements import Statement, ExpressionStatement, Resumer, RawResumer
     from inmanta.ast.attribute import Attribute, RelationAttribute
-    from inmanta.compiler import Compiler
     from inmanta.ast.blocks import BasicBlock
-    from inmanta.ast.entity import Implementation
+    from inmanta.ast.entity import Default, Entity, EntityLike, Implement, Implementation  # noqa: F401
+    from inmanta.ast.statements import ExpressionStatement, RawResumer, Resumer, Statement
+    from inmanta.compiler import Compiler
 
 
 T = TypeVar("T")

@@ -49,7 +49,7 @@ from inmanta.plugins import Plugin, PluginMeta
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from inmanta.ast import Statement, BasicBlock  # noqa: F401
+    from inmanta.ast import BasicBlock, Statement  # noqa: F401
 
 
 def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type], Namespace]:

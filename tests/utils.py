@@ -201,10 +201,9 @@ class LogSequence(object):
 
 
 def configure(unused_tcp_port, database_name, database_port):
-    from inmanta.config import Config
-
     import inmanta.agent.config  # noqa: F401
     import inmanta.server.config  # noqa: F401
+    from inmanta.config import Config
 
     free_port = str(unused_tcp_port)
     Config.load_config()

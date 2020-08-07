@@ -58,7 +58,7 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from inmanta.ast.entity import Default, Entity, Implement, EntityLike  # noqa: F401
+    from inmanta.ast.entity import Default, Entity, EntityLike, Implement  # noqa: F401
     from inmanta.execute.runtime import Instance
 
 LOGGER = logging.getLogger(__name__)
