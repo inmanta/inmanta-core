@@ -41,18 +41,22 @@ def track_dataflow() -> bool:
     return datatrace_enable.get() or dataflow_graphic_enable.get()
 
 
-json: Option[bool] = Option(
-    "compiler", "json", False, "Export structured json containing compile data such as occurred errors.", is_bool,
+export_compile_data: Option[bool] = Option(
+    "compiler",
+    "export_compile_data",
+    False,
+    "Export structured json containing compile data such as occurred errors.",
+    is_bool,
 )
 
 
-default_json_file: str = "compile_data.json"
+default_compile_data_file: str = "compile_data.json"
 
 
-json_file: Option[str] = Option(
+export_compile_data_file: Option[str] = Option(
     "compiler",
-    "json_file",
-    default_json_file,
-    "File to export compile json to. If omitted %s is used." % default_json_file,
+    "export_compile_data_file",
+    default_compile_data_file,
+    "File to export compile data to. If omitted %s is used." % default_compile_data_file,
     is_str,
 )

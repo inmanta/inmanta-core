@@ -247,8 +247,8 @@ class CompileRun(object):
                 str(server_port),
                 "--metadata",
                 json.dumps(self.request.metadata),
-                "--compile-json",
-                "--compile-json-file",
+                "--export-compile-data",
+                "--export-compile-data-file",
                 compile_data_json_file.name,
             ]
 

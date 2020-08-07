@@ -220,16 +220,16 @@ def compiler_config(parser: ArgumentParser) -> None:
     parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
     parser.add_argument(
-        "--json",
-        dest="compile_json",
+        "--export-compile-data",
+        dest="export_compile_data",
         help="Export structured json containing compile data such as occurred errors.",
         action="store_true",
         default=False,
     )
     parser.add_argument(
-        "--json-file",
-        dest="compile_json_file",
-        help="File to export compile json to. If omitted %s is used." % compiler.config.default_json_file,
+        "--export-compile-data-file",
+        dest="export_compile_data_file",
+        help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
     parser.add_argument(
         "--experimental-data-trace",
@@ -273,11 +273,11 @@ def compile_project(options: argparse.Namespace):
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
 
-    if options.compile_json is True:
-        Config.set("compiler", "json", "true")
+    if options.export_compile_data is True:
+        Config.set("compiler", "export_compile_data", "true")
 
-    if options.compile_json_file is not None:
-        Config.set("compiler", "json_file", options.compile_json_file)
+    if options.export_compile_data_file is not None:
+        Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
 
     if options.datatrace is True:
         Config.set("compiler", "datatrace_enable", "true")
@@ -426,16 +426,16 @@ def export_parser_config(parser: ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--compile-json",
-        dest="compile_json",
+        "--export-compile-data",
+        dest="export_compile_data",
         help="Export structured json containing compile data such as occurred errors.",
         action="store_true",
         default=False,
     )
     parser.add_argument(
-        "--compile-json-file",
-        dest="compile_json_file",
-        help="File to export compile json to. If omitted %s is used." % compiler.config.default_json_file,
+        "--export-compile-data-file",
+        dest="export_compile_data_file",
+        help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
 
 
@@ -459,11 +459,11 @@ def export(options: argparse.Namespace) -> None:
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
 
-    if options.compile_json is True:
-        Config.set("compiler", "json", "true")
+    if options.export_compile_data is True:
+        Config.set("compiler", "export_compile_data", "true")
 
-    if options.compile_json_file is not None:
-        Config.set("compiler", "json_file", options.compile_json_file)
+    if options.export_compile_data_file is not None:
+        Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
 
     # try to parse the metadata as json. If a normal string, create json for it.
     if options.metadata is not None and len(options.metadata) > 0:
