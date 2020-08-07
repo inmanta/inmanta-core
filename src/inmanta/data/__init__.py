@@ -662,6 +662,7 @@ TYPE_MAP = {"int": "integer", "bool": "boolean", "dict": "jsonb", "str": "varcha
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
 AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY = "agent_trigger_method_on_auto_deploy"
+ENVIRONMENT_AGENT_TRIGGER_METHOD = "environment_agent_trigger_method"
 AUTOSTART_SPLAY = "autostart_splay"
 AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
 AUTOSTART_AGENT_DEPLOY_SPLAY_TIME = "autostart_agent_deploy_splay_time"
@@ -794,6 +795,16 @@ class Environment(BaseDocument):
             default=const.AgentTriggerMethod.push_incremental_deploy.name,
             validator=convert_agent_trigger_method,
             doc="The agent trigger method to use when " + PUSH_ON_AUTO_DEPLOY + " is enabled",
+            allowed_values=[opt.name for opt in const.AgentTriggerMethod],
+        ),
+        ENVIRONMENT_AGENT_TRIGGER_METHOD: Setting(
+            name=ENVIRONMENT_AGENT_TRIGGER_METHOD,
+            typ="enum",
+            default=const.AgentTriggerMethod.push_full_deploy.name,
+            validator=convert_agent_trigger_method,
+            doc="The agent trigger method to use. "
+            f"If {PUSH_ON_AUTO_DEPLOY} is enabled, "
+            f"{AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} overrides this setting",
             allowed_values=[opt.name for opt in const.AgentTriggerMethod],
         ),
         AUTOSTART_SPLAY: Setting(
@@ -1706,6 +1717,98 @@ class ResourceAction(BaseDocument):
             query = "DELETE FROM " + cls.table_name() + " WHERE started < $1"
             value = cls._get_value(keep_logs_until)
             await cls._execute_query(query, value)
+
+    @classmethod
+    async def query_resource_actions(
+        cls,
+        environment: uuid.UUID,
+        resource_type: Optional[str] = None,
+        agent: Optional[str] = None,
+        attribute: Optional[str] = None,
+        attribute_value: Optional[str] = None,
+        log_severity: Optional[str] = None,
+        limit: int = 0,
+        action_id: Optional[uuid.UUID] = None,
+        first_timestamp: Optional[datetime.datetime] = None,
+        last_timestamp: Optional[datetime.datetime] = None,
+    ) -> List["ResourceAction"]:
+
+        query = f"""SELECT DISTINCT ra.*
+                        FROM {cls.table_name()} ra
+                        INNER JOIN
+                        {Resource.table_name()} r on  r.resource_version_id = ANY(ra.resource_version_ids)
+                        WHERE r.environment=$1
+                     """
+        values = [cls._get_value(environment)]
+
+        parameter_index = 2
+        if resource_type:
+            query += f" AND resource_type=${parameter_index}"
+            values.append(cls._get_value(resource_type))
+            parameter_index += 1
+        if agent:
+            query += f" AND agent=${parameter_index}"
+            values.append(cls._get_value(agent))
+            parameter_index += 1
+        if attribute and attribute_value:
+            query += f" AND attributes->>${parameter_index} LIKE ${parameter_index + 1}::varchar"
+            values.append(cls._get_value(attribute))
+            values.append(cls._get_value(attribute_value))
+            parameter_index += 2
+        if log_severity:
+            # <@ Is contained by
+            query += f" AND ${parameter_index} <@ ANY(messages)"
+            values.append(cls._get_value({"level": log_severity.upper()}))
+            parameter_index += 1
+        if first_timestamp and action_id:
+            query += f" AND (started, action_id) > (${parameter_index}, ${parameter_index+1})"
+            values.append(cls._get_value(first_timestamp))
+            values.append(cls._get_value(action_id))
+            parameter_index += 2
+        elif first_timestamp:
+            query += f" AND started > ${parameter_index}"
+            values.append(cls._get_value(first_timestamp))
+            parameter_index += 1
+        if last_timestamp and action_id:
+            query += f" AND (started, action_id) < (${parameter_index}, ${parameter_index+1})"
+            values.append(cls._get_value(last_timestamp))
+            values.append(cls._get_value(action_id))
+            parameter_index += 2
+        elif last_timestamp:
+            query += f" AND started < ${parameter_index}"
+            values.append(cls._get_value(last_timestamp))
+            parameter_index += 1
+        if first_timestamp:
+            query += " ORDER BY started, action_id"
+        else:
+            query += " ORDER BY started DESC, action_id DESC"
+        if limit is not None and limit > 0:
+            query += " LIMIT $%d" % parameter_index
+            values.append(cls._get_value(limit))
+            parameter_index += 1
+        if first_timestamp:
+            query = f"""SELECT * FROM ({query}) AS matching_actions
+                        ORDER BY matching_actions.started DESC, matching_actions.action_id DESC"""
+
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
+
+    def to_dto(self) -> m.ResourceAction:
+        return m.ResourceAction(
+            environment=self.environment,
+            version=self.version,
+            resource_version_ids=self.resource_version_ids,
+            action_id=self.action_id,
+            action=self.action,
+            started=self.started,
+            finished=self.finished,
+            messages=self.messages,
+            status=self.status,
+            changes=self.changes,
+            change=self.change,
+            send_event=self.send_event,
+        )
 
 
 class Resource(BaseDocument):

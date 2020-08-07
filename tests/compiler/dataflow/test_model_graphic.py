@@ -18,13 +18,13 @@
 
 import re
 import shutil
-from compiler.dataflow.conftest import DataflowTestHelper
 from functools import total_ordering
 from itertools import chain
 from typing import Callable, List, Optional, Tuple
 
 import pytest
 
+from compiler.dataflow.conftest import DataflowTestHelper
 from inmanta.ast import Locatable, Namespace
 from inmanta.ast.entity import Entity
 from inmanta.execute.dataflow import AssignableNode, AttributeNode, InstanceNode, Node, ValueNode

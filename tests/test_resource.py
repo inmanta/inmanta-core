@@ -20,7 +20,7 @@ import pytest
 
 from inmanta import resources
 from inmanta.ast import ExternalException
-from inmanta.resources import ResourceException, resource
+from inmanta.resources import PARSE_ID_REGEX, PARSE_RVID_REGEX, Id, ResourceException, resource
 
 
 class Base(resources.Resource):
@@ -302,3 +302,90 @@ def test_resource_invalid_agent_name_entity(snippetcompiler):
     )
     with pytest.raises(ExternalException):
         snippetcompiler.do_export()
+
+
+def test_is_resource_version_id():
+    """
+         Test whether the is_resource_version_id() method of the Id class works correctly.
+    """
+    assert Id.is_resource_version_id("test::Resource[agent,key=id],v=3")
+    assert Id.is_resource_version_id("test::mod::Resource[agent,key=id],v=3")
+    assert not Id.is_resource_version_id("test::Resource[agent,key=id]")
+    assert not Id.is_resource_version_id("test::mod::Resource[agent,key=id]")
+    assert not Id.is_resource_version_id("test::Resource")
+
+
+def test_parse_id_regex():
+    result = PARSE_ID_REGEX.search("test::Resource[agent,key=id],v=3")
+    assert result is not None
+    assert result.group("id") == "test::Resource[agent,key=id]"
+    assert result.group("type") == "test::Resource"
+    assert result.group("ns") == "test"
+    assert result.group("class") == "Resource"
+    assert result.group("hostname") == "agent"
+    assert result.group("attr") == "key"
+    assert result.group("value") == "id"
+    assert result.group("version") == "3"
+
+    result = PARSE_ID_REGEX.search("test::submodule::Resource[agent,key=id],v=3")
+    assert result is not None
+    assert result.group("id") == "test::submodule::Resource[agent,key=id]"
+    assert result.group("type") == "test::submodule::Resource"
+    assert result.group("ns") == "test::submodule"
+    assert result.group("class") == "Resource"
+    assert result.group("hostname") == "agent"
+    assert result.group("attr") == "key"
+    assert result.group("value") == "id"
+    assert result.group("version") == "3"
+
+    result = PARSE_ID_REGEX.search("test::Resource[agent,key=id]")
+    assert result is not None
+    assert result.group("id") == "test::Resource[agent,key=id]"
+    assert result.group("type") == "test::Resource"
+    assert result.group("ns") == "test"
+    assert result.group("class") == "Resource"
+    assert result.group("hostname") == "agent"
+    assert result.group("attr") == "key"
+    assert result.group("value") == "id"
+    assert result.group("version") is None
+
+    result = PARSE_ID_REGEX.search("test::submodule::Resource[agent,key=id]")
+    assert result is not None
+    assert result.group("id") == "test::submodule::Resource[agent,key=id]"
+    assert result.group("type") == "test::submodule::Resource"
+    assert result.group("ns") == "test::submodule"
+    assert result.group("class") == "Resource"
+    assert result.group("hostname") == "agent"
+    assert result.group("attr") == "key"
+    assert result.group("value") == "id"
+    assert result.group("version") is None
+
+
+def test_parse_rvid_regex():
+    result = PARSE_RVID_REGEX.search("test::Resource[agent,key=id],v=3")
+    assert result is not None
+    assert result.group("id") == "test::Resource[agent,key=id]"
+    assert result.group("type") == "test::Resource"
+    assert result.group("ns") == "test"
+    assert result.group("class") == "Resource"
+    assert result.group("hostname") == "agent"
+    assert result.group("attr") == "key"
+    assert result.group("value") == "id"
+    assert result.group("version") == "3"
+
+    result = PARSE_RVID_REGEX.search("test::submodule::Resource[agent,key=id],v=3")
+    assert result is not None
+    assert result.group("id") == "test::submodule::Resource[agent,key=id]"
+    assert result.group("type") == "test::submodule::Resource"
+    assert result.group("ns") == "test::submodule"
+    assert result.group("class") == "Resource"
+    assert result.group("hostname") == "agent"
+    assert result.group("attr") == "key"
+    assert result.group("value") == "id"
+    assert result.group("version") == "3"
+
+    result = PARSE_RVID_REGEX.search("test::Resource[agent,key=id]")
+    assert result is None
+
+    result = PARSE_RVID_REGEX.search("test::submodule::Resource[agent,key=id]")
+    assert result is None

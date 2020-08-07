@@ -44,11 +44,11 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from inmanta.execute.runtime import ExecutionContext, ResultVariable  # noqa: F401
-    from inmanta.ast.statements import Statement, ExpressionStatement  # noqa: F401
-    from inmanta.ast.statements.define import DefineAttribute, DefineImport  # noqa: F401
-    from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast import Namespaced
+    from inmanta.ast.attribute import Attribute  # noqa: F401
+    from inmanta.ast.statements import ExpressionStatement, Statement  # noqa: F401
+    from inmanta.ast.statements.define import DefineAttribute, DefineImport  # noqa: F401
+    from inmanta.execute.runtime import ExecutionContext, ResultVariable  # noqa: F401
 
 
 class EntityLike(NamedType):

@@ -22,15 +22,17 @@ import os
 import uuid
 from collections import defaultdict
 from time import sleep
-from typing import Callable, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 import click
 import texttable
+from click_plugins import with_plugins
+from pkg_resources import iter_entry_points
 
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
-from inmanta.const import TIME_ISOFMT, AgentAction, AgentTriggerMethod
-from inmanta.resources import Id
+from inmanta.const import TIME_ISOFMT, AgentAction, AgentTriggerMethod, ResourceAction
+from inmanta.resources import Id, ResourceVersionIdStr
 from inmanta.types import JsonType
 
 
@@ -91,11 +93,11 @@ class Client(object):
 
             raise Exception(("An error occurred while requesting %s" % key_name) + msg)
 
-    def get_list(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> List[Dict[str, str]]:
+    def get_list(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> List[Dict[str, Any]]:
         """
             Same as do request, but return type is a list of dicts
         """
-        return cast(List[Dict[str, str]], self.do_request(method_name, key_name, arguments, False))
+        return cast(List[Dict[str, Any]], self.do_request(method_name, key_name, arguments, False))
 
     def get_dict(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> Dict[str, str]:
         """
@@ -170,6 +172,7 @@ def print_table(header: List[str], rows: List[List[str]], data_type: List[str] =
     click.echo(table.draw())
 
 
+@with_plugins(iter_entry_points("inmanta.cli_plugins"))
 @click.group(help="Base command")
 @click.option("--host", help="The server hostname to connect to")
 @click.option("--port", help="The server port to connect to")
@@ -799,6 +802,65 @@ def bootstrap_token(client: Client) -> None:
         Generate a bootstrap token that provides access to everything. This token is only valid for 3600 seconds.
     """
     click.echo("Token: " + protocol.encode_token(["api", "compiler", "agent"], expire=3600))
+
+
+@cmd.group("action-log", help="Subcommand to view the resource action log")
+@click.pass_context
+def resource_action_log(ctx: click.Context) -> None:
+    pass
+
+
+def validate_resource_version_id(
+    ctx: click.Context, option: Union[click.Option, click.Parameter], value: Any
+) -> ResourceVersionIdStr:
+    if not Id.is_resource_version_id(value):
+        raise click.BadParameter(value)
+    return value
+
+
+@resource_action_log.command(name="list")
+@click.option("--environment", "-e", help="The ID or name of the environment to use", required=True)
+@click.option(
+    "--rvid", help="The resource version ID of the resource", callback=validate_resource_version_id, required=True,
+)
+@click.option("--action", help="Only list this resource action", type=click.Choice([ra.value for ra in ResourceAction]))
+@click.pass_obj
+def resource_action_log_list(client: Client, environment: str, rvid: ResourceVersionIdStr, action: Optional[str]) -> None:
+    """
+        List the resource action log for a specific Resource.
+    """
+    tid = client.to_environment_id(environment)
+    ra_logs = client.get_list("get_resource", "logs", arguments=dict(tid=tid, id=rvid, logs=True, log_action=action))
+    headers = ["Action ID", "Action", "Started", "Finished", "Status"]
+    rows = [[log["action_id"], log["action"], log["started"], log["finished"], log.get("status", "")] for log in ra_logs]
+    if rows:
+        print_table(headers, rows)
+    else:
+        click.echo("No resource action log entry found.")
+
+
+@resource_action_log.command(name="show-messages")
+@click.option("--environment", "-e", help="The ID or name of the environment to use", required=True)
+@click.option(
+    "--rvid", help="The resource version ID of the resource", callback=validate_resource_version_id, required=True,
+)
+@click.option("--action-id", type=click.UUID, help="The ID of the resource action record", required=True)
+@click.pass_obj
+def resource_action_log_show(client: Client, environment: str, rvid: ResourceVersionIdStr, action_id: uuid.UUID) -> None:
+    """
+        Show the log messages for a specific entry in the resource action log.
+    """
+    tid = client.to_environment_id(environment)
+    action_logs = [
+        action_log
+        for action_log in client.get_list("get_resource", "logs", arguments=dict(tid=tid, id=rvid, logs=True))
+        if action_log["action_id"] == str(action_id)
+    ]
+    if not action_logs:
+        click.echo(f"No log messages found for action-id {action_id}")
+    else:
+        for msg in action_logs[0]["messages"]:
+            click.echo(f"{msg['timestamp']} {msg['level']} {msg['msg']}")
 
 
 def main() -> None:

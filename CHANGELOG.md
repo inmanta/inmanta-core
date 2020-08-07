@@ -4,6 +4,12 @@
 - Added merging of similar compile requests to the compile queue (#2137)
 - Export all handler's / resource's module's plugin source files so helper functions can be used from sibling modules (#2162)
 - Added documentation on how a string is matched against a regex defined in a regex-based typedef (#2214)
+- Added API to query ResourceActions
+- Added support to query the resource action log of a resource via the CLI (#2253)
+- Added conditional expression to the language with syntax condition ? x: y (#1987)
+- Add support for inmanta-cli click plugins
+- Added link to the PDF version of the documentation
+- Added environment setting for agent_trigger_method (#2025)
 - Expose compile data as exported by `inmanta compile --export-compile-data` via API (inmanta/inmanta-telco#54)
 
 ## Bug fixes
@@ -12,6 +18,8 @@
 - Handle skipped and unavailable as failures when calculating increments (#2184)
 - Constrain agent name to string values (#2172)
 - Fix for allowing comments in the requirements.txt file of modules (#2206)
+- Allow equality checks between types to support optional value overrides (#2243)
+- Don't add path params as query params to the url in the client (#2246)
 
 # Release 2020.3 (2020-07-02)
 

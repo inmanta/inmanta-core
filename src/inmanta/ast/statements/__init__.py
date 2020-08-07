@@ -30,8 +30,8 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.blocks import BasicBlock  # noqa: F401
+    from inmanta.ast.type import NamedType, Type  # noqa: F401
     from inmanta.ast.variables import Reference  # noqa: F401
-    from inmanta.ast.type import Type, NamedType  # noqa: F401
 
 
 class Statement(Namespaced):
@@ -148,7 +148,7 @@ class Resumer(ExpressionStatement):
 
 
 class RawResumer(ExpressionStatement):
-    def resume(self, equires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
+    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> None:
         pass
 
 

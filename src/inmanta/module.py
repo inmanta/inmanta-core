@@ -49,8 +49,8 @@ except ImportError:
 
 
 if TYPE_CHECKING:
-    from pkg_resources.packaging.version import Version  # noqa: F401
     from pkg_resources import Requirement  # noqa: F401
+    from pkg_resources.packaging.version import Version  # noqa: F401
 
 
 LOGGER = logging.getLogger(__name__)
