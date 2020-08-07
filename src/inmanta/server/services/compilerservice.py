@@ -298,12 +298,12 @@ class CompileRun(object):
                     try:
                         return success, model.CompileData.parse_raw(compile_data_json)
                     except json.JSONDecodeError:
-                        LOGGER.debug(
+                        LOGGER.warning(
                             "Failed to load compile data json for compile %s. Invalid json: '%s'",
                             (self.request.id, compile_data_json),
                         )
                     except pydantic.ValidationError:
-                        LOGGER.debug(
+                        LOGGER.warning(
                             "Failed to parse compile data for compile %s. Json does not match CompileData model: '%s'",
                             (self.request.id, compile_data_json),
                         )

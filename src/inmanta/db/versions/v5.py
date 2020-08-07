@@ -28,7 +28,7 @@ async def update(connection: Connection) -> None:
 ALTER TABLE public.compile ADD COLUMN substitute_compile_id uuid REFERENCES public.compile (id);
 
 
--- Compile data json exported by compiling with the --json parameter.
+-- Compile data json exported by compiling with the --export-compile-data parameter.
 ALTER TABLE public.compile ADD COLUMN compile_data jsonb;
         """
     )
