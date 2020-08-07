@@ -1409,7 +1409,7 @@ class Compile(BaseDocument):
         :param handled: were all registered handlers executed?
         :param version: version exported by this compile
         :param remote_id: id as given by the requestor, used by the requestor to distinguish between different requests
-        :param compile_data: json data as exported by compiling with the --json parameter
+        :param compile_data: json data as exported by compiling with the --export-compile-data parameter
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
