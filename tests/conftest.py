@@ -34,6 +34,7 @@ import time
 import traceback
 import uuid
 from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import asyncpg
 import pkg_resources
@@ -932,7 +933,7 @@ class CompileRunnerMock(object):
         self._runner_queue = runner_queue
         self.block = False
 
-    async def run(self, force_update: Optional[bool] = False) -> bool:
+    async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, None]:
         now = datetime.datetime.now()
         returncode = 1 if self._make_compile_fail else 0
         report = data.Report(
@@ -948,7 +949,7 @@ class CompileRunnerMock(object):
             while self.block:
                 await asyncio.sleep(0.1)
 
-        return success
+        return success, None
 
 
 def monkey_patch_compiler_service(monkeypatch, server, make_compile_fail, runner_queue=None):

@@ -81,7 +81,7 @@ def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type],
 
     if not success:
         sys.stderr.write("Unable to execute all statements.\n")
-    if compiler_config.json.get():
+    if compiler_config.export_compile_data.get():
         compiler.export_data()
     if compiler_config.dataflow_graphic_enable.get():
         show_dataflow_graphic(sched, compiler)
@@ -239,7 +239,7 @@ class Compiler(object):
         """
             Exports compiler data if the option has been set.
         """
-        with open(compiler_config.json_file.get(), "w") as file:
+        with open(compiler_config.export_compile_data_file.get(), "w") as file:
             file.write("%s\n" % self._data.export().json())
 
     def handle_exception(self, exception: CompilerException) -> None:
@@ -250,7 +250,7 @@ class Compiler(object):
 
     def _handle_exception_export(self, exception: CompilerException) -> None:
         self._data.add_error(exception)
-        if compiler_config.json.get():
+        if compiler_config.export_compile_data.get():
             self.export_data()
         raise exception
 
