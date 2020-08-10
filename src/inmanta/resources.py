@@ -36,9 +36,8 @@ from typing import (
     cast,
 )
 
-import inmanta.execute.proxy as proxy
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
-from inmanta.execute import runtime, util
+from inmanta.execute import proxy, runtime, util
 from inmanta.types import JsonType
 
 if TYPE_CHECKING:
