@@ -183,16 +183,6 @@ class ResourceMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
-def serialize_proxy(d: "proxy.DynamicProxy"):
-    if isinstance(d, proxy.DictProxy):
-        return {key: serialize_proxy(value) for key, value in d.items()}
-
-    if isinstance(d, proxy.SequenceProxy):
-        return [serialize_proxy(value) for value in d]
-
-    return d
-
-
 RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"}
 
 
@@ -306,10 +296,6 @@ class Resource(metaclass=ResourceMeta):
                     value = cls.map[field_name](exporter, model_object)
                 else:
                     value = getattr(model_object, field_name)
-
-                # copy dict and sequence proxy before passing it to handler code
-                if isinstance(value, (proxy.DynamicProxy, proxy.SequenceProxy)):
-                    value = serialize_proxy(value)
 
                 return value
             except proxy.UnknownException as e:
