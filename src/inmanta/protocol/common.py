@@ -505,14 +505,14 @@ class MethodProperties(object):
         if typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
             self._validate_type_arg(arg, typing_inspect.get_args(arg_type, evaluate=True)[0], allow_none_type=True)
 
-        elif not typing_inspect.is_generic_type(arg_type) and issubclass(arg_type, ReturnValue):
-            raise InvalidMethodDefinition("ReturnValue should have a type specified.")
+        elif not typing_inspect.is_generic_type(arg_type) and isinstance(arg_type, type):
+            if issubclass(arg_type, ReturnValue):
+                raise InvalidMethodDefinition("ReturnValue should have a type specified.")
 
-        elif not typing_inspect.is_generic_type(arg_type) and issubclass(arg_type, type(None)):
-            pass
-
+            elif issubclass(arg_type, ReturnValue):
+                pass
         else:
-            self._validate_type_arg(arg, arg_type)
+            self._validate_type_arg(arg, arg_type, allow_none_type=True)
 
     def _validate_type_arg(self, arg: str, arg_type: Type, allow_none_type: bool = False, in_url: bool = False) -> None:
         """ Validate the given type arg recursively
