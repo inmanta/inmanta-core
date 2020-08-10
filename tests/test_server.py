@@ -22,7 +22,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict
+from typing import Dict, Optional
 
 import pytest
 import tornado
@@ -34,7 +34,7 @@ from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
 from inmanta.export import upload_code
-from inmanta.protocol import Client, handle, json_encode, method
+from inmanta.protocol import Client, handle, json_encode, method, typedmethod
 from inmanta.protocol.common import ArgOption
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -962,3 +962,16 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     response = json.loads(response.body.decode("utf-8"))
     action_ids = [uuid.UUID(resource_action["action_id"]) for resource_action in response["data"]]
     assert action_ids == third_page_action_ids
+
+
+def test_2277_typedmethod_return_optional() -> None:
+    @typedmethod(
+        path="/typedtestmethod",
+        operation="GET",
+        client_types=[const.ClientType.api],
+        api_version=1,
+    )
+    def test_method_typed() -> Optional[int]:
+        """
+            A typedmethod used for testing.
+        """
