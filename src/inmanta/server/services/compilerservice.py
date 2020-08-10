@@ -34,10 +34,12 @@ from typing import Dict, Hashable, List, Optional, Tuple, cast
 
 import dateutil
 import dateutil.parser
+import pydantic
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
 from inmanta.protocol import encode_token, methods
+from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
@@ -164,13 +166,13 @@ class CompileRun(object):
             )
 
             returncode = await self.drain(sub_process)
-
             return await self._end_stage(returncode)
+
         except Exception as e:
             await self._error("".join(traceback.format_exception(type(e), e, e.__traceback__)))
             return await self._end_stage(RETURNCODE_INTERNAL_ERROR)
 
-    async def run(self, force_update: Optional[bool] = False) -> bool:
+    async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, Optional[model.CompileData]]:
         success = False
         now = datetime.datetime.now()
         await self.request.update_fields(started=now)
@@ -189,7 +191,7 @@ class CompileRun(object):
             if env is None:
                 await self._error("Environment %s does not exist." % environment_id)
                 await self._end_stage(-1)
-                return False
+                return False, None
 
             inmanta_path = [sys.executable, "-m", "inmanta.app"]
 
@@ -213,7 +215,7 @@ class CompileRun(object):
                         cmd.extend(["-b", repo_branch])
                     result = await self._run_compile_stage("Cloning repository", cmd, project_dir)
                     if result.returncode is None or result.returncode > 0:
-                        return False
+                        return False, None
 
                 elif force_update or self.request.force_update:
                     result = await self._run_compile_stage("Fetching changes", ["git", "fetch", repo_url], project_dir)
@@ -229,6 +231,8 @@ class CompileRun(object):
                     LOGGER.info("Installing and updating modules")
                     await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
 
+            compile_data_json_file = NamedTemporaryFile()
+
             server_address = opt.server_address.get()
             server_port = opt.get_bind_port()
             cmd = inmanta_path + [
@@ -243,6 +247,9 @@ class CompileRun(object):
                 str(server_port),
                 "--metadata",
                 json.dumps(self.request.metadata),
+                "--export-compile-data",
+                "--export-compile-data-file",
+                compile_data_json_file.name,
             ]
 
             if not self.request.do_export:
@@ -285,7 +292,22 @@ class CompileRun(object):
             LOGGER.exception("An error occured while recompiling")
 
         finally:
-            return success
+            with compile_data_json_file as file:
+                compile_data_json: str = file.read().decode()
+                if compile_data_json:
+                    try:
+                        return success, model.CompileData.parse_raw(compile_data_json)
+                    except json.JSONDecodeError:
+                        LOGGER.warning(
+                            "Failed to load compile data json for compile %s. Invalid json: '%s'",
+                            (self.request.id, compile_data_json),
+                        )
+                    except pydantic.ValidationError:
+                        LOGGER.warning(
+                            "Failed to parse compile data for compile %s. Json does not match CompileData model: '%s'",
+                            (self.request.id, compile_data_json),
+                        )
+            return success, None
 
 
 class CompilerService(ServerSlice):
@@ -467,15 +489,22 @@ class CompilerService(ServerSlice):
 
         runner = self._get_compile_runner(compile, project_dir=os.path.join(self._env_folder, str(compile.environment)))
         # set force_update == True iff any compile request has force_update == True
-        success = await runner.run(force_update=any(c.force_update for c in chain([compile], merge_candidates)))
+        compile_data: Optional[model.CompileData]
+        success, compile_data = await runner.run(force_update=any(c.force_update for c in chain([compile], merge_candidates)))
 
         version = runner.version
 
         end = datetime.datetime.now()
-        await compile.update_fields(completed=end, success=success, version=version)
+        compile_data_json: Optional[str] = None if compile_data is None else compile_data.json()
+        await compile.update_fields(completed=end, success=success, version=version, compile_data=compile_data_json)
         awaitables = [
             merge_candidate.update_fields(
-                started=compile.started, completed=end, success=success, version=version, substitute_compile_id=compile.id
+                started=compile.started,
+                completed=end,
+                success=success,
+                version=version,
+                substitute_compile_id=compile.id,
+                compile_data=compile_data_json,
             )
             for merge_candidate in merge_candidates
         ]
@@ -518,6 +547,13 @@ class CompilerService(ServerSlice):
             return 404
 
         return 200, {"report": report}
+
+    @protocol.handle(methods.get_compile_data, compile_id="id")
+    async def get_compile_data(self, compile_id: uuid.UUID) -> Optional[model.CompileData]:
+        compile: Optional[data.Compile] = await data.Compile.get_by_id(compile_id)
+        if compile is None:
+            raise NotFound("The given compile id does not exist")
+        return compile.to_dto().compile_data
 
     @protocol.handle(methods.get_compile_queue, env="tid")
     async def get_compile_queue(self, env: data.Environment) -> List[model.CompileRun]:

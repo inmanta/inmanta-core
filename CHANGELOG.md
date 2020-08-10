@@ -10,6 +10,7 @@
 - Add support for inmanta-cli click plugins
 - Added link to the PDF version of the documentation
 - Added environment setting for agent_trigger_method (#2025)
+- Expose compile data as exported by `inmanta compile --export-compile-data` via API (inmanta/inmanta-telco#54)
 
 ## Bug fixes
 - Restore support to pass mocking information to the compiler

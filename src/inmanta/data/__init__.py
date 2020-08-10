@@ -1409,6 +1409,7 @@ class Compile(BaseDocument):
         :param handled: were all registered handlers executed?
         :param version: version exported by this compile
         :param remote_id: id as given by the requestor, used by the requestor to distinguish between different requests
+        :param compile_data: json data as exported by compiling with the --export-compile-data parameter
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1430,6 +1431,8 @@ class Compile(BaseDocument):
     # Compile queue might be collapsed if it contains similar compile requests.
     # In that case, substitute_compile_id will reference the actually compiled request.
     substitute_compile_id: Optional[uuid.UUID] = Field(field_type=uuid.UUID)
+
+    compile_data: Optional[str] = Field(field_type=str)
 
     @classmethod
     async def get_reports(
@@ -1564,6 +1567,7 @@ class Compile(BaseDocument):
             force_update=self.force_update,
             metadata=self.metadata,
             environment_variables=self.environment_variables,
+            compile_data=None if self.compile_data is None else json.loads(self.compile_data),
         )
 
 
