@@ -33,7 +33,6 @@ import tempfile
 import time
 import traceback
 import uuid
-from tempfile import mktemp
 from typing import Dict, List, Optional
 
 import asyncpg
@@ -798,13 +797,11 @@ class SnippetCompilationTest(KeepOnFail):
         helper function to allow actual export to be run an a different thread
         i.e. export.run must run off main thread to allow it to start a new ioloop for run_sync
         """
-        templfile = mktemp("json", "dump", self.project_dir)
-
         class Options(object):
             pass
 
         options = Options()
-        options.json = templfile if not deploy else None
+        options.json = os.path.join(self.project_dir, "dump.json") if not deploy else None
         options.depgraph = False
         options.deploy = deploy
         options.ssl = False

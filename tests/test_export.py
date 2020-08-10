@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+import json
+import os
 import pytest
 
 from inmanta import config, const
@@ -297,3 +299,36 @@ a = exp::RequiresTest(do_break=3)
         match="A dependency manager inserted a resource id without version this is not allowed aa::Bbbb\\[agent,name=agent\\]",
     ):
         snippetcompiler.do_export()
+
+
+def test_2121_wrapped_proxy_serialize(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import exp
+
+dct = {"a": 1, "b": 2}
+
+x = exp::WrappedProxyTest(
+    name = "my_wrapped_proxy_test",
+    agent = "my_agent",
+    my_list = [1, 2, 3],
+    my_dict = {
+        "dct": dct,
+    }
+)
+        """,
+    )
+    snippetcompiler.do_export()
+    tmp_file: str = os.path.join(snippetcompiler.project_dir, "dump.json")
+    with open(tmp_file, "r") as f:
+        export: dict = json.loads(f.read())
+        my_dict: dict = {"dct": {"a": 1, "b": 2}}
+        assert len(export) == 1
+        print(export[0])
+        assert export[0]["wrapped_proxies"] == {
+            "my_list": [1, 2, 3],
+            "my_dict": my_dict,
+            "deep_dict": {
+                "multi_level": my_dict,
+            },
+        }
