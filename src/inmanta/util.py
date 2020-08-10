@@ -217,6 +217,9 @@ class JSONSerializable(ABC):
 
     @staticmethod
     def default(obj: object) -> Union[ReturnTypes, "JSONSerializable"]:
+        """
+            Attempts object serialization. Meant to be used as `default` argument for `json.dumps`.
+        """
         if isinstance(obj, JSONSerializable):
             return obj.json_serialization_step()
 
