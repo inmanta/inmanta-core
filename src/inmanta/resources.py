@@ -208,7 +208,9 @@ class Resource(metaclass=ResourceMeta):
             return False
 
     @classmethod
-    def convert_requires(cls, resources: Dict["runtime.Instance", "Resource"], ignored_resources: Set["runtime.Instance"]) -> None:
+    def convert_requires(
+        cls, resources: Dict["runtime.Instance", "Resource"], ignored_resources: Set["runtime.Instance"]
+    ) -> None:
         """
             Convert all requires
 
@@ -241,7 +243,9 @@ class Resource(metaclass=ResourceMeta):
             res.requires = {x.id for x in final_requires}
 
     @classmethod
-    def object_to_id(cls, model_object: "proxy.DynamicProxy", entity_name: str, attribute_name: str, agent_attribute: str) -> "Id":
+    def object_to_id(
+        cls, model_object: "proxy.DynamicProxy", entity_name: str, attribute_name: str, agent_attribute: str
+    ) -> "Id":
         """
         Convert the given object to a textual id
 

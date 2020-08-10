@@ -61,9 +61,7 @@ class WrappedProxyTest(resources.ManagedResource):
         return {
             "my_list": obj.my_list,
             "my_dict": obj.my_dict,
-            "deep_dict": {
-                "multi_level": obj.my_dict,
-            },
+            "deep_dict": {"multi_level": obj.my_dict,},
         }
 
 

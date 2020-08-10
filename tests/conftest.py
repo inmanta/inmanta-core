@@ -33,7 +33,6 @@ import tempfile
 import time
 import traceback
 import uuid
-from typing import Dict, List, Optional
 from typing import Dict, List, Optional, Tuple
 
 import asyncpg
@@ -798,6 +797,7 @@ class SnippetCompilationTest(KeepOnFail):
         helper function to allow actual export to be run an a different thread
         i.e. export.run must run off main thread to allow it to start a new ioloop for run_sync
         """
+
         class Options(object):
             pass
 

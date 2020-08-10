@@ -17,6 +17,7 @@
 """
 import json
 import os
+
 import pytest
 
 from inmanta import config, const
@@ -328,7 +329,5 @@ x = exp::WrappedProxyTest(
         assert export[0]["wrapped_proxies"] == {
             "my_list": [1, 2, 3],
             "my_dict": my_dict,
-            "deep_dict": {
-                "multi_level": my_dict,
-            },
+            "deep_dict": {"multi_level": my_dict,},
         }
