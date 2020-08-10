@@ -202,14 +202,43 @@ def get_free_tcp_port() -> str:
 
 
 class JSONSerializable(ABC):
+    """
+        Instances of this class are JSON serializable. Concrete subclasses should implement json_serialization_step.
+    """
+
     @abstractmethod
     def json_serialization_step(self) -> Union[ReturnTypes, "JSONSerializable"]:
+        """
+            Perform a step in the serialization process. Returns an other serializable object.
+            The implementation should make sure each step progresses serialization so that successively
+            calling JSONSerializable.default eventually resolves to a trivially serializable object.
+        """
         raise NotImplementedError()
 
     @staticmethod
     def default(obj: object) -> Union[ReturnTypes, "JSONSerializable"]:
         if isinstance(obj, JSONSerializable):
             return obj.json_serialization_step()
+
+        if isinstance(obj, uuid.UUID):
+            return str(obj)
+
+        if isinstance(obj, datetime.datetime):
+            return obj.isoformat(timespec="microseconds")
+
+        if hasattr(obj, "to_dict"):
+            return obj.to_dict()
+
+        if isinstance(obj, enum.Enum):
+            return obj.name
+
+        if isinstance(obj, Exception):
+            # Logs can push exceptions through RPC. Return a string representation.
+            return str(obj)
+
+        if isinstance(obj, BaseModel):
+            return obj.dict(by_alias=True)
+
         LOGGER.error("Unable to serialize %s", obj)
         raise TypeError(repr(obj) + " is not JSON serializable")
 
@@ -218,24 +247,6 @@ def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
         A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries
     """
-    if isinstance(o, uuid.UUID):
-        return str(o)
-
-    if isinstance(o, datetime.datetime):
-        return o.isoformat(timespec="microseconds")
-
-    if hasattr(o, "to_dict"):
-        return o.to_dict()
-
-    if isinstance(o, enum.Enum):
-        return o.name
-
-    if isinstance(o, Exception):
-        # Logs can push exceptions through RPC. Return a string representation.
-        return str(o)
-
-    if isinstance(o, BaseModel):
-        return o.dict(by_alias=True)
 
     return JSONSerializable.default(o)
 
