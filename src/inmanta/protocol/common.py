@@ -506,7 +506,7 @@ class MethodProperties(object):
         if typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
             self._validate_type_arg(arg, typing_inspect.get_args(arg_type, evaluate=True)[0], allow_none_type=True)
 
-        elif not typing_inspect.is_generic_type(arg_type) and isinstance(arg_type, type) and if issubclass(arg_type, ReturnValue):
+        elif not typing_inspect.is_generic_type(arg_type) and isinstance(arg_type, type) and issubclass(arg_type, ReturnValue):
             raise InvalidMethodDefinition("ReturnValue should have a type specified.")
 
         else:
