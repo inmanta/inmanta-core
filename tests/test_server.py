@@ -966,10 +966,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
 
 def test_2277_typedmethod_return_optional() -> None:
     @typedmethod(
-        path="/typedtestmethod",
-        operation="GET",
-        client_types=[const.ClientType.api],
-        api_version=1,
+        path="/typedtestmethod", operation="GET", client_types=[const.ClientType.api], api_version=1,
     )
     def test_method_typed() -> Optional[int]:
         """
