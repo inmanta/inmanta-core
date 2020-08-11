@@ -215,43 +215,35 @@ class JSONSerializable(ABC):
         """
         raise NotImplementedError()
 
-    @staticmethod
-    def default(obj: object) -> Union[ReturnTypes, "JSONSerializable"]:
-        """
-            Attempts object serialization. Meant to be used as `default` argument for `json.dumps`.
-        """
-        if isinstance(obj, JSONSerializable):
-            return obj.json_serialization_step()
-
-        if isinstance(obj, uuid.UUID):
-            return str(obj)
-
-        if isinstance(obj, datetime.datetime):
-            return obj.isoformat(timespec="microseconds")
-
-        if hasattr(obj, "to_dict"):
-            return obj.to_dict()
-
-        if isinstance(obj, enum.Enum):
-            return obj.name
-
-        if isinstance(obj, Exception):
-            # Logs can push exceptions through RPC. Return a string representation.
-            return str(obj)
-
-        if isinstance(obj, BaseModel):
-            return obj.dict(by_alias=True)
-
-        LOGGER.error("Unable to serialize %s", obj)
-        raise TypeError(repr(obj) + " is not JSON serializable")
-
 
 def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
         A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries
     """
+    if isinstance(o, JSONSerializable):
+        return o.json_serialization_step()
 
-    return JSONSerializable.default(o)
+    if isinstance(o, uuid.UUID):
+        return str(o)
+
+    if isinstance(o, datetime.datetime):
+        return o.isoformat(timespec="microseconds")
+
+    if hasattr(o, "to_dict"):
+        return o.to_dict()
+
+    if isinstance(o, enum.Enum):
+        return o.name
+
+    if isinstance(o, Exception):
+        # Logs can push exceptions through RPC. Return a string representation.
+        return str(o)
+
+    if isinstance(o, BaseModel):
+        return o.dict(by_alias=True)
+
+    LOGGER.error("Unable to serialize %s", o)
+    raise TypeError(repr(o) + " is not JSON serializable")
 
 
 def add_future(future: Union[Future, Coroutine]) -> Task:
