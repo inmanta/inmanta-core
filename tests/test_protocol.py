@@ -33,7 +33,7 @@ from tornado import gen, web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
-from inmanta import config, protocol
+from inmanta import config, const, protocol
 from inmanta.data.model import BaseModel
 from inmanta.protocol import VersionMatch, exceptions, json_encode
 from inmanta.protocol.common import (
@@ -41,9 +41,11 @@ from inmanta.protocol.common import (
     HTML_CONTENT_WITH_UTF8_CHARSET,
     OCTET_STREAM_CONTENT,
     ZIP_CONTENT,
+    ArgOption,
     InvalidMethodDefinition,
     InvalidPathException,
     MethodProperties,
+    Result,
     ReturnValue,
 )
 from inmanta.protocol.methods import ENV_OPTS
@@ -1590,3 +1592,88 @@ async def test_multiple_path_params(unused_tcp_port, postgres_db, database_name,
 
     request = MethodProperties.methods["test_method"][0].build_call(args=[], kwargs={"id": "1", "name": "monty", "age": 42})
     assert request.url == "/api/v1/test/1/monty?age=42"
+
+
+@pytest.mark.asyncio(timeout=5)
+async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
+    async def _id(x: object, dct: Dict[str, str]) -> object:
+        return x
+
+    @protocol.method(
+        path="/testmethod",
+        operation="POST",
+        arg_options={"header_param": ArgOption(header="X-Inmanta-Header-Param", getter=_id)},
+        client_types=[const.ClientType.api],
+    )
+    def test_method(header_param: str, body_param: str) -> None:
+        """
+            A method used for testing.
+        """
+
+    class TestSlice(ServerSlice):
+        @protocol.handle(test_method)
+        async def test_method_implementation(self, header_param: str, body_param: str) -> None:
+            pass
+
+    server: Server = Server()
+    server_slice: ServerSlice = TestSlice("my_test_slice")
+    server.add_slice(server_slice)
+    await server.start()
+    async_finalizer.add(server_slice.stop)
+    async_finalizer.add(server.stop)
+
+    client = tornado.httpclient.AsyncHTTPClient()
+
+    # valid request should succeed
+    request = tornado.httpclient.HTTPRequest(
+        url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
+        method="POST",
+        body=json_encode({"body_param": "body_param_value"}),
+        headers={"X-Inmanta-Header-Param": "header_param_value"},
+    )
+    response: tornado.httpclient.HTTPResponse = await client.fetch(request)
+    assert response.code == 200
+
+    # invalid request should fail
+    request = tornado.httpclient.HTTPRequest(
+        url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
+        method="POST",
+        body=json_encode({"header_param": "header_param_value", "body_param": "body_param_value"}),
+    )
+    with pytest.raises(tornado.httpclient.HTTPClientError):
+        await client.fetch(request)
+
+
+@pytest.mark.parametrize(
+    "return_value,valid", [(1, True), (None, True), ("Hello World!", False)]
+)
+@pytest.mark.asyncio
+async def test_2277_typedmethod_return_optional(async_finalizer, return_value: object, valid: bool) -> None:
+    @protocol.typedmethod(
+        path="/typedtestmethod", operation="GET", client_types=[const.ClientType.api], api_version=1,
+    )
+    def test_method_typed() -> Optional[int]:
+        """
+            A typedmethod used for testing.
+        """
+
+    class TestSlice(ServerSlice):
+        @protocol.handle(test_method_typed)
+        async def test_method_typed_implementation(self) -> Optional[int]:
+            return return_value  # type: ignore
+
+    server: Server = Server()
+    server_slice: ServerSlice = TestSlice("my_test_slice")
+    server.add_slice(server_slice)
+    await server.start()
+    async_finalizer.add(server_slice.stop)
+    async_finalizer.add(server.stop)
+
+    client: protocol.Client = protocol.Client("client")
+
+    response: Result = await client.test_method_typed()
+    if valid:
+        assert response.code == 200
+        assert response.result == {"data": return_value}
+    else:
+        assert response.code == 400

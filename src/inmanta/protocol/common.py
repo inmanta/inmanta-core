@@ -213,8 +213,7 @@ class ReturnValue(Generic[T]):
         """ Get the body with an envelope specified
         """
         response: Dict[str, Any] = {}
-        if self._response is not None:
-            response[envelope_key] = self._response
+        response[envelope_key] = self._response
 
         if len(self._warnings):
             response["metadata"] = {"warnings": self._warnings}
