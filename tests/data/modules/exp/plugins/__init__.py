@@ -50,6 +50,10 @@ class RequiresTest(resources.PurgeableResource):
 
 @resources.resource("exp::WrappedProxyTest", agent="agent", id_attribute="name")
 class WrappedProxyTest(resources.ManagedResource):
+    """
+        This class represents a service on a system.
+    """
+
     fields = ("name", "wrapped_proxies")
 
     @staticmethod
@@ -59,15 +63,6 @@ class WrappedProxyTest(resources.ManagedResource):
             "my_dict": obj.my_dict,
             "deep_dict": {"multi_level": obj.my_dict,},
         }
-
-
-@resources.resource("exp::WrappedSelfTest", agent="agent", id_attribute="name")
-class WrappedSelfTest(resources.ManagedResource):
-    fields = ("name", "wrapped_self")
-
-    @staticmethod
-    def get_wrapped_self(exp, obj):
-        return {"self": obj}
 
 
 @dependency_manager

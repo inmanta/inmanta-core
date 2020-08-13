@@ -40,12 +40,3 @@ entity WrappedProxyTest:
 end
 
 implement WrappedProxyTest using std::none
-
-
-entity WrappedSelfTest:
-    string name
-    string agent
-    bool managed=true
-end
-
-implement WrappedSelfTest using std::none

@@ -20,7 +20,7 @@ from collections import Mapping
 from copy import copy
 from typing import Dict, List, Optional, Tuple, Union
 
-from inmanta.ast import NotFoundException, RuntimeException
+from inmanta.ast import RuntimeException
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.types import PrimitiveTypes
 from inmanta.util import JSONSerializable
@@ -136,12 +136,7 @@ class DynamicProxy(object):
 
     def __getattr__(self, attribute):
         instance = self._get_instance()
-
-        try:
-            value = instance.get_attribute(attribute).get_value()
-        except NotFoundException:
-            # allow for hasattr(proxy, "some_attr")
-            raise AttributeError()
+        value = instance.get_attribute(attribute).get_value()
 
         return DynamicProxy.return_value(value)
 
