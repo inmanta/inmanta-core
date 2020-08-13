@@ -50,7 +50,7 @@ black==19.10b0
 typing_inspect==0.6.0
 importlib_metadata==1.7.0
 mypy==0.782
-setuptools==49.3.0
+setuptools==49.4.0
 pip==20.2.2
 docstring-parser==0.7.2
 bumpversion==0.6.0
