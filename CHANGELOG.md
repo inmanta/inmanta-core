@@ -21,6 +21,7 @@
 - Allow equality checks between types to support optional value overrides (#2243)
 - Don't add path params as query params to the url in the client (#2246)
 - Allow Optional as return type for typedmethods (#2277)
+- Made Dict- and SequenceProxy serializable to allow exporter to wrap dict and list attributes in other data structures (#2121)
 
 # Release 2020.3 (2020-07-02)
 

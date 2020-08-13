@@ -29,6 +29,7 @@ import socket
 import time
 import uuid
 import warnings
+from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
 from functools import lru_cache
 from logging import Logger
@@ -39,7 +40,7 @@ from tornado import gen
 from tornado.ioloop import IOLoop
 
 from inmanta.data.model import BaseModel
-from inmanta.types import JsonType, PrimitiveTypes
+from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -200,10 +201,28 @@ def get_free_tcp_port() -> str:
         return str(port)
 
 
-def custom_json_encoder(o: object) -> Union[Dict, str, List]:
+class JSONSerializable(ABC):
+    """
+        Instances of this class are JSON serializable. Concrete subclasses should implement json_serialization_step.
+    """
+
+    @abstractmethod
+    def json_serialization_step(self) -> Union[ReturnTypes, "JSONSerializable"]:
+        """
+            Perform a step in the serialization process. Returns an other serializable object.
+            The implementation should make sure each step progresses serialization so that successively
+            calling JSONSerializable.default eventually resolves to a trivially serializable object.
+        """
+        raise NotImplementedError()
+
+
+def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
         A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries
     """
+    if isinstance(o, JSONSerializable):
+        return o.json_serialization_step()
+
     if isinstance(o, uuid.UUID):
         return str(o)
 
