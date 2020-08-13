@@ -331,3 +331,21 @@ x = exp::WrappedProxyTest(
             "my_dict": my_dict,
             "deep_dict": {"multi_level": my_dict},
         }
+
+
+def test_2121_wrapped_self_serialize(snippetcompiler):
+    """
+        Make sure DynamicProxies representing an entity are not serialized.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+import exp
+
+exp::WrappedSelfTest(
+    name = "my_wrapped_self_test",
+    agent = "my_agent",
+)
+        """
+    )
+    with pytest.raises(TypeError, match="not JSON serializable"):
+        snippetcompiler.do_export()
