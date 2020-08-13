@@ -49,9 +49,10 @@ from inmanta.protocol.openapi.model import (
 )
 from inmanta.server import config
 from inmanta.server.extensions import FeatureManager
+from inmanta.types import ReturnTypes
 
 
-def openapi_json_encoder(o) -> Union[Dict, str, List]:
+def openapi_json_encoder(o) -> Union[ReturnTypes, util.JSONSerializable]:
     if isinstance(o, BaseModel):
         return o.dict(by_alias=True, exclude_none=True)
     return util.custom_json_encoder(o)

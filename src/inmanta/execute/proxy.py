@@ -18,10 +18,12 @@
 
 from collections import Mapping
 from copy import copy
-from typing import Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from inmanta.ast import RuntimeException
 from inmanta.execute.util import NoneValue, Unknown
+from inmanta.types import PrimitiveTypes
+from inmanta.util import JSONSerializable
 
 try:
     from typing import TYPE_CHECKING
@@ -175,7 +177,7 @@ class DynamicProxy(object):
         return "@%s" % repr(self._get_instance())
 
 
-class SequenceProxy(DynamicProxy):
+class SequenceProxy(DynamicProxy, JSONSerializable):
     def __init__(self, iterator):
         DynamicProxy.__init__(self, iterator)
 
@@ -194,8 +196,11 @@ class SequenceProxy(DynamicProxy):
 
         return IteratorProxy(instance.__iter__())
 
+    def json_serialization_step(self) -> List[PrimitiveTypes]:
+        return self._get_instance()
 
-class DictProxy(DynamicProxy, Mapping):
+
+class DictProxy(DynamicProxy, Mapping, JSONSerializable):
     def __init__(self, mydict):
         DynamicProxy.__init__(self, mydict)
 
@@ -213,6 +218,9 @@ class DictProxy(DynamicProxy, Mapping):
         instance = self._get_instance()
 
         return IteratorProxy(instance.__iter__())
+
+    def json_serialization_step(self) -> Dict[str, PrimitiveTypes]:
+        return self._get_instance()
 
 
 class CallProxy(DynamicProxy):

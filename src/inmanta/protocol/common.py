@@ -815,7 +815,7 @@ class UrlMethod(object):
 
 
 # Util functions
-def custom_json_encoder(o: object) -> Union[Dict, str, List]:
+def custom_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
     """
         A custom json encoder that knows how to encode other types commonly used by Inmanta
     """
