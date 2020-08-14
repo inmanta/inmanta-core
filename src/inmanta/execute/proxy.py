@@ -63,6 +63,16 @@ class UnknownException(Exception):
         self.unknown = unknown
 
 
+class AttributeNotFound(NotFoundException, AttributeError):
+    """
+        Exception used for backwards compatibility with try-except blocks around some_proxy.some_attr.
+        This previously raised `NotFoundException` which is currently deprecated in this context.
+        Its new behavior is to raise an AttributeError for compatibility with Python's builtin `hasattr`.
+    """
+
+    pass
+
+
 class DynamicProxy(object):
     """
         This class wraps an object and makes sure that a model is never modified
@@ -139,9 +149,9 @@ class DynamicProxy(object):
 
         try:
             value = instance.get_attribute(attribute).get_value()
-        except NotFoundException:
+        except NotFoundException as e:
             # allow for hasattr(proxy, "some_attr")
-            raise AttributeError()
+            raise AttributeNotFound(e.stmt, e.name)
 
         return DynamicProxy.return_value(value)
 
