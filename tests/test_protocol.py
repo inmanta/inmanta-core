@@ -1645,9 +1645,7 @@ async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
         await client.fetch(request)
 
 
-@pytest.mark.parametrize(
-    "return_value,valid", [(1, True), (None, True), ("Hello World!", False)]
-)
+@pytest.mark.parametrize("return_value,valid", [(1, True), (None, True), ("Hello World!", False)])
 @pytest.mark.asyncio
 async def test_2277_typedmethod_return_optional(async_finalizer, return_value: object, valid: bool) -> None:
     @protocol.typedmethod(
