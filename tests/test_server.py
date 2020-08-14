@@ -43,7 +43,6 @@ from inmanta.server import (
 )
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import Server, ServerSlice
 from inmanta.util import get_compiler_version, hash_file
 from utils import log_contains, log_doesnt_contain, retry_limited
 
