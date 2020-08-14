@@ -1005,7 +1005,7 @@ def get_server_status() -> model.StatusResponse:
     """
 
 
-@method(
+@typedmethod(
     path="/compiledata/<id>", operation="GET", client_types=[const.ClientType.api], api_version=1,
 )
 def get_compile_data(id: uuid.UUID) -> Optional[model.CompileData]:

@@ -22,10 +22,8 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict
 
 import pytest
-import tornado
 from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
@@ -34,8 +32,7 @@ from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
 from inmanta.export import upload_code
-from inmanta.protocol import Client, handle, json_encode, method
-from inmanta.protocol.common import ArgOption
+from inmanta.protocol import Client
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -46,7 +43,6 @@ from inmanta.server import (
 )
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import Server, ServerSlice
 from inmanta.util import get_compiler_version, hash_file
 from utils import log_contains, log_doesnt_contain, retry_limited
 
@@ -714,56 +710,6 @@ async def test_server_logs_address(server_config, caplog):
 
         await ibl.stop()
         log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:")
-
-
-@pytest.mark.asyncio(timeout=5)
-async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
-    async def _id(x: object, dct: Dict[str, str]) -> object:
-        return x
-
-    @method(
-        path="/testmethod",
-        operation="POST",
-        arg_options={"header_param": ArgOption(header="X-Inmanta-Header-Param", getter=_id)},
-        client_types=[const.ClientType.api],
-    )
-    def test_method(header_param: str, body_param: str) -> None:
-        """
-            A method used for testing.
-        """
-
-    class TestSlice(ServerSlice):
-        @handle(test_method)
-        async def test_method_implementation(self, header_param: str, body_param: str) -> None:
-            pass
-
-    server: Server = Server()
-    server_slice: ServerSlice = TestSlice("my_test_slice")
-    server.add_slice(server_slice)
-    await server.start()
-    async_finalizer.add(server_slice.stop)
-    async_finalizer.add(server.stop)
-
-    client = tornado.httpclient.AsyncHTTPClient()
-
-    # valid request should succeed
-    request = tornado.httpclient.HTTPRequest(
-        url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
-        method="POST",
-        body=json_encode({"body_param": "body_param_value"}),
-        headers={"X-Inmanta-Header-Param": "header_param_value"},
-    )
-    response: tornado.httpclient.HTTPResponse = await client.fetch(request)
-    assert response.code == 200
-
-    # invalid request should fail
-    request = tornado.httpclient.HTTPRequest(
-        url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
-        method="POST",
-        body=json_encode({"header_param": "header_param_value", "body_param": "body_param_value"}),
-    )
-    with pytest.raises(tornado.httpclient.HTTPClientError):
-        await client.fetch(request)
 
 
 @pytest.mark.asyncio

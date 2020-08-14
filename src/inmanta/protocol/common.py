@@ -213,8 +213,7 @@ class ReturnValue(Generic[T]):
         """ Get the body with an envelope specified
         """
         response: Dict[str, Any] = {}
-        if self._response is not None:
-            response[envelope_key] = self._response
+        response[envelope_key] = self._response
 
         if len(self._warnings):
             response["metadata"] = {"warnings": self._warnings}
@@ -502,17 +501,15 @@ class MethodProperties(object):
         """
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
+
         if typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
             self._validate_type_arg(arg, typing_inspect.get_args(arg_type, evaluate=True)[0], allow_none_type=True)
 
-        elif not typing_inspect.is_generic_type(arg_type) and issubclass(arg_type, ReturnValue):
+        elif not typing_inspect.is_generic_type(arg_type) and isinstance(arg_type, type) and issubclass(arg_type, ReturnValue):
             raise InvalidMethodDefinition("ReturnValue should have a type specified.")
 
-        elif not typing_inspect.is_generic_type(arg_type) and issubclass(arg_type, type(None)):
-            pass
-
         else:
-            self._validate_type_arg(arg, arg_type)
+            self._validate_type_arg(arg, arg_type, allow_none_type=True)
 
     def _validate_type_arg(self, arg: str, arg_type: Type, allow_none_type: bool = False, in_url: bool = False) -> None:
         """ Validate the given type arg recursively
