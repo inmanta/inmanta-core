@@ -522,7 +522,8 @@ async def test_return_non_warnings(unused_tcp_port, postgres_db, database_name, 
 
     response = await client.test_method("x")
     assert response.code == 200
-    assert "data" not in response.result
+    assert "data" in response.result
+    assert response.result["data"] is None
     assert "metadata" in response.result
     assert "warnings" in response.result["metadata"]
     assert "error1" in response.result["metadata"]["warnings"]
