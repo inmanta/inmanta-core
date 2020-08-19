@@ -396,6 +396,7 @@ class MethodProperties(object):
             :param envelope: Put the response of the call under an envelope key.
             :param typed: Is the method definition typed or not
             :param envelope_key: The envelope key to use
+            :param strict_typing: If true, does not allow `Any` when validating argument types
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -525,7 +526,7 @@ class MethodProperties(object):
 
             :param arg: The name of the argument
             :param arg_type: The annotated type fo the argument
-            :param strict: If true, does not allow `Any`.
+            :param strict: If true, does not allow `Any`
             :param allow_none_type: If true, allow `None` as the type for this argument
             :param in_url: This argument is passed in the URL
         """
