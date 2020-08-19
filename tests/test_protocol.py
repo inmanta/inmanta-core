@@ -24,7 +24,7 @@ import threading
 import time
 import uuid
 from enum import Enum
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 import pytest
 import tornado
