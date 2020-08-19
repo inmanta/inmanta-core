@@ -11,6 +11,7 @@
 - Added link to the PDF version of the documentation
 - Added environment setting for agent_trigger_method (#2025)
 - Expose compile data as exported by `inmanta compile --export-compile-data` via API (inmanta/inmanta-telco#54)
+- Added `typedmethod` decorator `strict\_typing` parameter to  allow `Any` types for those few cases where it's required (#2301)
 
 ## Bug fixes
 - Restore support to pass mocking information to the compiler
