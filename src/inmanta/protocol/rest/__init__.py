@@ -256,6 +256,8 @@ class CallArguments(object):
                 )
 
             el_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+            if el_type is Any:
+                return
             for el in value:
                 if typing_inspect.is_union_type(el_type):
                     self._validate_union_return(el_type, el)
@@ -269,6 +271,8 @@ class CallArguments(object):
                 )
 
             el_type = typing_inspect.get_args(arg_type, evaluate=True)[1]
+            if el_type is Any:
+                return
             for k, v in value.items():
                 if not isinstance(k, str):
                     raise exceptions.ServerError("Keys of return dict need to be strings.")
@@ -304,7 +308,12 @@ class CallArguments(object):
             # Both isubclass and isinstance fail on this type
             # This check needs to be first because isinstance fails on generic types.
             # TODO: also validate the value inside a ReturnValue
-            if typing_inspect.is_union_type(return_type):
+            if return_type is Any:
+                return common.Response.create(
+                    ReturnValue(response=result), config.properties.envelope, config.properties.envelope_key
+                )
+
+            elif typing_inspect.is_union_type(return_type):
                 self._validate_union_return(return_type, result)
                 return common.Response.create(
                     ReturnValue(response=result), config.properties.envelope, config.properties.envelope_key

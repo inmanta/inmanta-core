@@ -24,7 +24,7 @@ import threading
 import time
 import uuid
 from enum import Enum
-from typing import Dict, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 import pytest
 import tornado
@@ -1676,3 +1676,40 @@ async def test_2277_typedmethod_return_optional(async_finalizer, return_value: o
         assert response.result == {"data": return_value}
     else:
         assert response.code == 400
+
+
+def test_method_strict_exception() -> None:
+    with pytest.raises(InvalidMethodDefinition, match="Invalid type for argument arg: Any type is not allowed in strict mode"):
+
+        @protocol.typedmethod(path="/testmethod", operation="POST", client_types=[const.ClientType.api])
+        def test_method(arg: Any) -> None:
+            pass
+
+
+@pytest.mark.asyncio
+async def test_method_nonstrict_allowed(async_finalizer) -> None:
+    @protocol.typedmethod(path="/zipsingle", operation="POST", client_types=[const.ClientType.api], strict_typing=False)
+    def merge_dicts(one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
+        """
+            Merge two dicts.
+        """
+
+    class TestSlice(ServerSlice):
+        @protocol.handle(merge_dicts)
+        async def merge_dicts_impl(self, one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
+            return {**one, **other}
+
+    server: Server = Server()
+    server_slice: ServerSlice = TestSlice("my_test_slice")
+    server.add_slice(server_slice)
+    await server.start()
+    async_finalizer.add(server_slice.stop)
+    async_finalizer.add(server.stop)
+
+    client: protocol.Client = protocol.Client("client")
+
+    one: Dict[str, Any] = {"my": {"nested": {"keys": 42}}}
+    other: Dict[str, int] = {"single_level": 42}
+    response: Result = await client.merge_dicts(one, other, None)
+    assert response.code == 200
+    assert response.result == {"data": {**one, **other}}

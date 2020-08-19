@@ -375,6 +375,7 @@ class MethodProperties(object):
         envelope: bool,
         typed: bool = False,
         envelope_key: str = const.ENVELOPE_KEY,
+        strict_typing: bool = True,
     ) -> None:
         """
             Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -395,6 +396,7 @@ class MethodProperties(object):
             :param envelope: Put the response of the call under an envelope key.
             :param typed: Is the method definition typed or not
             :param envelope_key: The envelope key to use
+            :param strict_typing: If true, does not allow `Any` when validating argument types
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -416,6 +418,7 @@ class MethodProperties(object):
         self._api_prefix = api_prefix
         self._envelope = envelope
         self._envelope_key = envelope_key
+        self._strict_typing = strict_typing
         self.function = function
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.styles.Style.rest)
@@ -469,6 +472,7 @@ class MethodProperties(object):
 
             For arguments the following types are supported:
             - Simpletypes: BaseModel, datetime, Enum, uuid.UUID, str, float, int, bool
+            - Simpletypes includes Any iff strict_typing == False
             - List[Simpletypes]: A list of simple types
             - Dict[str, Simpletypes]: A dict with string keys and simple types
 
@@ -492,38 +496,51 @@ class MethodProperties(object):
             if arg not in type_hints:
                 raise InvalidMethodDefinition(f"{arg} in function {self.function} has no type annotation.")
 
-            self._validate_type_arg(arg, type_hints[arg], allow_none_type=True, in_url=self.arguments_in_url())
+            self._validate_type_arg(
+                arg, type_hints[arg], strict=self.strict_typing, allow_none_type=True, in_url=self.arguments_in_url()
+            )
 
-        self._validate_return_type(type_hints["return"])
+        self._validate_return_type(type_hints["return"], strict=self.strict_typing)
 
-    def _validate_return_type(self, arg_type: Type) -> None:
+    def _validate_return_type(self, arg_type: Type, *, strict: bool = True) -> None:
         """ Validate the return type
         """
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
 
         if typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
-            self._validate_type_arg(arg, typing_inspect.get_args(arg_type, evaluate=True)[0], allow_none_type=True)
+            self._validate_type_arg(
+                arg, typing_inspect.get_args(arg_type, evaluate=True)[0], strict=strict, allow_none_type=True
+            )
 
         elif not typing_inspect.is_generic_type(arg_type) and isinstance(arg_type, type) and issubclass(arg_type, ReturnValue):
             raise InvalidMethodDefinition("ReturnValue should have a type specified.")
 
         else:
-            self._validate_type_arg(arg, arg_type, allow_none_type=True)
+            self._validate_type_arg(arg, arg_type, allow_none_type=True, strict=strict)
 
-    def _validate_type_arg(self, arg: str, arg_type: Type, allow_none_type: bool = False, in_url: bool = False) -> None:
+    def _validate_type_arg(
+        self, arg: str, arg_type: Type, *, strict: bool = True, allow_none_type: bool = False, in_url: bool = False
+    ) -> None:
         """ Validate the given type arg recursively
 
             :param arg: The name of the argument
             :param arg_type: The annotated type fo the argument
+            :param strict: If true, does not allow `Any`
+            :param allow_none_type: If true, allow `None` as the type for this argument
             :param in_url: This argument is passed in the URL
         """
+
+        if arg_type is Any:
+            if strict:
+                raise InvalidMethodDefinition(f"Invalid type for argument {arg}: Any type is not allowed in strict mode")
+            return
 
         if typing_inspect.is_union_type(arg_type):
             # Make sure there is only one list and one dict in the union, otherwise we cannot process the arguments
             cnt: Dict[str, int] = defaultdict(lambda: 0)
             for sub_arg in typing_inspect.get_args(arg_type, evaluate=True):
-                self._validate_type_arg(arg, sub_arg, allow_none_type, in_url)
+                self._validate_type_arg(arg, sub_arg, strict=strict, allow_none_type=allow_none_type, in_url=in_url)
 
                 if typing_inspect.is_generic_type(sub_arg):
                     # there is a difference between python 3.6 and >=3.7
@@ -553,7 +570,7 @@ class MethodProperties(object):
                 )
 
             elif len(args) == 1:  # A generic list
-                self._validate_type_arg(arg, args[0], allow_none_type, in_url)
+                self._validate_type_arg(arg, args[0], strict=strict, allow_none_type=allow_none_type, in_url=in_url)
 
             elif len(args) == 2:  # Generic Dict
                 if not issubclass(args[0], str):
@@ -561,7 +578,7 @@ class MethodProperties(object):
                         f"Type {arg_type} of argument {arg} must be a Dict with str keys and not {args[0].__name__}"
                     )
 
-                self._validate_type_arg(arg, args[1], allow_none_type=True, in_url=in_url)
+                self._validate_type_arg(arg, args[1], strict=strict, allow_none_type=True, in_url=in_url)
 
             elif len(args) > 2:
                 raise InvalidMethodDefinition(f"Failed to validate type {arg_type} of argument {arg}.")
@@ -616,6 +633,10 @@ class MethodProperties(object):
     @property
     def envelope_key(self) -> str:
         return self._envelope_key
+
+    @property
+    def strict_typing(self) -> bool:
+        return self._strict_typing
 
     @property
     def api_version(self) -> int:
