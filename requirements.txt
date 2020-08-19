@@ -25,7 +25,7 @@ six==1.15.0
 sphinx-argparse==0.2.5
 sphinx-autodoc-annotation==1.0-1
 sphinx-rtd-theme==0.5.0
-sphinx-tabs==1.1.13
+sphinx-tabs==1.2.0
 sphinx==3.2.1
 sphinxcontrib-serializinghtml==1.1.4
 sphinxcontrib-redoc==1.6.0
