@@ -44,6 +44,11 @@ def get_id(instance: "std::Entity") -> "string":
     return resources.to_id(instance)
 
 
+class TestPluginException(PluginException):
+    def __init__(self, msg):
+        super().__init__("Test: " + msg)
+
+
 @plugin
 def raise_exception(message: "string") -> None:
-    raise PluginException(message)
+    raise TestPluginException(message)

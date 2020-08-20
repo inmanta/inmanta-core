@@ -96,17 +96,43 @@ x = 1
 
 
 @pytest.mark.parametrize(
-    "snippet,exception,category",
+    "snippet,exception,category,message,report_exnc",
     [
-        ("1 = 1", ParserException, ast_export.ErrorCategory.parser),
-        ("x.n = 1", NotFoundException, ast_export.ErrorCategory.runtime),
-        ("import tests tests::raise_exception('my message')", ExplicitPluginException, ast_export.ErrorCategory.plugin),
+        (
+            "1 = 1",
+            ParserException,
+            ast_export.ErrorCategory.parser,
+            "Syntax error at token 1",
+            "inmanta.parser.ParserException",
+        ),
+        (
+            "x.n = 1",
+            NotFoundException,
+            ast_export.ErrorCategory.runtime,
+            "variable x not found",
+            "inmanta.ast.NotFoundException",
+        ),
+        (
+            "import tests tests::raise_exception('my message')",
+            ExplicitPluginException,
+            ast_export.ErrorCategory.plugin,
+            "Test: my message",
+            "inmanta_plugins.tests.TestPluginException",
+        ),
     ],
 )
 def test_export_compile_data_to_file_categories(
-    snippetcompiler, snippet: str, exception: Type[CompilerException], category: ast_export.ErrorCategory, tempfile_export
+    snippetcompiler,
+    snippet: str,
+    exception: Type[CompilerException],
+    category: ast_export.ErrorCategory,
+    message,
+    report_exnc,
+    tempfile_export,
 ) -> None:
     snippetcompiler.setup_for_snippet(snippet)
     compile_data: CompileData = tempfile_export(exception)
     assert len(compile_data.errors) == 1
     assert compile_data.errors[0].category == category
+    assert message == compile_data.errors[0].message
+    assert report_exnc == compile_data.errors[0].type

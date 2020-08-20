@@ -827,13 +827,13 @@ class SnippetCompilationTest(KeepOnFail):
     async def do_export_and_deploy(self, include_status=False, do_raise=True):
         return await off_main_thread(lambda: self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
 
-    def setup_for_error(self, snippet, shouldbe):
+    def setup_for_error(self, snippet, shouldbe, indent_offset=0):
         self.setup_for_snippet(snippet)
         try:
             compiler.do_compile()
             assert False, "Should get exception"
         except CompilerException as e:
-            text = e.format_trace(indent="  ")
+            text = e.format_trace(indent="  ", indent_level=indent_offset)
             print(text)
             shouldbe = shouldbe.format(dir=self.project_dir)
             assert shouldbe == text
