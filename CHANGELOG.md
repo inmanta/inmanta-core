@@ -13,7 +13,9 @@
 - Expose compile data as exported by `inmanta compile --export-compile-data` via API (inmanta/inmanta-telco#54)
 
 ## Upgrade notes
-- DynamicProxy.\_\_getattr\_\_ now raises an AttributeError instead of a NotFoundException when an attribute can not be found, for compatibility with Python's builtin `hasattr` (#2991)
+- `DynamicProxy.__getattr__` now raises an `AttributeError` instead of a plain `NotFoundException` when an attribute can not be
+    found, for compatibility with Python's builtin `hasattr`. This change is backwards compatible, though it is recommended to
+    except on `AttributeError` over `NotFoundException`. (#2991)
 
 ## Bug fixes
 - Restore support to pass mocking information to the compiler
