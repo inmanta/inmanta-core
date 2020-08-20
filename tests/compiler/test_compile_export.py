@@ -117,7 +117,7 @@ x = 1
             ExplicitPluginException,
             ast_export.ErrorCategory.plugin,
             "Test: my message",
-            "inmanta.plugins.PluginException",
+            "inmanta_plugins.tests.TestPluginException",
         ),
     ],
 )
