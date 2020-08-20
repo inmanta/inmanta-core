@@ -20,7 +20,7 @@ from collections import Mapping
 from copy import copy
 from typing import Dict, List, Optional, Tuple, Union
 
-from inmanta.ast import RuntimeException
+from inmanta.ast import NotFoundException, RuntimeException
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.types import PrimitiveTypes
 from inmanta.util import JSONSerializable
@@ -61,6 +61,16 @@ class UnknownException(Exception):
 
     def __init__(self, unknown):
         self.unknown = unknown
+
+
+class AttributeNotFound(NotFoundException, AttributeError):
+    """
+        Exception used for backwards compatibility with try-except blocks around some_proxy.some_attr.
+        This previously raised `NotFoundException` which is currently deprecated in this context.
+        Its new behavior is to raise an AttributeError for compatibility with Python's builtin `hasattr`.
+    """
+
+    pass
 
 
 class DynamicProxy(object):
@@ -136,7 +146,12 @@ class DynamicProxy(object):
 
     def __getattr__(self, attribute):
         instance = self._get_instance()
-        value = instance.get_attribute(attribute).get_value()
+
+        try:
+            value = instance.get_attribute(attribute).get_value()
+        except NotFoundException as e:
+            # allow for hasattr(proxy, "some_attr")
+            raise AttributeNotFound(e.stmt, e.name)
 
         return DynamicProxy.return_value(value)
 

@@ -17,6 +17,11 @@
 
 - Option `inmanta compile --json` is renamed to `inmanta compile --export-compile-data`
 
+## Upgrade notes
+- `DynamicProxy.__getattr__` now raises an `AttributeError` instead of a plain `NotFoundException` when an attribute can not be
+    found, for compatibility with Python's builtin `hasattr`. This change is backwards compatible, though it is recommended to
+    except on `AttributeError` over `NotFoundException`. (#2991)
+
 ## Bug fixes
 - Restore support to pass mocking information to the compiler
 - Disallow parameters mapped to a header to be passed via the body instead (#2151)
