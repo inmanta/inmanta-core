@@ -116,7 +116,7 @@ x = 1
             "import tests tests::raise_exception('my message')",
             ExplicitPluginException,
             ast_export.ErrorCategory.plugin,
-            "my message",
+            "Test: my message",
             "inmanta.plugins.PluginException",
         ),
     ],

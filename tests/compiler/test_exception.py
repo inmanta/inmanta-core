@@ -109,6 +109,21 @@ Test()
     )
 
 
+def test_plugin_exception(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+import tests
+tests::raise_exception('my message')
+        """,
+        """  PluginException in plugin tests::raise_exception
+  Test: my message (reported in tests::raise_exception('my message') ({dir}/main.cf:3))
+  caused by:
+    inmanta_plugins.tests.TestPluginException: my message
+""",
+        indent_offset=1,
+    )
+
+
 def test_dataflow_exception(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

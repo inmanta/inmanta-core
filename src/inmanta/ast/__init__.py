@@ -633,7 +633,8 @@ class ExternalException(RuntimeException):
 
     def format_trace(self, indent: str = "", indent_level: int = 0) -> str:
         """Make a representation of this exception and its causes"""
-        out = indent * indent_level + self.format()
+
+        out = indent * indent_level + self.format().replace("\n", "\n" + indent * indent_level)
 
         part = traceback.format_exception_only(self.__cause__.__class__, self.__cause__)
         out += "\n" + indent * indent_level + "caused by:\n"
@@ -666,21 +667,8 @@ class ExplicitPluginException(ExternalException):
             category=export.ErrorCategory.plugin,
         )
 
-    def format_trace(self, indent: str = "", indent_level: int = 0) -> str:
-        """Make a representation of this exception and its causes"""
-        out = indent * indent_level + self.format()
-
-        out += "\n" + indent * indent_level + "caused by:\n"
-
-        msg_line = self.__cause__.message
-        out += (indent * (indent_level + 1)) + msg_line + "\n"
-
-        part = traceback.format_exception_only(self.__cause__.__class__, self.__cause__)
-
-        for line in part:
-            out += indent * (indent_level + 1) + line
-
-        return out
+    def get_message(self) -> str:
+        return self.msg + "\n" + self.__cause__.message
 
 
 class WrappingRuntimeException(RuntimeException):
