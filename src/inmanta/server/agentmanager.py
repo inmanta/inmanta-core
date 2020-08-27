@@ -108,7 +108,16 @@ class SessionAction:
 
 
 class AgentManager(ServerSlice, SessionListener):
-    """ This class contains all server functionality related to the management of agents
+    """
+        This class contains all server functionality related to the management of agents.
+        Each logical agent managed by an instance of this class has at most one primary agent instance process associated with
+        it. A subset of these processes are autostarted, those are managed by :py:class:`AutostartedAgentManager`.
+        The server ignores all requests from non-primary agent instances. Therefore an agent without a primary is effectively
+        paused as far as the server is concerned, though any rogue agent instances could still perform actions agent-side.
+
+        Throughout this class the terms "logical agent" or sometimes just "agent" refer to a logical agent managed by an
+        instance of this class. The terms "agent instance", "agent process" or just "process" refer to a concrete process
+        running an agent instance, which might be the primary for a logical agent.
     """
 
     def __init__(self, closesessionsonstart: bool = True, fact_back_off: int = None) -> None:
@@ -188,6 +197,10 @@ class AgentManager(ServerSlice, SessionListener):
             await self._unpause_agent(env, name)
 
     async def _pause_agent(self, env: data.Environment, endpoint: Optional[str] = None) -> None:
+        """
+            Pause a logical agent by pausing an active agent instance if it exists, and removing the logical agent's primary.
+        """
+
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True)
             endpoints_with_new_primary = []
@@ -711,6 +724,11 @@ class AgentManager(ServerSlice, SessionListener):
 
 
 class AutostartedAgentManager(ServerSlice):
+    """
+        An instance of this class manages autostarted agent instance processes. It does not manage the logical agents as those
+        are managed by `:py:class:AgentManager`.
+    """
+
     def __init__(self):
         super(AutostartedAgentManager, self).__init__(SLICE_AUTOSTARTED_AGENT_MANAGER)
         self._agent_procs: Dict[UUID, subprocess.Process] = {}  # env uuid -> subprocess.Process
