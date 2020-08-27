@@ -238,6 +238,31 @@ def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
     """
 
 
+#  Halt all orchestrator operations for an environment
+
+
+@typedmethod(
+    path="/halt", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api], api_version=1
+)
+def halt_operations(tid: uuid.UUID) -> None:
+    """
+        Halt all orchestrator operations for an environment.
+
+        :param tid: The environment id
+    """
+
+
+@typedmethod(
+    path="/resume", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api], api_version=1
+)
+def resume_operations(tid: uuid.UUID) -> None:
+    """
+        Resume all orchestrator operations for an environment.
+
+        :param tid: The environment id
+    """
+
+
 #  Decomission an environment
 
 

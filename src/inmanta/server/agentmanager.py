@@ -824,6 +824,10 @@ class AutostartedAgentManager(ServerSlice):
             :param agents: A list of agent names that possibly should be started in this environment.
             :param restart: Restart all agents even if the list of agents is up to date.
         """
+        # silently ignore requests if this environment is halted
+        if env.halted:
+            return False
+
         if self._stopping:
             raise ShutdownInProgress()
 

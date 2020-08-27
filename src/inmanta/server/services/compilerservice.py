@@ -388,6 +388,9 @@ class CompilerService(ServerSlice):
 
             :return: the compile id of the requested compile and any warnings produced during the request
         """
+        if env.halted:
+            return None, ["Skipping compile because environment has been halted."]
+
         server_compile: bool = await env.get(data.SERVER_COMPILE)
         if not server_compile:
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")

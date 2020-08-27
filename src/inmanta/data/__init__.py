@@ -762,6 +762,7 @@ class Environment(BaseDocument):
     repo_branch: str = Field(field_type=str, default="")
     settings: Dict[str, m.EnvSettingType] = Field(field_type=dict, default={})
     last_version: int = Field(field_type=int, default=0)
+    halted: bool = Field(field_type=bool, default=False)
 
     def to_dto(self) -> m.Environment:
         return m.Environment(
@@ -771,6 +772,7 @@ class Environment(BaseDocument):
             repo_url=self.repo_url,
             repo_branch=self.repo_branch,
             settings=self.settings,
+            halted=self.halted,
         )
 
     _settings: Dict[str, Setting] = {

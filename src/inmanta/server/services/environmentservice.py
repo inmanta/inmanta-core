@@ -25,11 +25,13 @@ from enum import Enum
 from typing import Dict, List, Optional, Set, cast
 
 from inmanta import data
+from inmanta.const import AgentAction
 from inmanta.data import model
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
 from inmanta.server import (
+    SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_DATABASE,
     SLICE_ENVIRONMENT,
@@ -39,7 +41,7 @@ from inmanta.server import (
     SLICE_TRANSPORT,
     protocol,
 )
-from inmanta.server.agentmanager import AutostartedAgentManager
+from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.server import Server
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
@@ -106,6 +108,7 @@ class EnvironmentService(protocol.ServerSlice):
     """Slice with project and environment management"""
 
     server_slice: Server
+    agent_manager: AgentManager
     autostarted_agent_manager: AutostartedAgentManager
     orchestration_service: OrchestrationService
     resource_service: ResourceService
@@ -124,6 +127,7 @@ class EnvironmentService(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
+        self.agent_manager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
         self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
         self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
@@ -193,6 +197,23 @@ class EnvironmentService(protocol.ServerSlice):
     async def delete_environment(self, environment_id: uuid.UUID) -> Apireturn:
         await self.environment_delete(environment_id)
         return 200
+
+    @protocol.handle(methods.halt_operations, env="tid")
+    async def halt_operations(self, env: data.Environment) -> None:
+        # TODO: this might not be sufficient -> inconsistent state if interrupted halfway through. Transaction does not solve
+        # this because of side effects in AgentManager._pause_agent
+        await env.update_fields(halted=True)
+        await self.agent_manager.all_agents_action(env, AgentAction.pause)
+        await self.autostarted_agent_manager.stop_agents(env)
+
+
+    @protocol.handle(methods.resume_operations, env="tid")
+    async def resume_operations(self, env: data.Environment) -> None:
+        # TODO: same concern as above
+        await env.update_fields(halted=False)
+        await self.autostarted_agent_manager.restart_agents(env)
+        await self.agent_manager.all_agents_action(env, AgentAction.unpause)
+
 
     @protocol.handle(methods.decomission_environment, env="id")
     async def decommission_environment(self, env: data.Environment, metadata: Optional[JsonType]) -> Apireturn:

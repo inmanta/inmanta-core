@@ -160,6 +160,7 @@ class Environment(BaseModel):
     repo_url: str
     repo_branch: str
     settings: Dict[str, EnvSettingType]
+    halted: bool
 
 
 class Project(BaseModel):
