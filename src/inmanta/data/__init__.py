@@ -1567,7 +1567,7 @@ class Compile(BaseDocument):
             force_update=self.force_update,
             metadata=self.metadata,
             environment_variables=self.environment_variables,
-            compile_data=self.compile_data,
+            compile_data=None if self.compile_data is None else m.CompileData(**self.compile_data),
         )
 
 
