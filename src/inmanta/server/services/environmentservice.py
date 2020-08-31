@@ -198,20 +198,19 @@ class EnvironmentService(protocol.ServerSlice):
         await self.environment_delete(environment_id)
         return 200
 
-    @protocol.handle(methods.halt_operations, env="tid")
-    async def halt_operations(self, env: data.Environment) -> None:
-        # TODO: this might not be sufficient -> inconsistent state if interrupted halfway through. Transaction does not solve
-        # this because of side effects in AgentManager._pause_agent
+    @protocol.handle(methods.halt_environment, env="tid")
+    async def halt(self, env: data.Environment) -> None:
+        # TODO: make sure agent instances can not establish a new session
         await env.update_fields(halted=True)
         await self.agent_manager.all_agents_action(env, AgentAction.pause)
         await self.autostarted_agent_manager.stop_agents(env)
 
 
-    @protocol.handle(methods.resume_operations, env="tid")
-    async def resume_operations(self, env: data.Environment) -> None:
-        # TODO: same concern as above
+    @protocol.handle(methods.resume_environment, env="tid")
+    async def resume(self, env: data.Environment) -> None:
         await env.update_fields(halted=False)
         await self.autostarted_agent_manager.restart_agents(env)
+        # TODO: don't restart all agents, only those that were running when halted
         await self.agent_manager.all_agents_action(env, AgentAction.unpause)
 
 

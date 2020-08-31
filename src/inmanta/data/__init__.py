@@ -1249,6 +1249,8 @@ class Agent(BaseDocument):
         :param last_failover: Moment at which the primary was last changed
         :param paused: is this agent paused (if so, skip it)
         :param primary: what is the current active instance (if none, state is down)
+        :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
+            persist paused state when halting.
     """
 
     environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1256,6 +1258,7 @@ class Agent(BaseDocument):
     last_failover: datetime.datetime = Field(field_type=datetime.datetime)
     paused: bool = Field(field_type=bool, default=False)
     id_primary: Optional[uuid.UUID] = Field(field_type=uuid.UUID)  # AgentInstance
+    unpause_on_resume: Optional[bool] = Field(field_type=bool)
 
     def set_primary(self, primary: uuid.UUID) -> None:
         self.id_primary = primary
@@ -1317,6 +1320,28 @@ class Agent(BaseDocument):
     async def get(cls, env: uuid.UUID, endpoint: str, connection: Optional[asyncpg.connection.Connection] = None) -> "Agent":
         obj = await cls.get_one(environment=env, name=endpoint, connection=connection)
         return obj
+
+    @classmethod
+    async def persist_on_halt(cls, env: uuid.UUID) -> None:
+        """
+            Persists paused state when halting all agents.
+        """
+        await cls._execute_query(
+            f"UPDATE {cls.table_name()} SET unpause_on_resume=NOT paused WHERE environment=$1", cls._get_value(env)
+        )
+
+    @classmethod
+    async def persist_on_resume(cls, env: uuid.UUID) -> List[str]:
+        """
+            Restores default halted state. Returns a list of agents that should be unpaused.
+        """
+        unpause_on_resume = await cls._fetch_query(
+            f"SELECT {cls.table_name()} WHERE environment=$1 AND unpause_on_resume", cls._get_value(env)
+        )
+        await cls._execute_query(
+            f"UPDATE {cls.table_name()} SET unpause_on_resume=null WHERE environment=$1", cls._get_value(env)
+        )
+        return sorted([r["name"] for r in unpause_on_resume])
 
     @classmethod
     async def pause(cls, env: uuid.UUID, endpoint: Optional[str], paused: bool) -> List[str]:
