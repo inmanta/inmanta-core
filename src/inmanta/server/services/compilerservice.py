@@ -495,7 +495,7 @@ class CompilerService(ServerSlice):
         version = runner.version
 
         end = datetime.datetime.now()
-        compile_data_json: Optional[str] = None if compile_data is None else compile_data.json()
+        compile_data_json: Optional[dict] = None if compile_data is None else compile_data.dict()
         await compile.update_fields(completed=end, success=success, version=version, compile_data=compile_data_json)
         awaitables = [
             merge_candidate.update_fields(
