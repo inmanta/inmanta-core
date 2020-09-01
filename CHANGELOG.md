@@ -12,6 +12,7 @@
 - Added environment setting for agent_trigger_method (#2025)
 - Expose compile data as exported by `inmanta compile --export-compile-data` via API (inmanta/inmanta-telco#54)
 - Added `typedmethod` decorator `strict_typing` parameter to  allow `Any` types for those few cases where it's required (#2301)
+- Added API method for halting all environment operations (#2228)
 
 ## Upgrade notes
 
@@ -32,7 +33,7 @@
 - Don't add path params as query params to the url in the client (#2246)
 - Allow Optional as return type for typedmethods (#2277)
 - Made Dict- and SequenceProxy serializable to allow exporter to wrap dict and list attributes in other data structures (#2121)
-- Improved reporting of `PluginException` (#2304) 
+- Improved reporting of `PluginException` (#2304)
 
 # Release 2020.3 (2020-07-02)
 
