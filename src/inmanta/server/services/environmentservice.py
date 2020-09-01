@@ -200,9 +200,8 @@ class EnvironmentService(protocol.ServerSlice):
 
     @protocol.handle(methods.halt_environment, env="tid")
     async def halt(self, env: data.Environment) -> None:
-        # TODO: make sure agent instances can not establish a new session
         await env.update_fields(halted=True)
-        await self.agent_manager.all_agents_action(env, AgentAction.pause)
+        await self.agent_manager.halt_agents(env)
         await self.autostarted_agent_manager.stop_agents(env)
 
 
@@ -210,8 +209,7 @@ class EnvironmentService(protocol.ServerSlice):
     async def resume(self, env: data.Environment) -> None:
         await env.update_fields(halted=False)
         await self.autostarted_agent_manager.restart_agents(env)
-        # TODO: don't restart all agents, only those that were running when halted
-        await self.agent_manager.all_agents_action(env, AgentAction.unpause)
+        await self.agent_manager.resume_agents(env)
 
 
     @protocol.handle(methods.decomission_environment, env="id")

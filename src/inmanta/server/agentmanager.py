@@ -31,7 +31,7 @@ from inmanta import const, data
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import encode_token, methods, methods_v2
-from inmanta.protocol.exceptions import NotFound, ShutdownInProgress
+from inmanta.protocol.exceptions import Forbidden, NotFound, ShutdownInProgress
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -187,17 +187,19 @@ class AgentManager(ServerSlice, SessionListener):
             Halts all agents for an environment. Persists prior paused state.
         """
         await data.Agent.persist_on_halt(env.id)
-        self.all_agents_action(env, AgentAction.pause)
+        await self._pause_agent(env)
 
     async def resume_agents(self, env: data.Environment) -> None:
         """
             Resumes after halting. Unpauses all agents that had been paused by halting.
         """
         to_unpause: List[str] = await data.Agent.persist_on_resume(env.id)
-        await asyncio.gather(*[self._unpause_agent(agent) for agent in to_unpause])
+        await asyncio.gather(*[self._unpause_agent(env, agent) for agent in to_unpause])
 
     @protocol.handle(methods_v2.all_agents_action, env="tid")
     async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:
+        if env.halted:
+            raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
         if action is AgentAction.pause:
             await self._pause_agent(env)
         else:
@@ -205,6 +207,8 @@ class AgentManager(ServerSlice, SessionListener):
 
     @protocol.handle(methods_v2.agent_action, env="tid")
     async def agent_action(self, env: data.Environment, name: str, action: AgentAction) -> None:
+        if env.halted:
+            raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
         if action is AgentAction.pause:
             await self._pause_agent(env, name)
         else:
