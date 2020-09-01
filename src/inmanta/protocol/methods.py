@@ -241,9 +241,7 @@ def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
 #  Halt all orchestrator operations for an environment
 
 
-@typedmethod(
-    path="/halt", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api], api_version=1
-)
+@typedmethod(path="/halt", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api], api_version=1)
 def halt_environment(tid: uuid.UUID) -> None:
     """
         Halt all orchestrator operations for an environment.
@@ -252,9 +250,7 @@ def halt_environment(tid: uuid.UUID) -> None:
     """
 
 
-@typedmethod(
-    path="/resume", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api], api_version=1
-)
+@typedmethod(path="/resume", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api], api_version=1)
 def resume_environment(tid: uuid.UUID) -> None:
     """
         Resume all orchestrator operations for an environment.

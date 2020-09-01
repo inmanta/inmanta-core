@@ -25,7 +25,6 @@ from enum import Enum
 from typing import Dict, List, Optional, Set, cast
 
 from inmanta import data
-from inmanta.const import AgentAction
 from inmanta.data import model
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
@@ -204,13 +203,11 @@ class EnvironmentService(protocol.ServerSlice):
         await self.agent_manager.halt_agents(env)
         await self.autostarted_agent_manager.stop_agents(env)
 
-
     @protocol.handle(methods.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
         await env.update_fields(halted=False)
         await self.autostarted_agent_manager.restart_agents(env)
         await self.agent_manager.resume_agents(env)
-
 
     @protocol.handle(methods.decomission_environment, env="id")
     async def decommission_environment(self, env: data.Environment, metadata: Optional[JsonType]) -> Apireturn:
