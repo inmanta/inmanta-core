@@ -1432,7 +1432,7 @@ class Compile(BaseDocument):
     # In that case, substitute_compile_id will reference the actually compiled request.
     substitute_compile_id: Optional[uuid.UUID] = Field(field_type=uuid.UUID)
 
-    compile_data: Optional[str] = Field(field_type=str)
+    compile_data: Optional[dict] = Field(field_type=dict)
 
     @classmethod
     async def get_reports(
@@ -1567,7 +1567,7 @@ class Compile(BaseDocument):
             force_update=self.force_update,
             metadata=self.metadata,
             environment_variables=self.environment_variables,
-            compile_data=None if self.compile_data is None else json.loads(self.compile_data),
+            compile_data=None if self.compile_data is None else m.CompileData(**self.compile_data),
         )
 
 
