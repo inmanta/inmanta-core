@@ -244,7 +244,9 @@ def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
 @typedmethod(path="/halt", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api], api_version=1)
 def halt_environment(tid: uuid.UUID) -> None:
     """
-        Halt all orchestrator operations for an environment.
+        Halt all orchestrator operations for an environment. The environment will enter a state where all agents are paused and
+        can not be unpaused. Compile requests and new agent registration requests are ignored. Normal operation can be restored
+        using the `resume_environment` endpoint.
 
         :param tid: The environment id
     """
@@ -253,7 +255,8 @@ def halt_environment(tid: uuid.UUID) -> None:
 @typedmethod(path="/resume", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api], api_version=1)
 def resume_environment(tid: uuid.UUID) -> None:
     """
-        Resume all orchestrator operations for an environment.
+        Resume all orchestrator operations for an environment. Resumes normal environment operation and unpauses all agents
+        that were active when the environment was halted.
 
         :param tid: The environment id
     """
