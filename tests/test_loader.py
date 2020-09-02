@@ -296,3 +296,43 @@ install_mode: master
     assert test_pkg() == "test_pkg -- test_submod2"
     (stdout, stderr) = capsys.readouterr()
     assert "#loading" not in stdout
+
+
+def test_plugin_loading_old_format(tmpdir, capsys):
+    """
+        Ensure the code loader ignores code formatted in the old on disk format (pre Inmanta 2020.4).
+    """
+    # Create directory structure code dir
+    code_dir = tmpdir
+    modules_dir = tmpdir.join(loader.MODULE_DIR)
+    modules_dir.mkdir()
+
+    # Create source files using pre Inmanta 2020.4 format
+    old_format_source_file = modules_dir.join("inmanta_plugins.old_format.py")
+    old_format_source_file.write("")
+
+    # Assert code using the pre inmanta 2020.4 format is ignored
+    loader.CodeLoader(code_dir)
+    with pytest.raises(ImportError):
+        import inmanta_plugins.old_format  # NOQA
+
+    # Add newly formatted code next the pre Inmanta 2020.4 format
+    new_format_mod_dir = modules_dir.join("new_format")
+    new_format_mod_dir.mkdir()
+    new_format_plugins_dir = new_format_mod_dir.join("plugins")
+    new_format_plugins_dir.mkdir()
+    new_format_source_file = new_format_plugins_dir.join("__init__.py")
+    new_format_source_file.write(
+        """
+def test():
+    return 10
+    """
+    )
+
+    # Assert newly formatted code is loaded and code using the pre inmanta 2020.4 format is ignored
+    loader.CodeLoader(code_dir)
+    import inmanta_plugins.new_format as mod  # NOQA
+
+    assert mod.test() == 10
+    with pytest.raises(ImportError):
+        import inmanta_plugins.old_format  # NOQA
