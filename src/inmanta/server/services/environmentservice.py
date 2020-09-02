@@ -112,10 +112,12 @@ class EnvironmentService(protocol.ServerSlice):
     orchestration_service: OrchestrationService
     resource_service: ResourceService
     listeners: Dict[EnvironmentAction, List[EnvironmentListener]]
+    agent_state_lock: asyncio.Lock
 
     def __init__(self) -> None:
         super(EnvironmentService, self).__init__(SLICE_ENVIRONMENT)
         self.listeners = defaultdict(list)
+        self.agent_state_lock = asyncio.Lock()
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER, SLICE_DATABASE, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE]
@@ -199,19 +201,21 @@ class EnvironmentService(protocol.ServerSlice):
 
     @protocol.handle(methods_v2.halt_environment, env="tid")
     async def halt(self, env: data.Environment) -> None:
-        if env.halted:
-            return
-        await env.update_fields(halted=True)
-        await self.agent_manager.halt_agents(env)
-        await self.autostarted_agent_manager.stop_agents(env)
+        async with self.agent_state_lock:
+            if env.halted:
+                return
+            await env.update_fields(halted=True)
+            await self.agent_manager.halt_agents(env)
+            await self.autostarted_agent_manager.stop_agents(env)
 
     @protocol.handle(methods_v2.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
-        if not env.halted:
-            return
-        await env.update_fields(halted=False)
-        await self.autostarted_agent_manager.restart_agents(env)
-        await self.agent_manager.resume_agents(env)
+        async with self.agent_state_lock:
+            if not env.halted:
+                return
+            await env.update_fields(halted=False)
+            await self.autostarted_agent_manager.restart_agents(env)
+            await self.agent_manager.resume_agents(env)
 
     @protocol.handle(methods.decomission_environment, env="id")
     async def decommission_environment(self, env: data.Environment, metadata: Optional[JsonType]) -> Apireturn:
