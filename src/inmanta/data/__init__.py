@@ -1335,13 +1335,19 @@ class Agent(BaseDocument):
         """
             Restores default halted state. Returns a list of agents that should be unpaused.
         """
-        unpause_on_resume = await cls._fetch_query(
-            f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume", cls._get_value(env)
-        )
-        await cls._execute_query(
-            f"UPDATE {cls.table_name()} SET unpause_on_resume=null WHERE environment=$1", cls._get_value(env)
-        )
-        return sorted([r["name"] for r in unpause_on_resume])
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                unpause_on_resume = await cls._fetch_query(
+                    f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume",
+                    cls._get_value(env),
+                    connection=con,
+                )
+                await cls._execute_query(
+                    f"UPDATE {cls.table_name()} SET unpause_on_resume=null WHERE environment=$1",
+                    cls._get_value(env),
+                    connection=con,
+                )
+                return sorted([r["name"] for r in unpause_on_resume])
 
     @classmethod
     async def pause(cls, env: uuid.UUID, endpoint: Optional[str], paused: bool) -> List[str]:
