@@ -2,7 +2,7 @@
 
 ## New features
 - Added merging of similar compile requests to the compile queue (#2137)
-- Export all handler's / resource's module's plugin source files so helper functions can be used from sibling modules (#2162)
+- Export all handler's / resource's module's plugin source files so helper functions can be used from sibling modules (#2162, #2312)
 - Added documentation on how a string is matched against a regex defined in a regex-based typedef (#2214)
 - Added API to query ResourceActions
 - Added support to query the resource action log of a resource via the CLI (#2253)
@@ -32,7 +32,7 @@
 - Don't add path params as query params to the url in the client (#2246)
 - Allow Optional as return type for typedmethods (#2277)
 - Made Dict- and SequenceProxy serializable to allow exporter to wrap dict and list attributes in other data structures (#2121)
-- Improved reporting of `PluginException` (#2304) 
+- Improved reporting of `PluginException` (#2304)
 
 # Release 2020.3 (2020-07-02)
 

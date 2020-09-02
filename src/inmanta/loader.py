@@ -21,6 +21,7 @@ import importlib
 import inspect
 import logging
 import os
+import pathlib
 import sys
 import types
 from dataclasses import dataclass
@@ -256,11 +257,29 @@ class CodeLoader(object):
             if module_source.name not in self.__modules or module_source.hash_value != self.__modules[module_source.name][0]:
                 LOGGER.info("Deploying code (hv=%s, module=%s)", module_source.hash_value, module_source.name)
 
-                # Treat all modules as a package for simplicity
-                module_dir: str = os.path.join(
-                    self.__code_dir, MODULE_DIR, PluginModuleLoader.convert_module_to_relative_path(module_source.name)
+                all_modules_dir: str = os.path.join(self.__code_dir, MODULE_DIR)
+                relative_module_path: str = PluginModuleLoader.convert_module_to_relative_path(module_source.name)
+                # Treat all modules as a package for simplicity: module is a dir with source in __init__.py
+                module_dir: str = os.path.join(all_modules_dir, relative_module_path)
+
+                package_dir: str = os.path.normpath(
+                    os.path.join(all_modules_dir, pathlib.PurePath(pathlib.PurePath(relative_module_path).parts[0]))
                 )
+
+                def touch_inits(directory: str) -> None:
+                    """
+                        Make sure __init__.py files exist for this package and all parent packages. Required for compatibility
+                        with pre-2020.4 inmanta clients because they don't necessarily upload the whole package.
+                    """
+                    normdir: str = os.path.normpath(directory)
+                    if normdir == package_dir:
+                        return
+                    pathlib.Path(os.path.join(normdir, "__init__.py")).touch()
+                    touch_inits(os.path.dirname(normdir))
+
+                # ensure correct package structure
                 os.makedirs(module_dir, exist_ok=True)
+                touch_inits(os.path.dirname(module_dir))
                 source_file = os.path.join(module_dir, "__init__.py")
 
                 # write the new source

@@ -175,6 +175,25 @@ def helper():
     assert "ModuleNotFoundError: No module named" not in caplog.text
 
 
+def test_2312_code_loader_missing_init(tmp_path) -> None:
+    cl = loader.CodeLoader(tmp_path)
+
+    code: str = (
+        """
+def test():
+    return 10
+        """
+    )
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(code.encode())
+    hv: str = sha1sum.hexdigest()
+    cl.deploy_version([ModuleSource("inmanta_plugins.my_module.my_sub_mod", code, hv)])
+
+    import inmanta_plugins.my_module.my_sub_mod as sm
+
+    assert sm.test() == 10
+
+
 def test_code_loader_import_error(tmp_path, caplog):
     """ Test loading code with an import error
     """
