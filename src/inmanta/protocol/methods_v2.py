@@ -132,7 +132,13 @@ def environment_get(id: uuid.UUID) -> model.Environment:
     """
 
 
-@typedmethod(path="/halt", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+@typedmethod(
+    path="/actions/environment/halt",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
 def halt_environment(tid: uuid.UUID) -> None:
     """
         Halt all orchestrator operations for an environment. The environment will enter a state where all agents are paused and
@@ -143,7 +149,13 @@ def halt_environment(tid: uuid.UUID) -> None:
     """
 
 
-@typedmethod(path="/resume", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+@typedmethod(
+    path="/actions/environment/resume",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
 def resume_environment(tid: uuid.UUID) -> None:
     """
         Resume all orchestrator operations for an environment. Resumes normal environment operation and unpauses all agents
