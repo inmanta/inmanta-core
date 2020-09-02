@@ -197,7 +197,7 @@ class EnvironmentService(protocol.ServerSlice):
         await self.environment_delete(environment_id)
         return 200
 
-    @protocol.handle(methods.halt_environment, env="tid")
+    @protocol.handle(methods_v2.halt_environment, env="tid")
     async def halt(self, env: data.Environment) -> None:
         if env.halted:
             return
@@ -205,7 +205,7 @@ class EnvironmentService(protocol.ServerSlice):
         await self.agent_manager.halt_agents(env)
         await self.autostarted_agent_manager.stop_agents(env)
 
-    @protocol.handle(methods.resume_environment, env="tid")
+    @protocol.handle(methods_v2.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
         if not env.halted:
             return
