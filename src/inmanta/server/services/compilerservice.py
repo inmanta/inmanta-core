@@ -388,9 +388,6 @@ class CompilerService(ServerSlice):
 
             :return: the compile id of the requested compile and any warnings produced during the request
         """
-        if env.halted:
-            return None, ["Skipping compile because environment has been halted."]
-
         server_compile: bool = await env.get(data.SERVER_COMPILE)
         if not server_compile:
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
@@ -420,14 +417,22 @@ class CompilerService(ServerSlice):
 
     async def _queue(self, compile: data.Compile) -> None:
         async with self._global_lock:
+            env: Optional[data.Environment] = await data.Environment.get_by_id(compile.environment)
+            assert env is not None
+            # don't execute any compiles in a halted environment
+            if env.halted:
+                return
+
             if compile.environment not in self._recompiles or self._recompiles[compile.environment].done():
                 task = self.add_background_task(self._run(compile))
                 self._recompiles[compile.environment] = task
 
     async def _dequeue(self, environment: uuid.UUID) -> None:
         async with self._global_lock:
+            env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
+            assert env is not None
             nextrun = await data.Compile.get_next_run(environment)
-            if nextrun:
+            if nextrun and not env.halted:
                 task = self.add_background_task(self._run(nextrun))
                 self._recompiles[environment] = task
             else:
@@ -455,6 +460,14 @@ class CompilerService(ServerSlice):
         unhandled = await data.Compile.get_unhandled_compiles()
         for u in unhandled:
             self.add_background_task(self._notify_listeners(u))
+
+    async def resume_environment(self, environment: uuid.UUID) -> None:
+        """
+            Resume compiler service after halt.
+        """
+        compile: Optional[data.Compile] = await data.Compile.get_next_run(environment)
+        if compile is not None:
+            await self._queue(compile)
 
     @protocol.handle(methods.is_compiling, environment_id="id")
     async def is_compiling(self, environment_id: uuid.UUID) -> Apireturn:

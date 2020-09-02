@@ -216,6 +216,7 @@ class EnvironmentService(protocol.ServerSlice):
             await env.update_fields(halted=False)
             await self.autostarted_agent_manager.restart_agents(env)
             await self.agent_manager.resume_agents(env)
+        await self.server_slice.compiler.resume_environment(env.id)
 
     @protocol.handle(methods.decomission_environment, env="id")
     async def decommission_environment(self, env: data.Environment, metadata: Optional[JsonType]) -> Apireturn:

@@ -707,7 +707,7 @@ async def test_compileservice_queue(mocked_compiler_service_block, server, clien
 
 
 @pytest.mark.asyncio
-async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment) -> None:
+async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
     config.Config.set("server", "auto-recompile-wait", "0")
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
@@ -723,7 +723,14 @@ async def test_compilerservice_halt(mocked_compiler_service_block, server, clien
 
     result = await client.get_compile_queue(environment)
     assert result.code == 200
-    assert len(result.result["queue"]) == 0
+    assert len(result.result["queue"]) == 1
+
+    result = await client.is_compiling(environment)
+    assert result.code == 204
+
+    await client.resume_environment(environment)
+    result = await client.is_compiling(environment)
+    assert result.code == 200
 
 
 @pytest.fixture(scope="function")

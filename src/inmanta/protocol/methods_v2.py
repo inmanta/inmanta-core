@@ -142,8 +142,8 @@ def environment_get(id: uuid.UUID) -> model.Environment:
 def halt_environment(tid: uuid.UUID) -> None:
     """
         Halt all orchestrator operations for an environment. The environment will enter a state where all agents are paused and
-        can not be unpaused. Compile requests and new agent registration requests are ignored. Normal operation can be restored
-        using the `resume_environment` endpoint.
+        can not be unpaused. Incoming compile requests will still be queued but compilation will halt. Normal operation can be
+        restored using the `resume_environment` endpoint.
 
         :param tid: The environment id
     """
