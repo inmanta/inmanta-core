@@ -199,12 +199,16 @@ class EnvironmentService(protocol.ServerSlice):
 
     @protocol.handle(methods.halt_environment, env="tid")
     async def halt(self, env: data.Environment) -> None:
+        if env.halted:
+            return
         await env.update_fields(halted=True)
         await self.agent_manager.halt_agents(env)
         await self.autostarted_agent_manager.stop_agents(env)
 
     @protocol.handle(methods.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
+        if not env.halted:
+            return
         await env.update_fields(halted=False)
         await self.autostarted_agent_manager.restart_agents(env)
         await self.agent_manager.resume_agents(env)
