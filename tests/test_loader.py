@@ -320,6 +320,7 @@ install_mode: master
 def test_plugin_loading_old_format(tmpdir, capsys):
     """
         Ensure the code loader ignores code formatted in the old on disk format (pre Inmanta 2020.4).
+        (See issue: #2162)
     """
     # Create directory structure code dir
     code_dir = tmpdir
