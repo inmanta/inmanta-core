@@ -272,7 +272,7 @@ class CodeLoader(object):
                     pathlib.Path(os.path.join(normdir, "__init__.py")).touch()
                     touch_inits(os.path.dirname(normdir))
 
-                # esnure correct package structure
+                # ensure correct package structure
                 os.makedirs(module_dir, exist_ok=True)
                 touch_inits(os.path.dirname(module_dir))
                 source_file = os.path.join(module_dir, "__init__.py")
