@@ -188,14 +188,14 @@ class AgentManager(ServerSlice, SessionListener):
             Halts all agents for an environment. Persists prior paused state.
         """
         await data.Agent.persist_on_halt(env.id, connection=connection)
-        await self._pause_agent(env)
+        await self._pause_agent(env, connection=connection)
 
     async def resume_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
             Resumes after halting. Unpauses all agents that had been paused by halting.
         """
         to_unpause: List[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
-        await asyncio.gather(*[self._unpause_agent(env, agent) for agent in to_unpause])
+        await asyncio.gather(*[self._unpause_agent(env, agent, connection=connection) for agent in to_unpause])
 
     @protocol.handle(methods_v2.all_agents_action, env="tid")
     async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:
@@ -215,13 +215,15 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             await self._unpause_agent(env, name)
 
-    async def _pause_agent(self, env: data.Environment, endpoint: Optional[str] = None) -> None:
+    async def _pause_agent(
+        self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
         """
             Pause a logical agent by pausing an active agent instance if it exists, and removing the logical agent's primary.
         """
 
         async with self.session_lock:
-            agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True)
+            agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True, connection=connection)
             endpoints_with_new_primary = []
             for agent_name in agents:
                 key = (env.id, agent_name)
@@ -231,11 +233,13 @@ class AgentManager(ServerSlice, SessionListener):
                     del self.tid_endpoint_to_session[key]
                     await live_session.get_client().set_state(agent_name, enabled=False)
                     endpoints_with_new_primary.append((agent_name, None))
-            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now())
+            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now(), connection=connection)
 
-    async def _unpause_agent(self, env: data.Environment, endpoint: Optional[str] = None) -> None:
+    async def _unpause_agent(
+        self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
         async with self.session_lock:
-            agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False)
+            agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
             endpoints_with_new_primary = []
             for agent_name in agents:
                 key = (env.id, agent_name)
@@ -247,7 +251,7 @@ class AgentManager(ServerSlice, SessionListener):
                         self.tid_endpoint_to_session[key] = session
                         await session.get_client().set_state(agent_name, enabled=True)
                         endpoints_with_new_primary.append((agent_name, session.id))
-            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now())
+            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now(), connection=connection)
 
     async def _process_session_listener_actions(self) -> None:
         """

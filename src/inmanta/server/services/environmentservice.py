@@ -208,7 +208,7 @@ class EnvironmentService(protocol.ServerSlice):
                 async with connection.transaction():
                     await env.update_fields(halted=True, connection=connection)
                     await self.agent_manager.halt_agents(env, connection=connection)
-                    await self.autostarted_agent_manager.stop_agents(env)
+        await self.autostarted_agent_manager.stop_agents(env)
 
     @protocol.handle(methods_v2.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
@@ -218,8 +218,8 @@ class EnvironmentService(protocol.ServerSlice):
             async with data.Environment.get_connection() as connection:
                 async with connection.transaction():
                     await env.update_fields(halted=False, connection=connection)
-                    await self.autostarted_agent_manager.restart_agents(env)
                     await self.agent_manager.resume_agents(env, connection=connection)
+        await self.autostarted_agent_manager.restart_agents(env)
         await self.server_slice.compiler.resume_environment(env.id)
 
     @protocol.handle(methods.decomission_environment, env="id")
