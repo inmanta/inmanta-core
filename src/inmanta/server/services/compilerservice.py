@@ -418,6 +418,8 @@ class CompilerService(ServerSlice):
     async def _queue(self, compile: data.Compile) -> None:
         async with self._global_lock:
             env: Optional[data.Environment] = await data.Environment.get_by_id(compile.environment)
+            if env is None:
+                raise Exception("Can't queue compile: environment %s does not exist" % compile.environment)
             assert env is not None
             # don't execute any compiles in a halted environment
             if env.halted:
@@ -430,7 +432,8 @@ class CompilerService(ServerSlice):
     async def _dequeue(self, environment: uuid.UUID) -> None:
         async with self._global_lock:
             env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
-            assert env is not None
+            if env is None:
+                raise Exception("Can't queue compile: environment %s does not exist" % environment)
             nextrun = await data.Compile.get_next_run(environment)
             if nextrun and not env.halted:
                 task = self.add_background_task(self._run(nextrun))
