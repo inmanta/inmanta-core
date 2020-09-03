@@ -38,7 +38,7 @@ import pydantic
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
-from inmanta.protocol import encode_token, methods
+from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.server import config as opt
@@ -548,7 +548,7 @@ class CompilerService(ServerSlice):
 
         return 200, {"report": report}
 
-    @protocol.handle(methods.get_compile_data, compile_id="id")
+    @protocol.handle(methods_v2.get_compile_data, compile_id="id")
     async def get_compile_data(self, compile_id: uuid.UUID) -> Optional[model.CompileData]:
         compile: Optional[data.Compile] = await data.Compile.get_by_id(compile_id)
         if compile is None:
