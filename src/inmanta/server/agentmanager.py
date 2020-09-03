@@ -868,6 +868,10 @@ class AutostartedAgentManager(ServerSlice):
 
         async with self.agent_lock:
             # silently ignore requests if this environment is halted
+            refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id)
+            if refreshed_env is None:
+                raise Exception("Can't ensure agent: environment %s does not exist" % env.id)
+            env = refreshed_env
             if env.halted:
                 return False
 
