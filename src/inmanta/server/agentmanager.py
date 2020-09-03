@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import asyncpg
 import logging
 import os
 import sys
@@ -182,18 +183,18 @@ class AgentManager(ServerSlice, SessionListener):
     async def stop(self) -> None:
         await super().stop()
 
-    async def halt_agents(self, env: data.Environment) -> None:
+    async def halt_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
             Halts all agents for an environment. Persists prior paused state.
         """
-        await data.Agent.persist_on_halt(env.id)
+        await data.Agent.persist_on_halt(env.id, connection=connection)
         await self._pause_agent(env)
 
-    async def resume_agents(self, env: data.Environment) -> None:
+    async def resume_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
             Resumes after halting. Unpauses all agents that had been paused by halting.
         """
-        to_unpause: List[str] = await data.Agent.persist_on_resume(env.id)
+        to_unpause: List[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
         await asyncio.gather(*[self._unpause_agent(env, agent) for agent in to_unpause])
 
     @protocol.handle(methods_v2.all_agents_action, env="tid")

@@ -1322,32 +1322,41 @@ class Agent(BaseDocument):
         return obj
 
     @classmethod
-    async def persist_on_halt(cls, env: uuid.UUID) -> None:
+    async def persist_on_halt(cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
             Persists paused state when halting all agents.
         """
         await cls._execute_query(
-            f"UPDATE {cls.table_name()} SET unpause_on_resume=NOT paused WHERE environment=$1", cls._get_value(env)
+            f"UPDATE {cls.table_name()} SET unpause_on_resume=NOT paused WHERE environment=$1",
+            cls._get_value(env),
+            connection=connection,
         )
 
     @classmethod
-    async def persist_on_resume(cls, env: uuid.UUID) -> List[str]:
+    async def persist_on_resume(cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> List[str]:
         """
             Restores default halted state. Returns a list of agents that should be unpaused.
         """
-        async with cls._connection_pool.acquire() as con:
-            async with con.transaction():
+
+        async def query_with_connection(connection: asyncpg.connection.Connection) -> List[str]:
+            async with connection.transaction():
                 unpause_on_resume = await cls._fetch_query(
                     f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume",
                     cls._get_value(env),
-                    connection=con,
+                    connection=connection,
                 )
                 await cls._execute_query(
                     f"UPDATE {cls.table_name()} SET unpause_on_resume=null WHERE environment=$1",
                     cls._get_value(env),
-                    connection=con,
+                    connection=connection,
                 )
                 return sorted([r["name"] for r in unpause_on_resume])
+
+        if connection is not None:
+            return await query_with_connection(connection)
+
+        async with cls.get_connection() as con:
+            return await query_with_connection(con)
 
     @classmethod
     async def pause(cls, env: uuid.UUID, endpoint: Optional[str], paused: bool) -> List[str]:
