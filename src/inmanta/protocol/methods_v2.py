@@ -308,6 +308,8 @@ def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
         :param action: The type of action that should be executed on an agent.
                         * pause: A paused agent cannot execute any deploy operations.
                         * unpause: A unpaused agent will be able to execute deploy operations.
+
+        :raises Forbidden: The given environment has been halted.
     """
 
 
@@ -322,6 +324,8 @@ def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
         :param action: The type of action that should be executed on the agents
                         * pause: A paused agent cannot execute any deploy operations.
                         * unpause: A unpaused agent will be able to execute deploy operations.
+
+        :raises Forbidden: The given environment has been halted.
     """
 
 
