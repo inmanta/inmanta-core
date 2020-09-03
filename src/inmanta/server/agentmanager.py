@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import asyncio
-import asyncpg
 import logging
 import os
 import sys
@@ -27,6 +26,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from uuid import UUID
+
+import asyncpg
 
 from inmanta import const, data
 from inmanta.config import Config
