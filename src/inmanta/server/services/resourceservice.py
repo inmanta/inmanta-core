@@ -28,7 +28,7 @@ from tornado.httputil import url_concat
 from inmanta import const, data
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
 from inmanta.data.model import Resource, ResourceAction, ResourceType, ResourceVersionIdStr
-from inmanta.protocol import methods
+from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.resources import Id
@@ -550,7 +550,7 @@ class ResourceService(protocol.ServerSlice):
 
         return 200
 
-    @protocol.handle(methods.get_resource_actions, env="tid")
+    @protocol.handle(methods_v2.get_resource_actions, env="tid")
     async def get_resource_actions(
         self,
         env: data.Environment,
@@ -614,7 +614,7 @@ class ResourceService(protocol.ServerSlice):
             return query_params
 
         if limit and resource_action_dtos:
-            base_url = "/api/v1/resource_actions"
+            base_url = "/api/v2/resource_actions"
             common_query_params = _get_query_params(resource_type, agent, attribute, attribute_value, log_severity, limit)
             # Next is always earlier with regards to 'started' time
             next_params = common_query_params.copy()
