@@ -202,6 +202,11 @@ class CodeLoader(object):
         configure_module_finder([mod_dir])
 
         for py in glob.iglob(os.path.join(mod_dir, "**", "*.py"), recursive=True):
+            # Files in the root of the modules directory are sources files formatted on disk using
+            # the pre inmanta 2020.4 format. These sources should be ignored. (See issue: #2162)
+            if os.path.dirname(py) == mod_dir:
+                continue
+
             mod_name: str
             if mod_dir in py:
                 mod_name = PluginModuleLoader.convert_relative_path_to_module(os.path.relpath(py, start=mod_dir))
