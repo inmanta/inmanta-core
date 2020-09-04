@@ -146,6 +146,8 @@ def halt_environment(tid: uuid.UUID) -> None:
         restored using the `resume_environment` endpoint.
 
         :param tid: The environment id
+
+        :raises NotFound: The given environment doesn't exist.
     """
 
 
@@ -162,6 +164,8 @@ def resume_environment(tid: uuid.UUID) -> None:
         that were active when the environment was halted.
 
         :param tid: The environment id
+
+        :raises NotFound: The given environment doesn't exist.
     """
 
 

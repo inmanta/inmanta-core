@@ -434,13 +434,15 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
-    async def get_by_id(cls: Type[T], doc_id: uuid.UUID) -> Optional[T]:
+    async def get_by_id(
+        cls: Type[T], doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Optional[T]:
         """
             Get a specific document based on its ID
 
             :return: An instance of this class with its fields filled from the database.
         """
-        result = await cls.get_list(id=doc_id)
+        result = await cls.get_list(id=doc_id, connection=connection)
         if len(result) > 0:
             return result[0]
         return None
@@ -1329,7 +1331,7 @@ class Agent(BaseDocument):
             Persists paused state when halting all agents.
         """
         await cls._execute_query(
-            f"UPDATE {cls.table_name()} SET unpause_on_resume=NOT paused WHERE environment=$1",
+            f"UPDATE {cls.table_name()} SET unpause_on_resume=NOT paused WHERE environment=$1 AND unpause_on_resume IS NULL",
             cls._get_value(env),
             connection=connection,
         )
@@ -1348,7 +1350,7 @@ class Agent(BaseDocument):
                     connection=connection,
                 )
                 await cls._execute_query(
-                    f"UPDATE {cls.table_name()} SET unpause_on_resume=null WHERE environment=$1",
+                    f"UPDATE {cls.table_name()} SET unpause_on_resume=NULL WHERE environment=$1",
                     cls._get_value(env),
                     connection=connection,
                 )

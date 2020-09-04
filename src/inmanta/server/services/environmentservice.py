@@ -202,25 +202,37 @@ class EnvironmentService(protocol.ServerSlice):
     @protocol.handle(methods_v2.halt_environment, env="tid")
     async def halt(self, env: data.Environment) -> None:
         async with self.agent_state_lock:
-            if env.halted:
-                return
             async with data.Environment.get_connection() as connection:
                 async with connection.transaction():
-                    await env.update_fields(halted=True, connection=connection)
-                    await self.agent_manager.halt_agents(env, connection=connection)
-        await self.autostarted_agent_manager.stop_agents(env)
+                    refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
+                    if refreshed_env is None:
+                        raise NotFound("Environment %s does not exist" % env.id)
+
+                    # silently ignore requests if this environment has already been halted
+                    if refreshed_env.halted:
+                        return
+
+                    await refreshed_env.update_fields(halted=True, connection=connection)
+                    await self.agent_manager.halt_agents(refreshed_env, connection=connection)
+            await self.autostarted_agent_manager.stop_agents(refreshed_env)
 
     @protocol.handle(methods_v2.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
         async with self.agent_state_lock:
-            if not env.halted:
-                return
             async with data.Environment.get_connection() as connection:
                 async with connection.transaction():
-                    await env.update_fields(halted=False, connection=connection)
-                    await self.agent_manager.resume_agents(env, connection=connection)
-        await self.autostarted_agent_manager.restart_agents(env)
-        await self.server_slice.compiler.resume_environment(env.id)
+                    refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
+                    if refreshed_env is None:
+                        raise NotFound("Environment %s does not exist" % env.id)
+
+                    # silently ignore requests if this environment has already been resumed
+                    if not refreshed_env.halted:
+                        return
+
+                    await refreshed_env.update_fields(halted=False, connection=connection)
+                    await self.agent_manager.resume_agents(refreshed_env, connection=connection)
+            await self.autostarted_agent_manager.restart_agents(refreshed_env)
+        await self.server_slice.compiler.resume_environment(refreshed_env.id)
 
     @protocol.handle(methods.decomission_environment, env="id")
     async def decommission_environment(self, env: data.Environment, metadata: Optional[JsonType]) -> Apireturn:
