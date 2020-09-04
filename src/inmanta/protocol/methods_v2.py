@@ -134,6 +134,43 @@ def environment_get(id: uuid.UUID) -> model.Environment:
 
 
 @typedmethod(
+    path="/actions/environment/halt",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def halt_environment(tid: uuid.UUID) -> None:
+    """
+        Halt all orchestrator operations for an environment. The environment will enter a state where all agents are paused and
+        can not be unpaused. Incoming compile requests will still be queued but compilation will halt. Normal operation can be
+        restored using the `resume_environment` endpoint.
+
+        :param tid: The environment id
+
+        :raises NotFound: The given environment doesn't exist.
+    """
+
+
+@typedmethod(
+    path="/actions/environment/resume",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def resume_environment(tid: uuid.UUID) -> None:
+    """
+        Resume all orchestrator operations for an environment. Resumes normal environment operation and unpauses all agents
+        that were active when the environment was halted.
+
+        :param tid: The environment id
+
+        :raises NotFound: The given environment doesn't exist.
+    """
+
+
+@typedmethod(
     path="/decommission/<id>",
     operation="POST",
     arg_options={"id": methods.ArgOption(getter=methods.convert_environment)},
@@ -276,6 +313,8 @@ def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
         :param action: The type of action that should be executed on an agent.
                         * pause: A paused agent cannot execute any deploy operations.
                         * unpause: A unpaused agent will be able to execute deploy operations.
+
+        :raises Forbidden: The given environment has been halted.
     """
 
 
@@ -290,6 +329,8 @@ def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
         :param action: The type of action that should be executed on the agents
                         * pause: A paused agent cannot execute any deploy operations.
                         * unpause: A unpaused agent will be able to execute deploy operations.
+
+        :raises Forbidden: The given environment has been halted.
     """
 
 

@@ -27,11 +27,13 @@ from enum import Enum
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from uuid import UUID
 
+import asyncpg
+
 from inmanta import const, data
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import encode_token, methods, methods_v2
-from inmanta.protocol.exceptions import NotFound, ShutdownInProgress
+from inmanta.protocol.exceptions import Forbidden, NotFound, ShutdownInProgress
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -108,7 +110,16 @@ class SessionAction:
 
 
 class AgentManager(ServerSlice, SessionListener):
-    """ This class contains all server functionality related to the management of agents
+    """
+        This class contains all server functionality related to the management of agents.
+        Each logical agent managed by an instance of this class has at most one primary agent instance process associated with
+        it. A subset of these processes are autostarted, those are managed by :py:class:`AutostartedAgentManager`.
+        The server ignores all requests from non-primary agent instances. Therefore an agent without a primary is effectively
+        paused as far as the server is concerned, though any rogue agent instances could still perform actions agent-side.
+
+        Throughout this class the terms "logical agent" or sometimes just "agent" refer to a logical agent managed by an
+        instance of this class. The terms "agent instance", "agent process" or just "process" refer to a concrete process
+        running an agent instance, which might be the primary for a logical agent.
     """
 
     def __init__(self, closesessionsonstart: bool = True, fact_back_off: int = None) -> None:
@@ -173,8 +184,24 @@ class AgentManager(ServerSlice, SessionListener):
     async def stop(self) -> None:
         await super().stop()
 
+    async def halt_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+            Halts all agents for an environment. Persists prior paused state.
+        """
+        await data.Agent.persist_on_halt(env.id, connection=connection)
+        await self._pause_agent(env, connection=connection)
+
+    async def resume_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+            Resumes after halting. Unpauses all agents that had been paused by halting.
+        """
+        to_unpause: List[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
+        await asyncio.gather(*[self._unpause_agent(env, agent, connection=connection) for agent in to_unpause])
+
     @protocol.handle(methods_v2.all_agents_action, env="tid")
     async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:
+        if env.halted:
+            raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
         if action is AgentAction.pause:
             await self._pause_agent(env)
         else:
@@ -182,14 +209,22 @@ class AgentManager(ServerSlice, SessionListener):
 
     @protocol.handle(methods_v2.agent_action, env="tid")
     async def agent_action(self, env: data.Environment, name: str, action: AgentAction) -> None:
+        if env.halted:
+            raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
         if action is AgentAction.pause:
             await self._pause_agent(env, name)
         else:
             await self._unpause_agent(env, name)
 
-    async def _pause_agent(self, env: data.Environment, endpoint: Optional[str] = None) -> None:
+    async def _pause_agent(
+        self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        """
+            Pause a logical agent by pausing an active agent instance if it exists, and removing the logical agent's primary.
+        """
+
         async with self.session_lock:
-            agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True)
+            agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True, connection=connection)
             endpoints_with_new_primary = []
             for agent_name in agents:
                 key = (env.id, agent_name)
@@ -199,11 +234,13 @@ class AgentManager(ServerSlice, SessionListener):
                     del self.tid_endpoint_to_session[key]
                     await live_session.get_client().set_state(agent_name, enabled=False)
                     endpoints_with_new_primary.append((agent_name, None))
-            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now())
+            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now(), connection=connection)
 
-    async def _unpause_agent(self, env: data.Environment, endpoint: Optional[str] = None) -> None:
+    async def _unpause_agent(
+        self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
         async with self.session_lock:
-            agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False)
+            agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
             endpoints_with_new_primary = []
             for agent_name in agents:
                 key = (env.id, agent_name)
@@ -215,7 +252,7 @@ class AgentManager(ServerSlice, SessionListener):
                         self.tid_endpoint_to_session[key] = session
                         await session.get_client().set_state(agent_name, enabled=True)
                         endpoints_with_new_primary.append((agent_name, session.id))
-            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now())
+            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now(), connection=connection)
 
     async def _process_session_listener_actions(self) -> None:
         """
@@ -711,6 +748,11 @@ class AgentManager(ServerSlice, SessionListener):
 
 
 class AutostartedAgentManager(ServerSlice):
+    """
+        An instance of this class manages autostarted agent instance processes. It does not manage the logical agents as those
+        are managed by `:py:class:AgentManager`.
+    """
+
     def __init__(self):
         super(AutostartedAgentManager, self).__init__(SLICE_AUTOSTARTED_AGENT_MANAGER)
         self._agent_procs: Dict[UUID, subprocess.Process] = {}  # env uuid -> subprocess.Process
@@ -831,6 +873,14 @@ class AutostartedAgentManager(ServerSlice):
             return not self._agent_manager.are_agents_up(env.id, agents)
 
         async with self.agent_lock:
+            # silently ignore requests if this environment is halted
+            refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id)
+            if refreshed_env is None:
+                raise Exception("Can't ensure agent: environment %s does not exist" % env.id)
+            env = refreshed_env
+            if env.halted:
+                return False
+
             if is_start_agent_required():
                 res = await self.__do_start_agent(agents, env)
                 return res

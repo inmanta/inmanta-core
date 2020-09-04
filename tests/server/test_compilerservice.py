@@ -708,6 +708,33 @@ async def test_compileservice_queue(mocked_compiler_service_block, server, clien
     assert result.code == 200
 
 
+@pytest.mark.asyncio
+async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
+    config.Config.set("server", "auto-recompile-wait", "0")
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+
+    result = await client.get_compile_queue(environment)
+    assert result.code == 200
+    assert len(result.result["queue"]) == 0
+
+    await client.halt_environment(environment)
+
+    env = await data.Environment.get_by_id(environment)
+    assert env is not None
+    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+
+    result = await client.get_compile_queue(environment)
+    assert result.code == 200
+    assert len(result.result["queue"]) == 1
+
+    result = await client.is_compiling(environment)
+    assert result.code == 204
+
+    await client.resume_environment(environment)
+    result = await client.is_compiling(environment)
+    assert result.code == 200
+
+
 @pytest.fixture(scope="function")
 async def server_with_frequent_cleanups(server_pre_start, server_config, async_finalizer):
     config.Config.set("server", "compiler-report-retention", "2")

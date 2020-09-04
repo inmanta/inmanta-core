@@ -30,6 +30,7 @@ from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
 from inmanta.server import (
+    SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_DATABASE,
     SLICE_ENVIRONMENT,
@@ -39,7 +40,7 @@ from inmanta.server import (
     SLICE_TRANSPORT,
     protocol,
 )
-from inmanta.server.agentmanager import AutostartedAgentManager
+from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.server import Server
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
@@ -106,14 +107,17 @@ class EnvironmentService(protocol.ServerSlice):
     """Slice with project and environment management"""
 
     server_slice: Server
+    agent_manager: AgentManager
     autostarted_agent_manager: AutostartedAgentManager
     orchestration_service: OrchestrationService
     resource_service: ResourceService
     listeners: Dict[EnvironmentAction, List[EnvironmentListener]]
+    agent_state_lock: asyncio.Lock
 
     def __init__(self) -> None:
         super(EnvironmentService, self).__init__(SLICE_ENVIRONMENT)
         self.listeners = defaultdict(list)
+        self.agent_state_lock = asyncio.Lock()
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER, SLICE_DATABASE, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE]
@@ -124,6 +128,7 @@ class EnvironmentService(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
+        self.agent_manager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
         self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
         self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
@@ -193,6 +198,41 @@ class EnvironmentService(protocol.ServerSlice):
     async def delete_environment(self, environment_id: uuid.UUID) -> Apireturn:
         await self.environment_delete(environment_id)
         return 200
+
+    @protocol.handle(methods_v2.halt_environment, env="tid")
+    async def halt(self, env: data.Environment) -> None:
+        async with self.agent_state_lock:
+            async with data.Environment.get_connection() as connection:
+                async with connection.transaction():
+                    refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
+                    if refreshed_env is None:
+                        raise NotFound("Environment %s does not exist" % env.id)
+
+                    # silently ignore requests if this environment has already been halted
+                    if refreshed_env.halted:
+                        return
+
+                    await refreshed_env.update_fields(halted=True, connection=connection)
+                    await self.agent_manager.halt_agents(refreshed_env, connection=connection)
+            await self.autostarted_agent_manager.stop_agents(refreshed_env)
+
+    @protocol.handle(methods_v2.resume_environment, env="tid")
+    async def resume(self, env: data.Environment) -> None:
+        async with self.agent_state_lock:
+            async with data.Environment.get_connection() as connection:
+                async with connection.transaction():
+                    refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
+                    if refreshed_env is None:
+                        raise NotFound("Environment %s does not exist" % env.id)
+
+                    # silently ignore requests if this environment has already been resumed
+                    if not refreshed_env.halted:
+                        return
+
+                    await refreshed_env.update_fields(halted=False, connection=connection)
+                    await self.agent_manager.resume_agents(refreshed_env, connection=connection)
+            await self.autostarted_agent_manager.restart_agents(refreshed_env)
+        await self.server_slice.compiler.resume_environment(refreshed_env.id)
 
     @protocol.handle(methods.decomission_environment, env="id")
     async def decommission_environment(self, env: data.Environment, metadata: Optional[JsonType]) -> Apireturn:

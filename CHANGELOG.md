@@ -12,6 +12,7 @@
 - Added environment setting for agent_trigger_method (#2025)
 - Expose compile data as exported by `inmanta compile --export-compile-data` via API (inmanta/inmanta-telco#54, #2317)
 - Added `typedmethod` decorator `strict_typing` parameter to  allow `Any` types for those few cases where it's required (#2301)
+- Added API method for halting all environment operations (#2228)
 
 ## Upgrade notes
 

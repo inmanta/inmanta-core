@@ -434,13 +434,15 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
-    async def get_by_id(cls: Type[T], doc_id: uuid.UUID) -> Optional[T]:
+    async def get_by_id(
+        cls: Type[T], doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Optional[T]:
         """
             Get a specific document based on its ID
 
             :return: An instance of this class with its fields filled from the database.
         """
-        result = await cls.get_list(id=doc_id)
+        result = await cls.get_list(id=doc_id, connection=connection)
         if len(result) > 0:
             return result[0]
         return None
@@ -762,6 +764,7 @@ class Environment(BaseDocument):
     repo_branch: str = Field(field_type=str, default="")
     settings: Dict[str, m.EnvSettingType] = Field(field_type=dict, default={})
     last_version: int = Field(field_type=int, default=0)
+    halted: bool = Field(field_type=bool, default=False)
 
     def to_dto(self) -> m.Environment:
         return m.Environment(
@@ -771,6 +774,7 @@ class Environment(BaseDocument):
             repo_url=self.repo_url,
             repo_branch=self.repo_branch,
             settings=self.settings,
+            halted=self.halted,
         )
 
     _settings: Dict[str, Setting] = {
@@ -1182,11 +1186,13 @@ class AgentInstance(BaseDocument):
     tid = Field(field_type=uuid.UUID, required=True)
 
     @classmethod
-    async def active_for(cls, tid, endpoint, process: uuid.UUID = None):
+    async def active_for(
+        cls, tid, endpoint, process: uuid.UUID = None, connection: Optional[asyncpg.connection.Connection] = None
+    ):
         if process is not None:
-            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, process=process)
+            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, process=process, connection=connection)
         else:
-            objects = await cls.get_list(expired=None, tid=tid, name=endpoint)
+            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, connection=connection)
         return objects
 
     @classmethod
@@ -1247,6 +1253,8 @@ class Agent(BaseDocument):
         :param last_failover: Moment at which the primary was last changed
         :param paused: is this agent paused (if so, skip it)
         :param primary: what is the current active instance (if none, state is down)
+        :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
+            persist paused state when halting.
     """
 
     environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1254,6 +1262,7 @@ class Agent(BaseDocument):
     last_failover: datetime.datetime = Field(field_type=datetime.datetime)
     paused: bool = Field(field_type=bool, default=False)
     id_primary: Optional[uuid.UUID] = Field(field_type=uuid.UUID)  # AgentInstance
+    unpause_on_resume: Optional[bool] = Field(field_type=bool)
 
     def set_primary(self, primary: uuid.UUID) -> None:
         self.id_primary = primary
@@ -1317,7 +1326,46 @@ class Agent(BaseDocument):
         return obj
 
     @classmethod
-    async def pause(cls, env: uuid.UUID, endpoint: Optional[str], paused: bool) -> List[str]:
+    async def persist_on_halt(cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+            Persists paused state when halting all agents.
+        """
+        await cls._execute_query(
+            f"UPDATE {cls.table_name()} SET unpause_on_resume=NOT paused WHERE environment=$1 AND unpause_on_resume IS NULL",
+            cls._get_value(env),
+            connection=connection,
+        )
+
+    @classmethod
+    async def persist_on_resume(cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> List[str]:
+        """
+            Restores default halted state. Returns a list of agents that should be unpaused.
+        """
+
+        async def query_with_connection(connection: asyncpg.connection.Connection) -> List[str]:
+            async with connection.transaction():
+                unpause_on_resume = await cls._fetch_query(
+                    f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume",
+                    cls._get_value(env),
+                    connection=connection,
+                )
+                await cls._execute_query(
+                    f"UPDATE {cls.table_name()} SET unpause_on_resume=NULL WHERE environment=$1",
+                    cls._get_value(env),
+                    connection=connection,
+                )
+                return sorted([r["name"] for r in unpause_on_resume])
+
+        if connection is not None:
+            return await query_with_connection(connection)
+
+        async with cls.get_connection() as con:
+            return await query_with_connection(con)
+
+    @classmethod
+    async def pause(
+        cls, env: uuid.UUID, endpoint: Optional[str], paused: bool, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> List[str]:
         """
             Pause a specific agent or all agents in an environment when endpoint is set to None.
 
@@ -1329,12 +1377,16 @@ class Agent(BaseDocument):
         else:
             query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 AND name=$3 RETURNING name"
             values = [cls._get_value(paused), cls._get_value(env), cls._get_value(endpoint)]
-        result = await cls._fetch_query(query, *values)
+        result = await cls._fetch_query(query, *values, connection=connection)
         return sorted([r["name"] for r in result])
 
     @classmethod
     async def update_primary(
-        cls, env: uuid.UUID, endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]], now: datetime.datetime
+        cls,
+        env: uuid.UUID,
+        endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]],
+        now: datetime.datetime,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
             Update the primary agent instance for agents present in the database.
@@ -1346,18 +1398,18 @@ class Agent(BaseDocument):
             :param now: Timestamp of this failover
         """
         for (endpoint, sid) in endpoints_with_new_primary:
-            agent = await cls.get(env, endpoint)
+            agent = await cls.get(env, endpoint, connection=connection)
             if agent is None:
                 continue
 
             if sid is None:
-                await agent.update_fields(last_failover=now, primary=None)
+                await agent.update_fields(last_failover=now, primary=None, connection=connection)
             else:
-                instances = await AgentInstance.active_for(tid=env, endpoint=agent.name, process=sid)
+                instances = await AgentInstance.active_for(tid=env, endpoint=agent.name, process=sid, connection=connection)
                 if instances:
-                    await agent.update_fields(last_failover=now, primary=instances[0].id)
+                    await agent.update_fields(last_failover=now, primary=instances[0].id, connection=connection)
                 else:
-                    await agent.update_fields(last_failover=now, primary=None)
+                    await agent.update_fields(last_failover=now, primary=None, connection=connection)
 
 
 class Report(BaseDocument):

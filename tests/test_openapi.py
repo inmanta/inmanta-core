@@ -218,7 +218,7 @@ def test_openapi_types_base_model():
     openapi_type = type_converter.get_openapi_type_of_parameter(
         inspect.Parameter("param", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=model.Environment)
     )
-    assert openapi_type.required == ["id", "name", "project_id", "repo_url", "repo_branch", "settings"]
+    assert openapi_type.required == ["id", "name", "project_id", "repo_url", "repo_branch", "settings", "halted"]
 
 
 def test_openapi_types_union():

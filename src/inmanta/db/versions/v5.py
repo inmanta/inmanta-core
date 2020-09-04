@@ -30,5 +30,11 @@ ALTER TABLE public.compile ADD COLUMN substitute_compile_id uuid REFERENCES publ
 
 -- Compile data json exported by compiling with the --export-compile-data parameter.
 ALTER TABLE public.compile ADD COLUMN compile_data jsonb;
+
+
+-- Add halted column to environment table to support halting all orchestrator operations.
+ALTER TABLE public.environment ADD COLUMN halted boolean NOT NULL DEFAULT false;
+-- Add unpause_on_resume column to agent table to persist paused state when halting the environment.
+ALTER TABLE public.agent ADD COLUMN unpause_on_resume boolean;
         """
     )
