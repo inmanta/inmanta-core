@@ -48,6 +48,28 @@ class RequiresTest(resources.PurgeableResource):
     fields = ("name", "agent", "do_break")
 
 
+@resources.resource("exp::WrappedProxyTest", agent="agent", id_attribute="name")
+class WrappedProxyTest(resources.ManagedResource):
+    fields = ("name", "wrapped_proxies")
+
+    @staticmethod
+    def get_wrapped_proxies(exp, obj):
+        return {
+            "my_list": obj.my_list,
+            "my_dict": obj.my_dict,
+            "deep_dict": {"multi_level": obj.my_dict,},
+        }
+
+
+@resources.resource("exp::WrappedSelfTest", agent="agent", id_attribute="name")
+class WrappedSelfTest(resources.ManagedResource):
+    fields = ("name", "wrapped_self")
+
+    @staticmethod
+    def get_wrapped_self(exp, obj):
+        return {"self": obj}
+
+
 @dependency_manager
 def bad_loops(_, all_resources):
     my_resources = {

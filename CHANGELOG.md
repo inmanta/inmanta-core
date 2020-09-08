@@ -1,7 +1,39 @@
-# Release 2020.3.1 (2020-07-03)
+# Release 2020.4 (2020-09-08)
+
+## New features
+- Added merging of similar compile requests to the compile queue (#2137)
+- Export all handler's / resource's module's plugin source files so helper functions can be used from sibling modules (#2162, #2312)
+- Added documentation on how a string is matched against a regex defined in a regex-based typedef (#2214)
+- Added API to query ResourceActions
+- Added support to query the resource action log of a resource via the CLI (#2253)
+- Added conditional expression to the language with syntax condition ? x: y (#1987)
+- Add support for inmanta-cli click plugins
+- Added link to the PDF version of the documentation
+- Added environment setting for agent_trigger_method (#2025)
+- Expose compile data as exported by `inmanta compile --export-compile-data` via API (inmanta/inmanta-telco#54, #2317)
+- Added `typedmethod` decorator `strict_typing` parameter to  allow `Any` types for those few cases where it's required (#2301)
+- Added API method for halting all environment operations (#2228)
+
+## Upgrade notes
+
+- Option `inmanta compile --json` is renamed to `inmanta compile --export-compile-data`
+
+## Upgrade notes
+- `DynamicProxy.__getattr__` now raises an `AttributeError` instead of a plain `NotFoundException` when an attribute can not be
+    found, for compatibility with Python's builtin `hasattr`. This change is backwards compatible, though it is recommended to
+    except on `AttributeError` over `NotFoundException`. (#2991)
 
 ## Bug fixes
 - Restore support to pass mocking information to the compiler
+- Disallow parameters mapped to a header to be passed via the body instead (#2151)
+- Handle skipped and unavailable as failures when calculating increments (#2184)
+- Constrain agent name to string values (#2172)
+- Fix for allowing comments in the requirements.txt file of modules (#2206)
+- Allow equality checks between types to support optional value overrides (#2243)
+- Don't add path params as query params to the url in the client (#2246)
+- Allow Optional as return type for typedmethods (#2277)
+- Made Dict- and SequenceProxy serializable to allow exporter to wrap dict and list attributes in other data structures (#2121)
+- Improved reporting of `PluginException` (#2304)
 
 # Release 2020.3 (2020-07-02)
 

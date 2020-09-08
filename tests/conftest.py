@@ -33,8 +33,7 @@ import tempfile
 import time
 import traceback
 import uuid
-from tempfile import mktemp
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import asyncpg
 import pkg_resources
@@ -74,6 +73,7 @@ else:
 logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes]
+
 
 # Database
 @pytest.fixture
@@ -797,13 +797,12 @@ class SnippetCompilationTest(KeepOnFail):
         helper function to allow actual export to be run an a different thread
         i.e. export.run must run off main thread to allow it to start a new ioloop for run_sync
         """
-        templfile = mktemp("json", "dump", self.project_dir)
 
         class Options(object):
             pass
 
         options = Options()
-        options.json = templfile if not deploy else None
+        options.json = os.path.join(self.project_dir, "dump.json") if not deploy else None
         options.depgraph = False
         options.deploy = deploy
         options.ssl = False
@@ -828,13 +827,13 @@ class SnippetCompilationTest(KeepOnFail):
     async def do_export_and_deploy(self, include_status=False, do_raise=True):
         return await off_main_thread(lambda: self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
 
-    def setup_for_error(self, snippet, shouldbe):
+    def setup_for_error(self, snippet, shouldbe, indent_offset=0):
         self.setup_for_snippet(snippet)
         try:
             compiler.do_compile()
             assert False, "Should get exception"
         except CompilerException as e:
-            text = e.format_trace(indent="  ")
+            text = e.format_trace(indent="  ", indent_level=indent_offset)
             print(text)
             shouldbe = shouldbe.format(dir=self.project_dir)
             assert shouldbe == text
@@ -934,7 +933,7 @@ class CompileRunnerMock(object):
         self._runner_queue = runner_queue
         self.block = False
 
-    async def run(self) -> bool:
+    async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, None]:
         now = datetime.datetime.now()
         returncode = 1 if self._make_compile_fail else 0
         report = data.Report(
@@ -950,7 +949,7 @@ class CompileRunnerMock(object):
             while self.block:
                 await asyncio.sleep(0.1)
 
-        return success
+        return success, None
 
 
 def monkey_patch_compiler_service(monkeypatch, server, make_compile_fail, runner_queue=None):

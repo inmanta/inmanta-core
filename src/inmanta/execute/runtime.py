@@ -46,12 +46,11 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from inmanta.ast.entity import Default, Entity, Implement, EntityLike  # noqa: F401
-    from inmanta.ast.statements import Statement, ExpressionStatement, Resumer, RawResumer
     from inmanta.ast.attribute import Attribute, RelationAttribute
-    from inmanta.compiler import Compiler
     from inmanta.ast.blocks import BasicBlock
-    from inmanta.ast.entity import Implementation
+    from inmanta.ast.entity import Default, Entity, EntityLike, Implement, Implementation  # noqa: F401
+    from inmanta.ast.statements import ExpressionStatement, RawResumer, Resumer, Statement
+    from inmanta.compiler import Compiler
 
 
 T = TypeVar("T")
@@ -360,8 +359,8 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
         self.value.append(value)
 
-        for l in self.listeners:
-            l.receive_result(value, location)
+        for listener in self.listeners:
+            listener.receive_result(value, location)
 
         return True
 
@@ -946,7 +945,7 @@ class Instance(ExecutionContext):
         return "%s %02x" % (self.type, self.sid)
 
     def __str__(self) -> str:
-        return "%s (instantiated at %s)" % (self.type, ",".join([str(l) for l in self.get_locations()]))
+        return "%s (instantiated at %s)" % (self.type, ",".join([str(location) for location in self.get_locations()]))
 
     def add_implementation(self, impl: "Implementation") -> bool:
         if impl in self.implementations:

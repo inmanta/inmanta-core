@@ -34,7 +34,7 @@ from inmanta.ast import (
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import NamedType, Type
-from inmanta.execute.runtime import Instance, QueueScheduler, Resolver
+from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, dataflow
 from inmanta.execute.util import AnyType
 from inmanta.util import memoize
 
@@ -44,11 +44,11 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from inmanta.execute.runtime import ExecutionContext, ResultVariable  # noqa: F401
-    from inmanta.ast.statements import Statement, ExpressionStatement  # noqa: F401
-    from inmanta.ast.statements.define import DefineAttribute, DefineImport  # noqa: F401
-    from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast import Namespaced
+    from inmanta.ast.attribute import Attribute  # noqa: F401
+    from inmanta.ast.statements import ExpressionStatement, Statement  # noqa: F401
+    from inmanta.ast.statements.define import DefineAttribute, DefineImport  # noqa: F401
+    from inmanta.execute.runtime import ExecutionContext, ResultVariable  # noqa: F401
 
 
 class EntityLike(NamedType):
@@ -342,7 +342,7 @@ class Entity(EntityLike, NamedType):
         resolver: Resolver,
         queue: QueueScheduler,
         location: Location,
-        node: Optional["dataflow.InstanceNodeReference"] = None,
+        node: Optional[dataflow.InstanceNodeReference] = None,
     ) -> "Instance":
         """
             Return an instance of the class defined in this entity.

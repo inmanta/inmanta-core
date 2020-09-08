@@ -16,11 +16,11 @@
     Contact: code@inmanta.com
 """
 
-from compiler.dataflow.conftest import create_instance, get_dataflow_node
 from typing import List, Set
 
 import pytest
 
+from compiler.dataflow.conftest import create_instance, get_dataflow_node
 from inmanta.ast.statements import Statement
 from inmanta.execute.dataflow import (
     AssignableNode,

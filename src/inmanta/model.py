@@ -18,7 +18,6 @@
 from builtins import str
 from typing import Dict, List, Tuple
 
-
 """
     Objects defining the serialization format for type information.
 
@@ -111,16 +110,16 @@ class Attribute(object):
         )
 
     @staticmethod
-    def from_list(l):
-        return {n: Attribute.from_dict(x) for n, x in l.items()}
+    def from_list(lst):
+        return {n: Attribute.from_dict(x) for n, x in lst.items()}
 
 
 class Value(object):
     """A value reference from a type either :class:`.DirectValue` or :class:`.ReferenceValue` """
 
     @staticmethod
-    def from_list(l):
-        return [Value.from_dict(x) for x in l]
+    def from_list(lst):
+        return [Value.from_dict(x) for x in lst]
 
     @staticmethod
     def from_dict(ctx):
@@ -258,8 +257,8 @@ class Relation(object):
         )
 
     @staticmethod
-    def from_list(l):
-        return {n: Relation.from_dict(x) for n, x in l.items()}
+    def from_list(lst):
+        return {n: Relation.from_dict(x) for n, x in lst.items()}
 
 
 class Entity(object):

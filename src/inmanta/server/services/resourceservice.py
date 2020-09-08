@@ -23,10 +23,13 @@ import uuid
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
 
+from tornado.httputil import url_concat
+
 from inmanta import const, data
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
-from inmanta.data.model import Resource, ResourceType, ResourceVersionIdStr
-from inmanta.protocol import methods
+from inmanta.data.model import Resource, ResourceAction, ResourceType, ResourceVersionIdStr
+from inmanta.protocol import methods, methods_v2
+from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
@@ -546,3 +549,81 @@ class ResourceService(protocol.ServerSlice):
                     await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
 
         return 200
+
+    @protocol.handle(methods_v2.get_resource_actions, env="tid")
+    async def get_resource_actions(
+        self,
+        env: data.Environment,
+        resource_type: Optional[str] = None,
+        agent: Optional[str] = None,
+        attribute: Optional[str] = None,
+        attribute_value: Optional[str] = None,
+        log_severity: Optional[str] = None,
+        limit: Optional[int] = 0,
+        action_id: Optional[uuid.UUID] = None,
+        first_timestamp: Optional[datetime.datetime] = None,
+        last_timestamp: Optional[datetime.datetime] = None,
+    ) -> ReturnValue[List[ResourceAction]]:
+        if (attribute and not attribute_value) or (not attribute and attribute_value):
+            raise BadRequest(
+                f"Attribute and attribute_value should both be supplied to use them filtering. "
+                f"Received attribute: {attribute}, attribute_value: {attribute_value}"
+            )
+        if first_timestamp and last_timestamp:
+            raise BadRequest(
+                f"Only one of the parameters first_timestamp and last_timestamp should be used "
+                f"Received first_timestamp: {first_timestamp}, last_timestamp: {last_timestamp}"
+            )
+        if action_id and not (first_timestamp or last_timestamp):
+            raise BadRequest(
+                f"The action_id parameter should be used in combination with either the first_timestamp or the last_timestamp "
+                f"Received action_id: {action_id}, first_timestamp: {first_timestamp}, last_timestamp: {last_timestamp}"
+            )
+        resource_actions = await data.ResourceAction.query_resource_actions(
+            env.id,
+            resource_type,
+            agent,
+            attribute=attribute,
+            attribute_value=attribute_value,
+            log_severity=log_severity,
+            limit=limit,
+            action_id=action_id,
+            first_timestamp=first_timestamp,
+            last_timestamp=last_timestamp,
+        )
+        resource_action_dtos = [resource_action.to_dto() for resource_action in resource_actions]
+        links = {}
+
+        def _get_query_params(
+            resource_type: Optional[str] = None,
+            agent: Optional[str] = None,
+            attribute: Optional[str] = None,
+            attribute_value: Optional[str] = None,
+            log_severity: Optional[str] = None,
+            limit: Optional[int] = 0,
+        ) -> dict:
+            query_params = {
+                "resource_type": resource_type,
+                "agent": agent,
+                "attribute": attribute,
+                "attribute_value": attribute_value,
+                "log_severity": log_severity,
+                "limit": limit,
+            }
+            query_params = {param_key: param_value for param_key, param_value in query_params.items() if param_value}
+            return query_params
+
+        if limit and resource_action_dtos:
+            base_url = "/api/v2/resource_actions"
+            common_query_params = _get_query_params(resource_type, agent, attribute, attribute_value, log_severity, limit)
+            # Next is always earlier with regards to 'started' time
+            next_params = common_query_params.copy()
+            next_params["last_timestamp"] = resource_action_dtos[-1].started
+            next_params["action_id"] = resource_action_dtos[-1].action_id
+            links["next"] = url_concat(base_url, next_params)
+            previous_params = common_query_params.copy()
+            previous_params["first_timestamp"] = resource_action_dtos[0].started
+            previous_params["action_id"] = resource_action_dtos[0].action_id
+            links["prev"] = url_concat(base_url, previous_params)
+        return_value = ReturnValue(response=resource_action_dtos, links=links if links else None)
+        return return_value

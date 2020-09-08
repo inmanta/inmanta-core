@@ -18,11 +18,11 @@
 
 import os
 import uuid
+from collections import defaultdict
 
 import pytest
 from asyncpg import Connection
 
-from _collections import defaultdict
 from db.common import PGRestore
 from inmanta.resources import Id
 from inmanta.server.bootloader import InmantaBootloader

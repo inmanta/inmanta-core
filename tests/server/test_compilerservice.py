@@ -23,14 +23,17 @@ import shutil
 import subprocess
 import uuid
 from asyncio import Semaphore
-from typing import List
+from typing import AsyncIterator, List, Optional
 
 import pytest
 
+import inmanta.ast.export as ast_export
+import inmanta.data.model as model
 from inmanta import config, data
 from inmanta.const import ParameterSource
 from inmanta.data import Compile, Report
 from inmanta.deploy import cfg_env
+from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server import config as server_config
 from inmanta.server import protocol
@@ -52,6 +55,58 @@ async def compilerservice(server_config, init_dataclasses_and_load_schema):
     yield cs
     await cs.prestop()
     await cs.stop()
+
+
+@pytest.fixture
+async def environment_factory(tmpdir) -> AsyncIterator["EnvironmentFactory"]:
+    """
+        Provides a factory for environments with a main.cf file.
+    """
+    yield EnvironmentFactory(str(tmpdir))
+
+
+class EnvironmentFactory:
+    def __init__(self, dir: str) -> None:
+        self.src_dir: str = os.path.join(dir, "src")
+        self.project: data.Project = data.Project(name="test")
+        self._ready: bool = False
+
+    async def setup(self) -> None:
+        if self._ready:
+            return
+
+        project_template = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
+        shutil.copytree(project_template, self.src_dir)
+
+        # Set up git
+        subprocess.check_output(["git", "init"], cwd=self.src_dir)
+        subprocess.check_output(["git", "add", "*"], cwd=self.src_dir)
+        subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=self.src_dir)
+        subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=self.src_dir)
+        subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=self.src_dir)
+
+        await self.project.insert()
+
+        self._ready = True
+
+    async def create_environment(self, main: str) -> data.Environment:
+        await self.setup()
+        branch: str = str(uuid.uuid4())
+        subprocess.check_output(["git", "checkout", "-b", branch], cwd=self.src_dir)
+        self.write_main(main)
+        environment: data.Environment = data.Environment(
+            name=branch, project=self.project.id, repo_url=self.src_dir, repo_branch=branch
+        )
+        await environment.insert()
+        return environment
+
+    def write_main(self, main: str, environment: Optional[data.Environment] = None) -> None:
+        if environment is not None:
+            subprocess.check_output(["git", "checkout", environment.repo_branch], cwd=self.src_dir)
+        with open(os.path.join(self.src_dir, "main.cf"), "w", encoding="utf-8") as fd:
+            fd.write(main)
+        subprocess.check_output(["git", "add", "main.cf"], cwd=self.src_dir)
+        subprocess.check_output(["git", "commit", "-m", "write main.cf", "--allow-empty"], cwd=self.src_dir)
 
 
 @pytest.mark.asyncio
@@ -99,11 +154,11 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
             self.done = False
             self.version = None
 
-        async def run(self):
+        async def run(self, force_update: Optional[bool] = False):
             self.started = True
             await self.lock.acquire()
             self.done = True
-            return True
+            return True, None
 
         def release(self):
             self.lock.release()
@@ -137,7 +192,8 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     async def request_compile(env: data.Environment) -> uuid.UUID:
         """Request compile for given env, return remote_id"""
         u1 = uuid.uuid4()
-        await cs.request_recompile(env, False, False, u1)
+        # add unique environment variables to prevent merging in request_recompile
+        await cs.request_recompile(env, False, False, u1, env_vars={"uuid": str(u1)})
         results = await data.Compile.get_by_remote_id(env.id, u1)
         assert len(results) == 1
         assert results[0].remote_id == u1
@@ -240,19 +296,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
 
 @pytest.mark.asyncio
-async def test_compile_runner(server, tmpdir, client):
-    # create project, printing env
-    project_source_dir = os.path.join(tmpdir, "src")
-
-    project_template = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
-
-    shutil.copytree(project_template, project_source_dir)
-    subprocess.check_output(["git", "init"], cwd=project_source_dir)
-    subprocess.check_output(["git", "add", "*"], cwd=project_source_dir)
-    subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=project_source_dir)
-    subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=project_source_dir)
-    subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_source_dir)
-
+async def test_compile_runner(environment_factory: EnvironmentFactory, server, client, tmpdir):
     testmarker_env = "TESTMARKER"
     no_marker = "__no__marker__"
     marker_print = "_INM_MM:"
@@ -260,36 +304,19 @@ async def test_compile_runner(server, tmpdir, client):
     marker_print3 = "_INM_MM3:"
 
     def make_main(marker_print):
-        # add main.cf
-        with open(os.path.join(project_source_dir, "main.cf"), "w", encoding="utf-8") as fd:
-            fd.write(
-                f"""
+        return f"""
     marker = std::get_env("{testmarker_env}","{no_marker}")
     std::print("{marker_print} {{{{marker}}}}")
 
     host = std::Host(name="test", os=std::linux)
     std::ConfigFile(host=host, path="/etc/motd", content="1234")
-    """
-            )
+        """
 
-        subprocess.check_output(["git", "add", "main.cf"], cwd=project_source_dir)
-        subprocess.check_output(["git", "commit", "-m", "unit test 2"], cwd=project_source_dir)
-
-    make_main(marker_print)
-    subprocess.check_output("git checkout -b alt".split(), cwd=project_source_dir)
-    make_main(marker_print2)
+    env = await environment_factory.create_environment(make_main(marker_print))
+    env2 = await environment_factory.create_environment(make_main(marker_print2))
 
     project_work_dir = os.path.join(tmpdir, "work")
     ensure_directory_exist(project_work_dir)
-
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url=project_source_dir, repo_branch="master")
-    await env.insert()
-
-    env2 = data.Environment(name="devalt", project=project.id, repo_url=project_source_dir, repo_branch="alt")
-    await env2.insert()
 
     async def compile_and_assert(env, export=True, meta={}, env_vars={}, update=False):
         compile = data.Compile(
@@ -359,7 +386,7 @@ async def test_compile_runner(server, tmpdir, client):
     # switch branch
     compile, stages = await compile_and_assert(env2, False)
     assert stages["Init"]["returncode"] == 0
-    assert stages["switching branch from master to alt"]["returncode"] == 0
+    assert stages[f"switching branch from {env.repo_branch} to {env2.repo_branch}"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print2} {no_marker}" in out
@@ -378,7 +405,7 @@ async def test_compile_runner(server, tmpdir, client):
     assert len(stages) == 5
     assert compile.version is None
 
-    make_main(marker_print3)
+    environment_factory.write_main(make_main(marker_print3))
     compile, stages = await compile_and_assert(env2, False, update=True)
     assert stages["Init"]["returncode"] == 0
     assert stages["Fetching changes"]["returncode"] == 0
@@ -392,6 +419,42 @@ async def test_compile_runner(server, tmpdir, client):
 
 
 @pytest.mark.asyncio
+async def test_compilerservice_compile_data(environment_factory: EnvironmentFactory, client, server) -> None:
+    async def get_compile_data(main: str) -> model.CompileData:
+        env: data.Environment = await environment_factory.create_environment(main)
+        result: Result = await client.notify_change(env.id)
+        assert result.code == 200
+
+        async def compile_done():
+            return (await client.is_compiling(env.id)).code == 204
+
+        await retry_limited(compile_done, 10)
+
+        reports = await client.get_reports(env.id)
+        assert reports.code == 200
+        assert len(reports.result["reports"]) == 1
+        compile_id: str = reports.result["reports"][0]["id"]
+        compile_data_a = model.CompileData(**reports.result["reports"][0]["compile_data"])
+
+        result = await client.get_compile_data(uuid.UUID(compile_id))
+        assert result.code == 200
+        assert "data" in result.result
+        compile_data: model.CompileData = model.CompileData(**result.result["data"])
+        assert compile_data_a == compile_data
+        return compile_data
+
+    errors0: List[ast_export.Error] = (await get_compile_data("x = 0")).errors
+    assert len(errors0) == 0
+
+    errors1: List[ast_export.Error] = (await get_compile_data("x = 0 x = 1")).errors
+    assert len(errors1) == 1
+    error: ast_export.Error = errors1[0]
+    assert error.category == ast_export.ErrorCategory.runtime
+    assert error.type == "inmanta.ast.DoubleSetException"
+    assert error.message == "value set twice:\n\told value: 0\n\t\tset at ./main.cf:1\n\tnew value: 1\n\t\tset at ./main.cf:1\n"
+
+
+@pytest.mark.asyncio
 async def test_e2e_recompile_failure(compilerservice: CompilerService):
     project = data.Project(name="test")
     await project.insert()
@@ -400,9 +463,9 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
     await env.insert()
 
     u1 = uuid.uuid4()
-    await compilerservice.request_recompile(env, False, False, u1)
+    await compilerservice.request_recompile(env, False, False, u1, env_vars={"my_unique_var": str(u1)})
     u2 = uuid.uuid4()
-    await compilerservice.request_recompile(env, False, False, u2)
+    await compilerservice.request_recompile(env, False, False, u2, env_vars={"my_unique_var": str(u2)})
 
     assert await compilerservice.is_compiling(env.id) == 200
 
@@ -548,23 +611,55 @@ async def test_compileservice_queue(mocked_compiler_service_block, server, clien
     assert result.code == 200
 
     # request a compile
-    compile_id1 = uuid.uuid4()
-    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=compile_id1)
+    remote_id1 = uuid.uuid4()
+    await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=False, remote_id=remote_id1, env_vars={"my_unique_var": "1"}
+    )
 
     # api should return one
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 1
-    assert result.result["queue"][0]["remote_id"] == str(compile_id1)
+    assert result.result["queue"][0]["remote_id"] == str(remote_id1)
     assert result.code == 200
 
     # request a compile
-    compile_id2 = uuid.uuid4()
-    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=compile_id2)
+    remote_id2 = uuid.uuid4()
+    compile_id2, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=remote_id2)
 
     # api should return two
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 2
-    assert result.result["queue"][1]["remote_id"] == str(compile_id2)
+    assert result.result["queue"][1]["remote_id"] == str(remote_id2)
+    assert result.code == 200
+
+    # request a compile with do_export=True
+    remote_id3 = uuid.uuid4()
+    compile_id3, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=remote_id3)
+
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 3
+    assert result.result["queue"][2]["remote_id"] == str(remote_id3)
+    assert result.code == 200
+
+    # request a compile with do_export=False -> expect merge with compile2
+    remote_id4 = uuid.uuid4()
+    compile_id4, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=remote_id4)
+
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 4
+    assert result.result["queue"][3]["remote_id"] == str(remote_id4)
+    assert result.code == 200
+
+    # request a compile with do_export=True -> expect merge with compile3, expect force_update == True for the compile
+    remote_id5 = uuid.uuid4()
+    compile_id5, _ = await compilerslice.request_recompile(env=env, force_update=True, do_export=True, remote_id=remote_id5)
+    remote_id6 = uuid.uuid4()
+    compile_id6, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=remote_id6)
+
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 6
+    assert result.result["queue"][4]["remote_id"] == str(remote_id5)
+    assert result.result["queue"][5]["remote_id"] == str(remote_id6)
     assert result.code == 200
 
     # finish a compile and wait for service to take on next
@@ -576,25 +671,67 @@ async def test_compileservice_queue(mocked_compiler_service_block, server, clien
     while current_task is compilerslice._recompiles[env.id]:
         await asyncio.sleep(0.01)
 
-    # api should return one when ready
+    # api should return five when ready
     result = await client.get_compile_queue(environment)
-    assert len(result.result["queue"]) == 1
+    assert len(result.result["queue"]) == 5
+    assert result.result["queue"][0]["remote_id"] == str(remote_id2)
     assert result.code == 200
 
-    # finish a compile
+    # finish second compile
     current_task = compilerslice._recompiles[env.id]
-
-    run = mocked_compiler_service_block.get()
+    run = mocked_compiler_service_block.get(block=True, timeout=2)
     run.block = False
 
-    while env.id in compilerslice._recompiles and current_task is compilerslice._recompiles[env.id]:
-        await asyncio.sleep(0.01)
+    while current_task is compilerslice._recompiles[env.id]:
+        await asyncio.sleep(0.2)
 
-    # return
+    assert await compilerslice.get_report(compile_id2) == await compilerslice.get_report(compile_id4)
+
+    # finish third compile
+    current_task = compilerslice._recompiles[env.id]
+    run = mocked_compiler_service_block.get(block=True, timeout=2)
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 3
+    assert result.result["queue"][0]["remote_id"] == str(remote_id3)
+    assert result.code == 200
+    run.block = False
+
+    while env.id in compilerslice._recompiles:
+        await asyncio.sleep(0.2)
+
+    assert await compilerslice.get_report(compile_id3) == await compilerslice.get_report(compile_id5)
+    assert await compilerslice.get_report(compile_id3) == await compilerslice.get_report(compile_id6)
 
     # api should return none
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 0
+    assert result.code == 200
+
+
+@pytest.mark.asyncio
+async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
+    config.Config.set("server", "auto-recompile-wait", "0")
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+
+    result = await client.get_compile_queue(environment)
+    assert result.code == 200
+    assert len(result.result["queue"]) == 0
+
+    await client.halt_environment(environment)
+
+    env = await data.Environment.get_by_id(environment)
+    assert env is not None
+    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+
+    result = await client.get_compile_queue(environment)
+    assert result.code == 200
+    assert len(result.result["queue"]) == 1
+
+    result = await client.is_compiling(environment)
+    assert result.code == 204
+
+    await client.resume_environment(environment)
+    result = await client.is_compiling(environment)
     assert result.code == 200
 
 

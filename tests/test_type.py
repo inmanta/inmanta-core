@@ -16,14 +16,17 @@
     Contact: code@inmanta.com
 """
 
+import typing
+from functools import reduce
 from typing import Tuple
 
 import pytest
+from more_itertools import pairwise
 
 from inmanta.ast import Namespace, RuntimeException
 from inmanta.ast.attribute import Attribute
 from inmanta.ast.entity import Entity
-from inmanta.ast.type import TYPES, Integer, NullableType, Type, TypedList
+from inmanta.ast.type import TYPES, Bool, Integer, LiteralDict, LiteralList, NullableType, Number, String, Type, TypedList
 from inmanta.execute.util import NoneValue
 
 
@@ -61,3 +64,34 @@ def test_attribute_validate(multi: bool, nullable: bool) -> None:
     validate(NoneValue(), nullable)
     validate([0, 1, 2], multi)
     validate([0, 1, NoneValue()], False)
+
+
+def create_type(base_type: typing.Type[Type], multi: bool = False, nullable: bool = False) -> Type:
+    base: Type = base_type()
+    transformations: typing.List[typing.Callable[[Type], Type]] = [
+        lambda t: TypedList(t) if multi else t,
+        lambda t: NullableType(t) if nullable else t,
+    ]
+    return reduce(lambda acc, t: t(acc), transformations, base)
+
+
+@pytest.mark.parametrize("base_type", [Bool, Integer, LiteralDict, LiteralList, Number, String])
+def test_type_equals_simple(base_type: typing.Type[Type]) -> None:
+    assert create_type(base_type) == create_type(base_type)
+
+
+def test_type_equals_transformations() -> None:
+    def all_transformations() -> typing.List[Type]:
+        return [
+            create_type(base_type, multi, nullable)
+            for multi in [True, False]
+            for nullable in [True, False]
+            for base_type in [Integer, Number]
+        ]
+
+    l1: typing.List[Type] = all_transformations()
+    l2: typing.List[Type] = all_transformations()
+    assert l1 == l2
+    for t1, t2 in pairwise(l1):
+        assert t1 != t2
+        assert t2 != t1

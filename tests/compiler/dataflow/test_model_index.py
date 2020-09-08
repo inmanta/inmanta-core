@@ -16,10 +16,10 @@
     Contact: code@inmanta.com
 """
 
-from compiler.dataflow.conftest import DataflowTestHelper
 from typing import Optional
 
 import inmanta.ast.type as inmanta_type
+from compiler.dataflow.conftest import DataflowTestHelper
 from inmanta.ast.entity import Entity
 from inmanta.execute.dataflow import AssignableNodeReference, InstanceAttributeNodeReference, InstanceNodeReference
 from inmanta.execute.runtime import Instance, ResultVariable, Typeorvalue

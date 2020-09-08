@@ -23,8 +23,8 @@ import subprocess
 import sys
 
 try:
-    import pwd
     import grp  # @UnresolvedImport
+    import pwd
 except ImportError:
     pwd = None
     grp = None
@@ -42,7 +42,7 @@ except ImportError:
 
 # This code needs to stay Py2 compatible without any external libs
 if False:
-    from typing import Optional, Dict, Tuple, Union, List
+    from typing import Dict, List, Optional, Tuple, Union
 
 
 class IOBase(object):

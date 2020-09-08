@@ -16,10 +16,9 @@
     Contact: code@inmanta.com
 """
 
-from compiler.dataflow.conftest import create_instance, get_dataflow_node
-
 import pytest
 
+from compiler.dataflow.conftest import create_instance, get_dataflow_node
 from inmanta.ast import Namespace
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements import Statement

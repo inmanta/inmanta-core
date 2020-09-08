@@ -19,7 +19,7 @@
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import RuntimeException
+from inmanta.ast import NotFoundException, RuntimeException
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.util import NoneValue
 
@@ -90,3 +90,23 @@ def test_unwrap_list_dict_recurse():
 def test_unwrap_dict_key_validation():
     with pytest.raises(RuntimeException):
         DynamicProxy.unwrap({1: 2})
+
+
+def test_dynamic_proxy_attribute_error(snippetcompiler):
+    proxy: object = proxy_object(
+        snippetcompiler,
+        """
+entity A:
+end
+implement A using std::none
+
+x = A()
+        """,
+        "x",
+    )
+
+    assert isinstance(proxy, DynamicProxy)
+    with pytest.raises(AttributeError):
+        proxy.x
+    with pytest.raises(NotFoundException):
+        proxy.x

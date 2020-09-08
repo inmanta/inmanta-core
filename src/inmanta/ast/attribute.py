@@ -36,9 +36,9 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
+    from inmanta.ast.entity import Entity  # noqa: F401
     from inmanta.ast.type import Type  # noqa: F401
     from inmanta.execute.runtime import Instance  # noqa: F401
-    from inmanta.ast.entity import Entity  # noqa: F401
 
 
 class Attribute(Locatable):

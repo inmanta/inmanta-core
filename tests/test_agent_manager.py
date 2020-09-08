@@ -774,6 +774,51 @@ async def test_agent_actions(server, client, async_finalizer):
             expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
         )
 
+    # set up for halt test
+    async def assert_agents_halt_state(env_id: UUID, agents_running: Dict[str, bool], halted: bool) -> None:
+        """
+            :param agents_running: dictionary of agents that were running before environment halting.
+        """
+        for agent_name, running in agents_running.items():
+            db_agent: data.Agent = await data.Agent.get_one(environment=env_id, name=agent_name)
+            assert db_agent.unpause_on_resume is (running if halted else None)
+
+    result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.pause.value)
+    assert result.code == 200
+    await assert_agents_paused(
+        expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
+    )
+    await assert_agents_halt_state(env1_id, {"agent1": False, "agent2": True}, False)
+    await assert_agents_halt_state(env2_id, {"agent1": True}, False)
+
+    # halt environment
+    result = await client.halt_environment(env1_id)
+    assert result.code == 200
+    await assert_agents_paused(
+        expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): True, (env2_id, "agent1"): False}
+    )
+    await assert_agents_halt_state(env1_id, {"agent1": False, "agent2": True}, True)
+    await assert_agents_halt_state(env2_id, {"agent1": True}, False)
+
+    # verify agent actions are not allowed in halted state
+    result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.unpause.value)
+    assert result.code == 403
+    assert "message" in result.result
+    assert result.result["message"] == "Access denied: Can not pause or unpause agents when the environment has been halted."
+    result = await client.agent_action(tid=env1_id, name="agent2", action=AgentAction.pause.value)
+    assert result.code == 403
+    result = await client.agent_action(tid=env2_id, name="agent1", action=AgentAction.pause.value)
+    assert result.code == 200
+
+    # resume environment, make sure only agents that were already running are unpaused
+    result = await client.resume_environment(env1_id)
+    assert result.code == 200
+    await assert_agents_paused(
+        expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): False, (env2_id, "agent1"): True}
+    )
+    await assert_agents_halt_state(env1_id, {"agent1": False, "agent2": True}, False)
+    await assert_agents_halt_state(env2_id, {"agent1": False}, False)
+
 
 @pytest.mark.asyncio
 async def test_process_already_terminated(server, environment):

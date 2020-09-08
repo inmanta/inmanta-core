@@ -4,6 +4,7 @@ from os import path
 requires = [
     "asyncpg",
     "click",
+    "click-plugins",
     "colorlog",
     "execnet",
     "netifaces",
@@ -32,7 +33,7 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    version="2020.3.1",
+    version="2020.4",
     python_requires=">=3.6",  # also update classifiers
     # Meta data
     name="inmanta",
