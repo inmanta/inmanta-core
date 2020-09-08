@@ -1,4 +1,6 @@
-# Release 2020.4 (?)
+# Release 2020.5 (?)
+
+# Release 2020.4 (2020-09-08)
 
 ## New features
 - Added merging of similar compile requests to the compile queue (#2137)
