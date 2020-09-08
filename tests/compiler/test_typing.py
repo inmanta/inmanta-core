@@ -340,3 +340,24 @@ def test_types_base_type(snippetcompiler, base_type: inmanta_type.Type) -> None:
         assert t.get_base_type().type_string() == base_type.type_string()
         # verify with_base_type is round-trip compatible
         assert t.with_base_type(base_type).type_string() == t.type_string()
+
+
+def test_2243_override_optional(snippetcompiler) -> None:
+    # make sure this compiles without errors
+    snippetcompiler.setup_for_snippet(
+        """
+entity Parent:
+    bool? val
+end
+
+implement Parent using std::none
+
+entity Child extends Parent:
+    bool? val = false
+end
+
+implement Child using std::none
+
+Child()
+        """,
+    )

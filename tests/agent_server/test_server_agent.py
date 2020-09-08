@@ -33,6 +33,7 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
+from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
@@ -2785,9 +2786,17 @@ async def test_eventprocessing(resource_container, server, client, clienthelper,
     await resource_container.wait_for_done_with_waiters(client, environment, version)
 
 
+@pytest.mark.parametrize("use_agent_trigger_method_setting", [(True,), (False)])
 @pytest.mark.asyncio
 async def test_push_incremental_deploy(
-    resource_container, environment, server, client, clienthelper, no_agent_backoff, async_finalizer
+    resource_container,
+    environment,
+    server,
+    client,
+    clienthelper,
+    no_agent_backoff,
+    async_finalizer,
+    use_agent_trigger_method_setting,
 ):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
@@ -2825,8 +2834,17 @@ async def test_push_incremental_deploy(
     resources = get_resources(version, "value1")
     await clienthelper.put_version_simple(resources, version)
 
-    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
-    assert result.code == 200
+    if use_agent_trigger_method_setting:
+        # Set the ENVIRONMENT_AGENT_TRIGGER_METHOD to full and leave the param None in the release_version call
+        result = await client.environment_settings_set(
+            environment, ENVIRONMENT_AGENT_TRIGGER_METHOD, const.AgentTriggerMethod.push_full_deploy
+        )
+        assert result.code == 200
+        result = await client.release_version(environment, version, True)
+        assert result.code == 200
+    else:
+        result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+        assert result.code == 200
 
     await _wait_until_deployment_finishes(client, environment, version)
 
@@ -2847,8 +2865,17 @@ async def test_push_incremental_deploy(
     )
     assert result.code == 200
 
-    result = await client.release_version(environment, version2, True, const.AgentTriggerMethod.push_incremental_deploy)
-    assert result.code == 200
+    if use_agent_trigger_method_setting:
+        # Set the ENVIRONMENT_AGENT_TRIGGER_METHOD to incremental and leave the param None in the release_version call
+        result = await client.environment_settings_set(
+            environment, ENVIRONMENT_AGENT_TRIGGER_METHOD, const.AgentTriggerMethod.push_incremental_deploy
+        )
+        assert result.code == 200
+        result = await client.release_version(environment, version2, True)
+        assert result.code == 200
+    else:
+        result = await client.release_version(environment, version2, True, const.AgentTriggerMethod.push_incremental_deploy)
+        assert result.code == 200
 
     await _wait_until_deployment_finishes(client, environment, version2)
 
@@ -3469,14 +3496,14 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         name="key1",
         value="value1",
         environment=uuid.UUID(environment),
-        resource_id=f"test::SetFact[agent1,key=key1]",
+        resource_id="test::SetFact[agent1,key=key1]",
         source=ParameterSource.fact.value,
     )
     param2 = data.Parameter(
         name="key2",
         value="value2",
         environment=uuid.UUID(environment),
-        resource_id=f"test::SetFact[agent1,key=key2]",
+        resource_id="test::SetFact[agent1,key=key2]",
         source=ParameterSource.fact.value,
     )
 
@@ -3514,14 +3541,14 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         name="returned_fact_key1",
         value="test",
         environment=uuid.UUID(environment),
-        resource_id=f"test::SetFact[agent1,key=key1]",
+        resource_id="test::SetFact[agent1,key=key1]",
         source=ParameterSource.fact.value,
     )
     param4 = data.Parameter(
         name="returned_fact_key2",
         value="test",
         environment=uuid.UUID(environment),
-        resource_id=f"test::SetFact[agent1,key=key2]",
+        resource_id="test::SetFact[agent1,key=key2]",
         source=ParameterSource.fact.value,
     )
 

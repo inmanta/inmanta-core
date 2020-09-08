@@ -236,6 +236,6 @@ tests::raise_exception("%s")
         compiler.do_compile()
         assert False, "Expected ExplicitPluginException"
     except ExplicitPluginException as e:
-        assert e.__cause__.message == msg
+        assert e.__cause__.message == "Test: " + msg
     except Exception as e:
         assert False, "Expected ExplicitPluginException, got %s" % e

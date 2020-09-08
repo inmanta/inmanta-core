@@ -1,0 +1,7 @@
+name: plugins_project
+description: A project used for plugin loading tests
+modulepath: libs
+downloadpath: libs
+install_mode: "release"
+repo:
+    - https://github.com/inmanta/

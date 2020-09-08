@@ -16,12 +16,12 @@
     Contact: code@inmanta.com
 """
 
-from compiler.dataflow.conftest import DataflowTestHelper, get_dataflow_node
 from typing import Dict, List
 
 import pytest
 
 import inmanta.ast.type as inmanta_type
+from compiler.dataflow.conftest import DataflowTestHelper, get_dataflow_node
 from inmanta.execute.dataflow import (
     AssignableNodeReference,
     Assignment,

@@ -55,17 +55,6 @@ async def stop_agent(server, agent):
     await retry_limited(lambda: len(agentmanager.sessions) == prelen - 1, 10)
 
 
-def get_resource(version, key="key1", agent="agent1", value="value1"):
-    return {
-        "key": key,
-        "value": value,
-        "id": f"test::Resource[{agent},key={key}],v=%d" % version,
-        "send_event": False,
-        "purged": False,
-        "requires": [],
-    }
-
-
 async def _deploy_resources(client, environment, resources, version, push, agent_trigger_method=None):
     result = await client.put_version(
         tid=environment,

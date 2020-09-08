@@ -17,21 +17,23 @@
 """
 import glob
 import hashlib
-import imp
+import importlib
 import inspect
 import logging
 import os
+import pathlib
 import sys
 import types
+from dataclasses import dataclass
 from importlib.abc import FileLoader, Finder
-from typing import Dict, Iterable, List, Optional, Set, Tuple
-
-import pkg_resources
+from itertools import chain, starmap
+from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
 from inmanta import const
 
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
+PLUGIN_DIR = "plugins"
 
 LOGGER = logging.getLogger(__name__)
 
@@ -88,6 +90,14 @@ class SourceInfo(object):
 
         return module_parts[1]
 
+    def get_siblings(self) -> Iterator["SourceInfo"]:
+        """
+            Returns an iterator over SourceInfo objects for all plugin source files in this Inmanta module (including this one).
+        """
+        from inmanta.module import Project
+
+        return starmap(SourceInfo, Project.get().modules[self._get_module_name()].get_plugin_files())
+
     @property
     def requires(self) -> List[str]:
         """ List of python requirements associated with this source file
@@ -121,13 +131,19 @@ class CodeManager(object):
         if type_name not in self.__type_file:
             self.__type_file[type_name] = set()
 
+        # if file_name is in there, all plugin files should be in there => return
         if file_name in self.__type_file[type_name]:
             return
 
-        self.__type_file[type_name].add(file_name)
+        # don't just store this file, but all plugin files in its Inmanta module to allow for importing helper modules
+        all_plugin_files: List[SourceInfo] = list(SourceInfo(file_name, instance.__module__).get_siblings())
+        self.__type_file[type_name].update(source_info.path for source_info in all_plugin_files)
 
-        if file_name not in self.__file_info:
-            self.__file_info[file_name] = SourceInfo(file_name, instance.__module__)
+        if file_name in self.__file_info:
+            return
+
+        for file_info in all_plugin_files:
+            self.__file_info[file_info.path] = file_info
 
     def get_object_source(self, instance: object) -> Optional[str]:
         """ Get the path of the source file in which type_object is defined
@@ -157,6 +173,13 @@ class CodeManager(object):
         return ((type_name, [self.__file_info[path] for path in files]) for type_name, files in self.__type_file.items())
 
 
+@dataclass
+class ModuleSource:
+    name: str
+    source: str
+    hash_value: str
+
+
 class CodeLoader(object):
     """
         Class responsible for managing code loaded from modules received from the compiler
@@ -176,13 +199,19 @@ class CodeLoader(object):
             Load all existing modules
         """
         mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
-        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+        configure_module_finder([mod_dir])
 
-        for py in glob.glob(os.path.join(mod_dir, "*.py")):
+        for py in glob.iglob(os.path.join(mod_dir, "**", "*.py"), recursive=True):
+            # Files in the root of the modules directory are sources files formatted on disk using
+            # the pre inmanta 2020.4 format. These sources should be ignored. (See issue: #2162)
+            if os.path.dirname(py) == mod_dir:
+                continue
+
+            mod_name: str
             if mod_dir in py:
-                mod_name = py[len(mod_dir) + 1 : -3]
+                mod_name = PluginModuleLoader.convert_relative_path_to_module(os.path.relpath(py, start=mod_dir))
             else:
-                mod_name = py[:-3]
+                mod_name = PluginModuleLoader.convert_relative_path_to_module(py)
 
             with open(py, "r", encoding="utf-8") as fd:
                 source_code = fd.read().encode("utf-8")
@@ -192,7 +221,7 @@ class CodeLoader(object):
 
             hv = sha1sum.hexdigest()
 
-            self._load_module(mod_name, py, hv)
+            self._load_module(mod_name, hv)
 
     def __check_dir(self) -> None:
         """
@@ -206,34 +235,64 @@ class CodeLoader(object):
         if not os.path.exists(os.path.join(self.__code_dir, MODULE_DIR)):
             os.makedirs(os.path.join(self.__code_dir, MODULE_DIR), exist_ok=True)
 
-    def _load_module(self, mod_name: str, python_file: str, hv: str) -> None:
+    def _load_module(self, mod_name: str, hv: str) -> None:
         """
             Load or reload a module
         """
         try:
-            mod = imp.load_source(mod_name, python_file)
+            if mod_name in self.__modules:
+                mod = importlib.reload(self.__modules[mod_name][1])
+            else:
+                mod = importlib.import_module(mod_name)
             self.__modules[mod_name] = (hv, mod)
             LOGGER.info("Loaded module %s" % mod_name)
         except ImportError:
             LOGGER.exception("Unable to load module %s" % mod_name)
 
-    def deploy_version(self, hash_value: str, module_name: str, module_source: str) -> None:
-        """ Deploy a new version of the modules
-        """
-        # if the module is new, or update
-        if module_name not in self.__modules or hash_value != self.__modules[module_name][0]:
-            LOGGER.info("Deploying code (hv=%s, module=%s)", hash_value, module_name)
-            # write the new source
-            source_file = os.path.join(self.__code_dir, MODULE_DIR, module_name + ".py")
+    def deploy_version(self, module_sources: Iterable[ModuleSource]) -> None:
+        to_reload: List[ModuleSource] = []
 
-            fd = open(source_file, "w+", encoding="utf-8")
-            fd.write(module_source)
-            fd.close()
+        for module_source in module_sources:
+            # if the module is new, or update
+            if module_source.name not in self.__modules or module_source.hash_value != self.__modules[module_source.name][0]:
+                LOGGER.info("Deploying code (hv=%s, module=%s)", module_source.hash_value, module_source.name)
 
-            # (re)load the new source
-            self._load_module(module_name, source_file, hash_value)
+                all_modules_dir: str = os.path.join(self.__code_dir, MODULE_DIR)
+                relative_module_path: str = PluginModuleLoader.convert_module_to_relative_path(module_source.name)
+                # Treat all modules as a package for simplicity: module is a dir with source in __init__.py
+                module_dir: str = os.path.join(all_modules_dir, relative_module_path)
 
-        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+                package_dir: str = os.path.normpath(
+                    os.path.join(all_modules_dir, pathlib.PurePath(pathlib.PurePath(relative_module_path).parts[0]))
+                )
+
+                def touch_inits(directory: str) -> None:
+                    """
+                        Make sure __init__.py files exist for this package and all parent packages. Required for compatibility
+                        with pre-2020.4 inmanta clients because they don't necessarily upload the whole package.
+                    """
+                    normdir: str = os.path.normpath(directory)
+                    if normdir == package_dir:
+                        return
+                    pathlib.Path(os.path.join(normdir, "__init__.py")).touch()
+                    touch_inits(os.path.dirname(normdir))
+
+                # ensure correct package structure
+                os.makedirs(module_dir, exist_ok=True)
+                touch_inits(os.path.dirname(module_dir))
+                source_file = os.path.join(module_dir, "__init__.py")
+
+                # write the new source
+                with open(source_file, "w+", encoding="utf-8") as fd:
+                    fd.write(module_source.source)
+
+                to_reload.append(module_source)
+
+        if len(to_reload) > 0:
+            importlib.invalidate_caches()
+            for module_source in to_reload:
+                # (re)load the new source
+                self._load_module(module_source.name, module_source.hash_value)
 
 
 class PluginModuleLoader(FileLoader):
@@ -258,14 +317,88 @@ class PluginModuleLoader(FileLoader):
             return True
         return os.path.basename(self.path) == "__init__.py"
 
-    def _get_path_to_module(self, fullname: str):
-        module_parts = fullname.split(".")[1:]
+    @classmethod
+    def convert_relative_path_to_module(cls, path: str) -> str:
+        """
+            Returns the fully qualified module name given a path, relative to the module directory.
+            For example
+                convert_relative_path_to_module("my_mod/plugins/my_submod")
+                == convert_relative_path_to_module("my_mod/plugins/my_submod.py")
+                == convert_relative_path_to_module("my_mod/plugins/my_submod/__init__.py")
+                == "inmanta_plugins.my_mod.my_submod".
+        """
+        if path.startswith("/"):
+            raise Exception("Error parsing module path: expected relative path, got %s" % path)
+
+        def split(path: str) -> Iterator[str]:
+            """
+                Returns an iterator over path's parts.
+            """
+            if path == "":
+                return iter(())
+            init, last = os.path.split(path)
+            yield from split(init)
+            if last != "":
+                yield last
+
+        parts: List[str] = list(split(path))
+
+        if parts == []:
+            return const.PLUGINS_PACKAGE
+
+        if len(parts) == 1 or parts[1] != PLUGIN_DIR:
+            raise Exception("Error parsing module path: expected 'some_module/%s/some_submodule', got %s" % (PLUGIN_DIR, path))
+
+        def strip_py(module: List[str]) -> List[str]:
+            """
+                Strip __init__.py or .py file extension from module parts.
+            """
+            if module == []:
+                return []
+            init, last = module[:-1], module[-1]
+            if last == "__init__.py":
+                return init
+            if last.endswith(".py"):
+                return list(chain(init, [last[:-3]]))
+            return module
+
+        top_level_inmanta_module: str = parts[0]
+        inmanta_submodule: List[str] = parts[2:]
+
+        # my_mod/plugins/tail -> inmanta_plugins.my_mod.tail
+        return ".".join(chain([const.PLUGINS_PACKAGE, top_level_inmanta_module], strip_py(inmanta_submodule)))
+
+    @classmethod
+    def convert_module_to_relative_path(cls, full_mod_name: str) -> str:
+        """
+            Returns path to the module, relative to the module directory. Does not differentiate between modules and packages.
+            For example convert_module_to_relative_path("inmanta_plugins.my_mod.my_submod") == "my_mod/plugins/my_submod".
+        """
+        full_module_parts = full_mod_name.split(".")
+        if full_module_parts[0] != const.PLUGINS_PACKAGE:
+            raise Exception(
+                "PluginModuleLoader is a loader for the inmanta_plugins package."
+                " Module %s is not part of the inmanta_plugins package." % full_mod_name,
+            )
+        module_parts = full_module_parts[1:]
         # No __init__.py exists for top level package
         if len(module_parts) == 0:
             return ""
-        module_parts.insert(1, "plugins")
+
+        module_parts.insert(1, PLUGIN_DIR)
+
+        if module_parts[-1] == "__init__":
+            module_parts = module_parts[:-1]
+
+        return os.path.join(*module_parts)
+
+    def _get_path_to_module(self, fullname: str):
+        relative_path: str = self.convert_module_to_relative_path(fullname)
+        # special case: top-level package
+        if relative_path == "":
+            return ""
         for module_path in self._modulepaths:
-            path_to_module = os.path.join(module_path, *module_parts)
+            path_to_module = os.path.join(module_path, relative_path)
             if os.path.exists(f"{path_to_module}.py"):
                 return f"{path_to_module}.py"
             if os.path.isdir(path_to_module):

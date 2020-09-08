@@ -37,8 +37,7 @@ from typing import (
 )
 
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
-from inmanta.execute import runtime, util
-from inmanta.execute.proxy import DictProxy, DynamicProxy, SequenceProxy, UnknownException, UnsetException
+from inmanta.execute import proxy, runtime, util
 from inmanta.types import JsonType
 
 if TYPE_CHECKING:
@@ -72,6 +71,8 @@ class resource(object):  # noqa: N801
     _resources: Dict[str, Tuple[Type["Resource"], Dict[str, str]]] = {}
 
     def __init__(self, name: str, id_attribute: str, agent: str):
+        if not isinstance(agent, str):
+            raise ResourceException(f"The agent parameter has to be a string, got {agent} of type {type(agent)}")
         self._cls_name = name
         self._options = {"agent": agent, "name": id_attribute}
 
@@ -136,7 +137,7 @@ class IgnoreResourceException(Exception):
     """
 
 
-def to_id(entity: DynamicProxy) -> Optional[str]:
+def to_id(entity: "proxy.DynamicProxy") -> Optional[str]:
     """
         Convert an entity instance from the model to its resource id
     """
@@ -181,16 +182,6 @@ class ResourceMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
-def serialize_proxy(d: DynamicProxy):
-    if isinstance(d, DictProxy):
-        return {key: serialize_proxy(value) for key, value in d.items()}
-
-    if isinstance(d, SequenceProxy):
-        return [serialize_proxy(value) for value in d]
-
-    return d
-
-
 RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"}
 
 
@@ -206,8 +197,8 @@ class Resource(metaclass=ResourceMeta):
 
     fields: Sequence[str] = ("send_event",)
     send_event: bool
-    model: DynamicProxy
-    map: Dict[str, Callable[[Optional["export.Exporter"], DynamicProxy], Any]]
+    model: "proxy.DynamicProxy"
+    map: Dict[str, Callable[[Optional["export.Exporter"], "proxy.DynamicProxy"], Any]]
 
     @staticmethod
     def get_send_event(_exporter: "export.Exporter", obj: "Resource") -> bool:
@@ -217,7 +208,9 @@ class Resource(metaclass=ResourceMeta):
             return False
 
     @classmethod
-    def convert_requires(cls, resources: Dict[runtime.Instance, "Resource"], ignored_resources: Set[runtime.Instance]) -> None:
+    def convert_requires(
+        cls, resources: Dict["runtime.Instance", "Resource"], ignored_resources: Set["runtime.Instance"]
+    ) -> None:
         """
             Convert all requires
 
@@ -250,7 +243,9 @@ class Resource(metaclass=ResourceMeta):
             res.requires = {x.id for x in final_requires}
 
     @classmethod
-    def object_to_id(cls, model_object: DynamicProxy, entity_name: str, attribute_name: str, agent_attribute: str) -> "Id":
+    def object_to_id(
+        cls, model_object: "proxy.DynamicProxy", entity_name: str, attribute_name: str, agent_attribute: str
+    ) -> "Id":
         """
         Convert the given object to a textual id
 
@@ -270,9 +265,9 @@ class Resource(metaclass=ResourceMeta):
 
                 agent_value = getattr(agent_value, el)
 
-            except UnsetException as e:
+            except proxy.UnsetException as e:
                 raise e
-            except UnknownException as e:
+            except proxy.UnknownException as e:
                 raise e
             except Exception:
                 raise Exception(
@@ -282,14 +277,18 @@ class Resource(metaclass=ResourceMeta):
 
         attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
         if isinstance(attribute_value, util.Unknown):
-            raise UnknownException(attribute_value)
+            raise proxy.UnknownException(attribute_value)
+        if not isinstance(agent_value, str):
+            raise ResourceException(
+                f"The agent attribute should lead to a string, got {agent_value} of type {type(agent_value)}"
+            )
 
-        # agent_value is no longer a DynamicProxy here, force this for mypy validation
+        # agent_value is no longer a proxy.DynamicProxy here, force this for mypy validation
         return Id(entity_name, str(agent_value), attribute_name, attribute_value)
 
     @classmethod
     def map_field(
-        cls, exporter: Optional["export.Exporter"], entity_name: str, field_name: str, model_object: DynamicProxy
+        cls, exporter: Optional["export.Exporter"], entity_name: str, field_name: str, model_object: "proxy.DynamicProxy"
     ) -> str:
         try:
             try:
@@ -301,19 +300,15 @@ class Resource(metaclass=ResourceMeta):
                 else:
                     value = getattr(model_object, field_name)
 
-                # copy dict and sequence proxy before passing it to handler code
-                if isinstance(value, (DynamicProxy, SequenceProxy)):
-                    value = serialize_proxy(value)
-
                 return value
-            except UnknownException as e:
+            except proxy.UnknownException as e:
                 return e.unknown
 
         except AttributeError:
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))
 
     @classmethod
-    def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: DynamicProxy) -> "Resource":
+    def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: "proxy.DynamicProxy") -> "Resource":
         """
         Build a resource from a given configuration model entity
         """
@@ -466,14 +461,19 @@ class ManagedResource(Resource):
 
 
 PARSE_ID_REGEX = re.compile(
-    r"^(?P<id>(?P<type>(?P<ns>[\w-]+::)+(?P<class>[\w-]+))\[(?P<hostname>[^,]+),"
+    r"^(?P<id>(?P<type>(?P<ns>[\w-]+(::[\w-]+)*)::(?P<class>[\w-]+))\[(?P<hostname>[^,]+),"
     r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\])(,v=(?P<version>[0-9]+))?$"
+)
+
+PARSE_RVID_REGEX = re.compile(
+    r"^(?P<id>(?P<type>(?P<ns>[\w-]+(::[\w-]+)*)::(?P<class>[\w-]+))\[(?P<hostname>[^,]+),"
+    r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\]),v=(?P<version>[0-9]+)$"
 )
 
 
 class Id(object):
     """
-        A unique id that idenfies a resource that is managed by an agent
+        A unique id that identifies a resource that is managed by an agent
     """
 
     def __init__(self, entity_type: str, agent_name: str, attribute: str, attribute_value: str, version: int = 0) -> None:
@@ -593,6 +593,14 @@ class Id(object):
 
         id_obj = Id(parts["type"], parts["hostname"], parts["attr"], parts["value"], version)
         return id_obj
+
+    @classmethod
+    def is_resource_version_id(cls, value: str) -> bool:
+        """
+            Check whether the given value is a resource version id
+        """
+        result = PARSE_RVID_REGEX.search(value)
+        return result is not None
 
     entity_type = property(get_entity_type)
     agent_name = property(get_agent_name)

@@ -34,12 +34,12 @@ if TYPE_CHECKING:
     import inmanta.ast.statements  # noqa: F401
     from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast.blocks import BasicBlock  # noqa: F401
-    from inmanta.ast.type import Type, NamedType  # noqa: F401
-    from inmanta.execute.runtime import ExecutionContext, Instance, DelayedResultVariable, ResultVariable  # noqa: F401
-    from inmanta.ast.statements import Statement, AssignStatement  # noqa: F401
     from inmanta.ast.entity import Entity  # noqa: F401
-    from inmanta.ast.statements.define import DefineImport, DefineEntity  # noqa: F401
+    from inmanta.ast.statements import AssignStatement, Statement  # noqa: F401
+    from inmanta.ast.statements.define import DefineEntity, DefineImport  # noqa: F401
+    from inmanta.ast.type import NamedType, Type  # noqa: F401
     from inmanta.compiler import Compiler
+    from inmanta.execute.runtime import DelayedResultVariable, ExecutionContext, Instance, ResultVariable  # noqa: F401
     from inmanta.plugins import PluginException
 
 
@@ -633,7 +633,8 @@ class ExternalException(RuntimeException):
 
     def format_trace(self, indent: str = "", indent_level: int = 0) -> str:
         """Make a representation of this exception and its causes"""
-        out = indent * indent_level + self.format()
+
+        out = indent * indent_level + self.format().replace("\n", "\n" + indent * indent_level)
 
         part = traceback.format_exception_only(self.__cause__.__class__, self.__cause__)
         out += "\n" + indent * indent_level + "caused by:\n"
@@ -656,9 +657,18 @@ class ExplicitPluginException(ExternalException):
         self.__cause__: PluginException
 
     def export(self) -> export.Error:
-        error: export.Error = super().export()
-        error.category = export.ErrorCategory.plugin
-        return error
+        location: Optional[Location] = self.get_location()
+        module: Optional[str] = self.__cause__.__class__.__module__
+        name: str = self.__cause__.__class__.__qualname__
+        return export.Error(
+            type=name if module is None else "%s.%s" % (module, name),
+            message=self.__cause__.message,
+            location=location.export() if location is not None else None,
+            category=export.ErrorCategory.plugin,
+        )
+
+    def get_message(self) -> str:
+        return self.msg + "\n" + self.__cause__.message
 
 
 class WrappingRuntimeException(RuntimeException):

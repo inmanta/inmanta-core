@@ -27,15 +27,19 @@ import sys
 import traceback
 import uuid
 from asyncio import CancelledError, Task
+from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Dict, List, Optional, Tuple, cast
+from typing import Dict, Hashable, List, Optional, Tuple, cast
 
 import dateutil
 import dateutil.parser
+import pydantic
 
+import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
-from inmanta.protocol import encode_token, methods
+from inmanta.protocol import encode_token, methods, methods_v2
+from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
@@ -162,13 +166,13 @@ class CompileRun(object):
             )
 
             returncode = await self.drain(sub_process)
-
             return await self._end_stage(returncode)
+
         except Exception as e:
             await self._error("".join(traceback.format_exception(type(e), e, e.__traceback__)))
             return await self._end_stage(RETURNCODE_INTERNAL_ERROR)
 
-    async def run(self) -> bool:
+    async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, Optional[model.CompileData]]:
         success = False
         now = datetime.datetime.now()
         await self.request.update_fields(started=now)
@@ -187,7 +191,7 @@ class CompileRun(object):
             if env is None:
                 await self._error("Environment %s does not exist." % environment_id)
                 await self._end_stage(-1)
-                return False
+                return False, None
 
             inmanta_path = [sys.executable, "-m", "inmanta.app"]
 
@@ -211,9 +215,9 @@ class CompileRun(object):
                         cmd.extend(["-b", repo_branch])
                     result = await self._run_compile_stage("Cloning repository", cmd, project_dir)
                     if result.returncode is None or result.returncode > 0:
-                        return False
+                        return False, None
 
-                elif self.request.force_update:
+                elif force_update or self.request.force_update:
                     result = await self._run_compile_stage("Fetching changes", ["git", "fetch", repo_url], project_dir)
                 if repo_branch:
                     branch = await self.get_branch()
@@ -222,10 +226,12 @@ class CompileRun(object):
                             f"switching branch from {branch} to {repo_branch}", ["git", "checkout", repo_branch], project_dir
                         )
 
-                if self.request.force_update:
+                if force_update or self.request.force_update:
                     await self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
                     LOGGER.info("Installing and updating modules")
                     await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
+
+            compile_data_json_file = NamedTemporaryFile()
 
             server_address = opt.server_address.get()
             server_port = opt.get_bind_port()
@@ -241,6 +247,9 @@ class CompileRun(object):
                 str(server_port),
                 "--metadata",
                 json.dumps(self.request.metadata),
+                "--export-compile-data",
+                "--export-compile-data-file",
+                compile_data_json_file.name,
             ]
 
             if not self.request.do_export:
@@ -283,7 +292,22 @@ class CompileRun(object):
             LOGGER.exception("An error occured while recompiling")
 
         finally:
-            return success
+            with compile_data_json_file as file:
+                compile_data_json: str = file.read().decode()
+                if compile_data_json:
+                    try:
+                        return success, model.CompileData.parse_raw(compile_data_json)
+                    except json.JSONDecodeError:
+                        LOGGER.warning(
+                            "Failed to load compile data json for compile %s. Invalid json: '%s'",
+                            (self.request.id, compile_data_json),
+                        )
+                    except pydantic.ValidationError:
+                        LOGGER.warning(
+                            "Failed to parse compile data for compile %s. Json does not match CompileData model: '%s'",
+                            (self.request.id, compile_data_json),
+                        )
+            return success, None
 
 
 class CompilerService(ServerSlice):
@@ -383,16 +407,35 @@ class CompilerService(ServerSlice):
         await self._queue(compile)
         return compile.id, None
 
+    @staticmethod
+    def _compile_merge_key(c: data.Compile) -> Hashable:
+        """
+            Returns a key used to determine whether two compiles c1 and c2 are eligible for merging. They are iff
+            _compile_merge_key(c1) == _compile_merge_key(c2).
+        """
+        return c.to_dto().json(include={"environment", "started", "do_export", "environment_variables"})
+
     async def _queue(self, compile: data.Compile) -> None:
         async with self._global_lock:
+            env: Optional[data.Environment] = await data.Environment.get_by_id(compile.environment)
+            if env is None:
+                raise Exception("Can't queue compile: environment %s does not exist" % compile.environment)
+            assert env is not None
+            # don't execute any compiles in a halted environment
+            if env.halted:
+                return
+
             if compile.environment not in self._recompiles or self._recompiles[compile.environment].done():
                 task = self.add_background_task(self._run(compile))
                 self._recompiles[compile.environment] = task
 
     async def _dequeue(self, environment: uuid.UUID) -> None:
         async with self._global_lock:
+            env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
+            if env is None:
+                raise Exception("Can't queue compile: environment %s does not exist" % environment)
             nextrun = await data.Compile.get_next_run(environment)
-            if nextrun:
+            if nextrun and not env.halted:
                 task = self.add_background_task(self._run(nextrun))
                 self._recompiles[environment] = task
             else:
@@ -421,6 +464,14 @@ class CompilerService(ServerSlice):
         for u in unhandled:
             self.add_background_task(self._notify_listeners(u))
 
+    async def resume_environment(self, environment: uuid.UUID) -> None:
+        """
+            Resume compiler service after halt.
+        """
+        compile: Optional[data.Compile] = await data.Compile.get_next_run(environment)
+        if compile is not None:
+            await self._queue(compile)
+
     @protocol.handle(methods.is_compiling, environment_id="id")
     async def is_compiling(self, environment_id: uuid.UUID) -> Apireturn:
         if environment_id in self._recompiles and not self._recompiles[environment_id].done():
@@ -428,6 +479,10 @@ class CompilerService(ServerSlice):
         return 204
 
     async def _run(self, compile: data.Compile) -> None:
+        """
+            Runs a compile request. At completion, looks for similar compile requests based on _compile_merge_key and marks
+            those as completed as well.
+        """
         now = datetime.datetime.now()
 
         wait_time = opt.server_autrecompile_wait.get()
@@ -444,16 +499,40 @@ class CompilerService(ServerSlice):
             )
         await asyncio.sleep(wait)
 
+        compile_merge_key: Hashable = CompilerService._compile_merge_key(compile)
+        merge_candidates: List[data.Compile] = [
+            c
+            for c in await data.Compile.get_next_compiles_for_environment(compile.environment)
+            if not c.id == compile.id and CompilerService._compile_merge_key(c) == compile_merge_key
+        ]
+
         runner = self._get_compile_runner(compile, project_dir=os.path.join(self._env_folder, str(compile.environment)))
-        success = await runner.run()
+        # set force_update == True iff any compile request has force_update == True
+        compile_data: Optional[model.CompileData]
+        success, compile_data = await runner.run(force_update=any(c.force_update for c in chain([compile], merge_candidates)))
 
         version = runner.version
 
         end = datetime.datetime.now()
-        await compile.update_fields(completed=end, success=success, version=version)
+        compile_data_json: Optional[dict] = None if compile_data is None else compile_data.dict()
+        await compile.update_fields(completed=end, success=success, version=version, compile_data=compile_data_json)
+        awaitables = [
+            merge_candidate.update_fields(
+                started=compile.started,
+                completed=end,
+                success=success,
+                version=version,
+                substitute_compile_id=compile.id,
+                compile_data=compile_data_json,
+            )
+            for merge_candidate in merge_candidates
+        ]
+        await asyncio.gather(*awaitables)
         if self.is_stopping():
             return
         self.add_background_task(self._notify_listeners(compile))
+        for merge_candidate in merge_candidates:
+            self.add_background_task(self._notify_listeners(merge_candidate))
         await self._dequeue(compile.environment)
 
     def _get_compile_runner(self, compile: data.Compile, project_dir: str) -> CompileRun:
@@ -488,8 +567,15 @@ class CompilerService(ServerSlice):
 
         return 200, {"report": report}
 
+    @protocol.handle(methods_v2.get_compile_data, compile_id="id")
+    async def get_compile_data(self, compile_id: uuid.UUID) -> Optional[model.CompileData]:
+        compile: Optional[data.Compile] = await data.Compile.get_by_id(compile_id)
+        if compile is None:
+            raise NotFound("The given compile id does not exist")
+        return compile.to_dto().compile_data
+
     @protocol.handle(methods.get_compile_queue, env="tid")
-    async def get_compile_queue(self, env: data.Environment) -> List[CompileRun]:
+    async def get_compile_queue(self, env: data.Environment) -> List[model.CompileRun]:
         """
             Get the current compiler queue on the server
         """

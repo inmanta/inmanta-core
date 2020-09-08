@@ -16,12 +16,12 @@
     Contact: code@inmanta.com
 """
 
-from compiler.dataflow.conftest import DataflowTestHelper, get_dataflow_node
 from typing import Dict, List, Optional
 
 import pytest
 
 import inmanta.ast.type as inmanta_type
+from compiler.dataflow.conftest import DataflowTestHelper, get_dataflow_node
 from inmanta.ast import DoubleSetException, NotFoundException, RuntimeException
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements import Literal

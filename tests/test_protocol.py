@@ -24,7 +24,7 @@ import threading
 import time
 import uuid
 from enum import Enum
-from typing import Dict, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 import pytest
 import tornado
@@ -33,7 +33,7 @@ from tornado import gen, web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
-from inmanta import config, protocol
+from inmanta import config, const, protocol
 from inmanta.data.model import BaseModel
 from inmanta.protocol import VersionMatch, exceptions, json_encode
 from inmanta.protocol.common import (
@@ -41,8 +41,11 @@ from inmanta.protocol.common import (
     HTML_CONTENT_WITH_UTF8_CHARSET,
     OCTET_STREAM_CONTENT,
     ZIP_CONTENT,
+    ArgOption,
     InvalidMethodDefinition,
     InvalidPathException,
+    MethodProperties,
+    Result,
     ReturnValue,
 )
 from inmanta.protocol.methods import ENV_OPTS
@@ -519,7 +522,8 @@ async def test_return_non_warnings(unused_tcp_port, postgres_db, database_name, 
 
     response = await client.test_method("x")
     assert response.code == 200
-    assert "data" not in response.result
+    assert "data" in response.result
+    assert response.result["data"] is None
     assert "metadata" in response.result
     assert "warnings" in response.result["metadata"]
     assert "error1" in response.result["metadata"]["warnings"]
@@ -1565,3 +1569,147 @@ async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_n
     response = await client.fetch(request, raise_error=False)
     assert response.code == 400
     assert json.loads(response.body)["message"] == "Invalid request: Field 'tid' is required."
+
+
+@pytest.mark.asyncio
+async def test_multiple_path_params(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+        def test_method(id: str, name: str, age: int) -> str:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_methodY(self, id: str, name: str, age: int) -> str:  # NOQA
+            return name
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    request = MethodProperties.methods["test_method"][0].build_call(args=[], kwargs={"id": "1", "name": "monty", "age": 42})
+    assert request.url == "/api/v1/test/1/monty?age=42"
+
+
+@pytest.mark.asyncio(timeout=5)
+async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
+    async def _id(x: object, dct: Dict[str, str]) -> object:
+        return x
+
+    @protocol.method(
+        path="/testmethod",
+        operation="POST",
+        arg_options={"header_param": ArgOption(header="X-Inmanta-Header-Param", getter=_id)},
+        client_types=[const.ClientType.api],
+    )
+    def test_method(header_param: str, body_param: str) -> None:
+        """
+            A method used for testing.
+        """
+
+    class TestSlice(ServerSlice):
+        @protocol.handle(test_method)
+        async def test_method_implementation(self, header_param: str, body_param: str) -> None:
+            pass
+
+    server: Server = Server()
+    server_slice: ServerSlice = TestSlice("my_test_slice")
+    server.add_slice(server_slice)
+    await server.start()
+    async_finalizer.add(server_slice.stop)
+    async_finalizer.add(server.stop)
+
+    client = tornado.httpclient.AsyncHTTPClient()
+
+    # valid request should succeed
+    request = tornado.httpclient.HTTPRequest(
+        url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
+        method="POST",
+        body=json_encode({"body_param": "body_param_value"}),
+        headers={"X-Inmanta-Header-Param": "header_param_value"},
+    )
+    response: tornado.httpclient.HTTPResponse = await client.fetch(request)
+    assert response.code == 200
+
+    # invalid request should fail
+    request = tornado.httpclient.HTTPRequest(
+        url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
+        method="POST",
+        body=json_encode({"header_param": "header_param_value", "body_param": "body_param_value"}),
+    )
+    with pytest.raises(tornado.httpclient.HTTPClientError):
+        await client.fetch(request)
+
+
+@pytest.mark.parametrize("return_value,valid", [(1, True), (None, True), ("Hello World!", False)])
+@pytest.mark.asyncio
+async def test_2277_typedmethod_return_optional(async_finalizer, return_value: object, valid: bool) -> None:
+    @protocol.typedmethod(
+        path="/typedtestmethod", operation="GET", client_types=[const.ClientType.api], api_version=1,
+    )
+    def test_method_typed() -> Optional[int]:
+        """
+            A typedmethod used for testing.
+        """
+
+    class TestSlice(ServerSlice):
+        @protocol.handle(test_method_typed)
+        async def test_method_typed_implementation(self) -> Optional[int]:
+            return return_value  # type: ignore
+
+    server: Server = Server()
+    server_slice: ServerSlice = TestSlice("my_test_slice")
+    server.add_slice(server_slice)
+    await server.start()
+    async_finalizer.add(server_slice.stop)
+    async_finalizer.add(server.stop)
+
+    client: protocol.Client = protocol.Client("client")
+
+    response: Result = await client.test_method_typed()
+    if valid:
+        assert response.code == 200
+        assert response.result == {"data": return_value}
+    else:
+        assert response.code == 400
+
+
+def test_method_strict_exception() -> None:
+    with pytest.raises(InvalidMethodDefinition, match="Invalid type for argument arg: Any type is not allowed in strict mode"):
+
+        @protocol.typedmethod(path="/testmethod", operation="POST", client_types=[const.ClientType.api])
+        def test_method(arg: Any) -> None:
+            pass
+
+
+@pytest.mark.asyncio
+async def test_method_nonstrict_allowed(async_finalizer) -> None:
+    @protocol.typedmethod(path="/zipsingle", operation="POST", client_types=[const.ClientType.api], strict_typing=False)
+    def merge_dicts(one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
+        """
+            Merge two dicts.
+        """
+
+    class TestSlice(ServerSlice):
+        @protocol.handle(merge_dicts)
+        async def merge_dicts_impl(self, one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
+            return {**one, **other}
+
+    server: Server = Server()
+    server_slice: ServerSlice = TestSlice("my_test_slice")
+    server.add_slice(server_slice)
+    await server.start()
+    async_finalizer.add(server_slice.stop)
+    async_finalizer.add(server.stop)
+
+    client: protocol.Client = protocol.Client("client")
+
+    one: Dict[str, Any] = {"my": {"nested": {"keys": 42}}}
+    other: Dict[str, int] = {"single_level": 42}
+    response: Result = await client.merge_dicts(one, other, None)
+    assert response.code == 200
+    assert response.result == {"data": {**one, **other}}

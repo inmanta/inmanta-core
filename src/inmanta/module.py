@@ -28,12 +28,12 @@ from functools import lru_cache
 from io import BytesIO
 from subprocess import CalledProcessError
 from tarfile import TarFile
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple, Union
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, NewType, Optional, Set, Tuple, Union
 
 import yaml
 from pkg_resources import parse_requirements, parse_version
 
-from inmanta import const, env, loader, plugins
+from inmanta import env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, ModuleNotFoundException, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
@@ -49,11 +49,14 @@ except ImportError:
 
 
 if TYPE_CHECKING:
-    from pkg_resources.packaging.version import Version  # noqa: F401
     from pkg_resources import Requirement  # noqa: F401
+    from pkg_resources.packaging.version import Version  # noqa: F401
 
 
 LOGGER = logging.getLogger(__name__)
+
+Path = NewType("Path", str)
+ModuleName = NewType("ModuleName", str)
 
 
 class InvalidModuleException(CompilerException):
@@ -322,6 +325,38 @@ class ModuleLike(object):
             return default
         else:
             return self._meta[name]
+
+    def _remove_comments(self, lines: List[str]) -> List[str]:
+        """
+            Remove comments from lines in requirements.txt file.
+        """
+        result = []
+        for line in lines:
+            if line.strip().startswith("#"):
+                continue
+            if " #" in line:
+                line_without_comment = line.split(" #", maxsplit=1)[0]
+                result.append(line_without_comment)
+            else:
+                result.append(line)
+        return result
+
+    def _remove_line_continuations(self, lines: List[str]) -> List[str]:
+        """
+            Remove line continuation from lines in requirements.txt file.
+        """
+        result = []
+        line_continuation_buffer = ""
+        for line in lines:
+            if line.endswith("\\"):
+                line_continuation_buffer = f"{line_continuation_buffer}{line[0:-1]}"
+            else:
+                if line_continuation_buffer:
+                    result.append(f"{line_continuation_buffer}{line}")
+                    line_continuation_buffer = ""
+                else:
+                    result.append(line)
+        return result
 
 
 INSTALL_RELEASES = "release"
@@ -664,38 +699,6 @@ class Project(ModuleLike):
         req_lines = self._remove_comments(req_lines)
         req_lines = self._remove_line_continuations(req_lines)
         return list(set(req_lines))
-
-    def _remove_comments(self, lines: List[str]) -> List[str]:
-        """
-            Remove comments from lines in requirements.txt file.
-        """
-        result = []
-        for line in lines:
-            if line.strip().startswith("#"):
-                continue
-            if " #" in line:
-                line_without_comment = line.split(" #", maxsplit=1)[0]
-                result.append(line_without_comment)
-            else:
-                result.append(line)
-        return result
-
-    def _remove_line_continuations(self, lines: List[str]) -> List[str]:
-        """
-            Remove line continuation from lines in requirements.txt file.
-        """
-        result = []
-        line_continuation_buffer = ""
-        for line in lines:
-            if line.endswith("\\"):
-                line_continuation_buffer = f"{line_continuation_buffer}{line[0:-1]}"
-            else:
-                if line_continuation_buffer:
-                    result.append(f"{line_continuation_buffer}{line}")
-                    line_continuation_buffer = ""
-                else:
-                    result.append(line)
-        return result
 
     def get_name(self) -> str:
         return "project.yml"
@@ -1098,25 +1101,30 @@ class Module(ModuleLike):
 
         return modules
 
-    def load_plugins(self) -> None:
+    def get_plugin_files(self) -> Iterator[Tuple[Path, ModuleName]]:
         """
-            Load all plug-ins from a configuration module
+            Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
         """
-        plugin_dir = os.path.join(self._path, "plugins")
+        plugin_dir: str = os.path.join(self._path, loader.PLUGIN_DIR)
 
         if not os.path.exists(plugin_dir):
-            return
+            return iter(())
 
         if not os.path.exists(os.path.join(plugin_dir, "__init__.py")):
             raise CompilerException(
                 "The plugin directory %s should be a valid python package with a __init__.py file" % plugin_dir
             )
+        return (
+            (Path(file_name), ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self._meta["name"])),)
+            for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True)
+        )
 
+    def load_plugins(self) -> None:
+        """
+            Load all plug-ins from a configuration module
+        """
         try:
-            mod_name = self._meta["name"]
-            for py_file in glob.glob(os.path.join(plugin_dir, "**", "*.py"), recursive=True):
-                fq_mod_name = self._get_fq_mod_name_for_py_file(py_file, plugin_dir, mod_name)
-
+            for _, fq_mod_name in self.get_plugin_files():
                 LOGGER.debug("Loading module %s", fq_mod_name)
                 importlib.import_module(fq_mod_name)
 
@@ -1125,24 +1133,7 @@ class Module(ModuleLike):
 
     def _get_fq_mod_name_for_py_file(self, py_file: str, plugin_dir: str, mod_name: str) -> str:
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)
-
-        def add_prefix(prefix: str, item: str) -> str:
-            if item == "":
-                return prefix
-            else:
-                return f"{prefix}.{item}"
-
-        (head, tail) = os.path.split(rel_py_file)
-        if tail == "__init__.py":
-            result = ""
-        else:
-            result = tail[0:-3]  # Remove .py
-
-        while head != "":
-            (head, tail) = os.path.split(head)
-            result = add_prefix(tail, result)
-
-        return add_prefix(f"{const.PLUGINS_PACKAGE}.{mod_name}", result)
+        return loader.PluginModuleLoader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
 
     def versions(self):
         """
@@ -1213,7 +1204,10 @@ class Module(ModuleLike):
         if raw is None:
             return []
         else:
-            return [y for y in [x.strip() for x in raw.split("\n")] if len(y) != 0]
+            requirements_lines = [y for y in [x.strip() for x in raw.split("\n")] if len(y) != 0]
+            requirements_lines = self._remove_comments(requirements_lines)
+            requirements_lines = self._remove_line_continuations(requirements_lines)
+            return requirements_lines
 
     def execute_command(self, cmd: str) -> None:
         print("executing %s on %s in %s" % (cmd, self.get_name(), self._path))

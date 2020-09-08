@@ -30,3 +30,22 @@ end
 implement RequiresTest using std::none
 
 
+entity WrappedProxyTest:
+    string name
+    string agent
+    bool managed=true
+
+    list my_list
+    dict my_dict
+end
+
+implement WrappedProxyTest using std::none
+
+
+entity WrappedSelfTest:
+    string name
+    string agent
+    bool managed=true
+end
+
+implement WrappedSelfTest using std::none

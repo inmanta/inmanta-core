@@ -434,13 +434,15 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
-    async def get_by_id(cls: Type[T], doc_id: uuid.UUID) -> Optional[T]:
+    async def get_by_id(
+        cls: Type[T], doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Optional[T]:
         """
             Get a specific document based on its ID
 
             :return: An instance of this class with its fields filled from the database.
         """
-        result = await cls.get_list(id=doc_id)
+        result = await cls.get_list(id=doc_id, connection=connection)
         if len(result) > 0:
             return result[0]
         return None
@@ -662,6 +664,7 @@ TYPE_MAP = {"int": "integer", "bool": "boolean", "dict": "jsonb", "str": "varcha
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
 AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY = "agent_trigger_method_on_auto_deploy"
+ENVIRONMENT_AGENT_TRIGGER_METHOD = "environment_agent_trigger_method"
 AUTOSTART_SPLAY = "autostart_splay"
 AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
 AUTOSTART_AGENT_DEPLOY_SPLAY_TIME = "autostart_agent_deploy_splay_time"
@@ -761,6 +764,7 @@ class Environment(BaseDocument):
     repo_branch: str = Field(field_type=str, default="")
     settings: Dict[str, m.EnvSettingType] = Field(field_type=dict, default={})
     last_version: int = Field(field_type=int, default=0)
+    halted: bool = Field(field_type=bool, default=False)
 
     def to_dto(self) -> m.Environment:
         return m.Environment(
@@ -770,6 +774,7 @@ class Environment(BaseDocument):
             repo_url=self.repo_url,
             repo_branch=self.repo_branch,
             settings=self.settings,
+            halted=self.halted,
         )
 
     _settings: Dict[str, Setting] = {
@@ -794,6 +799,16 @@ class Environment(BaseDocument):
             default=const.AgentTriggerMethod.push_incremental_deploy.name,
             validator=convert_agent_trigger_method,
             doc="The agent trigger method to use when " + PUSH_ON_AUTO_DEPLOY + " is enabled",
+            allowed_values=[opt.name for opt in const.AgentTriggerMethod],
+        ),
+        ENVIRONMENT_AGENT_TRIGGER_METHOD: Setting(
+            name=ENVIRONMENT_AGENT_TRIGGER_METHOD,
+            typ="enum",
+            default=const.AgentTriggerMethod.push_full_deploy.name,
+            validator=convert_agent_trigger_method,
+            doc="The agent trigger method to use. "
+            f"If {PUSH_ON_AUTO_DEPLOY} is enabled, "
+            f"{AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} overrides this setting",
             allowed_values=[opt.name for opt in const.AgentTriggerMethod],
         ),
         AUTOSTART_SPLAY: Setting(
@@ -1171,11 +1186,13 @@ class AgentInstance(BaseDocument):
     tid = Field(field_type=uuid.UUID, required=True)
 
     @classmethod
-    async def active_for(cls, tid, endpoint, process: uuid.UUID = None):
+    async def active_for(
+        cls, tid, endpoint, process: uuid.UUID = None, connection: Optional[asyncpg.connection.Connection] = None
+    ):
         if process is not None:
-            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, process=process)
+            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, process=process, connection=connection)
         else:
-            objects = await cls.get_list(expired=None, tid=tid, name=endpoint)
+            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, connection=connection)
         return objects
 
     @classmethod
@@ -1236,6 +1253,8 @@ class Agent(BaseDocument):
         :param last_failover: Moment at which the primary was last changed
         :param paused: is this agent paused (if so, skip it)
         :param primary: what is the current active instance (if none, state is down)
+        :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
+            persist paused state when halting.
     """
 
     environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1243,6 +1262,7 @@ class Agent(BaseDocument):
     last_failover: datetime.datetime = Field(field_type=datetime.datetime)
     paused: bool = Field(field_type=bool, default=False)
     id_primary: Optional[uuid.UUID] = Field(field_type=uuid.UUID)  # AgentInstance
+    unpause_on_resume: Optional[bool] = Field(field_type=bool)
 
     def set_primary(self, primary: uuid.UUID) -> None:
         self.id_primary = primary
@@ -1306,7 +1326,46 @@ class Agent(BaseDocument):
         return obj
 
     @classmethod
-    async def pause(cls, env: uuid.UUID, endpoint: Optional[str], paused: bool) -> List[str]:
+    async def persist_on_halt(cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+            Persists paused state when halting all agents.
+        """
+        await cls._execute_query(
+            f"UPDATE {cls.table_name()} SET unpause_on_resume=NOT paused WHERE environment=$1 AND unpause_on_resume IS NULL",
+            cls._get_value(env),
+            connection=connection,
+        )
+
+    @classmethod
+    async def persist_on_resume(cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> List[str]:
+        """
+            Restores default halted state. Returns a list of agents that should be unpaused.
+        """
+
+        async def query_with_connection(connection: asyncpg.connection.Connection) -> List[str]:
+            async with connection.transaction():
+                unpause_on_resume = await cls._fetch_query(
+                    f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume",
+                    cls._get_value(env),
+                    connection=connection,
+                )
+                await cls._execute_query(
+                    f"UPDATE {cls.table_name()} SET unpause_on_resume=NULL WHERE environment=$1",
+                    cls._get_value(env),
+                    connection=connection,
+                )
+                return sorted([r["name"] for r in unpause_on_resume])
+
+        if connection is not None:
+            return await query_with_connection(connection)
+
+        async with cls.get_connection() as con:
+            return await query_with_connection(con)
+
+    @classmethod
+    async def pause(
+        cls, env: uuid.UUID, endpoint: Optional[str], paused: bool, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> List[str]:
         """
             Pause a specific agent or all agents in an environment when endpoint is set to None.
 
@@ -1318,12 +1377,16 @@ class Agent(BaseDocument):
         else:
             query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 AND name=$3 RETURNING name"
             values = [cls._get_value(paused), cls._get_value(env), cls._get_value(endpoint)]
-        result = await cls._fetch_query(query, *values)
+        result = await cls._fetch_query(query, *values, connection=connection)
         return sorted([r["name"] for r in result])
 
     @classmethod
     async def update_primary(
-        cls, env: uuid.UUID, endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]], now: datetime.datetime
+        cls,
+        env: uuid.UUID,
+        endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]],
+        now: datetime.datetime,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
             Update the primary agent instance for agents present in the database.
@@ -1335,18 +1398,18 @@ class Agent(BaseDocument):
             :param now: Timestamp of this failover
         """
         for (endpoint, sid) in endpoints_with_new_primary:
-            agent = await cls.get(env, endpoint)
+            agent = await cls.get(env, endpoint, connection=connection)
             if agent is None:
                 continue
 
             if sid is None:
-                await agent.update_fields(last_failover=now, primary=None)
+                await agent.update_fields(last_failover=now, primary=None, connection=connection)
             else:
-                instances = await AgentInstance.active_for(tid=env, endpoint=agent.name, process=sid)
+                instances = await AgentInstance.active_for(tid=env, endpoint=agent.name, process=sid, connection=connection)
                 if instances:
-                    await agent.update_fields(last_failover=now, primary=instances[0].id)
+                    await agent.update_fields(last_failover=now, primary=instances[0].id, connection=connection)
                 else:
-                    await agent.update_fields(last_failover=now, primary=None)
+                    await agent.update_fields(last_failover=now, primary=None, connection=connection)
 
 
 class Report(BaseDocument):
@@ -1393,11 +1456,12 @@ class Compile(BaseDocument):
         :param do_export: should this compiler perform an export
         :param force_update: should this compile definitely update
         :param metadata: exporter metadata to be passed to the compiler
-        :param environment_variable: environment variables to be passed to the compiler
+        :param environment_variables: environment variables to be passed to the compiler
         :param succes: was the compile successful
         :param handled: were all registered handlers executed?
         :param version: version exported by this compile
         :param remote_id: id as given by the requestor, used by the requestor to distinguish between different requests
+        :param compile_data: json data as exported by compiling with the --export-compile-data parameter
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1415,6 +1479,12 @@ class Compile(BaseDocument):
     success: Optional[bool] = Field(field_type=bool)
     handled: bool = Field(field_type=bool, default=False)
     version: Optional[int] = Field(field_type=int)
+
+    # Compile queue might be collapsed if it contains similar compile requests.
+    # In that case, substitute_compile_id will reference the actually compiled request.
+    substitute_compile_id: Optional[uuid.UUID] = Field(field_type=uuid.UUID)
+
+    compile_data: Optional[dict] = Field(field_type=dict)
 
     @classmethod
     async def get_reports(
@@ -1448,9 +1518,12 @@ class Compile(BaseDocument):
         """
             Get the compile and the associated reports from the database
         """
-        result = await cls.get_by_id(compile_id)
+        result: Optional[Compile] = await cls.get_by_id(compile_id)
         if result is None:
             return None
+
+        if result.substitute_compile_id is not None:
+            return await cls.get_report(result.substitute_compile_id)
 
         dict_model = result.to_dict()
         reports = await Report.get_list(compile=result.id)
@@ -1546,6 +1619,7 @@ class Compile(BaseDocument):
             force_update=self.force_update,
             metadata=self.metadata,
             environment_variables=self.environment_variables,
+            compile_data=None if self.compile_data is None else m.CompileData(**self.compile_data),
         )
 
 
@@ -1695,6 +1769,98 @@ class ResourceAction(BaseDocument):
             query = "DELETE FROM " + cls.table_name() + " WHERE started < $1"
             value = cls._get_value(keep_logs_until)
             await cls._execute_query(query, value)
+
+    @classmethod
+    async def query_resource_actions(
+        cls,
+        environment: uuid.UUID,
+        resource_type: Optional[str] = None,
+        agent: Optional[str] = None,
+        attribute: Optional[str] = None,
+        attribute_value: Optional[str] = None,
+        log_severity: Optional[str] = None,
+        limit: int = 0,
+        action_id: Optional[uuid.UUID] = None,
+        first_timestamp: Optional[datetime.datetime] = None,
+        last_timestamp: Optional[datetime.datetime] = None,
+    ) -> List["ResourceAction"]:
+
+        query = f"""SELECT DISTINCT ra.*
+                        FROM {cls.table_name()} ra
+                        INNER JOIN
+                        {Resource.table_name()} r on  r.resource_version_id = ANY(ra.resource_version_ids)
+                        WHERE r.environment=$1
+                     """
+        values = [cls._get_value(environment)]
+
+        parameter_index = 2
+        if resource_type:
+            query += f" AND resource_type=${parameter_index}"
+            values.append(cls._get_value(resource_type))
+            parameter_index += 1
+        if agent:
+            query += f" AND agent=${parameter_index}"
+            values.append(cls._get_value(agent))
+            parameter_index += 1
+        if attribute and attribute_value:
+            query += f" AND attributes->>${parameter_index} LIKE ${parameter_index + 1}::varchar"
+            values.append(cls._get_value(attribute))
+            values.append(cls._get_value(attribute_value))
+            parameter_index += 2
+        if log_severity:
+            # <@ Is contained by
+            query += f" AND ${parameter_index} <@ ANY(messages)"
+            values.append(cls._get_value({"level": log_severity.upper()}))
+            parameter_index += 1
+        if first_timestamp and action_id:
+            query += f" AND (started, action_id) > (${parameter_index}, ${parameter_index+1})"
+            values.append(cls._get_value(first_timestamp))
+            values.append(cls._get_value(action_id))
+            parameter_index += 2
+        elif first_timestamp:
+            query += f" AND started > ${parameter_index}"
+            values.append(cls._get_value(first_timestamp))
+            parameter_index += 1
+        if last_timestamp and action_id:
+            query += f" AND (started, action_id) < (${parameter_index}, ${parameter_index+1})"
+            values.append(cls._get_value(last_timestamp))
+            values.append(cls._get_value(action_id))
+            parameter_index += 2
+        elif last_timestamp:
+            query += f" AND started < ${parameter_index}"
+            values.append(cls._get_value(last_timestamp))
+            parameter_index += 1
+        if first_timestamp:
+            query += " ORDER BY started, action_id"
+        else:
+            query += " ORDER BY started DESC, action_id DESC"
+        if limit is not None and limit > 0:
+            query += " LIMIT $%d" % parameter_index
+            values.append(cls._get_value(limit))
+            parameter_index += 1
+        if first_timestamp:
+            query = f"""SELECT * FROM ({query}) AS matching_actions
+                        ORDER BY matching_actions.started DESC, matching_actions.action_id DESC"""
+
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
+
+    def to_dto(self) -> m.ResourceAction:
+        return m.ResourceAction(
+            environment=self.environment,
+            version=self.version,
+            resource_version_ids=self.resource_version_ids,
+            action_id=self.action_id,
+            action=self.action,
+            started=self.started,
+            finished=self.finished,
+            messages=self.messages,
+            status=self.status,
+            changes=self.changes,
+            change=self.change,
+            send_event=self.send_event,
+        )
 
 
 class Resource(BaseDocument):
@@ -2311,19 +2477,17 @@ class ConfigurationModel(BaseDocument):
 
     async def mark_done(self) -> None:
         """ mark this deploy as done """
-        subquery = (
-            f"(EXISTS("
-            + f"SELECT 1 "
-            + f"FROM {Resource.table_name()} "
-            + f"WHERE environment=$1 AND model=$2 AND status != $3"
-            + f"))::boolean"
-        )
-        query = (
-            f"UPDATE {self.table_name()} "
-            + f"SET "
-            + f"deployed=True, result=(CASE WHEN {subquery} THEN $4::versionstate ELSE $5::versionstate END) "
-            f"WHERE environment=$1 AND version=$2 RETURNING result"
-        )
+        subquery = f"""(EXISTS(
+                    SELECT 1
+                    FROM {Resource.table_name()}
+                    WHERE environment=$1 AND model=$2 AND status != $3
+                ))::boolean
+            """
+        query = f"""UPDATE {self.table_name()}
+                SET
+                deployed=True, result=(CASE WHEN {subquery} THEN $4::versionstate ELSE $5::versionstate END)
+                WHERE environment=$1 AND version=$2 RETURNING result
+            """
         values = [
             self._get_value(self.environment),
             self._get_value(self.version),
@@ -2388,10 +2552,10 @@ class ConfigurationModel(BaseDocument):
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
-        :param negative: find deployable resources not in the increment
-
-        available/skipped/unavailable -> next version
+        available -> next version
         not present -> increment
+        skipped -> increment
+        unavailable -> increment
         error -> increment
         Deployed and same hash -> not increment
         deployed and different hash -> increment
@@ -2404,8 +2568,8 @@ class ConfigurationModel(BaseDocument):
 
         # to increment
         increment = []
-        not_incrememt = []
-        # todo in this verions
+        not_increment = []
+        # todo in this version
         work = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
 
         # get versions
@@ -2416,7 +2580,7 @@ class ConfigurationModel(BaseDocument):
         versions = [record["version"] for record in version_records]
 
         for version in versions:
-            # todo in next verion
+            # todo in next version
             next = []
 
             vresources = await Resource.get_resources_for_version_raw(environment, version, projection)
@@ -2431,11 +2595,11 @@ class ConfigurationModel(BaseDocument):
                 ores = id_to_resource[res["resource_id"]]
 
                 status = ores["status"]
-                # available/skipped/unavailable -> next version
-                if status in [ResourceState.available.name, ResourceState.skipped.name, ResourceState.unavailable.name]:
+                # available -> next version
+                if status in [ResourceState.available.name]:
                     next.append(res)
 
-                # error/undeployable -> increment
+                # -> increment
                 elif status in [
                     ResourceState.failed.name,
                     ResourceState.cancelled.name,
@@ -2443,14 +2607,15 @@ class ConfigurationModel(BaseDocument):
                     ResourceState.processing_events.name,
                     ResourceState.skipped_for_undefined.name,
                     ResourceState.undefined.name,
+                    ResourceState.skipped.name,
+                    ResourceState.unavailable.name,
                 ]:
                     increment.append(res)
-                # undefined -> not in increment
 
                 elif status == ResourceState.deployed.name:
                     if res["attribute_hash"] == ores["attribute_hash"]:
                         #  Deployed and same hash -> not increment
-                        not_incrememt.append(res)
+                        not_increment.append(res)
                     else:
                         # Deployed and different hash -> increment
                         increment.append(res)
@@ -2464,7 +2629,7 @@ class ConfigurationModel(BaseDocument):
         if work:
             increment.extend(work)
 
-        negative = [res["resource_version_id"] for res in not_incrememt]
+        negative = [res["resource_version_id"] for res in not_increment]
 
         # patch up the graph
         # 1-include stuff for send-events.

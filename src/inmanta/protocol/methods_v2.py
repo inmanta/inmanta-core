@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import datetime
 import uuid
 from typing import Dict, List, Optional, Union
 
@@ -129,6 +130,43 @@ def environment_get(id: uuid.UUID) -> model.Environment:
         Get an environment and all versions associated
 
         :param id: The id of the environment to return
+    """
+
+
+@typedmethod(
+    path="/actions/environment/halt",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def halt_environment(tid: uuid.UUID) -> None:
+    """
+        Halt all orchestrator operations for an environment. The environment will enter a state where all agents are paused and
+        can not be unpaused. Incoming compile requests will still be queued but compilation will halt. Normal operation can be
+        restored using the `resume_environment` endpoint.
+
+        :param tid: The environment id
+
+        :raises NotFound: The given environment doesn't exist.
+    """
+
+
+@typedmethod(
+    path="/actions/environment/resume",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def resume_environment(tid: uuid.UUID) -> None:
+    """
+        Resume all orchestrator operations for an environment. Resumes normal environment operation and unpauses all agents
+        that were active when the environment was halted.
+
+        :param tid: The environment id
+
+        :raises NotFound: The given environment doesn't exist.
     """
 
 
@@ -275,6 +313,8 @@ def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
         :param action: The type of action that should be executed on an agent.
                         * pause: A paused agent cannot execute any deploy operations.
                         * unpause: A unpaused agent will be able to execute deploy operations.
+
+        :raises Forbidden: The given environment has been halted.
     """
 
 
@@ -289,6 +329,8 @@ def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
         :param action: The type of action that should be executed on the agents
                         * pause: A paused agent cannot execute any deploy operations.
                         * unpause: A unpaused agent will be able to execute deploy operations.
+
+        :raises Forbidden: The given environment has been halted.
     """
 
 
@@ -298,4 +340,57 @@ def update_agent_map(agent_map: Dict[str, str]) -> None:
         Notify an agent about the fact that the autostart_agent_map has been updated.
 
         :param agent_map: The content of the new autostart_agent_map
+    """
+
+
+@typedmethod(
+    path="/compiledata/<id>", operation="GET", client_types=[ClientType.api], api_version=2,
+)
+def get_compile_data(id: uuid.UUID) -> Optional[model.CompileData]:
+    """
+        Get the compile data for the given compile request.
+
+        :param id: The id of the compile.
+    """
+
+
+@typedmethod(
+    path="/resource_actions", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def get_resource_actions(
+    tid: uuid.UUID,
+    resource_type: Optional[str] = None,
+    agent: Optional[str] = None,
+    attribute: Optional[str] = None,
+    attribute_value: Optional[str] = None,
+    log_severity: Optional[str] = None,
+    limit: Optional[int] = 0,
+    action_id: Optional[uuid.UUID] = None,
+    first_timestamp: Optional[datetime.datetime] = None,
+    last_timestamp: Optional[datetime.datetime] = None,
+) -> ReturnValue[List[model.ResourceAction]]:
+    """
+        Return resource actions matching the search criteria.
+
+        :param tid: The id of the environment this resource belongs to
+        :param resource_type: The resource entity type that should be queried
+        :param agent: Agent name that is used to filter the results
+        :param attribute: Attribute name used for filtering
+        :param attribute_value: Attribute value used for filtering. Attribute and attribute value should be supplied together.
+        :param log_severity: Only include ResourceActions which have a log message with this severity.
+        :param limit: Limit the number of resource actions included in the response
+        :param action_id: Start the query from this action_id.
+                To be used in combination with either the first or last timestamp.
+        :param first_timestamp: Limit the results to resource actions that started later
+                than the value of this parameter (exclusive)
+        :param last_timestamp: Limit the results to resource actions that started earlier
+                than the value of this parameter (exclusive).
+                Only the first_timestamp or last_timestamp parameter should be supplied
+        :return: the list of matching Resource Actions in a descending order according to the 'started' timestamp.
+                If a limit was specified, also return the links to the next and previous pages.
+                The "next" page always refers to the actions that started earlier,
+                while the "prev" page refers to actions that started later.
+
+        :raises BadRequest: When the supplied parameters are not valid.
+
     """

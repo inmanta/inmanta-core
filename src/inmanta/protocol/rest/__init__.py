@@ -122,14 +122,23 @@ class CallArguments(object):
 
         return self._metadata
 
-    def _map_headers(self, arg: str) -> Optional[Any]:
+    def _is_header_param(self, arg: str) -> bool:
         if arg not in self._properties.arg_options:
-            return None
+            return False
 
         opts = self._properties.arg_options[arg]
 
         if opts.header is None:
+            return False
+
+        return True
+
+    def _map_headers(self, arg: str) -> Optional[Any]:
+        if not self._is_header_param(arg):
             return None
+
+        opts = self._properties.arg_options[arg]
+        assert opts.header is not None
 
         value = self._request_headers.get(opts.header)
         if opts.reply_header and value is not None:
@@ -180,7 +189,7 @@ class CallArguments(object):
             # get value from headers, defaults or message
             value = self._map_headers(arg)
             if value is None:
-                if arg in self._message:
+                if not self._is_header_param(arg) and arg in self._message:
                     value = self._message[arg]
                     all_fields.remove(arg)
 
@@ -247,6 +256,8 @@ class CallArguments(object):
                 )
 
             el_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+            if el_type is Any:
+                return
             for el in value:
                 if typing_inspect.is_union_type(el_type):
                     self._validate_union_return(el_type, el)
@@ -260,9 +271,11 @@ class CallArguments(object):
                 )
 
             el_type = typing_inspect.get_args(arg_type, evaluate=True)[1]
+            if el_type is Any:
+                return
             for k, v in value.items():
                 if not isinstance(k, str):
-                    raise exceptions.ServerError(f"Keys of return dict need to be strings.")
+                    raise exceptions.ServerError("Keys of return dict need to be strings.")
 
                 if typing_inspect.is_union_type(el_type):
                     self._validate_union_return(el_type, v)
@@ -295,7 +308,12 @@ class CallArguments(object):
             # Both isubclass and isinstance fail on this type
             # This check needs to be first because isinstance fails on generic types.
             # TODO: also validate the value inside a ReturnValue
-            if typing_inspect.is_union_type(return_type):
+            if return_type is Any:
+                return common.Response.create(
+                    ReturnValue(response=result), config.properties.envelope, config.properties.envelope_key
+                )
+
+            elif typing_inspect.is_union_type(return_type):
                 self._validate_union_return(return_type, result)
                 return common.Response.create(
                     ReturnValue(response=result), config.properties.envelope, config.properties.envelope_key

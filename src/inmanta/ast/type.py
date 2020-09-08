@@ -177,6 +177,11 @@ class NullableType(Type):
     def with_base_type(self, base_type: Type) -> Type:
         return NullableType(self.element_type.with_base_type(base_type))
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NullableType):
+            return NotImplemented
+        return self.element_type == other.element_type
+
 
 class Primitive(Type):
     """
@@ -204,6 +209,11 @@ class Primitive(Type):
 
     def type_string_internal(self) -> str:
         return "Primitive"
+
+    def __eq__(self, other: object) -> bool:
+        if other.__class__ != self.__class__:
+            return NotImplemented
+        return True
 
 
 class Number(Primitive):
@@ -408,6 +418,11 @@ class TypedList(List):
     def with_base_type(self, base_type: Type) -> Type:
         return TypedList(base_type)
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, TypedList):
+            return NotImplemented
+        return self.element_type == other.element_type
+
 
 class LiteralList(TypedList):
     """
@@ -427,6 +442,11 @@ class LiteralList(TypedList):
 
     def with_base_type(self, base_type: Type) -> Type:
         return self
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, LiteralList):
+            return NotImplemented
+        return True
 
 
 class Dict(Type):
@@ -500,6 +520,11 @@ class LiteralDict(TypedDict):
 
     def type_string(self) -> str:
         return "dict"
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, LiteralDict):
+            return NotImplemented
+        return True
 
 
 class Union(Type):

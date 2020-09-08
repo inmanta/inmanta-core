@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import datetime
 import logging
 import os
 import uuid
@@ -23,8 +24,9 @@ from typing import Dict
 import pytest
 
 from inmanta import data
+from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.util import get_compiler_version
-from utils import log_contains
+from utils import get_resource, log_contains
 
 
 @pytest.mark.asyncio
@@ -290,7 +292,7 @@ async def test_pause_agent(server, cli):
         result = await cli.run("agent", "list", "-e", str(env_id))
         assert result.exit_code == 0
         output = result.stdout.replace(" ", "")
-        assert f"Agent|Environment|Paused" in output
+        assert "Agent|Environment|Paused" in output
         for (agent_name, paused) in expected_records.items():
             assert f"{agent_name}|{env_id}|{paused}" in output
 
@@ -335,3 +337,148 @@ async def test_pause_agent(server, cli):
     for action in ["pause", "unpause"]:
         result = await cli.run("agent", action, "-e", str(env1.id))
         assert result.exit_code != 0
+
+
+@pytest.mark.asyncio
+async def test_list_actionlog(server, environment, client, cli, agent, clienthelper):
+    """
+        Test the `inmanta-cli action-log list` command.
+    """
+
+    def assert_nr_records_in_output_table(output: str, nr_records: int) -> None:
+        lines = [line.strip() for line in output.split("\n") if line.strip() and line.strip().startswith("|")]
+        actual_nr_of_records = len(lines) - 1  # Exclude the header
+        assert nr_records == actual_nr_of_records
+
+    result = await client.reserve_version(tid=environment)
+    assert result.code == 200
+    version = result.result["data"]
+
+    resource1 = get_resource(version, key="test1")
+    resource2 = get_resource(version, key="test2")
+    await clienthelper.put_version_simple(resources=[resource1, resource2], version=version)
+
+    result = await agent._client.resource_action_update(
+        tid=environment,
+        resource_ids=[resource1["id"]],
+        action_id=uuid.uuid4(),
+        action=ResourceAction.deploy,
+        started=datetime.datetime.now(),
+        finished=datetime.datetime.now(),
+        status=ResourceState.failed,
+        messages=[
+            {
+                "level": "INFO",
+                "msg": "Deploying",
+                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
+                "args": [],
+            },
+            {
+                "level": "ERROR",
+                "msg": "Deployment failed",
+                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
+                "args": [],
+                "status": ResourceState.failed.value,
+            },
+        ],
+        changes={},
+        change=Change.nochange,
+        send_events=False,
+    )
+    assert result.code == 200
+    result = await agent._client.resource_action_update(
+        tid=environment,
+        resource_ids=[resource2["id"]],
+        action_id=uuid.uuid4(),
+        action=ResourceAction.deploy,
+        started=datetime.datetime.now(),
+        finished=datetime.datetime.now(),
+        status=ResourceState.deployed,
+        messages=[
+            {
+                "level": "INFO",
+                "msg": "Deployed successfully",
+                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
+                "args": [],
+            },
+        ],
+        changes={},
+        change=Change.nochange,
+        send_events=False,
+    )
+    assert result.code == 200
+
+    # Get all resource actions for resource1
+    result = await cli.run("action-log", "list", "-e", str(environment), "--rvid", resource1["id"])
+    assert result.exit_code == 0
+    assert_nr_records_in_output_table(result.output, nr_records=2)  # 1 store action + 1 deploy action
+
+    # Get deploy resource actions for resource1
+    result = await cli.run("action-log", "list", "-e", str(environment), "--rvid", resource1["id"], "--action", "deploy")
+    assert result.exit_code == 0
+    assert_nr_records_in_output_table(result.output, nr_records=1)  # 1 deploy action
+
+    # Resource id is provided instead of resource version id
+    resource_id = resource1["id"].rsplit(",", maxsplit=1)[0]
+    result = await cli.run("action-log", "list", "-e", str(environment), "--rvid", resource_id)
+    assert result.exit_code != 0
+    assert f"Invalid value for '--rvid': {resource_id}" in result.stderr
+
+    # Incorrect format resource version id
+    result = await cli.run("action-log", "list", "-e", str(environment), "--rvid", "test")
+    assert result.exit_code != 0
+    assert "Invalid value for '--rvid': test" in result.stderr
+
+
+@pytest.mark.asyncio
+async def test_show_messages_actionlog(server, environment, client, cli, agent, clienthelper):
+    """
+        Test the `inmanta-cli action-log show-messages` command.
+    """
+    result = await client.reserve_version(tid=environment)
+    assert result.code == 200
+    version = result.result["data"]
+
+    resource1 = get_resource(version, key="test1")
+    await clienthelper.put_version_simple(resources=[resource1], version=version)
+
+    result = await agent._client.resource_action_update(
+        tid=environment,
+        resource_ids=[resource1["id"]],
+        action_id=uuid.uuid4(),
+        action=ResourceAction.deploy,
+        started=datetime.datetime.now(),
+        finished=datetime.datetime.now(),
+        status=ResourceState.deployed,
+        messages=[
+            {
+                "level": "DEBUG",
+                "msg": "Started deployment",
+                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
+                "args": [],
+            },
+            {
+                "level": "INFO",
+                "msg": "Deployed successfully",
+                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
+                "args": [],
+            },
+        ],
+        changes={},
+        change=Change.nochange,
+        send_events=False,
+    )
+    assert result.code == 200
+
+    # Obtain action_id
+    result = await client.get_resource(tid=environment, id=resource1["id"], logs=True, log_action=ResourceAction.deploy)
+    assert result.code == 200
+    assert len(result.result["logs"]) == 1
+    action_id = result.result["logs"][0]["action_id"]
+
+    result = await cli.run(
+        "action-log", "show-messages", "-e", str(environment), "--rvid", resource1["id"], "--action-id", str(action_id)
+    )
+    assert result.exit_code == 0
+    assert "DEBUG Started deployment" in result.output
+    assert "INFO Deployed successfully" in result.output

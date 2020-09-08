@@ -21,11 +21,11 @@ from itertools import chain, filterfalse
 from typing import TYPE_CHECKING, Callable, Dict, FrozenSet, Generic, Iterable, Iterator, List, Optional, Set, Tuple, TypeVar
 
 if TYPE_CHECKING:
-    from inmanta.execute.runtime import Resolver, ResultVariable
     from inmanta.ast import Locatable
     from inmanta.ast.attribute import Attribute
     from inmanta.ast.entity import Entity
     from inmanta.ast.statements.generator import Constructor
+    from inmanta.execute.runtime import Resolver, ResultVariable
 
 
 """

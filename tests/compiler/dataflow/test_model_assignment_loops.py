@@ -16,11 +16,11 @@
     Contact: code@inmanta.com
 """
 
-from compiler.dataflow.conftest import DataflowTestHelper
 from typing import Set
 
 import pytest
 
+from compiler.dataflow.conftest import DataflowTestHelper
 from inmanta.ast import RuntimeException
 
 

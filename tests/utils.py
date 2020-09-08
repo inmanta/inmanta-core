@@ -21,6 +21,7 @@ import json
 import logging
 import time
 import uuid
+from typing import Any, Dict
 
 from inmanta import data
 from inmanta.protocol import Client
@@ -200,10 +201,9 @@ class LogSequence(object):
 
 
 def configure(unused_tcp_port, database_name, database_port):
-    from inmanta.config import Config
-
     import inmanta.agent.config  # noqa: F401
     import inmanta.server.config  # noqa: F401
+    from inmanta.config import Config
 
     free_port = str(unused_tcp_port)
     Config.load_config()
@@ -286,3 +286,14 @@ class ClientHelper(object):
             compiler_version=get_compiler_version(),
         )
         assert res.code == 200, res.result
+
+
+def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: str = "value1") -> Dict[str, Any]:
+    return {
+        "key": key,
+        "value": value,
+        "id": f"test::Resource[{agent},key={key}],v=%d" % version,
+        "send_event": False,
+        "purged": False,
+        "requires": [],
+    }
