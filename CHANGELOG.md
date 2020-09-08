@@ -17,10 +17,8 @@
 - Added API method for halting all environment operations (#2228)
 
 ## Upgrade notes
-
+- Ensure the database is backed up before executing an upgrade.
 - Option `inmanta compile --json` is renamed to `inmanta compile --export-compile-data`
-
-## Upgrade notes
 - `DynamicProxy.__getattr__` now raises an `AttributeError` instead of a plain `NotFoundException` when an attribute can not be
     found, for compatibility with Python's builtin `hasattr`. This change is backwards compatible, though it is recommended to
     except on `AttributeError` over `NotFoundException`. (#2991)
