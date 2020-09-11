@@ -20,23 +20,22 @@
     does not result in an import loop (see #2341 and #2342).
 """
 
+import importlib
 import multiprocessing
 from typing import Callable, Iterator, Optional
 
 import pytest
 
-Importer = Callable[[], None]
-
 
 @pytest.fixture(scope="session")
-def import_entry_point() -> Iterator[Callable[[Importer], Optional[int]]]:
+def import_entry_point() -> Iterator[Callable[[str], Optional[int]]]:
     """
-        Yields a function that runs an importer in a seperate Python process and returns the exit code.
+        Yields a function that imports a module in a seperate Python process and returns the exit code.
     """
     context = multiprocessing.get_context("spawn")
 
-    def do_import(importer: Importer) -> Optional[int]:
-        process = context.Process(target=importer)
+    def do_import(module: str) -> Optional[int]:
+        process = context.Process(target=importlib.import_module, args=(module,))
         process.start()
         process.join()
         return process.exitcode
@@ -44,9 +43,5 @@ def import_entry_point() -> Iterator[Callable[[Importer], Optional[int]]]:
     yield do_import
 
 
-def import_execute_proxy() -> None:
-    import inmanta.execute.proxy  # noqa: F401
-
-
 def test_import_proxy(import_entry_point) -> None:
-    assert import_entry_point(import_execute_proxy) == 0
+    assert import_entry_point("inmanta.execute.proxy") == 0
