@@ -97,7 +97,7 @@ class SessionActionType(str, Enum):
 
 class SessionAction:
     """
-        A session update to be executed by the AgentManager.
+    A session update to be executed by the AgentManager.
     """
 
     def __init__(
@@ -111,15 +111,15 @@ class SessionAction:
 
 class AgentManager(ServerSlice, SessionListener):
     """
-        This class contains all server functionality related to the management of agents.
-        Each logical agent managed by an instance of this class has at most one primary agent instance process associated with
-        it. A subset of these processes are autostarted, those are managed by :py:class:`AutostartedAgentManager`.
-        The server ignores all requests from non-primary agent instances. Therefore an agent without a primary is effectively
-        paused as far as the server is concerned, though any rogue agent instances could still perform actions agent-side.
+    This class contains all server functionality related to the management of agents.
+    Each logical agent managed by an instance of this class has at most one primary agent instance process associated with
+    it. A subset of these processes are autostarted, those are managed by :py:class:`AutostartedAgentManager`.
+    The server ignores all requests from non-primary agent instances. Therefore an agent without a primary is effectively
+    paused as far as the server is concerned, though any rogue agent instances could still perform actions agent-side.
 
-        Throughout this class the terms "logical agent" or sometimes just "agent" refer to a logical agent managed by an
-        instance of this class. The terms "agent instance", "agent process" or just "process" refer to a concrete process
-        running an agent instance, which might be the primary for a logical agent.
+    Throughout this class the terms "logical agent" or sometimes just "agent" refer to a logical agent managed by an
+    instance of this class. The terms "agent instance", "agent process" or just "process" refer to a concrete process
+    running an agent instance, which might be the primary for a logical agent.
     """
 
     def __init__(self, closesessionsonstart: bool = True, fact_back_off: int = None) -> None:
@@ -186,14 +186,14 @@ class AgentManager(ServerSlice, SessionListener):
 
     async def halt_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
-            Halts all agents for an environment. Persists prior paused state.
+        Halts all agents for an environment. Persists prior paused state.
         """
         await data.Agent.persist_on_halt(env.id, connection=connection)
         await self._pause_agent(env, connection=connection)
 
     async def resume_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
-            Resumes after halting. Unpauses all agents that had been paused by halting.
+        Resumes after halting. Unpauses all agents that had been paused by halting.
         """
         to_unpause: List[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
         await asyncio.gather(*[self._unpause_agent(env, agent, connection=connection) for agent in to_unpause])
@@ -220,7 +220,7 @@ class AgentManager(ServerSlice, SessionListener):
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
         """
-            Pause a logical agent by pausing an active agent instance if it exists, and removing the logical agent's primary.
+        Pause a logical agent by pausing an active agent instance if it exists, and removing the logical agent's primary.
         """
 
         async with self.session_lock:
@@ -256,7 +256,7 @@ class AgentManager(ServerSlice, SessionListener):
 
     async def _process_session_listener_actions(self) -> None:
         """
-            This is the consumer of the _session_listener_actions queue.
+        This is the consumer of the _session_listener_actions queue.
         """
         while not self.is_stopping():
             try:
@@ -280,7 +280,7 @@ class AgentManager(ServerSlice, SessionListener):
 
     async def _process_action(self, action: SessionAction) -> None:
         """
-            Process a specific SessionAction.
+        Process a specific SessionAction.
         """
         action_type = action.action_type
         if action_type == SessionActionType.REGISTER_SESSION:
@@ -295,7 +295,7 @@ class AgentManager(ServerSlice, SessionListener):
     # Notify from session listener
     async def new_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str]) -> None:
         """
-           The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
+        The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
         """
         session_action = SessionAction(
             action_type=SessionActionType.REGISTER_SESSION,
@@ -308,7 +308,7 @@ class AgentManager(ServerSlice, SessionListener):
     # Notify from session listener
     async def expire(self, session: protocol.Session, endpoint_names_snapshot: Set[str]) -> None:
         """
-            The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
+        The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
         """
         session_action = SessionAction(
             action_type=SessionActionType.EXPIRE_SESSION,
@@ -321,7 +321,7 @@ class AgentManager(ServerSlice, SessionListener):
     # Notify from session listener
     async def seen(self, session: protocol.Session, endpoint_names_snapshot: Set[str]) -> None:
         """
-           The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
+        The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
         """
         session_action = SessionAction(
             action_type=SessionActionType.SEEN_SESSION,
@@ -358,7 +358,7 @@ class AgentManager(ServerSlice, SessionListener):
         endpoints_with_new_primary: List[Tuple[str, Optional[uuid.UUID]]],
     ) -> None:
         """
-            Note: This method call is allowed to fail when the database connection is lost.
+        Note: This method call is allowed to fail when the database connection is lost.
         """
         now = datetime.now()
         await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add, now)
@@ -369,9 +369,9 @@ class AgentManager(ServerSlice, SessionListener):
     # Session registration
     async def _register_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str], now: datetime) -> None:
         """
-            This method registers a new session in memory and asynchronously updates the agent
-            session log in the database. When the database connection is lost, the get_statuses()
-            call fails and the new session will be refused.
+        This method registers a new session in memory and asynchronously updates the agent
+        session log in the database. When the database connection is lost, the get_statuses()
+        call fails and the new session will be refused.
         """
         LOGGER.debug("New session %s for agents %s on %s", session.id, endpoint_names_snapshot, session.nodename)
         async with self.session_lock:
@@ -401,7 +401,7 @@ class AgentManager(ServerSlice, SessionListener):
         now: datetime,
     ) -> None:
         """
-            Note: This method call is allowed to fail when the database connection is lost.
+        Note: This method call is allowed to fail when the database connection is lost.
         """
         await data.AgentProcess.seen(tid, session.nodename, session.id, now)
         await data.AgentInstance.log_instance_creation(tid, session.id, endpoint_names, now)
@@ -410,9 +410,9 @@ class AgentManager(ServerSlice, SessionListener):
     # Session expiry
     async def _expire_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str], now: datetime) -> None:
         """
-            This method expires the given session and update the in-memory session state.
-            The in-database session log is updated asynchronously. These database updates
-            are allowed to fail when the database connection is lost.
+        This method expires the given session and update the in-memory session state.
+        The in-database session log is updated asynchronously. These database updates
+        are allowed to fail when the database connection is lost.
         """
         if not self.is_running() or self.is_stopping():
             return
@@ -437,7 +437,7 @@ class AgentManager(ServerSlice, SessionListener):
         now: datetime,
     ) -> None:
         """
-            Note: This method call is allowed to fail when the database connection is lost.
+        Note: This method call is allowed to fail when the database connection is lost.
         """
         await data.AgentProcess.expire_process(session.id, now)
         await data.AgentInstance.log_instance_expiry(session.id, session.endpoint_names, now)
@@ -463,13 +463,13 @@ class AgentManager(ServerSlice, SessionListener):
     # Util
     async def _use_new_active_session_for_agent(self, tid: uuid.UUID, endpoint_name: str) -> Optional[protocol.Session]:
         """
-            This method searches for a new active session for the given agent. If a new active session if found,
-            the in-memory state of the agentmanager is updated to use that new session. No logging is done in the
-            database.
+        This method searches for a new active session for the given agent. If a new active session if found,
+        the in-memory state of the agentmanager is updated to use that new session. No logging is done in the
+        database.
 
-            :return The new active session in use or None if no new active session was found
+        :return The new active session in use or None if no new active session was found
 
-            Note: Always call under session lock.
+        Note: Always call under session lock.
         """
         key = (tid, endpoint_name)
         new_active_session = self._get_session_to_failover_agent(tid, endpoint_name)
@@ -485,13 +485,13 @@ class AgentManager(ServerSlice, SessionListener):
         self, session: protocol.Session, endpoints: Set[str]
     ) -> Sequence[Tuple[str, uuid.UUID]]:
         """
-            Make this session the primary session for the endpoints of this session if no primary exists and the agent is not
-            paused.
+        Make this session the primary session for the endpoints of this session if no primary exists and the agent is not
+        paused.
 
-            :return: The endpoints that got a new primary.
+        :return: The endpoints that got a new primary.
 
-            Note: Always call under session lock.
-            Note: This call will fail when the database connection is lost.
+        Note: Always call under session lock.
+        Note: This call will fail when the database connection is lost.
         """
         agent_statuses = await data.Agent.get_statuses(session.tid, endpoints)
 
@@ -509,11 +509,11 @@ class AgentManager(ServerSlice, SessionListener):
         self, session: protocol.Session, endpoints: Set[str]
     ) -> Sequence[Tuple[str, Optional[uuid.UUID]]]:
         """
-            If the given session is the primary for a given endpoint, failover to a new session.
+        If the given session is the primary for a given endpoint, failover to a new session.
 
-            :return: The endpoints that got a new primary.
+        :return: The endpoints that got a new primary.
 
-            Note: Always call under session lock.
+        Note: Always call under session lock.
         """
         agent_statuses = await data.Agent.get_statuses(session.tid, endpoints)
         result = []
@@ -542,8 +542,8 @@ class AgentManager(ServerSlice, SessionListener):
 
     def get_session_for(self, tid: uuid.UUID, endpoint: str) -> Optional[protocol.Session]:
         """
-            Return a session that matches the given environment and endpoint.
-            This method also returns session to paused or non-live agents.
+        Return a session that matches the given environment and endpoint.
+        This method also returns session to paused or non-live agents.
         """
         key = (tid, endpoint)
         session = self.tid_endpoint_to_session.get(key)
@@ -599,7 +599,7 @@ class AgentManager(ServerSlice, SessionListener):
     # Agent Management
     async def ensure_agent_registered(self, env: data.Environment, nodename: str) -> data.Agent:
         """
-            Make sure that an agent has been created in the database
+        Make sure that an agent has been created in the database
         """
         async with self.session_lock:
             agent = await data.Agent.get(env.id, nodename)
@@ -610,11 +610,11 @@ class AgentManager(ServerSlice, SessionListener):
 
     async def _create_default_agent(self, env: data.Environment, nodename: str) -> data.Agent:
         """
-            This method creates a new agent (agent in the model) in the database.
-            If an active agent instance exists for the given agent, it is marked as a the
-            primary instance for that agent in the database.
+        This method creates a new agent (agent in the model) in the database.
+        If an active agent instance exists for the given agent, it is marked as a the
+        primary instance for that agent in the database.
 
-            Note: This method must be called under session lock
+        Note: This method must be called under session lock
         """
         saved = data.Agent(environment=env.id, name=nodename, paused=False)
         await saved.insert()
@@ -702,7 +702,7 @@ class AgentManager(ServerSlice, SessionListener):
 
     async def request_parameter(self, env_id: uuid.UUID, resource_id: str) -> Apireturn:
         """
-            Request the value of a parameter from an agent
+        Request the value of a parameter from an agent
         """
         if resource_id is not None and resource_id != "":
             env = await data.Environment.get_by_id(env_id)
@@ -749,8 +749,8 @@ class AgentManager(ServerSlice, SessionListener):
 
 class AutostartedAgentManager(ServerSlice):
     """
-        An instance of this class manages autostarted agent instance processes. It does not manage the logical agents as those
-        are managed by `:py:class:AgentManager`.
+    An instance of this class manages autostarted agent instance processes. It does not manage the logical agents as those
+    are managed by `:py:class:AgentManager`.
     """
 
     def __init__(self):
@@ -791,8 +791,8 @@ class AutostartedAgentManager(ServerSlice):
 
     async def _start_agents(self) -> None:
         """
-            Ensure that autostarted agents of each environment are started when AUTOSTART_ON_START is true. This method
-            is called on server start.
+        Ensure that autostarted agents of each environment are started when AUTOSTART_ON_START is true. This method
+        is called on server start.
         """
         environments = await data.Environment.get_list()
         for env in environments:
@@ -810,7 +810,7 @@ class AutostartedAgentManager(ServerSlice):
 
     async def stop_agents(self, env: data.Environment) -> None:
         """
-            Stop all agents for this environment and close sessions
+        Stop all agents for this environment and close sessions
         """
         async with self.agent_lock:
             LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
@@ -842,11 +842,11 @@ class AutostartedAgentManager(ServerSlice):
     # Start/stop agents
     async def _ensure_agents(self, env: data.Environment, agents: List[str], restart: bool = False) -> bool:
         """
-            Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
+        Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
 
-            :param env: The environment to start the agents for
-            :param agents: A list of agent names that possibly should be started in this environment.
-            :param restart: Restart all agents even if the list of agents is up to date.
+        :param env: The environment to start the agents for
+        :param agents: A list of agent names that possibly should be started in this environment.
+        :param restart: Restart all agents even if the list of agents is up to date.
         """
         if self._stopping:
             raise ShutdownInProgress()
@@ -888,9 +888,9 @@ class AutostartedAgentManager(ServerSlice):
 
     async def __do_start_agent(self, agents: List[str], env: data.Environment) -> bool:
         """
-            Start an agent process for the given agents in the given environment
+        Start an agent process for the given agents in the given environment
 
-            Note: Always call under agent_lock
+        Note: Always call under agent_lock
         """
         agent_map: Dict[str, str]
         agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
@@ -933,12 +933,12 @@ class AutostartedAgentManager(ServerSlice):
 
     async def _make_agent_config(self, env: data.Environment, agent_names: List[str], agent_map: Dict[str, str]) -> str:
         """
-            Generate the config file for the process that hosts the autostarted agents
+        Generate the config file for the process that hosts the autostarted agents
 
-            :param env: The environment for which to autostart agents
-            :param agent_names: The names of the agents
-            :param agent_map: The agent mapping to use
-            :return: A string that contains the config file content.
+        :param env: The environment for which to autostart agents
+        :param agent_names: The names of the agents
+        :param agent_map: The agent mapping to use
+        :return: A string that contains the config file content.
         """
         environment_id = str(env.id)
         port: int = opt.get_bind_port()
@@ -1014,7 +1014,7 @@ ssl=True
         self, args: List[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
     ) -> subprocess.Process:
         """
-            Fork an inmanta process from the same code base as the current code
+        Fork an inmanta process from the same code base as the current code
         """
         full_args = ["-m", "inmanta.app", *args]
         # handles can be closed, owned by child process,...

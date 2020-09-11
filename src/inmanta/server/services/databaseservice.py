@@ -49,8 +49,7 @@ class DatabaseService(protocol.ServerSlice):
         return []
 
     async def connect_database(self) -> None:
-        """ Connect to the database
-        """
+        """Connect to the database"""
         database_host = opt.db_host.get()
         database_port = opt.db_port.get()
 
@@ -72,13 +71,11 @@ class DatabaseService(protocol.ServerSlice):
         LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
 
     async def disconnect_database(self) -> None:
-        """ Disconnect the database
-        """
+        """Disconnect the database"""
         await data.disconnect()
 
     async def get_status(self) -> Dict[str, ArgumentTypes]:
-        """ Get the status of the database connection
-        """
+        """Get the status of the database connection"""
         connected = await self.get_connection_status()
         status = {
             "connected": connected,

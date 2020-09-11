@@ -44,9 +44,9 @@ async def retry_limited(fun, timeout):
 
 async def wait_until_logs_are_available(client: Client, environment: str, resource_id: str, expect_nr_of_logs: int) -> None:
     """
-        The state of a resource and its logs are not set atomically. As such there is a small window
-        when the deployment is marked as finished, but the logs are not available yet. This check
-        prevents that race condition.
+    The state of a resource and its logs are not set atomically. As such there is a small window
+    when the deployment is marked as finished, but the logs are not available yet. This check
+    prevents that race condition.
     """
 
     async def all_logs_are_available():
@@ -142,7 +142,7 @@ def log_doesnt_contain(caplog, loggerpart, level, msg):
 def log_index(caplog, loggerpart, level, msg, after=0):
     """Find a log in line in the captured log, return the index of the first occurrence
 
-       :param after: only consider records after the given index"""
+    :param after: only consider records after the given index"""
     close = []
     for i, (logger_name, log_level, message) in enumerate(caplog.record_tuples[after:]):
         if msg in message:

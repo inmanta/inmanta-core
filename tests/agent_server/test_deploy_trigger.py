@@ -28,7 +28,7 @@ async def test_deploy_trigger(
     server, client, clienthelper, resource_container, environment, caplog, no_agent_backoff, async_finalizer
 ):
     """
-       Test deployment of empty model
+    Test deployment of empty model
     """
     caplog.set_level(logging.INFO)
 

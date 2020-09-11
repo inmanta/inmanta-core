@@ -21,10 +21,10 @@ from inmanta.docstring_parser import parse_docstring
 
 def test_docstring():
     """
-        Test docstring which has a:
-        * short description
-        * long description
-        * attributes
+    Test docstring which has a:
+    * short description
+    * long description
+    * attributes
     """
     docstring = """
         This is a description.
@@ -54,7 +54,7 @@ def test_docstring():
 
 def test_docstring_only_short_description():
     """
-        Test docstring consisting of a short description only.
+    Test docstring consisting of a short description only.
     """
     docstring = """
         This is a description.
@@ -69,7 +69,7 @@ def test_docstring_only_short_description():
 
 def test_empty_docstring():
     """
-        Test parser when docstring is an empty line.
+    Test parser when docstring is an empty line.
     """
     parsed_docstring = parse_docstring("")
 
@@ -80,8 +80,8 @@ def test_empty_docstring():
 
 def test_syntax_error_in_attr_definition_docstring(caplog):
     """
-        Verify that a warning is logged when a syntax error
-        exists in the definition of an attribute.
+    Verify that a warning is logged when a syntax error
+    exists in the definition of an attribute.
     """
     docstring = """
         This is a description.

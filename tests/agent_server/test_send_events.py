@@ -33,7 +33,7 @@ logger = logging.getLogger("inmanta.test.send_events")
 @pytest.mark.asyncio
 async def test_send_events(resource_container, environment, server, client, agent, clienthelper):
     """
-        Send and receive events within one agent
+    Send and receive events within one agent
     """
     resource_container.Provider.reset()
 
@@ -90,7 +90,7 @@ async def test_send_events(resource_container, environment, server, client, agen
 @pytest.mark.asyncio
 async def test_send_events_cross_agent(resource_container, environment, server, client, async_finalizer, clienthelper):
     """
-        Send and receive events over agents
+    Send and receive events over agents
     """
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
@@ -165,7 +165,7 @@ async def test_send_events_cross_agent_deploying(
     resource_container, environment, server, client, no_agent_backoff, async_finalizer, clienthelper
 ):
     """
-        Send and receive events over agents
+    Send and receive events over agents
     """
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
@@ -238,7 +238,7 @@ async def test_send_events_cross_agent_restart(
     resource_container, environment, server, client, clienthelper, no_agent_backoff, async_finalizer
 ):
     """
-        Send and receive events over agents with agents starting after deploy
+    Send and receive events over agents with agents starting after deploy
     """
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
@@ -319,7 +319,7 @@ async def test_send_events_cross_agent_restart(
 @pytest.mark.asyncio
 async def test_send_events_cross_agent_fail(resource_container, environment, server, client, async_finalizer, clienthelper):
     """
-        Send and receive events over agents, ensure failures are reported correctly
+    Send and receive events over agents, ensure failures are reported correctly
     """
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 

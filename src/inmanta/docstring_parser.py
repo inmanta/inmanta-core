@@ -42,7 +42,7 @@ class DocString:
 
     def get_description(self) -> Optional[str]:
         """
-            Return the general description in the docstring.
+        Return the general description in the docstring.
         """
         if self._doc_string.short_description is None:
             return None
@@ -53,20 +53,20 @@ class DocString:
 
     def get_description_for_attribute(self, attr_name: str) -> Optional[str]:
         """
-            Return the description for a certain attribute.
+        Return the description for a certain attribute.
         """
         return self._attr_description_map.get(attr_name, None)
 
     def get_attribute_description_map(self) -> Dict[str, str]:
         """
-            Return the dict which maps the attribute name to its description.
+        Return the dict which maps the attribute name to its description.
         """
         return dict(self._attr_description_map)
 
 
 def parse_docstring(doc_string: str) -> DocString:
     """
-        Parse the docstring of an entity.
+    Parse the docstring of an entity.
     """
     doc_string = docstring_parser.parse(doc_string, style=docstring_parser.Style.rest)
     return DocString(doc_string)

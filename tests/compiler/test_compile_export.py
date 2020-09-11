@@ -32,7 +32,7 @@ from inmanta.parser import ParserException
 
 def export_to_file(path: Path, expected_error_type: Optional[Type[CompilerException]] = None) -> CompileData:
     """
-        Compiles, exporting to a file, and returns the file contents, loaded as CompileData.
+    Compiles, exporting to a file, and returns the file contents, loaded as CompileData.
     """
     Config.set("compiler", "export_compile_data", "true")
     Config.set("compiler", "export_compile_data_file", str(path))

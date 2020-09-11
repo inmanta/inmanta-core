@@ -107,7 +107,7 @@ class Config(object):
         cls, section: Optional[str] = None, name: Optional[str] = None, default_value: Optional[str] = None
     ) -> Union[str, ConfigParser]:
         """
-            Get the entire config or get a value directly
+        Get the entire config or get a value directly
         """
         cfg = cls._get_instance()
         if section is None:
@@ -130,14 +130,13 @@ class Config(object):
 
     @classmethod
     def is_set(cls, section: str, name: str) -> bool:
-        """Check if a certain config option was specified in the config file.
-        """
+        """Check if a certain config option was specified in the config file."""
         return section in cls._get_instance() and name in cls._get_instance()[section]
 
     @classmethod
     def getboolean(cls, section: str, name: str, default_value: Optional[bool] = None) -> bool:
         """
-            Return a boolean from the configuration
+        Return a boolean from the configuration
         """
         cls.validate_option_request(section, name, default_value)
         return cls._get_instance().getboolean(section, name, fallback=default_value)
@@ -145,7 +144,7 @@ class Config(object):
     @classmethod
     def set(cls, section: str, name: str, value: str) -> None:
         """
-            Override a value
+        Override a value
         """
         name = _normalize_name(name)
 
@@ -373,7 +372,7 @@ feature_file_config = Option("config", "feature-file", None, "The loacation of t
 ###############################
 class TransportConfig(object):
     """
-        A class to register the config options for Client classes
+    A class to register the config options for Client classes
     """
 
     def __init__(self, name: str, port: int = 8888) -> None:
@@ -403,7 +402,7 @@ AUTH_JWT_PREFIX = "auth_jwt_"
 
 class AuthJWTConfig(object):
     """
-        Auth JWT configuration manager
+    Auth JWT configuration manager
     """
 
     sections: Dict[str, "AuthJWTConfig"] = {}
@@ -414,8 +413,8 @@ class AuthJWTConfig(object):
     @classmethod
     def list(cls) -> List[str]:
         """
-            Return a list of all defined auth jwt configurations. This method will load new sections if they were added
-            since the last invocation.
+        Return a list of all defined auth jwt configurations. This method will load new sections if they were added
+        since the last invocation.
         """
         cfg = Config._get_instance()
         prefix_len = len(AUTH_JWT_PREFIX)
@@ -448,7 +447,7 @@ class AuthJWTConfig(object):
     @classmethod
     def get(cls, name: str) -> Optional["AuthJWTConfig"]:
         """
-            Get the config with the given name
+        Get the config with the given name
         """
         cls.list()
         if name in cls.sections:
@@ -458,7 +457,7 @@ class AuthJWTConfig(object):
     @classmethod
     def get_sign_config(cls) -> Optional["AuthJWTConfig"]:
         """
-            Get the configuration with sign is true
+        Get the configuration with sign is true
         """
         cls.list()
         for cfg in cls.sections.values():
@@ -469,9 +468,9 @@ class AuthJWTConfig(object):
     @classmethod
     def get_issuer(cls, issuer: str) -> Optional["AuthJWTConfig"]:
         """
-            Get the config for the given issuer. Only when no auth config has been loaded yet, the configuration will be loaded
-            again. For loading additional configuration, call list() first. This method is in the auth path for each API
-            request.
+        Get the config for the given issuer. Only when no auth config has been loaded yet, the configuration will be loaded
+        again. For loading additional configuration, call list() first. This method is in the auth path for each API
+        request.
         """
         if len(cls.issuers) == 0:
             cls.list()
@@ -498,7 +497,7 @@ class AuthJWTConfig(object):
 
     def validate_generic(self) -> None:
         """
-            Validate  and parse the generic options that are valid for all algorithms
+        Validate  and parse the generic options that are valid for all algorithms
         """
         if "sign" in self._config:
             self.sign = is_bool(self._config["sign"])
@@ -530,7 +529,7 @@ class AuthJWTConfig(object):
 
     def validate_hs265(self) -> None:
         """
-            Validate and parse HS256 algorithm configuration
+        Validate and parse HS256 algorithm configuration
         """
         if "key" not in self._config:
             raise ValueError("key is required in %s for algorithm %s" % (self.section, self.algo))
@@ -555,7 +554,7 @@ class AuthJWTConfig(object):
 
     def validate_rs265(self) -> None:
         """
-            Validate and parse RS256 algorithm configuration
+        Validate and parse RS256 algorithm configuration
         """
         if "jwks_uri" not in self._config:
             raise ValueError("jwks_uri is required for RS256 based providers in section %s" % self.section)

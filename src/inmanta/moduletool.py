@@ -68,7 +68,7 @@ class ModuleLikeTool(object):
 
     def execute(self, cmd, args):
         """
-            Execute the given subcommand
+        Execute the given subcommand
         """
         if cmd is not None and cmd != "" and hasattr(self, cmd):
             method = getattr(self, cmd)
@@ -180,7 +180,7 @@ class ProjectTool(ModuleLikeTool):
     def freeze(self, outfile, recursive, operator):
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
-         """
+        """
         try:
             project = self.get_project(load=True)
         except Exception:
@@ -237,7 +237,7 @@ class ProjectTool(ModuleLikeTool):
 
 class ModuleTool(ModuleLikeTool):
     """
-        A tool to manage configuration modules
+    A tool to manage configuration modules
     """
 
     def __init__(self):
@@ -380,7 +380,7 @@ version: 0.0.1dev0"""
 
     def list(self, requires=False):
         """
-            List all modules in a table
+        List all modules in a table
         """
         table = []
         name_length = 10
@@ -431,7 +431,7 @@ version: 0.0.1dev0"""
 
     def update(self, module: str = None, project: Project = None):
         """
-            Update all modules from their source
+        Update all modules from their source
         """
 
         if project is None:
@@ -488,7 +488,7 @@ version: 0.0.1dev0"""
 
     def install(self, module=None, project=None):
         """
-            Install all modules the project requires or a single module without its dependencies
+        Install all modules the project requires or a single module without its dependencies
         """
         if project is None:
             project = self.get_project(False)
@@ -500,21 +500,21 @@ version: 0.0.1dev0"""
 
     def status(self, module=None):
         """
-            Run a git status on all modules and report
+        Run a git status on all modules and report
         """
         for mod in self.get_modules(module):
             mod.status()
 
     def push(self, module=None):
         """
-            Push all modules
+        Push all modules
         """
         for mod in self.get_modules(module):
             mod.push()
 
     def verify(self):
         """
-            Verify dependencies and frozen module versions
+        Verify dependencies and frozen module versions
         """
         Project.get().verify()
 
@@ -524,10 +524,19 @@ version: 0.0.1dev0"""
         return module
 
     def commit(
-        self, message, module=None, version=None, dev=False, major=False, minor=False, patch=False, commit_all=False, tag=False,
+        self,
+        message,
+        module=None,
+        version=None,
+        dev=False,
+        major=False,
+        minor=False,
+        patch=False,
+        commit_all=False,
+        tag=False,
     ):
         """
-            Commit all current changes.
+        Commit all current changes.
         """
         # find module
         module = self.get_module(module)
@@ -549,7 +558,7 @@ version: 0.0.1dev0"""
     def freeze(self, outfile, recursive, operator, module=None):
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
-         """
+        """
 
         # find module
         module = self.get_module(module)

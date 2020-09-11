@@ -57,7 +57,7 @@ class BasicBlock(object):
 
     def add_var(self, name: str, stmt: Statement) -> None:
         """
-            Adds a variable to this block, paired with the statement that put it here.
+        Adds a variable to this block, paired with the statement that put it here.
         """
         self.__variables.append((name, stmt))
 
@@ -90,9 +90,9 @@ class BasicBlock(object):
 
     def warn_shadowed_variables(self) -> None:
         """
-            Produces a warning for any shadowed variables in ocurring in this namespace. This namespace's scope's root block
-            is used as an entrypoint for the check. If nested_block is provided, that block is interpreted as living in this
-            scope and only that block is searched for shadowing with respect to the scope.
+        Produces a warning for any shadowed variables in ocurring in this namespace. This namespace's scope's root block
+        is used as an entrypoint for the check. If nested_block is provided, that block is interpreted as living in this
+        scope and only that block is searched for shadowing with respect to the scope.
         """
         for var, shadowed_locs, orig_locs in self.shadowed_variables():
             inmanta_warnings.warn(
@@ -108,13 +108,14 @@ class BasicBlock(object):
             )
 
     def shadowed_variables(
-        self, surrounding_vars: Optional[Dict[str, FrozenSet[Locatable]]] = None,
+        self,
+        surrounding_vars: Optional[Dict[str, FrozenSet[Locatable]]] = None,
     ) -> Iterator[Tuple[str, FrozenSet[Locatable], FrozenSet[Locatable]]]:
         """
-            Returns an iterator over variables shadowed in this block or it's nested blocks.
-            The elements are tuples of the variable name, a set of the shadowed locations
-            and a set of the originally declared locations.
-            :param surrounding_vars: an accumulator for variables declared in surrounding blocks.
+        Returns an iterator over variables shadowed in this block or it's nested blocks.
+        The elements are tuples of the variable name, a set of the shadowed locations
+        and a set of the originally declared locations.
+        :param surrounding_vars: an accumulator for variables declared in surrounding blocks.
         """
         if surrounding_vars is None:
             surrounding_vars = {}

@@ -473,9 +473,9 @@ def test_587_assign_extend_incorrect(snippetcompiler):
 
 def test_set_wrong_relation_type(snippetcompiler):
     """
-        Test the error message when setting the wrong type on a relation in the two cases:
-        1) on an instance
-        2) in the constructor
+    Test the error message when setting the wrong type on a relation in the two cases:
+    1) on an instance
+    2) in the constructor
     """
     # noqa: E501
     snippetcompiler.setup_for_error(

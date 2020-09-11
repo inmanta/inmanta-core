@@ -23,7 +23,7 @@ from inmanta.export import dependency_manager
 @resources.resource("exp::Test", agent="agent", id_attribute="test")
 class Test(resources.ManagedResource):
     """
-        This class represents a service on a system.
+    This class represents a service on a system.
     """
 
     fields = ("name", "agent", "field1")
@@ -36,7 +36,7 @@ class Test(resources.ManagedResource):
 @resources.resource("exp::Test2", agent="agent", id_attribute="name")
 class Test2(resources.PurgeableResource):
     """
-        This class represents a service on a system.
+    This class represents a service on a system.
     """
 
     fields = ("name", "agent", "mydict", "mylist")
@@ -57,7 +57,9 @@ class WrappedProxyTest(resources.ManagedResource):
         return {
             "my_list": obj.my_list,
             "my_dict": obj.my_dict,
-            "deep_dict": {"multi_level": obj.my_dict,},
+            "deep_dict": {
+                "multi_level": obj.my_dict,
+            },
         }
 
 

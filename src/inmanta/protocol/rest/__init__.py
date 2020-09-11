@@ -49,7 +49,7 @@ def authorize_request(
     auth_data: Optional[MutableMapping[str, str]], metadata: Dict[str, str], message: JsonType, config: common.UrlMethod
 ) -> None:
     """
-        Authorize a request based on the given data
+    Authorize a request based on the given data
     """
     if auth_data is None:
         return
@@ -79,16 +79,16 @@ def authorize_request(
 
 class CallArguments(object):
     """
-        This class represents the call arguments for a method call.
+    This class represents the call arguments for a method call.
     """
 
     def __init__(
         self, properties: common.MethodProperties, message: Dict[str, Optional[Any]], request_headers: Mapping[str, str]
     ) -> None:
         """
-            :param method_config: The method configuration that contains the metadata and functions to call
-            :param message: The message recieved by the RPC call
-            :param request_headers: The headers received by the RPC call
+        :param method_config: The method configuration that contains the metadata and functions to call
+        :param message: The message recieved by the RPC call
+        :param request_headers: The headers received by the RPC call
         """
         self._properties = properties
         self._message = message
@@ -148,7 +148,7 @@ class CallArguments(object):
 
     def get_default_value(self, arg_name: str, arg_position: int, default_start: int) -> Optional[Any]:
         """
-            Get a default value for an argument
+        Get a default value for an argument
         """
         if default_start >= 0 and 0 <= (arg_position - default_start) < len(self._argspec.defaults):
             return self._argspec.defaults[arg_position - default_start]
@@ -157,7 +157,7 @@ class CallArguments(object):
 
     async def _run_getters(self, arg: str, value: Optional[Any]) -> Optional[Any]:
         """
-            Run ant available getters on value
+        Run ant available getters on value
         """
         if arg not in self._properties.arg_options or self._properties.arg_options[arg].getter is None:
             return value
@@ -171,7 +171,7 @@ class CallArguments(object):
 
     async def process(self) -> None:
         """
-            Process the message
+        Process the message
         """
         args: List[str] = list(self._argspec.args)
 
@@ -219,8 +219,8 @@ class CallArguments(object):
         self._processed = True
 
     def _validate_union_return(self, arg_type: Type, value: Any) -> None:
-        """ Validate a return with a union type
-            :see: protocol.common.MethodProperties._validate_function_types
+        """Validate a return with a union type
+        :see: protocol.common.MethodProperties._validate_function_types
         """
         matching_type = None
         for t in typing_inspect.get_args(arg_type, evaluate=True):
@@ -245,9 +245,9 @@ class CallArguments(object):
             self._validate_generic_return(arg_type, matching_type)
 
     def _validate_generic_return(self, arg_type: Type, value: Any) -> None:
-        """ Validate List or Dict types.
+        """Validate List or Dict types.
 
-            :note: we return any here because the calling function also returns any.
+        :note: we return any here because the calling function also returns any.
         """
         if issubclass(typing_inspect.get_origin(arg_type), list):
             if not isinstance(value, list):
@@ -289,9 +289,9 @@ class CallArguments(object):
             )
 
     async def process_return(self, config: common.UrlMethod, result: Apireturn) -> common.Response:
-        """ A handler can return ApiReturn, so lets handle all possible return types and convert it to a Response
+        """A handler can return ApiReturn, so lets handle all possible return types and convert it to a Response
 
-            Apireturn = Union[int, Tuple[int, Optional[JsonType]], "ReturnValue", "BaseModel"]
+        Apireturn = Union[int, Tuple[int, Optional[JsonType]], "ReturnValue", "BaseModel"]
         """
         if "return" in self._argspec.annotations:  # new style with return type
             return_type = self._argspec.annotations["return"]
@@ -375,7 +375,7 @@ class CallArguments(object):
 # Shared
 class RESTBase(util.TaskHandler):
     """
-        Base class for REST based client and servers
+    Base class for REST based client and servers
     """
 
     _id: str
@@ -386,7 +386,7 @@ class RESTBase(util.TaskHandler):
 
     def _decode(self, body: bytes) -> Optional[JsonType]:
         """
-            Decode a response body
+        Decode a response body
         """
         result = None
         if body is not None and len(body) > 0:

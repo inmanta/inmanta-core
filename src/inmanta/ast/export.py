@@ -34,8 +34,8 @@ class Exportable:
 
 class Position(BaseModel):
     """
-        Position in a file. Based on the
-        `LSP spec 3.15 <https://microsoft.github.io/language-server-protocol/specifications/specification-3-15/#position>`__
+    Position in a file. Based on the
+    `LSP spec 3.15 <https://microsoft.github.io/language-server-protocol/specifications/specification-3-15/#position>`__
     """
 
     line: int
@@ -44,8 +44,8 @@ class Position(BaseModel):
 
 class Range(BaseModel):
     """
-        Range in a file. Based on the
-        `LSP spec 3.15 <https://microsoft.github.io/language-server-protocol/specifications/specification-3-15/#range>`__
+    Range in a file. Based on the
+    `LSP spec 3.15 <https://microsoft.github.io/language-server-protocol/specifications/specification-3-15/#range>`__
     """
 
     start: Position
@@ -54,8 +54,8 @@ class Range(BaseModel):
 
 class Location(BaseModel):
     """
-        Location in a file. Based on the
-        `LSP spec 3.15 <https://microsoft.github.io/language-server-protocol/specifications/specification-3-15/#location>`__
+    Location in a file. Based on the
+    `LSP spec 3.15 <https://microsoft.github.io/language-server-protocol/specifications/specification-3-15/#location>`__
     """
 
     uri: str
@@ -64,7 +64,7 @@ class Location(BaseModel):
 
 class ErrorCategory(str, Enum):
     """
-        Category of an error.
+    Category of an error.
     """
 
     plugin = "plugin_exception"
@@ -85,7 +85,7 @@ class ErrorCategory(str, Enum):
 
 class Error(BaseModel):
     """
-        Error occurred while trying to compile.
+    Error occurred while trying to compile.
     """
 
     category: ErrorCategory = ErrorCategory.runtime

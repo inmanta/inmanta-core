@@ -39,7 +39,7 @@ cfg_env = config.Option("deploy", "environment", "deploy", "The environment name
 
 class FinishedException(Exception):
     """
-        This exception is raised when the deploy is ready
+    This exception is raised when the deploy is ready
     """
 
 
@@ -63,8 +63,7 @@ class Deploy(object):
         loud_logger.propagate = False
 
     def _check_result(self, result: protocol.Result, fatal: bool = True) -> protocol.Result:
-        """ Check the result of a call protocol call. If the result is not 200, issue an error
-        """
+        """Check the result of a call protocol call. If the result is not 200, issue an error"""
         if result.code != 200:
             msg = f"Server request failed with code {result.code} and result {result.result}"
             LOGGER.error(msg)
@@ -211,7 +210,7 @@ port=%(server_port)s
 
     def setup_project(self) -> bool:
         """
-            Set up the configured project and environment on the embedded server
+        Set up the configured project and environment on the embedded server
         """
         self._client = protocol.SyncClient("client")
 
@@ -286,7 +285,7 @@ port=%(server_port)s
 
     def setup(self) -> bool:
         """
-            Run inmanta locally
+        Run inmanta locally
         """
         # create local storage
         project = module.Project.get()
@@ -310,7 +309,7 @@ port=%(server_port)s
 
     def export(self) -> bool:
         """
-            Export a version to the embedded server
+        Export a version to the embedded server
         """
         inmanta_path = [sys.executable, "-m", "inmanta.app"]
 

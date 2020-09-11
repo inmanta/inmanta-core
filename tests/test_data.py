@@ -542,7 +542,7 @@ async def test_agent(init_dataclasses_and_load_schema):
 @pytest.mark.asyncio
 async def test_pause_agent_endpoint_set(environment):
     """
-        Test the pause() method in the Agent class
+    Test the pause() method in the Agent class
     """
     env_id = uuid.UUID(environment)
     agent_name = "test"
@@ -1646,8 +1646,8 @@ async def test_resources_report(init_dataclasses_and_load_schema):
 @pytest.mark.asyncio
 async def test_resource_action(init_dataclasses_and_load_schema):
     """
-        Test whether the save() method of a ResourceAction writes its changes, logs and fields
-        correctly to the database.
+    Test whether the save() method of a ResourceAction writes its changes, logs and fields
+    correctly to the database.
     """
     project = data.Project(name="test")
     await project.insert()
@@ -2258,7 +2258,7 @@ async def test_resources_json(init_dataclasses_and_load_schema):
 @pytest.mark.asyncio
 async def test_update_to_none_value(init_dataclasses_and_load_schema):
     """
-        Verify that a field with a default value can be set to None if that field is nullable.
+    Verify that a field with a default value can be set to None if that field is nullable.
     """
     project = data.Project(name="test")
     await project.insert()
@@ -2481,8 +2481,8 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
 @pytest.mark.asyncio
 async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and_load_schema):
     """
-        Test querying resource actions that have non unique timestamps, with pagination, using an explicit start and end time
-        as well as limit.
+    Test querying resource actions that have non unique timestamps, with pagination, using an explicit start and end time
+    as well as limit.
     """
     project = data.Project(name="test")
     await project.insert()
@@ -2495,7 +2495,13 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     await cm.insert()
     # Add multiple versions of model
     for i in range(0, 11):
-        cm = data.ConfigurationModel(environment=env.id, version=i, date=datetime.datetime.now(), total=1, version_info={},)
+        cm = data.ConfigurationModel(
+            environment=env.id,
+            version=i,
+            date=datetime.datetime.now(),
+            total=1,
+            version_info={},
+        )
         await cm.insert()
 
     # Add resource actions for motd

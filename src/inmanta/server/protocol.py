@@ -56,8 +56,8 @@ class SliceStartupException(ServerStartFailure):
 
 class ReturnClient(Client):
     """
-        A client that uses a return channel to connect to its destination. This client is used by the server to communicate
-        back to clients over the heartbeat channel.
+    A client that uses a return channel to connect to its destination. This client is used by the server to communicate
+    back to clients over the heartbeat channel.
     """
 
     def __init__(self, name: str, session: "Session") -> None:
@@ -92,7 +92,7 @@ class Server(endpoints.Endpoint):
 
     def add_slice(self, slice: "ServerSlice") -> None:
         """
-            Add new endpoints to this rest transport
+        Add new endpoints to this rest transport
         """
         self._slices[slice.name] = slice
         self._slice_sequence = None
@@ -105,7 +105,7 @@ class Server(endpoints.Endpoint):
 
     def get_id(self) -> str:
         """
-            Returns a unique id for a transport on an endpoint
+        Returns a unique id for a transport on an endpoint
         """
         return "server_rest_transport"
 
@@ -141,11 +141,11 @@ class Server(endpoints.Endpoint):
 
     async def start(self) -> None:
         """
-            Start the transport.
+        Start the transport.
 
-            The order in which the different endpoints are prestarted/started, is determined by the
-            order in which they are added to the RESTserver via the add_endpoint(endpoint) method.
-            This order is hardcoded in the get_server_slices() method in server/bootloader.py
+        The order in which the different endpoints are prestarted/started, is determined by the
+        order in which they are added to the RESTserver via the add_endpoint(endpoint) method.
+        This order is hardcoded in the get_server_slices() method in server/bootloader.py
         """
         if self.running:
             return
@@ -169,11 +169,11 @@ class Server(endpoints.Endpoint):
 
     async def stop(self) -> None:
         """
-            Stop the transport.
+        Stop the transport.
 
-            The order in which the endpoint are stopped, is reverse compared to the starting order.
-            This prevents database connection from being closed too early. This order in which the endpoint
-            are started, is hardcoded in the get_server_slices() method in server/bootloader.py
+        The order in which the endpoint are stopped, is reverse compared to the starting order.
+        This prevents database connection from being closed too early. This order in which the endpoint
+        are started, is hardcoded in the get_server_slices() method in server/bootloader.py
         """
         if not self.running:
             return
@@ -194,21 +194,21 @@ class Server(endpoints.Endpoint):
 
 class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
     """
-        Base class for server extensions offering zero or more api endpoints
+    Base class for server extensions offering zero or more api endpoints
 
-        Extensions developers should override the lifecycle methods:
+    Extensions developers should override the lifecycle methods:
 
-        * :func:`ServerSlice.prestart`
-        * :func:`ServerSlice.start`
-        * :func:`ServerSlice.prestop`
-        * :func:`ServerSlice.stop`
-        * :func:`ServerSlice.get_dependencies`
+    * :func:`ServerSlice.prestart`
+    * :func:`ServerSlice.start`
+    * :func:`ServerSlice.prestop`
+    * :func:`ServerSlice.stop`
+    * :func:`ServerSlice.get_dependencies`
 
-        To register endpoints that server static content, either use :func:'add_static_handler' or :func:'add_static_content'
-        To create endpoints, use the annotation based mechanism
+    To register endpoints that server static content, either use :func:'add_static_handler' or :func:'add_static_content'
+    To create endpoints, use the annotation based mechanism
 
-        To schedule recurring tasks, use :func:`schedule` or `self._sched`
-        To schedule background tasks, use :func:`add_background_task`
+    To schedule recurring tasks, use :func:`schedule` or `self._sched`
+    To schedule background tasks, use :func:`add_background_task`
     """
 
     feature_manager: FeatureManager
@@ -234,39 +234,39 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
     async def start(self) -> None:
         """
-            Start the server slice.
+        Start the server slice.
 
-            This method `blocks` until the slice is ready to receive calls
+        This method `blocks` until the slice is ready to receive calls
 
-            Dependencies are up (if present) prior to invocation of this call
+        Dependencies are up (if present) prior to invocation of this call
         """
         pass
 
     async def prestop(self) -> None:
         """
-            Always called before stop
+        Always called before stop
 
-            Stop producing new work:
-            - stop timers
-            - stop listeners
-            - notify shutdown to systems depending on us (like agents)
+        Stop producing new work:
+        - stop timers
+        - stop listeners
+        - notify shutdown to systems depending on us (like agents)
 
-            sets is_stopping to true
+        sets is_stopping to true
 
-            But remain functional
+        But remain functional
 
-            All dependencies are up (if present)
+        All dependencies are up (if present)
         """
         self._stopping = True
         self._sched.stop()
 
     async def stop(self) -> None:
         """
-            Go down
+        Go down
 
-            All dependencies are up (if present)
+        All dependencies are up (if present)
 
-            This method `blocks` until the slice is down
+        This method `blocks` until the slice is down
         """
         await super(ServerSlice, self).stop()
 
@@ -291,7 +291,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
     def add_static_handler(self, location: str, path: str, default_filename: Optional[str] = None, start: bool = False) -> None:
         """
-            Configure a static handler to serve data from the specified path.
+        Configure a static handler to serve data from the specified path.
         """
         if location[0] != "/":
             location = "/" + location
@@ -320,19 +320,18 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
     async def get_status(self) -> Dict[str, ArgumentTypes]:
         """
-            Get the status of this slice.
+        Get the status of this slice.
         """
         return {}
 
     def define_features(self) -> List[Feature]:
-        """ Return a list of feature that this slice offers
-        """
+        """Return a list of feature that this slice offers"""
         return []
 
 
 class Session(object):
     """
-        An environment that segments agents connected to the server
+    An environment that segments agents connected to the server
     """
 
     def __init__(
@@ -395,11 +394,11 @@ class Session(object):
         self.endpoint_names = endpoint_names
 
     async def _handle_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
-        """ A function that awaits a future until its value is ready or until timeout. When the call times out, a message is
-            logged. The future itself will be cancelled.
+        """A function that awaits a future until its value is ready or until timeout. When the call times out, a message is
+        logged. The future itself will be cancelled.
 
-            This method should be called as a background task. Any other exceptions (which should not occur) will be logged in
-            the background task.
+        This method should be called as a background task. Any other exceptions (which should not occur) will be logged in
+        the background task.
         """
         try:
             await asyncio.wait_for(future, timeout)
@@ -428,8 +427,8 @@ class Session(object):
 
     async def get_calls(self, no_hang: bool) -> Optional[List[common.Request]]:
         """
-            Get all calls queued for a node. If no work is available, wait until timeout. This method returns none if a call
-            fails.
+        Get all calls queued for a node. If no work is available, wait until timeout. This method returns none if a call
+        fails.
         """
         try:
             call_list: List[common.Request] = []
@@ -553,7 +552,7 @@ class TransportSlice(ServerSlice):
 
 class SessionManager(ServerSlice):
     """
-        A service that receives method calls over one or more transports
+    A service that receives method calls over one or more transports
     """
 
     __methods__: Dict[str, Tuple[str, Callable]] = {}

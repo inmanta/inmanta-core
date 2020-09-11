@@ -31,7 +31,7 @@ LOGGER = logging.getLogger(__name__)
 
 def find_executable(executable: str) -> Optional[str]:
     """
-        Scan PATH for an executable.
+    Scan PATH for an executable.
     """
     for path in os.environ.get("PATH", "").split(os.pathsep):
         path = os.path.abspath(path)
@@ -73,9 +73,9 @@ class PostgresProc(object):
 
     def start(self) -> bool:
         """
-            Start DB.
+        Start DB.
 
-            :return: `True` if instance has been started or `False` if it could not start.
+        :return: `True` if instance has been started or `False` if it could not start.
         """
         if self.running():
             return True

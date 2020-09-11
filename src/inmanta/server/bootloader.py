@@ -61,11 +61,11 @@ class ConstrainedApplicationContext(ApplicationContext):
 
 
 class InmantaBootloader(object):
-    """ The inmanta bootloader is responsible for:
-        - discovering extensions
-        - loading extensions
-        - loading core and extension slices
-        - starting the server and its slices in the correct order
+    """The inmanta bootloader is responsible for:
+    - discovering extensions
+    - loading extensions
+    - loading core and extension slices
+    - starting the server and its slices in the correct order
     """
 
     def __init__(self) -> None:
@@ -89,10 +89,10 @@ class InmantaBootloader(object):
 
     # Extension loading Phase I: from start to setup functions collected
     def _discover_plugin_packages(self) -> List[str]:
-        """ Discover all packages that are defined in the inmanta_ext namespace package. Filter available extensions based on
-            enabled_extensions and disabled_extensions config in the server configuration.
+        """Discover all packages that are defined in the inmanta_ext namespace package. Filter available extensions based on
+        enabled_extensions and disabled_extensions config in the server configuration.
 
-            :return: A list of all subpackages defined in inmanta_ext
+        :return: A list of all subpackages defined in inmanta_ext
         """
         inmanta_ext = importlib.import_module(EXTENSION_NAMESPACE)
         available = {name[len(EXTENSION_NAMESPACE) + 1 :]: name for finder, name, ispkg in iter_namespace(inmanta_ext)}
@@ -124,8 +124,8 @@ class InmantaBootloader(object):
         return extensions
 
     def _load_extension(self, name: str) -> Callable[[ApplicationContext], None]:
-        """ Import the extension defined in the package in name and return the setup function that needs to be called for the
-            extension to register its slices in the application context.
+        """Import the extension defined in the package in name and return the setup function that needs to be called for the
+        extension to register its slices in the application context.
         """
         try:
             importlib.import_module(name)
@@ -139,8 +139,7 @@ class InmantaBootloader(object):
             raise PluginLoadFailed(f"Could not load module {name}.{EXTENSION_MODULE}") from e
 
     def _load_extensions(self) -> Dict[str, Callable[[ApplicationContext], None]]:
-        """ Discover all extensions, validate correct naming and load its setup function
-        """
+        """Discover all extensions, validate correct naming and load its setup function"""
         plugins: Dict[str, Callable[[ApplicationContext], None]] = {}
         for name in self._discover_plugin_packages():
             try:
@@ -155,7 +154,7 @@ class InmantaBootloader(object):
     # Extension loading Phase II: collect slices
     def _collect_slices(self, extensions: Dict[str, Callable[[ApplicationContext], None]]) -> ApplicationContext:
         """
-            Call the setup function on all extensions and let them register their slices in the ApplicationContext.
+        Call the setup function on all extensions and let them register their slices in the ApplicationContext.
         """
         ctx = ApplicationContext()
         for name, setup in extensions.items():
@@ -165,7 +164,7 @@ class InmantaBootloader(object):
 
     def load_slices(self) -> ApplicationContext:
         """
-            Load all slices in the server
+        Load all slices in the server
         """
         exts = self._load_extensions()
         return self._collect_slices(exts)

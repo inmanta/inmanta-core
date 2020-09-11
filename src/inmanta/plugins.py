@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 
 class Context(object):
     """
-        An instance of this class is used to pass context to the plugin
+    An instance of this class is used to pass context to the plugin
     """
 
     __client: Optional[protocol.Client] = None
@@ -65,7 +65,7 @@ class Context(object):
 
     def emit_expression(self, stmt: "ExpressionStatement") -> None:
         """
-            Add a new statement
+        Add a new statement
         """
         self.owner.copy_location(stmt)
         stmt.normalize(self.resolver)
@@ -77,7 +77,7 @@ class Context(object):
 
     def get_type(self, name: LocatableString):
         """
-            Get a type from the configuration model.
+        Get a type from the configuration model.
         """
         try:
             return self.queue.get_types()[str(name)]
@@ -100,7 +100,7 @@ class Context(object):
 
     def get_data_dir(self) -> str:
         """
-            Get the path to the data dir (and create if it does not exist yet
+        Get the path to the data dir (and create if it does not exist yet
         """
         data_dir = os.path.join("data", self.plugin.namespace.get_full_name())
 
@@ -119,13 +119,13 @@ class Context(object):
 
     def run_sync(self, function: Callable[..., T], timeout: int = 5) -> T:
         """
-            Execute the async function and return its result. This method takes care of starting and stopping the ioloop. The
-            main use for this function is to use the inmanta internal rpc to communicate with the server.
+        Execute the async function and return its result. This method takes care of starting and stopping the ioloop. The
+        main use for this function is to use the inmanta internal rpc to communicate with the server.
 
-            :param function: The async function to execute. This function should return a yieldable object.
-            :param timeout: A timeout for the async function.
-            :return: The result of the async call.
-            :raises ConnectionRefusedError: When the function timeouts this exception is raised.
+        :param function: The async function to execute. This function should return a yieldable object.
+        :param timeout: A timeout for the async function.
+        :return: The result of the async call.
+        :raises ConnectionRefusedError: When the function timeouts this exception is raised.
         """
         from tornado.ioloop import IOLoop, TimeoutError
 
@@ -137,7 +137,7 @@ class Context(object):
 
 class PluginMeta(type):
     """
-        A metaclass that registers subclasses in the parent class.
+    A metaclass that registers subclasses in the parent class.
     """
 
     def __new__(cls, name, bases, dct):
@@ -151,7 +151,7 @@ class PluginMeta(type):
     @classmethod
     def add_function(cls, plugin_class):
         """
-            Add a function plugin class
+        Add a function plugin class
         """
         name = plugin_class.__function_name__
         ns_parts = str(plugin_class.__module__).split(".")
@@ -165,7 +165,7 @@ class PluginMeta(type):
     @classmethod
     def get_functions(cls) -> Dict[str, "Type[Plugin]"]:
         """
-            Get all functions that are registered
+        Get all functions that are registered
         """
         return cls.__functions
 
@@ -176,7 +176,7 @@ class PluginMeta(type):
 
 class Plugin(NamedType, metaclass=PluginMeta):
     """
-        This class models a plugin that can be called from the language.
+    This class models a plugin that can be called from the language.
     """
 
     def __init__(self, namespace: Namespace) -> None:
@@ -205,7 +205,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
     def _load_signature(self, function):
         """
-            Load the signature from the given python function
+        Load the signature from the given python function
         """
         arg_spec = inspect.getfullargspec(function)
         if arg_spec.defaults is not None:
@@ -238,13 +238,13 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
     def add_argument(self, arg_type, arg_type_name, arg_name, optional=False) -> None:
         """
-            Add an argument at the next position, of given type.
+        Add an argument at the next position, of given type.
         """
         self.arguments.append((arg_type, arg_type_name, arg_name, optional))
 
     def get_signature(self):
         """
-            Generate the signature of this plugin
+        Generate the signature of this plugin
         """
         arg_list = []
         for arg in self.arguments:
@@ -265,7 +265,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
     def to_type(self, arg_type: Optional[object], resolver) -> Optional[InmantaType.Type]:
         """
-            Convert a string representation of a type to a type
+        Convert a string representation of a type to a type
         """
         if arg_type is None:
             return None
@@ -307,7 +307,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
     def _is_instance(self, value: Any, arg_type: Type) -> bool:
         """
-            Check if value is of arg_type
+        Check if value is of arg_type
         """
         if arg_type is None:
             return True
@@ -319,7 +319,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
     def check_args(self, args: List[Any], kwargs: Dict[str, object]) -> bool:
         """
-            Check if the arguments of the call match the function signature
+        Check if the arguments of the call match the function signature
         """
         max_arg = len(self.arguments)
         required_args = [x[0] for x in self.arguments if len(x) == 2]
@@ -378,8 +378,8 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
     def emit_statement(self) -> "DynamicStatement":
         """
-            This method is called to determine if the plugin call pushes a new
-            statement
+        This method is called to determine if the plugin call pushes a new
+        statement
         """
         return self.new_statement
 
@@ -388,13 +388,13 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
     def get_variable(self, name, scope):
         """
-            Get the given variable
+        Get the given variable
         """
         return DynamicProxy.return_value(self._scope.get_variable(name, scope).value)
 
     def check_requirements(self) -> None:
         """
-            Check if the plug-in has all it requires
+        Check if the plug-in has all it requires
         """
         if "bin" in self.opts and self.opts["bin"] is not None:
             for _bin in self.opts["bin"]:
@@ -406,7 +406,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
     def __call__(self, *args, **kwargs):
         """
-            The function call itself
+        The function call itself
         """
         self.check_requirements()
 
@@ -457,7 +457,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
 class PluginException(Exception):
     """
-        Base class for custom exceptions raised from a plugin.
+    Base class for custom exceptions raised from a plugin.
     """
 
     def __init__(self, message: str) -> None:
@@ -468,29 +468,29 @@ def plugin(
     function: Callable = None, commands: List[str] = None, emits_statements: bool = False, allow_unknown: bool = False
 ) -> None:  # noqa: H801
     """
-        Python decorator to register functions with inmanta as plugin
+    Python decorator to register functions with inmanta as plugin
 
-        :param function: The function to register with inmanta. This is the first argument when it is used as decorator.
-        :param commands: A list of command paths that need to be available. Inmanta raises an exception when the command is
-                         not available.
-        :param emits_statements: Set to true if this plugin emits new statements that the compiler should execute. This is only
-                                 required for complex plugins such as integrating a template engine.
-        :param allow_unknown: Set to true if this plugin accepts Unknown values as valid input.
+    :param function: The function to register with inmanta. This is the first argument when it is used as decorator.
+    :param commands: A list of command paths that need to be available. Inmanta raises an exception when the command is
+                     not available.
+    :param emits_statements: Set to true if this plugin emits new statements that the compiler should execute. This is only
+                             required for complex plugins such as integrating a template engine.
+    :param allow_unknown: Set to true if this plugin accepts Unknown values as valid input.
     """
 
     def curry_name(name=None, commands=None, emits_statements=False, allow_unknown=False):
         """
-            Function to curry the name of the function
+        Function to curry the name of the function
         """
 
         def call(fnc):
             """
-                Create class to register the function and return the function itself
+            Create class to register the function and return the function itself
             """
 
             def wrapper(self, *args, **kwargs):
                 """
-                    Python will bind the function as method into the class
+                Python will bind the function as method into the class
                 """
                 return fnc(*args, **kwargs)
 
