@@ -45,12 +45,12 @@ class ChannelClosedException(Exception):
 
 class SshIO(local.IOBase):
     """
-        This class provides handler IO methods. This io method is used when the ssh scheme is provided in the agent uri.
+    This class provides handler IO methods. This io method is used when the ssh scheme is provided in the agent uri.
 
-        The uri supports setting the hostname, user and port. In the query string the following config can be provided:
-         * python: The python interpreter to use. The default value is python
-         * retries: The number of retries before giving up. The default number of retries 10
-         * retry_wait: The time to wait between retries for the remote target to become available. The default wait is 30s
+    The uri supports setting the hostname, user and port. In the query string the following config can be provided:
+     * python: The python interpreter to use. The default value is python
+     * retries: The number of retries before giving up. The default number of retries 10
+     * retry_wait: The time to wait between retries for the remote target to become available. The default wait is 30s
     """
 
     def is_remote(self) -> bool:
@@ -115,7 +115,7 @@ class SshIO(local.IOBase):
 
     def _build_connect_string(self) -> str:
         """
-            Build the connection string for execent based on the hostname
+        Build the connection string for execent based on the hostname
         """
         opts = "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PasswordAuthentication=no"
         opts += " -p %d" % self._port
@@ -159,7 +159,7 @@ class SshIO(local.IOBase):
 
     def __getattr__(self, name: str) -> Callable:
         """
-            Proxy a function call to the local version on the other side of the channel.
+        Proxy a function call to the local version on the other side of the channel.
         """
 
         def call(*args, **kwargs):

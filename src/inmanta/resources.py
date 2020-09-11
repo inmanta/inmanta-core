@@ -56,16 +56,16 @@ T = TypeVar("T", bound="Resource")
 
 class resource(object):  # noqa: N801
     """
-        A decorator that registers a new resource. The decorator must be applied to classes that inherit from
-        :class:`~inmanta.resources.Resource`
+    A decorator that registers a new resource. The decorator must be applied to classes that inherit from
+    :class:`~inmanta.resources.Resource`
 
-        :param name: The name of the entity in the configuration model it creates a resources from. For example
-                     :inmanta:entity:`std::File`
-        :param id_attribute: The attribute of `this` resource that uniquely identifies a resource on an agent. This attribute
-                             can be mapped.
-        :param agent: This string indicates how the agent of this resource is determined. This string points to an attribute,
-                      but it can navigate relations (this value cannot be mapped). For example, the agent argument could be
-                      ``host.name``
+    :param name: The name of the entity in the configuration model it creates a resources from. For example
+                 :inmanta:entity:`std::File`
+    :param id_attribute: The attribute of `this` resource that uniquely identifies a resource on an agent. This attribute
+                         can be mapped.
+    :param agent: This string indicates how the agent of this resource is determined. This string points to an attribute,
+                  but it can navigate relations (this value cannot be mapped). For example, the agent argument could be
+                  ``host.name``
     """
 
     _resources: Dict[str, Tuple[Type["Resource"], Dict[str, str]]] = {}
@@ -111,8 +111,7 @@ class resource(object):  # noqa: N801
 
     @classmethod
     def get_resources(cls) -> Iterator[Tuple[str, Type["Resource"]]]:
-        """ Return an iterator over resource type, resource definition
-        """
+        """Return an iterator over resource type, resource definition"""
         return (
             (resource_type, resource_definition) for resource_type, (resource_definition, _options) in cls._resources.items()
         )
@@ -120,26 +119,26 @@ class resource(object):  # noqa: N801
     @classmethod
     def reset(cls) -> None:
         """
-            Clear the list of registered resources
+        Clear the list of registered resources
         """
         cls._resources = {}
 
 
 class ResourceNotFoundExcpetion(Exception):
     """
-        This exception is thrown when a resource is not found
+    This exception is thrown when a resource is not found
     """
 
 
 class IgnoreResourceException(Exception):
     """
-        Throw this exception when a resource should not be included by the exported.
+    Throw this exception when a resource should not be included by the exported.
     """
 
 
 def to_id(entity: "proxy.DynamicProxy") -> Optional[str]:
     """
-        Convert an entity instance from the model to its resource id
+    Convert an entity instance from the model to its resource id
     """
     entity_name = str(entity._type())
     for cls_name in [entity_name] + entity._type().get_all_parent_names():
@@ -187,12 +186,12 @@ RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_
 
 class Resource(metaclass=ResourceMeta):
     """
-        Plugins should inherit resource from this class so a resource from a model can be serialized and deserialized.
+    Plugins should inherit resource from this class so a resource from a model can be serialized and deserialized.
 
-        Such as class is registered when the :func:`~inmanta.resources.resource` decorator is used. Each class needs to indicate
-        the fields the resource will have with a class field named "fields". A metaclass merges all fields lists from the class
-        itself and all superclasses. If a field it not available directly in the model object the serializer will look for
-        static methods in the class with the name "get_$fieldname".
+    Such as class is registered when the :func:`~inmanta.resources.resource` decorator is used. Each class needs to indicate
+    the fields the resource will have with a class field named "fields". A metaclass merges all fields lists from the class
+    itself and all superclasses. If a field it not available directly in the model object the serializer will look for
+    static methods in the class with the name "get_$fieldname".
     """
 
     fields: Sequence[str] = ("send_event",)
@@ -212,10 +211,10 @@ class Resource(metaclass=ResourceMeta):
         cls, resources: Dict["runtime.Instance", "Resource"], ignored_resources: Set["runtime.Instance"]
     ) -> None:
         """
-            Convert all requires
+        Convert all requires
 
-            :param resources: A dict with a mapping from model objects to resource objects
-            :param ignored_resources: A set of model objects that have been ignored (and not converted to resources)
+        :param resources: A dict with a mapping from model objects to resource objects
+        :param ignored_resources: A set of model objects that have been ignored (and not converted to resources)
         """
         for res in resources.values():
             final_requires: Set["Resource"] = set()
@@ -386,7 +385,7 @@ class Resource(metaclass=ResourceMeta):
 
     def set_version(self, version: int) -> None:
         """
-            Set the version of this resource
+        Set the version of this resource
         """
         self.version = version
         self.id.version = version
@@ -405,9 +404,9 @@ class Resource(metaclass=ResourceMeta):
 
     def clone(self, **kwargs: Any) -> "Resource":
         """
-            Create a clone of this resource. The given kwargs can be used to override attributes.
+        Create a clone of this resource. The given kwargs can be used to override attributes.
 
-            :return: The cloned resource
+        :return: The cloned resource
         """
         res = Resource.deserialize(self.serialize())
         for k, v in kwargs.items():
@@ -417,7 +416,7 @@ class Resource(metaclass=ResourceMeta):
 
     def serialize(self) -> JsonType:
         """
-            Serialize this resource to its dictionary representation
+        Serialize this resource to its dictionary representation
         """
         dictionary: Dict[str, Any] = {}
 
@@ -436,7 +435,7 @@ class Resource(metaclass=ResourceMeta):
 
 class PurgeableResource(Resource):
     """
-        See :inmanta:entity:`std::PurgeableResource` for more information.
+    See :inmanta:entity:`std::PurgeableResource` for more information.
     """
 
     fields = ("purged", "purge_on_delete")
@@ -446,7 +445,7 @@ class PurgeableResource(Resource):
 
 class ManagedResource(Resource):
     """
-        See :inmanta:entity:`std::ManagedResource` for more information.
+    See :inmanta:entity:`std::ManagedResource` for more information.
     """
 
     fields = ("managed",)
@@ -473,7 +472,7 @@ PARSE_RVID_REGEX = re.compile(
 
 class Id(object):
     """
-        A unique id that identifies a resource that is managed by an agent
+    A unique id that identifies a resource that is managed by an agent
     """
 
     def __init__(self, entity_type: str, agent_name: str, attribute: str, attribute_value: str, version: int = 0) -> None:
@@ -554,7 +553,7 @@ class Id(object):
 
     def get_instance(self) -> Optional[Resource]:
         """
-            Create an instance of this class and set the identifying attribute already
+        Create an instance of this class and set the identifying attribute already
         """
         cls, _ = resource.get_class(self.entity_type)
 
@@ -569,8 +568,8 @@ class Id(object):
     @classmethod
     def parse_id(cls, resource_id: Union[ResourceVersionIdStr, ResourceIdStr]) -> "Id":
         """
-            Parse the resource id and return the type, the hostname and the
-            resource identifier.
+        Parse the resource id and return the type, the hostname and the
+        resource identifier.
         """
         result = PARSE_ID_REGEX.search(resource_id)
 
@@ -597,7 +596,7 @@ class Id(object):
     @classmethod
     def is_resource_version_id(cls, value: str) -> bool:
         """
-            Check whether the given value is a resource version id
+        Check whether the given value is a resource version id
         """
         result = PARSE_RVID_REGEX.search(value)
         return result is not None
@@ -611,7 +610,7 @@ class Id(object):
 
 class HostNotFoundException(Exception):
     """
-        This exception is raise when the deployment agent cannot access a host to manage a resource (Use mainly with remote io)
+    This exception is raise when the deployment agent cannot access a host to manage a resource (Use mainly with remote io)
     """
 
     def __init__(self, hostname: str, user: str, error: str) -> None:

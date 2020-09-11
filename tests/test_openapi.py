@@ -68,36 +68,36 @@ def api_methods_fixture(clean_reset):
     @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=arg_options)
     def dummy_post_with_parameters(header: str, non_header: str, param: int, id: UUID) -> str:
         """
-            This is a brief description.
+        This is a brief description.
 
-            This is a more in depth description of the method.
+        This is a more in depth description of the method.
 
-            :param header: A header value.
-            :param non_header: Non header value via arg_options.
-            :param param: A parameter.
-            :param id: The id of the resource.
-            :return: A return value.
-            :raises OSError: Something went wrong
-            :raises NotFound: Resource was not found.
-            :raises test_openapi.DummyException: A dummy exception
+        :param header: A header value.
+        :param non_header: Non header value via arg_options.
+        :param param: A parameter.
+        :param id: The id of the resource.
+        :return: A return value.
+        :raises OSError: Something went wrong
+        :raises NotFound: Resource was not found.
+        :raises test_openapi.DummyException: A dummy exception
         """
         return ""
 
     @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=arg_options, operation="GET")
     def dummy_get_with_parameters(header: str, non_header: str, param: int, id: UUID) -> str:
         """
-            This is a brief description.
+        This is a brief description.
 
-            This is a more in depth description of the method.
+        This is a more in depth description of the method.
 
-            :param header: A header value.
-            :param non_header: Non header value via arg_options.
-            :param param: A parameter.
-            :param id: The id of the resource.
-            :return: A return value.
-            :raises OSError: Something went wrong
-            :raises NotFound: Resource was not found.
-            :raises test_openapi.DummyException: A dummy exception
+        :param header: A header value.
+        :param non_header: Non header value via arg_options.
+        :param param: A parameter.
+        :param id: The id of the resource.
+        :return: A return value.
+        :raises OSError: Something went wrong
+        :raises NotFound: Resource was not found.
+        :raises test_openapi.DummyException: A dummy exception
         """
         return ""
 
@@ -124,11 +124,11 @@ def api_methods_fixture(clean_reset):
         tid_doc: UUID, tid_no_doc: UUID, param_doc: int, param_no_doc: int, id_doc: UUID, id_no_doc: UUID
     ) -> str:
         """
-            This is a brief description.
+        This is a brief description.
 
-            :param tid_doc: The inmanta environment id.
-            :param param_doc: A parameter.
-            :param id_doc: The id of the resource.
+        :param tid_doc: The inmanta environment id.
+        :param param_doc: A parameter.
+        :param id_doc: The id of the resource.
         """
         return ""
 
@@ -143,11 +143,11 @@ def api_methods_fixture(clean_reset):
         tid_doc: UUID, tid_no_doc: UUID, param_doc: int, param_no_doc: int, id_doc: UUID, id_no_doc: UUID
     ) -> str:
         """
-            This is a brief description.
+        This is a brief description.
 
-            :param tid_doc: The inmanta environment id.
-            :param param_doc: A parameter.
-            :param id_doc: The id of the resource.
+        :param tid_doc: The inmanta environment id.
+        :param param_doc: A parameter.
+        :param id_doc: The id of the resource.
         """
         return ""
 
@@ -353,8 +353,8 @@ def test_openapi_types_env_setting():
 
 def test_post_operation(api_methods_fixture):
     """
-        Test whether an OpenAPI operation is constructed correctly for a
-        POST method which is fully annotated and documented.
+    Test whether an OpenAPI operation is constructed correctly for a
+    POST method which is fully annotated and documented.
     """
     short_description = "This is a brief description."
     long_description = "This is a more in depth description of the method."
@@ -369,7 +369,10 @@ def test_post_operation(api_methods_fixture):
     method_name = "dummy_post_with_parameters"
 
     post = UrlMethod(
-        properties=MethodProperties.methods["dummy_post_with_parameters"][0], slice=None, method_name=method_name, handler=None,
+        properties=MethodProperties.methods["dummy_post_with_parameters"][0],
+        slice=None,
+        method_name=method_name,
+        handler=None,
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
@@ -403,8 +406,8 @@ def test_post_operation(api_methods_fixture):
 
 def test_get_operation(api_methods_fixture):
     """
-        Test whether an OpenAPI operation is constructed correctly for a
-        GET method which is fully annotated and documented.
+    Test whether an OpenAPI operation is constructed correctly for a
+    GET method which is fully annotated and documented.
     """
     short_description = "This is a brief description."
     long_description = "This is a more in depth description of the method."
@@ -419,7 +422,10 @@ def test_get_operation(api_methods_fixture):
     method_name = "dummy_get_with_parameters"
 
     get = UrlMethod(
-        properties=MethodProperties.methods["dummy_get_with_parameters"][0], slice=None, method_name=method_name, handler=None,
+        properties=MethodProperties.methods["dummy_get_with_parameters"][0],
+        slice=None,
+        method_name=method_name,
+        handler=None,
     )
 
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
@@ -450,8 +456,8 @@ def test_get_operation(api_methods_fixture):
 
 def test_post_operation_no_docstring(api_methods_fixture):
     """
-        Test whether an OpenAPI operation is constructed correctly for a
-        POST method which doesn't have a docstring.
+    Test whether an OpenAPI operation is constructed correctly for a
+    POST method which doesn't have a docstring.
     """
     post = UrlMethod(
         properties=MethodProperties.methods["dummy_post_with_parameters_no_docstring"][0],
@@ -486,8 +492,8 @@ def test_post_operation_no_docstring(api_methods_fixture):
 
 def test_get_operation_no_docstring(api_methods_fixture):
     """
-        Test whether an OpenAPI operation is constructed correctly for a
-        GET method which doesn't have a docstring.
+    Test whether an OpenAPI operation is constructed correctly for a
+    GET method which doesn't have a docstring.
     """
     get = UrlMethod(
         properties=MethodProperties.methods["dummy_get_with_parameters_no_docstring"][0],
@@ -521,8 +527,8 @@ def test_get_operation_no_docstring(api_methods_fixture):
 
 def test_post_operation_partial_documentation(api_methods_fixture):
     """
-        Test whether an OpenAPI operation is constructed correctly for a
-        POST method which has missing entries in its docstring.
+    Test whether an OpenAPI operation is constructed correctly for a
+    POST method which has missing entries in its docstring.
     """
     short_description = "This is a brief description."
     tid_description = "The inmanta environment id."
@@ -564,8 +570,8 @@ def test_post_operation_partial_documentation(api_methods_fixture):
 
 def test_get_operation_partial_documentation(api_methods_fixture):
     """
-        Test whether an OpenAPI operation is constructed correctly for a
-        GET method which has missing entries in its docstring.
+    Test whether an OpenAPI operation is constructed correctly for a
+    GET method which has missing entries in its docstring.
     """
     short_description = "This is a brief description."
     tid_description = "The inmanta environment id."

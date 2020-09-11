@@ -26,8 +26,7 @@ from utils import LogSequence
 
 
 def test_basic_install(tmpdir):
-    """If this test fails, try running "pip uninstall lorem dummy-yummy iplib" before running it.
-    """
+    """If this test fails, try running "pip uninstall lorem dummy-yummy iplib" before running it."""
 
     env_dir1 = tmpdir.mkdir("env1").strpath
 

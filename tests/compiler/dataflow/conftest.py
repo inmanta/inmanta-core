@@ -51,7 +51,9 @@ def create_instance(
     if graph is None:
         return instance
     return graph.own_instance_node_for_responsible(
-        entity if entity is not None else Entity("DummyEntity", Namespace("dummy_namespace")), responsible, lambda: instance,
+        entity if entity is not None else Entity("DummyEntity", Namespace("dummy_namespace")),
+        responsible,
+        lambda: instance,
     )
 
 
@@ -68,7 +70,7 @@ def graph() -> Iterator[DataflowGraph]:
 
 def get_dataflow_node(graph: DataflowGraph, name: str) -> AssignableNodeReference:
     """
-        Returns a dataflow node for a graph by name. Name is allowed to have '.' for attribute nodes.
+    Returns a dataflow node for a graph by name. Name is allowed to have '.' for attribute nodes.
     """
     parts: List[str] = name.split(".")
     return reduce(lambda acc, part: AttributeNodeReference(acc, part), parts[1:], graph.resolver.get_dataflow_node(parts[0]))
@@ -230,32 +232,32 @@ class DataflowTestHelper:
 
     def verify_graphstring(self, graphstring: str) -> None:
         """
-            Verifies that the graphstring corresponds with the graph. Syntax for the graphstring:
-                graph_string: empty
-                    | graphstring_rule graph_string
-                    ;
-                graphstring_rule : lhs `->` rhs ;
-                lhs : var_name
-                    | instance_ref
-                    | instance_ref `.` attr_name
-                    ;
-                rhs : rhs_element
-                    | `[` rhs_list `]`
-                    ;
-                rhs_list : empty
-                    | rhs_element rhs_list
-                    ;
-                rhs_element : var_name
-                    | int
-                    | var_attr
-                    | `<instance>` instance_id
-                    ;
-                var_attr : var_name `.` attr_name`
-                    | var_name `.` var_attr
-                    ;
-            Where instance_id is a string that is bound when it occurs in the right. Once bound the same id can be used to refer
-            to it in later rules.
-            Spaces are required between all subsequent tokens.
+        Verifies that the graphstring corresponds with the graph. Syntax for the graphstring:
+            graph_string: empty
+                | graphstring_rule graph_string
+                ;
+            graphstring_rule : lhs `->` rhs ;
+            lhs : var_name
+                | instance_ref
+                | instance_ref `.` attr_name
+                ;
+            rhs : rhs_element
+                | `[` rhs_list `]`
+                ;
+            rhs_list : empty
+                | rhs_element rhs_list
+                ;
+            rhs_element : var_name
+                | int
+                | var_attr
+                | `<instance>` instance_id
+                ;
+            var_attr : var_name `.` attr_name`
+                | var_name `.` var_attr
+                ;
+        Where instance_id is a string that is bound when it occurs in the right. Once bound the same id can be used to refer
+        to it in later rules.
+        Spaces are required between all subsequent tokens.
         """
         self._tokens = graphstring.split()
         while len(self._tokens) > 0:
@@ -265,9 +267,9 @@ class DataflowTestHelper:
 
     def verify_leaves(self, leaves: Dict[str, Set[str]]) -> None:
         """
-            Verifies that the leaves correspond with the graph's leaves.
-            :param leaves: dict with variable names as keys and a set of leaves for each variable as values.
-                The variable and leaves are allowed to be attributes.
+        Verifies that the leaves correspond with the graph's leaves.
+        :param leaves: dict with variable names as keys and a set of leaves for each variable as values.
+            The variable and leaves are allowed to be attributes.
         """
         for key, value in leaves.items():
             lhs: AssignableNodeReference = get_dataflow_node(self.get_graph(), key)

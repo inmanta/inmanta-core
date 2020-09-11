@@ -40,7 +40,7 @@ LOGGER: logging.Logger = logging.getLogger(__name__)
 
 class CallTarget(object):
     """
-        A baseclass for all classes that are target for protocol calls / methods
+    A baseclass for all classes that are target for protocol calls / methods
     """
 
     def _get_endpoint_metadata(self) -> Dict[str, List[Tuple[str, Callable]]]:
@@ -59,7 +59,7 @@ class CallTarget(object):
 
     def get_op_mapping(self) -> Dict[str, Dict[str, UrlMethod]]:
         """
-            Build a mapping between urls, ops and methods
+        Build a mapping between urls, ops and methods
         """
         url_map: Dict[str, Dict[str, UrlMethod]] = defaultdict(dict)
 
@@ -88,7 +88,7 @@ class CallTarget(object):
 
 class Endpoint(TaskHandler):
     """
-        An end-point in the rpc framework
+    An end-point in the rpc framework
     """
 
     def __init__(self, name: str):
@@ -110,7 +110,7 @@ class Endpoint(TaskHandler):
 
     async def add_end_point_name(self, name: str) -> None:
         """
-            Add an additional name to this endpoint to which it reacts and sends out in heartbeats
+        Add an additional name to this endpoint to which it reacts and sends out in heartbeats
         """
         LOGGER.debug("Adding '%s' as endpoint", name)
         self._end_point_names.add(name)
@@ -121,7 +121,7 @@ class Endpoint(TaskHandler):
 
     def clear_end_points(self) -> None:
         """
-            Clear all endpoints
+        Clear all endpoints
         """
         self._end_point_names = set()
 
@@ -130,7 +130,7 @@ class Endpoint(TaskHandler):
 
     def _get_hostname(self) -> str:
         """
-            Determine the hostname of this machine
+        Determine the hostname of this machine
         """
         return socket.gethostname()
 
@@ -140,14 +140,13 @@ class Endpoint(TaskHandler):
     node_name = property(get_node_name)
 
     async def stop(self) -> None:
-        """ Stop this endpoint
-        """
+        """Stop this endpoint"""
         await super(Endpoint, self).stop()
 
 
 class SessionEndpoint(Endpoint, CallTarget):
     """
-        An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
+    An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
     """
 
     _client: "SessionClient"
@@ -174,7 +173,7 @@ class SessionEndpoint(Endpoint, CallTarget):
 
     def set_environment(self, environment_id: uuid.UUID) -> None:
         """
-            Set the environment of this agent
+        Set the environment of this agent
         """
         if isinstance(environment_id, str):
             self._env_id = uuid.UUID(environment_id)
@@ -183,13 +182,13 @@ class SessionEndpoint(Endpoint, CallTarget):
 
     async def start_connected(self):
         """
-            This method is called after starting the client transport, but before sending the first heartbeat.
+        This method is called after starting the client transport, but before sending the first heartbeat.
         """
         pass
 
     async def start(self) -> None:
         """
-            Connect to the server and use a heartbeat and long-poll for two-way communication
+        Connect to the server and use a heartbeat and long-poll for two-way communication
         """
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
@@ -216,7 +215,7 @@ class SessionEndpoint(Endpoint, CallTarget):
 
     async def perform_heartbeat(self) -> None:
         """
-            Start a continuous heartbeat call
+        Start a continuous heartbeat call
         """
         if self._client is None:
             raise Exception("AgentEndpoint not started")
@@ -324,7 +323,7 @@ class VersionMatch(str, Enum):
 
 class Client(Endpoint):
     """
-        A client that communicates with end-point based on its configuration
+    A client that communicates with end-point based on its configuration
     """
 
     def __init__(
@@ -347,7 +346,7 @@ class Client(Endpoint):
 
     async def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
         """
-            Execute a call and return the result
+        Execute a call and return the result
         """
         result = await self._transport_instance.call(method_properties, args, kwargs)
         return result
@@ -371,7 +370,7 @@ class Client(Endpoint):
 
     def __getattr__(self, name: str) -> Callable:
         """
-            Return a function that will call self._call with the correct method properties associated
+        Return a function that will call self._call with the correct method properties associated
         """
         method = self._select_method(name)
 
@@ -387,7 +386,7 @@ class Client(Endpoint):
 
 class SyncClient(object):
     """
-        A synchronous client that communicates with end-point based on its configuration
+    A synchronous client that communicates with end-point based on its configuration
     """
 
     def __init__(self, name: str, timeout: int = 120) -> None:
@@ -412,7 +411,7 @@ class SyncClient(object):
 
 class SessionClient(Client):
     """
-        A client that communicates with server endpoints over a session.
+    A client that communicates with server endpoints over a session.
     """
 
     def __init__(self, name: str, sid: uuid.UUID, timeout: int = 120) -> None:
@@ -421,7 +420,7 @@ class SessionClient(Client):
 
     async def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
         """
-            Execute the rpc call
+        Execute the rpc call
         """
         if "sid" not in kwargs:
             kwargs["sid"] = self._sid

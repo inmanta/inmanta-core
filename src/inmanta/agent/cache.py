@@ -74,14 +74,14 @@ class CacheVersionContext(contextlib.AbstractContextManager):
 
 class AgentCache(object):
     """
-        Caching system for the agent:
+    Caching system for the agent:
 
-        cache items can expire based on:
-        1. time
-        2. version
+    cache items can expire based on:
+    1. time
+    2. version
 
-        versions are opened and closed
-        when a version is closed as many times as it was opened, all cache items linked to this version are dropped
+    versions are opened and closed
+    when a version is closed as many times as it was opened, all cache items linked to this version are dropped
     """
 
     def __init__(self) -> None:
@@ -95,7 +95,7 @@ class AgentCache(object):
 
     def close(self) -> None:
         """
-            Cleanly terminate the cache
+        Cleanly terminate the cache
         """
         for version in list(self.counterforVersion.keys()):
             while self.is_open(version):
@@ -107,7 +107,7 @@ class AgentCache(object):
 
     def is_open(self, version: int) -> bool:
         """
-            Is the given version open in the cache?
+        Is the given version open in the cache?
         """
         return version in self.counterforVersion
 
@@ -116,9 +116,9 @@ class AgentCache(object):
 
     def open_version(self, version: int) -> None:
         """
-            Open the cache for the specific version
+        Open the cache for the specific version
 
-            :param version: the version id to open the cache for
+        :param version: the version id to open the cache for
         """
         if version in self.counterforVersion:
             self.counterforVersion[version] += 1
@@ -129,11 +129,11 @@ class AgentCache(object):
 
     def close_version(self, version: int) -> None:
         """
-            Close the cache for the specific version
+        Close the cache for the specific version
 
-            when a version is closed as many times as it was opened, all cache items linked to this version are dropped
+        when a version is closed as many times as it was opened, all cache items linked to this version are dropped
 
-            :param version: the version id to close the cache for
+        :param version: the version id to close the cache for
         """
         if version not in self.counterforVersion:
             raise Exception("Closed version that does not exist")
@@ -210,22 +210,22 @@ class AgentCache(object):
         call_on_delete: Optional[Callable[[Any], None]] = None,
     ) -> None:
         """
-            add a value to the cache with the given key
+        add a value to the cache with the given key
 
-            if a resource or version is given, these are prepended to the key and expiry is adapted accordingly
+        if a resource or version is given, these are prepended to the key and expiry is adapted accordingly
 
-            :param timeout: nr of second before this value is expired
-            :param call_on_delete: A callback function that is called when the value is removed from the cache.
+        :param timeout: nr of second before this value is expired
+        :param call_on_delete: A callback function that is called when the value is removed from the cache.
         """
         self._cache(CacheItem(self._get_key(key, resource, version), Scope(timeout, version), value, call_on_delete))
 
     def find(self, key: str, resource: Optional[Resource] = None, version: int = 0) -> Any:
         """
-            find a value in the cache with the given key
+        find a value in the cache with the given key
 
-            if a resource or version is given, these are prepended to the key
+        if a resource or version is given, these are prepended to the key
 
-            :raise KeyError: if the value is not found
+        :raise KeyError: if the value is not found
         """
         return self._get(self._get_key(key, resource, version)).value
 
@@ -241,17 +241,17 @@ class AgentCache(object):
         **kwargs,
     ):
         """
-            Attempt to find a value in the cache.
+        Attempt to find a value in the cache.
 
-            If it is not found, the function is called with kwargs as arguments, to produce the value.
-            The value is cached.
+        If it is not found, the function is called with kwargs as arguments, to produce the value.
+        The value is cached.
 
-            all kwargs are prepended to the key
+        all kwargs are prepended to the key
 
-            if a kwarg named version is found and forVersion is true, the value is cached only for that particular version
+        if a kwarg named version is found and forVersion is true, the value is cached only for that particular version
 
 
-            :param forVersion: whether to use the version attribute to attach this value to the resource
+        :param forVersion: whether to use the version attribute to attach this value to the resource
 
         """
         acceptable = {"resource"}

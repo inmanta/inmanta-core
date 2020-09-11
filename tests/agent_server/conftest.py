@@ -109,7 +109,7 @@ def resource_container():
     @resource("test::Resource", agent="agent", id_attribute="key")
     class MyResource(Resource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "purged")
@@ -117,7 +117,7 @@ def resource_container():
     @resource("test::Fact", agent="agent", id_attribute="key")
     class FactResource(Resource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "purged", "skip", "factvalue", "skipFact")
@@ -125,7 +125,7 @@ def resource_container():
     @resource("test::SetFact", agent="agent", id_attribute="key")
     class SetFactResource(PurgeableResource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "purged", "purge_on_delete")
@@ -133,7 +133,7 @@ def resource_container():
     @resource("test::Fail", agent="agent", id_attribute="key")
     class FailR(Resource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "purged")
@@ -141,7 +141,7 @@ def resource_container():
     @resource("test::Wait", agent="agent", id_attribute="key")
     class WaitR(Resource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "purged")
@@ -149,7 +149,7 @@ def resource_container():
     @resource("test::WaitEvent", agent="agent", id_attribute="key")
     class WaitER(Resource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "purged")
@@ -157,7 +157,7 @@ def resource_container():
     @resource("test::Noprov", agent="agent", id_attribute="key")
     class NoProv(Resource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "purged")
@@ -165,7 +165,7 @@ def resource_container():
     @resource("test::FailFast", agent="agent", id_attribute="key")
     class FailFastR(Resource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "purged")
@@ -173,7 +173,7 @@ def resource_container():
     @resource("test::BadEvents", agent="agent", id_attribute="key")
     class BadeEventR(Resource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "purged")
@@ -181,7 +181,7 @@ def resource_container():
     @resource("test::BadPost", agent="agent", id_attribute="key")
     class BadPostR(Resource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "purged")
@@ -421,7 +421,7 @@ def resource_container():
     @resource("test::AgentConfig", agent="agent", id_attribute="agentname")
     class AgentConfig(PurgeableResource):
         """
-            A resource that can modify the agentmap for autostarted agents
+        A resource that can modify the agentmap for autostarted agents
         """
 
         fields = ("agentname", "uri", "autostart")
@@ -504,7 +504,7 @@ def resource_container():
 
     async def wait_for_condition_with_waiters(wait_condition, timeout=10):
         """
-            Wait until wait_condition() returns false
+        Wait until wait_condition() returns false
         """
         now = time.time()
         while wait_condition():

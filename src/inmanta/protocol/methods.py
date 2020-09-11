@@ -44,7 +44,7 @@ async def add_env(env: uuid.UUID, metadata: dict) -> uuid.UUID:
 
 async def ignore_env(obj: Any, metadata: dict) -> Any:
     """
-        This mapper only adds an env all for authz
+    This mapper only adds an env all for authz
     """
     metadata[const.INMANTA_URN + "env"] = "all"
     return obj
@@ -58,38 +58,38 @@ AGENT_ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=
 @method(path="/project", operation="PUT", client_types=[const.ClientType.api])
 def create_project(name: str, project_id: uuid.UUID = None):
     """
-        Create a new project
+    Create a new project
 
-        :param name: The name of the project
-        :param project_id: A unique uuid, when it is not provided the server generates one
+    :param name: The name of the project
+    :param project_id: A unique uuid, when it is not provided the server generates one
     """
 
 
 @method(path="/project/<id>", operation="POST", client_types=[const.ClientType.api])
 def modify_project(id: uuid.UUID, name: str):
     """
-        Modify the given project
+    Modify the given project
     """
 
 
 @method(path="/project/<id>", operation="DELETE", client_types=[const.ClientType.api])
 def delete_project(id: uuid.UUID):
     """
-        Delete the given project and all related data
+    Delete the given project and all related data
     """
 
 
 @method(path="/project", operation="GET", client_types=[const.ClientType.api])
 def list_projects():
     """
-        Create a list of projects
+    Create a list of projects
     """
 
 
 @method(path="/project/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_project(id: uuid.UUID):
     """
-        Get a project and a list of the ids of all environments
+    Get a project and a list of the ids of all environments
     """
 
 
@@ -99,44 +99,44 @@ def create_environment(
     project_id: uuid.UUID, name: str, repository: str = None, branch: str = None, environment_id: uuid.UUID = None
 ):
     """
-        Create a new environment
+    Create a new environment
 
-        :param project_id: The id of the project this environment belongs to
-        :param name: The name of the environment
-        :param repository: The url (in git form) of the repository
-        :param branch: The name of the branch in the repository
-        :param environment_id: A unique environment id, if none an id is allocated by the server
+    :param project_id: The id of the project this environment belongs to
+    :param name: The name of the environment
+    :param repository: The url (in git form) of the repository
+    :param branch: The name of the branch in the repository
+    :param environment_id: A unique environment id, if none an id is allocated by the server
     """
 
 
 @method(path="/environment/<id>", operation="POST", client_types=[const.ClientType.api])
 def modify_environment(id: uuid.UUID, name: str, repository: str = None, branch: str = None):
     """
-        Modify the given environment
+    Modify the given environment
 
-        :param id: The id of the environment
-        :param name: The name of the environment
-        :param repository: The url (in git form) of the repository
-        :param branch: The name of the branch in the repository
+    :param id: The id of the environment
+    :param name: The name of the environment
+    :param repository: The url (in git form) of the repository
+    :param branch: The name of the branch in the repository
     """
 
 
 @method(path="/environment/<id>", operation="DELETE", client_types=[const.ClientType.api])
 def delete_environment(id: uuid.UUID):
     """
-        Delete the given environment and all related data.
+    Delete the given environment and all related data.
 
-        :param id: The uuid of the environment.
+    :param id: The uuid of the environment.
 
-        :raises NotFound: The given environment doesn't exist.
-        :raises Forbidden: The given environment is protected.
+    :raises NotFound: The given environment doesn't exist.
+    :raises Forbidden: The given environment is protected.
     """
 
 
 @method(path="/environment", operation="GET", client_types=[const.ClientType.api])
 def list_environments():
     """
-        Create a list of environments
+    Create a list of environments
     """
 
 
@@ -148,11 +148,11 @@ def list_environments():
 )
 def get_environment(id: uuid.UUID, versions: int = None, resources: int = None):
     """
-        Get an environment and all versions associated
+    Get an environment and all versions associated
 
-        :param id: The id of the environment to return
-        :param versions: Include this many available version for this environment.
-        :param resources: Include this many available resources for this environment.
+    :param id: The id of the environment to return
+    :param versions: Include this many available version for this environment.
+    :param resources: Include this many available resources for this environment.
     """
 
 
@@ -170,7 +170,7 @@ def get_environment(id: uuid.UUID, versions: int = None, resources: int = None):
 )
 def list_settings(tid: uuid.UUID):
     """
-        List the settings in the current environment
+    List the settings in the current environment
     """
 
 
@@ -184,7 +184,7 @@ def list_settings(tid: uuid.UUID):
 )
 def set_setting(tid: uuid.UUID, id: str, value: Union[PrimitiveTypes, JsonType]):
     """
-        Set a value
+    Set a value
     """
 
 
@@ -198,7 +198,7 @@ def set_setting(tid: uuid.UUID, id: str, value: Union[PrimitiveTypes, JsonType])
 )
 def get_setting(tid: uuid.UUID, id: str):
     """
-        Get a value
+    Get a value
     """
 
 
@@ -212,7 +212,7 @@ def get_setting(tid: uuid.UUID, id: str):
 )
 def delete_setting(tid: uuid.UUID, id: str):
     """
-        Delete a value
+    Delete a value
     """
 
 
@@ -227,13 +227,13 @@ def delete_setting(tid: uuid.UUID, id: str):
 )
 def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
     """
-        Create or get a new token for the given client types. Tokens generated with this call are scoped to the current
-        environment.
+    Create or get a new token for the given client types. Tokens generated with this call are scoped to the current
+    environment.
 
-        :param tid: The environment id
-        :param client_types: The client types for which this token is valid (api, agent, compiler)
-        :param idempotent: The token should be idempotent, such tokens do not have an expire or issued at set so their
-                           value will not change.
+    :param tid: The environment id
+    :param client_types: The client types for which this token is valid (api, agent, compiler)
+    :param idempotent: The token should be idempotent, such tokens do not have an expire or issued at set so their
+                       value will not change.
     """
 
 
@@ -249,8 +249,8 @@ def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
 )
 def decomission_environment(id: uuid.UUID, metadata: dict = None):
     """
-        Decommision an environment. This is done by uploading an empty model to the server and let purge_on_delete handle
-        removal.
+    Decommision an environment. This is done by uploading an empty model to the server and let purge_on_delete handle
+    removal.
     """
 
 
@@ -262,12 +262,12 @@ def decomission_environment(id: uuid.UUID, metadata: dict = None):
 )
 def clear_environment(id: uuid.UUID):
     """
-        Clear all data from this environment.
+    Clear all data from this environment.
 
-        :param id: The uuid of the environment.
+    :param id: The uuid of the environment.
 
-        :raises NotFound: The given environment doesn't exist.
-        :raises Forbidden: The given environment is protected.
+    :raises NotFound: The given environment doesn't exist.
+    :raises Forbidden: The given environment is protected.
     """
 
 
@@ -282,15 +282,15 @@ def clear_environment(id: uuid.UUID):
 )
 def heartbeat(sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: str, no_hang: bool = False):
     """
-        Send a heartbeat to the server
+    Send a heartbeat to the server
 
-        :paran sid: The session ID used by this agent at this moment
-        :param tid: The environment this node and its agents belongs to
-        :param endpoint_names: The names of the endpoints on this node
-        :param nodename: The name of the node from which the heart beat comes
-        :param no_hang: don't use this call for long polling, but for connectivity check
+    :paran sid: The session ID used by this agent at this moment
+    :param tid: The environment this node and its agents belongs to
+    :param endpoint_names: The names of the endpoints on this node
+    :param nodename: The name of the node from which the heart beat comes
+    :param no_hang: don't use this call for long polling, but for connectivity check
 
-        also registered as API method, because it is called with an invalid SID the first time
+    also registered as API method, because it is called with an invalid SID the first time
     """
 
 
@@ -303,11 +303,11 @@ def heartbeat(sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: st
 )
 def heartbeat_reply(sid: uuid.UUID, reply_id: uuid.UUID, data: dict):
     """
-        Send a reply back to the server
+    Send a reply back to the server
 
-        :param sid: The session ID used by this agent at this moment
-        :param reply_id: The id data is a reply to
-        :param data: The data as a response to the reply
+    :param sid: The session ID used by this agent at this moment
+    :param reply_id: The id data is a reply to
+    :param data: The data as a response to the reply
     """
 
 
@@ -324,10 +324,10 @@ def heartbeat_reply(sid: uuid.UUID, reply_id: uuid.UUID, data: dict):
 )
 def upload_file(id: str, content: str):
     """
-        Upload a new file
+    Upload a new file
 
-        :param id: The id of the file
-        :param content: The base64 encoded content of the file
+    :param id: The id of the file
+    :param content: The base64 encoded content of the file
     """
 
 
@@ -341,9 +341,9 @@ def upload_file(id: str, content: str):
 )
 def stat_file(id: str):
     """
-        Does the file exist
+    Does the file exist
 
-        :param id: The id of the file to check
+    :param id: The id of the file to check
     """
 
 
@@ -357,9 +357,9 @@ def stat_file(id: str):
 )
 def get_file(id: str):
     """
-        Retrieve a file
+    Retrieve a file
 
-        :param id: The id of the file to retrieve
+    :param id: The id of the file to retrieve
     """
 
 
@@ -371,10 +371,10 @@ def get_file(id: str):
 )
 def stat_files(files: list):
     """
-        Check which files exist in the given list
+    Check which files exist in the given list
 
-        :param files: A list of file id to check
-        :return: A list of files that do not exist.
+    :param files: A list of file id to check
+    :return: A list of files that do not exist.
     """
 
 
@@ -394,15 +394,15 @@ def get_resource(
     tid: uuid.UUID, id: str, logs: bool = None, status: bool = None, log_action: const.ResourceAction = None, log_limit: int = 0
 ):
     """
-        Return a resource with the given id.
+    Return a resource with the given id.
 
-        :param tid: The id of the environment this resource belongs to
-        :param id: Get the resource with the given id
-        :param logs: Include the logs in the response
-        :param status: Only return the status of the resource
-        :param log_action: The log action to include, leave empty/none for all actions. Valid actions are one of
-                          the action strings in const.ResourceAction
-        :param log_limit: Limit the number of logs included in the response
+    :param tid: The id of the environment this resource belongs to
+    :param id: Get the resource with the given id
+    :param logs: Include the logs in the response
+    :param status: Only return the status of the resource
+    :param log_action: The log action to include, leave empty/none for all actions. Valid actions are one of
+                      the action strings in const.ResourceAction
+    :param log_limit: Limit the number of logs included in the response
     """
 
 
@@ -411,15 +411,15 @@ def get_resources_for_agent(
     tid: uuid.UUID, agent: str, sid: uuid.UUID = None, version: int = None, incremental_deploy: bool = False
 ):
     """
-        Return the most recent state for the resources associated with agent, or the version requested
+    Return the most recent state for the resources associated with agent, or the version requested
 
-        :param tid: The id of the environment this resource belongs to
-        :param agent: The agent
-        :param sid: Session id of the agent (transparently added by agent client)
-        :param version: The version to retrieve. If none, the latest available version is returned. With a specific version
-                        that version is returned, even if it has not been released yet.
-        :param incremental_deploy: Indicates whether the server should only return the resources that changed since the
-                                   previous deployment.
+    :param tid: The id of the environment this resource belongs to
+    :param agent: The agent
+    :param sid: Session id of the agent (transparently added by agent client)
+    :param version: The version to retrieve. If none, the latest available version is returned. With a specific version
+                    that version is returned, even if it has not been released yet.
+    :param incremental_deploy: Indicates whether the server should only return the resources that changed since the
+                               previous deployment.
     """
 
 
@@ -438,22 +438,22 @@ def resource_action_update(
     send_events: bool = False,
 ):
     """
-        Send a resource update to the server
+    Send a resource update to the server
 
-        :param tid: The id of the environment this resource belongs to
-        :param resource_ids: The resource with the given resource_version_id id from the agent
-        :param action_id: A unique id to indicate the resource action that has be updated
-        :param action: The action performed
-        :param started: The timestamp when this action was started. When this action (action_id) has not been saved yet,
-                        started has to be defined.
-        :param finished: The timestamp when this action was finished. Afterwards, no changes with the same action_id
-                        can be stored. The status field also has to be set.
-        :param status: The current status of the resource (if known)
-        :param messages: A list of log entries to add to this entry.
-        :param change:s A dict of changes to this resource. The key of this dict indicates the attributes/fields that
-                       have been changed. The value contains the new value and/or the original value.
-        :param change: The result of the changes
-        :param send_events: Send events to the dependents of this resource
+    :param tid: The id of the environment this resource belongs to
+    :param resource_ids: The resource with the given resource_version_id id from the agent
+    :param action_id: A unique id to indicate the resource action that has be updated
+    :param action: The action performed
+    :param started: The timestamp when this action was started. When this action (action_id) has not been saved yet,
+                    started has to be defined.
+    :param finished: The timestamp when this action was finished. Afterwards, no changes with the same action_id
+                    can be stored. The status field also has to be set.
+    :param status: The current status of the resource (if known)
+    :param messages: A list of log entries to add to this entry.
+    :param change:s A dict of changes to this resource. The key of this dict indicates the attributes/fields that
+                   have been changed. The value contains the new value and/or the original value.
+    :param change: The result of the changes
+    :param send_events: Send events to the dependents of this resource
     """
 
 
@@ -463,34 +463,34 @@ def resource_action_update(
 @method(path="/version", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def list_versions(tid: uuid.UUID, start: int = None, limit: int = None):
     """
-        Returns a list of all available versions
+    Returns a list of all available versions
 
-        :param tid: The id of the environment
-        :param start: Optional, parameter to control the amount of results that are returned. 0 is the latest version.
-        :param limit: Optional, parameter to control the amount of results returned.
+    :param tid: The id of the environment
+    :param start: Optional, parameter to control the amount of results that are returned. 0 is the latest version.
+    :param limit: Optional, parameter to control the amount of results returned.
     """
 
 
 @method(path="/version/<id>", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def get_version(tid: uuid.UUID, id: int, include_logs: bool = None, log_filter: str = None, limit: int = None):
     """
-        Get a particular version and a list of all resources in this version
+    Get a particular version and a list of all resources in this version
 
-        :param tid: The id of the environment
-        :param id: The id of the version to retrieve
-        :param include_logs: If true, a log of all operations on all resources is included
-        :param log_filter: Filter log to only include actions of the specified type
-        :param limit: The maximal number of actions to return per resource (starting from the latest)
+    :param tid: The id of the environment
+    :param id: The id of the version to retrieve
+    :param include_logs: If true, a log of all operations on all resources is included
+    :param log_filter: Filter log to only include actions of the specified type
+    :param limit: The maximal number of actions to return per resource (starting from the latest)
     """
 
 
 @method(path="/version/<id>", operation="DELETE", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def delete_version(tid: uuid.UUID, id: int):
     """
-        Delete a particular version and resources
+    Delete a particular version and resources
 
-        :param tid: The id of the environment
-        :param id: The id of the version to retrieve
+    :param tid: The id of the environment
+    :param id: The id of the version to retrieve
     """
 
 
@@ -505,17 +505,17 @@ def put_version(
     compiler_version: str = None,
 ):
     """
-        Store a new version of the configuration model
+    Store a new version of the configuration model
 
-        The version number must be obtained through the reserve_version call
+    The version number must be obtained through the reserve_version call
 
-        :param tid: The id of the environment
-        :param version: The version of the configuration model
-        :param resources: A list of all resources in the configuration model (deployable)
-        :param resource_state: A dictionary with the initial const.ResourceState per resource id
-        :param unknowns: A list of unknown parameters that caused the model to be incomplete
-        :param version_info: Module version information
-        :param compiler_version: version of the compiler, if not provided, this call will return an error
+    :param tid: The id of the environment
+    :param version: The version of the configuration model
+    :param resources: A list of all resources in the configuration model (deployable)
+    :param resource_state: A dictionary with the initial const.ResourceState per resource id
+    :param unknowns: A list of unknown parameters that caused the model to be incomplete
+    :param version_info: Module version information
+    :param compiler_version: version of the compiler, if not provided, this call will return an error
     """
 
 
@@ -524,13 +524,13 @@ def put_version(
 )
 def release_version(tid: uuid.UUID, id: int, push: bool = False, agent_trigger_method: const.AgentTriggerMethod = None):
     """
-        Release version of the configuration model for deployment.
+    Release version of the configuration model for deployment.
 
-        :param tid: The id of the environment
-        :param id: The version of the CM to deploy
-        :param push: Notify all agents to deploy the version
-        :param agent_trigger_method: Indicates whether the agents should perform a full or an incremental deploy when
-                                    push is true.
+    :param tid: The id of the environment
+    :param id: The version of the CM to deploy
+    :param push: Notify all agents to deploy the version
+    :param agent_trigger_method: Indicates whether the agents should perform a full or an incremental deploy when
+                                push is true.
     """
 
 
@@ -541,11 +541,11 @@ def deploy(
     agents: list = None,
 ):
     """
-        Notify agents to perform a deploy now.
+    Notify agents to perform a deploy now.
 
-        :param tid: The id of the environment.
-        :param agent_trigger_method: Indicates whether the agents should perform a full or an incremental deploy.
-        :param agents: Optional, names of specific agents to trigger
+    :param tid: The id of the environment.
+    :param agent_trigger_method: Indicates whether the agents should perform a full or an incremental deploy.
+    :param agents: Optional, names of specific agents to trigger
     """
 
 
@@ -555,42 +555,42 @@ def deploy(
 @method(path="/dryrun/<id>", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def dryrun_request(tid: uuid.UUID, id: int):
     """
-        Do a dryrun
+    Do a dryrun
 
-        :param tid: The id of the environment
-        :param id: The version of the CM to deploy
+    :param tid: The id of the environment
+    :param id: The version of the CM to deploy
     """
 
 
 @method(path="/dryrun", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def dryrun_list(tid: uuid.UUID, version: int = None):
     """
-        Create a list of dry runs
+    Create a list of dry runs
 
-        :param tid: The id of the environment
-        :param version: Only for this version
+    :param tid: The id of the environment
+    :param version: Only for this version
     """
 
 
 @method(path="/dryrun/<id>", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def dryrun_report(tid: uuid.UUID, id: uuid.UUID):
     """
-        Create a dryrun report
+    Create a dryrun report
 
-        :param tid: The id of the environment
-        :param id: The version dryrun to report
+    :param tid: The id of the environment
+    :param id: The version dryrun to report
     """
 
 
 @method(path="/dryrun/<id>", operation="PUT", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
 def dryrun_update(tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
     """
-        Store dryrun results at the server
+    Store dryrun results at the server
 
-        :param tid: The id of the environment
-        :param id: The version dryrun to report
-        :param resource: The id of the resource
-        :param changes: The required changes
+    :param tid: The id of the environment
+    :param id: The version dryrun to report
+    :param resource: The id of the resource
+    :param changes: The required changes
     """
 
 
@@ -600,13 +600,13 @@ def dryrun_update(tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
 @method(path="/agent_dryrun/<id>", operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[])
 def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
     """
-        Do a dryrun on an agent
+    Do a dryrun on an agent
 
-        :param tid: The environment id
-        :param id: The id of the dryrun
-        :param agent: The agent to do the dryrun for
-        :param version: The version of the model to dryrun
-        """
+    :param tid: The environment id
+    :param id: The id of the dryrun
+    :param agent: The agent to do the dryrun for
+    :param version: The version of the model to dryrun
+    """
 
 
 # Method to notify the server of changes in the configuration model source code
@@ -620,7 +620,7 @@ def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
 )
 def notify_change_get(id: uuid.UUID, update: bool = True):
     """
-        Simplified GET version of the POST method
+    Simplified GET version of the POST method
     """
 
 
@@ -632,20 +632,20 @@ def notify_change_get(id: uuid.UUID, update: bool = True):
 )
 def notify_change(id: uuid.UUID, update: bool = True, metadata: dict = {}):
     """
-        Notify the server that the repository of the environment with the given id, has changed.
+    Notify the server that the repository of the environment with the given id, has changed.
 
-        :param id: The id of the environment
-        :param update: Update the model code and modules. Default value is true
-        :param metadata: The metadata that indicates the source of the compilation trigger.
+    :param id: The id of the environment
+    :param update: Update the model code and modules. Default value is true
+    :param metadata: The metadata that indicates the source of the compilation trigger.
     """
 
 
 @method(path="/notify/<id>", operation="HEAD", client_types=[const.ClientType.api])
 def is_compiling(id: uuid.UUID):
     """
-       Is a compiler running for the given environment
+    Is a compiler running for the given environment
 
-       :param id: The environment id
+    :param id: The environment id
     """
 
 
@@ -660,17 +660,17 @@ def is_compiling(id: uuid.UUID):
 )
 def get_param(tid: uuid.UUID, id: str, resource_id: str = None):
     """
-        Get a parameter from the server.
+    Get a parameter from the server.
 
-        :param tid: The id of the environment
-        :param id: The name of the parameter
-        :param resource_id: Optionally, scope the parameter to resource (fact),
-                            if the resource id should not contain a version, the latest version is used
-        :return: Returns the following status codes:
-                200: The parameter content is returned
-                404: The parameter is not found and unable to find it because its resource is not known to the server
-                410: The parameter has expired
-                503: The parameter is not found but its value is requested from an agent
+    :param tid: The id of the environment
+    :param id: The name of the parameter
+    :param resource_id: Optionally, scope the parameter to resource (fact),
+                        if the resource id should not contain a version, the latest version is used
+    :return: Returns the following status codes:
+            200: The parameter content is returned
+            404: The parameter is not found and unable to find it because its resource is not known to the server
+            410: The parameter has expired
+            503: The parameter is not found but its value is requested from an agent
     """
 
 
@@ -690,16 +690,16 @@ def set_param(
     recompile: bool = False,
 ):
     """
-        Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
-        Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
+    Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
+    Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
 
-        :param tid: The id of the environment
-        :param id: The name of the parameter
-        :param resource_id: Optionally, scope the parameter to resource (fact)
-        :param source: The source of the parameter.
-        :param value: The value of the parameter
-        :param metadata: metadata about the parameter
-        :param recompile: Whether to trigger a recompile
+    :param tid: The id of the environment
+    :param id: The name of the parameter
+    :param resource_id: Optionally, scope the parameter to resource (fact)
+    :param source: The source of the parameter.
+    :param value: The value of the parameter
+    :param metadata: metadata about the parameter
+    :param recompile: Whether to trigger a recompile
     """
 
 
@@ -711,11 +711,11 @@ def set_param(
 )
 def delete_param(tid: uuid.UUID, id: str, resource_id: str = None):
     """
-        Delete a parameter on the server
+    Delete a parameter on the server
 
-        :param tid: The id of the environment
-        :param id: The name of the parameter
-        :param resource_id: The resource id of the parameter
+    :param tid: The id of the environment
+    :param id: The name of the parameter
+    :param resource_id: The resource id of the parameter
     """
 
 
@@ -724,10 +724,10 @@ def delete_param(tid: uuid.UUID, id: str, resource_id: str = None):
 )
 def list_params(tid: uuid.UUID, query: dict = {}):
     """
-        List/query parameters in this environment
+    List/query parameters in this environment
 
-        :param tid: The id of the environment
-        :param query: A query to match against metadata
+    :param tid: The id of the environment
+    :param query: A query to match against metadata
     """
 
 
@@ -743,15 +743,15 @@ def list_params(tid: uuid.UUID, query: dict = {}):
 )
 def set_parameters(tid: uuid.UUID, parameters: list):
     """
-        Set a parameter on the server
+    Set a parameter on the server
 
-        :param tid: The id of the environment
-        :param parameters: A list of dicts with the following keys:
-            - id The name of the parameter
-            - source The source of the parameter. Valid values are defined in the ParameterSource enum (see: inmanta/const.py)
-            - value The value of the parameter
-            - resource_id Optionally, scope the parameter to resource (fact)
-            - metadata metadata about the parameter
+    :param tid: The id of the environment
+    :param parameters: A list of dicts with the following keys:
+        - id The name of the parameter
+        - source The source of the parameter. Valid values are defined in the ParameterSource enum (see: inmanta/const.py)
+        - value The value of the parameter
+        - resource_id Optionally, scope the parameter to resource (fact)
+        - metadata metadata about the parameter
     """
 
 
@@ -761,11 +761,11 @@ def set_parameters(tid: uuid.UUID, parameters: list):
 @method(path="/agent_parameter", operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[])
 def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
     """
-        Get all parameters/facts known by the agents for the given resource
+    Get all parameters/facts known by the agents for the given resource
 
-        :param tid: The environment
-        :param agent: The agent to get the parameters from
-        :param resource: The resource to query the parameters from
+    :param tid: The environment
+    :param agent: The agent to get the parameters from
+    :param resource: The resource to query the parameters from
     """
 
 
@@ -775,22 +775,22 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
 @method(path="/code/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
 def upload_code(tid: uuid.UUID, id: int, resource: str, sources: dict):
     """
-        Upload the supporting code to the server
+    Upload the supporting code to the server
 
-        :param tid: The environment the code belongs to
-        :param id: The id (version) of the configuration model
-        :param sources: The source files that contain handlers and inmanta plug-ins
-            {code_hash:(file_name, provider.__module__, source_code, [req])}
+    :param tid: The environment the code belongs to
+    :param id: The id (version) of the configuration model
+    :param sources: The source files that contain handlers and inmanta plug-ins
+        {code_hash:(file_name, provider.__module__, source_code, [req])}
     """
 
 
 @method(path="/code/<id>", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
 def get_code(tid: uuid.UUID, id: int, resource: str):
     """
-        Get the code for a given version of the configuration model
+    Get the code for a given version of the configuration model
 
-        :param tid: The environment the code belongs to
-        :param id: The id (version) of the configuration model
+    :param tid: The environment the code belongs to
+    :param id: The id (version) of the configuration model
     """
 
 
@@ -800,11 +800,11 @@ def get_code(tid: uuid.UUID, id: int, resource: str):
 @method(path="/codebatched/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
 def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
     """
-        Upload the supporting code to the server
+    Upload the supporting code to the server
 
-        :param tid: The environment the code belongs to
-        :param id: The id (version) of the configuration model
-        :param resource: a dict mapping resources to dicts mapping file names to file hashes
+    :param tid: The environment the code belongs to
+    :param id: The id (version) of the configuration model
+    :param resource: a dict mapping resources to dicts mapping file names to file hashes
     """
 
 
@@ -814,7 +814,7 @@ def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
 @method(path="/filediff", client_types=[const.ClientType.api])
 def diff(a: str, b: str):
     """
-        Returns the diff of the files with the two given ids
+    Returns the diff of the files with the two given ids
     """
 
 
@@ -824,21 +824,21 @@ def diff(a: str, b: str):
 @method(path="/compilereport", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def get_reports(tid: uuid.UUID, start: str = None, end: str = None, limit: int = None):
     """
-        Return compile reports newer then start
+    Return compile reports newer then start
 
-        :param tid: The id of the environment to get a report from
-        :param start: Reports after start
-        :param end: Reports before end
-        :param limit: Maximum number of results
+    :param tid: The id of the environment to get a report from
+    :param start: Reports after start
+    :param end: Reports before end
+    :param limit: Maximum number of results
     """
 
 
 @method(path="/compilereport/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_report(id: uuid.UUID):
     """
-        Get a compile report from the server
+    Get a compile report from the server
 
-        :param compile_id: The id of the compile and its reports to fetch.
+    :param compile_id: The id of the compile and its reports to fetch.
     """
 
 
@@ -848,21 +848,21 @@ def get_report(id: uuid.UUID):
 @method(path="/agentproc", operation="GET", client_types=[const.ClientType.api])
 def list_agent_processes(environment: uuid.UUID = None, expired: bool = True):
     """
-        Return a list of all nodes and the agents for these nodes
+    Return a list of all nodes and the agents for these nodes
 
-        :param environment: An optional environment. If set, only the agents that belong to this environment are returned
-        :param all: Optional, also show expired.
-        :return: A list of nodes
+    :param environment: An optional environment. If set, only the agents that belong to this environment are returned
+    :param all: Optional, also show expired.
+    :return: A list of nodes
     """
 
 
 @method(path="/agentproc/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_agent_process(id: uuid.UUID):
     """
-        Return a detailed report for a node
+    Return a detailed report for a node
 
-        :param agent_sid: The session id of the agent
-        :return: The requested node
+    :param agent_sid: The session id of the agent
+    :return: The requested node
     """
 
 
@@ -870,20 +870,20 @@ def get_agent_process(id: uuid.UUID):
 @method(path="/agent/<id>", operation="POST", api=True, timeout=5, arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def trigger_agent(tid: uuid.UUID, id: str):
     """
-        Request the server to reload an agent
+    Request the server to reload an agent
 
-        :param tid: The environment this agent is defined in
-        :param id: The name of the agent
-        :return: The requested node
+    :param tid: The environment this agent is defined in
+    :param id: The name of the agent
+    :return: The requested node
     """
 
 
 @method(path="/agent", operation="GET", api=True, timeout=5, arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def list_agents(tid: uuid.UUID):
     """
-        List all agent for an environment
+    List all agent for an environment
 
-        :param tid: The environment the agents are defined in
+    :param tid: The environment the agents are defined in
     """
 
 
@@ -893,9 +893,9 @@ def list_agents(tid: uuid.UUID):
 @method(path="/status", operation="GET", server_agent=True, timeout=5, client_types=[])
 def get_status():
     """
-        A call from the server to the agent to report its status to the server
+    A call from the server to the agent to report its status to the server
 
-        :return: A map with report items
+    :return: A map with report items
     """
 
 
@@ -905,18 +905,18 @@ def get_status():
 @method(path="/agentstate", operation="POST", server_agent=True, timeout=5, client_types=[])
 def set_state(agent: str, enabled: bool):
     """
-        Set the state of the agent.
+    Set the state of the agent.
     """
 
 
 @method(path="/agentstate/<id>", operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[])
 def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
     """
-        Request an agent to reload resources
+    Request an agent to reload resources
 
-        :param tid: The environment this agent is defined in
-        :param id: The name of the agent
-        :param incremental_deploy: Indicates whether the agent should perform an incremental deploy or a full deploy
+    :param tid: The environment this agent is defined in
+    :param id: The name of the agent
+    :param incremental_deploy: Indicates whether the agent should perform an incremental deploy or a full deploy
     """
 
 
@@ -928,15 +928,15 @@ def resource_event(
     tid: uuid.UUID, id: str, resource: str, send_events: bool, state: const.ResourceState, change: const.Change, changes={}
 ):
     """
-        Tell an agent a resource it waits for has been updated
+    Tell an agent a resource it waits for has been updated
 
-        :param tid: The environment this agent is defined in
-        :param id: The name of the agent
-        :param resource: The resource ID of the resource being updated
-        :param send_events: Does the resource have send_events enabled?
-        :param state: State the resource acquired (deployed, skipped, canceled)
-        :param change: The change that was made to the resource
-        :param changes: The changes made to the resource
+    :param tid: The environment this agent is defined in
+    :param id: The name of the agent
+    :param resource: The resource ID of the resource being updated
+    :param send_events: Does the resource have send_events enabled?
+    :param state: State the resource acquired (deployed, skipped, canceled)
+    :param change: The change that was made to the resource
+    :param changes: The changes made to the resource
     """
 
 
@@ -946,19 +946,19 @@ def resource_event(
 @method(path="/agentrecovery", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
 def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
     """
-        Get the state for this agent.
+    Get the state for this agent.
 
-        returns a map
-        {
-         enabled: bool
-        }
+    returns a map
+    {
+     enabled: bool
+    }
     """
 
 
 @typedmethod(path="/serverstatus", operation="GET", client_types=[const.ClientType.api])
 def get_server_status() -> model.StatusResponse:
     """
-        Get the status of the server
+    Get the status of the server
     """
 
 
@@ -972,5 +972,5 @@ def get_server_status() -> model.StatusResponse:
 )
 def get_compile_queue(tid: uuid.UUID) -> List[model.CompileRun]:
     """
-        Get the current compiler queue on the server
+    Get the current compiler queue on the server
     """

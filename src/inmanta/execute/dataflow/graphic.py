@@ -44,23 +44,23 @@ except ModuleNotFoundError:
 
 class GraphicRenderer:
     """
-        Renders the DataflowGraph as a graphic graph. This graphic representation does not show all
-        information because that would make it too congested. It shows nodes and assignments but not
-        responsibles or dynamic context. An assignment where the right hand side is an attribute
-        x.y.z is shown as an edge to z with the label ".y.z".
+    Renders the DataflowGraph as a graphic graph. This graphic representation does not show all
+    information because that would make it too congested. It shows nodes and assignments but not
+    responsibles or dynamic context. An assignment where the right hand side is an attribute
+    x.y.z is shown as an edge to z with the label ".y.z".
     """
 
     @classmethod
     def view(cls, variables: Iterable[ResultVariable], instances: Iterable[Instance]) -> None:
         """
-            Renders and visualizes supplied variables and instances and the paths originating in them.
+        Renders and visualizes supplied variables and instances and the paths originating in them.
         """
         cls.render(variables, instances).view()
 
     @classmethod
     def render(cls, variables: Iterable[ResultVariable], instances: Iterable[Instance]) -> "GraphicGraph":
         """
-            Renders supplied variables and instances and the paths originating in them.
+        Renders supplied variables and instances and the paths originating in them.
         """
         graphic: GraphicGraph = GraphicGraph()
         for instance in instances:
@@ -74,7 +74,7 @@ class GraphicRenderer:
 
 class GraphicGraph:
     """
-        Graphic representation of a data flow graph. Stateful. Methods add_node and add_assignments have side effects.
+    Graphic representation of a data flow graph. Stateful. Methods add_node and add_assignments have side effects.
     """
 
     def __init__(self) -> None:
@@ -94,8 +94,8 @@ class GraphicGraph:
 
     def node_key(self, node: Node) -> str:
         """
-            Returns a unique key for a node.
-            node == other => node_key(node) == node_key(other)
+        Returns a unique key for a node.
+        node == other => node_key(node) == node_key(other)
         """
         key: str = str(hash(node))
         if isinstance(node, InstanceNode):
@@ -105,7 +105,7 @@ class GraphicGraph:
 
     def add_node(self, node: Node) -> None:
         """
-            Adds the node if it has not been added yet, recursing along dependencies (assignments, attributes, ...)
+        Adds the node if it has not been added yet, recursing along dependencies (assignments, attributes, ...)
         """
         if node in self._nodes:
             return
@@ -147,12 +147,12 @@ class GraphicGraph:
 
     def add_assignments(self, assignments: Iterable[Assignment]) -> None:
         """
-            Adds the assignments if they have not been added yet, recursing on the rhs' assignments.
+        Adds the assignments if they have not been added yet, recursing on the rhs' assignments.
         """
 
         def unroll_attribute_reference(attr: AttributeNodeReference) -> Iterator[AttributeNodeReference]:
             """
-                Unrolls a chain of attribute references. Returns the chain of references where a parent comes after its child.
+            Unrolls a chain of attribute references. Returns the chain of references where a parent comes after its child.
             """
             yield attr
             if isinstance(attr.instance_var_ref, AttributeNodeReference):

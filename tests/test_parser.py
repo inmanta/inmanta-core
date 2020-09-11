@@ -66,8 +66,7 @@ def test_define_empty():
 
 
 def test_define_entity():
-    """Test the definition of entities
-    """
+    """Test the definition of entities"""
     statements = parse_code(
         """
 entity Test:
@@ -123,8 +122,7 @@ end"""
 
 
 def test_extend_entity():
-    """Test extending entities
-    """
+    """Test extending entities"""
     statements = parse_code(
         """
 entity Test extends Foo:
@@ -139,8 +137,7 @@ end
 
 
 def test_complex_entity():
-    """Test definition of a complex entity
-    """
+    """Test definition of a complex entity"""
     documentation = "This entity has documentation"
     statements = parse_code(
         """
@@ -179,8 +176,7 @@ end
 
 
 def test_relation():
-    """Test definition of relations
-    """
+    """Test definition of relations"""
     statements = parse_code(
         """
 Test tests [0:] -- [5:10] Foo bars
@@ -204,8 +200,7 @@ Test tests [0:] -- [5:10] Foo bars
 
 
 def test_relation_2():
-    """Test definition of relations
-    """
+    """Test definition of relations"""
     statements = parse_code(
         """
 Test tests [3] -- [:10] Foo bars
@@ -229,8 +224,7 @@ Test tests [3] -- [:10] Foo bars
 
 
 def test_new_relation():
-    """Test definition of relations
-    """
+    """Test definition of relations"""
     statements = parse_code(
         """
 Test.bar [1] -- Foo.tests [5:10]
@@ -254,8 +248,7 @@ Test.bar [1] -- Foo.tests [5:10]
 
 
 def test_new_relation_with_annotations():
-    """Test definition of relations
-    """
+    """Test definition of relations"""
     statements = parse_code(
         """
 Test.bar [1] foo,bar Foo.tests [5:10]
@@ -282,8 +275,7 @@ Test.bar [1] foo,bar Foo.tests [5:10]
 
 
 def test_new_relation_unidir():
-    """Test definition of relations
-    """
+    """Test definition of relations"""
     statements = parse_code(
         """
 Test.bar [1] -- Foo
@@ -307,8 +299,7 @@ Test.bar [1] -- Foo
 
 
 def test_new_relation_with_annotations_unidir():
-    """Test definition of relations
-    """
+    """Test definition of relations"""
     statements = parse_code(
         """
 Test.bar [1] foo,bar Foo
@@ -335,8 +326,7 @@ Test.bar [1] foo,bar Foo
 
 
 def test_implementation():
-    """Test the definition of implementations
-    """
+    """Test the definition of implementations"""
     statements = parse_code(
         """
 implementation test for Test:
@@ -363,8 +353,7 @@ end
 
 
 def test_implementation_with_for():
-    """Test the propagation of type requires when using a for
-    """
+    """Test the propagation of type requires when using a for"""
     statements = parse_code(
         """
 implementation test for Test:
@@ -381,8 +370,7 @@ end
 
 
 def test_implements():
-    """Test implements with no selector
-    """
+    """Test implements with no selector"""
     statements = parse_code(
         """
 implement Test using test
@@ -398,8 +386,7 @@ implement Test using test
 
 
 def test_implements_2():
-    """Test implements with selector
-    """
+    """Test implements with selector"""
     statements = parse_code(
         """
 implement Test using test, blah when (self > 5)
@@ -451,8 +438,7 @@ implement Test using %s
 
 
 def test_implements_selector():
-    """Test implements with selector
-    """
+    """Test implements with selector"""
     statements = parse_code(
         """
 implement Test using test when not (fg(self) and false)
@@ -1407,8 +1393,7 @@ z.a+=b
 
 
 def test_mapref():
-    """Test extending entities
-    """
+    """Test extending entities"""
     statements = parse_code(
         """
 a = b.c["test"]
@@ -1427,8 +1412,7 @@ a = b.c["test"]
 
 
 def test_mapref_2():
-    """Test extending entities
-    """
+    """Test extending entities"""
     statements = parse_code(
         """
 a = c["test"]
@@ -1446,8 +1430,7 @@ a = c["test"]
 
 
 def test_map_multi_ref():
-    """Test extending entities
-    """
+    """Test extending entities"""
     statements = parse_code(
         """
 a = c["test"]["xx"]
@@ -1468,8 +1451,7 @@ a = c["test"]["xx"]
 
 
 def test_if_statement():
-    """Test for the if statement
-    """
+    """Test for the if statement"""
     statements = parse_code(
         """
 if test.field == "value":
@@ -1488,8 +1470,7 @@ end
 
 
 def test_if_else():
-    """Test for the if statement with an else clause
-    """
+    """Test for the if statement with an else clause"""
     statements = parse_code(
         """
 if test.field == "value":
@@ -1510,8 +1491,7 @@ end
 
 
 def test_bool_str():
-    """Test to string of bool literal renders inmanta true/false and not python
-    """
+    """Test to string of bool literal renders inmanta true/false and not python"""
     statements = parse_code(
         """
 val1 = true

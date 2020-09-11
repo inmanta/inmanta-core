@@ -46,7 +46,7 @@ LOGGER = logging.getLogger(__name__)
 
 class VirtualEnv(object):
     """
-        Creates and uses a virtual environment for this process
+    Creates and uses a virtual environment for this process
     """
 
     _egg_fragment_re = re.compile(r"#egg=(?P<name>[^&]*)")
@@ -68,7 +68,7 @@ class VirtualEnv(object):
 
     def init_env(self) -> bool:
         """
-            Init the virtual environment
+        Init the virtual environment
         """
         self._parent_python = sys.executable
 
@@ -106,7 +106,7 @@ class VirtualEnv(object):
 
     def use_virtual_env(self) -> None:
         """
-            Use the virtual environment
+        Use the virtual environment
         """
         if not self.init_env():
             raise Exception("Unable to init virtual environment")
@@ -149,7 +149,7 @@ class VirtualEnv(object):
 
     def _parse_line(self, req_line: str) -> Tuple[Optional[str], str]:
         """
-            Parse the requirement line
+        Parse the requirement line
         """
         at = VirtualEnv._at_fragment_re.search(req_line)
         if at is not None:
@@ -214,7 +214,7 @@ class VirtualEnv(object):
 
     def _install(self, requirements_list: List[str]) -> None:
         """
-            Install requirements in the given requirements file
+        Install requirements in the given requirements file
         """
         requirements_file = self._gen_requirements_file(requirements_list)
 
@@ -247,7 +247,7 @@ class VirtualEnv(object):
 
     def _read_current_requirements_hash(self) -> str:
         """
-            Return the hash of the requirements file used to install the current environment
+        Return the hash of the requirements file used to install the current environment
         """
         path = os.path.join(self.env_path, "requirements.sha1sum")
         if not os.path.exists(path):
@@ -258,7 +258,7 @@ class VirtualEnv(object):
 
     def _set_current_requirements_hash(self, new_hash):
         """
-            Set the current requirements hahs
+        Set the current requirements hahs
         """
         path = os.path.join(self.env_path, "requirements.sha1sum")
         with open(path, "w+", encoding="utf-8") as fd:
@@ -266,7 +266,7 @@ class VirtualEnv(object):
 
     def install_from_list(self, requirements_list: List[str], detailed_cache: bool = False, cache: bool = True) -> None:
         """
-            Install requirements from a list of requirement strings
+        Install requirements from a list of requirement strings
         """
         if detailed_cache:
             requirements_list = sorted(list(set(requirements_list) - self.__cache_done))

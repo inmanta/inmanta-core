@@ -29,7 +29,7 @@ from inmanta import protocol
 
 def test_jwt_create(inmanta_config):
     """
-        Test creating, signing and verifying JWT with HS256 from the configuration
+    Test creating, signing and verifying JWT with HS256 from the configuration
     """
     jot = protocol.encode_token(["api"])
     payload = protocol.decode_token(jot)
@@ -84,7 +84,7 @@ async def jwks(unused_tcp_port):
 @pytest.mark.asyncio(timeout=30)
 async def test_validate_rs256(jwks, tmp_path):
     """
-        Test that inmanta can download a rs256 public key
+    Test that inmanta can download a rs256 public key
     """
     port = str(list(jwks._sockets.values())[0].getsockname()[1])
     config_file = os.path.join(tmp_path, "auth.cfg")

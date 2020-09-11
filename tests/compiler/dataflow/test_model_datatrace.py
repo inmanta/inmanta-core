@@ -313,13 +313,13 @@ def test_dataflow_trace(
     exception: Optional[Type[CompilerException]],
 ) -> None:
     """
-        Tests the data trace output.
+    Tests the data trace output.
 
-        :param description: Description for this test.
-        :param model: The model to compile.
-        :param trace: The expected trace.
-        :param trace_root: The root variable for the trace. No attribute lookup allowed.
-        :param exception: The type of an expected compiler exception.
+    :param description: Description for this test.
+    :param model: The model to compile.
+    :param trace: The expected trace.
+    :param trace_root: The root variable for the trace. No attribute lookup allowed.
+    :param exception: The type of an expected compiler exception.
     """
     dataflow_test_helper.compile(model, exception)
     root = dataflow_test_helper.get_graph().resolver.get_dataflow_node(trace_root)

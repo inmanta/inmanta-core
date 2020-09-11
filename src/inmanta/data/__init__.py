@@ -109,11 +109,11 @@ class Field(object):
 
 class DataDocument(object):
     """
-        A baseclass for objects that represent data in inmanta. The main purpose of this baseclass is to group dict creation
-        logic. These documents are not stored in the database
-        (use BaseDocument for this purpose). It provides a to_dict method that the inmanta rpc can serialize. You can store
-        DataDocument childeren in BaseDocument fields, they will be serialized to dict. However, on retrieval this is not
-        performed.
+    A baseclass for objects that represent data in inmanta. The main purpose of this baseclass is to group dict creation
+    logic. These documents are not stored in the database
+    (use BaseDocument for this purpose). It provides a to_dict method that the inmanta rpc can serialize. You can store
+    DataDocument childeren in BaseDocument fields, they will be serialized to dict. However, on retrieval this is not
+    performed.
     """
 
     def __init__(self, **kwargs):
@@ -121,7 +121,7 @@ class DataDocument(object):
 
     def to_dict(self) -> JsonType:
         """
-            Return a dict representation of this object.
+        Return a dict representation of this object.
         """
         return self._data
 
@@ -145,8 +145,8 @@ T = TypeVar("T")
 
 class BaseDocument(object, metaclass=DocumentMeta):
     """
-        A base document in the database. Subclasses of this document determine collections names. This type is mainly used to
-        bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
+    A base document in the database. Subclasses of this document determine collections names. This type is mainly used to
+    bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
     """
 
     _connection_pool: asyncpg.pool.Pool = None
@@ -154,14 +154,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     def get_connection(cls) -> asyncpg.pool.PoolAcquireContext:
         """
-            Returns a PoolAcquireContext that can be either awaited or used in an async with statement to receive a Connection.
+        Returns a PoolAcquireContext that can be either awaited or used in an async with statement to receive a Connection.
         """
         return cls._connection_pool.acquire()
 
     @classmethod
     def table_name(cls) -> str:
         """
-            Return the name of the collection
+        Return the name of the collection
         """
         return cls.__name__.lower()
 
@@ -237,7 +237,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     def _new_id(cls):
         """
-            Generate a new ID. Override to use something else than uuid4
+        Generate a new ID. Override to use something else than uuid4
         """
         return uuid.uuid4()
 
@@ -321,7 +321,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
-            Insert a new document based on the instance passed. Validation is done based on the defined fields.
+        Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
         (column_names, values) = self._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
@@ -365,7 +365,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     async def insert_many(cls, documents: Sequence["BaseDocument"]) -> None:
         """
-            Insert multiple objects at once
+        Insert multiple objects at once
         """
         if not documents:
             return
@@ -392,8 +392,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     async def update(self, **kwargs: Any) -> None:
         """
-            Update this document in the database. It will update the fields in this object and send a full update to database.
-            Use update_fields to only update specific fields.
+        Update this document in the database. It will update the fields in this object and send a full update to database.
+        Use update_fields to only update specific fields.
         """
         kwargs = self._convert_field_names_to_db_column_names(kwargs)
         for name, value in kwargs.items():
@@ -419,8 +419,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         """
-            Update the given fields of this document in the database. It will update the fields in this object and do a specific
-            $set in the database on this document.
+        Update the given fields of this document in the database. It will update the fields in this object and do a specific
+        $set in the database on this document.
         """
         if len(kwargs) == 0:
             return
@@ -438,9 +438,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
         cls: Type[T], doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
     ) -> Optional[T]:
         """
-            Get a specific document based on its ID
+        Get a specific document based on its ID
 
-            :return: An instance of this class with its fields filled from the database.
+        :return: An instance of this class with its fields filled from the database.
         """
         result = await cls.get_list(id=doc_id, connection=connection)
         if len(result) > 0:
@@ -465,7 +465,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         **query: Any,
     ) -> List[T]:
         """
-            Get a list of documents matching the filter args
+        Get a list of documents matching the filter args
         """
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
@@ -484,7 +484,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     async def delete_all(cls, connection: Optional[asyncpg.connection.Connection] = None, **query):
         """
-            Delete all documents that match the given query
+        Delete all documents that match the given query
         """
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
@@ -540,7 +540,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     async def delete(self, connection: asyncpg.connection.Connection = None) -> None:
         """
-            Delete this document
+        Delete this document
         """
         (filter_as_string, values) = self._get_filter_on_primary_key_fields()
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
@@ -568,7 +568,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     def to_dict(self) -> JsonType:
         """
-            Return a dict representing the document
+        Return a dict representing the document
         """
         result = {}
         for name, typing in self._fields.items():
@@ -593,9 +593,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
 class Project(BaseDocument):
     """
-        An inmanta configuration project
+    An inmanta configuration project
 
-        :param name: The name of the configuration project.
+    :param name: The name of the configuration project.
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -682,7 +682,7 @@ PROTECTED_ENVIRONMENT = "protected_environment"
 
 class Setting(object):
     """
-        A class to define a new environment setting.
+    A class to define a new environment setting.
     """
 
     def __init__(
@@ -698,17 +698,17 @@ class Setting(object):
         allowed_values: Optional[List[m.EnvSettingType]] = None,
     ):
         """
-            :param name: The name of the setting.
-            :param type: The type of the value. This type is mainly used for documentation purpose.
-            :param default: An optional default value for this setting. When a default is set and the
-                            is requested from the database, it will return the default value and also store
-                            the default value in the database.
-            :param doc: The documentation/help string for this setting
-            :param validator: A validation and casting function for input settings.
-            :param recompile: Trigger a recompile of the model when a setting is updated?
-            :param update_model: Update the configuration model (git pull on project and repos)
-            :param agent_restart: Restart autostarted agents when this settings is updated.
-            :param allowed_values: list of possible values (if type is enum)
+        :param name: The name of the setting.
+        :param type: The type of the value. This type is mainly used for documentation purpose.
+        :param default: An optional default value for this setting. When a default is set and the
+                        is requested from the database, it will return the default value and also store
+                        the default value in the database.
+        :param doc: The documentation/help string for this setting
+        :param validator: A validation and casting function for input settings.
+        :param recompile: Trigger a recompile of the model when a setting is updated?
+        :param update_model: Update the configuration model (git pull on project and repos)
+        :param agent_restart: Restart autostarted agents when this settings is updated.
+        :param allowed_values: list of possible values (if type is enum)
         """
         self.name: str = name
         self.typ: str = typ
@@ -746,15 +746,15 @@ class Setting(object):
 
 class Environment(BaseDocument):
     """
-        A deployment environment of a project
+    A deployment environment of a project
 
-        :param id: A unique, machine generated id
-        :param name: The name of the deployment environment.
-        :param project: The project this environment belongs to.
-        :param repo_url: The repository url that contains the configuration model code for this environment
-        :param repo_branch: The repository branch that contains the configuration model code for this environment
-        :param settings: Key/value settings for this environment
-        :param last_version: The last version number that was reserved for this environment
+    :param id: A unique, machine generated id
+    :param name: The name of the deployment environment.
+    :param project: The project this environment belongs to.
+    :param repo_url: The repository url that contains the configuration model code for this environment
+    :param repo_branch: The repository branch that contains the configuration model code for this environment
+    :param settings: Key/value settings for this environment
+    :param last_version: The last version number that was reserved for this environment
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -916,9 +916,9 @@ class Environment(BaseDocument):
 
     async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """
-            Get a setting in this environment.
+        Get a setting in this environment.
 
-            :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
+        :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
         """
         if key not in self._settings:
             raise KeyError()
@@ -944,10 +944,10 @@ class Environment(BaseDocument):
 
     async def set(self, key: str, value: m.EnvSettingType, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
-            Set a new setting in this environment.
+        Set a new setting in this environment.
 
-            :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
-            :param value: The value of the settings. The value should be of type as defined in _settings
+        :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
+        :param value: The value of the settings. The value should be of type as defined in _settings
         """
         if key not in self._settings:
             raise KeyError()
@@ -972,9 +972,9 @@ class Environment(BaseDocument):
 
     async def unset(self, key: str) -> None:
         """
-            Unset a setting in this environment. If a default value is provided, this value will replace the current value.
+        Unset a setting in this environment. If a default value is provided, this value will replace the current value.
 
-            :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
+        :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
         """
         if key not in self._settings:
             raise KeyError()
@@ -1027,18 +1027,18 @@ RETURNING last_version;
 
 class Parameter(BaseDocument):
     """
-        A parameter that can be used in the configuration model
-        Any transactions that update Parameter should adhere to the locking order described in
-        :py:class:`inmanta.data.ConfigurationModel`.
+    A parameter that can be used in the configuration model
+    Any transactions that update Parameter should adhere to the locking order described in
+    :py:class:`inmanta.data.ConfigurationModel`.
 
-        :param name: The name of the parameter
-        :param value: The value of the parameter
-        :param environment: The environment this parameter belongs to
-        :param source: The source of the parameter
-        :param resource_id: An optional resource id
-        :param updated: When was the parameter updated last
+    :param name: The name of the parameter
+    :param value: The value of the parameter
+    :param environment: The environment this parameter belongs to
+    :param source: The source of the parameter
+    :param resource_id: An optional resource id
+    :param updated: When was the parameter updated last
 
-        :todo Add history
+    :todo Add history
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1072,14 +1072,14 @@ class Parameter(BaseDocument):
 
 class UnknownParameter(BaseDocument):
     """
-        A parameter that the compiler indicated that was unknown. This parameter causes the configuration model to be
-        incomplete for a specific environment.
+    A parameter that the compiler indicated that was unknown. This parameter causes the configuration model to be
+    incomplete for a specific environment.
 
-        :param name:
-        :param resource_id:
-        :param source:
-        :param environment:
-        :param version: The version id of the configuration model on which this parameter was reported
+    :param name:
+    :param resource_id:
+    :param source:
+    :param environment:
+    :param version: The version id of the configuration model on which this parameter was reported
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1094,11 +1094,11 @@ class UnknownParameter(BaseDocument):
 
 class AgentProcess(BaseDocument):
     """
-        A process in the infrastructure that has (had) a session as an agent.
+    A process in the infrastructure that has (had) a session as an agent.
 
-        :param hostname: The hostname of the device.
-        :param environment: To what environment is this process bound
-        :param last_seen: When did the server receive data from the node for the last time.
+    :param hostname: The hostname of the device.
+    :param environment: To what environment is this process bound
+    :param last_seen: When did the server receive data from the node for the last time.
     """
 
     hostname: str = Field(field_type=str, required=True)
@@ -1142,7 +1142,7 @@ class AgentProcess(BaseDocument):
     @classmethod
     async def seen(cls, env: uuid.UUID, nodename: str, sid: uuid.UUID, now: datetime.datetime):
         """
-            Update the last_seen parameter of the process and mark as not expired.
+        Update the last_seen parameter of the process and mark as not expired.
         """
         proc = await cls.get_one(sid=sid)
         if proc is None:
@@ -1172,10 +1172,10 @@ class AgentProcess(BaseDocument):
 
 class AgentInstance(BaseDocument):
     """
-        A physical server/node in the infrastructure that reports to the management server.
+    A physical server/node in the infrastructure that reports to the management server.
 
-        :param hostname: The hostname of the device.
-        :param last_seen: When did the server receive data from the node for the last time.
+    :param hostname: The hostname of the device.
+    :param last_seen: When did the server receive data from the node for the last time.
     """
 
     # TODO: add env to speed up cleanup
@@ -1205,7 +1205,7 @@ class AgentInstance(BaseDocument):
         cls, tid: uuid.UUID, process: uuid.UUID, endpoints: Set[str], now: datetime.datetime
     ) -> None:
         """
-            Expire the agent instances for the given endpoints if they are not expired yet.
+        Expire the agent instances for the given endpoints if they are not expired yet.
         """
         if not endpoints:
             return
@@ -1222,7 +1222,7 @@ class AgentInstance(BaseDocument):
         cls, tid: uuid.UUID, process: uuid.UUID, endpoints: Set[str], now: datetime.datetime
     ) -> None:
         """
-            Create new agent instances for a given session.
+        Create new agent instances for a given session.
         """
         if not endpoints:
             return
@@ -1234,7 +1234,7 @@ class AgentInstance(BaseDocument):
     @classmethod
     async def log_instance_expiry(cls, sid: uuid.UUID, endpoints: Set[str], now: datetime.datetime) -> None:
         """
-            Expire specific instances for a given session id.
+        Expire specific instances for a given session id.
         """
         if not endpoints:
             return
@@ -1246,15 +1246,15 @@ class AgentInstance(BaseDocument):
 
 class Agent(BaseDocument):
     """
-        An inmanta agent
+    An inmanta agent
 
-        :param environment: The environment this resource is defined in
-        :param name: The name of this agent
-        :param last_failover: Moment at which the primary was last changed
-        :param paused: is this agent paused (if so, skip it)
-        :param primary: what is the current active instance (if none, state is down)
-        :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
-            persist paused state when halting.
+    :param environment: The environment this resource is defined in
+    :param name: The name of this agent
+    :param last_failover: Moment at which the primary was last changed
+    :param paused: is this agent paused (if so, skip it)
+    :param primary: what is the current active instance (if none, state is down)
+    :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
+        persist paused state when halting.
     """
 
     environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1328,7 +1328,7 @@ class Agent(BaseDocument):
     @classmethod
     async def persist_on_halt(cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
-            Persists paused state when halting all agents.
+        Persists paused state when halting all agents.
         """
         await cls._execute_query(
             f"UPDATE {cls.table_name()} SET unpause_on_resume=NOT paused WHERE environment=$1 AND unpause_on_resume IS NULL",
@@ -1339,7 +1339,7 @@ class Agent(BaseDocument):
     @classmethod
     async def persist_on_resume(cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> List[str]:
         """
-            Restores default halted state. Returns a list of agents that should be unpaused.
+        Restores default halted state. Returns a list of agents that should be unpaused.
         """
 
         async def query_with_connection(connection: asyncpg.connection.Connection) -> List[str]:
@@ -1367,9 +1367,9 @@ class Agent(BaseDocument):
         cls, env: uuid.UUID, endpoint: Optional[str], paused: bool, connection: Optional[asyncpg.connection.Connection] = None
     ) -> List[str]:
         """
-            Pause a specific agent or all agents in an environment when endpoint is set to None.
+        Pause a specific agent or all agents in an environment when endpoint is set to None.
 
-            :return A list of agent names that have been paused/unpaused by this method.
+        :return A list of agent names that have been paused/unpaused by this method.
         """
         if endpoint is None:
             query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 RETURNING name"
@@ -1389,13 +1389,13 @@ class Agent(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
-            Update the primary agent instance for agents present in the database.
+        Update the primary agent instance for agents present in the database.
 
-            :param env: The environment of the agent
-            :param endpoints_with_new_primary: Contains a tuple (agent-name, sid) for each agent that has got a new
-                                               primary agent instance. The sid in the tuple is the session id of the new
-                                               primary. If the session id is None, the Agent doesn't have a primary anymore.
-            :param now: Timestamp of this failover
+        :param env: The environment of the agent
+        :param endpoints_with_new_primary: Contains a tuple (agent-name, sid) for each agent that has got a new
+                                           primary agent instance. The sid in the tuple is the session id of the new
+                                           primary. If the session id is None, the Agent doesn't have a primary anymore.
+        :param now: Timestamp of this failover
         """
         for (endpoint, sid) in endpoints_with_new_primary:
             agent = await cls.get(env, endpoint, connection=connection)
@@ -1414,14 +1414,14 @@ class Agent(BaseDocument):
 
 class Report(BaseDocument):
     """
-        A report of a substep of compilation
+    A report of a substep of compilation
 
-        :param started: when the substep started
-        :param completed: when it ended
-        :param command: the command that was executed
-        :param name: The name of this step
-        :param errstream: what was reported on system err
-        :param outstream: what was reported on system out
+    :param started: when the substep started
+    :param completed: when it ended
+    :param command: the command that was executed
+    :param name: The name of this step
+    :param errstream: what was reported on system err
+    :param outstream: what was reported on system out
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1447,21 +1447,21 @@ class Report(BaseDocument):
 
 class Compile(BaseDocument):
     """
-        A run of the compiler
+    A run of the compiler
 
-        :param environment: The environment this resource is defined in
-        :param requested: Time the compile was requested
-        :param started: Time the compile started
-        :param completed: Time to compile was completed
-        :param do_export: should this compiler perform an export
-        :param force_update: should this compile definitely update
-        :param metadata: exporter metadata to be passed to the compiler
-        :param environment_variables: environment variables to be passed to the compiler
-        :param succes: was the compile successful
-        :param handled: were all registered handlers executed?
-        :param version: version exported by this compile
-        :param remote_id: id as given by the requestor, used by the requestor to distinguish between different requests
-        :param compile_data: json data as exported by compiling with the --export-compile-data parameter
+    :param environment: The environment this resource is defined in
+    :param requested: Time the compile was requested
+    :param started: Time the compile started
+    :param completed: Time to compile was completed
+    :param do_export: should this compiler perform an export
+    :param force_update: should this compile definitely update
+    :param metadata: exporter metadata to be passed to the compiler
+    :param environment_variables: environment variables to be passed to the compiler
+    :param succes: was the compile successful
+    :param handled: were all registered handlers executed?
+    :param version: version exported by this compile
+    :param remote_id: id as given by the requestor, used by the requestor to distinguish between different requests
+    :param compile_data: json data as exported by compiling with the --export-compile-data parameter
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1516,7 +1516,7 @@ class Compile(BaseDocument):
     # TODO: Use join
     async def get_report(cls, compile_id: uuid.UUID) -> "Compile":
         """
-            Get the compile and the associated reports from the database
+        Get the compile and the associated reports from the database
         """
         result: Optional[Compile] = await cls.get_by_id(compile_id)
         if result is None:
@@ -1533,8 +1533,7 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_last_run(cls, environment_id: uuid.UUID) -> "Compile":
-        """ Get the last run for the given environment
-        """
+        """Get the last run for the given environment"""
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} where environment=$1 AND completed IS NOT NULL ORDER BY completed DESC LIMIT 1",
             [cls._get_value(environment_id)],
@@ -1545,8 +1544,7 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_next_run(cls, environment_id: uuid.UUID) -> "Compile":
-        """ Get the next compile in the queue for the given environment
-        """
+        """Get the next compile in the queue for the given environment"""
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND completed IS NULL ORDER BY requested ASC LIMIT 1",
             [cls._get_value(environment_id)],
@@ -1557,8 +1555,7 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_next_run_all(cls) -> "List[Compile]":
-        """ Get the next compile in the queue for each environment
-        """
+        """Get the next compile in the queue for each environment"""
         results = await cls.select_query(
             f"SELECT DISTINCT ON (environment) * FROM {cls.table_name()} WHERE completed IS NULL ORDER BY environment, "
             f"requested ASC",
@@ -1568,8 +1565,7 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_unhandled_compiles(cls) -> "List[Compile]":
-        """ Get all compiles that have completed but for which listeners have not been notified yet.
-        """
+        """Get all compiles that have completed but for which listeners have not been notified yet."""
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL ORDER BY requested ASC", []
         )
@@ -1577,8 +1573,7 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_next_compiles_for_environment(cls, environment_id: uuid.UUID) -> "List[Compile]":
-        """ Get the queue of compiles that are scheduled in FIFO order.
-        """
+        """Get the queue of compiles that are scheduled in FIFO order."""
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND NOT handled and completed IS NULL "
             "ORDER BY requested ASC",
@@ -1588,8 +1583,7 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_next_compiles_count(cls) -> int:
-        """ Get the number of compiles in the queue for ALL environments
-        """
+        """Get the number of compiles in the queue for ALL environments"""
         result = await cls._fetchval(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL")
         return result
 
@@ -1649,23 +1643,23 @@ class LogLine(DataDocument):
 
 class ResourceAction(BaseDocument):
     """
-        Log related to actions performed on a specific resource version by Inmanta.
-        Any transactions that update ResourceAction should adhere to the locking order described in
-        :py:class:`inmanta.data.ConfigurationModel
+    Log related to actions performed on a specific resource version by Inmanta.
+    Any transactions that update ResourceAction should adhere to the locking order described in
+    :py:class:`inmanta.data.ConfigurationModel
 
-        :param environment: The environment this action belongs to.
-        :param version: The version of the configuration model this action belongs to.
-        :param resource_version_ids: The resource version ids of the resources this action relates to.
-        :param action_id: This id distinguishes the actions from each other. Action ids have to be unique per environment.
-        :param action: The action performed on the resource
-        :param started: When did the action start
-        :param finished: When did the action finish
-        :param messages: The log messages associated with this action
-        :param status: The status of the resource when this action was finished
-        :param changes: A dict with key the resource id and value a dict of fields -> value. Value is a dict that can
-                       contain old and current keys and the associated values. An empty dict indicates that the field
-                       was changed but not data was provided by the agent.
-        :param change: The change result of an action
+    :param environment: The environment this action belongs to.
+    :param version: The version of the configuration model this action belongs to.
+    :param resource_version_ids: The resource version ids of the resources this action relates to.
+    :param action_id: This id distinguishes the actions from each other. Action ids have to be unique per environment.
+    :param action: The action performed on the resource
+    :param started: When did the action start
+    :param finished: When did the action finish
+    :param messages: The log messages associated with this action
+    :param status: The status of the resource when this action was finished
+    :param changes: A dict with key the resource id and value a dict of fields -> value. Value is a dict that can
+                   contain old and current keys and the associated values. An empty dict indicates that the field
+                   was changed but not data was provided by the agent.
+    :param change: The change result of an action
     """
 
     environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
@@ -1753,7 +1747,7 @@ class ResourceAction(BaseDocument):
 
     async def save(self, connection: Optional[asyncpg.connection.Connection] = None):
         """
-            Save the changes
+        Save the changes
         """
         if len(self._updates) == 0:
             return
@@ -1865,17 +1859,17 @@ class ResourceAction(BaseDocument):
 
 class Resource(BaseDocument):
     """
-        A specific version of a resource. This entity contains the desired state of a resource.
-        Any transactions that update Resource should adhere to the locking order described in
-        :py:class:`inmanta.data.ConfigurationModel`.
+    A specific version of a resource. This entity contains the desired state of a resource.
+    Any transactions that update Resource should adhere to the locking order described in
+    :py:class:`inmanta.data.ConfigurationModel`.
 
-        :param environment: The environment this resource version is defined in
-        :param rid: The id of the resource and its version
-        :param resource: The resource for which this defines the state
-        :param model: The configuration model (versioned) this resource state is associated with
-        :param attributes: The state of this version of the resource
-        :param attribute_hash: hash of the attributes, excluding requires, provides and version,
-                               used to determine if a resource describes the same state across versions
+    :param environment: The environment this resource version is defined in
+    :param rid: The id of the resource and its version
+    :param resource: The resource for which this defines the state
+    :param model: The configuration model (versioned) this resource state is associated with
+    :param attributes: The state of this version of the resource
+    :param attribute_hash: hash of the attributes, excluding requires, provides and version,
+                           used to determine if a resource describes the same state across versions
     """
 
     environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1913,7 +1907,7 @@ class Resource(BaseDocument):
     @classmethod
     async def get_resources_for_attribute_hash(cls, environment, hashes):
         """
-            Get all resources listed in resource_version_ids
+        Get all resources listed in resource_version_ids
         """
         hashes_as_str = "(" + ",".join(["$" + str(i) for i in range(2, len(hashes) + 2)]) + ")"
         query = "SELECT * FROM " + cls.table_name() + " WHERE environment=$1 AND attribute_hash IN " + hashes_as_str
@@ -1932,7 +1926,7 @@ class Resource(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> List["Resource"]:
         """
-            Get all resources listed in resource_version_ids
+        Get all resources listed in resource_version_ids
         """
         if not resource_version_ids:
             return []
@@ -1954,7 +1948,7 @@ class Resource(BaseDocument):
     @classmethod
     async def get_undeployable(cls, environment, version):
         """
-            Returns a list of resources with an undeployable state
+        Returns a list of resources with an undeployable state
         """
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         undeployable_states = ", ".join(["$" + str(i + 3) for i in range(len(const.UNDEPLOYABLE_STATES))])
@@ -2006,8 +2000,8 @@ class Resource(BaseDocument):
     @classmethod
     async def get_resources_report(cls, environment: uuid.UUID) -> List[JsonType]:
         """
-            This method generates a report of all resources in the given environment,
-            with their latest version and when they are last deployed.
+        This method generates a report of all resources in the given environment,
+        with their latest version and when they are last deployed.
         """
         query_resource_ids = f"""
                 SELECT DISTINCT resource_id
@@ -2113,7 +2107,7 @@ class Resource(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Optional["Resource"]:
         """
-            Get a resource with the given resource version id
+        Get a resource with the given resource version id
         """
         value = await cls.get_one(environment=environment, resource_version_id=resource_version_id, connection=connection)
         return value
@@ -2138,12 +2132,12 @@ class Resource(BaseDocument):
     @classmethod
     async def get_deleted_resources(cls, environment, current_version, current_resources):
         """
-            This method returns all resources that have been deleted from the model and are not yet marked as purged. It returns
-            the latest version of the resource from a released model.
+        This method returns all resources that have been deleted from the model and are not yet marked as purged. It returns
+        the latest version of the resource from a released model.
 
-            :param environment:
-            :param current_version:
-            :param current_resources: A set of all resource ids in the current version.
+        :param environment:
+        :param current_version:
+        :param current_resources: A set of all resource ids in the current version.
         """
         LOGGER.debug("Starting purge_on_delete queries")
 
@@ -2264,18 +2258,18 @@ class Resource(BaseDocument):
 
 class ConfigurationModel(BaseDocument):
     """
-        A specific version of the configuration model.
-        Any transactions that update ResourceAction, Resource, Parameter and/or ConfigurationModel
-        should acquire their locks in that order.
+    A specific version of the configuration model.
+    Any transactions that update ResourceAction, Resource, Parameter and/or ConfigurationModel
+    should acquire their locks in that order.
 
-        :param version: The version of the configuration model, represented by a unix timestamp.
-        :param environment: The environment this configuration model is defined in
-        :param date: The date this configuration model was created
-        :param released: Is this model released and available for deployment?
-        :param deployed: Is this model deployed?
-        :param result: The result of the deployment. Success or error.
-        :param version_info: Version metadata
-        :param total: The total number of resources
+    :param version: The version of the configuration model, represented by a unix timestamp.
+    :param environment: The environment this configuration model is defined in
+    :param date: The date this configuration model was created
+    :param released: Is this model released and available for deployment?
+    :param deployed: Is this model deployed?
+    :param result: The result of the deployment. Success or error.
+    :param version_info: Version metadata
+    :param total: The total number of resources
     """
 
     version: int = Field(field_type=int, required=True, part_of_primary_key=True)
@@ -2309,7 +2303,7 @@ class ConfigurationModel(BaseDocument):
     @classmethod
     async def _get_status_field(cls, environment: uuid.UUID, values: str) -> dict:
         """
-            This field is required to ensure backward compatibility on the API.
+        This field is required to ensure backward compatibility on the API.
         """
         result = {}
         values = json.loads(values)
@@ -2386,7 +2380,7 @@ class ConfigurationModel(BaseDocument):
     @classmethod
     async def get_version(cls, environment: uuid.UUID, version: int) -> "ConfigurationModel":
         """
-            Get a specific version
+        Get a specific version
         """
         result = await cls.get_one(environment=environment, version=version)
         return result
@@ -2394,7 +2388,7 @@ class ConfigurationModel(BaseDocument):
     @classmethod
     async def get_latest_version(cls, environment: uuid.UUID) -> "ConfigurationModel":
         """
-            Get the latest released (most recent) version for the given environment
+        Get the latest released (most recent) version for the given environment
         """
         versions = await cls.get_list(order_by_column="version", order="DESC", limit=1, environment=environment, released=True)
         if len(versions) == 0:
@@ -2405,7 +2399,7 @@ class ConfigurationModel(BaseDocument):
     @classmethod
     async def get_version_nr_latest_version(cls, environment: uuid.UUID) -> Optional[int]:
         """
-            Get the version number of the latest released version in the given environment.
+        Get the version number of the latest released version in the given environment.
         """
         query = f"""SELECT version
                     FROM {ConfigurationModel.table_name()}
@@ -2421,7 +2415,7 @@ class ConfigurationModel(BaseDocument):
     @classmethod
     async def get_agents(cls, environment: uuid.UUID, version: int) -> List[str]:
         """
-            Returns a list of all agents that have resources defined in this configuration model
+        Returns a list of all agents that have resources defined in this configuration model
         """
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT DISTINCT agent FROM " + Resource.table_name() + " WHERE " + filter_statement
@@ -2435,7 +2429,7 @@ class ConfigurationModel(BaseDocument):
     @classmethod
     async def get_versions(cls, environment: uuid.UUID, start: int = 0, limit: int = DBLIMIT) -> List["ConfigurationModel"]:
         """
-            Get all versions for an environment ordered descending
+        Get all versions for an environment ordered descending
         """
         versions = await cls.get_list(
             order_by_column="version", order="DESC", limit=limit, offset=start, environment=environment
@@ -2464,14 +2458,14 @@ class ConfigurationModel(BaseDocument):
 
     async def get_undeployable(self) -> List[m.ResourceIdStr]:
         """
-            Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
+        Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
         """
         return self.undeployable
 
     async def get_skipped_for_undeployable(self) -> List[m.ResourceIdStr]:
         """
-            Returns a list of resource ids (NOT resource version ids)
-            of resources which should get a skipped_for_undeployable state
+        Returns a list of resource ids (NOT resource version ids)
+        of resources which should get a skipped_for_undeployable state
         """
         return self.skipped_for_undeployable
 
@@ -2503,12 +2497,12 @@ class ConfigurationModel(BaseDocument):
     async def mark_done_if_done(cls, environment, version, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         async def do_query_exclusive(con: asyncpg.connection.Connection) -> None:
             """
-                Performs the query to mark done if done. Acquires a lock that blocks execution until other transactions holding
-                this lock have committed. This makes sure that once a transaction performs this query, it needs to commit before
-                another transaction is able to perform it. This way no race condition is possible where the deployed state is
-                not set: when a transaction A is in this part of its lifecycle, either all other related (possibly conflicting)
-                transactions have committed already, or they will only start this part of their lifecycle when A has committed
-                itself.
+            Performs the query to mark done if done. Acquires a lock that blocks execution until other transactions holding
+            this lock have committed. This makes sure that once a transaction performs this query, it needs to commit before
+            another transaction is able to perform it. This way no race condition is possible where the deployed state is
+            not set: when a transaction A is in this part of its lifecycle, either all other related (possibly conflicting)
+            transactions have committed already, or they will only start this part of their lifecycle when A has committed
+            itself.
             """
             async with con.transaction():
                 # SHARE UPDATE EXCLUSIVE is self-conflicting
@@ -2559,7 +2553,7 @@ class ConfigurationModel(BaseDocument):
         error -> increment
         Deployed and same hash -> not increment
         deployed and different hash -> increment
-         """
+        """
         projection_a = ["resource_version_id", "resource_id", "status", "attribute_hash", "attributes"]
         projection = ["resource_version_id", "resource_id", "status", "attribute_hash"]
 
@@ -2668,16 +2662,16 @@ class ConfigurationModel(BaseDocument):
 
 class Code(BaseDocument):
     """
-        A code deployment
+    A code deployment
 
-        :param environment: The environment this code belongs to
-        :param version: The version of configuration model it belongs to
-        :param resource: The resource type this code belongs to
-        :param sources: The source code of plugins (phasing out)  form:
-            {code_hash:(file_name, provider.__module__, source_code, [req])}
-        :param requires: Python requires for the source code above
-        :param source_refs: file hashes refering to files in the file store
-            {code_hash:(file_name, provider.__module__, [req])}
+    :param environment: The environment this code belongs to
+    :param version: The version of configuration model it belongs to
+    :param resource: The resource type this code belongs to
+    :param sources: The source code of plugins (phasing out)  form:
+        {code_hash:(file_name, provider.__module__, source_code, [req])}
+    :param requires: Python requires for the source code above
+    :param source_refs: file hashes refering to files in the file store
+        {code_hash:(file_name, provider.__module__, [req])}
     """
 
     environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -2701,15 +2695,15 @@ class Code(BaseDocument):
 
 class DryRun(BaseDocument):
     """
-        A dryrun of a model version
+    A dryrun of a model version
 
-        :param id: The id of this dryrun
-        :param environment: The environment this code belongs to
-        :param model: The configuration model
-        :param date: The date the run was requested
-        :param resource_total: The number of resources that do a dryrun for
-        :param resource_todo: The number of resources left to do
-        :param resources: Changes for each of the resources in the version
+    :param id: The id of this dryrun
+    :param environment: The environment this code belongs to
+    :param model: The configuration model
+    :param date: The date the run was requested
+    :param resource_total: The number of resources that do a dryrun for
+    :param resource_todo: The number of resources left to do
+    :param resources: Changes for each of the resources in the version
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -2723,8 +2717,8 @@ class DryRun(BaseDocument):
     @classmethod
     async def update_resource(cls, dryrun_id, resource_id, dryrun_data):
         """
-            Register a resource update with a specific query that sets the dryrun_data and decrements the todo counter, only
-            if the resource has not been saved yet.
+        Register a resource update with a specific query that sets the dryrun_data and decrements the todo counter, only
+        if the resource has not been saved yet.
         """
         jsonb_key = uuid.uuid5(dryrun_id, resource_id)
         query = (

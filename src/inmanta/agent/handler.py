@@ -50,11 +50,11 @@ T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
 class provider(object):  # noqa: N801
     """
-        A decorator that registers a new handler.
+    A decorator that registers a new handler.
 
-        :param resource_type: The type of the resource this handler provides an implementation for.
-                              For example, :inmanta:entity:`std::File`
-        :param name: A name to reference this provider.
+    :param resource_type: The type of the resource this handler provides an implementation for.
+                          For example, :inmanta:entity:`std::File`
+    :param name: A name to reference this provider.
     """
 
     def __init__(self, resource_type: str, name: str) -> None:
@@ -63,7 +63,7 @@ class provider(object):  # noqa: N801
 
     def __call__(self, function):
         """
-            The wrapping
+        The wrapping
         """
         Commander.add_provider(self._resource_type, self._name, function)
         return function
@@ -71,21 +71,21 @@ class provider(object):  # noqa: N801
 
 class SkipResource(Exception):
     """
-        A handler should raise this exception when a resource should be skipped. The resource will be marked as skipped
-        instead of failed.
+    A handler should raise this exception when a resource should be skipped. The resource will be marked as skipped
+    instead of failed.
     """
 
 
 class ResourcePurged(Exception):
     """
-        If the :func:`~inmanta.agent.handler.CRUDHandler.read_resource` method raises this exception, the agent will
-        mark the current state of the resource as purged.
+    If the :func:`~inmanta.agent.handler.CRUDHandler.read_resource` method raises this exception, the agent will
+    mark the current state of the resource as purged.
     """
 
 
 class InvalidOperation(Exception):
     """
-        This exception is raised by the context or handler methods when an invalid operation is performed.
+    This exception is raised by the context or handler methods when an invalid operation is performed.
     """
 
 
@@ -99,25 +99,25 @@ def cache(
     call_on_delete: Optional[Callable[[Any], None]] = None,
 ) -> Union[T_FUNC, Callable[[T_FUNC], T_FUNC]]:
     """
-        decorator for methods in resource handlers to provide caching
+    decorator for methods in resource handlers to provide caching
 
-        this decorator works similar to memoization:
-        when the decorate method is called, its return value is cached,
-        for subsequent calls, the cached value is used instead of the actual value
+    this decorator works similar to memoization:
+    when the decorate method is called, its return value is cached,
+    for subsequent calls, the cached value is used instead of the actual value
 
-        The name of the method + the arguments of the method form the cache key
+    The name of the method + the arguments of the method form the cache key
 
-        If an argument named version is present and for_version is True,
-        the cache entry is flushed after this version has been deployed
-        If an argument named resource is present,
-        it is assumed to be a resource and its ID is used, without the version information
+    If an argument named version is present and for_version is True,
+    the cache entry is flushed after this version has been deployed
+    If an argument named resource is present,
+    it is assumed to be a resource and its ID is used, without the version information
 
-        :param timeout: the number of second this cache entry should live
-        :param for_version: if true, this value is evicted from the cache when this deploy is ready
-        :param ignore: a list of argument names that should not be part of the cache key
-        :param cache_none: cache returned none values
-        :param call_on_delete: A callback function that is called when the value is removed from the cache,
-                with the value as argument.
+    :param timeout: the number of second this cache entry should live
+    :param for_version: if true, this value is evicted from the cache when this deploy is ready
+    :param ignore: a list of argument names that should not be part of the cache key
+    :param cache_none: cache returned none values
+    :param call_on_delete: A callback function that is called when the value is removed from the cache,
+            with the value as argument.
     """
 
     def actual(f) -> T_FUNC:
@@ -148,7 +148,7 @@ def cache(
 
 class HandlerContext(object):
     """
-        Context passed to handler methods for state related "things"
+    Context passed to handler methods for state related "things"
     """
 
     def __init__(
@@ -183,10 +183,10 @@ class HandlerContext(object):
 
     def set_fact(self, fact_id: str, value: str) -> None:
         """
-            Send a fact to the Inmanta server.
+        Send a fact to the Inmanta server.
 
-            :param fact_id: The name of the fact.
-            :param value: The actual value of the fact.
+        :param fact_id: The name of the fact.
+        :param value: The actual value of the fact.
         """
         resource_id = self._resource.id.resource_str()
         fact = {
@@ -215,13 +215,13 @@ class HandlerContext(object):
 
     def set_status(self, status: const.ResourceState) -> None:
         """
-            Set the status of the handler operation.
+        Set the status of the handler operation.
         """
         self._status = status
 
     def is_dry_run(self) -> bool:
         """
-            Is this a dryrun?
+        Is this a dryrun?
         """
         return self._dry_run
 
@@ -267,29 +267,29 @@ class HandlerContext(object):
 
     def add_change(self, name: str, desired: typing.Any, current: typing.Any = None) -> None:
         """
-            Report a change of a field. This field is added to the set of updated fields
+        Report a change of a field. This field is added to the set of updated fields
 
-            :param name: The name of the field that was updated
-            :param desired: The desired value to which the field was updated (or should be updated)
-            :param current: The value of the field before it was updated
+        :param name: The name of the field that was updated
+        :param desired: The desired value to which the field was updated (or should be updated)
+        :param current: The value of the field before it was updated
         """
         self._changes[name] = AttributeStateChange(current=current, desired=desired)
 
     def add_changes(self, **kwargs: SimpleTypes) -> None:
         """
-            Report a list of changes at once as kwargs
+        Report a list of changes at once as kwargs
 
-            :param key: The name of the field that was updated. This field is also added to the set of updated fields
-            :param value: The desired value of the field.
+        :param key: The name of the field that was updated. This field is also added to the set of updated fields
+        :param value: The desired value of the field.
 
-            To report the previous value of the field, use the add_change method
+        To report the previous value of the field, use the add_change method
         """
         for field, value in kwargs.items():
             self._changes[field] = AttributeStateChange(desired=value)
 
     def fields_updated(self, fields: str) -> None:
         """
-            Report that fields have been updated
+        Report that fields have been updated
         """
         for field in fields:
             if field not in self._changes:
@@ -316,9 +316,9 @@ class HandlerContext(object):
         ],
     ) -> None:
         """
-            Update the changes list with changes
+        Update the changes list with changes
 
-            :param changes: This should be a dict with a value a dict containing "current" and "desired" keys
+        :param changes: This should be a dict with a value a dict containing "current" and "desired" keys
         """
         for attribute, change in changes.items():
             if isinstance(change, dict):
@@ -416,15 +416,15 @@ class HandlerContext(object):
 
 class ResourceHandler(object):
     """
-        A baseclass for classes that handle resources. New handler are registered with the
-        :func:`~inmanta.agent.handler.provider` decorator.
+    A baseclass for classes that handle resources. New handler are registered with the
+    :func:`~inmanta.agent.handler.provider` decorator.
 
-        The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
-        makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
-        operations.
+    The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
+    makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
+    operations.
 
-        :param agent: The agent that is executing this handler.
-        :param io: The io object to use.
+    :param agent: The agent that is executing this handler.
+    :param io: The io object to use.
     """
 
     def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: "IOBase" = None) -> None:
@@ -441,11 +441,11 @@ class ResourceHandler(object):
 
     def run_sync(self, func: typing.Callable[[], T]) -> T:
         """
-            Run a the given async function on the ioloop of the agent. It will block the current thread until the future
-            resolves.
+        Run a the given async function on the ioloop of the agent. It will block the current thread until the future
+        resolves.
 
-            :param func: A function that returns a yieldable future.
-            :return: The result of the async function.
+        :param func: A function that returns a yieldable future.
+        :return: The result of the async function.
         """
         f: Future[T] = Future()
 
@@ -470,9 +470,9 @@ class ResourceHandler(object):
 
     def get_client(self) -> protocol.SessionClient:
         """
-            Get the client instance that identifies itself with the agent session.
+        Get the client instance that identifies itself with the agent session.
 
-            :return: A client that is associated with the session of the agent that executes this handler.
+        :return: A client that is associated with the session of the agent that executes this handler.
         """
         if self._client is None:
             self._client = protocol.SessionClient("agent", self._agent.sessionid)
@@ -480,38 +480,38 @@ class ResourceHandler(object):
 
     def process_events(self, ctx: HandlerContext, resource: resources.Resource, events: dict) -> None:
         """
-            Process events generated by changes to required resources. Override this method to process events in a handler.
+        Process events generated by changes to required resources. Override this method to process events in a handler.
 
-            The default implementation provides the reload mechanism. It will call do_reload when the handler can_reload() and
-            if at least one of the dependents have successfully deployed and there were changes. Make sure to call this method
-            from a subclass if the reload behaviour is required.
+        The default implementation provides the reload mechanism. It will call do_reload when the handler can_reload() and
+        if at least one of the dependents have successfully deployed and there were changes. Make sure to call this method
+        from a subclass if the reload behaviour is required.
 
-            This method is called for all dependents of the given resource (inverse of the requires relationship)
-            that have send_event set to true and for which a deploy was started. These are the only conditions, even if all
-            dependents have failed or no changes were deployed. It is up to the handler to filter out irrelevant events.
+        This method is called for all dependents of the given resource (inverse of the requires relationship)
+        that have send_event set to true and for which a deploy was started. These are the only conditions, even if all
+        dependents have failed or no changes were deployed. It is up to the handler to filter out irrelevant events.
 
-            In case of partial deployments (e.g. incremental deploy), only those resources that are being deployed will produce
-            an event. I.e. it is possible to receive less events then expected.
+        In case of partial deployments (e.g. incremental deploy), only those resources that are being deployed will produce
+        an event. I.e. it is possible to receive less events then expected.
 
-            In case of failure of agent, server or the system being managed, delivery of events can not be guaranteed.
-            Update events can be lost unrecoverably in case the agent or server fails after the update was performed, but before
-            the event was emitted. In the current implementation, start of a new deploy while another is in progress can also
-            causes updates to be lost.
+        In case of failure of agent, server or the system being managed, delivery of events can not be guaranteed.
+        Update events can be lost unrecoverably in case the agent or server fails after the update was performed, but before
+        the event was emitted. In the current implementation, start of a new deploy while another is in progress can also
+        causes updates to be lost.
 
-            However, while event delivery can not be guaranteed, convergence to the desired state can be reliably detected.
-            If the record of the convergence is lost, it will be retried until it is recorded.
-            For strong behavioral guarantees, it is better to rely on desired state than on events.
+        However, while event delivery can not be guaranteed, convergence to the desired state can be reliably detected.
+        If the record of the convergence is lost, it will be retried until it is recorded.
+        For strong behavioral guarantees, it is better to rely on desired state than on events.
 
-            Events are best used to accelerate convergence.
-            For example, cross agent dependencies primarily make use of the deployment log on the server to determine if their
-            dependencies are in their desired state. To speed up convergence, events are sent to notify other agents of relevant
-            changes to resources they depend on.
+        Events are best used to accelerate convergence.
+        For example, cross agent dependencies primarily make use of the deployment log on the server to determine if their
+        dependencies are in their desired state. To speed up convergence, events are sent to notify other agents of relevant
+        changes to resources they depend on.
 
-            :param ctx: Context object to report changes and logs to the agent and server.
-            :param resource: The resource to process the events for.
-            :param dict: A dict with events of the resource the given resource requires. The keys of the dict are the resources.
-                         Each value is a dict with the items status (const.ResourceState), changes (dict) and
-                         change (const.Change). The value is also defined by inmanta.data.model.Event
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to process the events for.
+        :param dict: A dict with events of the resource the given resource requires. The keys of the dict are the resources.
+                     Each value is a dict with the items status (const.ResourceState), changes (dict) and
+                     change (const.Change). The value is also defined by inmanta.data.model.Event
         """
 
         # ctx.status == const.ResourceState.deployed is only true if
@@ -531,45 +531,45 @@ class ResourceHandler(object):
 
     def can_process_events(self) -> bool:
         """
-            Can this handler process events? This is a more generic version of the reload mechanism.
+        Can this handler process events? This is a more generic version of the reload mechanism.
 
-            See the :py:func:`ResourceHandler.process_events` for more details about this mechanism.
+        See the :py:func:`ResourceHandler.process_events` for more details about this mechanism.
 
-            :return: Return true if this handler processes events.
+        :return: Return true if this handler processes events.
         """
         return self.can_reload()
 
     def can_reload(self) -> bool:
         """
-            Can this handler reload?
+        Can this handler reload?
 
-            :return: Return true if this handler needs to reload on requires changes.
+        :return: Return true if this handler needs to reload on requires changes.
         """
         return False
 
     def do_reload(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
-            Perform a reload of this resource.
+        Perform a reload of this resource.
 
-            :param ctx: Context object to report changes and logs to the agent and server.
-            :param resource: The resource to reload.
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to reload.
         """
 
     def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
-            Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
-            to run before an operation.
+        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
+        to run before an operation.
 
-            :param ctx: Context object to report changes and logs to the agent and server.
-            :param resource: The resource to query facts for.
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
         """
 
     def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
-            Method executed after an operation. Override this method to run after an operation.
+        Method executed after an operation. Override this method to run after an operation.
 
-            :param ctx: Context object to report changes and logs to the agent and server.
-            :param resource: The resource to query facts for.
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
         """
 
     def close(self) -> None:
@@ -577,12 +577,12 @@ class ResourceHandler(object):
 
     def _diff(self, current: resources.Resource, desired: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
         """
-            Calculate the diff between the current and desired resource state.
+        Calculate the diff between the current and desired resource state.
 
-            :param current: The current state of the resource
-            :param desired: The desired state of the resource
-            :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
-                     fields that require changes.
+        :param current: The current state of the resource
+        :param desired: The desired state of the resource
+        :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
+                 fields that require changes.
         """
         changes = {}
 
@@ -598,49 +598,49 @@ class ResourceHandler(object):
 
     def check_resource(self, ctx: HandlerContext, resource: resources.Resource) -> resources.Resource:
         """
-            Check the current state of a resource
+        Check the current state of a resource
 
-            :param ctx: Context object to report changes and logs to the agent and server.
-            :param resource: The resource to check the current state of.
-            :return: A resource to represents the current state. Use the :func:`~inmanta.resources.Resource.clone` to create
-                     clone of the given resource that can be modified.
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        :return: A resource to represents the current state. Use the :func:`~inmanta.resources.Resource.clone` to create
+                 clone of the given resource that can be modified.
         """
         raise NotImplementedError()
 
     def list_changes(self, ctx: HandlerContext, resource: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
         """
-            Returns the changes required to bring the resource on this system in the state described in the resource entry.
-            This method calls :func:`~inmanta.agent.handler.ResourceHandler.check_resource`
+        Returns the changes required to bring the resource on this system in the state described in the resource entry.
+        This method calls :func:`~inmanta.agent.handler.ResourceHandler.check_resource`
 
-            :param ctx: Context object to report changes and logs to the agent and server.
-            :param resource: The resource to check the current state of.
-            :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
-                     fields that require changes.
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
+                 fields that require changes.
         """
         current = self.check_resource(ctx, resource)
         return self._diff(current, resource)
 
     def do_changes(self, ctx: HandlerContext, resource: resources.Resource, changes: dict) -> None:
         """
-            Do the changes required to bring the resource on this system in the state of the given resource.
+        Do the changes required to bring the resource on this system in the state of the given resource.
 
-            :param ctx: Context object to report changes and logs to the agent and server.
-            :param resource: The resource to check the current state of.
-            :param changes: The changes that need to occur as reported by
-                            :func:`~inmanta.agent.handler.ResourceHandler.list_changes`
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        :param changes: The changes that need to occur as reported by
+                        :func:`~inmanta.agent.handler.ResourceHandler.list_changes`
         """
         raise NotImplementedError()
 
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
         """
-            Update the given resource. This method is called by the agent. Most handlers will not override this method
-            and will only override :func:`~inmanta.agent.handler.ResourceHandler.check_resource`, optionally
-            :func:`~inmanta.agent.handler.ResourceHandler.list_changes` and
-            :func:`~inmanta.agent.handler.ResourceHandler.do_changes`
+        Update the given resource. This method is called by the agent. Most handlers will not override this method
+        and will only override :func:`~inmanta.agent.handler.ResourceHandler.check_resource`, optionally
+        :func:`~inmanta.agent.handler.ResourceHandler.list_changes` and
+        :func:`~inmanta.agent.handler.ResourceHandler.do_changes`
 
-            :param ctx: Context object to report changes and logs to the agent and server.
-            :param resource: The resource to check the current state of.
-            :param dry_run: True will only determine the required changes but will not execute them.
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        :param dry_run: True will only determine the required changes but will not execute them.
         """
         try:
             self.pre(ctx, resource)
@@ -678,26 +678,26 @@ class ResourceHandler(object):
 
     def facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
         """
-            Override this method to implement fact querying. A queried fact can be reported back in two different ways:
-            either via the return value of this method or by adding the fact to the HandlerContext via the
-            :func:`~inmanta.agent.handler.HandlerContext.set_fact` method. :func:`~inmanta.agent.handler.ResourceHandler.pre`
-            and :func:`~inmanta.agent.handler.ResourceHandler.post` are called before and after this method.
+        Override this method to implement fact querying. A queried fact can be reported back in two different ways:
+        either via the return value of this method or by adding the fact to the HandlerContext via the
+        :func:`~inmanta.agent.handler.HandlerContext.set_fact` method. :func:`~inmanta.agent.handler.ResourceHandler.pre`
+        and :func:`~inmanta.agent.handler.ResourceHandler.post` are called before and after this method.
 
-            :param ctx: Context object to report changes, logs and facts to the agent and server.
-            :param resource: The resource to query facts for.
-            :return: A dict with fact names as keys and facts values.
+        :param ctx: Context object to report changes, logs and facts to the agent and server.
+        :param resource: The resource to query facts for.
+        :return: A dict with fact names as keys and facts values.
         """
         return {}
 
     def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
         """
-            This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.ResourceHandler.pre`
-            and :func:`~inmanta.agent.handler.ResourceHandler.post`. This method calls
-            :func:`~inmanta.agent.handler.ResourceHandler.facts` to do the actually querying.
+        This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.ResourceHandler.pre`
+        and :func:`~inmanta.agent.handler.ResourceHandler.post`. This method calls
+        :func:`~inmanta.agent.handler.ResourceHandler.facts` to do the actually querying.
 
-            :param ctx: Context object to report changes and logs to the agent and server.
-            :param resource: The resource to query facts for.
-            :return: A dict with fact names as keys and facts values.
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        :return: A dict with fact names as keys and facts values.
         """
         try:
             self.pre(ctx, resource)
@@ -716,20 +716,20 @@ class ResourceHandler(object):
 
     def available(self, resource: resources.Resource) -> bool:
         """
-            Returns true if this handler is available for the given resource
+        Returns true if this handler is available for the given resource
 
-            :param resource: Is this handler available for the given resource?
-            :return: Available or not?
+        :param resource: Is this handler available for the given resource?
+        :return: Available or not?
         """
         return True
 
     def get_file(self, hash_id: str) -> Optional[bytes]:
         """
-            Retrieve a file from the fileserver identified with the given id. The convention is to use the sha1sum of the
-            content to identify it.
+        Retrieve a file from the fileserver identified with the given id. The convention is to use the sha1sum of the
+        content to identify it.
 
-            :param hash_id: The id of the content/file to retrieve from the server.
-            :return: The content in the form of a bytestring or none is the content does not exist.
+        :param hash_id: The id of the content/file to retrieve from the server.
+        :return: The content in the form of a bytestring or none is the content does not exist.
         """
 
         def call() -> Result:
@@ -749,10 +749,10 @@ class ResourceHandler(object):
 
     def stat_file(self, hash_id: str) -> bool:
         """
-            Check if a file exists on the server. This method does and async call to the server and blocks on the result.
+        Check if a file exists on the server. This method does and async call to the server and blocks on the result.
 
-            :param hash_id: The id of the file on the server. The convention is the use the sha1sum of the content as id.
-            :return: True if the file is available on the server.
+        :param hash_id: The id of the file on the server. The convention is the use the sha1sum of the content as id.
+        :return: True if the file is available on the server.
         """
 
         def call() -> Result:
@@ -763,10 +763,10 @@ class ResourceHandler(object):
 
     def upload_file(self, hash_id: str, content: bytes) -> None:
         """
-            Upload a file to the server
+        Upload a file to the server
 
-            :param hash_id: The id to identify the content. The convention is to use the sha1sum of the content to identify it.
-            :param content: A byte string with the content
+        :param hash_id: The id to identify the content. The convention is to use the sha1sum of the content to identify it.
+        :param content: A byte string with the content
         """
 
         def call() -> Result:
@@ -780,77 +780,77 @@ class ResourceHandler(object):
 
 class CRUDHandler(ResourceHandler):
     """
-        This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
-        only works on purgeable resources.
+    This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
+    only works on purgeable resources.
     """
 
     def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
         """
-            This method reads the current state of the resource. It provides a copy of the resource that should be deployed,
-            the method implementation should modify the attributes of this resource to the current state.
+        This method reads the current state of the resource. It provides a copy of the resource that should be deployed,
+        the method implementation should modify the attributes of this resource to the current state.
 
-            :param ctx: Context can be used to pass value discovered in the read method to the CUD methods. For example, the
-                       id used in API calls
-            :param resource: A clone of the desired resource state. The read method need to set values on this object.
-            :raise SkipResource: Raise this exception when the handler should skip this resource
-            :raise ResourcePurged: Raise this exception when the resource does not exist yet.
+        :param ctx: Context can be used to pass value discovered in the read method to the CUD methods. For example, the
+                   id used in API calls
+        :param resource: A clone of the desired resource state. The read method need to set values on this object.
+        :raise SkipResource: Raise this exception when the handler should skip this resource
+        :raise ResourcePurged: Raise this exception when the resource does not exist yet.
         """
 
     def create_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
         """
-            This method is called by the handler when the resource should be created.
+        This method is called by the handler when the resource should be created.
 
-            :param context: Context can be used to get values discovered in the read method. For example, the id used in API
-                            calls. This context should also be used to let the handler know what changes were made to the
-                            resource.
-            :param resource: The desired resource state.
+        :param context: Context can be used to get values discovered in the read method. For example, the id used in API
+                        calls. This context should also be used to let the handler know what changes were made to the
+                        resource.
+        :param resource: The desired resource state.
         """
 
     def delete_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
         """
-            This method is called by the handler when the resource should be deleted.
+        This method is called by the handler when the resource should be deleted.
 
-            :param ctx: Context can be used to get values discovered in the read method. For example, the id used in API
-                        calls. This context should also be used to let the handler know what changes were made to the
-                        resource.
-            :param resource: The desired resource state.
+        :param ctx: Context can be used to get values discovered in the read method. For example, the id used in API
+                    calls. This context should also be used to let the handler know what changes were made to the
+                    resource.
+        :param resource: The desired resource state.
         """
 
     def update_resource(self, ctx: HandlerContext, changes: dict, resource: resources.PurgeableResource) -> None:
         """
-            This method is called by the handler when the resource should be updated.
+        This method is called by the handler when the resource should be updated.
 
-            :param ctx: Context can be used to get values discovered in the read method. For example, the id used in API
-                        calls. This context should also be used to let the handler know what changes were made to the
-                        resource.
-            :param changes: A map of resource attributes that should be changed. Each value is a tuple with the current and the
-                            desired value.
-            :param resource: The desired resource state.
+        :param ctx: Context can be used to get values discovered in the read method. For example, the id used in API
+                    calls. This context should also be used to let the handler know what changes were made to the
+                    resource.
+        :param changes: A map of resource attributes that should be changed. Each value is a tuple with the current and the
+                        desired value.
+        :param resource: The desired resource state.
         """
 
     def calculate_diff(
         self, ctx: HandlerContext, current: resources.Resource, desired: resources.Resource
     ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
         """
-            Calculate the diff between the current and desired resource state.
+        Calculate the diff between the current and desired resource state.
 
-            :param ctx: Context can be used to get values discovered in the read method. For example, the id used in API
-                        calls. This context should also be used to let the handler know what changes were made to the
-                        resource.
-            :param current: The current state of the resource
-            :param desired: The desired state of the resource
-            :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
-                     fields that require changes.
+        :param ctx: Context can be used to get values discovered in the read method. For example, the id used in API
+                    calls. This context should also be used to let the handler know what changes were made to the
+                    resource.
+        :param current: The current state of the resource
+        :param desired: The desired state of the resource
+        :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
+                 fields that require changes.
         """
         return self._diff(current, desired)
 
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = None) -> None:
         """
-            Update the given resource. This method is called by the agent. Override the CRUD methods of this class.
+        Update the given resource. This method is called by the agent. Override the CRUD methods of this class.
 
-            :param ctx: Context object to report changes and logs to the agent and server.
-            :param resource: The resource to check the current state of.
-            :param dry_run: True will only determine the required changes but will not execute them.
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        :param dry_run: True will only determine the required changes but will not execute them.
         """
         try:
             self.pre(ctx, resource)
@@ -916,7 +916,7 @@ class CRUDHandler(ResourceHandler):
 
 class Commander(object):
     """
-        This class handles commands
+    This class handles commands
     """
 
     __command_functions: Dict[str, Dict[str, Type[ResourceHandler]]] = defaultdict(dict)
@@ -945,7 +945,7 @@ class Commander(object):
         cls, cache: AgentCache, agent: "inmanta.agent.agent.AgentInstance", resource: resources.Resource
     ) -> ResourceHandler:
         """
-            Return a provider to handle the given resource
+        Return a provider to handle the given resource
         """
         resource_id = resource.id
         resource_type = resource_id.get_entity_type()
@@ -983,11 +983,11 @@ class Commander(object):
     @classmethod
     def add_provider(cls, resource: str, name: str, provider: Type["ResourceHandler"]) -> None:
         """
-            Register a new provider
+        Register a new provider
 
-            :param resource: the name of the resource this handler applies to
-            :param name: the name of the handler itself
-            :param provider: the handler function
+        :param resource: the name of the resource this handler applies to
+        :param name: the name of the handler itself
+        :param provider: the handler function
         """
         if resource in cls.__command_functions and name in cls.__command_functions[resource]:
             del cls.__command_functions[resource][name]
@@ -996,8 +996,7 @@ class Commander(object):
 
     @classmethod
     def get_providers(cls) -> typing.Iterator[Tuple[str, typing.Type["ResourceHandler"]]]:
-        """ Return an iterator over resource type, handler definition
-        """
+        """Return an iterator over resource type, handler definition"""
         for resource_type, handler_map in cls.__command_functions.items():
             for handle_name, handler_class in handler_map.items():
                 yield (resource_type, handler_class)
@@ -1005,7 +1004,7 @@ class Commander(object):
     @classmethod
     def get_provider_class(cls, resource_type: str, name: str) -> Optional[typing.Type["ResourceHandler"]]:
         """
-            Return the class of the handler for the given type and with the given name
+        Return the class of the handler for the given type and with the given name
         """
         if resource_type not in cls.__command_functions:
             return None
@@ -1018,6 +1017,6 @@ class Commander(object):
 
 class HandlerNotAvailableException(Exception):
     """
-        This exception is thrown when a resource handler cannot perform its job. For example, the admin interface
-        it connects to is not available.
+    This exception is thrown when a resource handler cannot perform its job. For example, the admin interface
+    it connects to is not available.
     """

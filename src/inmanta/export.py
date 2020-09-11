@@ -100,7 +100,7 @@ def upload_code(conn: protocol.Client, tid: uuid.UUID, version: int, code_manage
 
 class Exporter(object):
     """
-        This class handles exporting the compiled configuration model
+    This class handles exporting the compiled configuration model
     """
 
     # instance vars
@@ -116,14 +116,14 @@ class Exporter(object):
     @classmethod
     def add(cls, name: str, types: List[str], function: Callable[["Exporter", ProxiedType], None]) -> None:
         """
-            Add a new export function
+        Add a new export function
         """
         cls.__export_functions[name] = (types, function)
 
     @classmethod
     def add_dependency_manager(cls, function: Callable[[ModelDict, ResourceDict], None]) -> None:
         """
-            Register a new dependency manager
+        Register a new dependency manager
         """
         cls.__dep_manager.append(function)
 
@@ -140,8 +140,7 @@ class Exporter(object):
         self._file_store: Dict[str, bytes] = {}
 
     def _get_instance_proxies_of_types(self, types: List[str]) -> Dict[str, ProxiedType]:
-        """ Returns a dict of instances for the given types
-        """
+        """Returns a dict of instances for the given types"""
         proxies: Dict[str, ProxiedType] = {}
         for t in types:
             if self.types is not None and t in self.types:
@@ -153,7 +152,7 @@ class Exporter(object):
 
     def _load_resources(self, types: Dict[str, Entity]) -> None:
         """
-            Load all registered resources
+        Load all registered resources
         """
         resource.validate()
         entities = resource.get_entity_resources()
@@ -192,7 +191,7 @@ class Exporter(object):
 
     def _run_export_plugins_specified_in_config_file(self) -> None:
         """
-            Run any additional export plug-ins
+        Run any additional export plug-ins
         """
         export = []
         for pl in cfg_export.get():
@@ -215,7 +214,7 @@ class Exporter(object):
 
     def _call_dep_manager(self, types: ModelDict) -> None:
         """
-            Call all dep managers and let them add dependencies
+        Call all dep managers and let them add dependencies
         """
         for fnc in self.__class__.__dep_manager:
             try:
@@ -258,7 +257,7 @@ class Exporter(object):
 
     def _validate_graph(self) -> None:
         """
-            Validate the graph and if requested by the user, dump it
+        Validate the graph and if requested by the user, dump it
         """
         done: Set[Resource] = set()
 
@@ -378,12 +377,12 @@ class Exporter(object):
 
     def add_resource(self, resource: Resource) -> None:
         """
-            Add a new resource to the list of exported resources. When
-            commit_resources is called, the entire list of resources is send
-            to the the server.
+        Add a new resource to the list of exported resources. When
+        commit_resources is called, the entire list of resources is send
+        to the the server.
 
-            A resource is a map of attributes. This method validates the id
-            of the resource and will add a version (if it is not set already)
+        A resource is a map of attributes. This method validates the id
+        of the resource and will add a version (if it is not set already)
         """
         if resource.version > 0:
             raise Exception("Versions should not be added to resources during model compilation.")
@@ -408,8 +407,7 @@ class Exporter(object):
         self._resources[resource.id] = resource
 
     def resources_to_list(self) -> List[Dict[str, Any]]:
-        """ Convert the resource list to a json representation
-        """
+        """Convert the resource list to a json representation"""
         resources = []
 
         for res in self._resources.values():
@@ -418,8 +416,7 @@ class Exporter(object):
         return resources
 
     def deploy_code(self, conn: protocol.Client, tid: uuid.UUID, version: int = None) -> None:
-        """ Deploy code to the server
-        """
+        """Deploy code to the server"""
         if version is None:
             version = int(time.time())
 
@@ -439,7 +436,7 @@ class Exporter(object):
 
     def commit_resources(self, version: int, resources: List[Dict[str, str]], metadata: Dict[str, str], model: Dict) -> None:
         """
-            Commit the entire list of resource to the configurations server.
+        Commit the entire list of resource to the configurations server.
         """
         tid = cfg_env.get()
         if tid is None:
@@ -497,8 +494,8 @@ class Exporter(object):
 
     def upload_file(self, content: Union[str, bytes]) -> str:
         """
-            Upload a file to the configuration server. This operation is not
-            executed in the transaction.
+        Upload a file to the configuration server. This operation is not
+        executed in the transaction.
         """
         bcontent: bytes
 
@@ -531,7 +528,7 @@ class dependency_manager(object):  # noqa: N801
 
 
 class code_manager(object):  # noqa: N801
-    """ Register a function that will be invoked after all resource and handler code is collected. A code manager can add
+    """Register a function that will be invoked after all resource and handler code is collected. A code manager can add
     or modify code before it is uploaded to the server.
     """
 
@@ -541,7 +538,7 @@ class code_manager(object):  # noqa: N801
 
 class export(object):  # noqa: N801
     """
-        A decorator that registers an export function
+    A decorator that registers an export function
     """
 
     def __init__(self, name: str, *args: str) -> None:
@@ -550,7 +547,7 @@ class export(object):  # noqa: N801
 
     def __call__(self, function: Callable[["Exporter", ProxiedType], None]) -> Callable[["Exporter", ProxiedType], None]:
         """
-            The wrapping
+        The wrapping
         """
         Exporter.add(self.name, self.types, function)
         return function
@@ -600,7 +597,7 @@ class ModelExporter(object):
 
     def export_types(self) -> Dict[str, Any]:
         """
-            Run after export_model!!
+        Run after export_model!!
         """
 
         def convert_comment(value):
