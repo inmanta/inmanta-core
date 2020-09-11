@@ -14,7 +14,7 @@ contains all dependencies for the core platform, for running tests and for gener
     pip install -c requirements.txt .
 
 
-https://dependabot.com monitors each dependency for updates and security issues. The inmanta development policy is to track the latest
+https://pyup.io monitors each dependency for updates and security issues. The inmanta development policy is to track the latest
 version of all dependencies.
 
 Versioning
