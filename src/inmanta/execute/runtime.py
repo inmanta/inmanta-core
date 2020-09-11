@@ -20,6 +20,7 @@ from abc import abstractmethod
 from typing import Deque, Dict, Generic, List, Optional, Set, TypeVar, Union, cast
 
 import inmanta.execute.dataflow as dataflow
+import inmanta.execute.proxy as proxy
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeException,
@@ -36,7 +37,6 @@ from inmanta.ast import (
 )
 from inmanta.ast.type import Type
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.proxy import UnsetException
 from inmanta.execute.tracking import Tracker
 from inmanta.execute.util import Unknown
 
@@ -142,7 +142,7 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
 
     def get_value(self) -> T:
         if not self.hasValue:
-            raise UnsetException("Value not available", self)
+            raise proxy.UnsetException("Value not available", self)
 
         return self.value
 
@@ -972,7 +972,7 @@ class Instance(ExecutionContext):
                         # list for n-ary relations
                         length = 0 if v.value is None else len(v.value)
                         excns.append(
-                            UnsetException(
+                            proxy.UnsetException(
                                 "The object %s is not complete: attribute %s (%s) requires %d values but only %d are set"
                                 % (self, k, attr.location, low, length),
                                 self,
@@ -981,7 +981,7 @@ class Instance(ExecutionContext):
                         )
                     else:
                         excns.append(
-                            UnsetException(
+                            proxy.UnsetException(
                                 "The object %s is not complete: attribute %s (%s) is not set" % (self, k, attr.location),
                                 self,
                                 attr,
