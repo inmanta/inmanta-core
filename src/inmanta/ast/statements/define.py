@@ -55,11 +55,16 @@ LOGGER = logging.getLogger(__name__)
 
 class TypeDeclaration(Statement):
     """
-        Declaration of a type. A type declaration consists of a base type string and can be
-        multi ('basetype[]'), nullable ('basetype?') or both ('basetype[]?').
+    Declaration of a type. A type declaration consists of a base type string and can be
+    multi ('basetype[]'), nullable ('basetype?') or both ('basetype[]?').
     """
 
-    def __init__(self, basetype: LocatableString, multi: bool = False, nullable: bool = False,) -> None:
+    def __init__(
+        self,
+        basetype: LocatableString,
+        multi: bool = False,
+        nullable: bool = False,
+    ) -> None:
         Statement.__init__(self)
         self.basetype: LocatableString = basetype
         self.multi: bool = multi
@@ -67,13 +72,13 @@ class TypeDeclaration(Statement):
 
     def get_basetype(self, namespace: Namespace) -> Type:
         """
-            Returns the base type for this declaration as a Type.
+        Returns the base type for this declaration as a Type.
         """
         return namespace.get_type(self.basetype)
 
     def get_type(self, namespace: Namespace) -> Type:
         """
-            Returns the type for this declaration as a Type.
+        Returns the type for this declaration as a Type.
         """
         tp: Type = self.get_basetype(namespace)
         if self.multi:
@@ -95,7 +100,7 @@ class DefineAttribute(Statement):
         remove_default: bool = True,
     ) -> None:
         """
-            if default_value is None, this is an explicit removal of a default value
+        if default_value is None, this is an explicit removal of a default value
         """
         super(DefineAttribute, self).__init__()
         self.type = attr_type
@@ -109,7 +114,7 @@ class DefineAttribute(Statement):
 
 class DefineEntity(TypeDefinitionStatement):
     """
-        Define a new entity in the configuration
+    Define a new entity in the configuration
     """
 
     comment: Optional[str]
@@ -148,13 +153,13 @@ class DefineEntity(TypeDefinitionStatement):
         self, attr_type: LocatableString, name: LocatableString, default_value: ExpressionStatement = None
     ) -> None:
         """
-            Add an attribute to this entity
+        Add an attribute to this entity
         """
         self.attributes.append(DefineAttribute(TypeDeclaration(attr_type), name, default_value))
 
     def __repr__(self) -> str:
         """
-            A textual representation of this entity
+        A textual representation of this entity
         """
         return "Entity(%s)" % self.name
 
@@ -172,7 +177,7 @@ class DefineEntity(TypeDefinitionStatement):
 
     def evaluate(self) -> None:
         """
-            Evaluate this statement.
+        Evaluate this statement.
         """
         try:
             entity_type = self.type
@@ -239,9 +244,9 @@ class DefineEntity(TypeDefinitionStatement):
 
 class DefineImplementation(TypeDefinitionStatement):
     """
-        Define a new implementation that has a name and contains statements
+    Define a new implementation that has a name and contains statements
 
-        :param name: The name of the implementation
+    :param name: The name of the implementation
     """
 
     comment: Optional[str]
@@ -273,13 +278,13 @@ class DefineImplementation(TypeDefinitionStatement):
 
     def __repr__(self) -> str:
         """
-            The representation of this implementation
+        The representation of this implementation
         """
         return "Implementation(%s)" % self.name
 
     def evaluate(self) -> None:
         """
-            Evaluate this statement in the given scope
+        Evaluate this statement in the given scope
         """
         try:
             cls = self.namespace.get_type(self.entity)
@@ -295,19 +300,19 @@ class DefineImplementation(TypeDefinitionStatement):
 
     def nested_blocks(self) -> Iterator["BasicBlock"]:
         """
-            Returns an iterator over blocks contained within this statement.
+        Returns an iterator over blocks contained within this statement.
         """
         yield self.block
 
 
 class DefineImplement(DefinitionStatement):
     """
-        Define a new implementation for a given entity
+    Define a new implementation for a given entity
 
-        :param entity: The name of the entity that is implemented
-        :param implementations: A list of implementations
-        :param select: A clause that determines when this implementation is "active"
-        :param inherit: True iff the entity should inherit all implementations from its parents
+    :param entity: The name of the entity that is implemented
+    :param implementations: A list of implementations
+    :param select: A clause that determines when this implementation is "active"
+    :param inherit: True iff the entity should inherit all implementations from its parents
     """
 
     comment: Optional[str]
@@ -339,13 +344,13 @@ class DefineImplement(DefinitionStatement):
 
     def __repr__(self) -> str:
         """
-            Returns a representation of this class
+        Returns a representation of this class
         """
         return "Implement(%s)" % (self.entity)
 
     def evaluate(self) -> None:
         """
-            Evaluate this statement.
+        Evaluate this statement.
         """
         try:
             entity_type = self.namespace.get_type(self.entity)
@@ -393,11 +398,11 @@ class DefineImplement(DefinitionStatement):
 
 class DefineTypeConstraint(TypeDefinitionStatement):
     """
-        Define a new data type in the configuration. This type is a constrained
-        version of a the built-in datatypes
+    Define a new data type in the configuration. This type is a constrained
+    version of a the built-in datatypes
 
-        :param name: The name of the new  type
-        :param basetype: The name of the type that is "refined"
+    :param name: The name of the new  type
+    :param basetype: The name of the type that is "refined"
     """
 
     comment: Optional[str]
@@ -421,15 +426,15 @@ class DefineTypeConstraint(TypeDefinitionStatement):
 
     def get_expression(self) -> ExpressionStatement:
         """
-            Get the expression that constrains the basetype
+        Get the expression that constrains the basetype
         """
         return self.__expression
 
     def set_expression(self, expression: ExpressionStatement) -> None:
         """
-            Set the expression that constrains the basetype. This expression
-            should reference the value that will be assign to a variable of this
-            type. This variable has the same name as the type.
+        Set the expression that constrains the basetype. This expression
+        should reference the value that will be assign to a variable of this
+        type. This variable has the same name as the type.
         """
         contains_var = False
 
@@ -450,13 +455,13 @@ class DefineTypeConstraint(TypeDefinitionStatement):
 
     def __repr__(self) -> str:
         """
-            A representation of this definition
+        A representation of this definition
         """
         return "Type(%s)" % self.name
 
     def evaluate(self) -> None:
         """
-            Evaluate this statement.
+        Evaluate this statement.
         """
         basetype = self.namespace.get_type(self.basetype)
 
@@ -470,10 +475,10 @@ class DefineTypeConstraint(TypeDefinitionStatement):
 
 class DefineTypeDefault(TypeDefinitionStatement):
     """
-        Define a new entity that is based on an existing entity and default values for attributes.
+    Define a new entity that is based on an existing entity and default values for attributes.
 
-        :param name: The name of the new type
-        :param class_ctor: A constructor statement
+    :param name: The name of the new type
+    :param class_ctor: A constructor statement
     """
 
     type: Default
@@ -491,13 +496,13 @@ class DefineTypeDefault(TypeDefinitionStatement):
 
     def __repr__(self) -> str:
         """
-            Get a representation of this default
+        Get a representation of this default
         """
         return self.pretty_print()
 
     def evaluate(self) -> None:
         """
-            Evaluate this statement.
+        Evaluate this statement.
         """
         # the base class
         type_class = self.namespace.get_type(self.ctor.class_type)
@@ -522,7 +527,7 @@ Relationside = Tuple[LocatableString, LocatableString, Tuple[Optional[int], Opti
 
 class DefineRelation(BiStatement):
     """
-        Define a relation
+    Define a relation
     """
 
     annotation_expression: List[Tuple[ResultVariable, ExpressionStatement]]
@@ -545,13 +550,13 @@ class DefineRelation(BiStatement):
 
     def __repr__(self) -> str:
         """
-            The represenation of this relation
+        The represenation of this relation
         """
         return "Relation(%s, %s)" % (self.left[0], self.right[0])
 
     def evaluate(self) -> None:
         """
-            Add this relation to the participating ends
+        Add this relation to the participating ends
         """
         try:
             left = self.namespace.get_type(self.left[0])
@@ -635,7 +640,7 @@ class DefineRelation(BiStatement):
 
 class DefineIndex(DefinitionStatement):
     """
-        This defines an index over attributes in an entity
+    This defines an index over attributes in an entity
     """
 
     def __init__(self, entity_type: LocatableString, attributes: List[LocatableString]):
@@ -649,7 +654,7 @@ class DefineIndex(DefinitionStatement):
 
     def types(self, recursive: bool = False) -> List[Tuple[str, LocatableString]]:
         """
-            @see Statement#types
+        @see Statement#types
         """
         return [("type", self.type)]
 
@@ -658,7 +663,7 @@ class DefineIndex(DefinitionStatement):
 
     def evaluate(self) -> None:
         """
-            Add the index to the entity
+        Add the index to the entity
         """
         entity_like = self.namespace.get_type(self.type)
         assert isinstance(entity_like, EntityLike), "%s is not an entity or default" % entity_like
@@ -687,7 +692,7 @@ class DefineIndex(DefinitionStatement):
 
 class PluginStatement(TypeDefinitionStatement):
     """
-        This statement defines a plugin function
+    This statement defines a plugin function
     """
 
     def __init__(self, namespace: Namespace, name: str, function_class: typing.Type[Plugin]) -> None:
@@ -698,13 +703,13 @@ class PluginStatement(TypeDefinitionStatement):
 
     def __repr__(self) -> str:
         """
-            The representation of this function
+        The representation of this function
         """
         return "Function(%s)" % self._name
 
     def evaluate(self) -> None:
         """
-            Evaluate this plugin
+        Evaluate this plugin
         """
         pass
 
@@ -723,7 +728,7 @@ class DefineImport(TypeDefinitionStatement, Import):
 
     def evaluate(self) -> None:
         """
-            Evaluate this plugin
+        Evaluate this plugin
         """
 
     def __str__(self) -> str:

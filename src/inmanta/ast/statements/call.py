@@ -44,14 +44,14 @@ LOGGER = logging.getLogger(__name__)
 
 class FunctionCall(ReferenceStatement):
     """
-        This class models a call to a function
+    This class models a call to a function
 
-        :param name: The name of the function that needs to be called
-        :param arguments: A list of arguments
+    :param name: The name of the function that needs to be called
+    :param arguments: A list of arguments
 
-        uses:          args
-        provides:      return value
-        contributes:
+    uses:          args
+    provides:      return value
+    contributes:
     """
 
     def __init__(
@@ -109,7 +109,7 @@ class FunctionCall(ReferenceStatement):
 
     def resume(self, requires, resolver, queue, result):
         """
-            Evaluate this statement.
+        Evaluate this statement.
         """
         arguments = [a.execute(requires, resolver, queue) for a in self.arguments]
         kwargs = {k: v.execute(requires, resolver, queue) for k, v in self.kwargs.items()}
@@ -154,13 +154,13 @@ class Function:
 
     def call_direct(self, args, kwargs) -> object:
         """
-            Call this function and return the result.
+        Call this function and return the result.
         """
         raise NotImplementedError()
 
     def call_in_context(self, args, kwargs, resolver: Resolver, queue: QueueScheduler, result: ResultVariable) -> None:
         """
-            Call this function in the supplied context and store the result in the supplied ResultVariable.
+        Call this function in the supplied context and store the result in the supplied ResultVariable.
         """
         raise NotImplementedError()
 

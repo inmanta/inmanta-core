@@ -138,9 +138,9 @@ def context_dump(ioloop: IOLoop) -> None:
 
 def setup_signal_handlers(shutdown_function: Callable[[], Coroutine[Any, Any, None]]) -> None:
     """
-        Make sure that shutdown_function is called when a SIGTERM or a SIGINT interrupt occurs.
+    Make sure that shutdown_function is called when a SIGTERM or a SIGINT interrupt occurs.
 
-        :param shutdown_function: The function that contains the shutdown logic.
+    :param shutdown_function: The function that contains the shutdown logic.
     """
     # ensure correct ioloop
     ioloop = IOLoop.current()
@@ -186,9 +186,9 @@ def safe_shutdown(ioloop: IOLoop, shutdown_function: Callable[[], None]) -> None
 
 async def safe_shutdown_wrapper(shutdown_function: Callable[[], Coroutine[Any, Any, None]]) -> None:
     """
-        Wait 10 seconds to gracefully shutdown the instance.
-        Afterwards stop the IOLoop
-        Wait for 3 seconds to force stop
+    Wait 10 seconds to gracefully shutdown the instance.
+    Afterwards stop the IOLoop
+    Wait for 3 seconds to force stop
     """
     future = shutdown_function()
     try:
@@ -202,7 +202,7 @@ async def safe_shutdown_wrapper(shutdown_function: Callable[[], Coroutine[Any, A
 
 def compiler_config(parser: ArgumentParser) -> None:
     """
-        Configure the compiler of the export function
+    Configure the compiler of the export function
     """
     parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
     parser.add_argument(
@@ -370,7 +370,7 @@ def deploy(options: argparse.Namespace) -> None:
 
 def export_parser_config(parser: ArgumentParser) -> None:
     """
-        Configure the compiler of the export function
+    Configure the compiler of the export function
     """
     parser.add_argument("-g", dest="depgraph", help="Dump the dependency graph", action="store_true")
     parser.add_argument(
@@ -629,7 +629,7 @@ def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
 
 def app() -> None:
     """
-        Run the compiler
+    Run the compiler
     """
     # Send logs to stdout
     stream_handler = _get_default_stream_handler()

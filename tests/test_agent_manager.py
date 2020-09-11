@@ -56,7 +56,7 @@ async def empty_future(*args, **kwargs):
 
 class MockSession(object):
     """
-        An environment that segments agents connected to the server
+    An environment that segments agents connected to the server
     """
 
     def __init__(self, sid, tid, endpoint_names: Set[str], nodename):
@@ -493,8 +493,8 @@ async def assert_agent_db_state(
     tid: UUID, nr_procs: int, nr_non_expired_procs: int, nr_agent_instances: int, nr_non_expired_instances: int
 ) -> typing.Callable:
     """
-        The database log is updated asynchronously. This method waits until
-        the desired database state is reached.
+    The database log is updated asynchronously. This method waits until
+    the desired database state is reached.
     """
 
     async def is_db_state_reached():
@@ -518,9 +518,9 @@ async def assert_agent_db_state(
 @pytest.mark.asyncio
 async def test_session_renewal(init_dataclasses_and_load_schema):
     """
-        Agent got timeout but agent process was still running (e.g, network connectivity was disrupted).
-        So the same agent process connects to the server with the same session id. This test verifies
-        that the database state is updated correctly when an expired session is renewed.
+    Agent got timeout but agent process was still running (e.g, network connectivity was disrupted).
+    So the same agent process connects to the server with the same session id. This test verifies
+    that the database state is updated correctly when an expired session is renewed.
     """
     project = data.Project(name="test")
     await project.insert()
@@ -565,9 +565,9 @@ async def test_session_renewal(init_dataclasses_and_load_schema):
 @pytest.mark.asyncio
 async def test_fix_corrupted_database(init_dataclasses_and_load_schema):
     """
-        When the database connection is lost, the agent session information might get
-        corrupted. This inconsistency should be fixed when a new session is registered.
-        This test case verifies this behavior.
+    When the database connection is lost, the agent session information might get
+    corrupted. This inconsistency should be fixed when a new session is registered.
+    This test case verifies this behavior.
     """
     project = data.Project(name="test")
     await project.insert()
@@ -636,10 +636,10 @@ async def test_fix_corrupted_database(init_dataclasses_and_load_schema):
 @pytest.mark.asyncio
 async def test_session_creation_fails(server, environment, async_finalizer, caplog):
     """
-        Verify that:
-         * Session creation works correctly when the connectivity to the database works.
-         * Session creation is refused when the connectivity to the database doesn't work.
-           In that case the server state should stay consistent.
+    Verify that:
+     * Session creation works correctly when the connectivity to the database works.
+     * Session creation is refused when the connectivity to the database doesn't work.
+       In that case the server state should stay consistent.
     """
     env_id = UUID(environment)
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
@@ -689,7 +689,7 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
 @pytest.mark.asyncio
 async def test_agent_actions(server, client, async_finalizer):
     """
-        Test the agent_action() and the all_agents_action() API call.
+    Test the agent_action() and the all_agents_action() API call.
     """
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
@@ -777,7 +777,7 @@ async def test_agent_actions(server, client, async_finalizer):
     # set up for halt test
     async def assert_agents_halt_state(env_id: UUID, agents_running: Dict[str, bool], halted: bool) -> None:
         """
-            :param agents_running: dictionary of agents that were running before environment halting.
+        :param agents_running: dictionary of agents that were running before environment halting.
         """
         for agent_name, running in agents_running.items():
             db_agent: data.Agent = await data.Agent.get_one(environment=env_id, name=agent_name)
@@ -823,8 +823,8 @@ async def test_agent_actions(server, client, async_finalizer):
 @pytest.mark.asyncio
 async def test_process_already_terminated(server, environment):
     """
-        This test case tests whether the termination of autostarted agents (processes) happens correctly,
-        when one of the processes has already terminated.
+    This test case tests whether the termination of autostarted agents (processes) happens correctly,
+    when one of the processes has already terminated.
     """
     env_id = UUID(environment)
     env = await data.Environment.get_by_id(env_id)
@@ -843,8 +843,8 @@ async def test_process_already_terminated(server, environment):
 @pytest.mark.asyncio
 async def test_exception_occurs_while_processing_session_action(server, environment, async_finalizer, monkeypatch, caplog):
     """
-        This test verifies that the consumer of the _session_listener_actions queue keeps working
-        even when the an exception is thrown while handling an action.
+    This test verifies that the consumer of the _session_listener_actions queue keeps working
+    even when the an exception is thrown while handling an action.
     """
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
@@ -906,10 +906,10 @@ async def test_restart_on_environment_setting(server, client, environment, caplo
 @pytest.mark.asyncio
 async def test_failover_doesnt_make_paused_agent_primary(server, client, environment, agent_factory):
     """
-        This test verifies that:
+    This test verifies that:
 
-         * The standby agent doesn't take over when the agent is paused.
-         * Session expiry doesn't make a standby agent primary when the agent is paused.
+     * The standby agent doesn't take over when the agent is paused.
+     * Session expiry doesn't make a standby agent primary when the agent is paused.
     """
     agent_name = "agent1"
     agent_config.agent_names.set(agent_name)
@@ -956,8 +956,8 @@ async def test_failover_doesnt_make_paused_agent_primary(server, client, environ
 @pytest.mark.asyncio
 async def test_add_internal_agent_when_missing_in_agent_map(server, environment, postgresql_client):
     """
-        The internal agent should always be present in the autostart_agent_map. If it is not present, it is added when to
-        auto-started agent is started. This test case verifies this behavior.
+    The internal agent should always be present in the autostart_agent_map. If it is not present, it is added when to
+    auto-started agent is started. This test case verifies this behavior.
     """
     # Ensure agent1
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)

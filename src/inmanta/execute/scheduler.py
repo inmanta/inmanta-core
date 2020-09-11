@@ -63,7 +63,7 @@ MAX_ITERATIONS = 10000
 
 class Scheduler(object):
     """
-        This class schedules statements for execution
+    This class schedules statements for execution
     """
 
     def __init__(self, track_dataflow: bool = False):
@@ -129,7 +129,7 @@ class Scheduler(object):
 
     def define_types(self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]) -> None:
         """
-            This is the first compiler stage that defines all types_and_impl
+        This is the first compiler stage that defines all types_and_impl
         """
         # get all relevant stmts
         definitions: List["DefinitionStatement"] = [d for d in statements if isinstance(d, DefinitionStatement)]
@@ -232,7 +232,7 @@ class Scheduler(object):
 
     def run(self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]) -> bool:
         """
-            Evaluate the current graph
+        Evaluate the current graph
         """
         prev = time.time()
 

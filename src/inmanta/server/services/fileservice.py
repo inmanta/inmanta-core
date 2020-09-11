@@ -123,13 +123,13 @@ class FileService(protocol.ServerSlice):
     @protocol.handle(methods.stat_files)
     async def stat_files(self, files: List[str]) -> Apireturn:
         """
-            Return which files in the list exist on the server
+        Return which files in the list exist on the server
         """
         return 200, {"files": self.stat_file_internal(files)}
 
     def stat_file_internal(self, files: Iterable[str]) -> List[str]:
         """
-            Return which files in the list don't exist on the server
+        Return which files in the list don't exist on the server
         """
         response: List[str] = []
         for f in files:
@@ -142,7 +142,7 @@ class FileService(protocol.ServerSlice):
     @protocol.handle(methods.diff)
     async def file_diff(self, a: str, b: str) -> Apireturn:
         """
-            Diff the two files identified with the two hashes
+        Diff the two files identified with the two hashes
         """
         if a == "" or a == "0":
             a_lines: List[str] = []

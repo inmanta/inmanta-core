@@ -23,8 +23,8 @@ from inmanta.execute.dataflow import AssignableNode, AttributeNode, AttributeNod
 
 class UnsetRootCauseAnalyzer:
     """
-        Analyzes the root causes for attributes being unset among a collection of attribute nodes.
-        The main entrypoint for this class is the root_causes method.
+    Analyzes the root causes for attributes being unset among a collection of attribute nodes.
+    The main entrypoint for this class is the root_causes method.
     """
 
     def __init__(self, nodes: Iterable[AttributeNode]) -> None:
@@ -32,45 +32,45 @@ class UnsetRootCauseAnalyzer:
 
     def root_causes(self) -> Set[AttributeNode]:
         """
-            Returns the root causes from this instances' set of attribute nodes. An attribute node c
-            is defined as the cause for an other attribute node n iff c being unset leads to n
-            being unset.
-            Formally, the relation is_cause(c, x) is defined by three rules:
-                1. is_cause(c, x) <- c in `x = c` in graph
-                    (If `x = c` then c is responsible for x receiving a value)
-                2. is_cause(c, x) <- exists y: is_cause(c, y) and is_cause(y, x)
-                    (Cause is transitive)
-                3. is_cause(c, x) <- exists i : is_index_attr(x, i) and is_cause(c, x.i)
-                    (If an index attribute of x is unset this blocks execution. If c is the cause for the index
-                        value being unset, it is the cause for x being unset)
-                4. is_cause(c, x) <- exists y, z : `x = y.z` in graph and is_cause(c, y)
-                    (If x refers to y.z but y is unset, this blocks execution. If c is the cause for y being unset,
-                        it is the cause for x being unset)
+        Returns the root causes from this instances' set of attribute nodes. An attribute node c
+        is defined as the cause for an other attribute node n iff c being unset leads to n
+        being unset.
+        Formally, the relation is_cause(c, x) is defined by three rules:
+            1. is_cause(c, x) <- c in `x = c` in graph
+                (If `x = c` then c is responsible for x receiving a value)
+            2. is_cause(c, x) <- exists y: is_cause(c, y) and is_cause(y, x)
+                (Cause is transitive)
+            3. is_cause(c, x) <- exists i : is_index_attr(x, i) and is_cause(c, x.i)
+                (If an index attribute of x is unset this blocks execution. If c is the cause for the index
+                    value being unset, it is the cause for x being unset)
+            4. is_cause(c, x) <- exists y, z : `x = y.z` in graph and is_cause(c, y)
+                (If x refers to y.z but y is unset, this blocks execution. If c is the cause for y being unset,
+                    it is the cause for x being unset)
 
-                example (entity definitions omitted for clarity):
-                    model:
-                        index V(i)
+            example (entity definitions omitted for clarity):
+                model:
+                    index V(i)
 
-                        c = C()
-                        u = U()
-                        x = X()
+                    c = C()
+                    u = U()
+                    x = X()
 
-                        u.v = V(n = 42, i = c.i)
-                        x.n = u.v.n
+                    u.v = V(n = 42, i = c.i)
+                    x.n = u.v.n
 
-                    root_cause_analysis (capital letters refer to the single instance of that entity, not the entity itself):
-                        is_cause(c.i, x.n)
-                            <-(4)- `x.n = u.v.n` in graph and is_cause(c.i, u.v)
-                            <----- is_cause(c.i, u.v)
-                            <-(2)- is_cause(V, u.v) and is_cause(c.i, V)
-                            <-(1)- `u.v = V` in graph and is_cause(c.i, V)
-                            <----- is_cause(c.i, V)
-                            <-(3)- is_index_attr(V, i) and is_cause(c.i, V.i)
-                            <----- is_cause(c.i, V.i)
-                            <-(1)- `V.i = c.i` in graph
-                            <----- true
-            Rules 2 to 4 are implemented as propagation steps by
-            _assignment_step, _child_attribute_step and _parent_instance_step respectively.
+                root_cause_analysis (capital letters refer to the single instance of that entity, not the entity itself):
+                    is_cause(c.i, x.n)
+                        <-(4)- `x.n = u.v.n` in graph and is_cause(c.i, u.v)
+                        <----- is_cause(c.i, u.v)
+                        <-(2)- is_cause(V, u.v) and is_cause(c.i, V)
+                        <-(1)- `u.v = V` in graph and is_cause(c.i, V)
+                        <----- is_cause(c.i, V)
+                        <-(3)- is_index_attr(V, i) and is_cause(c.i, V.i)
+                        <----- is_cause(c.i, V.i)
+                        <-(1)- `V.i = c.i` in graph
+                        <----- true
+        Rules 2 to 4 are implemented as propagation steps by
+        _assignment_step, _child_attribute_step and _parent_instance_step respectively.
         """
         # Actual found roots
         roots: Set[AttributeNode] = set(())
@@ -135,18 +135,18 @@ class UnsetRootCauseAnalyzer:
 
     def _assignment_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
         """
-            Performs one propagation step according to rule 2:
-                is_cause(c, x) <- exists y: is_cause(c, y) and is_cause(y, x)
-                (Cause is transitive)
+        Performs one propagation step according to rule 2:
+            is_cause(c, x) <- exists y: is_cause(c, y) and is_cause(y, x)
+            (Cause is transitive)
         """
         return frozenset(node for assignment in node.assignable_assignments for node in assignment.rhs.nodes())
 
     def _child_attribute_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
         """
-            Performs one propagation step according to rule 3:
-                is_cause(c, x) <- exists i : is_index_attr(x, i) and is_cause(c, x.i)
-                (If an index attribute of x is unset this blocks execution. If c is the cause for the index
-                    value being unset, it is the cause for x being unset)
+        Performs one propagation step according to rule 3:
+            is_cause(c, x) <- exists i : is_index_attr(x, i) and is_cause(c, x.i)
+            (If an index attribute of x is unset this blocks execution. If c is the cause for the index
+                value being unset, it is the cause for x being unset)
         """
         return frozenset(
             index_attribute
@@ -156,10 +156,10 @@ class UnsetRootCauseAnalyzer:
 
     def _parent_instance_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
         """
-            Performs one propagation step according to rule 4:
-                is_cause(c, x) <- exists y, z : `x = y.z` in graph and is_cause(c, y)
-                (If x refers to y.z but y is unset, this blocks execution. If c is the cause for y being unset,
-                    it is the cause for x being unset)
+        Performs one propagation step according to rule 4:
+            is_cause(c, x) <- exists y, z : `x = y.z` in graph and is_cause(c, y)
+            (If x refers to y.z but y is unset, this blocks execution. If c is the cause for y being unset,
+                it is the cause for x being unset)
         """
         return frozenset(
             node

@@ -38,18 +38,18 @@ from inmanta.util import get_compiler_version
 
 class MultiVersionSetup(object):
     """
-      create scenarios by describing the history of a resource, from newest to oldest state
+    create scenarios by describing the history of a resource, from newest to oldest state
 
-      V  = void, nothing
-      A  - available
-      S  - skipped
-      UA - unavailable
-      E  - error
-      D  - deployed
-      d  - deploying
-      p  - processing events
-      SU - skipped for undefined
-      UD - undefined
+    V  = void, nothing
+    A  - available
+    S  - skipped
+    UA - unavailable
+    E  - error
+    D  - deployed
+    d  - deploying
+    p  - processing events
+    SU - skipped for undefined
+    UD - undefined
     """
 
     scenario_step_regex = re.compile(r"(A|E|D|d|p|S|SU|UA|UD)([0-9]+)")
@@ -98,7 +98,7 @@ class MultiVersionSetup(object):
         self, name: str, value: str, version: int, agent: str = "agent1", requires: List[str] = [], send_event: bool = False
     ) -> str:
         """
-            requires: list of resource identifiers
+        requires: list of resource identifiers
         """
         id = "test::Resource[%s,key=%s],v=%d" % (agent, name, version)
         res = {
@@ -212,7 +212,7 @@ class MultiVersionSetup(object):
 @pytest.mark.asyncio
 async def test_deploy(server, agent: Agent, environment, caplog):
     """
-        Test basic deploy mechanism mocking
+    Test basic deploy mechanism mocking
     """
     with caplog.at_level(logging.WARNING):
         # acquire raw server

@@ -149,7 +149,7 @@ async def test_ensure_future_and_handle_exception(caplog):
 
 def test_stable_dfs():
     def expand_graph(gs):
-        """ expand a graph od the form
+        """expand a graph od the form
         a: a b c d
         """
         nodes = set()

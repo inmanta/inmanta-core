@@ -43,9 +43,9 @@ if TYPE_CHECKING:
 
 class Attribute(Locatable):
     """
-        The attribute base class for entity attributes.
+    The attribute base class for entity attributes.
 
-        :param entity: The entity this attribute belongs to
+    :param entity: The entity this attribute belongs to
     """
 
     def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool = False, nullable: bool = False) -> None:
@@ -68,7 +68,7 @@ class Attribute(Locatable):
 
     def get_type(self) -> "Type":
         """
-            Get the type of this attribute.
+        Get the type of this attribute.
         """
         return self.__type
 
@@ -76,8 +76,8 @@ class Attribute(Locatable):
 
     def get_name(self) -> str:
         """
-            Get the name of the attribute. This is the name this attribute
-            is associated with in the entity.
+        Get the name of the attribute. This is the name this attribute
+        is associated with in the entity.
         """
         return self.__name
 
@@ -85,7 +85,7 @@ class Attribute(Locatable):
 
     def __hash__(self) -> "int":
         """
-            The hash of this object is based on the name of the attribute
+        The hash of this object is based on the name of the attribute
         """
         return hash(self.__name)
 
@@ -94,7 +94,7 @@ class Attribute(Locatable):
 
     def get_entity(self) -> "Entity":
         """
-            Return the entity this attribute belongs to
+        Return the entity this attribute belongs to
         """
         return self.__entity
 
@@ -102,8 +102,8 @@ class Attribute(Locatable):
 
     def validate(self, value: object) -> None:
         """
-            Validate a value that is going to be assigned to this attribute. Raises a :py:class:`inmanta.ast.RuntimeException`
-            if validation fails.
+        Validate a value that is going to be assigned to this attribute. Raises a :py:class:`inmanta.ast.RuntimeException`
+        if validation fails.
         """
         if isinstance(value, Unknown):
             return
@@ -126,15 +126,15 @@ class Attribute(Locatable):
 
     def is_optional(self) -> bool:
         """
-            Returns true iff this attribute accepts null values.
-            Deprecated but still used internally.
+        Returns true iff this attribute accepts null values.
+        Deprecated but still used internally.
         """
         return self.__nullable
 
     def is_multi(self) -> bool:
         """
-            Returns true iff this attribute expects a list of values of its base type.
-            Deprecated but still used internally.
+        Returns true iff this attribute expects a list of values of its base type.
+        Deprecated but still used internally.
         """
         return self.__multi
 
@@ -144,7 +144,7 @@ class Attribute(Locatable):
 
 class RelationAttribute(Attribute):
     """
-        An attribute that is a relation
+    An attribute that is a relation
     """
 
     def __init__(self, entity: "Entity", value_type: "Type", name: str) -> None:
@@ -164,7 +164,7 @@ class RelationAttribute(Attribute):
 
     def set_multiplicity(self, values: "Tuple[int, int]") -> None:
         """
-            Set the multiplicity of this end
+        Set the multiplicity of this end
         """
         self.low = values[0]
         self.high = values[1]

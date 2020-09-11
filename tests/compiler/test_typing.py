@@ -267,7 +267,8 @@ int("0.0")
 
 
 @pytest.mark.parametrize(
-    "parent_modifier,child_modifier", [("[]", ""), ("", "[]"), ("?", ""), ("", "?")],
+    "parent_modifier,child_modifier",
+    [("[]", ""), ("", "[]"), ("?", ""), ("", "?")],
 )
 def test_2132_inheritance_type_override(snippetcompiler, parent_modifier: str, child_modifier: str) -> None:
     snippetcompiler.setup_for_error(

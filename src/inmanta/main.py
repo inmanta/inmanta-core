@@ -58,7 +58,7 @@ class Client(object):
         self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}, allow_none: bool = False
     ) -> Optional[JsonType]:
         """
-            Do a request and return the response
+        Do a request and return the response
         """
         self.log.debug("Calling method %s on server %s:%s with arguments %s", method_name, self.host, self.host, arguments)
 
@@ -95,19 +95,19 @@ class Client(object):
 
     def get_list(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> List[Dict[str, Any]]:
         """
-            Same as do request, but return type is a list of dicts
+        Same as do request, but return type is a list of dicts
         """
         return cast(List[Dict[str, Any]], self.do_request(method_name, key_name, arguments, False))
 
     def get_dict(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> Dict[str, str]:
         """
-            Same as do request, but return type is a list of dicts
+        Same as do request, but return type is a list of dicts
         """
         return cast(Dict[str, str], self.do_request(method_name, key_name, arguments, False))
 
     def to_project_id(self, ref: str) -> uuid.UUID:
         """
-            Convert ref to a uuid
+        Convert ref to a uuid
         """
         try:
             project_id = uuid.UUID(ref)
@@ -133,7 +133,7 @@ class Client(object):
 
     def to_environment_id(self, ref: str, project_id: uuid.UUID = None) -> uuid.UUID:
         """
-            Convert ref to an env uuid, optionally scoped to a project
+        Convert ref to an env uuid, optionally scoped to a project
         """
         try:
             env_id = uuid.UUID(ref)
@@ -358,9 +358,9 @@ def environment_show(client: Client, environment: str) -> None:
 @click.pass_obj
 def environment_write_config(client: Client, environment: str) -> None:
     """
-        Save the ID of the environment and the server to the .inmanta config file
+    Save the ID of the environment and the server to the .inmanta config file
 
-        ENVIRONMENT: ID or name of the environment to write the config for
+    ENVIRONMENT: ID or name of the environment to write the config for
     """
     env = client.get_dict("get_environment", "environment", dict(id=client.to_environment_id(environment)))
     save_config(client, env)
@@ -492,13 +492,15 @@ def agent_list(client: Client, environment: str) -> None:
 @agent.command(name="pause")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option(
-    "--agent", help="The name of the agent to pause.", default=None,
+    "--agent",
+    help="The name of the agent to pause.",
+    default=None,
 )
 @click.option("--all", help="Pause all agents in the given environment", is_flag=True)
 @click.pass_obj
 def pause_agent(client: Client, environment: str, agent: Optional[str], all: bool) -> None:
     """
-        Pause a specific agent or all agents in a given environment. A paused agent cannot execute deploy operations.
+    Pause a specific agent or all agents in a given environment. A paused agent cannot execute deploy operations.
     """
     if agent is not None and all:
         raise click.ClickException("The --agent option and the --all flag cannot be used simultaneously.")
@@ -517,14 +519,16 @@ def pause_agent(client: Client, environment: str, agent: Optional[str], all: boo
 @agent.command(name="unpause")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option(
-    "--agent", help="The name of the agent to unpause.", default=None,
+    "--agent",
+    help="The name of the agent to unpause.",
+    default=None,
 )
 @click.option("--all", help="Unpause all agents in the given environment", is_flag=True)
 @click.pass_obj
 def unpause_agent(client: Client, environment: str, agent: Optional[str], all: bool) -> None:
     """
-        Unpause a specific agent or all agents in a given environment. A unpaused agent will be able to execute
-        deploy operations.
+    Unpause a specific agent or all agents in a given environment. A unpaused agent will be able to execute
+    deploy operations.
     """
     if agent is not None and all:
         raise click.ClickException("The --agent option and the --all flag cannot be used simultaneously.")
@@ -799,7 +803,7 @@ def create_token(client: Client, environment: str, api: str, compiler: str, agen
 @click.pass_obj
 def bootstrap_token(client: Client) -> None:
     """
-        Generate a bootstrap token that provides access to everything. This token is only valid for 3600 seconds.
+    Generate a bootstrap token that provides access to everything. This token is only valid for 3600 seconds.
     """
     click.echo("Token: " + protocol.encode_token(["api", "compiler", "agent"], expire=3600))
 
@@ -821,13 +825,16 @@ def validate_resource_version_id(
 @resource_action_log.command(name="list")
 @click.option("--environment", "-e", help="The ID or name of the environment to use", required=True)
 @click.option(
-    "--rvid", help="The resource version ID of the resource", callback=validate_resource_version_id, required=True,
+    "--rvid",
+    help="The resource version ID of the resource",
+    callback=validate_resource_version_id,
+    required=True,
 )
 @click.option("--action", help="Only list this resource action", type=click.Choice([ra.value for ra in ResourceAction]))
 @click.pass_obj
 def resource_action_log_list(client: Client, environment: str, rvid: ResourceVersionIdStr, action: Optional[str]) -> None:
     """
-        List the resource action log for a specific Resource.
+    List the resource action log for a specific Resource.
     """
     tid = client.to_environment_id(environment)
     ra_logs = client.get_list("get_resource", "logs", arguments=dict(tid=tid, id=rvid, logs=True, log_action=action))
@@ -842,13 +849,16 @@ def resource_action_log_list(client: Client, environment: str, rvid: ResourceVer
 @resource_action_log.command(name="show-messages")
 @click.option("--environment", "-e", help="The ID or name of the environment to use", required=True)
 @click.option(
-    "--rvid", help="The resource version ID of the resource", callback=validate_resource_version_id, required=True,
+    "--rvid",
+    help="The resource version ID of the resource",
+    callback=validate_resource_version_id,
+    required=True,
 )
 @click.option("--action-id", type=click.UUID, help="The ID of the resource action record", required=True)
 @click.pass_obj
 def resource_action_log_show(client: Client, environment: str, rvid: ResourceVersionIdStr, action_id: uuid.UUID) -> None:
     """
-        Show the log messages for a specific entry in the resource action log.
+    Show the log messages for a specific entry in the resource action log.
     """
     tid = client.to_environment_id(environment)
     action_logs = [

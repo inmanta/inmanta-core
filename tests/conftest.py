@@ -214,10 +214,10 @@ async def hard_clean_db_post(postgresql_client):
 @pytest.fixture(scope="function")
 async def clean_db(postgresql_pool, create_db, postgres_db):
     """
-        1) Truncated tables: All tables which are part of the inmanta schema, except for the schemaversion table. The version
-                             number stored in the schemaversion table is read by the Inmanta server during startup.
-        2) Dropped tables: All tables which are not part of the inmanta schema. Some tests create additional tables, which are
-                           not part of the Inmanta schema. These should be cleaned-up before running a new test.
+    1) Truncated tables: All tables which are part of the inmanta schema, except for the schemaversion table. The version
+                         number stored in the schemaversion table is read by the Inmanta server during startup.
+    2) Dropped tables: All tables which are not part of the inmanta schema. Some tests create additional tables, which are
+                       not part of the Inmanta schema. These should be cleaned-up before running a new test.
     """
     yield
     # By using the connection pool, we can make sure that the connection we use is alive
@@ -296,7 +296,7 @@ def reset_all_objects():
 @pytest.fixture(scope="function", autouse=True)
 def restore_cwd():
     """
-        Restore the current working directory after search test.
+    Restore the current working directory after search test.
     """
     cwd = os.getcwd()
     yield
@@ -341,8 +341,7 @@ def inmanta_config():
 
 @pytest.fixture
 def server_pre_start():
-    """ This fixture is called by the server. Override this fixture to influence server config
-    """
+    """This fixture is called by the server. Override this fixture to influence server config"""
 
 
 @pytest.fixture(scope="function")
@@ -407,8 +406,7 @@ async def agent_factory(server):
 
 @pytest.fixture(scope="function")
 async def autostarted_agent(server, environment):
-    """ Configure agent1 as an autostarted agent.
-    """
+    """Configure agent1 as an autostarted agent."""
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTO_DEPLOY, True)
@@ -637,7 +635,7 @@ def capture_warnings():
 @pytest.fixture(scope="function")
 async def environment(client, server, environment_default):
     """
-        Create a project and environment, with auto_deploy turned off. This fixture returns the uuid of the environment
+    Create a project and environment, with auto_deploy turned off. This fixture returns the uuid of the environment
     """
 
     env = await data.Environment.get_by_id(uuid.UUID(environment_default))
@@ -651,7 +649,7 @@ async def environment(client, server, environment_default):
 @pytest.fixture(scope="function")
 async def environment_default(client, server):
     """
-        Create a project and environment. This fixture returns the uuid of the environment
+    Create a project and environment. This fixture returns the uuid of the environment
     """
     result = await client.create_project("env-test")
     assert result.code == 200
@@ -668,7 +666,7 @@ async def environment_default(client, server):
 @pytest.fixture(scope="function")
 async def environment_multi(client_multi, server_multi):
     """
-        Create a project and environment. This fixture returns the uuid of the environment
+    Create a project and environment. This fixture returns the uuid of the environment
     """
     result = await client_multi.create_project("env-test")
     assert result.code == 200

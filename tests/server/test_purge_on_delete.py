@@ -33,7 +33,7 @@ LOGGER = logging.getLogger(__name__)
 @pytest.mark.asyncio
 async def test_purge_on_delete_requires(client, server, environment, clienthelper):
     """
-        Test purge on delete of resources and inversion of requires
+    Test purge on delete of resources and inversion of requires
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     await agent.start()
@@ -160,7 +160,7 @@ async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, s
 @pytest.mark.asyncio
 async def test_purge_on_delete_compile_failed(client, server, clienthelper, environment):
     """
-        Test purge on delete of resources
+    Test purge on delete of resources
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     await agent.start()
@@ -262,7 +262,7 @@ async def test_purge_on_delete_compile_failed(client, server, clienthelper, envi
 @pytest.mark.asyncio
 async def test_purge_on_delete(client, clienthelper, server, environment):
     """
-        Test purge on delete of resources
+    Test purge on delete of resources
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     await agent.start()
@@ -393,7 +393,7 @@ async def test_purge_on_delete(client, clienthelper, server, environment):
 @pytest.mark.asyncio
 async def test_purge_on_delete_ignore(client, clienthelper, server, environment):
     """
-        Test purge on delete behavior for resources that have not longer purged_on_delete set
+    Test purge on delete behavior for resources that have not longer purged_on_delete set
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     await agent.start()
@@ -516,7 +516,7 @@ async def test_purge_on_delete_ignore(client, clienthelper, server, environment)
 @pytest.mark.asyncio
 async def test_disable_purge_on_delete(client, clienthelper, server, environment):
     """
-        Test disable purge on delete of resources
+    Test disable purge on delete of resources
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     await agent.start()

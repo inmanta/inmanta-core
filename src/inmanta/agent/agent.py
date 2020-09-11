@@ -81,7 +81,7 @@ class ResourceAction(object):
 
     def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
         """
-            :param gid: A unique identifier to identify a deploy. This is local to this agent.
+        :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
         self.scheduler: "ResourceScheduler" = scheduler
         self.resource: Resource = resource
@@ -128,13 +128,13 @@ class ResourceAction(object):
         event_only: bool = False,
     ) -> Tuple[bool, bool]:
         """
-            :param ctx: The context to use during execution of this deploy
-            :param events: Possible events that are available for this resource
-            :param cache: The cache instance to use
-            :param event_only: don't execute, only do event propagation
-            :param state: start time
-            :return (success, send_event) Return whether the execution was successful and whether a change event should be sent
-                                          to provides of this resource.
+        :param ctx: The context to use during execution of this deploy
+        :param events: Possible events that are available for this resource
+        :param cache: The cache instance to use
+        :param event_only: don't execute, only do event propagation
+        :param state: start time
+        :return (success, send_event) Return whether the execution was successful and whether a change event should be sent
+                                      to provides of this resource.
         """
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
 
@@ -448,7 +448,7 @@ class ResourceScheduler(object):
 
     def cancel(self) -> None:
         """
-            Cancel all scheduled deployments.
+        Cancel all scheduled deployments.
         """
         for ra in self.generation.values():
             ra.cancel()
@@ -748,9 +748,9 @@ class AgentInstance(object):
         self, reason: str = "Unknown", incremental_deploy: bool = False, is_repair_run: bool = False
     ) -> None:
         """
-            Get the latest version for the given agent (this is also how we are notified)
+        Get the latest version for the given agent (this is also how we are notified)
 
-            :param reason: the reason this deploy was started
+        :param reason: the reason this deploy was started
         """
         if not self._can_get_resources():
             self.logger.warning("%s aborted by rate limiter", reason)
@@ -959,8 +959,8 @@ class AgentInstance(object):
     async def load_resources(
         self, version: int, action: const.ResourceAction, resources: List[JsonType]
     ) -> Tuple[Dict[ResourceVersionIdStr, const.ResourceState], List[Resource]]:
-        """ Deserialize all resources and load all handler code. When the code for this type fails to load, the resource
-            is marked as failed
+        """Deserialize all resources and load all handler code. When the code for this type fails to load, the resource
+        is marked as failed
         """
         started = datetime.datetime.now()
         failed_resource_types = await self.process.ensure_code(
@@ -1016,8 +1016,8 @@ class CouldNotConnectToServer(Exception):
 
 class Agent(SessionEndpoint):
     """
-        An agent to enact changes upon resources. This agent listens to the
-        message bus for changes.
+    An agent to enact changes upon resources. This agent listens to the
+    message bus for changes.
     """
 
     # cache reference to THIS ioloop for handlers to push requests on it
@@ -1095,9 +1095,9 @@ class Agent(SessionEndpoint):
 
     async def start_connected(self):
         """
-            This method is required because:
-                1) The client transport is required to retrieve the autostart_agent_map from the server.
-                2) _init_endpoint_names() needs to be an async method and async calls are not possible in a constructor.
+        This method is required because:
+            1) The client transport is required to retrieve the autostart_agent_map from the server.
+            2) _init_endpoint_names() needs to be an async method and async calls are not possible in a constructor.
         """
         init_agentmap_succeeded = False
         while not init_agentmap_succeeded:
@@ -1119,7 +1119,7 @@ class Agent(SessionEndpoint):
 
     async def _add_end_point_name(self, name: str) -> None:
         """
-            Note: always call under _instances_lock
+        Note: always call under _instances_lock
         """
         LOGGER.info("Adding endpoint %s", name)
         await super(Agent, self).add_end_point_name(name)
@@ -1139,7 +1139,7 @@ class Agent(SessionEndpoint):
 
     async def _remove_end_point_name(self, name: str) -> None:
         """
-            Note: always call under _instances_lock
+        Note: always call under _instances_lock
         """
         LOGGER.info("Removing endpoint %s", name)
         await super(Agent, self).remove_end_point_name(name)
@@ -1239,14 +1239,13 @@ class Agent(SessionEndpoint):
 
     async def get_latest_version(self) -> None:
         """
-            Get the latest version of managed resources for all agents
+        Get the latest version of managed resources for all agents
         """
         for agent in self._instances.values():
             await agent.get_latest_version_for_agent(reason="call to get_latest_version on agent")
 
     async def ensure_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> Set[str]:
-        """ Ensure that the code for the given environment and version is loaded
-        """
+        """Ensure that the code for the given environment and version is loaded"""
         failed_to_load: Set[str] = set()
         if self._loader is None:
             return failed_to_load
@@ -1282,7 +1281,7 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods.trigger, env="tid", agent="id")
     async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
         """
-            Trigger an update
+        Trigger an update
         """
         instance = self._instances.get(agent)
 
@@ -1342,7 +1341,7 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
     async def run_dryrun(self, env: uuid.UUID, dry_run_id: uuid.UUID, agent: str, version: int) -> Apireturn:
         """
-           Run a dryrun of the given version
+        Run a dryrun of the given version
         """
         assert env == self._env_id
 
@@ -1356,7 +1355,7 @@ class Agent(SessionEndpoint):
 
     def check_storage(self) -> Dict[str, str]:
         """
-            Check if the server storage is configured and ready to use.
+        Check if the server storage is configured and ready to use.
         """
 
         state_dir = cfg.state_dir.get()

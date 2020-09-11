@@ -35,9 +35,9 @@ LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 class RESTClient(RESTBase):
-    """"
-        A REST (json body over http) client transport. Only methods that operate on resource can use all
-        HTTP verbs. For other methods the POST verb is used.
+    """ "
+    A REST (json body over http) client transport. Only methods that operate on resource can use all
+    HTTP verbs. For other methods the POST verb is used.
     """
 
     def __init__(self, endpoint: "Endpoint", connection_timout: int = 120) -> None:
@@ -56,13 +56,13 @@ class RESTClient(RESTBase):
     @property
     def id(self) -> str:
         """
-            Returns a unique id for a transport on an endpoint
+        Returns a unique id for a transport on an endpoint
         """
         return "%s_rest_transport" % self.__end_point.name
 
     def match_call(self, url: str, method: str) -> Tuple[Optional[Dict[str, AnyStr]], Optional[common.UrlMethod]]:
         """
-            Get the method call for the given url and http method. This method is used for return calls over long poll
+        Get the method call for the given url and http method. This method is used for return calls over long poll
         """
         for target in self.endpoint.call_targets:
             url_map = target.get_op_mapping()
@@ -77,7 +77,7 @@ class RESTClient(RESTBase):
 
     def _get_client_config(self) -> str:
         """
-            Load the configuration for the client
+        Load the configuration for the client
         """
         LOGGER.debug("Getting config in section %s", self.id)
 
