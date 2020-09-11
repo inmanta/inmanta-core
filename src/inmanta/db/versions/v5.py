@@ -25,7 +25,7 @@ async def update(connection: Connection) -> None:
         """
 -- Compile queue might be collapsed if it contains similar compile requests.
 -- In that case, substitute_compile_id will reference the actually compiled request.
-ALTER TABLE public.compile ADD COLUMN substitute_compile_id uuid REFERENCES public.compile (id);
+ALTER TABLE public.compile ADD COLUMN substitute_compile_id uuid REFERENCES public.compile (id) ON DELETE CASCADE;
 
 
 -- Compile data json exported by compiling with the --export-compile-data parameter.
