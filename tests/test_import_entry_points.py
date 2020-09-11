@@ -30,7 +30,7 @@ import pytest
 @pytest.fixture(scope="session")
 def import_entry_point() -> Iterator[Callable[[str], Optional[int]]]:
     """
-        Yields a function that imports a module in a seperate Python process and returns the exit code.
+    Yields a function that imports a module in a seperate Python process and returns the exit code.
     """
     context = multiprocessing.get_context("spawn")
 
