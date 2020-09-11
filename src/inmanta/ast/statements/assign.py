@@ -61,7 +61,7 @@ if TYPE_CHECKING:
 
 class CreateList(ReferenceStatement):
     """
-        Create list of values
+    Create list of values
     """
 
     def __init__(self, items: typing.List[ExpressionStatement]) -> None:
@@ -98,7 +98,7 @@ class CreateList(ReferenceStatement):
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
-            Create this list
+        Create this list
         """
 
         # gradual case, everything is in placeholder
@@ -159,7 +159,7 @@ class CreateDict(ReferenceStatement):
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
-            Create this list
+        Create this list
         """
         qlist = {}
 
@@ -181,7 +181,7 @@ class CreateDict(ReferenceStatement):
 
 class SetAttribute(AssignStatement, Resumer):
     """
-        Set an attribute of a given instance to a given value
+    Set an attribute of a given instance to a given value
     """
 
     def __init__(self, instance: "Reference", attribute_name: str, value: ExpressionStatement, list_only: bool = False) -> None:
@@ -261,13 +261,13 @@ class SetAttributeHelper(ExecutionUnit):
 
 class Assign(AssignStatement):
     """
-        This class represents the assignment of a value to a variable -> alias
+    This class represents the assignment of a value to a variable -> alias
 
-        :param name: The name of the value
-        :param value: The value that is to be assigned to the variable
+    :param name: The name of the value
+    :param value: The value that is to be assigned to the variable
 
-        uses:          value
-        provides:      variable
+    uses:          value
+    provides:      variable
     """
 
     def __init__(self, name: str, value: ExpressionStatement) -> None:
@@ -303,7 +303,7 @@ class Assign(AssignStatement):
 
 class MapLookup(ReferenceStatement):
     """
-        Lookup a value in a dict
+    Lookup a value in a dict
     """
 
     def __init__(self, themap: ExpressionStatement, key: ExpressionStatement):
@@ -335,7 +335,7 @@ class MapLookup(ReferenceStatement):
 
 class IndexLookup(ReferenceStatement, Resumer):
     """
-        Lookup a value in a dictionary
+    Lookup a value in a dictionary
     """
 
     def __init__(
@@ -384,17 +384,17 @@ class IndexLookup(ReferenceStatement, Resumer):
 
     def __repr__(self) -> str:
         """
-            The representation of this statement
+        The representation of this statement
         """
         return "%s[%s]" % (self.index_type, ",".join([repr(x) for x in chain([self.query], self.wrapped_query)]))
 
 
 class ShortIndexLookup(IndexLookup):
     """lookup of the form
-vm = ip::Host(...)
-file = std::File(host=vm, path="/etc/motd", ...)
+    vm = ip::Host(...)
+    file = std::File(host=vm, path="/etc/motd", ...)
 
-vm.files[path="/etc/motd"]
+    vm.files[path="/etc/motd"]
     """
 
     def __init__(
@@ -450,7 +450,7 @@ vm.files[path="/etc/motd"]
 
     def __repr__(self) -> str:
         """
-            The representation of this statement
+        The representation of this statement
         """
         return "%s.%s[%s]" % (
             self.rootobject,
@@ -461,7 +461,7 @@ vm.files[path="/etc/motd"]
 
 class StringFormat(ReferenceStatement):
     """
-        Create a new string by doing a string interpolation
+    Create a new string by doing a string interpolation
     """
 
     def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:

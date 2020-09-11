@@ -181,7 +181,8 @@ def module_without_tags(modules_repo):
 
 
 @pytest.mark.parametrize(
-    "dev, tag, version_tag_in_output", [(True, True, True), (True, False, False), (False, True, True), (False, False, True)],
+    "dev, tag, version_tag_in_output",
+    [(True, True, True), (True, False, False), (False, True, True), (False, False, True)],
 )
 def test_commit_no_tags(modules_dir, module_without_tags, dev, tag, version_tag_in_output):
     add_file(module_without_tags, "dummyfile", "Content", "Commit without tags", version="5.0", dev=dev, tag=tag)

@@ -190,11 +190,11 @@ client-id=test456
 
 @pytest.mark.asyncio
 async def test_bind_address_ipv4(async_finalizer, client):
-    """ This test case check if the Inmanta server doesn't bind on another interface than 127.0.0.1 when bind-address is equal
-        to 127.0.0.1. Procedure:
-            1) Get free port on all interfaces.
-            2) Bind that port on a non-loopback interface, so it's not available for the inmanta server anymore.
-            3) Start the Inmanta server with bind-address 127.0.0.1. and execute an API call
+    """This test case check if the Inmanta server doesn't bind on another interface than 127.0.0.1 when bind-address is equal
+    to 127.0.0.1. Procedure:
+        1) Get free port on all interfaces.
+        2) Bind that port on a non-loopback interface, so it's not available for the inmanta server anymore.
+        3) Start the Inmanta server with bind-address 127.0.0.1. and execute an API call
     """
 
     @protocol.method(path="/test", operation="POST", client_types=["api"])

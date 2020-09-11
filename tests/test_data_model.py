@@ -26,8 +26,7 @@ from inmanta.data.model import BaseModel
 
 
 def test_model_inheritance():
-    """ Test if config classes inheritance
-    """
+    """Test if config classes inheritance"""
 
     class Choices(str, Enum):
         yes = "yes"
@@ -45,9 +44,9 @@ def test_model_inheritance():
 
 
 def test_union_bool_json():
-    """ Test if pydantic correctly serializes a bool to bool and not int when using a Union.
+    """Test if pydantic correctly serializes a bool to bool and not int when using a Union.
 
-        Union in python < 3.7 removes all strict subtypes. bool and strictbool are subtypes of int
+    Union in python < 3.7 removes all strict subtypes. bool and strictbool are subtypes of int
     """
 
     class Test(pydantic.BaseModel):

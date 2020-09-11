@@ -52,8 +52,7 @@ def error_and_log(message: str, **context: Any) -> None:
 
 
 class ResourceActionLogLine(logging.LogRecord):
-    """ A special log record that is used to report log lines that come from the agent
-    """
+    """A special log record that is used to report log lines that come from the agent"""
 
     def __init__(self, logger_name: str, level: str, msg: str, created: datetime.datetime) -> None:
         super().__init__(

@@ -24,10 +24,10 @@ from inmanta.types import JsonType
 
 class BaseHttpException(web.HTTPError):
     """
-        A base exception for errors in the server
-        Classes which extend from the BaseHttpException class cannot have mandatory arguments
-        in their constructor. This is required to determine the status_code of the exception in
-        inmanta.protocol.common.MethodProperties._get_http_status_code_for_exception()
+    A base exception for errors in the server
+    Classes which extend from the BaseHttpException class cannot have mandatory arguments
+    in their constructor. This is required to determine the status_code of the exception in
+    inmanta.protocol.common.MethodProperties._get_http_status_code_for_exception()
     """
 
     def __init__(self, status_code: int = 500, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
@@ -36,7 +36,7 @@ class BaseHttpException(web.HTTPError):
 
     def to_body(self) -> Dict[str, Any]:
         """
-            Return a response body
+        Return a response body
         """
         body: JsonType = {"message": self.log_message}
         if self.details is not None:
@@ -46,14 +46,14 @@ class BaseHttpException(web.HTTPError):
 
     def to_status(self) -> int:
         """
-            Return the status code
+        Return the status code
         """
         return self.status_code
 
 
 class Forbidden(BaseHttpException):
     """
-        An exception raised when access is denied (403)
+    An exception raised when access is denied (403)
     """
 
     def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
@@ -66,7 +66,7 @@ class Forbidden(BaseHttpException):
 
 class UnauthorizedException(BaseHttpException):
     """
-        An exception raised when access to this resource is unauthorized
+    An exception raised when access to this resource is unauthorized
     """
 
     def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
@@ -79,7 +79,7 @@ class UnauthorizedException(BaseHttpException):
 
 class BadRequest(BaseHttpException):
     """
-        This exception is raised for a mailformed request
+    This exception is raised for a mailformed request
     """
 
     def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
@@ -92,7 +92,7 @@ class BadRequest(BaseHttpException):
 
 class NotFound(BaseHttpException):
     """
-        This exception is used to indicate that a request or reference resource was not found.
+    This exception is used to indicate that a request or reference resource was not found.
     """
 
     def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
@@ -105,7 +105,7 @@ class NotFound(BaseHttpException):
 
 class Conflict(BaseHttpException):
     """
-        This exception is used to indicate that a request conflicts with the current state of the resource.
+    This exception is used to indicate that a request conflicts with the current state of the resource.
     """
 
     def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
@@ -118,7 +118,7 @@ class Conflict(BaseHttpException):
 
 class ServerError(BaseHttpException):
     """
-        An unexpected error occurred in the server
+    An unexpected error occurred in the server
     """
 
     def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:

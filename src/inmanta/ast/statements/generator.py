@@ -66,8 +66,8 @@ LOGGER = logging.getLogger(__name__)
 
 class SubConstructor(ExpressionStatement):
     """
-        This statement selects an implementation for a given object and
-        imports the statements
+    This statement selects an implementation for a given object and
+    imports the statements
     """
 
     def __init__(self, instance_type: "Entity", implements: "Implement") -> None:
@@ -90,7 +90,7 @@ class SubConstructor(ExpressionStatement):
 
     def execute(self, requires: Dict[object, object], instance: Resolver, queue: QueueScheduler) -> object:
         """
-            Evaluate this statement
+        Evaluate this statement
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing subconstructor for %s implement %s", self.type, self.implements.location)
         condition = self.implements.constraint.execute(requires, instance, queue)
@@ -155,7 +155,7 @@ class GradualFor(ResultCollector):
 
 class For(DynamicStatement):
     """
-        A for loop
+    A for loop
     """
 
     def __init__(self, variable: ExpressionStatement, loop_var: LocatableString, module: BasicBlock) -> None:
@@ -203,7 +203,7 @@ class For(DynamicStatement):
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
-            Evaluate this statement.
+        Evaluate this statement.
         """
         var = self.base.execute(requires, resolver, queue)
 
@@ -227,7 +227,7 @@ class For(DynamicStatement):
 
 class If(ExpressionStatement):
     """
-        An if Statement
+    An if Statement
     """
 
     def __init__(self, condition: ExpressionStatement, if_branch: BasicBlock, else_branch: BasicBlock) -> None:
@@ -252,7 +252,7 @@ class If(ExpressionStatement):
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
-            Evaluate this statement.
+        Evaluate this statement.
         """
         cond: object = self.condition.execute(requires, resolver, queue)
         if isinstance(cond, Unknown):
@@ -275,7 +275,7 @@ class If(ExpressionStatement):
 
 class ConditionalExpression(ExpressionStatement):
     """
-        A conditional expression similar to Python's `x if c else y`.
+    A conditional expression similar to Python's `x if c else y`.
     """
 
     def __init__(
@@ -360,7 +360,10 @@ class ConditionalExpressionResumer(RawResumer):
                 self.expression.if_expression if self.condition_value else self.expression.else_expression
             )
             RawUnit(
-                queue, resolver, subexpression.requires_emit(resolver, queue), self,
+                queue,
+                resolver,
+                subexpression.requires_emit(resolver, queue),
+                self,
             )
         else:
             value: object = (
@@ -371,10 +374,10 @@ class ConditionalExpressionResumer(RawResumer):
 
 class Constructor(ExpressionStatement):
     """
-        This class represents the usage of a constructor to create a new object.
+    This class represents the usage of a constructor to create a new object.
 
-        :param class_type: The type of the object that is created by this
-            constructor call.
+    :param class_type: The type of the object that is created by this
+        constructor call.
     """
 
     def __init__(
@@ -478,7 +481,7 @@ class Constructor(ExpressionStatement):
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler):
         """
-            Evaluate this statement.
+        Evaluate this statement.
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing constructor for %s at %s", self.class_type, self.location)
 
@@ -535,7 +538,10 @@ class Constructor(ExpressionStatement):
         if len(instances) > 0:
             if graph is not None:
                 graph.add_index_match(
-                    chain([self.get_dataflow_node(graph)], (i.instance_node for i in instances if i.instance_node is not None),)
+                    chain(
+                        [self.get_dataflow_node(graph)],
+                        (i.instance_node for i in instances if i.instance_node is not None),
+                    )
                 )
             # ensure that instances are all the same objects
             first = instances[0]
@@ -575,7 +581,7 @@ class Constructor(ExpressionStatement):
 
     def add_attribute(self, lname: LocatableString, value: ExpressionStatement) -> None:
         """
-            Add an attribute to this constructor call
+        Add an attribute to this constructor call
         """
         name = str(lname)
         if name not in self.__attributes:
@@ -589,13 +595,13 @@ class Constructor(ExpressionStatement):
 
     def get_attributes(self) -> Dict[str, ExpressionStatement]:
         """
-            Get the attribtues that are set for this constructor call
+        Get the attribtues that are set for this constructor call
         """
         return self.__attributes
 
     def get_wrapped_kwargs(self) -> List["WrappedKwargs"]:
         """
-            Get the wrapped kwargs that are set for this constructor call
+        Get the wrapped kwargs that are set for this constructor call
         """
         return self.__wrapped_kwarg_attributes
 
@@ -604,8 +610,8 @@ class Constructor(ExpressionStatement):
 
     def _register_dataflow_node(self, graph: DataflowGraph) -> dataflow.InstanceNodeReference:
         """
-            Registers the dataflow node for this constructor to the graph if it does not exist yet.
-            Returns the node.
+        Registers the dataflow node for this constructor to the graph if it does not exist yet.
+        Returns the node.
         """
 
         def get_new_node() -> dataflow.InstanceNode:
@@ -620,7 +626,7 @@ class Constructor(ExpressionStatement):
 
     def __repr__(self) -> str:
         """
-            The representation of the this statement
+        The representation of the this statement
         """
         return "Construct(%s)" % (self.class_type)
 

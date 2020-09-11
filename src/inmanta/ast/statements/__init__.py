@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 class Statement(Namespaced):
     """
-        An abstract baseclass representing a statement in the configuration policy.
+    An abstract baseclass representing a statement in the configuration policy.
     """
 
     def __init__(self) -> None:
@@ -46,7 +46,7 @@ class Statement(Namespaced):
 
     def copy_location(self, statement: Locatable) -> None:
         """
-            Copy the location of this statement in the given statement
+        Copy the location of this statement in the given statement
         """
         statement.set_location(self.location)
 
@@ -64,15 +64,15 @@ class Statement(Namespaced):
 
     def nested_blocks(self) -> Iterator["BasicBlock"]:
         """
-            Returns an iterator over blocks contained within this statement.
+        Returns an iterator over blocks contained within this statement.
         """
         return iter(())
 
 
 class DynamicStatement(Statement):
     """
-        This class represents all statements that have dynamic properties.
-        These are all statements that do not define typing.
+    This class represents all statements that have dynamic properties.
+    These are all statements that do not define typing.
     """
 
     def __init__(self) -> None:
@@ -94,7 +94,7 @@ class DynamicStatement(Statement):
 
     def declared_variables(self) -> Iterator[str]:
         """
-            Returns an iterator over this statement's own declared variables.
+        Returns an iterator over this statement's own declared variables.
         """
         return iter(())
 
@@ -114,15 +114,15 @@ class ExpressionStatement(DynamicStatement):
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         """
-            returns a dict of the result variables required, names are an opaque identifier
-            may emit statements to break execution is smaller segments
+        returns a dict of the result variables required, names are an opaque identifier
+        may emit statements to break execution is smaller segments
         """
         raise NotImplementedError()
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
-            execute the expression, give the values provided in the requires dict.
-            These values correspond to the values requested via requires_emit
+        execute the expression, give the values provided in the requires dict.
+        These values correspond to the values requested via requires_emit
         """
         raise NotImplementedError()
 
@@ -131,13 +131,13 @@ class ExpressionStatement(DynamicStatement):
 
     def as_constant(self) -> object:
         """
-            Returns this expression as a constant value, if possible. Otherwise, raise a RuntimeException.
+        Returns this expression as a constant value, if possible. Otherwise, raise a RuntimeException.
         """
         raise RuntimeException(None, "%s is not a constant")
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         """
-            Return the node in the data flow graph this ExpressionStatement will evaluate to.
+        Return the node in the data flow graph this ExpressionStatement will evaluate to.
         """
         raise NotImplementedError()
 
@@ -154,7 +154,7 @@ class RawResumer(ExpressionStatement):
 
 class ReferenceStatement(ExpressionStatement):
     """
-        This class models statements that refer to other statements
+    This class models statements that refer to other statements
     """
 
     def __init__(self, children: List[ExpressionStatement]) -> None:
@@ -196,7 +196,7 @@ class AssignStatement(DynamicStatement):
 
     def _add_to_dataflow_graph(self, graph: Optional[DataflowGraph]) -> None:
         """
-            Adds this assignment to the resolver's data flow graph.
+        Adds this assignment to the resolver's data flow graph.
         """
         raise NotImplementedError()
 
@@ -235,7 +235,7 @@ class Literal(ExpressionStatement):
 
 class DefinitionStatement(Statement):
     """
-        This statement defines a new entity in the configuration.
+    This statement defines a new entity in the configuration.
     """
 
     def __init__(self) -> None:

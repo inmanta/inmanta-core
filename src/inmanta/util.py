@@ -91,7 +91,7 @@ def is_sub_dict(subdct: Dict[PrimitiveTypes, PrimitiveTypes], dct: Dict[Primitiv
 
 def hash_file(content: bytes) -> str:
     """
-        Create a hash from the given content
+    Create a hash from the given content
     """
     sha1sum = hashlib.new("sha1")
     sha1sum.update(content)
@@ -129,7 +129,7 @@ def ensure_future_and_handle_exception(logger: Logger, msg: str, action: Union[C
 
 class Scheduler(object):
     """
-        An event scheduler class
+    An event scheduler class
     """
 
     def __init__(self, name: str) -> None:
@@ -138,11 +138,11 @@ class Scheduler(object):
 
     def add_action(self, action: Union[Callable, Coroutine], interval: float, initial_delay: float = None) -> None:
         """
-            Add a new action
+        Add a new action
 
-            :param action: A function to call periodically
-            :param interval: The interval between execution of actions
-            :param initial_delay: Delay to the first execution, defaults to interval
+        :param action: A function to call periodically
+        :param interval: The interval between execution of actions
+        :param initial_delay: Delay to the first execution, defaults to interval
         """
         assert inspect.iscoroutinefunction(action) or gen.is_coroutine_function(action)
 
@@ -168,7 +168,7 @@ class Scheduler(object):
 
     def remove(self, action: Callable) -> None:
         """
-            Remove a scheduled action
+        Remove a scheduled action
         """
         if action in self._scheduled:
             IOLoop.current().remove_timeout(self._scheduled[action])
@@ -176,7 +176,7 @@ class Scheduler(object):
 
     def stop(self) -> None:
         """
-            Stop the scheduler
+        Stop the scheduler
         """
         try:
             # remove can still run during stop. That is why we loop until we get a keyerror == the dict is empty
@@ -193,7 +193,7 @@ class Scheduler(object):
 
 def get_free_tcp_port() -> str:
     """
-        Semi safe method for getting a random port. This may contain a race condition.
+    Semi safe method for getting a random port. This may contain a race condition.
     """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp:
         tcp.bind(("", 0))
@@ -203,22 +203,22 @@ def get_free_tcp_port() -> str:
 
 class JSONSerializable(ABC):
     """
-        Instances of this class are JSON serializable. Concrete subclasses should implement json_serialization_step.
+    Instances of this class are JSON serializable. Concrete subclasses should implement json_serialization_step.
     """
 
     @abstractmethod
     def json_serialization_step(self) -> Union[ReturnTypes, "JSONSerializable"]:
         """
-            Perform a step in the serialization process. Returns an other serializable object.
-            The implementation should make sure each step progresses serialization so that successively
-            calling JSONSerializable.default eventually resolves to a trivially serializable object.
+        Perform a step in the serialization process. Returns an other serializable object.
+        The implementation should make sure each step progresses serialization so that successively
+        calling JSONSerializable.default eventually resolves to a trivially serializable object.
         """
         raise NotImplementedError()
 
 
 def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
-        A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries
+    A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries
     """
     if isinstance(o, JSONSerializable):
         return o.json_serialization_step()
@@ -248,7 +248,7 @@ def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
 
 def add_future(future: Union[Future, Coroutine]) -> Task:
     """
-        Add a future to the ioloop to be handled, but do not require the result.
+    Add a future to the ioloop to be handled, but do not require the result.
     """
 
     def handle_result(f: Task) -> None:
@@ -271,14 +271,13 @@ async def retry_limited(fun: Callable[[], bool], timeout: float, interval: float
 
 
 class StoppedException(Exception):
-    """ This exception is raised when a background task is added to the taskhandler when it is shutting down.
-    """
+    """This exception is raised when a background task is added to the taskhandler when it is shutting down."""
 
 
 class TaskHandler(object):
     """
-        This class provides a method to add a background task based on a coroutine. When the coroutine ends, any exceptions
-        are reported. If stop is invoked, all background tasks are cancelled.
+    This class provides a method to add a background task based on a coroutine. When the coroutine ends, any exceptions
+    are reported. If stop is invoked, all background tasks are cancelled.
     """
 
     def __init__(self) -> None:
@@ -294,7 +293,7 @@ class TaskHandler(object):
         return not self._stopped
 
     def add_background_task(self, future: Union[Future, Coroutine], cancel_on_stop=True) -> Task:
-        """ Add a background task to the event loop. When stop is called, the task is cancelled.
+        """Add a background task to the event loop. When stop is called, the task is cancelled.
 
         :param future: The future or coroutine to run as background task.
         :param cancel_on_stop: Cancel the task when stop is called. If false, the coroutine is awaited.
@@ -326,8 +325,7 @@ class TaskHandler(object):
         return task
 
     async def stop(self) -> None:
-        """ Stop all background tasks by requesting a cancel
-        """
+        """Stop all background tasks by requesting a cancel"""
         self._stopped = True
         await gather(*self._await_tasks)
         self._background_tasks.difference_update(self._await_tasks)

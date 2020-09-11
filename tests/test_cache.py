@@ -31,7 +31,7 @@ def my_resource():
     @resource("test::Resource", agent="agent", id_attribute="key")
     class MyResource(Resource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "purged")

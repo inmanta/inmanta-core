@@ -85,8 +85,8 @@ GraphicAsserter = Callable[[str, str], None]
 @total_ordering
 class DotSource:
     """
-        Represents DOT source semi-structurally. Sorts the lines before comparing to deal with nondeterministism
-        during construction.
+    Represents DOT source semi-structurally. Sorts the lines before comparing to deal with nondeterministism
+    during construction.
     """
 
     def __init__(self, lines: List[str], subgraphs: List[Tuple[str, "DotSource"]]) -> None:

@@ -384,9 +384,9 @@ class CompilerService(ServerSlice):
         env_vars: Dict[str, str] = {},
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
-            Recompile an environment in a different thread and taking wait time into account.
+        Recompile an environment in a different thread and taking wait time into account.
 
-            :return: the compile id of the requested compile and any warnings produced during the request
+        :return: the compile id of the requested compile and any warnings produced during the request
         """
         server_compile: bool = await env.get(data.SERVER_COMPILE)
         if not server_compile:
@@ -410,8 +410,8 @@ class CompilerService(ServerSlice):
     @staticmethod
     def _compile_merge_key(c: data.Compile) -> Hashable:
         """
-            Returns a key used to determine whether two compiles c1 and c2 are eligible for merging. They are iff
-            _compile_merge_key(c1) == _compile_merge_key(c2).
+        Returns a key used to determine whether two compiles c1 and c2 are eligible for merging. They are iff
+        _compile_merge_key(c1) == _compile_merge_key(c2).
         """
         return c.to_dto().json(include={"environment", "started", "do_export", "environment_variables"})
 
@@ -466,7 +466,7 @@ class CompilerService(ServerSlice):
 
     async def resume_environment(self, environment: uuid.UUID) -> None:
         """
-            Resume compiler service after halt.
+        Resume compiler service after halt.
         """
         compile: Optional[data.Compile] = await data.Compile.get_next_run(environment)
         if compile is not None:
@@ -480,8 +480,8 @@ class CompilerService(ServerSlice):
 
     async def _run(self, compile: data.Compile) -> None:
         """
-            Runs a compile request. At completion, looks for similar compile requests based on _compile_merge_key and marks
-            those as completed as well.
+        Runs a compile request. At completion, looks for similar compile requests based on _compile_merge_key and marks
+        those as completed as well.
         """
         now = datetime.datetime.now()
 
@@ -577,7 +577,7 @@ class CompilerService(ServerSlice):
     @protocol.handle(methods.get_compile_queue, env="tid")
     async def get_compile_queue(self, env: data.Environment) -> List[model.CompileRun]:
         """
-            Get the current compiler queue on the server
+        Get the current compiler queue on the server
         """
         compiles = await data.Compile.get_next_compiles_for_environment(env.id)
         return [x.to_dto() for x in compiles]

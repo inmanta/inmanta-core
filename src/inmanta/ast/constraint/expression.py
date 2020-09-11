@@ -31,8 +31,8 @@ from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, Raw
 
 class InvalidNumberOfArgumentsException(Exception):
     """
-        This exception is raised if an invalid amount of arguments is passed
-        to an operator.
+    This exception is raised if an invalid amount of arguments is passed
+    to an operator.
     """
 
     def __init__(self, msg: str) -> None:
@@ -41,8 +41,8 @@ class InvalidNumberOfArgumentsException(Exception):
 
 class UnboundVariableException(Exception):
     """
-        This execption is raised if an expression is evaluated when not all
-        variables have been resolved
+    This execption is raised if an expression is evaluated when not all
+    variables have been resolved
     """
 
     def __init__(self, msg: str) -> None:
@@ -51,9 +51,9 @@ class UnboundVariableException(Exception):
 
 class OpMetaClass(ABCMeta):
     """
-        This metaclass registers a class with the operator class if it contains
-        a string that specifies the op it is able to handle. This metaclass
-        only makes sense for subclasses of the Operator class.
+    This metaclass registers a class with the operator class if it contains
+    a string that specifies the op it is able to handle. This metaclass
+    only makes sense for subclasses of the Operator class.
     """
 
     def __init__(self, name, bases, attr_dict):
@@ -105,7 +105,7 @@ class IsDefined(ReferenceStatement):
 
 class Operator(ReferenceStatement, metaclass=OpMetaClass):
     """
-        This class is an abstract base class for all operators that can be used in expressions
+    This class is an abstract base class for all operators that can be used in expressions
     """
 
     # A hash to lookup each handler
@@ -114,14 +114,14 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
     @classmethod
     def register_operator(cls, operator_string, operator_class):
         """
-            Register a new operator
+        Register a new operator
         """
         cls.__operator[operator_string] = operator_class
 
     @classmethod
     def get_operator_class(cls, oper):
         """
-            Get the class that implements the given operator. Returns none of the operator does not exist
+        Get the class that implements the given operator. Returns none of the operator does not exist
         """
         if oper in cls.__operator:
             return cls.__operator[oper]
@@ -152,12 +152,12 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
     @abstractmethod
     def _op(self, args):
         """
-            Abstract method that implements the operator
+        Abstract method that implements the operator
         """
 
     def __repr__(self):
         """
-            Return a representation of the op
+        Return a representation of the op
         """
         arg_list = []
         for arg in self._arguments:
@@ -166,7 +166,7 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
 
     def to_function(self):
         """
-            Returns a function that represents this expression
+        Returns a function that represents this expression
         """
         return create_function(self)
 
@@ -179,7 +179,7 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
 
 class BinaryOperator(Operator):
     """
-        This class represents a binary operator.
+    This class represents a binary operator.
     """
 
     def __init__(self, name, op1, op2):
@@ -187,7 +187,7 @@ class BinaryOperator(Operator):
 
     def _op(self, args):
         """
-            The method that needs to be implemented for this operator
+        The method that needs to be implemented for this operator
         """
         # pylint: disable-msg=W0142
         return self._bin_op(*args)
@@ -195,7 +195,7 @@ class BinaryOperator(Operator):
     @abstractmethod
     def _bin_op(self, arg1, arg2):
         """
-            The implementation of the binary op
+        The implementation of the binary op
         """
 
     def pretty_print(self):
@@ -207,7 +207,7 @@ class BinaryOperator(Operator):
 
 class LazyBooleanOperator(BinaryOperator):
     """
-        This class represents a binary boolean operator.
+    This class represents a binary boolean operator.
     """
 
     def __init__(self, name, op1, op2):
@@ -265,14 +265,14 @@ class LazyBooleanOperator(BinaryOperator):
 
     def _bin_op(self, arg1, arg2):
         """
-            The implementation of the binary op
+        The implementation of the binary op
         """
         raise NotImplementedError()
 
 
 class UnaryOperator(Operator):
     """
-        This class represents a unary operator
+    This class represents a unary operator
     """
 
     def __init__(self, name, op1):
@@ -280,7 +280,7 @@ class UnaryOperator(Operator):
 
     def _op(self, args):
         """
-            This method calls the implementation of the operator
+        This method calls the implementation of the operator
         """
         # pylint: disable-msg=W0142
         return self._un_op(*args)
@@ -288,7 +288,7 @@ class UnaryOperator(Operator):
     @abstractmethod
     def _un_op(self, arg):
         """
-            The implementation of the operator
+        The implementation of the operator
         """
 
     def pretty_print(self):
@@ -297,7 +297,7 @@ class UnaryOperator(Operator):
 
 class Not(UnaryOperator):
     """
-        The negation operator
+    The negation operator
     """
 
     __op = "not"
@@ -307,9 +307,9 @@ class Not(UnaryOperator):
 
     def _un_op(self, arg):
         """
-            Return the inverse of the argument
+        Return the inverse of the argument
 
-            @see Operator#_op
+        @see Operator#_op
         """
         try:
             Bool().validate(arg)
@@ -322,7 +322,7 @@ class Not(UnaryOperator):
 
 class Regex(BinaryOperator):
     """
-        An operator that does regex matching
+    An operator that does regex matching
     """
 
     def __init__(self, op1, op2):
@@ -331,7 +331,7 @@ class Regex(BinaryOperator):
 
     def _bin_op(self, arg1, arg2):
         """
-            @see Operator#_op
+        @see Operator#_op
         """
         if not isinstance(arg1, str):
             raise TypingException(self, "Regex can only be match with strings. %s is of type %s" % arg1)
@@ -343,14 +343,14 @@ class Regex(BinaryOperator):
 
     def __repr__(self):
         """
-            Return a representation of the op
+        Return a representation of the op
         """
         return self.pretty_print()
 
 
 class Equals(BinaryOperator):
     """
-        The equality operator
+    The equality operator
     """
 
     __op = "=="
@@ -360,14 +360,14 @@ class Equals(BinaryOperator):
 
     def _bin_op(self, arg1, arg2):
         """
-            @see Operator#_op
+        @see Operator#_op
         """
         return arg1 == arg2
 
 
 class LessThan(BinaryOperator):
     """
-        The less than operator
+    The less than operator
     """
 
     __op = "<"
@@ -377,7 +377,7 @@ class LessThan(BinaryOperator):
 
     def _bin_op(self, arg1, arg2):
         """
-            @see Operator#_op
+        @see Operator#_op
         """
         if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
             raise TypingException(self, "Can only compare numbers.")
@@ -386,7 +386,7 @@ class LessThan(BinaryOperator):
 
 class GreaterThan(BinaryOperator):
     """
-        The more than operator
+    The more than operator
     """
 
     __op = ">"
@@ -396,7 +396,7 @@ class GreaterThan(BinaryOperator):
 
     def _bin_op(self, arg1, arg2):
         """
-            @see Operator#_op
+        @see Operator#_op
         """
         if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
             raise TypingException(self, "Can only compare numbers.")
@@ -405,7 +405,7 @@ class GreaterThan(BinaryOperator):
 
 class LessThanOrEqual(BinaryOperator):
     """
-        The less than or equal operator
+    The less than or equal operator
     """
 
     __op = "<="
@@ -415,7 +415,7 @@ class LessThanOrEqual(BinaryOperator):
 
     def _bin_op(self, arg1, arg2):
         """
-            @see Operator#_op
+        @see Operator#_op
         """
         if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
             raise TypingException(self, "Can only compare numbers.")
@@ -424,7 +424,7 @@ class LessThanOrEqual(BinaryOperator):
 
 class GreaterThanOrEqual(BinaryOperator):
     """
-        The more than or equal operator
+    The more than or equal operator
     """
 
     __op = ">="
@@ -434,7 +434,7 @@ class GreaterThanOrEqual(BinaryOperator):
 
     def _bin_op(self, arg1, arg2):
         """
-            @see Operator#_op
+        @see Operator#_op
         """
         if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
             raise TypingException(self, "Can only compare numbers.")
@@ -443,7 +443,7 @@ class GreaterThanOrEqual(BinaryOperator):
 
 class NotEqual(BinaryOperator):
     """
-        The not equal operator
+    The not equal operator
     """
 
     __op = "!="
@@ -453,14 +453,14 @@ class NotEqual(BinaryOperator):
 
     def _bin_op(self, arg1, arg2):
         """
-            @see Operator#_op
+        @see Operator#_op
         """
         return arg1 != arg2
 
 
 class And(LazyBooleanOperator):
     """
-        The and boolean operator
+    The and boolean operator
     """
 
     __op = "and"
@@ -474,7 +474,7 @@ class And(LazyBooleanOperator):
 
 class Or(LazyBooleanOperator):
     """
-        The or boolean operator
+    The or boolean operator
     """
 
     __op = "or"
@@ -488,7 +488,7 @@ class Or(LazyBooleanOperator):
 
 class In(BinaryOperator):
     """
-        The in operator for iterable types and dicts
+    The in operator for iterable types and dicts
     """
 
     __op = "in"
@@ -498,7 +498,7 @@ class In(BinaryOperator):
 
     def _bin_op(self, arg1, arg2):
         """
-            @see Operator#_op
+        @see Operator#_op
         """
         if isinstance(arg2, dict):
             return arg1 in arg2

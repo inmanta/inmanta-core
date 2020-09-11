@@ -62,7 +62,7 @@ class ParameterService(protocol.ServerSlice):
 
     async def renew_expired_facts(self) -> None:
         """
-            Send out requests to renew expired facts
+        Send out requests to renew expired facts
         """
         LOGGER.info("Renewing expired parameters")
 
@@ -134,11 +134,11 @@ class ParameterService(protocol.ServerSlice):
         recompile: bool = False,
     ) -> bool:
         """
-            Update or set a parameter.
+        Update or set a parameter.
 
-            This method returns true if:
-            - this update resolves an unknown
-            - recompile is true and the parameter updates an existing parameter to a new value
+        This method returns true if:
+        - this update resolves an unknown
+        - recompile is true and the parameter updates an existing parameter to a new value
         """
         LOGGER.debug("Updating/setting parameter %s in env %s (for resource %s)", name, env.id, resource_id)
         if not isinstance(value, str):

@@ -19,7 +19,7 @@
 
 class AnyType(object):
     """
-        Supertype for objects that are an instance of all types
+    Supertype for objects that are an instance of all types
     """
 
     pass
@@ -27,9 +27,9 @@ class AnyType(object):
 
 class Unknown(AnyType):
     """
-        An instance of this class is used to indicate that this value can not be determined yet.
+    An instance of this class is used to indicate that this value can not be determined yet.
 
-        :param source: The source object that can determine the value
+    :param source: The source object that can determine the value
     """
 
     def __init__(self, source):

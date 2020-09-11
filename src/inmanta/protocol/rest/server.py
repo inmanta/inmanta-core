@@ -42,7 +42,7 @@ LOGGER: logging.Logger = logging.getLogger(__name__)
 
 class RESTHandler(tornado.web.RequestHandler):
     """
-        A generic class use by the transport
+    A generic class use by the transport
     """
 
     def initialize(self, transport: "RESTServer", config: Dict[str, common.UrlMethod]) -> None:
@@ -61,7 +61,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
     def get_auth_token(self, headers: MutableMapping[str, str]) -> Optional[MutableMapping[str, str]]:
         """
-            Get the auth token provided by the caller. The token is provided as a bearer token.
+        Get the auth token provided by the caller. The token is provided as a bearer token.
         """
         if "Authorization" not in headers:
             return None
@@ -107,7 +107,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
     async def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> None:
         """
-            An rpc like call
+        An rpc like call
         """
         if call_config is None:
             raise exceptions.NotFound("This method does not exist")
@@ -238,7 +238,7 @@ class StaticContentHandler(tornado.web.RequestHandler):
 
 class RESTServer(RESTBase):
     """
-        A tornado based rest server
+    A tornado based rest server
     """
 
     _http_server: Optional[httpserver.HTTPServer]
@@ -285,7 +285,7 @@ class RESTServer(RESTBase):
         self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
     ) -> None:
         """
-            Start the server on the current ioloop
+        Start the server on the current ioloop
         """
         global_url_map: Dict[str, Dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
 
@@ -322,7 +322,7 @@ class RESTServer(RESTBase):
 
     async def stop(self) -> None:
         """
-            Stop the current server
+        Stop the current server
         """
         self.running = False
         LOGGER.debug("Stopping Server Rest Endpoint")

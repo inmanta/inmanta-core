@@ -112,7 +112,7 @@ def test_ignore_resource_requires(snippetcompiler, caplog):
 
 def test_unknown_in_id_requires(snippetcompiler, caplog):
     """
-        Test to validate that resources that have an unknown in their ID attributes, are removed from requires
+    Test to validate that resources that have an unknown in their ID attributes, are removed from requires
     """
     snippetcompiler.setup_for_snippet(
         """import exp
@@ -149,7 +149,7 @@ def test_unknown_in_id_requires(snippetcompiler, caplog):
 
 def test_unknown_in_attribute_requires(snippetcompiler, caplog):
     """
-        Test to validate that resources that have an unknown in their ID attributes, are removed from requires
+    Test to validate that resources that have an unknown in their ID attributes, are removed from requires
     """
     snippetcompiler.setup_for_snippet(
         """import exp
@@ -335,7 +335,7 @@ x = exp::WrappedProxyTest(
 
 def test_2121_wrapped_self_serialize(snippetcompiler):
     """
-        Make sure DynamicProxies representing an entity are not serialized.
+    Make sure DynamicProxies representing an entity are not serialized.
     """
     snippetcompiler.setup_for_snippet(
         """

@@ -32,8 +32,7 @@ from inmanta.moduletool import ModuleTool
 
 
 def test_code_manager():
-    """ Verify the code manager
-    """
+    """Verify the code manager"""
     project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
     project: Project = Project(project_dir)
     Project.set(project)
@@ -87,15 +86,13 @@ def test_code_manager():
 
 
 def test_empty_code_loader(tmp_path):
-    """ Test loading an empty cache
-    """
+    """Test loading an empty cache"""
     cl = loader.CodeLoader(tmp_path)
     cl.load_modules()
 
 
 def test_code_loader(tmp_path):
-    """ Test loading a new module
-    """
+    """Test loading a new module"""
     cl = loader.CodeLoader(tmp_path)
 
     def deploy(code: str) -> None:
@@ -133,8 +130,7 @@ def test():
 
 
 def test_code_loader_dependency(tmp_path, caplog):
-    """ Test loading two modules with a dependency between them
-    """
+    """Test loading two modules with a dependency between them"""
     cl = loader.CodeLoader(tmp_path)
 
     def get_module_source(module: str, code: str) -> ModuleSource:
@@ -178,12 +174,10 @@ def helper():
 def test_2312_code_loader_missing_init(tmp_path) -> None:
     cl = loader.CodeLoader(tmp_path)
 
-    code: str = (
-        """
+    code: str = """
 def test():
     return 10
         """
-    )
     sha1sum = hashlib.new("sha1")
     sha1sum.update(code.encode())
     hv: str = sha1sum.hexdigest()
@@ -195,8 +189,7 @@ def test():
 
 
 def test_code_loader_import_error(tmp_path, caplog):
-    """ Test loading code with an import error
-    """
+    """Test loading code with an import error"""
     cl = loader.CodeLoader(tmp_path)
     code = """
 import badimmport
@@ -226,7 +219,7 @@ def module_path(tmpdir):
 
 def test_module_loader(module_path, tmpdir, capsys):
     """
-        Verify that the loader.PluginModuleFinder and loader.PluginModuleLoader load modules correctly.
+    Verify that the loader.PluginModuleFinder and loader.PluginModuleLoader load modules correctly.
     """
     origin_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "submodule")
     mod_dir = tmpdir.join(os.path.basename(origin_mod_dir))
@@ -267,8 +260,8 @@ def test_module_loader(module_path, tmpdir, capsys):
 
 def test_plugin_loading_on_project_load(tmpdir, capsys):
     """
-        Load all plugins via the Project.load() method call and verify that no
-        module is loaded twice when an import statement is used.
+    Load all plugins via the Project.load() method call and verify that no
+    module is loaded twice when an import statement is used.
     """
     main_cf = tmpdir.join("main.cf")
     main_cf.write("import submodule")
@@ -319,8 +312,8 @@ install_mode: master
 
 def test_plugin_loading_old_format(tmpdir, capsys):
     """
-        Ensure the code loader ignores code formatted in the old on disk format (pre Inmanta 2020.4).
-        (See issue: #2162)
+    Ensure the code loader ignores code formatted in the old on disk format (pre Inmanta 2020.4).
+    (See issue: #2162)
     """
     # Create directory structure code dir
     code_dir = tmpdir
