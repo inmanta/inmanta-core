@@ -24,7 +24,7 @@ from inmanta.util import get_compiler_version
 @pytest.mark.asyncio
 async def test_environment_settings(client, server, environment_default):
     """
-        Test environment settings
+    Test environment settings
     """
     result = await client.list_settings(tid=environment_default)
     assert result.code == 200
@@ -87,7 +87,11 @@ async def test_environment_settings(client, server, environment_default):
     assert result.code == 200
 
     agent_map = {"internal": "", "agent1": "", "agent2": "localhost", "agent3": "user@agent3"}
-    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP, value=agent_map,)
+    result = await client.set_setting(
+        tid=environment_default,
+        id=data.AUTOSTART_AGENT_MAP,
+        value=agent_map,
+    )
     assert result.code == 200
 
     # Internal agent is missing
@@ -111,7 +115,7 @@ async def test_environment_settings(client, server, environment_default):
 @pytest.mark.asyncio
 async def test_environment_settings_v2(client_v2, server, environment_default):
     """
-        Test environment settings
+    Test environment settings
     """
     response = await client_v2.environment_settings_list(tid=environment_default)
     assert response.code == 200
@@ -187,7 +191,11 @@ async def test_clear_protected_environment(server, client):
         version = res.result["data"]
 
         result = await client.put_version(
-            tid=env_id, version=version, resources=[], unknowns=[], compiler_version=get_compiler_version(),
+            tid=env_id,
+            version=version,
+            resources=[],
+            unknowns=[],
+            compiler_version=get_compiler_version(),
         )
         assert result.code == 200
 

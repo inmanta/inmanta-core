@@ -66,8 +66,8 @@ class EnvironmentAction(str, Enum):
 
 class EnvironmentListener:
     """
-        Base class for environment listeners
-        Exceptions from the listeners are dropped, the listeners are responsible for handling them
+    Base class for environment listeners
+    Exceptions from the listeners are dropped, the listeners are responsible for handling them
     """
 
     async def environment_action_created(self, env: model.Environment) -> None:
@@ -251,7 +251,7 @@ class EnvironmentService(protocol.ServerSlice):
     @protocol.handle(methods.create_token, env="tid")
     async def create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> Apireturn:
         """
-            Create a new auth token for this environment
+        Create a new auth token for this environment
         """
         return 200, {"token": await self.environment_create_token(env, client_types, idempotent)}
 
@@ -379,7 +379,7 @@ class EnvironmentService(protocol.ServerSlice):
     @protocol.handle(methods_v2.environment_clear, env="id")
     async def environment_clear(self, env: data.Environment) -> None:
         """
-            Clear the environment
+        Clear the environment
         """
         is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)
         if is_protected_environment:
@@ -396,7 +396,7 @@ class EnvironmentService(protocol.ServerSlice):
     @protocol.handle(methods_v2.environment_create_token, env="tid")
     async def environment_create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> str:
         """
-            Create a new auth token for this environment
+        Create a new auth token for this environment
         """
         return encode_token(client_types, str(env.id), idempotent)
 

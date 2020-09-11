@@ -77,7 +77,7 @@ class OrchestrationService(protocol.ServerSlice):
 
     async def _purge_versions(self) -> None:
         """
-            Purge versions from the database
+        Purge versions from the database
         """
         # TODO: move to data and use queries for delete
         envs = await data.Environment.get_list()

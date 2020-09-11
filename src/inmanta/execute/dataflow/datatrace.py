@@ -38,8 +38,8 @@ from inmanta.execute.runtime import Instance
 
 class DataTraceRenderer:
     """
-        Renderer for the data trace of an assignable node. The data trace shows all data paths to the node as well as dynamic
-        context (such as implementations) where applicable. The main entrypoint is the render() method.
+    Renderer for the data trace of an assignable node. The data trace shows all data paths to the node as well as dynamic
+    context (such as implementations) where applicable. The main entrypoint is the render() method.
     """
 
     @classmethod
@@ -49,7 +49,7 @@ class DataTraceRenderer:
     @classmethod
     def _render_reference(cls, node_ref: AssignableNodeReference, tree_root: bool = False) -> List[str]:
         """
-            Renders the data trace for all nodes a reference refers to.
+        Renders the data trace for all nodes a reference refers to.
         """
         result: List[str] = []
         if tree_root:
@@ -67,17 +67,17 @@ class DataTraceRenderer:
     @classmethod
     def _render_node(cls, node: AssignableNode) -> List[str]:
         """
-            Renders the data trace for an assignable node. Shows information about:
-                - the node's parent instance, if it is an attribute node
-                - the node's equivalence
-                - assignments to the node:
-                    - right hand side
-                    - responsible
-                    - the dynamic context it lives in, if any
-            Recurses on the assignment's right hand side.
+        Renders the data trace for an assignable node. Shows information about:
+            - the node's parent instance, if it is an attribute node
+            - the node's equivalence
+            - assignments to the node:
+                - right hand side
+                - responsible
+                - the dynamic context it lives in, if any
+        Recurses on the assignment's right hand side.
 
-            :param tree_root: indicates whether this node is the root of the data trace tree. Behaviour for non-root nodes is
-                slightly different in order to prevent output duplication.
+        :param tree_root: indicates whether this node is the root of the data trace tree. Behaviour for non-root nodes is
+            slightly different in order to prevent output duplication.
         """
         result: List[str] = []
         result += cls._render_equivalence(node.equivalence)
@@ -107,7 +107,7 @@ class DataTraceRenderer:
     @classmethod
     def _prefix_line(cls, prefix: str, line: str) -> str:
         """
-            Prefixes a line.
+        Prefixes a line.
         """
         if line == "":
             return prefix.rstrip()
@@ -116,16 +116,16 @@ class DataTraceRenderer:
     @classmethod
     def _prefix(cls, prefix: str, lines: Iterable[str]) -> List[str]:
         """
-            Prefixes lines.
+        Prefixes lines.
         """
         return [cls._prefix_line(prefix, line) for line in lines]
 
     @classmethod
     def _branch(cls, lines: List[str], last: Optional[bool] = False) -> List[str]:
         """
-            Renders a branch in the tree.
+        Renders a branch in the tree.
 
-            :param last: True iff this is the last branch on this level.
+        :param last: True iff this is the last branch on this level.
         """
         if len(lines) == 0:
             return []
@@ -138,14 +138,14 @@ class DataTraceRenderer:
     @classmethod
     def _indent(cls, lines: Iterable[str]) -> List[str]:
         """
-            Indents lines.
+        Indents lines.
         """
         return cls._prefix(" " * 4, lines)
 
     @classmethod
     def _render_implementation_context(cls, context: DataflowGraph) -> List[str]:
         """
-            Renders information about the dynamic implementation context, if it exists.
+        Renders information about the dynamic implementation context, if it exists.
         """
         # roundabout way to detect encapsulating context, may lead to false positives, see #1937
         try:
@@ -167,10 +167,10 @@ class DataTraceRenderer:
     @classmethod
     def _render_constructor(cls, instance: InstanceNode) -> List[str]:
         """
-            Renders information about the construction of an instance node:
-                - constructor statement
-                - lexical position
-                - dynamic context it lives in, if any
+        Renders information about the construction of an instance node:
+            - constructor statement
+            - lexical position
+            - dynamic context it lives in, if any
         """
         result: List[str] = []
         if instance.responsible is not None:
@@ -185,9 +185,9 @@ class DataTraceRenderer:
     @classmethod
     def _render_instance(cls, instance: InstanceNode) -> List[str]:
         """
-            Renders information about an instance node:
-                - construction information
-                - index matches and their construction information
+        Renders information about an instance node:
+            - construction information
+            - index matches and their construction information
         """
         result: List[str] = []
         result += cls._render_constructor(instance)
@@ -208,7 +208,7 @@ class DataTraceRenderer:
     @classmethod
     def _render_assignment(cls, assignment: Assignment) -> List[str]:
         """
-            Renders information about an assignment in the dataflow graph.
+        Renders information about an assignment in the dataflow graph.
         """
         responsible: "Locatable" = assignment.responsible
         return [
@@ -220,8 +220,8 @@ class DataTraceRenderer:
     @classmethod
     def _render_equivalence(cls, equivalence: Equivalence) -> List[str]:
         """
-            Renders information about an equivalence unless trivial. Shows the equivalence's members and the responsible
-            assignments.
+        Renders information about an equivalence unless trivial. Shows the equivalence's members and the responsible
+        assignments.
         """
         if len(equivalence.nodes) > 1:
             # sort output for consistency

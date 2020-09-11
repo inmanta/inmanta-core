@@ -80,36 +80,36 @@ class NameSpacedResolver(object):
 
 class Type(Locatable):
     """
-        This class is the abstract base class for all types in the Inmanta :term:`DSL` that represent basic data. These are
-        types that are not relations. Instances of subclasses represent a type in the Inmanta language.
+    This class is the abstract base class for all types in the Inmanta :term:`DSL` that represent basic data. These are
+    types that are not relations. Instances of subclasses represent a type in the Inmanta language.
     """
 
     def validate(self, value: Optional[object]) -> bool:
         """
-            Validate the given value to check if it satisfies the constraints associated with this type. Returns true iff
-            validation succeeds, otherwise raises a :py:class:`inmanta.ast.RuntimeException`.
+        Validate the given value to check if it satisfies the constraints associated with this type. Returns true iff
+        validation succeeds, otherwise raises a :py:class:`inmanta.ast.RuntimeException`.
         """
         return True
 
     def type_string(self) -> Optional[str]:
         """
-            Returns the type string as expressed in the Inmanta :term:`DSL`, if this type can be expressed in the :term:`DSL`.
-            Otherwise returns None.
+        Returns the type string as expressed in the Inmanta :term:`DSL`, if this type can be expressed in the :term:`DSL`.
+        Otherwise returns None.
         """
         return None
 
     def type_string_internal(self) -> str:
         """
-            Returns the internal string representation of the instance of the type. This is used by __str__
-            when type_string() returns None.
-            Use this method only when you explicitly need the internal string representation of the type.
+        Returns the internal string representation of the instance of the type. This is used by __str__
+        when type_string() returns None.
+        Use this method only when you explicitly need the internal string representation of the type.
         """
         return "Type"
 
     def __str__(self) -> str:
         """
-            Returns the string representation of the type, to be used for informative reporting as in error messages.
-            When a structured representation of the inmanta type is required, type_string() should be used instead.
+        Returns the string representation of the type, to be used for informative reporting as in error messages.
+        When a structured representation of the inmanta type is required, type_string() should be used instead.
         """
         type_string: Optional[str] = self.type_string()
         return type_string if type_string is not None else self.type_string_internal()
@@ -119,20 +119,20 @@ class Type(Locatable):
 
     def is_primitive(self) -> bool:
         """
-            Returns true iff this type is a primitive type, i.e. number, string, bool.
+        Returns true iff this type is a primitive type, i.e. number, string, bool.
         """
         return False
 
     def get_base_type(self) -> "Type":
         """
-            Returns the base type for this type, i.e. the plain type without modifiers such as expressed by
-            `[]` and `?` in the :term:`DSL`.
+        Returns the base type for this type, i.e. the plain type without modifiers such as expressed by
+        `[]` and `?` in the :term:`DSL`.
         """
         return self
 
     def with_base_type(self, base_type: "Type") -> "Type":
         """
-            Returns the type formed by replacing this type's base type with the supplied type.
+        Returns the type formed by replacing this type's base type with the supplied type.
         """
         return base_type
 
@@ -145,7 +145,7 @@ class NamedType(Type, Named):
 
 class NullableType(Type):
     """
-        Represents a nullable type in the Inmanta :term:`DSL`. For example `NullableType(Number())` represents `number?`.
+    Represents a nullable type in the Inmanta :term:`DSL`. For example `NullableType(Number())` represents `number?`.
     """
 
     def __init__(self, element_type: Type) -> None:
@@ -185,7 +185,7 @@ class NullableType(Type):
 
 class Primitive(Type):
     """
-        Abstract base class representing primitive types.
+    Abstract base class representing primitive types.
     """
 
     def __init__(self) -> None:
@@ -194,7 +194,7 @@ class Primitive(Type):
 
     def cast(self, value: Optional[object]) -> object:
         """
-            Cast a value to this type. If the value can not be cast, raises a :py:class:`inmanta.ast.RuntimeException`.
+        Cast a value to this type. If the value can not be cast, raises a :py:class:`inmanta.ast.RuntimeException`.
         """
         exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self))
 
@@ -218,10 +218,10 @@ class Primitive(Type):
 
 class Number(Primitive):
     """
-        This class represents an integer or float in the configuration model. On
-        these numbers the following operations are supported:
+    This class represents an integer or float in the configuration model. On
+    these numbers the following operations are supported:
 
-        +, -, /, *
+    +, -, /, *
     """
 
     def __init__(self) -> None:
@@ -230,8 +230,8 @@ class Number(Primitive):
 
     def validate(self, value: Optional[object]) -> bool:
         """
-            Validate the given value to check if it satisfies the constraints
-            associated with this type
+        Validate the given value to check if it satisfies the constraints
+        associated with this type
         """
         if isinstance(value, AnyType):
             return True
@@ -256,7 +256,7 @@ class Number(Primitive):
 
 class Integer(Number):
     """
-        An instance of this class represents the int type in the configuration model.
+    An instance of this class represents the int type in the configuration model.
     """
 
     def __init__(self) -> None:
@@ -276,7 +276,7 @@ class Integer(Number):
 
 class Bool(Primitive):
     """
-        This class represents a simple boolean that can hold true or false.
+    This class represents a simple boolean that can hold true or false.
     """
 
     def __init__(self) -> None:
@@ -285,8 +285,8 @@ class Bool(Primitive):
 
     def validate(self, value: Optional[object]) -> bool:
         """
-            Validate the given value to check if it satisfies the constraints
-            associated with this type
+        Validate the given value to check if it satisfies the constraints
+        associated with this type
         """
         if isinstance(value, AnyType):
             return True
@@ -309,7 +309,7 @@ class Bool(Primitive):
 
 class String(Primitive):
     """
-        This class represents a string type in the configuration model.
+    This class represents a string type in the configuration model.
     """
 
     def __init__(self) -> None:
@@ -318,8 +318,8 @@ class String(Primitive):
 
     def validate(self, value: Optional[object]) -> bool:
         """
-            Validate the given value to check if it satisfies the constraints
-            associated with this type
+        Validate the given value to check if it satisfies the constraints
+        associated with this type
         """
         if isinstance(value, AnyType):
             return True
@@ -350,7 +350,7 @@ class String(Primitive):
 
 class List(Type):
     """
-        Instances of this class represent a list type containing any types of values.
+    Instances of this class represent a list type containing any types of values.
     """
 
     def __init__(self):
@@ -377,8 +377,8 @@ class List(Type):
 
 class TypedList(List):
     """
-        Instances of this class represent a list type containing any values of type element_type.
-        For example `TypedList(Number())` represents `number[]`.
+    Instances of this class represent a list type containing any values of type element_type.
+    For example `TypedList(Number())` represents `number[]`.
     """
 
     def __init__(self, element_type: Type) -> None:
@@ -426,8 +426,8 @@ class TypedList(List):
 
 class LiteralList(TypedList):
     """
-        Instances of this class represent a list type containing only :py:class:`Literal` values.
-        This is the `list` type in the :term:`DSL`
+    Instances of this class represent a list type containing only :py:class:`Literal` values.
+    This is the `list` type in the :term:`DSL`
     """
 
     def __init__(self) -> None:
@@ -451,7 +451,7 @@ class LiteralList(TypedList):
 
 class Dict(Type):
     """
-        Instances of this class represent a dict type with any types of values.
+    Instances of this class represent a dict type with any types of values.
     """
 
     def __init__(self) -> None:
@@ -459,8 +459,8 @@ class Dict(Type):
 
     def validate(self, value: Optional[object]) -> bool:
         """
-            Validate the given value to check if it satisfies the constraints
-            associated with this type
+        Validate the given value to check if it satisfies the constraints
+        associated with this type
         """
         if isinstance(value, AnyType):
             return True
@@ -482,7 +482,7 @@ class Dict(Type):
 
 class TypedDict(Dict):
     """
-        Instances of this class represent a dict type containing only values of type element_type.
+    Instances of this class represent a dict type containing only values of type element_type.
     """
 
     def __init__(self, element_type: Type) -> None:
@@ -511,8 +511,8 @@ class TypedDict(Dict):
 
 class LiteralDict(TypedDict):
     """
-        Instances of this class represent a dict type containing only :py:class:`Literal` values.
-        This is the `dict` type in the :term:`DSL`
+    Instances of this class represent a dict type containing only :py:class:`Literal` values.
+    This is the `dict` type in the :term:`DSL`
     """
 
     def __init__(self) -> None:
@@ -529,7 +529,7 @@ class LiteralDict(TypedDict):
 
 class Union(Type):
     """
-        Instances of this class represent a union of multiple types.
+    Instances of this class represent a union of multiple types.
     """
 
     def __init__(self, types: PythonList[Type]) -> None:
@@ -551,8 +551,8 @@ class Union(Type):
 
 class Literal(Union):
     """
-        Instances of this class represent a literal in the configuration model. A literal is a primitive or a list or dict
-        where all values are literals themselves.
+    Instances of this class represent a literal in the configuration model. A literal is a primitive or a list or dict
+    where all values are literals themselves.
     """
 
     def __init__(self) -> None:
@@ -564,8 +564,8 @@ class Literal(Union):
 
 class ConstraintType(NamedType):
     """
-        A type that is based on a primitive type but defines additional constraints on this type.
-        These constraints only apply on the value of the type.
+    A type that is based on a primitive type but defines additional constraints on this type.
+    These constraints only apply on the value of the type.
     """
 
     def __init__(self, namespace: Namespace, name: str) -> None:
@@ -584,16 +584,16 @@ class ConstraintType(NamedType):
 
     def set_constraint(self, expression) -> None:
         """
-            Set the constraint for this type. This baseclass for constraint
-            types requires the constraint to be set as a regex that can be
-            compiled.
+        Set the constraint for this type. This baseclass for constraint
+        types requires the constraint to be set as a regex that can be
+        compiled.
         """
         self.expression = expression
         self._constraint = create_function(self, expression)
 
     def get_constraint(self):
         """
-            Get the string representation of the constraint
+        Get the string representation of the constraint
         """
         return self._constraint
 
@@ -601,8 +601,8 @@ class ConstraintType(NamedType):
 
     def validate(self, value: Optional[object]) -> bool:
         """
-            Validate the given value to check if it satisfies the constraint and
-            the basetype.
+        Validate the given value to check if it satisfies the constraint and
+        the basetype.
         """
         if isinstance(value, AnyType):
             return True
@@ -636,14 +636,14 @@ class ConstraintType(NamedType):
 
 def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
     """
-        Function that returns a function that evaluates the given expression.
-        The generated function accepts the unbound variables in the expression
-        as arguments.
+    Function that returns a function that evaluates the given expression.
+    The generated function accepts the unbound variables in the expression
+    as arguments.
     """
 
     def function(*args, **kwargs):
         """
-            A function that evaluates the expression
+        A function that evaluates the expression
         """
         if len(args) != 1:
             raise NotImplementedError()

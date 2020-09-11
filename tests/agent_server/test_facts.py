@@ -30,7 +30,7 @@ from utils import LogSequence, _wait_until_deployment_finishes, no_error_in_logs
 @pytest.mark.asyncio
 async def test_get_facts(resource_container, client, clienthelper, environment, agent, caplog):
     """
-        Test retrieving facts from the agent
+    Test retrieving facts from the agent
     """
     env_id = environment
 
@@ -65,7 +65,7 @@ async def test_get_facts(resource_container, client, clienthelper, environment, 
 @pytest.mark.asyncio
 async def test_purged_facts(resource_container, client, clienthelper, agent, environment, no_agent_backoff, caplog):
     """
-        Test if facts are purged when the resource is purged.
+    Test if facts are purged when the resource is purged.
     """
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -126,7 +126,7 @@ async def test_purged_facts(resource_container, client, clienthelper, agent, env
 @pytest.mark.asyncio
 async def test_get_facts_extended(server, client, agent, clienthelper, resource_container, environment, caplog):
     """
-        dryrun and deploy a configuration model automatically
+    dryrun and deploy a configuration model automatically
     """
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     # allow very rapid fact refresh
@@ -291,7 +291,7 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
 @pytest.mark.asyncio
 async def test_purged_resources(resource_container, client, clienthelper, server, environment, agent, no_agent_backoff):
     """
-        Test if facts are purged when the resource is no longer available in any version
+    Test if facts are purged when the resource is no longer available in any version
     """
     resource_container.Provider.reset()
 
@@ -382,7 +382,7 @@ async def test_purged_resources(resource_container, client, clienthelper, server
 @pytest.mark.asyncio
 async def test_get_fact_no_code(resource_container, client, clienthelper, environment, agent):
     """
-        Test retrieving facts from the agent when resource cannot be loaded
+    Test retrieving facts from the agent when resource cannot be loaded
     """
     env_id = environment
     resource_container.Provider.set("agent1", "key", "value")

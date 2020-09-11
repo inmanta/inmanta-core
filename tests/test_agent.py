@@ -50,8 +50,7 @@ async def test_agent_get_status(server, environment, agent):
 
 
 def test_context_changes():
-    """ Test registering changes in the handler context
-    """
+    """Test registering changes in the handler context"""
     resource = PurgeableResource(Id.parse_id("std::File[agent,path=/test],v=1"))
     ctx = HandlerContext(resource)
 
@@ -83,8 +82,8 @@ def test_context_changes():
 @pytest.fixture(scope="function")
 async def async_started_agent(server_config):
     """
-        Start agent with the use_autostart_agent_map option to true.
-        agent.start() is executed in the background, since connection to the server will fail.
+    Start agent with the use_autostart_agent_map option to true.
+    agent.start() is executed in the background, since connection to the server will fail.
     """
     config.Config.set("config", "use_autostart_agent_map", "true")
 
@@ -99,7 +98,7 @@ async def async_started_agent(server_config):
 @pytest.fixture(scope="function")
 async def startable_server(server_config):
     """
-        This fixture returns the bootloader of a server which is not yet started.
+    This fixture returns the bootloader of a server which is not yet started.
     """
     bootloader = InmantaBootloader()
     yield bootloader
@@ -112,8 +111,8 @@ async def startable_server(server_config):
 @pytest.mark.asyncio
 async def test_agent_cannot_retrieve_autostart_agent_map(async_started_agent, startable_server, caplog):
     """
-        When an agent with the config option use_autostart_agent_map set to true, cannot retrieve the autostart_agent_map
-        from the server at startup, the process should retry. This test verifies that the retry happens correctly.
+    When an agent with the config option use_autostart_agent_map set to true, cannot retrieve the autostart_agent_map
+    from the server at startup, the process should retry. This test verifies that the retry happens correctly.
     """
     client = protocol.Client("client")
 
@@ -143,9 +142,9 @@ async def test_agent_cannot_retrieve_autostart_agent_map(async_started_agent, st
 @pytest.mark.asyncio
 async def test_set_agent_map(server, environment, agent_factory):
     """
-        This test verifies whether an agentmap is set correct when set via:
-            1) The constructor
-            2) Via the agent-map configuration option
+    This test verifies whether an agentmap is set correct when set via:
+        1) The constructor
+        2) Via the agent-map configuration option
     """
     env_id = uuid.UUID(environment)
     agent_map = {"agent1": "localhost"}
@@ -168,9 +167,9 @@ async def test_set_agent_map(server, environment, agent_factory):
 @pytest.mark.asyncio
 async def test_hostname(server, environment, agent_factory):
     """
-        This test verifies whether the hostname of an agent is set correct when set via:
-            1) The constructor
-            2) Via the agent-names configuration option
+    This test verifies whether the hostname of an agent is set correct when set via:
+        1) The constructor
+        2) Via the agent-names configuration option
     """
     env_id = uuid.UUID(environment)
 
@@ -191,7 +190,7 @@ async def test_hostname(server, environment, agent_factory):
 @pytest.mark.asyncio
 async def test_update_agent_map(server, environment, agent_factory):
     """
-        If the URI of an enabled agent changes, it should still be enabled after the change
+    If the URI of an enabled agent changes, it should still be enabled after the change
     """
     env_id = uuid.UUID(environment)
     agent_map = {"node1": "localhost"}

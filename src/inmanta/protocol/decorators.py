@@ -28,12 +28,12 @@ FuncT = TypeVar("FuncT", bound=HandlerType)
 
 class handle(object):  # noqa: N801
     """
-        Decorator for subclasses of an endpoint to handle protocol methods
+    Decorator for subclasses of an endpoint to handle protocol methods
 
-        :param method: A subclass of method that defines the method
-        :param api_version: When specific this handler is only associated with a method of the specific api verision. If the
-                            version is not defined, the handler is not associated with a rest endpoint.
-        :param kwargs: Map arguments in the message from one name to an other
+    :param method: A subclass of method that defines the method
+    :param api_version: When specific this handler is only associated with a method of the specific api verision. If the
+                        version is not defined, the handler is not associated with a rest endpoint.
+    :param kwargs: Map arguments in the message from one name to an other
     """
 
     def __init__(self, method: Callable[..., Apireturn], api_version: Optional[int] = None, **kwargs: str) -> None:
@@ -43,7 +43,7 @@ class handle(object):  # noqa: N801
 
     def __call__(self, function: FuncT) -> FuncT:
         """
-            The wrapping
+        The wrapping
         """
         if not inspect.iscoroutinefunction(function):
             raise ValueError(f"{function} is not an async function. Only async def functions may handle requests.")
@@ -74,29 +74,29 @@ def method(
     envelope_key: str = const.ENVELOPE_KEY,
 ) -> Callable[..., Callable]:
     """
-        Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
-        and model the protocol.
+    Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
+    and model the protocol.
 
-        :param path: The url path to use for this call. This path can contain parameter names of the function. These names
-                     should be enclosed in < > brackets.
-        :param operation: The type of HTTP operation (verb)
-        :param timeout: nr of seconds before request it terminated
-        :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
-        :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
-        :param agent_server: This is a call from the Agent to the Server
-        :param validate_sid: This call requires a valid session, true by default if agent_server and not api
-        :param client_types: The allowed client types for this call.
-                The valid values are defined by the :const:`inmanta.const.ClientType` enum.
-        :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
-            which the options apply. The value is another dict that can contain the following options:
-                header: Map this argument to a header with the following name.
-                reply_header: If the argument is mapped to a header, this header will also be included in the reply
-                getter: Call this method after validation and pass its return value to the method call. This may change the
-                        type of the argument. This method can raise an HTTPException to return a 404 for example.
-        :param api_version: The version of the api this method belongs to
-        :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
-        :param envelope: Put the response of the call under an envelope with key envelope_key.
-        :param envelope_key: The envelope key to use.
+    :param path: The url path to use for this call. This path can contain parameter names of the function. These names
+                 should be enclosed in < > brackets.
+    :param operation: The type of HTTP operation (verb)
+    :param timeout: nr of seconds before request it terminated
+    :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
+    :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
+    :param agent_server: This is a call from the Agent to the Server
+    :param validate_sid: This call requires a valid session, true by default if agent_server and not api
+    :param client_types: The allowed client types for this call.
+            The valid values are defined by the :const:`inmanta.const.ClientType` enum.
+    :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
+        which the options apply. The value is another dict that can contain the following options:
+            header: Map this argument to a header with the following name.
+            reply_header: If the argument is mapped to a header, this header will also be included in the reply
+            getter: Call this method after validation and pass its return value to the method call. This may change the
+                    type of the argument. This method can raise an HTTPException to return a 404 for example.
+    :param api_version: The version of the api this method belongs to
+    :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
+    :param envelope: Put the response of the call under an envelope with key envelope_key.
+    :param envelope_key: The envelope key to use.
     """
 
     def wrapper(func: MethodT) -> MethodT:
@@ -141,31 +141,31 @@ def typedmethod(
     strict_typing: bool = True,
 ) -> Callable[..., Callable]:
     """
-        Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
-        and model the protocol.
+    Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
+    and model the protocol.
 
-        :param path: The url path to use for this call. This path can contain parameter names of the function. These names
-                     should be enclosed in < > brackets.
-        :param operation: The type of HTTP operation (verb)
-        :param timeout: nr of seconds before request it terminated
-        :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
-        :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
-        :param agent_server: This is a call from the Agent to the Server
-        :param validate_sid: This call requires a valid session, true by default if agent_server and not api
-        :param client_types: The allowed client types for this call.
-                The valid values are defined by the :const:`inmanta.const.ClientType` enum.
-        :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
-            which the options apply. The value is another dict that can contain the following options:
-                header: Map this argument to a header with the following name.
-                reply_header: If the argument is mapped to a header, this header will also be included in the reply
-                getter: Call this method after validation and pass its return value to the method call. This may change the
-                        type of the argument. This method can raise an HTTPException to return a 404 for example.
-        :param api_version: The version of the api this method belongs to
-        :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
-        :param envelope_key: The envelope key to use.
-        :param strict_typing: If true, does not allow `Any`. Setting this option to False is heavily discouraged except for some
-            few very specific cases where the type system does not allow the strict type to be specified, for example in case of
-            infinite recursion.
+    :param path: The url path to use for this call. This path can contain parameter names of the function. These names
+                 should be enclosed in < > brackets.
+    :param operation: The type of HTTP operation (verb)
+    :param timeout: nr of seconds before request it terminated
+    :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
+    :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
+    :param agent_server: This is a call from the Agent to the Server
+    :param validate_sid: This call requires a valid session, true by default if agent_server and not api
+    :param client_types: The allowed client types for this call.
+            The valid values are defined by the :const:`inmanta.const.ClientType` enum.
+    :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
+        which the options apply. The value is another dict that can contain the following options:
+            header: Map this argument to a header with the following name.
+            reply_header: If the argument is mapped to a header, this header will also be included in the reply
+            getter: Call this method after validation and pass its return value to the method call. This may change the
+                    type of the argument. This method can raise an HTTPException to return a 404 for example.
+    :param api_version: The version of the api this method belongs to
+    :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
+    :param envelope_key: The envelope key to use.
+    :param strict_typing: If true, does not allow `Any`. Setting this option to False is heavily discouraged except for some
+        few very specific cases where the type system does not allow the strict type to be specified, for example in case of
+        infinite recursion.
     """
 
     def wrapper(func: MethodT) -> MethodT:

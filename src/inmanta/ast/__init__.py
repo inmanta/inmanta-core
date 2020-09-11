@@ -156,16 +156,16 @@ class Locatable(object):
 
 class LocatableString(object):
     """
-        A string with an attached source location.
+    A string with an attached source location.
 
-        It is not a subtype of str, as str is not a normal class
-        As such, it is very important to unwrap strings ad this object is not an actual string.
+    It is not a subtype of str, as str is not a normal class
+    As such, it is very important to unwrap strings ad this object is not an actual string.
 
-        All identifiers produced by the parser are of this type.
+    All identifiers produced by the parser are of this type.
 
-        The unwrapping should be done in
-        1. anywhere in DefinitionStatements
-        2. in the constructors of other statements
+    The unwrapping should be done in
+    1. anywhere in DefinitionStatements
+    2. in the constructors of other statements
     """
 
     def __init__(self, value: str, location: Range, lexpos: "int", namespace: "Namespace") -> None:
@@ -256,7 +256,7 @@ class MockImport(Import):
 
 class Namespace(Namespaced):
     """
-        This class models a namespace that contains defined types, modules, ...
+    This class models a namespace that contains defined types, modules, ...
     """
 
     __slots__ = ("__name", "__parent", "__children", "defines_types", "visible_namespaces", "primitives", "scope")
@@ -341,13 +341,13 @@ class Namespace(Namespaced):
 
     def get_name(self) -> str:
         """
-            Get the name of this namespace
+        Get the name of this namespace
         """
         return self.__name
 
     def get_full_name(self) -> str:
         """
-            Get the fully qualified name of this namespace
+        Get the fully qualified name of this namespace
         """
         if self.__parent is None:
             raise Exception("Should not occur, compiler corrupt")
@@ -359,15 +359,15 @@ class Namespace(Namespaced):
 
     def set_parent(self, parent: "Namespace") -> None:
         """
-            Set the parent of this namespace. This namespace is also added to
-            the child list of the parent.
+        Set the parent of this namespace. This namespace is also added to
+        the child list of the parent.
         """
         self.__parent = parent
         self.__parent.add_child(self)
 
     def get_parent(self) -> "Optional[Namespace]":
         """
-            Get the parent namespace
+        Get the parent namespace
         """
         return self.__parent
 
@@ -375,7 +375,7 @@ class Namespace(Namespaced):
 
     def get_root(self) -> "Namespace":
         """
-            Get the root
+        Get the root
         """
         if self.__parent is None:
             return self
@@ -383,13 +383,13 @@ class Namespace(Namespaced):
 
     def add_child(self, child_ns: "Namespace") -> None:
         """
-            Add a child to the namespace.
+        Add a child to the namespace.
         """
         self.__children[child_ns.get_name()] = child_ns
 
     def __repr__(self) -> str:
         """
-            The representation of this object
+        The representation of this object
         """
         if self.__parent is not None and self.__parent.get_name() != "__root__":
             return repr(self.__parent) + "::" + self.__name
@@ -398,7 +398,7 @@ class Namespace(Namespaced):
 
     def children(self, recursive: bool = False) -> "List[Namespace]":
         """
-            Get the children of this namespace
+        Get the children of this namespace
         """
         children = list(self.__children.values())
         if not recursive:
@@ -411,8 +411,8 @@ class Namespace(Namespaced):
 
     def get_child(self, name: str) -> "Optional[Namespace]":
         """
-            Returns the child namespace with the given name or None if it does
-            not exist.
+        Returns the child namespace with the given name or None if it does
+        not exist.
         """
         if name in self.__children:
             return self.__children[name]
@@ -420,8 +420,8 @@ class Namespace(Namespaced):
 
     def get_child_or_create(self, name: str) -> "Namespace":
         """
-            Returns the child namespace with the given name or None if it does
-            not exist.
+        Returns the child namespace with the given name or None if it does
+        not exist.
         """
         if name in self.__children:
             return self.__children[name]
@@ -430,8 +430,8 @@ class Namespace(Namespaced):
 
     def get_ns_or_create(self, name: str) -> "Namespace":
         """
-            Returns the child namespace with the given name or None if it does
-            not exist.
+        Returns the child namespace with the given name or None if it does
+        not exist.
         """
         name_parts = name.split("::")
         if len(name_parts) == 1:
@@ -444,18 +444,18 @@ class Namespace(Namespaced):
 
     def get_ns_from_string(self, fqtn: str) -> "Optional[Namespace]":
         """
-            Get the namespace that is referenced to in the given fully qualified
-            type name.
+        Get the namespace that is referenced to in the given fully qualified
+        type name.
 
-            :param fqtn: The type name
+        :param fqtn: The type name
         """
         name_parts = fqtn.split("::")
         return self.get_root()._get_ns(name_parts)
 
     def _get_ns(self, ns_parts: List[str]) -> "Optional[Namespace]":
         """
-            Return the namespace indicated by the parts list. Each element of
-            the array represents a level in the namespace hierarchy.
+        Return the namespace indicated by the parts list. Each element of
+        the array represents a level in the namespace hierarchy.
         """
         if len(ns_parts) == 0:
             return None
@@ -470,7 +470,7 @@ class Namespace(Namespaced):
     @lru_cache()
     def to_path(self) -> List[str]:
         """
-            Return a list with the namespace path elements in it.
+        Return a list with the namespace path elements in it.
         """
         if self.__parent is None or self.__parent.get_name() == "__root__":
             return [self.__name]
@@ -580,7 +580,7 @@ class RuntimeException(CompilerException):
 
 class CompilerRuntimeWarning(InmantaWarning, RuntimeException):
     """
-        Baseclass for compiler warnings after parsing is complete.
+    Baseclass for compiler warnings after parsing is complete.
     """
 
     def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
@@ -649,7 +649,7 @@ class ExternalException(RuntimeException):
 
 class ExplicitPluginException(ExternalException):
     """
-        Base exception for wrapping an explicit :py:class:`inmanta.plugins.PluginException` raised from a plugin call.
+    Base exception for wrapping an explicit :py:class:`inmanta.plugins.PluginException` raised from a plugin call.
     """
 
     def __init__(self, stmt: Locatable, msg: str, cause: "PluginException") -> None:

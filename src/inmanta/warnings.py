@@ -24,7 +24,7 @@ from typing import Dict, List, Mapping, Optional, TextIO, Type, Union
 
 class InmantaWarning(Warning):
     """
-        Base class for Inmanta Warnings.
+    Base class for Inmanta Warnings.
     """
 
     def __init__(self):
@@ -39,8 +39,8 @@ class WarningBehaviour(Enum):
 
 class WarningRule:
     """
-        A single rule for warning handling. Describes the desired behaviour when an error occurs.
-        When type is set, the rule is only applied to subclasses of the warning type.
+    A single rule for warning handling. Describes the desired behaviour when an error occurs.
+    When type is set, the rule is only applied to subclasses of the warning type.
     """
 
     def __init__(self, action: WarningBehaviour, tp: Optional[Type[InmantaWarning]] = None) -> None:
@@ -53,13 +53,13 @@ class WarningRule:
 
 class WarningOption:
     """
-        An option to manage warnings. Consists of a name and a range of possible values, each tied to a warning rule.
-        For example, applying
-        WarningOption(
-            "disable-runtime-warnings",
-            {True: WarningRule(WarningBehaviour.IGNORE, CompilerRuntimeWarning)}
-        )
-        would add a rule to ignore CompilerRuntimeWarnings but leave other warning's behaviour as is.
+    An option to manage warnings. Consists of a name and a range of possible values, each tied to a warning rule.
+    For example, applying
+    WarningOption(
+        "disable-runtime-warnings",
+        {True: WarningRule(WarningBehaviour.IGNORE, CompilerRuntimeWarning)}
+    )
+    would add a rule to ignore CompilerRuntimeWarnings but leave other warning's behaviour as is.
     """
 
     def __init__(self, name: str, options: Dict[Union[str, bool], WarningRule]) -> None:
@@ -68,7 +68,7 @@ class WarningOption:
 
     def apply(self, option: Union[str, bool]) -> None:
         """
-            Apply the warning rule tied to the given option.
+        Apply the warning rule tied to the given option.
         """
         if option not in self.options:
             raise Exception("Illegal option %s for %s" % (option, self.name))
@@ -78,7 +78,7 @@ class WarningOption:
 
 class WarningsManager:
     """
-        Manages warning behaviour guided by a config file.
+    Manages warning behaviour guided by a config file.
     """
 
     # List of warning options with a rule tied to each possible option value.
@@ -97,7 +97,7 @@ class WarningsManager:
     @classmethod
     def apply_config(cls, config: Optional[Mapping[str, Union[str, bool]]]) -> None:
         """
-            Sets all known options based on values in config.
+        Sets all known options based on values in config.
         """
         cls._apply_default()
         if config is None:
@@ -113,7 +113,7 @@ class WarningsManager:
     @classmethod
     def _apply_default(cls) -> None:
         """
-            Applies the default warning behaviour.
+        Applies the default warning behaviour.
         """
         # Control how warnings are shown
         warnings.showwarning = cls._showwarning
@@ -133,14 +133,14 @@ class WarningsManager:
         line: Optional[str] = None,
     ) -> None:
         """
-            Shows a warning.
+        Shows a warning.
 
-            :param message: The warning to show.
-            :param category: The type of the warning.
-            :param filename: Required for compatibility but will be ignored.
-            :param lineno: Required for compatibility but will be ignored.
-            :param file: The file to write the warning to. Defaults to stderr.
-            :param line: Required for compatibility but will be ignored.
+        :param message: The warning to show.
+        :param category: The type of the warning.
+        :param filename: Required for compatibility but will be ignored.
+        :param lineno: Required for compatibility but will be ignored.
+        :param file: The file to write the warning to. Defaults to stderr.
+        :param line: Required for compatibility but will be ignored.
         """
         # implementation based on warnings._showwarnmsg_impl and logging._showwarning
         text: str
@@ -169,6 +169,6 @@ class WarningsManager:
 
 def warn(warning: InmantaWarning):
     """
-        Warn using the supplied InmantaWarning instance.
+    Warn using the supplied InmantaWarning instance.
     """
     warnings.warn(warning)

@@ -53,7 +53,7 @@ def test_deploy(snippetcompiler, tmpdir, postgres_db):
 @pytest.mark.asyncio(timeout=10)
 async def test_fork(server):
     """
-        This test should not fail. Some Subprocess'es can make the ioloop hang, this tests fails when that happens.
+    This test should not fail. Some Subprocess'es can make the ioloop hang, this tests fails when that happens.
     """
     i = 0
     while i < 5:

@@ -34,10 +34,10 @@ LOGGER = logging.getLogger(__name__)
 
 def parse_agent_uri(uri: str) -> typing.Tuple[str, Dict[str, Optional[str]]]:
     """
-        Parse an agent uri and return the settings
+    Parse an agent uri and return the settings
 
-        :attr uri: The uri to parse
-        :return: (scheme, config)
+    :attr uri: The uri to parse
+    :return: (scheme, config)
     """
     parts = urllib.parse.urlparse(uri)
     config: Dict[str, Optional[str]] = {}
@@ -69,7 +69,7 @@ def parse_agent_uri(uri: str) -> typing.Tuple[str, Dict[str, Optional[str]]]:
 
 def _get_io_class(scheme: str) -> typing.Type[local.IOBase]:
     """
-        Get an IO instance.
+    Get an IO instance.
     """
     if scheme == "local":
         return local.LocalIO
@@ -90,7 +90,7 @@ def _get_io_instance(uri: str) -> "IOBase":
 
 def get_io(cache: AgentCache, uri: str, version: int) -> "IOBase":
     """
-        Get an IO instance for the given uri and version
+    Get an IO instance for the given uri and version
     """
     if cache is None:
         io = _get_io_instance(uri)

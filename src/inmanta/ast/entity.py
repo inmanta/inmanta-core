@@ -68,7 +68,7 @@ class EntityLike(NamedType):
 
     def get_default_values(self) -> "Dict[str,ExpressionStatement]":
         """
-            Return the dictionary with default values
+        Return the dictionary with default values
         """
         values = []  # type: List[Tuple[str,ExpressionStatement]]
 
@@ -90,13 +90,13 @@ class EntityLike(NamedType):
 
 class Entity(EntityLike, NamedType):
     """
-        This class models a defined entity in the domain model of the configuration model.
+    This class models a defined entity in the domain model of the configuration model.
 
-        Each entity can contain attributes that are either data types or
-        relations and each entity can inherit from parent entities.
+    Each entity can contain attributes that are either data types or
+    relations and each entity can inherit from parent entities.
 
-        :param name: The name of this entity. This name can not be changed
-            after this object has been created
+    :param name: The name of this entity. This name can not be changed
+        after this object has been created
     """
 
     comment: Optional[str]
@@ -162,7 +162,7 @@ class Entity(EntityLike, NamedType):
 
     def add_default_value(self, name: str, value: "DefineAttribute") -> None:
         """
-            Add a default value for an attribute
+        Add a default value for an attribute
         """
         self.__default_values[name] = value
 
@@ -171,7 +171,7 @@ class Entity(EntityLike, NamedType):
 
     def get_namespace(self) -> Namespace:
         """
-            The namespace of this entity
+        The namespace of this entity
         """
         return self.__namespace
 
@@ -179,15 +179,15 @@ class Entity(EntityLike, NamedType):
 
     def __hash__(self) -> "int":
         """
-            The hashcode of this entity is defined as the hash of the name
-            of this entity
+        The hashcode of this entity is defined as the hash of the name
+        of this entity
         """
         return hash(self.__name)
 
     def get_name(self) -> str:
         """
-            Return the name of this entity. The name string has been
-            internalised for faster dictionary lookups
+        Return the name of this entity. The name string has been
+        internalised for faster dictionary lookups
         """
         return self.__name
 
@@ -195,19 +195,19 @@ class Entity(EntityLike, NamedType):
 
     def get_full_name(self) -> str:
         """
-            Get the full name of the entity
+        Get the full name of the entity
         """
         return self.__namespace.get_full_name() + "::" + self.__name
 
     def get_attributes(self) -> "Dict[str,Attribute]":
         """
-            Get a set with all attributes that are defined in this entity
+        Get a set with all attributes that are defined in this entity
         """
         return self._attributes
 
     def set_attributes(self, attributes: "Dict[str,Attribute]") -> None:
         """
-            Set a set of attributes that are defined in this entities
+        Set a set of attributes that are defined in this entities
         """
         self._attributes = attributes
 
@@ -215,7 +215,7 @@ class Entity(EntityLike, NamedType):
 
     def is_parent(self, entity: "Entity") -> bool:
         """
-            Check if the given entity is a parent of this entity
+        Check if the given entity is a parent of this entity
         """
         if entity in self.parent_entities:
             return True
@@ -227,7 +227,7 @@ class Entity(EntityLike, NamedType):
 
     def get_all_parent_names(self) -> "List[str]":
         """
-            Get a set with all parents of this entity
+        Get a set with all parents of this entity
         """
         parents = [str(x) for x in self.parent_entities]
         for entity in self.parent_entities:
@@ -243,7 +243,7 @@ class Entity(EntityLike, NamedType):
 
     def get_all_attribute_names(self) -> "List[str]":
         """
-            Return a list of all attribute names, including parents
+        Return a list of all attribute names, including parents
         """
         names = list(self._attributes.keys())
 
@@ -254,7 +254,7 @@ class Entity(EntityLike, NamedType):
 
     def add_attribute(self, attribute: "Attribute") -> None:
         """
-            Add an attribute to this entity. The attribute should not exist yet.
+        Add an attribute to this entity. The attribute should not exist yet.
         """
         if attribute.name not in self._attributes:
             self._attributes[attribute.name] = attribute
@@ -263,7 +263,7 @@ class Entity(EntityLike, NamedType):
 
     def get_attribute(self, name: str) -> "Attribute":
         """
-            Get the attribute with the given name
+        Get the attribute with the given name
         """
         if name in self._attributes:
             return self._attributes[name]
@@ -297,8 +297,8 @@ class Entity(EntityLike, NamedType):
 
     def get_attribute_from_related(self, name: str) -> "Attribute":
         """
-            Get the attribute with the given name, in both parents and children
-            (for type checking)
+        Get the attribute with the given name, in both parents and children
+        (for type checking)
         """
 
         for parent in self.__get_related():
@@ -309,7 +309,7 @@ class Entity(EntityLike, NamedType):
 
     def has_attribute(self, attribute: str) -> bool:
         """
-            Does the attribute already exist in this entity.
+        Does the attribute already exist in this entity.
         """
         if attribute not in self._attributes:
             for parent in self.parent_entities:
@@ -322,13 +322,13 @@ class Entity(EntityLike, NamedType):
 
     def get_all_instances(self) -> "List[Instance]":
         """
-            Return all instances of this entity
+        Return all instances of this entity
         """
         return list(self._instance_list)
 
     def add_instance(self, obj: "Instance") -> None:
         """
-            Register a new instance
+        Register a new instance
         """
         self._instance_list.add(obj)
         self.add_to_index(obj)
@@ -345,8 +345,8 @@ class Entity(EntityLike, NamedType):
         node: Optional[dataflow.InstanceNodeReference] = None,
     ) -> "Instance":
         """
-            Return an instance of the class defined in this entity.
-            If the corresponding node is not None, passes it on the instance.
+        Return an instance of the class defined in this entity.
+        If the corresponding node is not None, passes it on the instance.
         """
         out = Instance(self, resolver, queue, node)
         out.set_location(location)
@@ -358,13 +358,13 @@ class Entity(EntityLike, NamedType):
 
     def is_subclass(self, cls: "Entity") -> bool:
         """
-            Is the given class a subclass of this class
+        Is the given class a subclass of this class
         """
         return cls.is_parent(self)
 
     def validate(self, value: object) -> bool:
         """
-            Validate the given value
+        Validate the given value
         """
         if isinstance(value, AnyType):
             return True
@@ -380,31 +380,31 @@ class Entity(EntityLike, NamedType):
 
     def add_implementation(self, implement: "Implementation") -> None:
         """
-            Register an implementation for this entity
+        Register an implementation for this entity
         """
         self.implementations.append(implement)
 
     def add_implement(self, implement: "Implement") -> None:
         """
-            Register an implementation for this entity
+        Register an implementation for this entity
         """
         self.implements.append(implement)
 
     def __repr__(self) -> str:
         """
-            The representation of this type
+        The representation of this type
         """
         return "Entity(%s)" % (self.get_full_name())
 
     def __str__(self) -> str:
         """
-            The pretty string of this type
+        The pretty string of this type
         """
         return self.get_full_name()
 
     def __eq__(self, other: object) -> bool:
         """
-            Override list eq method
+        Override list eq method
         """
         if not isinstance(other, Entity):
             return False
@@ -413,7 +413,7 @@ class Entity(EntityLike, NamedType):
 
     def add_index(self, attributes: List[str]) -> None:
         """
-            Add an index over the given attributes.
+        Add an index over the given attributes.
         """
         # duplicate check
         for index in self._index_def:
@@ -429,8 +429,8 @@ class Entity(EntityLike, NamedType):
 
     def add_to_index(self, instance: Instance) -> None:
         """
-            Update indexes based on the instance and the attribute that has
-            been set
+        Update indexes based on the instance and the attribute that has
+        been set
         """
         attributes = {k: repr(v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
         # check if an index entry can be added
@@ -460,7 +460,7 @@ class Entity(EntityLike, NamedType):
         self, params: "List[Tuple[str,object]]", stmt: "Statement", target: "Optional[ResultVariable]" = None
     ) -> "Optional[Instance]":
         """
-            Search an instance in the index.
+        Search an instance in the index.
         """
         all_attributes: List[str] = [x[0] for x in params]
         attributes: Set[str] = set(())
@@ -497,7 +497,7 @@ class Entity(EntityLike, NamedType):
 
     def get_entity(self) -> "Entity":
         """
-            Get the entity (follow through defaults if needed)
+        Get the entity (follow through defaults if needed)
         """
         return self
 
@@ -519,9 +519,9 @@ class Entity(EntityLike, NamedType):
 
 class Implementation(NamedType):
     """
-        A module functions as a grouping of objects. This can be used to create
-        high level roles that do not have any arguments, or they can be used
-        to create mixin like aspects.
+    A module functions as a grouping of objects. This can be used to create
+    high level roles that do not have any arguments, or they can be used
+    to create mixin like aspects.
     """
 
     def __init__(
@@ -565,7 +565,7 @@ class Implementation(NamedType):
 
 class Implement(Locatable):
     """
-        Define an implementation of an entity in functions of implementations
+    Define an implementation of an entity in functions of implementations
     """
 
     comment: Optional[str]
@@ -586,7 +586,7 @@ class Implement(Locatable):
 
 class Default(EntityLike):
     """
-        This class models default values for a constructor.
+    This class models default values for a constructor.
     """
 
     def __init__(self, namespace: Namespace, name: str) -> None:
@@ -606,13 +606,13 @@ class Default(EntityLike):
 
     def add_default(self, name: str, value: "ExpressionStatement") -> None:
         """
-            Add a default value
+        Add a default value
         """
         self._defaults[name] = value
 
     def get_default(self, name: str) -> "ExpressionStatement":
         """
-            Get a default value for a given name
+        Get a default value for a given name
         """
         if name in self._defaults:
             return self._defaults[name]
@@ -624,25 +624,25 @@ class Default(EntityLike):
 
     def get_entity(self) -> Entity:
         """
-            Get the entity (follow through defaults if needed)
+        Get the entity (follow through defaults if needed)
         """
         return self.entity.get_entity()
 
     def __repr__(self) -> str:
         """
-            The representation of this type
+        The representation of this type
         """
         return "Default(%s)" % (self.get_full_name())
 
     def __str__(self) -> str:
         """
-            The pretty string of this type
+        The pretty string of this type
         """
         return "%s" % (self.get_full_name())
 
     def get_full_name(self) -> str:
         """
-            Get the full name of the entity
+        Get the full name of the entity
         """
         return self._namespace.get_full_name() + "::" + self.__name
 

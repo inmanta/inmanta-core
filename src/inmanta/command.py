@@ -25,13 +25,13 @@ class CLIException(Exception):
 
 class ShowUsageException(Exception):
     """
-        Raise this exception to show the usage message of the given level
+    Raise this exception to show the usage message of the given level
     """
 
 
 class Commander(object):
     """
-        This class handles commands
+    This class handles commands
     """
 
     __command_functions = {}
@@ -39,7 +39,7 @@ class Commander(object):
     @classmethod
     def add(cls, name: str, function, help_msg: str, parser_config, require_project=False, aliases=[]) -> None:
         """
-            Add a new export function
+        Add a new export function
         """
         if name in cls.__command_functions:
             raise Exception("Command %s already registered" % name)
@@ -57,21 +57,21 @@ class Commander(object):
     @classmethod
     def reset(cls):
         """
-            Return a list of commands
+        Return a list of commands
         """
         cls.__command_functions = {}
 
     @classmethod
     def commands(cls):
         """
-            Return a list of commands
+        Return a list of commands
         """
         return cls.__command_functions
 
 
 class command(object):  # noqa: N801
     """
-        A decorator that registers an export function
+    A decorator that registers an export function
     """
 
     def __init__(self, name, help_msg, parser_config=None, require_project=False, aliases=[]):
@@ -83,7 +83,7 @@ class command(object):  # noqa: N801
 
     def __call__(self, function):
         """
-            The wrapping
+        The wrapping
         """
         Commander.add(self.name, function, self.help, self.parser_config, self.require_project, self.aliases)
         return function

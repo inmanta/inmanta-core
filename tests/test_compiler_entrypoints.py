@@ -118,7 +118,7 @@ implement Test using a
 
 def test_get_types_and_scopes(snippetcompiler):
     """
-        Test the get_types_and_scopes() entrypoint of the compiler.
+    Test the get_types_and_scopes() entrypoint of the compiler.
     """
     snippetcompiler.setup_for_snippet(
         """

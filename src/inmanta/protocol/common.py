@@ -85,7 +85,7 @@ HTML_CONTENT_WITH_UTF8_CHARSET = f"{HTML_CONTENT}; {UTF8_CHARSET}"
 
 class ArgOption(object):
     """
-        Argument options to transform arguments before dispatch
+    Argument options to transform arguments before dispatch
     """
 
     def __init__(
@@ -96,10 +96,10 @@ class ArgOption(object):
         reply_header: bool = True,
     ) -> None:
         """
-            :param header: Map this argument to a header with the following name.
-            :param reply_header: If the argument is mapped to a header, this header will also be included in the reply
-            :param getter: Call this method after validation and pass its return value to the method call. This may change the
-                           type of the argument. This method can raise an HTTPException to return a 404 for example.
+        :param header: Map this argument to a header with the following name.
+        :param reply_header: If the argument is mapped to a header, this header will also be included in the reply
+        :param getter: Call this method after validation and pass its return value to the method call. This may change the
+                       type of the argument. This method can raise an HTTPException to return a 404 for example.
         """
         self.header = header
         self.reply_header = reply_header
@@ -108,7 +108,7 @@ class ArgOption(object):
 
 class Request(object):
     """
-        A protocol request
+    A protocol request
     """
 
     def __init__(self, url: str, method: str, headers: Dict[str, str], body: Optional[JsonType]) -> None:
@@ -169,7 +169,7 @@ T = TypeVar("T", bound=Union[None, ArgumentTypes])
 
 class ReturnValue(Generic[T]):
     """
-        An object that handlers can return to provide a response to a method call.
+    An object that handlers can return to provide a response to a method call.
     """
 
     def __init__(
@@ -197,8 +197,7 @@ class ReturnValue(Generic[T]):
         return self._headers
 
     def _get_without_envelope(self) -> ReturnTypes:
-        """ Get the body without an envelope specified
-        """
+        """Get the body without an envelope specified"""
         if len(self._warnings):
             LOGGER.info("Got warnings for client but cannot transfer because no envelope is used.")
 
@@ -210,8 +209,7 @@ class ReturnValue(Generic[T]):
         return self._response
 
     def _get_with_envelope(self, envelope_key: str) -> ReturnTypes:
-        """ Get the body with an envelope specified
-        """
+        """Get the body with an envelope specified"""
         response: Dict[str, Any] = {}
         response[envelope_key] = self._response
 
@@ -223,14 +221,14 @@ class ReturnValue(Generic[T]):
         return response
 
     def get_body(self, envelope: bool, envelope_key: str) -> ReturnTypes:
-        """ Get the response body.
+        """Get the response body.
 
-            When the content_type of this ReturnValue is not 'application/json',
-            the parameter `envelope` and `envelope_key` will be ignored. In that
-            case, this method will behave as if envelope=False was used.
+        When the content_type of this ReturnValue is not 'application/json',
+        the parameter `envelope` and `envelope_key` will be ignored. In that
+        case, this method will behave as if envelope=False was used.
 
-            :param envelope: Should the response be mapped into a data key
-            :param envelope_key: The envelope key to use
+        :param envelope: Should the response be mapped into a data key
+        :param envelope_key: The envelope key to use
         """
         if not envelope or self._headers[CONTENT_TYPE] != JSON_CONTENT:
             return self._get_without_envelope()
@@ -249,13 +247,18 @@ class ReturnValue(Generic[T]):
 
 class Response(object):
     """
-        A response object of a call
+    A response object of a call
     """
 
     @classmethod
-    def create(cls, result: ReturnValue, envelope: bool, envelope_key: Optional[str] = None,) -> "Response":
+    def create(
+        cls,
+        result: ReturnValue,
+        envelope: bool,
+        envelope_key: Optional[str] = None,
+    ) -> "Response":
         """
-            Create a response from a return value
+        Create a response from a return value
         """
         return cls(status_code=result.status_code, headers=result.headers, body=result.get_body(envelope, envelope_key))
 
@@ -278,13 +281,11 @@ class Response(object):
 
 
 class InvalidPathException(Exception):
-    """ This exception is raised when a path definition is invalid.
-    """
+    """This exception is raised when a path definition is invalid."""
 
 
 class UrlPath(object):
-    """ Class to handle manipulation of method paths
-    """
+    """Class to handle manipulation of method paths"""
 
     def __init__(self, path: str) -> None:
         self._path = path
@@ -297,8 +298,7 @@ class UrlPath(object):
         return re.findall("<([^<>]+)>", self._path)
 
     def validate_vars(self, method_vars: Iterable[str], function_name: str) -> None:
-        """ Are all variable defined in the method
-        """
+        """Are all variable defined in the method"""
         for var in self._vars:
             if var not in method_vars:
                 raise InvalidPathException(f"Variable {var} in path {self._path} is not defined in function {function_name}.")
@@ -308,8 +308,7 @@ class UrlPath(object):
         return self._path
 
     def generate_path(self, variables: Dict[str, str]) -> str:
-        """ Create a path with all variables substituted
-        """
+        """Create a path with all variables substituted"""
         path = self._path
         for var in self._vars:
             if var not in variables:
@@ -319,8 +318,7 @@ class UrlPath(object):
         return path
 
     def generate_regex_path(self) -> str:
-        """ Generate a path that uses regex named groups for tornado
-        """
+        """Generate a path that uses regex named groups for tornado"""
         path = self._path
         for var in self._vars:
             path = path.replace(f"<{var}>", f"(?P<{var}>[^/]+)")
@@ -329,8 +327,7 @@ class UrlPath(object):
 
 
 class InvalidMethodDefinition(Exception):
-    """ This exception is raised when the definition of a method is invalid.
-    """
+    """This exception is raised when the definition of a method is invalid."""
 
 
 VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
@@ -339,15 +336,14 @@ VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNon
 
 class MethodProperties(object):
     """
-        This class stores the information from a method definition
+    This class stores the information from a method definition
     """
 
     methods: Dict[str, List["MethodProperties"]] = defaultdict(list)
 
     @classmethod
     def register_method(cls, properties: "MethodProperties") -> None:
-        """ Register new method properties. Multiple properties on a method is supported but versions have to be unique.
-        """
+        """Register new method properties. Multiple properties on a method is supported but versions have to be unique."""
         current_list = [x.api_version for x in cls.methods[properties.function.__name__]]
         if properties.api_version in current_list:
             raise Exception(
@@ -378,25 +374,25 @@ class MethodProperties(object):
         strict_typing: bool = True,
     ) -> None:
         """
-            Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
-            and model the protocol.
+        Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
+        and model the protocol.
 
-            :param path: The path in the url
-            :param operation: The type of HTTP operation (verb)
-            :param timeout: nr of seconds before request it terminated
-            :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
-            :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
-            :param agent_server: This is a call from the Agent to the Server
-            :param validate_sid: This call requires a valid session, true by default if agent_server and not api
-            :param client_types: The allowed client types for this call
-            :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg
-                                to which the options apply.
-            :param api_version: The version of the api this method belongs to
-            :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
-            :param envelope: Put the response of the call under an envelope key.
-            :param typed: Is the method definition typed or not
-            :param envelope_key: The envelope key to use
-            :param strict_typing: If true, does not allow `Any` when validating argument types
+        :param path: The path in the url
+        :param operation: The type of HTTP operation (verb)
+        :param timeout: nr of seconds before request it terminated
+        :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
+        :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
+        :param agent_server: This is a call from the Agent to the Server
+        :param validate_sid: This call requires a valid session, true by default if agent_server and not api
+        :param client_types: The allowed client types for this call
+        :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg
+                            to which the options apply.
+        :param api_version: The version of the api this method belongs to
+        :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
+        :param envelope: Put the response of the call under an envelope key.
+        :param typed: Is the method definition typed or not
+        :param envelope_key: The envelope key to use
+        :param strict_typing: If true, does not allow `Any` when validating argument types
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -434,9 +430,9 @@ class MethodProperties(object):
 
     def validate_arguments(self, values: Dict[str, Any]) -> Dict[str, Any]:
         """
-            Validate methods arguments. Values is a dict with key/value pairs for the arguments (similar to kwargs). This method
-            validates and converts types if required (e.g. str to int). The returns value has the correct typing to dispatch
-            to method handlers.
+        Validate methods arguments. Values is a dict with key/value pairs for the arguments (similar to kwargs). This method
+        validates and converts types if required (e.g. str to int). The returns value has the correct typing to dispatch
+        to method handlers.
         """
         try:
             out = self.argument_validator(**values)
@@ -448,7 +444,7 @@ class MethodProperties(object):
 
     def arguments_to_pydantic(self) -> Type[pydantic.BaseModel]:
         """
-            Convert the method arguments to a pydantic model that allows to validate a message body with pydantic
+        Convert the method arguments to a pydantic model that allows to validate a message body with pydantic
         """
         sig = inspect.signature(self.function)
 
@@ -468,18 +464,18 @@ class MethodProperties(object):
         return self.operation == "GET"
 
     def _validate_function_types(self, typed: bool) -> None:
-        """ Validate the type hints used in the method definition.
+        """Validate the type hints used in the method definition.
 
-            For arguments the following types are supported:
-            - Simpletypes: BaseModel, datetime, Enum, uuid.UUID, str, float, int, bool
-            - Simpletypes includes Any iff strict_typing == False
-            - List[Simpletypes]: A list of simple types
-            - Dict[str, Simpletypes]: A dict with string keys and simple types
+        For arguments the following types are supported:
+        - Simpletypes: BaseModel, datetime, Enum, uuid.UUID, str, float, int, bool
+        - Simpletypes includes Any iff strict_typing == False
+        - List[Simpletypes]: A list of simple types
+        - Dict[str, Simpletypes]: A dict with string keys and simple types
 
-            For return types:
-            - Everything for arguments
-            - None is allowed
-            - ReturnValue with a type parameter. The type must be the allowed types for arguments or none
+        For return types:
+        - Everything for arguments
+        - None is allowed
+        - ReturnValue with a type parameter. The type must be the allowed types for arguments or none
         """
         type_hints = get_type_hints(self.function)
 
@@ -503,8 +499,7 @@ class MethodProperties(object):
         self._validate_return_type(type_hints["return"], strict=self.strict_typing)
 
     def _validate_return_type(self, arg_type: Type, *, strict: bool = True) -> None:
-        """ Validate the return type
-        """
+        """Validate the return type"""
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
 
@@ -522,13 +517,13 @@ class MethodProperties(object):
     def _validate_type_arg(
         self, arg: str, arg_type: Type, *, strict: bool = True, allow_none_type: bool = False, in_url: bool = False
     ) -> None:
-        """ Validate the given type arg recursively
+        """Validate the given type arg recursively
 
-            :param arg: The name of the argument
-            :param arg_type: The annotated type fo the argument
-            :param strict: If true, does not allow `Any`
-            :param allow_none_type: If true, allow `None` as the type for this argument
-            :param in_url: This argument is passed in the URL
+        :param arg: The name of the argument
+        :param arg_type: The annotated type fo the argument
+        :param strict: If true, does not allow `Any`
+        :param allow_none_type: If true, allow `None` as the type for this argument
+        :param in_url: This argument is passed in the URL
         """
 
         if arg_type is Any:
@@ -644,32 +639,32 @@ class MethodProperties(object):
 
     def get_long_method_description(self) -> Optional[str]:
         """
-            Return the full description present in the docstring of the method, excluding the first paragraph.
+        Return the full description present in the docstring of the method, excluding the first paragraph.
         """
         return self._parsed_docstring.long_description
 
     def get_short_method_description(self) -> Optional[str]:
         """
-            Return the first paragraph of the description present in the docstring of the method.
+        Return the first paragraph of the description present in the docstring of the method.
         """
         return self._parsed_docstring.short_description
 
     def get_description_for_param(self, param_name: str) -> Optional[str]:
         """
-            Return the description for a certain parameter present in the docstring.
+        Return the description for a certain parameter present in the docstring.
         """
         return self._docstring_parameter_map.get(param_name, None)
 
     def _get_http_status_code_for_exception(self, exception_name: str) -> int:
         """
-            Returns the HTTP status code for a given exception. Exceptions can be
-            specified in two different ways:
+        Returns the HTTP status code for a given exception. Exceptions can be
+        specified in two different ways:
 
-            1) A fully qualified path to the exception.
-            2) The name of the exception if the exception is defined in the
-               inmanta.protocol.exceptions module.
+        1) A fully qualified path to the exception.
+        2) The name of the exception if the exception is defined in the
+           inmanta.protocol.exceptions module.
 
-            Status code 500 is returned for exceptions which don't extend BaseHttpException.
+        Status code 500 is returned for exceptions which don't extend BaseHttpException.
         """
         if "." in exception_name:
             # Exception name was specified with fully-qualified path
@@ -693,9 +688,9 @@ class MethodProperties(object):
 
     def get_description_foreach_http_status_code(self) -> Dict[int, str]:
         """
-            This method return a mapping from the HTTP status code to
-            the associated description specified in the docstring using
-            the :returns: and :raises <exception>: statements.
+        This method return a mapping from the HTTP status code to
+        the associated description specified in the docstring using
+        the :returns: and :raises <exception>: statements.
         """
         result = {}
 
@@ -715,7 +710,7 @@ class MethodProperties(object):
 
     def get_call_headers(self) -> Set[str]:
         """
-            Returns the set of headers required to create call
+        Returns the set of headers required to create call
         """
         headers = set()
         headers.add("Authorization")
@@ -728,21 +723,21 @@ class MethodProperties(object):
 
     def get_listen_url(self) -> str:
         """
-            Create a listen url for this method
+        Create a listen url for this method
         """
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
         return url + self._path.generate_regex_path()
 
     def get_call_url(self, msg: Dict[str, str]) -> str:
         """
-             Create a calling url for the client
+        Create a calling url for the client
         """
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
         return url + self._path.generate_path({k: parse.quote(str(v), safe="") for k, v in msg.items()})
 
     def build_call(self, args: List, kwargs: Dict[str, Any] = {}) -> Request:
         """
-            Build a call from the given arguments. This method returns the url, headers, and body for the call.
+        Build a call from the given arguments. This method returns the url, headers, and body for the call.
         """
         # create the message
         msg: Dict[str, Any] = dict(kwargs)
@@ -784,12 +779,12 @@ class MethodProperties(object):
 
 class UrlMethod(object):
     """
-        This class holds the method definition together with the API (url, method) information
+    This class holds the method definition together with the API (url, method) information
 
-        :param properties: The properties of this method
-        :param endpoint: The object on which this method is defined
-        :param handler: The method to call on the endpoint
-        :param method_name: The name of the method to call on the endpoint
+    :param properties: The properties of this method
+    :param endpoint: The object on which this method is defined
+    :param handler: The method to call on the endpoint
+    :param method_name: The name of the method to call on the endpoint
     """
 
     def __init__(self, properties: MethodProperties, slice: "CallTarget", handler: HandlerType, method_name: str):
@@ -817,14 +812,14 @@ class UrlMethod(object):
     @property
     def short_method_description(self) -> Optional[str]:
         """
-            Return the first paragraph of the description present in the docstring of the method
+        Return the first paragraph of the description present in the docstring of the method
         """
         return self._properties.get_short_method_description()
 
     @property
     def long_method_description(self) -> Optional[str]:
         """
-            Return the full description present in the docstring of the method, excluding the first paragraph.
+        Return the full description present in the docstring of the method, excluding the first paragraph.
         """
         return self._properties.get_long_method_description()
 
@@ -835,7 +830,7 @@ class UrlMethod(object):
 # Util functions
 def custom_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
     """
-        A custom json encoder that knows how to encode other types commonly used by Inmanta
+    A custom json encoder that knows how to encode other types commonly used by Inmanta
     """
     if isinstance(o, execute.util.Unknown):
         return const.UNKNOWN_STRING
@@ -855,8 +850,7 @@ def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[Lis
 
 
 def json_encode(value: ReturnTypes) -> str:
-    """ Our json encode is able to also serialize other types than a dict.
-    """
+    """Our json encode is able to also serialize other types than a dict."""
     # see json_encode in tornado.escape
     return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
 
@@ -946,7 +940,7 @@ def decode_token(token: str) -> Dict[str, str]:
 
 class Result(object):
     """
-        A result of a method call
+    A result of a method call
     """
 
     def __init__(self, code: int = 0, result: Optional[JsonType] = None) -> None:
@@ -956,7 +950,7 @@ class Result(object):
 
     def get_result(self) -> Optional[JsonType]:
         """
-            Only when the result is marked as available the result can be returned
+        Only when the result is marked as available the result can be returned
         """
         if self.available():
             return self._result
@@ -973,7 +967,7 @@ class Result(object):
 
     def wait(self, timeout: int = 60) -> None:
         """
-            Wait for the result to become available
+        Wait for the result to become available
         """
         count: float = 0
         while count < timeout:
@@ -984,14 +978,14 @@ class Result(object):
 
     def callback(self, fnc: Callable[["Result"], None]) -> None:
         """
-            Set a callback function that is to be called when the result is ready.
+        Set a callback function that is to be called when the result is ready.
         """
         self._callback = fnc
 
 
 class SessionManagerInterface(object):
     """
-        An interface for a sessionmanager
+    An interface for a sessionmanager
     """
 
     def validate_sid(self, sid: uuid.UUID) -> bool:

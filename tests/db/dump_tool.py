@@ -41,7 +41,7 @@ def check_result(result):
 @pytest.mark.asyncio
 async def test_dump_db(server, client, postgres_db, database_name):
     """
-        Note: remove following line from the dump: SELECT pg_catalog.set_config('search_path', '', false);
+    Note: remove following line from the dump: SELECT pg_catalog.set_config('search_path', '', false);
 
     """
 

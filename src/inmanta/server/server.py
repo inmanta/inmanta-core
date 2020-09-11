@@ -50,8 +50,8 @@ dashboard_feature = BoolFeature(
 
 class Server(protocol.ServerSlice):
     """
-        The central Inmanta server that communicates with clients and agents and persists configuration
-        information
+    The central Inmanta server that communicates with clients and agents and persists configuration
+    information
     """
 
     _server_storage: Dict[str, str]
@@ -80,7 +80,7 @@ class Server(protocol.ServerSlice):
 
     def setup_dashboard(self) -> None:
         """
-            If configured, set up tornado to serve the dashboard
+        If configured, set up tornado to serve the dashboard
         """
         if not opt.dash_enable.get() or not self.feature_manager.enabled(dashboard_feature):
             return
@@ -116,7 +116,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     def check_storage(self) -> Dict[str, str]:
         """
-            Check if the server storage is configured and ready to use.
+        Check if the server storage is configured and ready to use.
         """
 
         def _ensure_directory_exist(directory: str, *subdirs: str) -> str:
@@ -154,7 +154,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     async def _async_recompile(self, env: data.Environment, update_repo: bool, metadata: JsonType = {}) -> Warnings:
         """
-            Recompile an environment in a different thread and taking wait time into account.
+        Recompile an environment in a different thread and taking wait time into account.
         """
         _, warnings = await self.compiler.request_recompile(
             env=env, force_update=update_repo, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
@@ -177,7 +177,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 slices.append(SliceStatus(name=slice_name, status=await slice.get_status()))
             except Exception:
                 LOGGER.error(
-                    f"The following error occured while trying to determine the status of slice {slice_name}", exc_info=True,
+                    f"The following error occured while trying to determine the status of slice {slice_name}",
+                    exc_info=True,
                 )
 
             ext_name = slice_name.split(".")[0]

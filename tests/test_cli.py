@@ -228,8 +228,8 @@ async def test_param(server, client, environment, cli):
 @pytest.mark.asyncio
 async def test_create_environment(tmpdir, server, client, cli):
     """
-        Tests the "inmanta-cli environment create" command
-        and overwrite prompt/overwriting of the .inmanta file
+    Tests the "inmanta-cli environment create" command
+    and overwrite prompt/overwriting of the .inmanta file
     """
     os.chdir(tmpdir)
     file_path = os.path.join(os.getcwd(), ".inmanta")
@@ -342,7 +342,7 @@ async def test_pause_agent(server, cli):
 @pytest.mark.asyncio
 async def test_list_actionlog(server, environment, client, cli, agent, clienthelper):
     """
-        Test the `inmanta-cli action-log list` command.
+    Test the `inmanta-cli action-log list` command.
     """
 
     def assert_nr_records_in_output_table(output: str, nr_records: int) -> None:
@@ -433,7 +433,7 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
 @pytest.mark.asyncio
 async def test_show_messages_actionlog(server, environment, client, cli, agent, clienthelper):
     """
-        Test the `inmanta-cli action-log show-messages` command.
+    Test the `inmanta-cli action-log show-messages` command.
     """
     result = await client.reserve_version(tid=environment)
     assert result.code == 200
