@@ -17,12 +17,17 @@
 """
 from asyncpg import Connection
 
-DISABLED = True
+DISABLED = False
 
 
 async def update(connection: Connection) -> None:
     await connection.execute(
         """
+ALTER TABLE public.compile DROP CONSTRAINT compile_substitute_compile_id_fkey;
+ALTER TABLE public.compile
+    ADD CONSTRAINT compile_substitute_compile_id_fkey
+    FOREIGN KEY (substitute_compile_id) REFERENCES public.compile (id)
+    ON DELETE CASCADE;
 
         """
     )
