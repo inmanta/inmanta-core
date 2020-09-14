@@ -19,8 +19,6 @@
 from abc import abstractmethod
 from typing import Deque, Dict, Generic, List, Optional, Set, TypeVar, Union, cast
 
-import inmanta.execute.dataflow as dataflow
-import inmanta.execute.proxy as proxy
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeException,
@@ -36,6 +34,7 @@ from inmanta.ast import (
     RuntimeException,
 )
 from inmanta.ast.type import Type
+from inmanta.execute import dataflow, proxy
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.tracking import Tracker
 from inmanta.execute.util import Unknown
