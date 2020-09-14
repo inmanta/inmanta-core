@@ -1,5 +1,8 @@
 # Release 2020.5 (?)
 
+## Bug fixes
+- Clearing an environment with merged compile requests no longer fails (#2350)
+
 # Release 2020.4 (2020-09-08)
 
 ## New features
