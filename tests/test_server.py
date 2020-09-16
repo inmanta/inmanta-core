@@ -492,9 +492,18 @@ async def test_clear_environment(client, server, clienthelper, environment):
     assert result.code == 200
     assert len(result.result["environment"]["versions"]) == 1
 
-    # trigger a compile
+    # trigger multiple compiles and wait for them to complete in order to test cascade deletion of collapsed compiles (#2350)
     result = await client.notify_change_get(id=environment)
     assert result.code == 200
+    result = await client.notify_change_get(id=environment)
+    assert result.code == 200
+    result = await client.notify_change_get(id=environment)
+    assert result.code == 200
+
+    async def compile_done():
+        return (await client.is_compiling(environment)).code == 204
+
+    await retry_limited(compile_done, 10)
 
     # Wait for env directory to appear
     slice = server.get_slice(SLICE_SERVER)

@@ -1,3 +1,9 @@
+# Release 2020.4.1 (2020-09-16)
+
+## Bug fixes
+- Fixed import loop when using `inmanta.execute.proxy` as entry point (#2341)
+- Clearing an environment with merged compile requests no longer fails (#2350)
+
 # Release 2020.4 (2020-09-08)
 
 ## New features
