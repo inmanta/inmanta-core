@@ -393,6 +393,7 @@ class CompilerService(ServerSlice):
             return None, ["Skipping compile because server compile not enabled for this environment."]
 
         requested = datetime.datetime.now()
+        LOGGER.info("Compile requested %s", requested)
         compile = data.Compile(
             environment=env.id,
             requested=requested,
@@ -477,26 +478,38 @@ class CompilerService(ServerSlice):
             return 200
         return 204
 
+    async def _calculate_recompile_wait(self, compile: data.Compile):
+        last_run = await data.Compile.get_last_run(compile.environment)
+        wait_time = opt.server_autrecompile_wait.get()
+        if not last_run or wait_time == 0:
+            wait: float = 0
+        else:
+            assert last_run.completed is not None
+            if last_run.completed >= compile.requested:
+                wait = max(0, wait_time - (last_run.completed - compile.requested).total_seconds())
+            else:
+                wait = 0
+        if wait > 0:
+            LOGGER.info(
+                "Last recompile less than %s seconds ago (last was at %s), waiting for %f seconds",
+                wait_time,
+                last_run.completed,
+                wait,
+            )
+        else:
+            LOGGER.debug("Running recompile without waiting: requested at %s", compile.requested)
+        return wait
+
+    async def _auto_recompile_wait(self, compile: data.Compile) -> None:
+        wait = await self._calculate_recompile_wait(compile)
+        await asyncio.sleep(wait)
+
     async def _run(self, compile: data.Compile) -> None:
         """
         Runs a compile request. At completion, looks for similar compile requests based on _compile_merge_key and marks
         those as completed as well.
         """
-        now = datetime.datetime.now()
-
-        wait_time = opt.server_autrecompile_wait.get()
-
-        lastrun = await data.Compile.get_last_run(compile.environment)
-        if not lastrun:
-            wait: float = 0
-        else:
-            assert lastrun.completed is not None
-            wait = max(0, wait_time - (now - lastrun.completed).total_seconds())
-        if wait > 0:
-            LOGGER.info(
-                "Last recompile longer than %s ago (last was at %s), waiting for %d", wait_time, lastrun.completed, wait
-            )
-        await asyncio.sleep(wait)
+        await self._auto_recompile_wait(compile)
 
         compile_merge_key: Hashable = CompilerService._compile_merge_key(compile)
         merge_candidates: List[data.Compile] = [
@@ -526,6 +539,7 @@ class CompilerService(ServerSlice):
             )
             for merge_candidate in merge_candidates
         ]
+        LOGGER.info("Compile completed: %s", end)
         await asyncio.gather(*awaitables)
         if self.is_stopping():
             return

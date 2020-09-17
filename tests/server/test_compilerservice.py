@@ -890,3 +890,61 @@ async def test_issue_2361(environment_factory: EnvironmentFactory, server, clien
     success, compile_data = await cr.run()
     assert not success
     assert compile_data is None
+
+
+@pytest.mark.asyncio(timeout=90)
+async def test_compileservice_auto_recompile_wait(mocked_compiler_service_block, server, client, environment, caplog):
+    """
+    Test the auto-recompile-wait setting when multiple recompiles are requested in a short amount of time
+    """
+    with caplog.at_level(logging.DEBUG):
+        env = await data.Environment.get_by_id(environment)
+        config.Config.set("server", "auto-recompile-wait", "2")
+        compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+
+        # request compiles in rapid succession
+        remote_id1 = uuid.uuid4()
+        await compilerslice.request_recompile(
+            env=env, force_update=False, do_export=False, remote_id=remote_id1, env_vars={"my_unique_var": "1"}
+        )
+        remote_id2 = uuid.uuid4()
+        compile_id2, _ = await compilerslice.request_recompile(
+            env=env, force_update=False, do_export=False, remote_id=remote_id2
+        )
+
+        remote_id3 = uuid.uuid4()
+        compile_id3, _ = await compilerslice.request_recompile(
+            env=env, force_update=False, do_export=True, remote_id=remote_id3
+        )
+
+        result = await client.get_compile_queue(environment)
+        assert len(result.result["queue"]) == 3
+        assert result.code == 200
+
+        # Start working through it
+        current_task = compilerslice._recompiles[env.id]
+        run = mocked_compiler_service_block.get(block=True, timeout=2)
+        run.block = False
+        while current_task is compilerslice._recompiles[env.id]:
+            await asyncio.sleep(0.2)
+
+        # Make sure that when enough time passes, waiting is not necessary
+        await asyncio.sleep(2)
+
+        current_task = compilerslice._recompiles[env.id]
+        run = mocked_compiler_service_block.get(block=True, timeout=2)
+        run.block = False
+        while current_task is compilerslice._recompiles[env.id]:
+            await asyncio.sleep(0.2)
+
+        current_task = compilerslice._recompiles[env.id]
+        run = mocked_compiler_service_block.get(block=True, timeout=2)
+        run.block = False
+        while current_task is compilerslice._recompiles.get(env.id):
+            await asyncio.sleep(0.2)
+
+        LogSequence(caplog, allow_errors=False).contains(
+            "inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting"
+        ).contains("inmanta.server.services.compilerservice", logging.INFO, "Last recompile less than 2 seconds ago").contains(
+            "inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting"
+        )
