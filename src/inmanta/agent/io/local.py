@@ -47,16 +47,16 @@ if False:
 
 class IOBase(object):
     """
-        Base class for an IO module. This class is python2 compatible so IOs that work remote can load this module on python2.
+    Base class for an IO module. This class is python2 compatible so IOs that work remote can load this module on python2.
     """
 
     def __init__(self, uri, config):
         # type: (str, Dict[str, Optional[str]]) -> None
         """
-            Initialize the IO
+        Initialize the IO
 
-            :param uri: The uri used to configure this IO
-            :param config: The parsed version of the uri
+        :param uri: The uri used to configure this IO
+        :param config: The parsed version of the uri
         """
         self.uri = uri
         self.config = config
@@ -64,31 +64,31 @@ class IOBase(object):
     def is_remote(self):
         # type: () -> bool
         """
-            Are operation executed remote
+        Are operation executed remote
 
-            :return: Returns true if the io operations are remote.
-            :rtype: bool
+        :return: Returns true if the io operations are remote.
+        :rtype: bool
         """
         raise NotImplementedError()
 
     def close(self):
         # type: () -> None
         """
-            Close any resources
+        Close any resources
         """
 
     def __del__(self):
         # type: () -> None
         """
-            An agent caches IO instances to reuse them for multiple resources. This method is called when an item is removed
-            from the cache, for example when a version in the cache is closed.
+        An agent caches IO instances to reuse them for multiple resources. This method is called when an item is removed
+        from the cache, for example when a version in the cache is closed.
         """
         self.close()
 
 
 class BashIO(IOBase):
     """
-        This class provides handler IO methods
+    This class provides handler IO methods
     """
 
     def __init__(self, uri, config, run_as=None):
@@ -98,7 +98,7 @@ class BashIO(IOBase):
 
     def _run_as_args(self, *args):
         """
-            Build the arguments to run the command as the `run_as` user
+        Build the arguments to run the command as the `run_as` user
         """
         if self.run_as is None:
             return list(args)
@@ -135,7 +135,7 @@ class BashIO(IOBase):
     def read(self, path):
         # type: (str) -> str
         """
-            Read in the file in path and return its content as string (UTF-8)
+        Read in the file in path and return its content as string (UTF-8)
         """
         cwd = os.curdir
         if not os.path.exists(cwd):
@@ -153,7 +153,7 @@ class BashIO(IOBase):
     def read_binary(self, path):
         # type: (str) -> bytes
         """
-            Return the content of the file
+        Return the content of the file
         """
         result = subprocess.Popen(self._run_as_args("dd", "if=" + path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         data = result.communicate()
@@ -166,7 +166,7 @@ class BashIO(IOBase):
     def run(self, command, arguments=[], env=None, cwd=None, timeout=None):
         # type: (str, List[str], Dict[str,str], str, int) -> Tuple[str, str, int]
         """
-            Execute a command with the given argument and return the result
+        Execute a command with the given argument and return the result
         """
         current_env = os.environ.copy()
         if env is not None:
@@ -188,7 +188,7 @@ class BashIO(IOBase):
     def file_exists(self, path):
         # type: (str) -> bool
         """
-            Check if a given file exists
+        Check if a given file exists
         """
         result = subprocess.Popen(self._run_as_args("stat", "-t", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         result.communicate()
@@ -201,7 +201,7 @@ class BashIO(IOBase):
     def readlink(self, path):
         # type: (str) -> str
         """
-            Return the target of the path
+        Return the target of the path
         """
         result = subprocess.Popen(self._run_as_args("readlink", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         data = result.communicate()
@@ -214,7 +214,7 @@ class BashIO(IOBase):
     def symlink(self, source, target):
         # type: (str, str) -> bool
         """
-            Symlink source to target
+        Symlink source to target
         """
         result = subprocess.Popen(self._run_as_args("ln", "-s", source, target), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         result.communicate()
@@ -227,7 +227,7 @@ class BashIO(IOBase):
     def is_symlink(self, path):
         # type: (str) -> bool
         """
-            Is the given path a symlink
+        Is the given path a symlink
         """
         result = subprocess.Popen(self._run_as_args("stat", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         data = result.communicate()
@@ -243,7 +243,7 @@ class BashIO(IOBase):
     def file_stat(self, path):
         # type: (str) -> Dict[str, Union[str, int]]
         """
-            Do a statcall on a file
+        Do a statcall on a file
         """
         result = subprocess.Popen(
             self._run_as_args("stat", "-c", "%a %U %G", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE
@@ -267,7 +267,7 @@ class BashIO(IOBase):
     def remove(self, path):
         # type: (str) -> None
         """
-            Remove a file
+        Remove a file
         """
         result = subprocess.Popen(self._run_as_args("rm", "-f", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         result.communicate()
@@ -278,7 +278,7 @@ class BashIO(IOBase):
     def put(self, path, content):
         # type: (str, str) -> bool
         """
-            Put the given content at the given path in UTF-8
+        Put the given content at the given path in UTF-8
         """
         result = subprocess.Popen(
             self._run_as_args("dd", "of=" + path), stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE
@@ -293,7 +293,7 @@ class BashIO(IOBase):
     def chown(self, path, user=None, group=None):
         # type: (str, Optional[str], Optional[str]) -> None
         """
-            Change the ownership information
+        Change the ownership information
         """
         args = None
         if user is not None and group is not None:
@@ -316,7 +316,7 @@ class BashIO(IOBase):
     def chmod(self, path, permissions):
         # type: (str, str) -> bool
         """
-            Change the permissions
+        Change the permissions
         """
         result = subprocess.Popen(self._run_as_args("chmod", permissions, path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         result.communicate()
@@ -326,7 +326,7 @@ class BashIO(IOBase):
     def mkdir(self, path):
         # type: (str) -> bool
         """
-            Create a directory
+        Create a directory
         """
         result = subprocess.Popen(self._run_as_args("mkdir", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         result.communicate()
@@ -336,7 +336,7 @@ class BashIO(IOBase):
     def rmdir(self, path):
         # type: (str) -> bool
         """
-            Remove a directory
+        Remove a directory
         """
         if path == "/":
             raise Exception("Please do not ask to do rm -rf /")
@@ -364,27 +364,27 @@ class BashIO(IOBase):
 
 class LocalIO(IOBase):
     """
-        This class provides handler IO methods
+    This class provides handler IO methods
     """
 
     def is_remote(self):
         # type: () -> bool
         """
-            Are operation executed remote
+        Are operation executed remote
 
-            :return: Returns true if the io operations are remote.
-            :rtype: bool
+        :return: Returns true if the io operations are remote.
+        :rtype: bool
         """
         return False
 
     def hash_file(self, path):
         # type: (str) -> str
         """
-            Return the sha1sum of the file at path
+        Return the sha1sum of the file at path
 
-            :param str path: The path of the file to hash the content of
-            :return: The sha1sum in a hex string
-            :rtype: str
+        :param str path: The path of the file to hash the content of
+        :return: The sha1sum in a hex string
+        :rtype: str
         """
         sha1sum = hashlib.sha1()
         with open(path, "rb") as f:
@@ -395,11 +395,11 @@ class LocalIO(IOBase):
     def read(self, path):
         # type: (str) -> str
         """
-            Read in the file in path and return its content as string
+        Read in the file in path and return its content as string
 
-            :param str path: The path of the file to read.
-            :return: The string content of the file
-            :rtype: string
+        :param str path: The path of the file to read.
+        :return: The string content of the file
+        :rtype: string
         """
         with open(path, "rb") as fd:
             return fd.read().decode("utf-8")
@@ -407,11 +407,11 @@ class LocalIO(IOBase):
     def read_binary(self, path):
         # type: (str) -> bytes
         """
-            Read in the file in path and return its content as a bytestring
+        Read in the file in path and return its content as a bytestring
 
-            :param str path: The path of the file to read.
-            :return: The byte content of the file
-            :rtype: bytes
+        :param str path: The path of the file to read.
+        :return: The byte content of the file
+        :rtype: bytes
         """
         with open(path, "rb") as fd:
             return fd.read()
@@ -419,16 +419,16 @@ class LocalIO(IOBase):
     def run(self, command, arguments=[], env=None, cwd=None, timeout=None):
         # type: (str, List[str], Dict[str,str], str, int) -> Tuple[str, str, int]
         """
-            Execute a command with the given argument and return the result
+        Execute a command with the given argument and return the result
 
-            :param str command: The command to execute.
-            :param list arguments: The arguments of the command
-            :param dict env: A dictionary with environment variables.
-            :param str cwd: The working dir to execute the command in.
-            :param int timeout: The timeout for this command. This parameter is ignored if the command is executed remotely with
-                                a python 2 interpreter.
-            :return: A tuple with (stdout, stderr, returncode)
-            :rtype: tuple
+        :param str command: The command to execute.
+        :param list arguments: The arguments of the command
+        :param dict env: A dictionary with environment variables.
+        :param str cwd: The working dir to execute the command in.
+        :param int timeout: The timeout for this command. This parameter is ignored if the command is executed remotely with
+                            a python 2 interpreter.
+        :return: A tuple with (stdout, stderr, returncode)
+        :rtype: tuple
         """
         current_env = os.environ.copy()
         if env is not None:
@@ -454,54 +454,54 @@ class LocalIO(IOBase):
     def file_exists(self, path):
         # type: (str) -> bool
         """
-            Check if a given file exists
+        Check if a given file exists
 
-            :param str path: The path to check if it exists.
-            :return: Returns true if the file exists
-            :rtype: bool
+        :param str path: The path to check if it exists.
+        :return: Returns true if the file exists
+        :rtype: bool
         """
         return os.path.lexists(path)
 
     def readlink(self, path):
         # type: (str) -> str
         """
-            Return the target of the path
+        Return the target of the path
 
-            :param str path: The symlink to get the target for.
-            :return: The target of the symlink
-            :rtype: str
+        :param str path: The symlink to get the target for.
+        :return: The target of the symlink
+        :rtype: str
         """
         return os.readlink(path)
 
     def symlink(self, source, target):
         # type: (str, str) -> None
         """
-            Symlink source to target
+        Symlink source to target
 
-            :param str source: Create a symlink of this path to target
-            :param str target: The path of the symlink to create
+        :param str source: Create a symlink of this path to target
+        :param str target: The path of the symlink to create
         """
         os.symlink(source, target)
 
     def is_symlink(self, path):
         # type: (str) -> bool
         """
-            Is the given path a symlink
+        Is the given path a symlink
 
-            :param str path: The path of the symlink
-            :return: Returns true if the given path points to a symlink
-            :rtype: str
+        :param str path: The path of the symlink
+        :return: Returns true if the given path points to a symlink
+        :rtype: str
         """
         return os.path.islink(path)
 
     def file_stat(self, path):
         # type: (str) -> Dict[str, Union[int, str]]
         """
-            Do a stat call on a file
+        Do a stat call on a file
 
-            :param str path: The file or direct to stat
-            :return: A dict with the owner, group and permissions of the given path
-            :rtype: dict[str, str]
+        :param str path: The file or direct to stat
+        :return: A dict with the owner, group and permissions of the given path
+        :rtype: dict[str, str]
         """
         stat_result = os.stat(path)
         status = {}
@@ -514,19 +514,19 @@ class LocalIO(IOBase):
     def remove(self, path):
         # type: (str) -> None
         """
-            Remove a file
+        Remove a file
 
-            :param str path: The path of the file to remove.
+        :param str path: The path of the file to remove.
         """
         os.remove(path)
 
     def put(self, path, content):
         # type: (str, str) -> None
         """
-            Put the given content at the given path
+        Put the given content at the given path
 
-            :param str path: The location where to write the file
-            :param bytes content: The binarystring content to write to the file.
+        :param str path: The location where to write the file
+        :param bytes content: The binarystring content to write to the file.
         """
         with open(path, "wb+") as fd:
             fd.write(content)
@@ -562,11 +562,11 @@ class LocalIO(IOBase):
     def chown(self, path, user=None, group=None):
         # type: (str, Optional[str], Optional[str]) -> None
         """
-            Change the ownership of a file.
+        Change the ownership of a file.
 
-            :param str path: The path of the file or directory to change the ownership of.
-            :param str user: The user to change to
-            :param str group: The group to change to
+        :param str path: The path of the file or directory to change the ownership of.
+        :param str user: The user to change to
+        :param str group: The group to change to
         """
         # Stolen from the python3 shutil lib
         if user is None and group is None:
@@ -596,28 +596,28 @@ class LocalIO(IOBase):
     def chmod(self, path, permissions):
         # type: (str, str) -> None
         """
-            Change the permissions
+        Change the permissions
 
-            :param str path: The path of the file or directory to change the permission of.
-            :param str permissions: An octal string with the permission to set.
+        :param str path: The path of the file or directory to change the permission of.
+        :param str permissions: An octal string with the permission to set.
         """
         os.chmod(path, int(permissions, 8))
 
     def mkdir(self, path):
         # type: (str) -> None
         """
-            Create a directory
+        Create a directory
 
-            :param str path: Create this directory. The parent needs to exist.
+        :param str path: Create this directory. The parent needs to exist.
         """
         os.mkdir(path)
 
     def rmdir(self, path):
         # type: (str) -> None
         """
-            Remove a directory
+        Remove a directory
 
-            :param str path: The directory to remove
+        :param str path: The directory to remove
         """
         shutil.rmtree(path)
 

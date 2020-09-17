@@ -37,8 +37,8 @@ if TYPE_CHECKING:
 
 class UnsetException(RuntimeException):
     """
-        This exception is thrown when an attribute is accessed that was not yet
-        available (i.e. it has not been frozen yet).
+    This exception is thrown when an attribute is accessed that was not yet
+    available (i.e. it has not been frozen yet).
     """
 
     def __init__(self, msg, instance: Optional["Instance"] = None, attribute: Optional["Attribute"] = None) -> None:
@@ -53,10 +53,10 @@ class UnsetException(RuntimeException):
 
 class UnknownException(Exception):
     """
-        This exception is thrown when code tries to access a value that is
-        unknown and cannot be determined during this evaluation. The code
-        receiving this exception is responsible for invalidating any results
-        depending on this value by return an instance of Unknown as well.
+    This exception is thrown when code tries to access a value that is
+    unknown and cannot be determined during this evaluation. The code
+    receiving this exception is responsible for invalidating any results
+    depending on this value by return an instance of Unknown as well.
     """
 
     def __init__(self, unknown):
@@ -65,9 +65,9 @@ class UnknownException(Exception):
 
 class AttributeNotFound(NotFoundException, AttributeError):
     """
-        Exception used for backwards compatibility with try-except blocks around some_proxy.some_attr.
-        This previously raised `NotFoundException` which is currently deprecated in this context.
-        Its new behavior is to raise an AttributeError for compatibility with Python's builtin `hasattr`.
+    Exception used for backwards compatibility with try-except blocks around some_proxy.some_attr.
+    This previously raised `NotFoundException` which is currently deprecated in this context.
+    Its new behavior is to raise an AttributeError for compatibility with Python's builtin `hasattr`.
     """
 
     pass
@@ -75,8 +75,8 @@ class AttributeNotFound(NotFoundException, AttributeError):
 
 class DynamicProxy(object):
     """
-        This class wraps an object and makes sure that a model is never modified
-        by native code.
+    This class wraps an object and makes sure that a model is never modified
+    by native code.
     """
 
     def __init__(self, instance):
@@ -88,7 +88,7 @@ class DynamicProxy(object):
     @classmethod
     def unwrap(cls, item: object) -> object:
         """
-            Converts a value from the plugin domain to the internal domain.
+        Converts a value from the plugin domain to the internal domain.
         """
         if item is None:
             return NoneValue()
@@ -116,7 +116,7 @@ class DynamicProxy(object):
     @classmethod
     def return_value(cls, value: object) -> Union[None, str, tuple, int, float, bool, "DynamicProxy"]:
         """
-            Converts a value from the internal domain to the plugin domain.
+        Converts a value from the internal domain to the plugin domain.
         """
         if value is None:
             return None
@@ -160,14 +160,14 @@ class DynamicProxy(object):
 
     def _type(self):
         """
-            Return the type of the proxied instance
+        Return the type of the proxied instance
         """
         return self._get_instance().type
 
     def is_unknown(self):
         """
-            Return true if this value is unknown and cannot be determined
-            during this compilation run
+        Return true if this value is unknown and cannot be determined
+        during this compilation run
         """
         if isinstance(self._get_instance(), Unknown):
             return True
@@ -240,7 +240,7 @@ class DictProxy(DynamicProxy, Mapping, JSONSerializable):
 
 class CallProxy(DynamicProxy):
     """
-        Proxy a value that implements a __call__ function
+    Proxy a value that implements a __call__ function
     """
 
     def __init__(self, instance):
@@ -254,7 +254,7 @@ class CallProxy(DynamicProxy):
 
 class IteratorProxy(DynamicProxy):
     """
-        Proxy an iterator call
+    Proxy an iterator call
     """
 
     def __init__(self, iterator):

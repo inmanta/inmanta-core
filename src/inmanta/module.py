@@ -61,7 +61,7 @@ ModuleName = NewType("ModuleName", str)
 
 class InvalidModuleException(CompilerException):
     """
-        This exception is raised if a module is invalid
+    This exception is raised if a module is invalid
     """
 
     def format_trace(self, indent: str = "", indent_level: int = 0) -> str:
@@ -80,13 +80,13 @@ class InvalidModuleException(CompilerException):
 
 class InvalidModuleFileException(CompilerException):
     """
-        This exception is raised if a module file is invalid
+    This exception is raised if a module file is invalid
     """
 
 
 class ProjectNotFoundExcpetion(CompilerException):
     """
-        This exception is raised when inmanta is unable to find a valid project
+    This exception is raised when inmanta is unable to find a valid project
     """
 
 
@@ -268,12 +268,12 @@ def merge_specs(mainspec: "Dict[str, List[Requirement]]", new: "List[Requirement
 
 class ModuleLike(object):
     """
-        Commons superclass for projects and modules, which are both versioned by git
+    Commons superclass for projects and modules, which are both versioned by git
     """
 
     def __init__(self, path: str) -> None:
         """
-            :param path: root git directory
+        :param path: root git directory
         """
         self._path = path
         self._meta = {}  # type: JsonType
@@ -304,7 +304,7 @@ class ModuleLike(object):
 
     def requires(self) -> "List[Requirement]":
         """
-            Get the requires for this module
+        Get the requires for this module
         """
         # filter on import stmt
 
@@ -328,7 +328,7 @@ class ModuleLike(object):
 
     def _remove_comments(self, lines: List[str]) -> List[str]:
         """
-            Remove comments from lines in requirements.txt file.
+        Remove comments from lines in requirements.txt file.
         """
         result = []
         for line in lines:
@@ -343,7 +343,7 @@ class ModuleLike(object):
 
     def _remove_line_continuations(self, lines: List[str]) -> List[str]:
         """
-            Remove line continuation from lines in requirements.txt file.
+        Remove line continuation from lines in requirements.txt file.
         """
         result = []
         line_continuation_buffer = ""
@@ -367,7 +367,7 @@ INSTALL_OPTS = [INSTALL_MASTER, INSTALL_PRERELEASES, INSTALL_RELEASES]
 
 class Project(ModuleLike):
     """
-        An inmanta project
+    An inmanta project
     """
 
     PROJECT_FILE = "project.yml"
@@ -375,14 +375,14 @@ class Project(ModuleLike):
 
     def __init__(self, path: str, autostd: bool = True, main_file: str = "main.cf") -> None:
         """
-            Initialize the project, this includes
-             * Loading the project.yaml (into self._meta)
-             * Setting paths from project.yaml
-             * Loading all modules in the module path (into self.modules)
-            It does not include
-             * verify if project.yml corresponds to the modules in self.modules
+        Initialize the project, this includes
+         * Loading the project.yaml (into self._meta)
+         * Setting paths from project.yaml
+         * Loading all modules in the module path (into self.modules)
+        It does not include
+         * verify if project.yml corresponds to the modules in self.modules
 
-            :param path: The directory where the project is located
+        :param path: The directory where the project is located
 
         """
         super().__init__(path)
@@ -446,7 +446,7 @@ class Project(ModuleLike):
     @classmethod
     def get_project_dir(cls, cur_dir: str) -> str:
         """
-            Find the project directory where we are working in. Traverse up until we find Project.PROJECT_FILE or reach /
+        Find the project directory where we are working in. Traverse up until we find Project.PROJECT_FILE or reach /
         """
         project_file = os.path.join(cur_dir, Project.PROJECT_FILE)
 
@@ -462,7 +462,7 @@ class Project(ModuleLike):
     @classmethod
     def get(cls, main_file: str = "main.cf") -> "Project":
         """
-            Get the instance of the project
+        Get the instance of the project
         """
         if cls._project is None:
             cls._project = Project(cls.get_project_dir(os.curdir), main_file=main_file)
@@ -472,7 +472,7 @@ class Project(ModuleLike):
     @classmethod
     def set(cls, project: "Project") -> None:
         """
-            Get the instance of the project
+        Get the instance of the project
         """
         cls._project = project
         os.chdir(project._path)
@@ -550,9 +550,9 @@ class Project(ModuleLike):
 
     def load_module_recursive(self, imports: List[DefineImport]) -> List[Tuple[str, List[Statement], BasicBlock]]:
         """
-            Load a specific module and all submodules into this project
+        Load a specific module and all submodules into this project
 
-            For each module, return a triple of name, statements, basicblock
+        For each module, return a triple of name, statements, basicblock
         """
         out = []
 
@@ -609,7 +609,7 @@ class Project(ModuleLike):
 
     def load_plugins(self) -> None:
         """
-            Load all plug-ins
+        Load all plug-ins
         """
         if not self.loaded:
             LOGGER.warning("loading plugins on project that has not been loaded completely")
@@ -628,13 +628,13 @@ class Project(ModuleLike):
 
     def use_virtual_env(self) -> None:
         """
-            Use the virtual environment
+        Use the virtual environment
         """
         self.virtualenv.use_virtual_env()
 
     def sorted_modules(self) -> list:
         """
-            Return a list of all modules, sorted on their name
+        Return a list of all modules, sorted on their name
         """
         names = list(self.modules.keys())
         names = sorted(names)
@@ -647,7 +647,7 @@ class Project(ModuleLike):
 
     def collect_requirements(self) -> "Mapping[str, Iterable[Requirement]]":
         """
-            Collect the list of all requirements of all modules in the project.
+        Collect the list of all requirements of all modules in the project.
         """
         specs = {}  # type: Dict[str, List[Requirement]]
         merge_specs(specs, self.requires())
@@ -670,7 +670,7 @@ class Project(ModuleLike):
 
     def verify_requires(self) -> bool:
         """
-            Check if all the required modules for this module have been loaded
+        Check if all the required modules for this module have been loaded
         """
         LOGGER.info("verifying project")
         imports = set([x.name for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
@@ -692,7 +692,7 @@ class Project(ModuleLike):
 
     def collect_python_requirements(self) -> List[str]:
         """
-            Collect the list of all python requirements off all modules in this project
+        Collect the list of all python requirements off all modules in this project
         """
         req_files = [x.strip() for x in [mod.get_python_requirements() for mod in self.modules.values()] if x is not None]
         req_lines = [x for x in "\n".join(req_files).split("\n") if len(x.strip()) > 0]
@@ -728,7 +728,7 @@ class Project(ModuleLike):
 
 class Module(ModuleLike):
     """
-        This class models an inmanta configuration module
+    This class models an inmanta configuration module
     """
 
     MODEL_DIR = "model"
@@ -736,11 +736,11 @@ class Module(ModuleLike):
 
     def __init__(self, project: Project, path: str, **kwmeta: dict) -> None:
         """
-            Create a new configuration module
+        Create a new configuration module
 
-            :param project: A reference to the project this module belongs to.
-            :param path: Where is the module stored
-            :param kwmeta: Meta-data
+        :param project: A reference to the project this module belongs to.
+        :param path: Where is the module stored
+        :param kwmeta: Meta-data
         """
         super().__init__(path)
         self._project = project
@@ -792,7 +792,7 @@ class Module(ModuleLike):
 
     def get_name(self) -> str:
         """
-            Returns the name of the module (if the meta data is set)
+        Returns the name of the module (if the meta data is set)
         """
         return self._meta["name"]
 
@@ -800,7 +800,7 @@ class Module(ModuleLike):
 
     def get_version(self) -> str:
         """
-            Return the version of this module
+        Return the version of this module
         """
         return str(self._meta["version"])
 
@@ -809,8 +809,8 @@ class Module(ModuleLike):
     @property
     def compiler_version(self) -> Optional[str]:
         """
-            Get the minimal compiler version required for this module version. Returns none is the compiler version is not
-            constrained.
+        Get the minimal compiler version required for this module version. Returns none is the compiler version is not
+        constrained.
         """
         if "compiler_version" in self._meta:
             return str(self._meta["compiler_version"])
@@ -826,7 +826,7 @@ class Module(ModuleLike):
         install_mode: str = INSTALL_RELEASES,
     ) -> "Module":
         """
-           Install a module, return module object
+        Install a module, return module object
         """
         # verify pressence in module path
         path = project.resolver.path_for(modulename)
@@ -858,7 +858,7 @@ class Module(ModuleLike):
         install_mode: str = INSTALL_RELEASES,
     ) -> "Module":
         """
-           Update a module, return module object
+        Update a module, return module object
         """
         if path is None:
             mypath = project.resolver.path_for(modulename)
@@ -955,9 +955,9 @@ class Module(ModuleLike):
 
     def is_versioned(self) -> bool:
         """
-            Check if this module is versioned, and if so the version number in the module file should
-            have a tag. If the version has + the current revision can be a child otherwise the current
-            version should match the tag
+        Check if this module is versioned, and if so the version number in the module file should
+        have a tag. If the version has + the current revision can be a child otherwise the current
+        version should match the tag
         """
         if not os.path.exists(os.path.join(self._path, ".git")):
             LOGGER.warning(
@@ -969,8 +969,8 @@ class Module(ModuleLike):
     @classmethod
     def is_valid_module(cls, module_path: str) -> bool:
         """
-            Checks if this module is a valid configuration module. A module should contain a
-            module.yml file.
+        Checks if this module is a valid configuration module. A module should contain a
+        module.yml file.
         """
         if not os.path.isfile(os.path.join(module_path, "module.yml")):
             return False
@@ -979,7 +979,7 @@ class Module(ModuleLike):
 
     def load_module_file(self) -> None:
         """
-            Load the module definition file
+        Load the module definition file
         """
         with open(self.get_config_file_name(), "r", encoding="utf-8") as fd:
             mod_def = yaml.safe_load(fd)
@@ -1008,7 +1008,7 @@ class Module(ModuleLike):
 
     def get_module_files(self) -> List[str]:
         """
-            Returns the path of all model files in this module, relative to the module root
+        Returns the path of all model files in this module, relative to the module root
         """
         files = []
         for model_file in glob.glob(os.path.join(self._path, "model", "*.cf")):
@@ -1082,7 +1082,7 @@ class Module(ModuleLike):
 
     def get_all_submodules(self) -> List[str]:
         """
-            Get all submodules of this module
+        Get all submodules of this module
         """
         modules = []
         cur_dir = os.path.join(self._path, Module.MODEL_DIR)
@@ -1103,7 +1103,7 @@ class Module(ModuleLike):
 
     def get_plugin_files(self) -> Iterator[Tuple[Path, ModuleName]]:
         """
-            Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
+        Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
         """
         plugin_dir: str = os.path.join(self._path, loader.PLUGIN_DIR)
 
@@ -1115,13 +1115,16 @@ class Module(ModuleLike):
                 "The plugin directory %s should be a valid python package with a __init__.py file" % plugin_dir
             )
         return (
-            (Path(file_name), ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self._meta["name"])),)
+            (
+                Path(file_name),
+                ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self._meta["name"])),
+            )
             for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True)
         )
 
     def load_plugins(self) -> None:
         """
-            Load all plug-ins from a configuration module
+        Load all plug-ins from a configuration module
         """
         try:
             for _, fq_mod_name in self.get_plugin_files():
@@ -1137,7 +1140,7 @@ class Module(ModuleLike):
 
     def versions(self):
         """
-            Provide a list of all versions available in the repository
+        Provide a list of all versions available in the repository
         """
         versions = gitprovider.get_all_tags(self._path)
 
@@ -1154,7 +1157,7 @@ class Module(ModuleLike):
 
     def status(self) -> None:
         """
-            Run a git status on this module
+        Run a git status on this module
         """
         try:
             output = gitprovider.status(self._path)
@@ -1175,7 +1178,7 @@ class Module(ModuleLike):
 
     def push(self) -> None:
         """
-            Run a git status on this module
+        Run a git status on this module
         """
         sys.stdout.write("%s (%s) " % (self.get_name(), self._path))
         sys.stdout.flush()
@@ -1189,7 +1192,7 @@ class Module(ModuleLike):
 
     def get_python_requirements(self) -> Optional[str]:
         """
-            Install python requirements with pip in a virtual environment
+        Install python requirements with pip in a virtual environment
         """
         file = os.path.join(self._path, "requirements.txt")
         if os.path.exists(file):

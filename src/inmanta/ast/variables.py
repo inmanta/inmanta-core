@@ -33,7 +33,7 @@ LOGGER = logging.getLogger(__name__)
 
 class Reference(ExpressionStatement):
     """
-        This class represents a reference to a value
+    This class represents a reference to a value
     """
 
     def __init__(self, name: LocatableString) -> None:
@@ -96,7 +96,7 @@ T = TypeVar("T")
 
 class AbstractAttributeReferenceHelper(Locatable, Generic[T]):
     """
-        Generic helper class for setting a target variable based on a Reference. Reschedules itself
+    Generic helper class for setting a target variable based on a Reference. Reschedules itself
     """
 
     def __init__(
@@ -114,7 +114,7 @@ class AbstractAttributeReferenceHelper(Locatable, Generic[T]):
         self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler
     ) -> ResultVariable:
         """
-            Fetches the referred variable
+        Fetches the referred variable
         """
         if self.instance:
             # get the Instance
@@ -132,19 +132,19 @@ class AbstractAttributeReferenceHelper(Locatable, Generic[T]):
 
     def is_ready(self) -> bool:
         """
-            Returns whether this instance is ready to set the target variable
+        Returns whether this instance is ready to set the target variable
         """
         return self.variable is not None and self.variable.is_ready()
 
     def target_value(self) -> T:
         """
-            Returns the target value based on self.variable
+        Returns the target value based on self.variable
         """
         raise NotImplementedError()
 
     def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
         """
-            Instance is ready to execute, do it and see if the variable is already present
+        Instance is ready to execute, do it and see if the variable is already present
         """
         if not self.variable:
             # this is a first time we are called, variable is not cached yet
@@ -176,7 +176,7 @@ class AbstractAttributeReferenceHelper(Locatable, Generic[T]):
 
 class IsDefinedReferenceHelper(AbstractAttributeReferenceHelper[bool]):
     """
-        Helper class for IsDefined, reschedules itself
+    Helper class for IsDefined, reschedules itself
     """
 
     def __init__(self, target: ResultVariable, instance: Optional[Reference], attribute: str) -> None:
@@ -198,7 +198,7 @@ class IsDefinedReferenceHelper(AbstractAttributeReferenceHelper[bool]):
 
 class AttributeReferenceHelper(AbstractAttributeReferenceHelper[object]):
     """
-        Helper class for AttributeReference, reschedules itself
+    Helper class for AttributeReference, reschedules itself
     """
 
     def __init__(self, target: ResultVariable, instance: Reference, attribute: str, resultcollector: ResultCollector) -> None:
@@ -212,8 +212,8 @@ class AttributeReferenceHelper(AbstractAttributeReferenceHelper[object]):
 
 class AttributeReference(Reference):
     """
-        This variable refers to an attribute. This is mostly used to refer to
-        attributes of a class or class instance.
+    This variable refers to an attribute. This is mostly used to refer to
+    attributes of a class or class instance.
     """
 
     def __init__(self, instance: Reference, attribute: LocatableString) -> None:

@@ -60,7 +60,7 @@ def openapi_json_encoder(o) -> Union[ReturnTypes, util.JSONSerializable]:
 
 class OpenApiConverter:
     """
-        Extracts API information for the OpenAPI definition from the server
+    Extracts API information for the OpenAPI definition from the server
     """
 
     def __init__(self, global_url_map: Dict[str, Dict[str, UrlMethod]], feature_manager: FeatureManager):
@@ -152,7 +152,7 @@ class OpenApiConverter:
 
 class OpenApiTypeConverter:
     """
-        Lookup for OpenAPI types corresponding to python types
+    Lookup for OpenAPI types corresponding to python types
     """
 
     components = Components(schemas={})
@@ -236,7 +236,7 @@ class OpenApiTypeConverter:
 
 class ArgOptionHandler:
     """
-        Extracts header, response header and path parameter information from ArgOptions
+    Extracts header, response header and path parameter information from ArgOptions
     """
 
     def __init__(self, type_converter: OpenApiTypeConverter):
@@ -268,7 +268,7 @@ class ArgOptionHandler:
 
 class FunctionParameterHandler:
     """
-        Creates OpenAPI Parameters and RequestBody items based on the handler function parameters
+    Creates OpenAPI Parameters and RequestBody items based on the handler function parameters
     """
 
     def __init__(
@@ -363,9 +363,9 @@ class FunctionParameterHandler:
 
     def _get_request_body_description(self) -> str:
         """
-            OpenAPI supports only a single description field for the full request body. As such,
-            this method return the description of the request body in CommonMark syntax to create
-            an itemization of the different parameters in the request body.
+        OpenAPI supports only a single description field for the full request body. As such,
+        this method return the description of the request body in CommonMark syntax to create
+        an itemization of the different parameters in the request body.
         """
         result = ""
         for param_name in sorted(self.non_path_and_non_header_params.keys()):
@@ -387,7 +387,7 @@ class FunctionParameterHandler:
 
 class OperationHandler:
     """
-        Builds an OpenAPI Operation object from an Inmanta UrlMethod
+    Builds an OpenAPI Operation object from an Inmanta UrlMethod
     """
 
     def __init__(self, type_converter: OpenApiTypeConverter, arg_option_handler: ArgOptionHandler):

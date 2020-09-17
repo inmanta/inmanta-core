@@ -53,9 +53,9 @@ LOGGER = logging.getLogger(__name__)
 @pytest.mark.slowtest
 async def test_autostart(server, client, environment, caplog):
     """
-        Test auto start of agent
-        An agent is started and then killed to simulate unexpected failure
-        When the second agent is started for the same environment, the first is terminated in a controlled manner
+    Test auto start of agent
+    An agent is started and then killed to simulate unexpected failure
+    When the second agent is started for the same environment, the first is terminated in a controlled manner
     """
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "iaas_agent": "", "iaas_agentx": ""})
@@ -106,7 +106,7 @@ async def test_autostart(server, client, environment, caplog):
 @pytest.mark.slowtest
 async def test_autostart_dual_env(client, server):
     """
-        Test auto start of agent
+    Test auto start of agent
     """
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
@@ -146,7 +146,7 @@ async def test_autostart_dual_env(client, server):
 @pytest.mark.slowtest
 async def test_autostart_batched(client, server, environment):
     """
-        Test auto start of agent
+    Test auto start of agent
     """
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "iaas_agentx": ""})
@@ -185,7 +185,7 @@ async def test_autostart_batched(client, server, environment):
 @pytest.mark.asyncio(timeout=10)
 async def test_version_removal(client, server):
     """
-        Test auto removal of older deploy model versions
+    Test auto removal of older deploy model versions
     """
     result = await client.create_project("env-test")
     assert result.code == 200
@@ -212,7 +212,7 @@ async def test_version_removal(client, server):
 @pytest.mark.slowtest
 async def test_get_resource_for_agent(server_multi, client_multi, environment_multi):
     """
-        Test the server to manage the updates on a model during agent deploy
+    Test the server to manage the updates on a model during agent deploy
     """
     agent = Agent("localhost", {"nvblah": "localhost"}, environment=environment_multi, code_loader=False)
     await agent.add_end_point_name("vm1.dev.inmanta.com")
@@ -379,7 +379,7 @@ async def test_get_environment(client, clienthelper, server, environment):
 @pytest.mark.asyncio
 async def test_resource_update(postgresql_client, client, clienthelper, server, environment):
     """
-        Test updating resources and logging
+    Test updating resources and logging
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     await agent.start()
@@ -480,7 +480,7 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
 @pytest.mark.asyncio
 async def test_clear_environment(client, server, clienthelper, environment):
     """
-        Test clearing out an environment
+    Test clearing out an environment
     """
     version = await clienthelper.get_version()
     result = await client.put_version(
@@ -556,8 +556,7 @@ def make_source(collector, filename, module, source, req):
 
 @pytest.mark.asyncio(timeout=30)
 async def test_code_upload(server, client, agent, environment):
-    """ Test upload of a single code definition
-    """
+    """Test upload of a single code definition"""
     version = (await client.reserve_version(environment)).result["data"]
 
     resources = [
@@ -600,8 +599,7 @@ async def test_code_upload(server, client, agent, environment):
 async def test_batched_code_upload(
     server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
 ):
-    """ Test uploading all code definitions at once
-    """
+    """Test uploading all code definitions at once"""
     config.Config.set("compiler_rest_transport", "request_timeout", "1")
 
     snippetcompiler.setup_for_snippet(
@@ -676,7 +674,7 @@ async def test_resource_action_log(server, client, environment):
 @pytest.mark.asyncio(timeout=30)
 async def test_invalid_sid(server, client, environment):
     """
-        Test the server to manage the updates on a model during agent deploy
+    Test the server to manage the updates on a model during agent deploy
     """
     # request get_code with a compiler client that does not have a sid
     res = await client.get_code(tid=environment, id=1, resource="std::File")
@@ -724,7 +722,7 @@ async def test_server_logs_address(server_config, caplog):
 @pytest.mark.asyncio
 async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, agent):
     """
-        Test querying resource actions via the API
+    Test querying resource actions via the API
     """
     aclient = agent._client
 
@@ -810,7 +808,13 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
 
     # Add multiple versions of model
     for i in range(0, 11):
-        cm = data.ConfigurationModel(environment=env.id, version=i, date=datetime.now(), total=1, version_info={},)
+        cm = data.ConfigurationModel(
+            environment=env.id,
+            version=i,
+            date=datetime.now(),
+            total=1,
+            version_info={},
+        )
         await cm.insert()
 
     # Add resource actions for motd
@@ -885,7 +889,10 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     base_url = "http://localhost:%s" % (port,)
     url = f"{base_url}{next_page}"
     client = AsyncHTTPClient()
-    request = HTTPRequest(url=url, headers={"X-Inmanta-tid": str(env.id)},)
+    request = HTTPRequest(
+        url=url,
+        headers={"X-Inmanta-tid": str(env.id)},
+    )
     response = await client.fetch(request, raise_error=False)
     assert response.code == 200
     response = json.loads(response.body.decode("utf-8"))

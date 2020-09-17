@@ -33,10 +33,10 @@ logger = logging.getLogger("inmanta.test.dryrun")
 @pytest.mark.asyncio(timeout=150)
 async def test_dryrun_and_deploy(server, client, resource_container, environment):
     """
-        dryrun and deploy a configuration model
+    dryrun and deploy a configuration model
 
-        There is a second agent with an undefined resource. The server will shortcut the dryrun and deploy for this resource
-        without an agent being present.
+    There is a second agent with an undefined resource. The server will shortcut the dryrun and deploy for this resource
+    without an agent being present.
     """
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
@@ -187,7 +187,7 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
 @pytest.mark.asyncio(timeout=30)
 async def test_dryrun_failures(resource_container, server, agent, client, environment, clienthelper):
     """
-        test dryrun scaling
+    test dryrun scaling
     """
     env_id = environment
 
@@ -273,7 +273,7 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
 @pytest.mark.asyncio(timeout=30)
 async def test_dryrun_scale(resource_container, server, client, environment, agent, clienthelper):
     """
-        test dryrun scaling
+    test dryrun scaling
     """
     version = await clienthelper.get_version()
     env_id = environment

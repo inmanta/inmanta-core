@@ -125,14 +125,14 @@ def p_main_term(p: YaccProduction) -> None:
 
 def p_top_stmt(p: YaccProduction) -> None:
     """top_stmt : mls
-                | entity_def
-                | implement_def
-                | implementation_def
-                | relation
-                | statement
-                | typedef
-                | index
-                | import """
+    | entity_def
+    | implement_def
+    | implementation_def
+    | relation
+    | statement
+    | typedef
+    | index
+    | import"""
     p[0] = p[1]
 
 
@@ -165,10 +165,10 @@ def p_import_1(p: YaccProduction) -> None:
 
 def p_stmt(p: YaccProduction) -> None:
     """statement : assign
-                | constructor
-                | function_call
-                | for
-                | if"""
+    | constructor
+    | function_call
+    | for
+    | if"""
     p[0] = p[1]
 
 
@@ -294,15 +294,15 @@ def p_attribute_type_multi(p: YaccProduction) -> None:
 
 def p_attribute_type_opt(p: YaccProduction) -> None:
     """attr_type_opt : attr_type_multi '?'
-        | attr_base_type '?'"""
+    | attr_base_type '?'"""
     p[1].nullable = True
     p[0] = p[1]
 
 
 def p_attribute_type(p: YaccProduction) -> None:
     """attr_type : attr_type_opt
-        | attr_type_multi
-        | attr_base_type"""
+    | attr_type_multi
+    | attr_base_type"""
     p[0] = p[1]
 
 
@@ -314,7 +314,7 @@ def p_attr(p: YaccProduction) -> None:
 
 def p_attr_cte(p: YaccProduction) -> None:
     """attr : attr_type ID '=' constant
-           | attr_type ID '=' constant_list"""
+    | attr_type ID '=' constant_list"""
     p[0] = DefineAttribute(p[1], p[2], p[4])
     attach_lnr(p, 2)
 
@@ -378,7 +378,7 @@ def p_implement_ns_list_collect(p: YaccProduction) -> None:
 
 def p_implement(p: YaccProduction) -> None:
     """implement_def : IMPLEMENT class_ref USING implement_ns_list empty
-        | IMPLEMENT class_ref USING implement_ns_list mls"""
+    | IMPLEMENT class_ref USING implement_ns_list mls"""
     (inherit, implementations) = p[4]
     p[0] = DefineImplement(p[2], implementations, Literal(True), inherit=inherit, comment=p[5])
     attach_lnr(p)
@@ -386,7 +386,7 @@ def p_implement(p: YaccProduction) -> None:
 
 def p_implement_when(p: YaccProduction) -> None:
     """implement_def : IMPLEMENT class_ref USING implement_ns_list WHEN expression empty
-        | IMPLEMENT class_ref USING implement_ns_list WHEN expression mls"""
+    | IMPLEMENT class_ref USING implement_ns_list WHEN expression mls"""
     (inherit, implementations) = p[4]
     p[0] = DefineImplement(p[2], implementations, p[6], inherit=inherit, comment=p[7])
     attach_lnr(p)
@@ -571,16 +571,16 @@ def p_index(p: YaccProduction) -> None:
 
 
 def p_expression(p: YaccProduction) -> None:
-    """ expression : boolean_expression
-            | constant
-            | function_call
-            | var_ref
-            | constructor
-            | list_def
-            | map_def
-            | map_lookup
-            | index_lookup
-            | conditional_expression """
+    """expression : boolean_expression
+    | constant
+    | function_call
+    | var_ref
+    | constructor
+    | list_def
+    | map_def
+    | map_lookup
+    | index_lookup
+    | conditional_expression"""
     p[0] = p[1]
 
 
@@ -590,10 +590,10 @@ def p_expression_parentheses(p: YaccProduction) -> None:
 
 
 def p_boolean_expression(p: YaccProduction) -> None:
-    """ boolean_expression : expression CMP_OP expression
-            | expression IN expression
-            | expression AND expression
-            | expression OR expression """
+    """boolean_expression : expression CMP_OP expression
+    | expression IN expression
+    | expression AND expression
+    | expression OR expression"""
     operator = Operator.get_operator_class(str(p[2]))
     p[0] = operator(p[1], p[3])
     attach_lnr(p, 2)
@@ -623,9 +623,9 @@ def p_operand(p: YaccProduction) -> None:
 
 
 def p_map_lookup(p: YaccProduction) -> None:
-    """ map_lookup : attr_ref '[' operand ']'
-                   | local_var '[' operand ']'
-                   | map_lookup '[' operand ']'"""
+    """map_lookup : attr_ref '[' operand ']'
+    | local_var '[' operand ']'
+    | map_lookup '[' operand ']'"""
     p[0] = MapLookup(p[1], p[3])
 
 
@@ -648,14 +648,14 @@ def p_list_def(p: YaccProduction) -> None:
 
 def p_pair_list_collect(p: YaccProduction) -> None:
     """pair_list : STRING ':' operand ',' pair_list
-        | STRING ':' operand empty pair_list_empty"""
+    | STRING ':' operand empty pair_list_empty"""
     p[5].insert(0, (str(p[1]), p[3]))
     p[0] = p[5]
 
 
 def p_pair_list_empty(p: YaccProduction) -> None:
     """pair_list : pair_list_empty
-        pair_list_empty : empty"""
+    pair_list_empty : empty"""
     p[0] = []
 
 
@@ -689,7 +689,7 @@ def p_conditional_expression(p: YaccProduction) -> None:
 
 
 def p_constant(p: YaccProduction) -> None:
-    """ constant : INT
+    """constant : INT
     | FLOAT
     """
     p[0] = Literal(p[1])
@@ -697,29 +697,25 @@ def p_constant(p: YaccProduction) -> None:
 
 
 def p_constant_none(p: YaccProduction) -> None:
-    """ constant : NULL
-    """
+    """constant : NULL"""
     p[0] = make_none(p, 1)
     attach_lnr(p)
 
 
 def p_constant_regex(p: YaccProduction) -> None:
-    """ constant : REGEX
-    """
+    """constant : REGEX"""
     p[0] = p[1]
     attach_lnr(p)
 
 
 def p_constant_true(p: YaccProduction) -> None:
-    """ constant : TRUE
-    """
+    """constant : TRUE"""
     p[0] = Literal(True)
     attach_lnr(p)
 
 
 def p_constant_false(p: YaccProduction) -> None:
-    """ constant : FALSE
-    """
+    """constant : FALSE"""
     p[0] = Literal(False)
     attach_lnr(p)
 
@@ -749,7 +745,7 @@ def get_string_ast_node(string: LocatableString, location: Location) -> Union[Li
 
 def create_string_format(format_string: LocatableString, variables: List[List[str]], location: Location) -> StringFormat:
     """
-        Create a string interpolation statement
+    Create a string interpolation statement
     """
     _vars = []
 
@@ -811,14 +807,14 @@ def p_param_list_element_kwargs(p: YaccProduction) -> None:
 
 def p_param_list_empty(p: YaccProduction) -> None:
     """param_list : param_list_empty
-        param_list_empty : empty"""
+    param_list_empty : empty"""
     # param_list: Tuple[List[Tuple[ID, operand]], List[wrapped_kwargs]]
     p[0] = ([], [])
 
 
 def p_param_list_nonempty(p: YaccProduction) -> None:
     """param_list : param_list_element empty param_list_empty
-            | param_list_element ',' param_list"""
+    | param_list_element ',' param_list"""
     # param_list parses a sequence of named arguments.
     # The arguments are separated by commas and take one of two forms:
     #   "key = value" -> p_param_list_element_explicit
@@ -847,14 +843,14 @@ def p_function_param_list_element_arg(p: YaccProduction) -> None:
 
 def p_function_param_list_empty(p: YaccProduction) -> None:
     """function_param_list : function_param_list_empty
-        function_param_list_empty : empty"""
+    function_param_list_empty : empty"""
     # param_list: Tuple[List[Tuple[ID, operand]], List[wrapped_kwargs]]
     p[0] = ([], [], [])
 
 
 def p_function_param_list_nonempty(p: YaccProduction) -> None:
     """function_param_list : function_param_list_element empty function_param_list_empty
-            | function_param_list_element ',' function_param_list"""
+    | function_param_list_element ',' function_param_list"""
     # function_param_list parses a sequence of named arguments.
     # The arguments are separated by commas and take one of three forms:
     #   "value" -> p_function_param_list_element_arg

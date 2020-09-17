@@ -60,7 +60,7 @@ async def compilerservice(server_config, init_dataclasses_and_load_schema):
 @pytest.fixture
 async def environment_factory(tmpdir) -> AsyncIterator["EnvironmentFactory"]:
     """
-        Provides a factory for environments with a main.cf file.
+    Provides a factory for environments with a main.cf file.
     """
     yield EnvironmentFactory(str(tmpdir))
 
@@ -115,7 +115,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
     class Collector(CompileStateListener):
         """
-            Collect all state updates, optionally hang the processing of listeners
+        Collect all state updates, optionally hang the processing of listeners
         """
 
         def __init__(self):
@@ -145,7 +145,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
     class HangRunner(object):
         """
-            compile runner mock, hang until released
+        compile runner mock, hang until released
         """
 
         def __init__(self):
@@ -165,7 +165,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
     class HookedCompilerService(CompilerService):
         """
-            hook in the hangrunner
+        hook in the hangrunner
         """
 
         def __init__(self):
@@ -510,7 +510,7 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
 @pytest.mark.asyncio(timeout=90)
 async def test_server_recompile(server, client, environment, monkeypatch):
     """
-        Test a recompile on the server and verify recompile triggers
+    Test a recompile on the server and verify recompile triggers
     """
     config.Config.set("server", "auto-recompile-wait", "0")
 
@@ -599,8 +599,8 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 @pytest.mark.asyncio(timeout=90)
 async def test_compileservice_queue(mocked_compiler_service_block, server, client, environment):
     """
-        Test the inspection of the compile queue. The compile runner is mocked out so the "started" field does not have the
-        correct value in this test.
+    Test the inspection of the compile queue. The compile runner is mocked out so the "started" field does not have the
+    correct value in this test.
     """
     env = await data.Environment.get_by_id(environment)
     config.Config.set("server", "auto-recompile-wait", "0")
@@ -754,7 +754,7 @@ def client_for_cleanup(server_with_frequent_cleanups):
 @pytest.fixture(scope="function")
 async def environment_for_cleanup(client_for_cleanup, server_with_frequent_cleanups):
     """
-        Create a project and environment. This fixture returns the uuid of the environment
+    Create a project and environment. This fixture returns the uuid of the environment
     """
     result = await client_for_cleanup.create_project("env-test")
     assert result.code == 200
@@ -860,3 +860,33 @@ async def test_compileservice_cleanup_on_trigger(client_for_cleanup, environment
     result = await client_for_cleanup.get_reports(environment_for_cleanup)
     assert result.code == 200
     assert len(result.result["reports"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_issue_2361(environment_factory: EnvironmentFactory, server, client, tmpdir):
+    env = await environment_factory.create_environment(main="")
+
+    # Change the branch of the environment to a non-existing branch as such that the run method
+    # of the CompileRun returns after executing the clone stage.
+    result = await client.environment_modify(id=env.id, name=env.id, branch="non-existing-branch")
+    assert result.code == 200
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    compile = data.Compile(
+        remote_id=uuid.uuid4(),
+        environment=env.id,
+        do_export=True,
+        metadata={},
+        environment_variables={},
+        force_update=True,
+    )
+    await compile.insert()
+
+    cr = CompileRun(compile, project_work_dir)
+
+    # This should not result in a "local variable referenced before assignment" exception
+    success, compile_data = await cr.run()
+    assert not success
+    assert compile_data is None

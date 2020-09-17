@@ -151,8 +151,8 @@ def is_colorama_package_available():
 
 def test_verify_that_colorama_package_is_not_present():
     """
-        The colorama package turns the colored characters in TTY-based terminal into uncolored characters.
-        As such, this package should not be present.
+    The colorama package turns the colored characters in TTY-based terminal into uncolored characters.
+    As such, this package should not be present.
     """
     assert not is_colorama_package_available()
 

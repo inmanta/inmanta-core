@@ -54,10 +54,10 @@ if TYPE_CHECKING:
 
 def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
     """
-        Perform a complete compilation run for the current project (as returned by :py:meth:`inmanta.module.Project.get`)
+    Perform a complete compilation run for the current project (as returned by :py:meth:`inmanta.module.Project.get`)
 
-        :param refs: Datastructure used to pass on mocking information to the compiler. Supported options:
-                        * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
+    :param refs: Datastructure used to pass on mocking information to the compiler. Supported options:
+                    * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
 
     """
     compiler = Compiler(refs=refs)
@@ -106,12 +106,12 @@ def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") 
 
 def anchormap(refs: Dict[Any, Any] = {}) -> Sequence[Tuple[Location, Location]]:
     """
-        Return all lexical references
+    Return all lexical references
 
-        Performs compilation up to and including the type resolution, but doesn't start executing
+    Performs compilation up to and including the type resolution, but doesn't start executing
 
-        :param refs: Datastructure used to pass on mocking information to the compiler. Supported options:
-                        * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
+    :param refs: Datastructure used to pass on mocking information to the compiler. Supported options:
+                    * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
     """
     compiler = Compiler(refs=refs)
 
@@ -124,7 +124,7 @@ def anchormap(refs: Dict[Any, Any] = {}) -> Sequence[Tuple[Location, Location]]:
 
 def get_types_and_scopes() -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
     """
-        Only run the compilation steps required to extract the different types and scopes.
+    Only run the compilation steps required to extract the different types and scopes.
     """
     compiler = Compiler()
     (statements, blocks) = compiler.compile()
@@ -135,11 +135,11 @@ def get_types_and_scopes() -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
 
 class Compiler(object):
     """
-        An inmanta compiler
+    An inmanta compiler
 
-        :param cf_file: DEPRECATED
-        :param refs: Datastructure used to pass on mocking information to the compiler. Supported keys:
-                        * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
+    :param cf_file: DEPRECATED
+    :param refs: Datastructure used to pass on mocking information to the compiler. Supported keys:
+                    * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
     """
 
     def __init__(self, cf_file: str = "main.cf", refs: Dict[Any, Any] = {}) -> None:
@@ -153,13 +153,13 @@ class Compiler(object):
 
     def is_loaded(self) -> bool:
         """
-            Is everything loaded and the namespace structure built?
+        Is everything loaded and the namespace structure built?
         """
         return self.__root_ns is not None
 
     def get_ns(self) -> Namespace:
         """
-            Get the root namespace
+        Get the root namespace
         """
         assert self.__root_ns is not None
         return self.__root_ns
@@ -168,20 +168,20 @@ class Compiler(object):
 
     def read(self, path: str) -> str:
         """
-            Return the content of the given file
+        Return the content of the given file
         """
         with open(path, "r", encoding="utf-8") as file_d:
             return file_d.read()
 
     def compile(self) -> Tuple[List["Statement"], List["BasicBlock"]]:
         """
-            This method will parse and prepare everything to start evaluation
-            the configuration specification.
+        This method will parse and prepare everything to start evaluation
+        the configuration specification.
 
-            This method will:
-            - load all modules using Project.get().get_complete_ast()
-            - add all plugins
-            - create std::Entity
+        This method will:
+        - load all modules using Project.get().get_complete_ast()
+        - add all plugins
+        - create std::Entity
         """
         project = Project.get()
         self.__root_ns = project.get_root_namespace()
@@ -237,7 +237,7 @@ class Compiler(object):
 
     def export_data(self) -> None:
         """
-            Exports compiler data if the option has been set.
+        Exports compiler data if the option has been set.
         """
         with open(compiler_config.export_compile_data_file.get(), "w") as file:
             file.write("%s\n" % self._data.export().json())
@@ -260,7 +260,7 @@ class Compiler(object):
 
         def add_trace(exception: CompilerException) -> bool:
             """
-                Add the trace to the deepest possible causes.
+            Add the trace to the deepest possible causes.
             """
             handled: bool = False
             if isinstance(exception, MultiException):

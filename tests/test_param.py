@@ -26,7 +26,7 @@ LOGGER = logging.getLogger(__name__)
 @pytest.mark.asyncio(timeout=60)
 async def test_param(client, environment):
     """
-        Test creating and updating forms
+    Test creating and updating forms
     """
     fake_uuid = uuid.uuid4()
     result = await client.list_params(tid=fake_uuid)

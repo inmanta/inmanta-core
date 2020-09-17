@@ -57,14 +57,14 @@ T = TypeVar("T")
 
 class ResultCollector(Generic[T]):
     """
-        Helper interface for gradual execution
+    Helper interface for gradual execution
     """
 
     __slots__ = ()
 
     def receive_result(self, value: T, location: Location) -> None:
         """
-            receive a possibly partial result
+        receive a possibly partial result
         """
         raise NotImplementedError()
 
@@ -79,15 +79,15 @@ class IPromise(Generic[T]):
 
 class ResultVariable(ResultCollector[T], IPromise[T]):
     """
-        A ResultVariable is like a future
-         - it has a list of waiters
-         - when a value is set, the waiters are notified,
-            they decrease their wait count and
-            queue themselves when their wait count becomes 0
+    A ResultVariable is like a future
+     - it has a list of waiters
+     - when a value is set, the waiters are notified,
+        they decrease their wait count and
+        queue themselves when their wait count becomes 0
 
-        If a type is set on a result variable, setting a value of another type will produce an exception.
+    If a type is set on a result variable, setting a value of another type will produce an exception.
 
-        In order to assist heuristic evaluation, result variables keep track of any statement that will assign a value to it
+    In order to assist heuristic evaluation, result variables keep track of any statement that will assign a value to it
     """
 
     location: Location
@@ -156,7 +156,7 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
 
     def listener(self, resulcollector: ResultCollector[T], location: Location) -> None:
         """
-            add a listener to report new values to, only for lists
+        add a listener to report new values to, only for lists
         """
         pass
 
@@ -175,9 +175,9 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
 
 class AttributeVariable(ResultVariable["Instance"]):
     """
-        a result variable for a relation with arity 1
+    a result variable for a relation with arity 1
 
-        when assigned a value, it will also assign a value to its inverse relation
+    when assigned a value, it will also assign a value to its inverse relation
     """
 
     __slots__ = ("attribute", "myself")
@@ -209,20 +209,20 @@ class AttributeVariable(ResultVariable["Instance"]):
 
 class DelayedResultVariable(ResultVariable[T]):
     """
-        DelayedResultVariable are ResultVariables of which it is unclear how many results will be set.
+    DelayedResultVariable are ResultVariables of which it is unclear how many results will be set.
 
-        i.e. there may be speculation about when they can be considered complete.
+    i.e. there may be speculation about when they can be considered complete.
 
-        When the freeze method is called, no more values will be accepted and
-        the DelayedResultVariable will behave as a normal ResultVariable.
+    When the freeze method is called, no more values will be accepted and
+    the DelayedResultVariable will behave as a normal ResultVariable.
 
-        When a DelayedResultVariable is definitely full, it is freeze itself.
+    When a DelayedResultVariable is definitely full, it is freeze itself.
 
-        DelayedResultVariable are queued with the scheduler at the point at which they might be complete.
-        The scheduler can decide when to freeze them. A DelayedResultVariable  can be complete when
-          - it contains enough elements
-          - there are no providers which still have to provide some values (tracked inexactly)
-            (a queue variable can be dequeued by the scheduler when a provider is added)
+    DelayedResultVariable are queued with the scheduler at the point at which they might be complete.
+    The scheduler can decide when to freeze them. A DelayedResultVariable  can be complete when
+      - it contains enough elements
+      - there are no providers which still have to provide some values (tracked inexactly)
+        (a queue variable can be dequeued by the scheduler when a provider is added)
     """
 
     __slots__ = ("queued", "queues", "listeners")
@@ -503,8 +503,8 @@ class OptionVariable(DelayedResultVariable["Instance"]):
 
 class DeprecatedOptionVariable(OptionVariable):
     """
-        Represents nullable attributes. In the future this class can be removed, and a standard
-        ResultVariable with nullable type should be used.
+    Represents nullable attributes. In the future this class can be removed, and a standard
+    ResultVariable with nullable type should be used.
     """
 
     def freeze(self) -> None:
@@ -520,9 +520,9 @@ class DeprecatedOptionVariable(OptionVariable):
 
 class QueueScheduler(object):
     """
-        Object representing the compiler to the AST nodes. It provides access to the queueing mechanism and the type system.
+    Object representing the compiler to the AST nodes. It provides access to the queueing mechanism and the type system.
 
-        MUTABLE!
+    MUTABLE!
     """
 
     __slots__ = ("compiler", "runqueue", "waitqueue", "types", "allwaiters")
@@ -600,7 +600,7 @@ class DelegateQueueScheduler(QueueScheduler):
 
 class Waiter(object):
     """
-        Waiters represent an executable unit, that can be executed the result variables they depend on have their values.
+    Waiters represent an executable unit, that can be executed the result variables they depend on have their values.
     """
 
     __slots__ = ("waitcount", "queue", "done")
@@ -628,12 +628,12 @@ class Waiter(object):
 
 class ExecutionUnit(Waiter):
     """
-       Basic assign statement:
-        - Wait for a dict of requirements
-        - Call the execute method on the expression, with a map of the resulting values
-        - Assign the resulting value to the result variable
+    Basic assign statement:
+     - Wait for a dict of requirements
+     - Call the execute method on the expression, with a map of the resulting values
+     - Assign the resulting value to the result variable
 
-        @param provides: Whether to register this XU as provider to the result variable
+     @param provides: Whether to register this XU as provider to the result variable
     """
 
     __slots__ = ("result", "requires", "expression", "resolver", "queue_scheduler", "owner")
@@ -680,7 +680,7 @@ class ExecutionUnit(Waiter):
 
 class HangUnit(Waiter):
     """
-        Wait for a dict of requirements, call the resume method on the resumer, with a map of the resulting values
+    Wait for a dict of requirements, call the resume method on the resumer, with a map of the resulting values
     """
 
     __slots__ = ("resolver", "requires", "resumer", "target")
@@ -713,8 +713,8 @@ class HangUnit(Waiter):
 
 class RawUnit(Waiter):
     """
-        Wait for a map of requirements, call the resume method on the resumer,
-        but with a map of ResultVariables instead of their values
+    Wait for a map of requirements, call the resume method on the resumer,
+    but with a map of ResultVariables instead of their values
     """
 
     __slots__ = ("resolver", "requires", "resumer")
@@ -954,7 +954,7 @@ class Instance(ExecutionContext):
 
     def final(self, excns: List[CompilerException]) -> None:
         """
-            The object should be complete, freeze all attributes
+        The object should be complete, freeze all attributes
         """
         if len(self.implementations) == 0:
             excns.append(RuntimeException(self, "Unable to select implementation for entity %s" % self.type.name))

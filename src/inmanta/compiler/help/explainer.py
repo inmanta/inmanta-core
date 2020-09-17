@@ -141,7 +141,7 @@ class ExplainerFactory(object):
 
     def explain_and_format(self, problem: CompilerException, plain: bool = True) -> Optional[str]:
         """
-            :param plain: remove tty color codes, only return plain text
+        :param plain: remove tty color codes, only return plain text
         """
         raw = self.explain(problem)
         if not raw:

@@ -65,7 +65,7 @@ def test_resource_base(snippetcompiler):
     @resource("__config__::XResource", agent="agent", id_attribute="key")
     class MyResource(inmanta.resources.Resource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "agent")
@@ -104,7 +104,7 @@ def test_resource_base_with_method_key(snippetcompiler):
     @resource("__config__::XResource", agent="agent", id_attribute="key")
     class MyResource(inmanta.resources.Resource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "agent", "serialize")
@@ -141,7 +141,7 @@ def test_resource_with_keyword(snippetcompiler):
     @resource("__config__::YResource", agent="agent", id_attribute="key")
     class MyResource(inmanta.resources.Resource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "agent", "model")
@@ -179,7 +179,7 @@ def test_resource_with_private_method(snippetcompiler):
     @resource("__config__::YResource", agent="agent", id_attribute="key")
     class MyResource(inmanta.resources.Resource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("__setattr__", "key", "value", "agent")
@@ -241,7 +241,7 @@ def test_resource_invalid_agent_name_annotation(snippetcompiler):
         @resource("__config__::XResource", agent=42, id_attribute="key")
         class MyResource(inmanta.resources.Resource):
             """
-                A file on a filesystem
+            A file on a filesystem
             """
 
             fields = ("key", "value", "agent")
@@ -306,7 +306,7 @@ def test_resource_invalid_agent_name_entity(snippetcompiler):
 
 def test_is_resource_version_id():
     """
-         Test whether the is_resource_version_id() method of the Id class works correctly.
+    Test whether the is_resource_version_id() method of the Id class works correctly.
     """
     assert Id.is_resource_version_id("test::Resource[agent,key=id],v=3")
     assert Id.is_resource_version_id("test::mod::Resource[agent,key=id],v=3")

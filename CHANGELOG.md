@@ -1,3 +1,8 @@
+# Release 2020.4.2 (2020-09-17)
+
+## Bug fixes
+- Fix "compile_data_json_file" referenced before assignment (#2361)
+
 # Release 2020.4.1 (2020-09-16)
 
 ## Bug fixes

@@ -33,14 +33,14 @@ LOGGER = logging.getLogger(__name__)
 
 
 class InvalidSliceNameException(Exception):
-    """ This exception is raised when the name of the slice is not valid. For example when the extension and the slice name
-        do not match.
+    """This exception is raised when the name of the slice is not valid. For example when the extension and the slice name
+    do not match.
     """
 
 
 class InvalidFeature(Exception):
-    """ This exception is raised when a feature is defined in another slice than it reports or the feature is not defined
-        at all.
+    """This exception is raised when a feature is defined in another slice than it reports or the feature is not defined
+    at all.
     """
 
 
@@ -73,30 +73,28 @@ class Feature(Generic[T]):
 
 
 class BoolFeature(Feature[bool]):
-    """ A feature that is on or off. When no value is given it is enabled.
-    """
+    """A feature that is on or off. When no value is given it is enabled."""
 
     def __init__(self, slice: str, name: str, description: str = "") -> None:
         super().__init__(slice, name, description, True)
 
 
 class StringListFeature(Feature[List[str]]):
-    """ A feature that holds a list of allowed values. When the list contains "*" it matches everything.
-    """
+    """A feature that holds a list of allowed values. When the list contains "*" it matches everything."""
 
     def __init__(self, slice: str, name: str, description: str = "") -> None:
         super().__init__(slice, name, description, default_value=["*"])
 
 
 class FeatureManager:
-    """ This class allows to verify whether a feature should be enabled or not. This is determined based on a configuration
-        file that is set with config.feature-file in the config. This feature file is a yaml with the following structure:
+    """This class allows to verify whether a feature should be enabled or not. This is determined based on a configuration
+    file that is set with config.feature-file in the config. This feature file is a yaml with the following structure:
 
-        .. code-block:: yaml
+    .. code-block:: yaml
 
-            slices:
-                slice_name:
-                    feature_name: bool
+        slices:
+            slice_name:
+                feature_name: bool
 
     """
 
@@ -142,8 +140,7 @@ class FeatureManager:
         slice.feature_manager = self
 
     def get_value(self, feature: Feature[T]) -> T:
-        """ Get the value of a feature
-        """
+        """Get the value of a feature"""
         if feature.slice not in self._features or feature.name not in self._features[feature.slice]:
             raise InvalidFeature("Feature should be defined be slices at boot time.")
 
@@ -156,16 +153,14 @@ class FeatureManager:
         return value
 
     def contains(self, feature: StringListFeature, item: str) -> bool:
-        """ Check if the value is contained in the list.
-        """
+        """Check if the value is contained in the list."""
         value = self.get_value(feature)
         if "*" in value:
             return True
         return item in value
 
     def stop(self):
-        """ Called when the server is stopped
-        """
+        """Called when the server is stopped"""
 
 
 class ApplicationContext:

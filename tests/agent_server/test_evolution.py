@@ -113,7 +113,7 @@ def resource_container_a():
     @resource("__config__::Resource", agent="agent", id_attribute="key")
     class MyResource(PurgeableResource):
         """
-            A file on a filesystem
+        A file on a filesystem
         """
 
         fields = ("key", "value", "purged", "purge_on_delete")

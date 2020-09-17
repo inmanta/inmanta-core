@@ -254,7 +254,7 @@ x -> <instance> 0
 
 def test_dataflow_model_no_leaf_error(dataflow_test_helper: DataflowTestHelper) -> None:
     """
-        Verify that tentative instance propagation does not crash when rhs is a reference with no leaf nodes.
+    Verify that tentative instance propagation does not crash when rhs is a reference with no leaf nodes.
     """
     dataflow_test_helper.compile(
         """
