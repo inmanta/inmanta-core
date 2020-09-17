@@ -866,8 +866,8 @@ async def test_compileservice_cleanup_on_trigger(client_for_cleanup, environment
 async def test_issue_2361(environment_factory: EnvironmentFactory, server, client, tmpdir):
     env = await environment_factory.create_environment(main="")
 
-    # Change the branch to a non-existing branch as such that the clone stage of the compiler service
-    # returns success=False before the NamedTemporaryFile is created.
+    # Change the branch of the environment to a non-existing branch as such that the run method
+    # of the CompileRun returns after executing the clone stage.
     result = await client.environment_modify(id=env.id, name=env.id, branch="non-existing-branch")
     assert result.code == 200
 
@@ -887,4 +887,6 @@ async def test_issue_2361(environment_factory: EnvironmentFactory, server, clien
     cr = CompileRun(compile, project_work_dir)
 
     # This should not result in a "local variable referenced before assignment" exception
-    await cr.run()
+    success, compile_data = await cr.run()
+    assert not success
+    assert compile_data is None
