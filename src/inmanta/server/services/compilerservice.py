@@ -177,6 +177,7 @@ class CompileRun(object):
         now = datetime.datetime.now()
         await self.request.update_fields(started=now)
 
+        compile_data_json_file = NamedTemporaryFile()
         try:
             await self._start_stage("Init", "")
 
@@ -230,8 +231,6 @@ class CompileRun(object):
                     await self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
                     LOGGER.info("Installing and updating modules")
                     await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
-
-            compile_data_json_file = NamedTemporaryFile()
 
             server_address = opt.server_address.get()
             server_port = opt.get_bind_port()
