@@ -393,7 +393,7 @@ class CompilerService(ServerSlice):
             return None, ["Skipping compile because server compile not enabled for this environment."]
 
         requested = datetime.datetime.now()
-        LOGGER.info("Compile requested %s", requested)
+
         compile = data.Compile(
             environment=env.id,
             requested=requested,
@@ -539,7 +539,7 @@ class CompilerService(ServerSlice):
             )
             for merge_candidate in merge_candidates
         ]
-        LOGGER.info("Compile completed: %s", end)
+
         await asyncio.gather(*awaitables)
         if self.is_stopping():
             return
