@@ -3,6 +3,7 @@
 ## Bug fixes
 - Fixed import loop when using `inmanta.execute.proxy` as entry point (#2341)
 - Clearing an environment with merged compile requests no longer fails (#2350)
+- Fix "compile_data_json_file" referenced before assignment (#2361)
 
 # Release 2020.4 (2020-09-08)
 

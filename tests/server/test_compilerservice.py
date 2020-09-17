@@ -860,3 +860,33 @@ async def test_compileservice_cleanup_on_trigger(client_for_cleanup, environment
     result = await client_for_cleanup.get_reports(environment_for_cleanup)
     assert result.code == 200
     assert len(result.result["reports"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_issue_2361(environment_factory: EnvironmentFactory, server, client, tmpdir):
+    env = await environment_factory.create_environment(main="")
+
+    # Change the branch of the environment to a non-existing branch as such that the run method
+    # of the CompileRun returns after executing the clone stage.
+    result = await client.environment_modify(id=env.id, name=env.id, branch="non-existing-branch")
+    assert result.code == 200
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    compile = data.Compile(
+        remote_id=uuid.uuid4(),
+        environment=env.id,
+        do_export=True,
+        metadata={},
+        environment_variables={},
+        force_update=True,
+    )
+    await compile.insert()
+
+    cr = CompileRun(compile, project_work_dir)
+
+    # This should not result in a "local variable referenced before assignment" exception
+    success, compile_data = await cr.run()
+    assert not success
+    assert compile_data is None
