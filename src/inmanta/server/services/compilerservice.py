@@ -479,32 +479,37 @@ class CompilerService(ServerSlice):
         return 204
 
     def _calculate_recompile_wait(
-        self, compile_requested: datetime.datetime, last_compile_completed: datetime.datetime, now: datetime.datetime
+        self,
+        wait_time: int,
+        compile_requested: datetime.datetime,
+        last_compile_completed: datetime.datetime,
+        now: datetime.datetime,
     ):
-        wait_time = opt.server_autrecompile_wait.get()
         if wait_time == 0:
             wait: float = 0
         else:
-            assert last_compile_completed is not None
             if last_compile_completed >= compile_requested:
-                wait = max(0, wait_time - (last_compile_completed - compile_requested).total_seconds())
+                wait = max(0, wait_time - (now - compile_requested).total_seconds())
             else:
                 wait = max(0, wait_time - (now - last_compile_completed).total_seconds())
-        if wait > 0:
-            LOGGER.info(
-                "server-auto-recompile-wait is enabled and set to %s seconds, waiting for %.2f seconds before running a new compile",
-                wait_time,
-                wait,
-            )
         return wait
 
     async def _auto_recompile_wait(self, compile: data.Compile) -> None:
+        wait_time = opt.server_autrecompile_wait.get()
         last_run = await data.Compile.get_last_run(compile.environment)
         if not last_run:
             wait: float = 0
         else:
-            wait = self._calculate_recompile_wait(compile.requested, last_run.completed, datetime.datetime.now())
-        if wait == 0:
+            assert last_run.completed is not None
+            wait = self._calculate_recompile_wait(wait_time, compile.requested, last_run.completed, datetime.datetime.now())
+        if wait > 0:
+            LOGGER.info(
+                "server-auto-recompile-wait is enabled and set to %s seconds, "
+                "waiting for %.2f seconds before running a new compile",
+                wait_time,
+                wait,
+            )
+        else:
             LOGGER.debug("Running recompile without waiting: requested at %s", compile.requested)
         await asyncio.sleep(wait)
 

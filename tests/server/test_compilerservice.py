@@ -960,26 +960,27 @@ async def test_compileservice_calculate_auto_recompile_wait(mocked_compiler_serv
     """
     Test the recompile waiting time calculation when auto-recompile-wait configuration option is enabled
     """
-    config.Config.set("server", "auto-recompile-wait", "2")
+    auto_recompile_wait = 2
+    config.Config.set("server", "auto-recompile-wait", str(auto_recompile_wait))
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     now = datetime.datetime.now()
     compile_requested = now - datetime.timedelta(seconds=1)
     last_compile_completed = now - datetime.timedelta(seconds=4)
-    waiting_time = compilerslice._calculate_recompile_wait(compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
     assert waiting_time == 0
 
     compile_requested = now - datetime.timedelta(seconds=0.1)
     last_compile_completed = now - datetime.timedelta(seconds=1)
-    waiting_time = compilerslice._calculate_recompile_wait(compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
     assert waiting_time == approx(1)
 
     compile_requested = now - datetime.timedelta(seconds=1)
     last_compile_completed = now - datetime.timedelta(seconds=0.1)
-    waiting_time = compilerslice._calculate_recompile_wait(compile_requested, last_compile_completed, now)
-    assert waiting_time == approx(1.1)
+    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    assert waiting_time == approx(1)
 
     compile_requested = now - datetime.timedelta(seconds=4)
     last_compile_completed = now - datetime.timedelta(seconds=1)
-    waiting_time = compilerslice._calculate_recompile_wait(compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
     assert waiting_time == 0
