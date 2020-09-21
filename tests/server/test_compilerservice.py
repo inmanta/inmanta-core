@@ -26,6 +26,7 @@ from asyncio import Semaphore
 from typing import AsyncIterator, List, Optional
 
 import pytest
+from pytest import approx
 
 import inmanta.ast.export as ast_export
 import inmanta.data.model as model
@@ -890,3 +891,96 @@ async def test_issue_2361(environment_factory: EnvironmentFactory, server, clien
     success, compile_data = await cr.run()
     assert not success
     assert compile_data is None
+
+
+@pytest.mark.asyncio(timeout=90)
+async def test_compileservice_auto_recompile_wait(mocked_compiler_service_block, server, client, environment, caplog):
+    """
+    Test the auto-recompile-wait setting when multiple recompiles are requested in a short amount of time
+    """
+    with caplog.at_level(logging.DEBUG):
+        env = await data.Environment.get_by_id(environment)
+        config.Config.set("server", "auto-recompile-wait", "2")
+        compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+
+        # request compiles in rapid succession
+        remote_id1 = uuid.uuid4()
+        await compilerslice.request_recompile(
+            env=env, force_update=False, do_export=False, remote_id=remote_id1, env_vars={"my_unique_var": "1"}
+        )
+        remote_id2 = uuid.uuid4()
+        compile_id2, _ = await compilerslice.request_recompile(
+            env=env, force_update=False, do_export=False, remote_id=remote_id2
+        )
+
+        remote_id3 = uuid.uuid4()
+        compile_id3, _ = await compilerslice.request_recompile(
+            env=env, force_update=False, do_export=True, remote_id=remote_id3
+        )
+
+        result = await client.get_compile_queue(environment)
+        assert len(result.result["queue"]) == 3
+        assert result.code == 200
+
+        # Start working through it
+        current_task = compilerslice._recompiles[env.id]
+        run = mocked_compiler_service_block.get(block=True, timeout=2)
+        run.block = False
+        while current_task is compilerslice._recompiles[env.id]:
+            await asyncio.sleep(0.2)
+
+        # Make sure that when enough time passes, waiting is not necessary
+        await asyncio.sleep(2)
+
+        current_task = compilerslice._recompiles[env.id]
+        run = mocked_compiler_service_block.get(block=True, timeout=2)
+        run.block = False
+        while current_task is compilerslice._recompiles[env.id]:
+            await asyncio.sleep(0.2)
+
+        current_task = compilerslice._recompiles[env.id]
+        run = mocked_compiler_service_block.get(block=True, timeout=2)
+        run.block = False
+        while current_task is compilerslice._recompiles.get(env.id):
+            await asyncio.sleep(0.2)
+
+        LogSequence(caplog, allow_errors=False).contains(
+            "inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting"
+        ).contains(
+            "inmanta.server.services.compilerservice",
+            logging.INFO,
+            "server-auto-recompile-wait is enabled and set to 2 seconds",
+        ).contains(
+            "inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting"
+        )
+
+
+@pytest.mark.asyncio
+async def test_compileservice_calculate_auto_recompile_wait(mocked_compiler_service_block, server):
+    """
+    Test the recompile waiting time calculation when auto-recompile-wait configuration option is enabled
+    """
+    auto_recompile_wait = 2
+    config.Config.set("server", "auto-recompile-wait", str(auto_recompile_wait))
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+
+    now = datetime.datetime.now()
+    compile_requested = now - datetime.timedelta(seconds=1)
+    last_compile_completed = now - datetime.timedelta(seconds=4)
+    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    assert waiting_time == 0
+
+    compile_requested = now - datetime.timedelta(seconds=0.1)
+    last_compile_completed = now - datetime.timedelta(seconds=1)
+    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    assert waiting_time == approx(1)
+
+    compile_requested = now - datetime.timedelta(seconds=1)
+    last_compile_completed = now - datetime.timedelta(seconds=0.1)
+    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    assert waiting_time == approx(1)
+
+    compile_requested = now - datetime.timedelta(seconds=4)
+    last_compile_completed = now - datetime.timedelta(seconds=1)
+    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    assert waiting_time == 0
