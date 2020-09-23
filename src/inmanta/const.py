@@ -238,3 +238,10 @@ class ParameterSource(str, Enum):
     plugin = "plugin"
     user = "user"
     report = "report"
+
+
+class ApiDocsFormat(str, Enum):
+    # openapi: the api docs in json format, according to the OpenAPI v3 specification
+    # swagger: the api docs in html, using a Swagger-UI view
+    openapi = "openapi"
+    swagger = "swagger"
