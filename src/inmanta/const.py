@@ -238,3 +238,8 @@ class ParameterSource(str, Enum):
     plugin = "plugin"
     user = "user"
     report = "report"
+
+
+class ApiDocsFormat(str, Enum):
+    openapi = "openapi"
+    swagger = "swagger"
