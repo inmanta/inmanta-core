@@ -404,7 +404,7 @@ class Scheduler(object):
 
         now = time.time()
         LOGGER.info(
-            "Total compilation time %f)",
+            "Total compilation time %f",
             now - start,
         )
 
