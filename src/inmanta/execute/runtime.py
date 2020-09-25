@@ -413,9 +413,6 @@ class ListVariable(BaseListVariable):
         self.myself = instance
         super().__init__(queue)
 
-    def freeze(self) -> None:
-        super().freeze()
-
     def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
         try:
             if not self._set_value(value, location, recur):
