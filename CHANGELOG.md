@@ -6,6 +6,7 @@
 - Fix "compile_data_json_file" referenced before assignment (#2361)
 - Fix server-autorecompile-wait config option (#2262)
 - Specify the supported values of the 'format' parameter of the OpenAPI endpoint explicitly (#2369)
+- Fix version cli argument conflict (#2358)
 
 # Release 2020.4 (2020-09-08)
 
