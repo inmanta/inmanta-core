@@ -230,11 +230,42 @@ class Scheduler(object):
 
         return rangetorange
 
+    def find_wait_cycle(self, allwaiters: List[Waiter]) -> bool:
+        """
+        Preconditions: no progress is made anymore
+
+        This means that all DelayedResultVariable that have not been frozen either have
+        no progress potential or have outstanding promises.
+        In this case, all gradual execution has been executed to the maximal extent.
+
+        Any DelayedResultVariable that still has progress potential has at least one waiter that doesn't support gradual
+        execution (e.g. a plugin).
+        If it takes input from another DelayedResultVariables, it will still have this promise outstanding.
+
+        The compiler will not freeze the DelayedResultVariable with progress potential because it has an outstanding promise.
+        The compiler will not freeze the other because it has no progress potential.
+
+        This causes the compiler to be stuck.
+
+        The root cause is that progress potential is only calculated locally.
+
+        For performance reasons, we keep progress potential local and instead detect this situation here.
+        """
+        for waiter in allwaiters:
+            for rv in waiter.requires.values():
+                if isinstance(rv, DelayedResultVariable):
+                    if rv.get_waiting_providers() > 0 and rv.get_progress_potential() > 0:
+                        LOGGER.debug("Waiting blocked on %s", rv)
+                        rv.freeze()
+                        return True
+        return False
+
     def run(self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]) -> bool:
         """
         Evaluate the current graph
         """
         prev = time.time()
+        start = prev
 
         # first evaluate all definitions, this should be done in one iteration
         self.define_types(compiler, statements, blocks)
@@ -304,6 +335,7 @@ class Scheduler(object):
 
             # all safe stmts are done
             progress = False
+            assert not basequeue
 
             # find a RV that has waiters, so freezing creates progress
             while len(waitqueue) > 0 and not progress:
@@ -341,9 +373,14 @@ class Scheduler(object):
                         next_rv.freeze()
                         progress = True
 
-            # no one waiting anymore, all done, freeze and finish
             if not progress:
+                # nothing works anymore, attempt to unfreeze wait cycle
+                progress = self.find_wait_cycle(queue.allwaiters)
+
+            if not progress:
+                # no one waiting anymore, all done, freeze and finish
                 LOGGER.debug("Finishing statements with no waiters")
+
                 while len(zerowaiters) > 0:
                     next_rv = zerowaiters.pop()
                     next_rv.freeze()
@@ -362,17 +399,14 @@ class Scheduler(object):
         if i == max_iterations:
             raise CompilerException(f"Could not complete model, max_iterations {max_iterations} reached.")
 
-        # now = time.time()
-        # print(now - prev)
-        # end evaluation loop
-        # self.dump_not_done()
-        # print(basequeue, waitqueue)
-        # dumpHangs()
-        # self.dump()
-        # rint(len(self.types["std::Entity"].get_all_instances()))
-
         excns: List[CompilerException] = []
         self.freeze_all(excns)
+
+        now = time.time()
+        LOGGER.info(
+            "Total compilation time %f)",
+            now - start,
+        )
 
         if len(excns) == 0:
             pass
@@ -391,6 +425,5 @@ class Scheduler(object):
             assert stmt is not None
 
             raise RuntimeException(stmt.expression, "not all statements executed %s" % all_statements)
-        # self.dump("std::File")
 
         return True

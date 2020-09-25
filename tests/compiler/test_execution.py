@@ -431,3 +431,35 @@ t1 = Test1()
         "The object __config__::Test1 (instantiated at {dir}/main.cf:10) is not complete: "
         "attribute a ({dir}/main.cf:5) is not set",
     )
+
+
+def test_issue_2378_scheduler(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    string name 
+end
+
+A.b [0:] -- B
+
+entity B:
+    string name
+end
+
+
+b = B(name="b")
+
+a3 = A(name="a3")
+
+a1 = A(name="a1")
+a2 = A(name="a2")
+
+implement A using std::none
+implement B using std::none
+
+a3.b = std::key_sort(a1.b, "name")
+a1.b = a2.b
+a2.b += b
+"""
+    )
+    compiler.do_compile()
