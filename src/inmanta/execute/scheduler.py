@@ -230,7 +230,7 @@ class Scheduler(object):
 
         return rangetorange
 
-    def find_wait_cycle(self, allwaiters: List[Waiter]) -> bool:
+    def find_wait_cycle(self, allwaiters: Set[Waiter]) -> bool:
         """
         Preconditions: no progress is made anymore
 

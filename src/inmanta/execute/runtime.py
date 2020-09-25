@@ -606,7 +606,9 @@ class Waiter(object):
     Waiters represent an executable unit, that can be executed the result variables they depend on have their values.
     """
 
-    __slots__ = ("waitcount", "queue", "done")
+    __slots__ = ("waitcount", "queue", "done", "requires")
+
+    requires: Dict[object, ResultVariable]
 
     def __init__(self, queue: QueueScheduler):
         self.waitcount = 1
@@ -639,7 +641,7 @@ class ExecutionUnit(Waiter):
      @param provides: Whether to register this XU as provider to the result variable
     """
 
-    __slots__ = ("result", "requires", "expression", "resolver", "queue_scheduler", "owner")
+    __slots__ = ("result", "expression", "resolver", "queue_scheduler", "owner")
 
     def __init__(
         self,
@@ -686,7 +688,7 @@ class HangUnit(Waiter):
     Wait for a dict of requirements, call the resume method on the resumer, with a map of the resulting values
     """
 
-    __slots__ = ("resolver", "requires", "resumer", "target")
+    __slots__ = ("resolver", "resumer", "target")
 
     def __init__(
         self,
@@ -720,7 +722,7 @@ class RawUnit(Waiter):
     but with a map of ResultVariables instead of their values
     """
 
-    __slots__ = ("resolver", "requires", "resumer")
+    __slots__ = ("resolver", "resumer")
 
     def __init__(
         self,
