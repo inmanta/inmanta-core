@@ -19,7 +19,7 @@ import datetime
 import uuid
 from typing import Dict, List, Optional, Union
 
-from inmanta.const import AgentAction, ClientType
+from inmanta.const import AgentAction, ApiDocsFormat, ClientType
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
 
@@ -294,10 +294,10 @@ def reserve_version(tid: uuid.UUID) -> int:
 
 
 @typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2)
-def get_api_docs(format: Optional[str] = None) -> ReturnValue[Union[OpenAPI, str]]:
+def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> ReturnValue[Union[OpenAPI, str]]:
     """
     Get the OpenAPI definition of the API
-    :param format: Use 'openapi' to get the schema in json format
+    :param format: Use 'openapi' to get the schema in json format, leave empty or use 'swagger' to get the Swagger-UI view
     """
 
 
