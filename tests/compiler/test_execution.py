@@ -437,7 +437,7 @@ def test_issue_2378_scheduler(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity A:
-    string name 
+    string name
 end
 
 A.b [0:] -- B
