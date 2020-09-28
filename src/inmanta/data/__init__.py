@@ -2448,8 +2448,18 @@ class ConfigurationModel(BaseDocument):
 
                 # Delete facts when the resources in this version are the only
                 await con.execute(
-                    f"DELETE FROM {Parameter.table_name()} p WHERE environment=$1 AND NOT EXISTS "
-                    f"(SELECT * FROM {Resource.table_name()} r WHERE p.resource_id=r.resource_id)",
+                    f"""
+                    DELETE FROM {Parameter.table_name()} p
+                    WHERE(
+                        environment=$1 AND
+                        resource_id<>'' AND
+                        NOT EXISTS(
+                            SELECT 1
+                            FROM {Resource.table_name()} r
+                            WHERE p.resource_id=r.resource_id
+                        )
+                    )
+                    """,
                     self.environment,
                 )
 
