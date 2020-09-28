@@ -79,8 +79,8 @@ ssh and if the remote agent is used.
 4. Test if you can login into a machine that has the public key and make sure ssh does not show you any prompts to store
    the host key.
 
-Step 7: Connect to the dashboard
---------------------------------
+Step 7: Configure the server bind address
+-----------------------------------------
 
 By default the server only listens on localhost, port 8888.
 This can be changed by altering the
@@ -100,8 +100,7 @@ Start the Inmanta server and make sure it is started at boot.
 
 .. code-block:: sh
 
-  sudo systemctl enable inmanta-server
-  sudo systemctl start inmanta-server
+  sudo systemctl enable --now inmanta-server
 
 
 The server dashboard is now available on the port and host configured in step 7.
