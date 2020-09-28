@@ -8,6 +8,7 @@
 - Fix server-autorecompile-wait config option (#2262)
 - Specify the supported values of the 'format' parameter of the OpenAPI endpoint explicitly (#2369)
 - Fix version cli argument conflict (#2358)
+- Don't remove resource independent parameters on version deletion (#2370)
 
 # Release 2020.4 (2020-09-08)
 
