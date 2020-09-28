@@ -291,7 +291,9 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
 @pytest.mark.asyncio
 async def test_purged_resources(resource_container, client, clienthelper, server, environment, agent, no_agent_backoff):
     """
-    Test if facts are purged when the resource is no longer available in any version
+    Test if:
+        * Facts are purged when the resource is no longer available in any version.
+        * Parameters with no resource attached are not deleted when a version is deleted.
     """
     resource_container.Provider.reset()
 
@@ -299,6 +301,12 @@ async def test_purged_resources(resource_container, client, clienthelper, server
 
     res1 = "test::Resource[agent1,key=key1]"
     res2 = "test::Resource[agent1,key=key2]"
+
+    # Add a resource independent parameter
+    result = await client.set_param(
+        tid=environment, id="test", source=const.ParameterSource.user, value="val", resource_id=None
+    )
+    assert result.code == 200
 
     # Create version 1 with 1 unknown
     version = await clienthelper.get_version()
@@ -327,7 +335,8 @@ async def test_purged_resources(resource_container, client, clienthelper, server
 
     async def params_are_available() -> bool:
         params = await data.Parameter.get_list(environment=env_uuid)
-        return len(params) >= 6
+        # 3 facts from res1 + 3 facts from res2 + parameter test
+        return len(params) >= 7
 
     await retry_limited(params_are_available, 10)
 
@@ -335,6 +344,9 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     assert result.code == 200
 
     result = await client.get_param(environment, "key2", res2)
+    assert result.code == 200
+
+    result = await client.get_param(environment, "test")
     assert result.code == 200
 
     # Create version 2
@@ -359,10 +371,10 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     assert result.code == 200
     assert len(result.result["environment"]["resources"]) == 1
 
-    # Facts of only one should be there
+    # 3 facts from res1 + parameter test
     result = await client.list_params(environment)
     assert result.code == 200
-    assert len(result.result["parameters"]) == 3
+    assert len(result.result["parameters"]) == 4
 
     # Remove version 2
     result = await client.delete_version(tid=environment, id=2)
@@ -373,10 +385,10 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     assert result.code == 200
     assert len(result.result["environment"]["resources"]) == 0
 
-    # The resource facts should be purged
+    # Only the resource independent parameter test should exist
     result = await client.list_params(environment)
     assert result.code == 200
-    assert len(result.result["parameters"]) == 0
+    assert len(result.result["parameters"]) == 1
 
 
 @pytest.mark.asyncio
