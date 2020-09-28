@@ -9,6 +9,7 @@
 - Specify the supported values of the 'format' parameter of the OpenAPI endpoint explicitly (#2369)
 - Fix version cli argument conflict (#2358)
 - Don't remove resource independent parameters on version deletion (#2370)
+- Enhance installation documentation (#2241, #2356, #2357)
 
 # Release 2020.4 (2020-09-08)
 
