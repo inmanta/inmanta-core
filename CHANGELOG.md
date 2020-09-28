@@ -1,3 +1,9 @@
+# Release 2020.4.3 (2020-10-05)
+
+## Bug fixes
+- Fixed compiler bug (#2378)
+- Don't remove resource independent parameters on version deletion (#2370)
+
 # Release 2020.4.2 (2020-09-17)
 
 ## Bug fixes
