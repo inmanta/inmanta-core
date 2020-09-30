@@ -254,15 +254,16 @@ async def test_decommission_protected_environment(server, client):
     async def assert_decomission_env(env_id: str, decommission_succeeds: bool) -> None:
         result = await client.list_versions(env_id)
         assert result.code == 200
-        assert len(result.result["versions"]) != 0
+        original_number_of_versions = len(result.result["versions"])
+        assert original_number_of_versions != 0
         # Execute clear operation
         result = await client.environment_decommission(env_id)
         assert result.code == 200 if decommission_succeeds else 403
         # Assert result
         result = await client.list_versions(env_id)
         assert result.code == 200
-        # Original and the empty for decommissioning
-        assert ("version_info" in result.result["versions"][0]) == decommission_succeeds
+        # Another version is added when decommissioning succeeds
+        assert (len(result.result["versions"]) > original_number_of_versions) == decommission_succeeds
 
     # Test default settings
     await push_version_to_environment()
