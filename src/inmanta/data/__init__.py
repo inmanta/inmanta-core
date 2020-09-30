@@ -905,7 +905,7 @@ class Environment(BaseDocument):
             default=False,
             typ="bool",
             validator=convert_boolean,
-            doc="When set to true, this environment cannot be cleared or deleted.",
+            doc="When set to true, this environment cannot be cleared, deleted or decommissioned.",
         ),
     }
 

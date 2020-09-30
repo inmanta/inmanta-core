@@ -181,6 +181,12 @@ def environment_decommission(id: uuid.UUID, metadata: Optional[model.ModelMetada
     """
     Decommission an environment. This is done by uploading an empty model to the server and let purge_on_delete handle
     removal.
+
+    :param id: The uuid of the environment.
+    :param metadata: Optional metadata associated with the decommissioning
+
+    :raises NotFound: The given environment doesn't exist.
+    :raises Forbidden: The given environment is protected.
     """
 
 
