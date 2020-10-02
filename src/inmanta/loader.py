@@ -183,6 +183,9 @@ class CodeLoader(object):
 
         self.__check_dir()
 
+        mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
+        configure_module_finder([mod_dir])
+
     def __check_dir(self) -> None:
         """
         Check if the code directory
