@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import glob
 import hashlib
 import importlib
 import inspect
