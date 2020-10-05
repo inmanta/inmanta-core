@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import glob
 import hashlib
 import importlib
 import inspect
@@ -182,36 +181,9 @@ class CodeLoader(object):
         self.__modules: Dict[str, Tuple[str, types.ModuleType]] = {}  # A map with all modules we loaded, and its hv
 
         self.__check_dir()
-        self.load_modules()
 
-    def load_modules(self) -> None:
-        """
-        Load all existing modules
-        """
         mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
         configure_module_finder([mod_dir])
-
-        for py in glob.iglob(os.path.join(mod_dir, "**", "*.py"), recursive=True):
-            # Files in the root of the modules directory are sources files formatted on disk using
-            # the pre inmanta 2020.4 format. These sources should be ignored. (See issue: #2162)
-            if os.path.dirname(py) == mod_dir:
-                continue
-
-            mod_name: str
-            if mod_dir in py:
-                mod_name = PluginModuleLoader.convert_relative_path_to_module(os.path.relpath(py, start=mod_dir))
-            else:
-                mod_name = PluginModuleLoader.convert_relative_path_to_module(py)
-
-            with open(py, "r", encoding="utf-8") as fd:
-                source_code = fd.read().encode("utf-8")
-
-            sha1sum = hashlib.new("sha1")
-            sha1sum.update(source_code)
-
-            hv = sha1sum.hexdigest()
-
-            self._load_module(mod_name, hv)
 
     def __check_dir(self) -> None:
         """
