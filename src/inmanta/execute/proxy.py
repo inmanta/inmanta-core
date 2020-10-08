@@ -192,7 +192,7 @@ class DynamicProxy(object):
         return "@%s" % repr(self._get_instance())
 
 
-class SequenceProxy(DynamicProxy, JSONSerializable, list):
+class SequenceProxy(DynamicProxy, JSONSerializable):
     def __init__(self, iterator):
         DynamicProxy.__init__(self, iterator)
 
