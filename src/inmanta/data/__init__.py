@@ -32,7 +32,7 @@ import asyncpg
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
-from inmanta import const, util, resources
+from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
