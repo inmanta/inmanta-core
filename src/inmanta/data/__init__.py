@@ -1912,10 +1912,10 @@ class Resource(BaseDocument):
         query = "SELECT * FROM " + cls.table_name() + " WHERE environment=$1 AND attribute_hash IN " + hashes_as_str
         values = [cls._get_value(environment)] + [cls._get_value(h) for h in hashes]
         result = await cls._fetch_query(query, *values)
-        resources = []
+        resources_list = []
         for res in result:
-            resources.append(cls(from_postgres=True, **res))
-        return resources
+            resources_list.append(cls(from_postgres=True, **res))
+        return resources_list
 
     @classmethod
     async def get_resources(
@@ -2060,7 +2060,7 @@ class Resource(BaseDocument):
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
 
         query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
-        resources = []
+        resources_list = []
         async with cls._connection_pool.acquire() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
@@ -2070,10 +2070,10 @@ class Resource(BaseDocument):
                         record["id"] = record["resource_version_id"]
                         parsed_id = resources.Id.parse_id(record["resource_version_id"])
                         record["resource_type"] = parsed_id.entity_type
-                        resources.append(record)
+                        resources_list.append(record)
                     else:
-                        resources.append(cls(from_postgres=True, **record))
-        return resources
+                        resources_list.append(cls(from_postgres=True, **record))
+        return resources_list
 
     @classmethod
     async def get_resources_for_version_raw(cls, environment, version, projection):
