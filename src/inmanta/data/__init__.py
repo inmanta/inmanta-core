@@ -32,11 +32,10 @@ import asyncpg
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
-from inmanta import const, util
+from inmanta import const, util, resources
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.types import JsonType, PrimitiveTypes
 
@@ -2038,7 +2037,7 @@ class Resource(BaseDocument):
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource_id = record["resource_id"]
-                    parsed_id = Id.parse_id(resource_id)
+                    parsed_id = resources.Id.parse_id(resource_id)
                     result.append(
                         {
                             "resource_id": resource_id,
@@ -2069,7 +2068,7 @@ class Resource(BaseDocument):
                         record = dict(record)
                         record["attributes"] = json.loads(record["attributes"])
                         record["id"] = record["resource_version_id"]
-                        parsed_id = Id.parse_id(record["resource_version_id"])
+                        parsed_id = resources.Id.parse_id(record["resource_version_id"])
                         record["resource_type"] = parsed_id.entity_type
                         resources.append(record)
                     else:
@@ -2114,7 +2113,7 @@ class Resource(BaseDocument):
 
     @classmethod
     def new(cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, **kwargs: Any) -> "Resource":
-        vid = Id.parse_id(resource_version_id)
+        vid = resources.Id.parse_id(resource_version_id)
 
         attr = dict(
             environment=environment,
