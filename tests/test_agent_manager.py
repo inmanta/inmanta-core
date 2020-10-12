@@ -718,11 +718,13 @@ async def test_agent_actions(server, client, async_finalizer):
         async_finalizer(a.stop)
         env_to_agent_map[env_id] = a
 
-        async def fetch_primary(agent_name: str) -> Optional[UUID]:
+        async def has_primary(agent_name: str) -> bool:
             agent: data.Agent = await data.Agent.get_one(environment=env_id, name=agent_name)
-            return agent.primary
+            primary_id: Optional[UUID] = agent.primary
+            primary_session: Optional[Session] = agent_manager.tid_endpoint_to_session.get((env_id, agent_name), None)
+            return primary_id is not None and primary_session is not None
 
-        await asyncio.gather(*(retry_limited(lambda: fetch_primary(agent_name) is not None, 10) for agent_name in agent_names))
+        await asyncio.gather(*(retry_limited(lambda: has_primary(agent_name), 10) for agent_name in agent_names))
 
     await asyncio.gather(start_agent(env1_id, ["agent1", "agent2"]), start_agent(env2_id, ["agent1"]))
 
