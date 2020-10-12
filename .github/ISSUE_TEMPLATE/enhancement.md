@@ -1,4 +1,4 @@
---
+---
 name: Enhancement
 about: Suggest an idea for this project
 title: ''
