@@ -31,8 +31,10 @@ from inmanta.util import get_compiler_version
 async def retry_limited(fun, timeout):
     async def fun_wrapper():
         if inspect.iscoroutinefunction(fun):
+            print("coroutine")
             return await fun()
         else:
+            print("normal function")
             return fun()
 
     start = time.time()
