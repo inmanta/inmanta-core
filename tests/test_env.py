@@ -116,10 +116,20 @@ def test_req_parser(tmpdir):
 
 def test_gen_req_file(tmpdir):
     e = env.VirtualEnv(tmpdir)
-    req = ["lorem == 0.1.1", "lorem > 0.1", "dummy-yummy", "iplib@git+https://github.com/bartv/python3-iplib", "lorem"]
+    req = [
+        "lorem == 0.1.1",
+        "lorem > 0.1",
+        "dummy-yummy",
+        "iplib@git+https://github.com/bartv/python3-iplib",
+        "lorem",
+        # verify support for environment markers as described in PEP 508
+        "lorem;python_version<'3.7'",
+        "lorem;platform_system == 'Linux'",
+    ]
 
     req_lines = [x for x in e._gen_requirements_file(req).split("\n") if len(x) > 0]
     assert len(req_lines) == 3
+    assert 'lorem == 0.1.1, > 0.1 ; python_version < "3.7" and platform_system == "Linux"' in req_lines
 
 
 def test_remove_requirements_present_in_parent_env(tmpdir):

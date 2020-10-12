@@ -1,5 +1,8 @@
 # Release 2020.5 (?)
 
+## New features
+- Added support for environment markers as described in PEP 508 to module requirements parsing (#2359)
+
 ## Bug fixes
 - Fixed import loop when using `inmanta.execute.proxy` as entry point (#2341)
 - Clearing an environment with merged compile requests no longer fails (#2350)
