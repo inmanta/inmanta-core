@@ -7,6 +7,12 @@ assignees: ''
 
 ---
 
+**Self checklist**
+
+ - [ ] This issue hasn't been already created
+ - [ ] Everything is sound and clear, all sections are filled-up
+ - [ ] Relevant labels have been added
+
 # Expected Behavior (short explanation)
 
 Please describe the behavior you are expecting

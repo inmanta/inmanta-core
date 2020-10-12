@@ -7,6 +7,12 @@ assignees: ''
 
 ---
 
+**Self checklist**
+
+ - [ ] This issue hasn't been already created
+ - [ ] Everything is sound and clear, all sections are filled-up
+ - [ ] Relevant labels have been added
+
 # Is your feature request related to a problem? Please describe.
 A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
 
