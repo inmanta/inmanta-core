@@ -19,7 +19,6 @@ import asyncio
 import datetime
 import logging
 import typing
-from functools import partial
 from typing import Dict, List, Optional, Set, Tuple
 from unittest.mock import Mock
 from uuid import UUID, uuid4
@@ -721,11 +720,9 @@ async def test_agent_actions(server, client, async_finalizer):
 
         async def has_primary(agent_name: str) -> bool:
             agent: data.Agent = await data.Agent.get_one(environment=env_id, name=agent_name)
-            primary_id: Optional[UUID] = agent.primary
-            primary_session: Optional[Session] = agent_manager.tid_endpoint_to_session.get((env_id, agent_name), None)
-            return primary_id is not None and primary_session is not None
+            return agent.primary is not None
 
-        await asyncio.gather(*(retry_limited(has_primary, 10, agent_name) for agent_name in agent_names))
+        await asyncio.gather(*(retry_limited(has_primary, timeout=10, agent_name=agent_name) for agent_name in agent_names))
 
     await asyncio.gather(start_agent(env1_id, ["agent1", "agent2"]), start_agent(env2_id, ["agent1"]))
 
