@@ -54,11 +54,16 @@ def test_import_plugins(import_entry_point) -> None:
 
 def test_import_resources(import_entry_point) -> None:
     assert import_entry_point("inmanta.resources") == 0
+    assert import_entry_point("inmanta.execute.util") == 0
 
 
 def test_import_handlers(import_entry_point) -> None:
     assert import_entry_point("inmanta.agent.handler") == 0
     assert import_entry_point("inmanta.agent.io.local") == 0
+
+
+def test_import_export(import_entry_point) -> None:
+    assert import_entry_point("inmanta.export") == 0
 
 
 def test_import_attributes(import_entry_point) -> None:
