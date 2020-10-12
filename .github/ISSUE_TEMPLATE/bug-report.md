@@ -37,6 +37,7 @@ Please provide any relevant information about your setup.
 
 * Inmanta version:
 * Operating System:
+* Python version:
 
 ## Failure Logs
 <details>

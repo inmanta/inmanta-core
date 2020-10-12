@@ -25,6 +25,14 @@ What is the current behavior?
 
 What did you identify as the root cause of this behavior?
 
+# Context
+
+Please provide any relevant information about your setup. 
+
+* Inmanta version:
+* Operating System:
+* Python version:
+
 # Fix idea
 
 How would you fix this?
