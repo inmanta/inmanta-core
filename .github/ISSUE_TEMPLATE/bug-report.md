@@ -34,7 +34,7 @@ Please provide any relevant information about your setup.
 
 ## Failure Logs
 <details>
-<summary>Click to deploy the logs</summary>
+<summary>Click to display the logs</summary>
 
 ```
 Enter the logs here
