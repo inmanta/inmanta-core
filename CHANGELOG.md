@@ -5,6 +5,7 @@
 
 ## Bug fixes
 - Fixed import loop when using `inmanta.execute.proxy` as entry point (#2341)
+- Fixed import loop when using `inmanta.resources` as entry point (#2342)
 - Clearing an environment with merged compile requests no longer fails (#2350)
 - Fixed compiler bug (#2378)
 - Fix "compile_data_json_file" referenced before assignment (#2361)
