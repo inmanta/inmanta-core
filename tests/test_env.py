@@ -124,12 +124,15 @@ def test_gen_req_file(tmpdir):
         "lorem",
         # verify support for environment markers as described in PEP 508
         "lorem;python_version<'3.7'",
-        "lorem;platform_system == 'Linux'",
+        "lorem;platform_machine == 'x86_64' and platform_system == 'Linux'",
     ]
 
     req_lines = [x for x in e._gen_requirements_file(req).split("\n") if len(x) > 0]
     assert len(req_lines) == 3
-    assert 'lorem == 0.1.1, > 0.1 ; python_version < "3.7" and platform_system == "Linux"' in req_lines
+    assert (
+        'lorem == 0.1.1, > 0.1 ; python_version < "3.7" and platform_machine == "x86_64" and platform_system == "Linux"'
+        in req_lines
+    )
 
 
 def test_remove_requirements_present_in_parent_env(tmpdir):
