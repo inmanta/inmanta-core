@@ -21,6 +21,10 @@ Please describe the behavior you are expecting
 
 What is the current behavior?
 
+## Root cause
+
+What did you identify as the root cause of this behavior?
+
 # Fix idea
 
 How would you fix this?
