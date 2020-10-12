@@ -231,7 +231,6 @@ class AgentManager(ServerSlice, SessionListener):
                 live_session = self.tid_endpoint_to_session.get(key)
                 if live_session:
                     # The agent has an active agent instance that has to be paused
-                    print("deleting...")
                     del self.tid_endpoint_to_session[key]
                     await live_session.get_client().set_state(agent_name, enabled=False)
                     endpoints_with_new_primary.append((agent_name, None))
@@ -479,7 +478,6 @@ class AgentManager(ServerSlice, SessionListener):
             set_state_call = new_active_session.get_client().set_state(endpoint_name, enabled=True)
             self.add_background_task(set_state_call)
         elif key in self.tid_endpoint_to_session:
-            print("deleting...")
             del self.tid_endpoint_to_session[key]
         return new_active_session
 
@@ -532,7 +530,6 @@ class AgentManager(ServerSlice, SessionListener):
                     # This should never occur. An agent cannot have an active session while its paused,
                     # given the fact that this method executes under session_lock
                     LOGGER.warning("Paused agent %s has an active session (sid=%s)", endpoint_name, session.id)
-                    print("deleting...")
                     del self.tid_endpoint_to_session[key]
                     result.append((endpoint_name, None))
         return result

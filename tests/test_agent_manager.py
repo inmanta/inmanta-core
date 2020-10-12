@@ -723,7 +723,6 @@ async def test_agent_actions(server, client, async_finalizer):
             agent: data.Agent = await data.Agent.get_one(environment=env_id, name=agent_name)
             primary_id: Optional[UUID] = agent.primary
             primary_session: Optional[Session] = agent_manager.tid_endpoint_to_session.get((env_id, agent_name), None)
-            print(f"env: {env_id}, agent: {agent_name}, id: {primary_id}, session: {primary_session}")
             return primary_id is not None and primary_session is not None
 
         await asyncio.gather(*(retry_limited(partial(has_primary, agent_name), 10) for agent_name in agent_names))
@@ -750,7 +749,6 @@ async def test_agent_actions(server, client, async_finalizer):
     await assert_agents_paused(
         expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
     )
-    assert False
     # Pause agent1 and pause again
     for _ in range(2):
         result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.pause.value)
