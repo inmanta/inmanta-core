@@ -725,7 +725,7 @@ async def test_agent_actions(server, client, async_finalizer):
             primary_session: Optional[Session] = agent_manager.tid_endpoint_to_session.get((env_id, agent_name), None)
             return primary_id is not None and primary_session is not None
 
-        await asyncio.gather(*(retry_limited(partial(has_primary, agent_name), 10) for agent_name in agent_names))
+        await asyncio.gather(*(retry_limited(has_primary, 10, agent_name) for agent_name in agent_names))
 
     await asyncio.gather(start_agent(env1_id, ["agent1", "agent2"]), start_agent(env2_id, ["agent1"]))
 
