@@ -718,10 +718,13 @@ async def test_agent_actions(server, client, async_finalizer):
         async_finalizer(a.stop)
         env_to_agent_map[env_id] = a
 
-    await start_agent(env1_id, ["agent1", "agent2"])
-    await start_agent(env2_id, ["agent1"])
+        async def fetch_primary(agent_name: str) -> Optional[UUID]:
+            agent: data.Agent = await data.Agent.get_one(environment=env_id, name=agent_name)
+            return agent.primary
 
-    await retry_limited(lambda: len(agent_manager.sessions) == 2, 10)
+        await asyncio.gather(*(retry_limited(lambda: fetch_primary(agent_name) is not None, 10) for agent_name in agent_names))
+
+    await asyncio.gather(start_agent(env1_id, ["agent1", "agent2"]), start_agent(env2_id, ["agent1"]))
 
     async def assert_agents_paused(expected_statuses: Dict[Tuple[UUID, str], bool]) -> None:
         for (env_id, agent_name), paused in expected_statuses.items():
@@ -734,7 +737,8 @@ async def test_agent_actions(server, client, async_finalizer):
             assert (agent_from_db.primary is None) == paused
             if not paused:
                 live_session = agent_manager.tid_endpoint_to_session[(env_id, agent_name)]
-                agent_instance = await data.AgentInstance.get_by_id(agent_from_db.primary)
+                agent_instance: Optional[data.AgentInstance] = await data.AgentInstance.get_by_id(agent_from_db.primary)
+                assert agent_instance is not None
                 assert agent_instance.process == live_session.id
             # Check agent state
             assert env_to_agent_map[env_id]._instances[agent_name].is_enabled() != paused
