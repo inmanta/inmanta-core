@@ -1450,44 +1450,48 @@ a = c["test"]["xx"]
     assert stmt.value.themap.key.value == "test"
 
 
-def test_if_statement():
+@pytest.mark.parametrize("empty", [True, False])
+def test_if_statement(empty):
     """Test for the if statement"""
     statements = parse_code(
         """
 if test.field == "value":
-    test.other = "otherValue"
+    %s
 end
-"""
+        """
+        % ("" if empty else 'test.other = "otherValue"')
     )
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, If)
     assert isinstance(stmt.condition, ExpressionStatement)
     assert isinstance(stmt.if_branch, BasicBlock)
-    assert len(stmt.if_branch.get_stmts()) == 1
+    assert len(stmt.if_branch.get_stmts()) == (0 if empty else 1)
     assert isinstance(stmt.else_branch, BasicBlock)
     assert len(stmt.else_branch.get_stmts()) == 0
 
 
-def test_if_else():
-    """Test for the if statement with an else clause"""
+@pytest.mark.parametrize("empty", [True, False])
+def test_if_else(empty: bool):
+    """Test for the if statement with an else clause, possibly empty (#2375)"""
     statements = parse_code(
         """
 if test.field == "value":
-    test.other = "otherValue"
+    %s
 else:
-    test.other = "altValue"
+    %s
 end
-"""
+        """
+        % (("", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"'))
     )
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, If)
     assert isinstance(stmt.condition, ExpressionStatement)
     assert isinstance(stmt.if_branch, BasicBlock)
-    assert len(stmt.if_branch.get_stmts()) == 1
+    assert len(stmt.if_branch.get_stmts()) == (0 if empty else 1)
     assert isinstance(stmt.else_branch, BasicBlock)
-    assert len(stmt.else_branch.get_stmts()) == 1
+    assert len(stmt.else_branch.get_stmts()) == (0 if empty else 1)
 
 
 def test_bool_str():

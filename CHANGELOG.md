@@ -16,6 +16,7 @@
 - Enhance installation documentation (#2241, #2356, #2357)
 - Ensure that a protected environment can't be decommissioned (#2376)
 - Don't load all code on agent start (#2343)
+- Allow empty body in else branch for if-else statement (#2375)
 
 # Release 2020.4 (2020-09-08)
 
