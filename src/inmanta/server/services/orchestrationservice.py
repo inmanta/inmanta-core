@@ -99,7 +99,7 @@ class OrchestrationService(protocol.ServerSlice):
         if (start is None and limit is not None) or (limit is None and start is not None):
             raise ServerError("Start and limit should always be set together.")
 
-        if start is None:
+        if start is None or limit is None:
             start = 0
             limit = data.APILIMIT
 
@@ -143,14 +143,14 @@ class OrchestrationService(protocol.ServerSlice):
                 f" To retrieve more entries, use /api/v2/resource_actions"
             )
 
-        resources_out = []
+        resources_out: List[JsonType] = []
         d = {"model": version, "resources": resources_out}
-        resource_action_lookup = {}
+        resource_action_lookup: Dict[ResourceVersionIdStr, List[data.ResourceAction]] = {}
 
         for res_dict in resources:
             resources_out.append(res_dict)
             if bool(include_logs):
-                actions = []
+                actions: List[data.ResourceAction] = []
                 res_dict["actions"] = actions
                 resource_action_lookup[res_dict["resource_version_id"]] = actions
 
