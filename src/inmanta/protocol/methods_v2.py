@@ -387,7 +387,7 @@ def get_resource_actions(
     :param attribute: Attribute name used for filtering
     :param attribute_value: Attribute value used for filtering. Attribute and attribute value should be supplied together.
     :param log_severity: Only include ResourceActions which have a log message with this severity.
-    :param limit: Limit the number of resource actions included in the response
+    :param limit: Limit the number of resource actions included in the response, up to 1000
     :param action_id: Start the query from this action_id.
             To be used in combination with either the first or last timestamp.
     :param first_timestamp: Limit the results to resource actions that started later

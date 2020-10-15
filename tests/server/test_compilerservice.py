@@ -32,7 +32,7 @@ import inmanta.ast.export as ast_export
 import inmanta.data.model as model
 from inmanta import config, data
 from inmanta.const import ParameterSource
-from inmanta.data import Compile, Report
+from inmanta.data import APILIMIT, Compile, Report
 from inmanta.deploy import cfg_env
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
@@ -984,3 +984,14 @@ async def test_compileservice_calculate_auto_recompile_wait(mocked_compiler_serv
     last_compile_completed = now - datetime.timedelta(seconds=1)
     waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
     assert waiting_time == 0
+
+
+@pytest.mark.asyncio
+async def test_compileservice_api(client, environment):
+    # Exceed max value for limit
+    result = await client.get_reports(environment, limit=APILIMIT + 1)
+    assert result.code == 400
+    assert result.result["message"] == f"Invalid request: limit parameter can not exceed 1000, got {APILIMIT+1}."
+
+    result = await client.get_reports(environment, limit=APILIMIT)
+    assert result.code == 200
