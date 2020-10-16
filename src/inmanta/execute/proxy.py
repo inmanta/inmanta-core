@@ -212,7 +212,8 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
         return IteratorProxy(instance.__iter__())
 
     def json_serialization_step(self) -> List[PrimitiveTypes]:
-        return self._get_instance()
+        # Ensure proper unwrapping by using __getitem__
+        return [i for i in self]
 
 
 class DictProxy(DynamicProxy, Mapping, JSONSerializable):

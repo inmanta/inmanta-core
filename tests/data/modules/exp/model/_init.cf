@@ -12,7 +12,7 @@ entity Test2 extends std::PurgeableResource:
 	string agent ="agenta"
 	string name = "ida"
 	dict mydict
-	string[] mylist
+	list mylist
 end
 
 implement Test2 using std::none

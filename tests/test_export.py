@@ -245,12 +245,12 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
     print(_version, json_value, status, model)
 
 
-def test_export_null_in_dict(snippetcompiler):
+def test_export_null_in_collection(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 import exp
 
-a = exp::Test2(mydict={"a": null}, mylist=["a","b"])
+a = exp::Test2(mydict={"a": null}, mylist=["a",null])
 """
     )
     _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
