@@ -235,7 +235,8 @@ class DictProxy(DynamicProxy, Mapping, JSONSerializable):
         return IteratorProxy(instance.__iter__())
 
     def json_serialization_step(self) -> Dict[str, PrimitiveTypes]:
-        return self._get_instance()
+        # Ensure proper unwrapping by using __getitem__
+        return {k: v for k, v in self.items()}
 
 
 class CallProxy(DynamicProxy):

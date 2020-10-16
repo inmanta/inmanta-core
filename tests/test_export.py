@@ -245,6 +245,20 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
     print(_version, json_value, status, model)
 
 
+def test_export_null_in_dict(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import exp
+
+a = exp::Test2(mydict={"a": null}, mylist=["a","b"])
+"""
+    )
+    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+
+    assert len(json_value) == 1
+    print(_version, json_value, status, model)
+
+
 def test_1934_cycle_in_dep_mgmr(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
