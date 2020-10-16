@@ -64,10 +64,9 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
-
-# Import the utils module differently when conftest is put into the inmanta_tests package
 from inmanta.types import JsonType
 
+# Import the utils module differently when conftest is put into the inmanta_tests packages
 if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
     from inmanta_tests import utils  # noqa: F401
 else:
