@@ -583,10 +583,7 @@ class ResourceService(protocol.ServerSlice):
         if limit is None:
             limit = APILIMIT
         elif limit > APILIMIT:
-            raise BadRequest(
-                f"limit parameter can not exceed {APILIMIT}, got {limit}."
-                f" To retrieve more entries, use /api/v2/resource_actions"
-            )
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
         resource_actions = await data.ResourceAction.query_resource_actions(
             env.id,
