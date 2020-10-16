@@ -20,7 +20,7 @@ import os
 
 import pytest
 
-from inmanta import config, const, protocol
+from inmanta import config, const
 from inmanta.export import DependencyCycleException
 
 
