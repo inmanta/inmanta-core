@@ -9,15 +9,14 @@ assignees: ''
 
 **Self checklist**
 
- - [ ] This issue hasn't been already created
- - [ ] Everything is sound and clear, all sections are filled-up
- - [ ] Relevant labels have been added
-
-# Is your feature request related to a problem? Please describe.
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+ - [ ] I checked that this issue hasn't been created before
+ - [ ] I added any relevant label to the issue
 
 # Describe the solution you'd like
 A clear and concise description of what you want to happen.
+
+# Is your feature request related to a problem? Please describe.
+A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
 
 # Describe alternatives you've considered
 A clear and concise description of any alternative solutions or features you've considered.
