@@ -991,7 +991,7 @@ async def test_compileservice_api(client, environment):
     # Exceed max value for limit
     result = await client.get_reports(environment, limit=APILIMIT + 1)
     assert result.code == 400
-    assert result.result["message"] == f"Invalid request: limit parameter can not exceed 1000, got {APILIMIT+1}."
+    assert result.result["message"] == f"Invalid request: limit parameter can not exceed {APILIMIT}, got {APILIMIT+1}."
 
     result = await client.get_reports(environment, limit=APILIMIT)
     assert result.code == 200
