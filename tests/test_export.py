@@ -20,7 +20,7 @@ import os
 
 import pytest
 
-from inmanta import config, const
+from inmanta import config, const, protocol
 from inmanta.export import DependencyCycleException
 
 
@@ -242,7 +242,6 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
     _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 1
-    print(_version, json_value, status, model)
 
 
 def test_export_null_in_collection(snippetcompiler):
@@ -256,7 +255,10 @@ a = exp::Test2(mydict={"a": null}, mylist=["a",null])
     _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 1
-    print(_version, json_value, status, model)
+    json_dict = snippetcompiler.get_exported_json()
+    resource = json_dict[0]
+    assert resource["mylist"] == ["a", None]
+    assert resource["mydict"] == {"a": None}
 
 
 def test_1934_cycle_in_dep_mgmr(snippetcompiler):
