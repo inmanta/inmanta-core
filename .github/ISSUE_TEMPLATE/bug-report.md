@@ -18,7 +18,7 @@ Please describe the behavior you are expecting
 
 # Current Behavior
 
-Please describe the corrent behavior
+Please describe the current behavior
 
 # Work around
 
