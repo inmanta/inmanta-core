@@ -243,7 +243,23 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
     _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 1
-    print(_version, json_value, status, model)
+
+
+def test_export_null_in_collection(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import exp
+
+a = exp::Test2(mydict={"a": null}, mylist=["a",null])
+"""
+    )
+    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+
+    assert len(json_value) == 1
+    json_dict = snippetcompiler.get_exported_json()
+    resource = json_dict[0]
+    assert resource["mylist"] == ["a", None]
+    assert resource["mydict"] == {"a": None}
 
 
 def test_export_unknown_in_collection(snippetcompiler):

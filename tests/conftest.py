@@ -19,6 +19,7 @@ import asyncio
 import concurrent
 import csv
 import datetime
+import json
 import logging
 import os
 import queue
@@ -63,8 +64,9 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
+from inmanta.types import JsonType
 
-# Import the utils module differently when conftest is put into the inmanta_tests package
+# Import the utils module differently when conftest is put into the inmanta_tests packages
 if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
     from inmanta_tests import utils  # noqa: F401
 else:
@@ -789,6 +791,10 @@ class SnippetCompilationTest(KeepOnFail):
 
     def do_export(self, include_status=False, do_raise=True):
         return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)
+
+    def get_exported_json(self) -> JsonType:
+        with open(os.path.join(self.project_dir, "dump.json")) as fh:
+            return json.load(fh)
 
     def _do_export(self, deploy=False, include_status=False, do_raise=True):
         """

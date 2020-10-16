@@ -2,6 +2,7 @@
 
 ## Bug fixes
 - Fixed bug in serialization of Resource with Unknowns in collections (#2603)
+- Fixed export failure with null in dict
 
 # Release 2020.4.4 (2020-11-25)
 
