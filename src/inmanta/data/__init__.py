@@ -43,6 +43,7 @@ from inmanta.types import JsonType, PrimitiveTypes
 LOGGER = logging.getLogger(__name__)
 
 DBLIMIT = 100000
+APILIMIT = 1000
 
 
 # TODO: disconnect
@@ -1711,6 +1712,26 @@ class ResourceAction(BaseDocument):
                     WHERE environment=$1 AND resource_version_ids::varchar[] @> ARRAY[$2]::varchar[]
                  """
         values = [cls._get_value(environment), cls._get_value(resource_version_id)]
+        if action is not None:
+            query += " AND action=$3"
+            values.append(cls._get_value(action))
+        query += " ORDER BY started DESC"
+        if limit is not None and limit > 0:
+            query += " LIMIT $%d" % (len(values) + 1)
+            values.append(cls._get_value(limit))
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
+
+    @classmethod
+    async def get_logs_for_version(
+        cls, environment: uuid.UUID, version: int, action: Optional[str] = None, limit: int = 0
+    ) -> List["ResourceAction"]:
+        query = f"""SELECT *
+                        FROM {cls.table_name()}
+                        WHERE environment=$1 AND version=$2
+                     """
+        values = [cls._get_value(environment), cls._get_value(version)]
         if action is not None:
             query += " AND action=$3"
             values.append(cls._get_value(action))
