@@ -46,9 +46,8 @@ async def migrate_v6_to_v7(
     await db_service.stop()
 
 
-# TODO: better name?
 @dataclass
-class AgentInstancePool:
+class AgentInstanceCount:
     """
     Helper class for describing agent instance table preconditions for a specific tid, process, name combination.
     """
@@ -65,8 +64,8 @@ async def test_unique_agent_instances(migrate_v6_to_v7: Callable[[], Awaitable[N
     async with postgresql_client.transaction():
         agent_processes: List[Record] = await postgresql_client.fetch("SELECT sid FROM public.agentprocess LIMIT 1;")
         assert len(agent_processes) == 1
-        instance_pools: List[AgentInstancePool] = [
-            AgentInstancePool(
+        instance_pools: List[AgentInstanceCount] = [
+            AgentInstanceCount(
                 tid=uuid.uuid4(), process=agent_processes[0]["sid"], name="name", count=count, active_count=active_count
             )
             for count in (1, 2, 3)
@@ -102,8 +101,8 @@ async def test_unique_agent_instances(migrate_v6_to_v7: Callable[[], Awaitable[N
             ;
             """
         )
-        all_instance_pools: List[AgentInstancePool] = [
-            AgentInstancePool(
+        all_instance_pools: List[AgentInstanceCount] = [
+            AgentInstanceCount(
                 tid=record["tid"],
                 process=record["process"],
                 name=record["name"],
