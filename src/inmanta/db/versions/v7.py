@@ -25,6 +25,11 @@ DISABLED = False
 
 
 async def update(connection: Connection) -> None:
+    await connection.execute(
+        """
+        CREATE INDEX resourceaction_environment_version_started_index ON resourceaction(environment,version,started DESC);
+        """
+    )
     await enforce_unique_agent_instances(connection)
 
 

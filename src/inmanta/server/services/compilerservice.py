@@ -38,8 +38,9 @@ import pydantic
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
+from inmanta.data import APILIMIT
 from inmanta.protocol import encode_token, methods, methods_v2
-from inmanta.protocol.exceptions import NotFound
+from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
@@ -569,6 +570,11 @@ class CompilerService(ServerSlice):
             return 500, {"message": "Limit, start and end can not be set together"}
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
+
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
         start_time = None
         end_time = None

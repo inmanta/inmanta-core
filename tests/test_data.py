@@ -1776,6 +1776,7 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     assert action.action == const.ResourceAction.dryrun
     assert action.messages[0]["level"] == LogLevel.WARNING.name
     assert action.messages[0]["timestamp"] == times
+
     resource_actions = await data.ResourceAction.get_log(
         env.id, "std::File[agent1,path=/etc/motd],v=%1", const.ResourceAction.deploy.name, limit=2
     )
@@ -1787,6 +1788,15 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     # Get logs for non-existing resource_version_id
     resource_actions = await data.ResourceAction.get_log(env.id, "std::File[agent11,path=/etc/motd],v=%1")
     assert len(resource_actions) == 0
+
+    resource_actions = await data.ResourceAction.get_logs_for_version(env.id, version)
+    assert len(resource_actions) == 11
+    for i in range(len(resource_actions)):
+        action = resource_actions[i]
+        if i == 0:
+            assert action.action == const.ResourceAction.dryrun
+        else:
+            assert action.action == const.ResourceAction.deploy
 
 
 @pytest.mark.asyncio
