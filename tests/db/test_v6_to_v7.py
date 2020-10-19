@@ -20,7 +20,7 @@ import datetime
 import os
 import uuid
 from dataclasses import dataclass
-from typing import AsyncIterator, Callable, Coroutine, List, Optional
+from typing import AsyncIterator, Awaitable, Callable, List
 
 import pytest
 from asyncpg import Connection, Record
@@ -28,23 +28,22 @@ from asyncpg.cursor import Cursor
 
 from db.common import PGRestore
 from inmanta import data
-from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import Server
+from inmanta.server.services.databaseservice import DatabaseService
 
 
 @pytest.fixture
 async def migrate_v6_to_v7(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config
-) -> AsyncIterator[Callable[[], Coroutine]]:
+) -> AsyncIterator[Callable[[], Awaitable[None]]]:
     # Get old tables
     with open(os.path.join(os.path.dirname(__file__), "dumps/v5.sql"), "r") as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
-    ibl = InmantaBootloader()
+    db_service: DatabaseService = DatabaseService()
 
     # When the bootloader is started, it also executes the migration to v7
-    yield ibl.start
-    await ibl.stop()
+    yield db_service.start
+    await db_service.stop()
 
 
 # TODO: better name?
@@ -62,7 +61,7 @@ class AgentInstancePool:
 
 
 @pytest.mark.asyncio(timeout=20)
-async def test_unique_agent_instances(migrate_v6_to_v7: Callable[[], Coroutine], postgresql_client: Connection) -> None:
+async def test_unique_agent_instances(migrate_v6_to_v7: Callable[[], Awaitable[None]], postgresql_client: Connection) -> None:
     async with postgresql_client.transaction():
         agent_processes: List[Record] = await postgresql_client.fetch("SELECT sid FROM public.agentprocess LIMIT 1;")
         assert len(agent_processes) == 1
@@ -113,10 +112,6 @@ async def test_unique_agent_instances(migrate_v6_to_v7: Callable[[], Coroutine],
             )
             async for record in records_pre
         ]
-
-    # TODO: remove
-    for pool in all_instance_pools:
-        print(pool)
 
     await migrate_v6_to_v7()
 
