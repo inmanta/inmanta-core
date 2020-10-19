@@ -606,31 +606,24 @@ async def test_fix_corrupted_database(init_dataclasses_and_load_schema):
     await agent_manager._register_session(
         session=session, endpoint_names_snapshot=set(session.endpoint_names), now=datetime.datetime.now()
     )
-    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=2, nr_non_expired_instances=1)
+    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=1, nr_non_expired_instances=1)
     await agent_manager._expire_session(
         session=session, endpoint_names_snapshot=set(session.endpoint_names), now=datetime.datetime.now()
     )
-    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=0, nr_agent_instances=2, nr_non_expired_instances=0)
+    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=0, nr_agent_instances=1, nr_non_expired_instances=0)
 
     # Make database corrupt
     instances = await data.AgentInstance.get_list(tid=tid)
-    assert len(instances) == 2
-    instance_one = instances[0]
-    instance_two = instances[1]
-    await instance_one.update(expired=None)
+    assert len(instances) == 1
+    await instances[0].update(expired=None)
     # Assert corruption
-    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=0, nr_agent_instances=2, nr_non_expired_instances=1)
+    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=0, nr_agent_instances=1, nr_non_expired_instances=1)
 
     # Session registration should fix the inconsistency
     await agent_manager._register_session(
         session=session, endpoint_names_snapshot=session.endpoint_names, now=datetime.datetime.now()
     )
-    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=3, nr_non_expired_instances=1)
-    instance_one_after_fix = await data.AgentInstance.get_by_id(instance_one.id)
-    assert instance_one_after_fix.expired is not None
-    # Expiry timestamp of instance_two should not have been changed
-    instance_two_after_fix = await data.AgentInstance.get_by_id(instance_two.id)
-    assert instance_two_after_fix.expired == instance_two.expired
+    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=1, nr_non_expired_instances=1)
 
 
 @pytest.mark.asyncio
