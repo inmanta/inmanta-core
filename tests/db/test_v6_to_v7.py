@@ -36,7 +36,7 @@ async def migrate_v6_to_v7(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config
 ) -> AsyncIterator[Callable[[], Awaitable[None]]]:
     # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v5.sql"), "r") as fh:
+    with open(os.path.join(os.path.dirname(__file__), "dumps/v6.sql"), "r") as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     db_service: DatabaseService = DatabaseService()
