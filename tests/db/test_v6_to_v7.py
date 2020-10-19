@@ -35,6 +35,16 @@ from inmanta.server.services.databaseservice import DatabaseService
 async def migrate_v6_to_v7(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config
 ) -> AsyncIterator[Callable[[], Awaitable[None]]]:
+    """
+    Performs a v6 database restore and yields a function that migrates to v7 when called.
+
+    Word of caution:
+    This fixture differs from similar ones in previous version migration tests in the following ways:
+    - It yields a migration function instead of migrating before yielding. This to allow tests to set up desired preconditions.
+    - It only starts the database slice, not the full server. This to make sure agent instance documents after yielding are only
+        affected by the migration, not by any agent management of the server. This prevents agent instance documents expiring
+        when starting the server.
+    """
     # Get old tables
     with open(os.path.join(os.path.dirname(__file__), "dumps/v6.sql"), "r") as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
