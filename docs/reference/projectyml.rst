@@ -2,18 +2,24 @@ Compiler Configuration Reference
 ===================================
 
 
+.. _project_yml:
+
 project.yml
 ------------
 Inside any project the compiler expects a project.yml file that defines metadata about the project,
 the location to store modules, repositories where to find modules and possibly specific versions of
 modules. 
 
-For basic usage information, see 'Create a configuration model'_.
+For basic usage information, see :ref:`project-creation-guide`.
 
 Project.yml defines the following settings:
 
     * ``name`` An optional name of the project.
     * ``description`` An optional description of the project
+    * ``author``  The author of the module
+    * ``author_email`` The contact email address of author
+    * ``license`` License the module is released under
+    * ``copyright`` Copyright holder name and date.
     * ``modulepath`` This value is a list of paths where Inmanta should search for modules. Paths
       are separated with ``:``
     * ``downloadpath`` This value determines the path where Inmanta should download modules from
