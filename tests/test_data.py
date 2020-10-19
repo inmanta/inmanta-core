@@ -466,7 +466,7 @@ async def test_agent_instance(init_dataclasses_and_load_schema):
     assert len(current_instances) == 1
     assert current_instances[0].id == agi2.id
 
-    await agi1.update_fields(expired=datetime.datetime.now())
+    await data.AgentInstance.log_instance_expiry(sid=agent_proc.sid, endpoints={agi1_name}, now=datetime.datetime.now())
 
     active_instances = await data.AgentInstance.active()
     assert len(active_instances) == 1
@@ -478,6 +478,11 @@ async def test_agent_instance(init_dataclasses_and_load_schema):
     current_instances = await data.AgentInstance.active_for(env.id, agi2_name)
     assert len(current_instances) == 1
     assert current_instances[0].id == agi2.id
+
+    await data.AgentInstance.log_instance_creation(process=agent_proc.sid, endpoints={agi1_name}, tid=env.id)
+    current_instances = await data.AgentInstance.active_for(env.id, agi1_name)
+    assert len(current_instances) == 1
+    assert current_instances[0].id == agi1.id
 
 
 @pytest.mark.asyncio

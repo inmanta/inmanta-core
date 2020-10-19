@@ -1210,9 +1210,7 @@ class AgentInstance(BaseDocument):
         return objects
 
     @classmethod
-    async def log_instance_creation(
-        cls: Type[TAgentInstance], tid: uuid.UUID, process: uuid.UUID, endpoints: Set[str], now: datetime.datetime
-    ) -> None:
+    async def log_instance_creation(cls: Type[TAgentInstance], tid: uuid.UUID, process: uuid.UUID, endpoints: Set[str]) -> None:
         """
         Create new agent instances for a given session.
         """
@@ -1220,12 +1218,12 @@ class AgentInstance(BaseDocument):
             async with cls.get_connection() as connection:
                 async with connection.transaction():
                     instance: Optional[TAgentInstance] = await cls.get_one(
-                        tid=tid, endpoint=endpoint, process=process, connection=connection
+                        tid=tid, name=endpoint, process=process, connection=connection
                     )
                     if instance is None:
                         await cls(tid=tid, process=process, name=endpoint).insert(connection=connection)
                     elif instance.expired is not None:
-                        instance.update_fields(expired=None)
+                        await instance.update_fields(expired=None)
 
     @classmethod
     async def log_instance_expiry(
