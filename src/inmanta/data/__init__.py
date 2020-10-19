@@ -2224,9 +2224,9 @@ class Resource(BaseDocument):
             doc.make_hash()
         await super(Resource, cls).insert_many(documents)
 
-    async def update(self, **kwargs: Any) -> None:
+    async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         self.make_hash()
-        await super(Resource, self).update(**kwargs)
+        await super(Resource, self).update(connection=connection, **kwargs)
 
     async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         self.make_hash()
