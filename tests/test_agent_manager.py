@@ -559,7 +559,7 @@ async def test_session_renewal(init_dataclasses_and_load_schema):
     await agent_manager._register_session(
         session=session, endpoint_names_snapshot=set(session.endpoint_names), now=datetime.datetime.now()
     )
-    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=2, nr_non_expired_instances=1)
+    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=1, nr_non_expired_instances=1)
 
 
 @pytest.mark.asyncio
