@@ -51,7 +51,7 @@ typing_inspect==0.6.0
 importlib_metadata==2.0.0
 mypy==0.790
 setuptools==50.3.1
-pip==20.2.3
+pip==20.2.4
 docstring-parser==0.7.3
 bumpversion==0.6.0
 sphinx-click==2.5.0
