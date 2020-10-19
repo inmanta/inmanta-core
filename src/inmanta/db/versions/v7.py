@@ -15,14 +15,67 @@
 
     Contact: code@inmanta.com
 """
-from asyncpg import Connection
+import datetime
+from functools import reduce
+from typing import Iterator, List, Optional
 
-DISABLED = True
+from asyncpg import Connection, Record
+
+DISABLED = False
 
 
 async def update(connection: Connection) -> None:
-    await connection.execute(
-        """
+    await enforce_unique_agent_instances(connection)
 
-        """
-    )
+
+async def enforce_unique_agent_instances(connection: Connection) -> None:
+    async with connection.transaction():
+        await merge_agent_instances(connection)
+        await connection.execute(
+            """
+            ALTER TABLE public.agentinstance ADD CONSTRAINT agentinstance_unique UNIQUE (tid, process, name);
+            """
+        )
+
+
+async def merge_agent_instances(connection: Connection) -> None:
+    """
+    Merges AgentInstance documents for the same agent instance to conform to the new AgentInstance table constraints.
+    """
+    async with connection.transaction():
+        records: List[Record] = await connection.fetch(
+            """
+            SELECT DISTINCT tid, process, name
+            FROM public.agentinstance
+            ;
+            """
+        )
+        for record in records:
+            record["tid"]
+            instances: List[Record] = await connection.fetch(
+                """
+                SELECT id, expired
+                FROM public.agentinstance
+                WHERE tid = $1 AND process = $2 AND name = $3
+                ;
+                """,
+                record["tid"],
+                record["process"],
+                record["name"],
+            )
+            expired: Optional[datetime.datetime] = reduce(
+                lambda acc, current: None if (current is None or acc is None) else max(acc, current),
+                (instance["expired"] for instance in instances),
+            )
+            iterator: Iterator[Record] = iter(instances)
+            keep: Record
+            discard: List[Record]
+            keep, *discard = iterator
+
+            if keep["expired"] is not expired:
+                await connection.execute("UPDATE public.agentinstance SET expired = $1 WHERE id = $2", expired, keep["id"])
+            if len(discard) > 0:
+                await connection.execute(
+                    "DELETE FROM public.agentinstance WHERE id IN (%s)" % ", ".join(f"${i + 1}" for i in range(len(discard))),
+                    *(instance["id"] for instance in discard),
+                )
