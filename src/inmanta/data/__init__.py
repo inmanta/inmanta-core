@@ -1237,7 +1237,6 @@ class AgentInstance(BaseDocument):
                 """,
                 *(cls._get_value(v) for v in chain(*value_tuples)),
             )
-            raise Exception()
 
     @classmethod
     async def log_instance_expiry(
