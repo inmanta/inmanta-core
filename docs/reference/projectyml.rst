@@ -14,7 +14,7 @@ For basic usage information, see :ref:`project-creation-guide`.
 
 Project.yml defines the following settings:
 
-    * ``name`` An optional name of the project.
+    * ``name`` The name of the project.
     * ``description`` An optional description of the project
     * ``author``  The author of the module
     * ``author_email`` The contact email address of author

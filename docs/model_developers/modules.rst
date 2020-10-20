@@ -86,9 +86,9 @@ To specify specific version are required, constraints can be added to the requir
         net: net ~= 0.2.4
         std: std >1.0 <2.5
 
-A module can also indicate a minimal compiler version with the *compiler_version* key.
+A module can also indicate a minimal compiler version with the ``compiler_version`` key.
 
-*source* indicates the authoritative repository where the module is maintained.
+``source`` indicates the authoritative repository where the module is maintained.
 
 To automatically freeze all versions to the currently checked out versions
 
@@ -107,9 +107,9 @@ Or for the the current project
 
 Versioning
 ----------
-Inmanta modules should be versioned. The current version is reflected in the module.yml file and in
-the commit is should be tagged in the git repository as well. To ease the use inmanta provides a
-command (inmanta modules commit) to modify module versions, commit to git and place the correct tag.
+Inmanta modules are versioned based on git tags. The current version is reflected in the ``module.yml`` file and in the
+commit is should be tagged in the git repository as well. To ease the use inmanta provides a command (``inmanta modules
+commit``) to modify module versions, commit to git and place the correct tag.
 
 To make changes to a module, first create a new git branch::
 

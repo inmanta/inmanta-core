@@ -19,6 +19,11 @@ deployed.
   pip install cookiecutter
   cookiecutter gh:inmanta/inmanta-project-template
 
+.. note::	
+
+    The cookiecutter template also sets up git for the new project. 	
+    This is a best practice to version control your infrastructure code.	
+
 Inside the project the compiler expects a ``project.yml`` file that defines metadata about the project,
 the location to store modules, repositories where to find modules and possibly specific versions of
 modules. project.yml defines the following settings:
@@ -62,7 +67,6 @@ An example ``project.yml`` could be:
       - https://github.com/inmanta/
   install_mode: release
   requires:
-
 
 
 The main file
