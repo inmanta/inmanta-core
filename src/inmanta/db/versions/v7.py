@@ -45,7 +45,7 @@ async def enforce_unique_agent_instances(connection: Connection) -> None:
 
 async def merge_agent_instances(connection: Connection) -> None:
     """
-    Merges AgentInstance documents for the same agent instance to conform to the new AgentInstance table constraints.
+    Merges AgentInstance records for the same agent instance to conform to the new AgentInstance table constraints.
     """
     async with connection.transaction():
         records: List[Record] = await connection.fetch(
@@ -68,6 +68,8 @@ async def merge_agent_instances(connection: Connection) -> None:
                 record["process"],
                 record["name"],
             )
+            # Merged instance should be active iff at least one of the instances being merged is active.
+            # Otherwise the most recent expiry timestamp will be used.
             expired: Optional[datetime.datetime] = reduce(
                 lambda acc, current: None if (current is None or acc is None) else max(acc, current),
                 (instance["expired"] for instance in instances),
