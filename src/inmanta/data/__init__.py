@@ -26,6 +26,7 @@ import uuid
 import warnings
 from collections import defaultdict
 from configparser import RawConfigParser
+from itertools import chain
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type, TypeVar, Union, cast
 
 import asyncpg
@@ -1215,16 +1216,28 @@ class AgentInstance(BaseDocument):
         """
         Create new agent instances for a given session.
         """
-        for endpoint in endpoints:
-            async with cls.get_connection() as connection:
-                async with connection.transaction():
-                    instance: Optional[TAgentInstance] = await cls.get_one(
-                        tid=tid, name=endpoint, process=process, connection=connection
-                    )
-                    if instance is None:
-                        await cls(tid=tid, process=process, name=endpoint).insert(connection=connection)
-                    elif instance.expired is not None:
-                        await instance.update_fields(expired=None)
+        if not endpoints:
+            return
+        async with cls.get_connection() as connection:
+            value_tuples: List[Tuple] = [(cls._new_id(), tid, process, name, None) for name in endpoints]
+            value_tuple_len: int = len(value_tuples[0])
+            values_subquery: str = ", ".join(
+                "(%s)" % ", ".join(f"${k}" for k in range(start, start + value_tuple_len))
+                for start in (value_tuple_len * i + 1 for i in range(len(endpoints)))
+            )
+            await connection.execute(
+                f"""
+                INSERT INTO
+                {cls.table_name()}
+                (id, tid, process, name, expired)
+                VALUES {values_subquery}
+                ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
+                SET expired = null
+                ;
+                """,
+                *(cls._get_value(v) for v in chain(*value_tuples)),
+            )
+            raise Exception()
 
     @classmethod
     async def log_instance_expiry(
