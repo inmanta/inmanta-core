@@ -1,6 +1,6 @@
 .. _project-creation-guide:
 
-Project Creation guide
+Project creation guide
 ============================
 
 This guide explains how to create a project.  
