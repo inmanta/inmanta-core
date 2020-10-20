@@ -72,11 +72,17 @@ class AgentInstanceCount:
 @pytest.mark.asyncio(timeout=20)
 async def test_unique_agent_instances(migrate_v6_to_v7: Callable[[], Awaitable[None]], postgresql_client: Connection) -> None:
     async with postgresql_client.transaction():
+        environments: List[Record] = await postgresql_client.fetch("SELECT id FROM public.environment LIMIT 1;")
+        assert len(environments) == 1
         agent_processes: List[Record] = await postgresql_client.fetch("SELECT sid FROM public.agentprocess LIMIT 1;")
         assert len(agent_processes) == 1
         instance_pools: List[AgentInstanceCount] = [
             AgentInstanceCount(
-                tid=uuid.uuid4(), process=agent_processes[0]["sid"], name="name", count=count, active_count=active_count
+                tid=environments[0]["id"],
+                process=agent_processes[0]["sid"],
+                name="name",
+                count=count,
+                active_count=active_count,
             )
             for count in (1, 2, 3)
             for active_count in (0, 1, 2)
