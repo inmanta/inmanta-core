@@ -22,7 +22,7 @@ South Bound Integration:
 Keep close to the API
 ---------------------
 
-When doing south bound integrations, it is tempting to *improve* the existing api.
+When doing south bound integrations, it is tempting to *improve* the existing API.
 Resist this temptation. It leads to the following problems:
 
 #. It costs a lot of effort to integrate the API and redesign it at the same time. 
@@ -39,7 +39,7 @@ then add an abstraction layer in the model. This neatly separates the integratio
 Prefer modeling relations as relations
 --------------------------------------
 
-Often, API's have relations. For example, when creating a virtual machine on AWS EC2, it can refer to one or more SecurityGroups.
+Often, APIs have relations. For example, when creating a virtual machine on AWS EC2, it can refer to one or more SecurityGroups.
 This is modeled in the AWS handler as an explicit relation: :inmanta:relation:`aws::VirtualMachine.security_groups`. 
 
 There are different modeling styles possible:
@@ -59,7 +59,7 @@ It is however difficult to migrate away from the textual references later on, be
 
 One solution to allow reference to unmanaged entities is to extend :inmanta:entity:`std::ManagedResource`. 
 This allows an entity to exist in the model, but when ``managed`` is set to ``false``, it will never become a resource. 
-However, the entity must still be valid. All attributes and relations still have to filled in correctly.
+However, the entity must still be valid. All attributes and relations still have to be filled in correctly.
 For entities with many non-optional relations, this is also not the best solution. 
 
 Another solution is to introduce a parent entity type that explicitly represents the unmanaged entity. 
@@ -67,7 +67,6 @@ It has only those attributes that are required to correctly refer to it.
 The concrete, managed entity is a subtype of the unmanaged version. 
 This requires a bit more types, but it is most evolution friendly. 
 No naming convention for the unmanaged parent has been established. 
-
 
 
 
