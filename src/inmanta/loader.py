@@ -26,7 +26,7 @@ import types
 from dataclasses import dataclass
 from importlib.abc import FileLoader, Finder
 from itertools import chain, starmap
-from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple, Type
 
 from inmanta import const
 
@@ -266,7 +266,21 @@ class PluginModuleLoadException(Exception):
         self.cause: Exception = cause
         self.module: str = module
         self.path: str = path
-        super().__init__("Error loading plugin module %s at %s: %s" % (self.module, self.path, self.cause))
+        # TODO: find a way to get the line number
+        super().__init__(
+            "%s while loading plugin module %s at %s: %s"
+            % (
+                self.get_cause_type_name(),
+                self.module,
+                self.path,
+                self.cause,
+            )
+        )
+
+    def get_cause_type_name(self) -> str:
+        module: Optional[str] = type(self.cause).__module__
+        name: str = type(self.cause).__qualname__
+        return name if module is None or module == "builtins" else "%s.%s" % (module, name)
 
 
 class PluginModuleLoader(FileLoader):

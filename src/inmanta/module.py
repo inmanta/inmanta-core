@@ -1131,23 +1131,18 @@ class Module(ModuleLike):
                 LOGGER.debug("Loading module %s", fq_mod_name)
                 importlib.import_module(fq_mod_name)
             except loader.PluginModuleLoadException as e:
-
-                def get_fully_qualified_name(t: Type) -> str:
-                    module: Optional[str] = t.__module__
-                    name: str = t.__qualname__
-                    return name if module is None or module == "builtins" else "%s.%s" % (module, name)
-
-                raise CompilerException(
-                    "Unable to load all plug-ins for module `%s`."
-                    " %s while loading %s at %s: %s"
+                exception = CompilerException(
+                    "Unable to load all plug-ins for module %s:\n\t%s while loading plugin module %s: %s"
                     % (
                         self._meta["name"],
-                        get_fully_qualified_name(type(e.cause)),
+                        e.get_cause_type_name(),
                         e.module,
-                        e.path,
                         e.cause,
                     )
-                ) from e
+                )
+                # TODO: correct line number
+                exception.set_location(Location(e.path, 0))
+                raise exception
 
     def _get_fq_mod_name_for_py_file(self, py_file: str, plugin_dir: str, mod_name: str) -> str:
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)
