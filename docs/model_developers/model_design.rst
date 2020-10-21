@@ -16,8 +16,6 @@ South Bound Integration:
 
 #. Keep close to the API. Keep the structure of the inmanta model as close as possible to the API you model. Refrain from adding abstraction layers when doing pure integration.
 #. Prefer modeling relations as relations, avoid reference by string.
-#. Align indexes to the real world identity.
-#. Have index an aligned with resource identity
 
 Keep close to the API
 ---------------------
@@ -67,7 +65,6 @@ It has only those attributes that are required to correctly refer to it.
 The concrete, managed entity is a subtype of the unmanaged version. 
 This requires a bit more types, but it is most evolution friendly. 
 No naming convention for the unmanaged parent has been established. 
-
 
 
 
