@@ -26,7 +26,6 @@ import uuid
 import warnings
 from collections import defaultdict
 from configparser import RawConfigParser
-from itertools import chain
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type, TypeVar, Union, cast
 
 import asyncpg
