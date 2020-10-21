@@ -1221,11 +1221,8 @@ class AgentInstance(BaseDocument):
         async with cls.get_connection() as connection:
             value_tuples: List[Tuple] = [(cls._new_id(), tid, process, name, None) for name in endpoints]
             value_tuple_len: int = len(value_tuples[0])
-            values_subquery: str = ", ".join(
-                "(%s)" % ", ".join(f"${k}" for k in range(start, start + value_tuple_len))
-                for start in (value_tuple_len * i + 1 for i in range(len(endpoints)))
-            )
-            await connection.execute(
+            values_subquery: str = "(%s)" % ", ".join(f"${k}" for k in range(1, 1 + value_tuple_len))
+            await connection.executemany(
                 f"""
                 INSERT INTO
                 {cls.table_name()}
@@ -1235,7 +1232,7 @@ class AgentInstance(BaseDocument):
                 SET expired = null
                 ;
                 """,
-                *(cls._get_value(v) for v in chain(*value_tuples)),
+                [tuple(map(cls._get_value, value_tuple)) for value_tuple in value_tuples],
             )
 
     @classmethod
