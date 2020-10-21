@@ -2,6 +2,7 @@
 
 ## New features
 - Added support for environment markers as described in PEP 508 to module requirements parsing (#2359)
+- Added design guide to the documentation
 
 ## Bug fixes
 - Fixed import loop when using `inmanta.execute.proxy` as entry point (#2341)
