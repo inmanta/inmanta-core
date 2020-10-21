@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from collections import Mapping
+from collections.abc import Mapping
 from copy import copy
 from typing import Dict, List, Optional, Tuple, Union
 

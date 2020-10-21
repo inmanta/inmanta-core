@@ -18,6 +18,7 @@
 - Don't load all code on agent start (#2343)
 - Allow empty body in else branch for if-else statement (#2375)
 - Fixed export failure with null in dict (#2437)
+- Fixed small documentation issues
 - Only store single agent instance in database for each distinct instance to prevent database overflow when agent rapidly and
     repeatadly dis- and reconnects (#2394)
 
