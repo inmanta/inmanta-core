@@ -1218,20 +1218,17 @@ class AgentInstance(BaseDocument):
         if not endpoints:
             return
         async with cls.get_connection() as connection:
-            value_tuples: List[Tuple] = [(cls._new_id(), tid, process, name, None) for name in endpoints]
-            value_tuple_len: int = len(value_tuples[0])
-            values_subquery: str = "(%s)" % ", ".join(f"${k}" for k in range(1, 1 + value_tuple_len))
             await connection.executemany(
                 f"""
                 INSERT INTO
                 {cls.table_name()}
                 (id, tid, process, name, expired)
-                VALUES {values_subquery}
+                VALUES ($1, $2, $3, $4, null)
                 ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
                 SET expired = null
                 ;
                 """,
-                [tuple(map(cls._get_value, value_tuple)) for value_tuple in value_tuples],
+                [tuple(map(cls._get_value, (cls._new_id(), tid, process, name))) for name in endpoints],
             )
 
     @classmethod
