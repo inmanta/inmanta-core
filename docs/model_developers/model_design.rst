@@ -66,11 +66,15 @@ The concrete, managed entity is a subtype of the unmanaged version.
 This requires a bit more types, but it is most evolution friendly. 
 No naming convention for the unmanaged parent has been established. 
 
+As an example, we could implement :inmanta:relation:`aws::VirtualMachine.security_groups` as follows:
 
+.. image:: /_static/relation_pattern_simple.*
+   :width: 90%
+   :alt: Simple example of the relation pattern
 
+In cases where there is a single relation that can point to multiple specific subtypes, 
+we can use the existing supertype entity to represent unmanaged entities.
 
-
-
-
-
-
+.. image:: /_static/relation_pattern_inherited.*
+   :width: 90%
+   :alt: Example of the relation pattern with inherited
