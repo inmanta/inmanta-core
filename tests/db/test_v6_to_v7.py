@@ -16,128 +16,49 @@
     Contact: code@inmanta.com
 """
 
-import datetime
 import os
-import uuid
-from dataclasses import dataclass
-from typing import AsyncIterator, Awaitable, Callable, List
+from typing import AsyncIterator
 
 import pytest
-from asyncpg import Connection, Record
+from asyncpg import Connection
 from asyncpg.cursor import Cursor
 
 from db.common import PGRestore
-from inmanta import data
-from inmanta.server.services.databaseservice import DatabaseService
+from inmanta.server.bootloader import InmantaBootloader
 
 
 @pytest.fixture
 async def migrate_v6_to_v7(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config
-) -> AsyncIterator[Callable[[], Awaitable[None]]]:
+) -> AsyncIterator[None]:
     """
-    Performs a v6 database restore and yields a function that migrates to v7 when called.
-
-    Word of caution:
-    This fixture differs from similar ones in previous version migration tests in the following ways:
-    - It yields a migration function instead of migrating before yielding. This to allow tests to set up desired preconditions.
-    - It only starts the database slice, not the full server. This to make sure agent instance documents after yielding are only
-        affected by the migration, not by any agent management of the server. This prevents agent instance documents expiring
-        when starting the server.
+    Performs a v6 database restore and migrates to v7.
     """
     # Get old tables
     with open(os.path.join(os.path.dirname(__file__), "dumps/v6.sql"), "r") as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
-    db_service: DatabaseService = DatabaseService()
+    ibl = InmantaBootloader()
 
+    await ibl.start()
     # When the bootloader is started, it also executes the migration to v7
-    yield db_service.start
-    await db_service.stop()
-
-
-@dataclass
-class AgentInstanceCount:
-    """
-    Helper class for describing agent instance table preconditions for a specific tid, process, name combination.
-    """
-
-    tid: uuid.UUID
-    process: uuid.UUID
-    name: str
-    count: int
-    active_count: int
+    yield
+    await ibl.stop()
 
 
 @pytest.mark.asyncio(timeout=20)
-async def test_unique_agent_instances(migrate_v6_to_v7: Callable[[], Awaitable[None]], postgresql_client: Connection) -> None:
+async def test_unique_agent_instances(migrate_v6_to_v7: None, postgresql_client: Connection) -> None:
+    # assert that existing documents have been merged and expired state has been set correctly
     async with postgresql_client.transaction():
-        environments: List[Record] = await postgresql_client.fetch("SELECT id FROM public.environment LIMIT 1;")
-        assert len(environments) == 1
-        agent_processes: List[Record] = await postgresql_client.fetch("SELECT sid FROM public.agentprocess LIMIT 1;")
-        assert len(agent_processes) == 1
-        instance_pools: List[AgentInstanceCount] = [
-            AgentInstanceCount(
-                tid=environments[0]["id"],
-                process=agent_processes[0]["sid"],
-                name="name",
-                count=count,
-                active_count=active_count,
-            )
-            for count in (1, 2, 3)
-            for active_count in (0, 1, 2)
-        ]
-
-        for instance_pool in instance_pools:
-            for i in range(instance_pool.count):
-                await postgresql_client.execute(
-                    """
-                    INSERT INTO public.agentinstance
-                    (id, tid, process, name, expired)
-                    VALUES ($1, $2, $3, $4, $5)
-                    ;
-                    """,
-                    *(
-                        data.AgentInstance._get_value(value)
-                        for value in (
-                            uuid.uuid4(),
-                            instance_pool.tid,
-                            instance_pool.process,
-                            instance_pool.name,
-                            (None if i < instance_pool.active_count else datetime.datetime.now()),
-                        )
-                    ),
-                )
-
-        records_pre: Cursor = postgresql_client.cursor(
+        records: Cursor = postgresql_client.cursor(
             """
-            SELECT tid, process, name, COUNT(expired) AS expired_count, COUNT(*)
+            SELECT COUNT(*)
             FROM public.agentinstance
             GROUP BY tid, process, name
             ;
             """
         )
-        all_instance_pools: List[AgentInstanceCount] = [
-            AgentInstanceCount(
-                tid=record["tid"],
-                process=record["process"],
-                name=record["name"],
-                count=record["count"],
-                active_count=(record["count"] - record["expired_count"]),
-            )
-            async for record in records_pre
-        ]
-
-    await migrate_v6_to_v7()
-
-    # assert that existing documents have been merged and expired state has been set correctly
-    async with postgresql_client.transaction():
-        for instance_pool in all_instance_pools:
-            instances: List[data.AgentInstance] = await data.AgentInstance.get_list(
-                tid=instance_pool.tid, process=instance_pool.process, name=instance_pool.name
-            )
-            assert len(instances) == 1
-            assert (instances[0].expired is None) == (instance_pool.active_count > 0)
+        assert all([record["count"] == 1 async for record in records])
 
     # assert unique constraint is present
     constraints = await postgresql_client.fetch(
