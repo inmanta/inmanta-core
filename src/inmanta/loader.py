@@ -257,6 +257,18 @@ class CodeLoader(object):
                 self._load_module(module_source.name, module_source.hash_value)
 
 
+class PluginModuleLoadException(Exception):
+    """
+    Wrapper exception raised when an exception occurs during plugin module loading.
+    """
+
+    def __init__(self, cause: Exception, module: str, path: str) -> None:
+        self.cause: Exception = cause
+        self.module: str = module
+        self.path: str = path
+        super().__init__("Error loading plugin module %s at %s: %s" % (self.module, self.path, self.cause))
+
+
 class PluginModuleLoader(FileLoader):
     """
     A custom module loader which imports the modules in the inmanta_plugins package.
@@ -266,6 +278,13 @@ class PluginModuleLoader(FileLoader):
         self._modulepaths = modulepaths
         path_to_module = self._get_path_to_module(fullname)
         super(PluginModuleLoader, self).__init__(fullname, path_to_module)
+        self.path: str
+
+    def exec_module(self, module: types.ModuleType) -> None:
+        try:
+            return super().exec_module(module)
+        except Exception as e:
+            raise PluginModuleLoadException(e, self.name, self.path)
 
     def get_source(self, fullname: str) -> bytes:
         # No __init__.py exists for top level package
@@ -354,7 +373,7 @@ class PluginModuleLoader(FileLoader):
 
         return os.path.join(*module_parts)
 
-    def _get_path_to_module(self, fullname: str):
+    def _get_path_to_module(self, fullname: str) -> str:
         relative_path: str = self.convert_module_to_relative_path(fullname)
         # special case: top-level package
         if relative_path == "":
