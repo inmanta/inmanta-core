@@ -141,7 +141,7 @@ class DocumentMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
-T = TypeVar("T")
+TBaseDocument = TypeVar("TBaseDocument", bound="BaseDocument")
 
 
 class BaseDocument(object, metaclass=DocumentMeta):
@@ -391,7 +391,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 result[name] = default_value
         return result
 
-    async def update(self, **kwargs: Any) -> None:
+    async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         """
         Update this document in the database. It will update the fields in this object and send a full update to database.
         Use update_fields to only update specific fields.
@@ -404,7 +404,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(column_names) + 1)
         values = values + values_for_filter
         query = "UPDATE " + self.table_name() + " SET " + values_as_parameterize_sql_string + " WHERE " + filter_statement
-        await self._execute_query(query, *values)
+        await self._execute_query(query, *values, connection=connection)
 
     def _get_set_statement(self, **kwargs):
         counter = 1
@@ -436,8 +436,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     async def get_by_id(
-        cls: Type[T], doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Optional[T]:
+        cls: Type[TBaseDocument], doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Optional[TBaseDocument]:
         """
         Get a specific document based on its ID
 
@@ -449,14 +449,17 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return None
 
     @classmethod
-    async def get_one(cls: Type[T], connection: Optional[asyncpg.connection.Connection] = None, **query) -> T:
+    async def get_one(
+        cls: Type[TBaseDocument], connection: Optional[asyncpg.connection.Connection] = None, **query
+    ) -> Optional[TBaseDocument]:
         results = await cls.get_list(connection=connection, **query)
         if results:
             return results[0]
+        return None
 
     @classmethod
     async def get_list(
-        cls: Type[T],
+        cls: Type[TBaseDocument],
         order_by_column: str = None,
         order: str = "ASC",
         limit: int = None,
@@ -464,7 +467,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         no_obj: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Any,
-    ) -> List[T]:
+    ) -> List[TBaseDocument]:
         """
         Get a list of documents matching the filter args
         """
@@ -1171,6 +1174,9 @@ class AgentProcess(BaseDocument):
         return result
 
 
+TAgentInstance = TypeVar("TAgentInstance", bound="AgentInstance")
+
+
 class AgentInstance(BaseDocument):
     """
     A physical server/node in the infrastructure that reports to the management server.
@@ -1188,8 +1194,12 @@ class AgentInstance(BaseDocument):
 
     @classmethod
     async def active_for(
-        cls, tid, endpoint, process: uuid.UUID = None, connection: Optional[asyncpg.connection.Connection] = None
-    ):
+        cls: Type[TAgentInstance],
+        tid: uuid.UUID,
+        endpoint: str,
+        process: Optional[uuid.UUID] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> List[TAgentInstance]:
         if process is not None:
             objects = await cls.get_list(expired=None, tid=tid, name=endpoint, process=process, connection=connection)
         else:
@@ -1197,49 +1207,41 @@ class AgentInstance(BaseDocument):
         return objects
 
     @classmethod
-    async def active(cls):
+    async def active(cls: Type[TAgentInstance]) -> List[TAgentInstance]:
         objects = await cls.get_list(expired=None)
         return objects
 
     @classmethod
-    async def _expire_endpoints_for_process(
-        cls, tid: uuid.UUID, process: uuid.UUID, endpoints: Set[str], now: datetime.datetime
-    ) -> None:
-        """
-        Expire the agent instances for the given endpoints if they are not expired yet.
-        """
-        if not endpoints:
-            return
-        names_subquery = ",".join([f"${i}" for i in range(4, 4 + len(endpoints))])
-        query = f"""UPDATE {cls.table_name()}
-                    SET expired=$1
-                    WHERE tid=$2 AND process=$3 AND name IN ({names_subquery}) AND expired IS NULL
-                 """
-        values = [cls._get_value(now), cls._get_value(tid), cls._get_value(process)] + [cls._get_value(e) for e in endpoints]
-        await cls._execute_query(query, *values)
-
-    @classmethod
-    async def log_instance_creation(
-        cls, tid: uuid.UUID, process: uuid.UUID, endpoints: Set[str], now: datetime.datetime
-    ) -> None:
+    async def log_instance_creation(cls: Type[TAgentInstance], tid: uuid.UUID, process: uuid.UUID, endpoints: Set[str]) -> None:
         """
         Create new agent instances for a given session.
         """
         if not endpoints:
             return
-        # Fix database corruption when database was down
-        await cls._expire_endpoints_for_process(tid, process, endpoints, now)
-        for nh in endpoints:
-            await cls(tid=tid, process=process, name=nh).insert()
+        async with cls.get_connection() as connection:
+            await connection.executemany(
+                f"""
+                INSERT INTO
+                {cls.table_name()}
+                (id, tid, process, name, expired)
+                VALUES ($1, $2, $3, $4, null)
+                ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
+                SET expired = null
+                ;
+                """,
+                [tuple(map(cls._get_value, (cls._new_id(), tid, process, name))) for name in endpoints],
+            )
 
     @classmethod
-    async def log_instance_expiry(cls, sid: uuid.UUID, endpoints: Set[str], now: datetime.datetime) -> None:
+    async def log_instance_expiry(
+        cls: Type[TAgentInstance], sid: uuid.UUID, endpoints: Set[str], now: datetime.datetime
+    ) -> None:
         """
         Expire specific instances for a given session id.
         """
         if not endpoints:
             return
-        instances = await cls.get_list(process=sid)
+        instances: List[TAgentInstance] = await cls.get_list(process=sid)
         for ai in instances:
             if ai.name in endpoints:
                 await ai.update_fields(expired=now)
@@ -2249,9 +2251,9 @@ class Resource(BaseDocument):
             doc.make_hash()
         await super(Resource, cls).insert_many(documents)
 
-    async def update(self, **kwargs: Any) -> None:
+    async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         self.make_hash()
-        await super(Resource, self).update(**kwargs)
+        await super(Resource, self).update(connection=connection, **kwargs)
 
     async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         self.make_hash()
