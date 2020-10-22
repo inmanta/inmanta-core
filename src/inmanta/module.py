@@ -28,7 +28,7 @@ from functools import lru_cache
 from io import BytesIO
 from subprocess import CalledProcessError
 from tarfile import TarFile
-from typing import Any, Dict, Iterable, Iterator, List, Mapping, NewType, Optional, Set, Tuple, Type, Union
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, NewType, Optional, Set, Tuple, Union
 
 import yaml
 from pkg_resources import parse_requirements, parse_version
@@ -1140,8 +1140,7 @@ class Module(ModuleLike):
                         e.cause,
                     )
                 )
-                # TODO: correct line number
-                exception.set_location(Location(e.path, 0))
+                exception.set_location(Location(e.path, e.lineno if e.lineno is not None else 0))
                 raise exception
 
     def _get_fq_mod_name_for_py_file(self, py_file: str, plugin_dir: str, mod_name: str) -> str:

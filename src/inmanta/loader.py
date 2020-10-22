@@ -22,11 +22,14 @@ import logging
 import os
 import pathlib
 import sys
+import traceback
 import types
 from dataclasses import dataclass
 from importlib.abc import FileLoader, Finder
 from itertools import chain, starmap
-from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple, Type
+from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple
+
+import more_itertools
 
 from inmanta import const
 
@@ -262,17 +265,18 @@ class PluginModuleLoadException(Exception):
     Wrapper exception raised when an exception occurs during plugin module loading.
     """
 
-    def __init__(self, cause: Exception, module: str, path: str) -> None:
+    def __init__(self, cause: Exception, module: str, path: str, lineno: Optional[int]) -> None:
         self.cause: Exception = cause
         self.module: str = module
         self.path: str = path
-        # TODO: find a way to get the line number
+        self.lineno: Optional[int] = lineno
+        lineno_suffix = f":{self.lineno}" if self.lineno is not None else ""
         super().__init__(
             "%s while loading plugin module %s at %s: %s"
             % (
                 self.get_cause_type_name(),
                 self.module,
-                self.path,
+                f"{self.path}{lineno_suffix}",
                 self.cause,
             )
         )
@@ -298,7 +302,13 @@ class PluginModuleLoader(FileLoader):
         try:
             return super().exec_module(module)
         except Exception as e:
-            raise PluginModuleLoadException(e, self.name, self.path)
+            # attach module, file name and line number
+            tb: Optional[types.TracebackType] = sys.exc_info()[2]
+            stack: traceback.StackSummary = traceback.extract_tb(tb)
+            lineno: Optional[int] = more_itertools.first(
+                (frame.lineno for frame in reversed(stack) if frame.filename == self.path), None
+            )
+            raise PluginModuleLoadException(e, self.name, self.path, lineno)
 
     def get_source(self, fullname: str) -> bytes:
         # No __init__.py exists for top level package
