@@ -20,11 +20,10 @@ import re
 import pytest
 
 import inmanta.compiler as compiler
-from conftest import SnippetCompilationTest
 from inmanta.ast import DuplicateException
 
 
-def test_2386_duplicate_attribute_error_message(snippetcompiler: SnippetCompilationTest) -> None:
+def test_2386_duplicate_attribute_error_message(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
