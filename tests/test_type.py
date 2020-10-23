@@ -23,7 +23,7 @@ from typing import Tuple
 import pytest
 from more_itertools import pairwise
 
-from inmanta.ast import Namespace, RuntimeException
+from inmanta.ast import Location, Namespace, RuntimeException
 from inmanta.ast.attribute import Attribute
 from inmanta.ast.entity import Entity
 from inmanta.ast.type import TYPES, Bool, Integer, LiteralDict, LiteralList, NullableType, Number, String, Type, TypedList
@@ -51,7 +51,7 @@ def test_dsl_types_type_string(base_type_string: str, multi: bool, nullable: boo
 @pytest.mark.parametrize("nullable", [True, False])
 def test_attribute_validate(multi: bool, nullable: bool) -> None:
     entity: Entity = Entity("DummyEntity", Namespace("dummy_namespace"))
-    attribute: Attribute = Attribute(entity, Integer(), "my_attribute", multi, nullable)
+    attribute: Attribute = Attribute(entity, Integer(), "my_attribute", Location("dummy.cf", 1), multi, nullable)
 
     def validate(value: object, success: bool) -> None:
         if success:
