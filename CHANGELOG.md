@@ -2,6 +2,7 @@
 
 ## New features
 - Added support for environment markers as described in PEP 508 to module requirements parsing (#2359)
+- Improved duplicate attributes error message (#2386)
 
 ## Bug fixes
 - Fixed import loop when using `inmanta.execute.proxy` as entry point (#2341)

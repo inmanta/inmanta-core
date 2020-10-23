@@ -58,7 +58,7 @@ def test_slots_rt():
     rs = Resolver(ns)
     e = Entity("xx", ns)
     qs = QueueScheduler(None, [], [], None, set())
-    r = RelationAttribute(e, None, "xx")
+    r = RelationAttribute(e, None, "xx", Location("", 0))
     i = Instance(e, rs, qs)
 
     assert_slotted(ResultVariable())
