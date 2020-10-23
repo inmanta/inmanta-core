@@ -1132,13 +1132,8 @@ class Module(ModuleLike):
                 importlib.import_module(fq_mod_name)
             except loader.PluginModuleLoadException as e:
                 exception = CompilerException(
-                    "Unable to load all plug-ins for module %s:\n\t%s while loading plugin module %s: %s"
-                    % (
-                        self._meta["name"],
-                        e.get_cause_type_name(),
-                        e.module,
-                        e.cause,
-                    )
+                    f"Unable to load all plug-ins for module {self._meta['name']}:"
+                    f"\n\t{e.get_cause_type_name()} while loading plugin module {e.module}: {e.cause}"
                 )
                 exception.set_location(Location(e.path, e.lineno if e.lineno is not None else 0))
                 raise exception
