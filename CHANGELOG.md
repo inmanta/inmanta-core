@@ -2,6 +2,7 @@
 
 ## New features
 - Added support for environment markers as described in PEP 508 to module requirements parsing (#2359)
+- Improved error message when plugin loading fails to include original exception and location (#2385)
 - Improved duplicate attributes error message (#2386)
 
 ## Bug fixes

@@ -22,11 +22,14 @@ import logging
 import os
 import pathlib
 import sys
+import traceback
 import types
 from dataclasses import dataclass
 from importlib.abc import FileLoader, Finder
 from itertools import chain, starmap
 from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple
+
+import more_itertools
 
 from inmanta import const
 
@@ -208,7 +211,7 @@ class CodeLoader(object):
                 mod = importlib.import_module(mod_name)
             self.__modules[mod_name] = (hv, mod)
             LOGGER.info("Loaded module %s" % mod_name)
-        except ImportError:
+        except (ImportError, PluginModuleLoadException):
             LOGGER.exception("Unable to load module %s" % mod_name)
 
     def deploy_version(self, module_sources: Iterable[ModuleSource]) -> None:
@@ -257,6 +260,33 @@ class CodeLoader(object):
                 self._load_module(module_source.name, module_source.hash_value)
 
 
+class PluginModuleLoadException(Exception):
+    """
+    Wrapper exception raised when an exception occurs during plugin module loading.
+    """
+
+    def __init__(self, cause: Exception, module: str, path: str, lineno: Optional[int]) -> None:
+        self.cause: Exception = cause
+        self.module: str = module
+        self.path: str = path
+        self.lineno: Optional[int] = lineno
+        lineno_suffix = f":{self.lineno}" if self.lineno is not None else ""
+        super().__init__(
+            "%s while loading plugin module %s at %s: %s"
+            % (
+                self.get_cause_type_name(),
+                self.module,
+                f"{self.path}{lineno_suffix}",
+                self.cause,
+            )
+        )
+
+    def get_cause_type_name(self) -> str:
+        module: Optional[str] = type(self.cause).__module__
+        name: str = type(self.cause).__qualname__
+        return name if module is None or module == "builtins" else "%s.%s" % (module, name)
+
+
 class PluginModuleLoader(FileLoader):
     """
     A custom module loader which imports the modules in the inmanta_plugins package.
@@ -266,6 +296,19 @@ class PluginModuleLoader(FileLoader):
         self._modulepaths = modulepaths
         path_to_module = self._get_path_to_module(fullname)
         super(PluginModuleLoader, self).__init__(fullname, path_to_module)
+        self.path: str
+
+    def exec_module(self, module: types.ModuleType) -> None:
+        try:
+            return super().exec_module(module)
+        except Exception as e:
+            # attach module, file name and line number
+            tb: Optional[types.TracebackType] = sys.exc_info()[2]
+            stack: traceback.StackSummary = traceback.extract_tb(tb)
+            lineno: Optional[int] = more_itertools.first(
+                (frame.lineno for frame in reversed(stack) if frame.filename == self.path), None
+            )
+            raise PluginModuleLoadException(e, self.name, self.path, lineno)
 
     def get_source(self, fullname: str) -> bytes:
         # No __init__.py exists for top level package
@@ -354,7 +397,7 @@ class PluginModuleLoader(FileLoader):
 
         return os.path.join(*module_parts)
 
-    def _get_path_to_module(self, fullname: str):
+    def _get_path_to_module(self, fullname: str) -> str:
         relative_path: str = self.convert_module_to_relative_path(fullname)
         # special case: top-level package
         if relative_path == "":
