@@ -16,8 +16,9 @@
     Contact: code@inmanta.com
 """
 import os
-import pytest
 import re
+
+import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import CompilerException, ExplicitPluginException, Namespace
