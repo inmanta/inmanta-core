@@ -211,7 +211,7 @@ class CodeLoader(object):
                 mod = importlib.import_module(mod_name)
             self.__modules[mod_name] = (hv, mod)
             LOGGER.info("Loaded module %s" % mod_name)
-        except ImportError:
+        except (ImportError, PluginModuleLoadException):
             LOGGER.exception("Unable to load module %s" % mod_name)
 
     def deploy_version(self, module_sources: Iterable[ModuleSource]) -> None:
