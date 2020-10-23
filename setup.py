@@ -22,6 +22,7 @@ requires = [
     "importlib_metadata",
     "docstring-parser",
     "cookiecutter",
+    "more-itertools",
 ]
 
 # Package a dummy extensions so that the namespace package for extensions is not empty
