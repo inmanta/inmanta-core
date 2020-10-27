@@ -1,4 +1,4 @@
-# Release 2020.5 (?)
+# Release 2020.5 (2020-10-27)
 
 ## New features
 - Added support for environment markers as described in PEP 508 to module requirements parsing (#2359)
