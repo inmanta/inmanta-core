@@ -383,7 +383,8 @@ class Project(ModuleLike):
          * verify if project.yml corresponds to the modules in self.modules
 
         :param path: The directory where the project is located
-
+        :param venv_path: Path to the directory that will contain the Python virtualenv.
+                          This can be an existing or a non-existing directory.
         """
         super().__init__(path)
         self.project_path = path
