@@ -7,11 +7,6 @@ assignees: ''
 
 ---
 
-**Self checklist**
-
- - [ ] I checked that this issue hasn't been created before
- - [ ] I added any relevant label to the issue
-
 # Describe the solution you'd like
 A clear and concise description of what you want to happen.
 

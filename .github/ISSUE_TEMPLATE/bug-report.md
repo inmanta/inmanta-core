@@ -7,11 +7,6 @@ assignees: ''
 
 ---
 
-**Self checklist**
-
- - [ ] I checked that this issue hasn't been created before
- - [ ] I added any relevant label to the issue
-
 # Expected Behavior (short explanation)
 
 Please describe the behavior you are expecting
