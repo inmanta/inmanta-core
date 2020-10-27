@@ -85,12 +85,6 @@ def test_code_manager():
         mgr.register_code("test2", str)
 
 
-def test_empty_code_loader(tmp_path):
-    """Test loading an empty cache"""
-    cl = loader.CodeLoader(tmp_path)
-    cl.load_modules()
-
-
 def test_code_loader(tmp_path):
     """Test loading a new module"""
     cl = loader.CodeLoader(tmp_path)
@@ -114,9 +108,6 @@ def test():
     import inmanta_plugins.inmanta_unit_test  # NOQA
 
     assert inmanta_plugins.inmanta_unit_test.test() == 10
-
-    # reload cached code
-    cl.load_modules()
 
     # deploy new version
     deploy(

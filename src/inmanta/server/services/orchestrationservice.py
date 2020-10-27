@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Set, cast
 import asyncpg
 
 from inmanta import const, data
-from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DELETE
+from inmanta.data import APILIMIT, ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DELETE
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import attach_warnings
@@ -99,20 +99,22 @@ class OrchestrationService(protocol.ServerSlice):
         if (start is None and limit is not None) or (limit is None and start is not None):
             raise ServerError("Start and limit should always be set together.")
 
-        if start is None:
+        if start is None or limit is None:
             start = 0
-            limit = data.DBLIMIT
+            limit = data.APILIMIT
+
+        if limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
         models = await data.ConfigurationModel.get_versions(env.id, start, limit)
         count = len(models)
 
-        d = {"versions": models}
-
-        if start is not None:
-            d["start"] = start
-            d["limit"] = limit
-
-        d["count"] = count
+        d = {
+            "versions": models,
+            "start": start,
+            "limit": limit,
+            "count": count,
+        }
 
         return 200, d
 
@@ -133,17 +135,31 @@ class OrchestrationService(protocol.ServerSlice):
         if resources is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
-        d = {"model": version}
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(
+                f"limit parameter can not exceed {APILIMIT}, got {limit}."
+                f" To retrieve more entries, use /api/v2/resource_actions"
+            )
 
-        # todo: batch get_log into single query?
-        d["resources"] = []
+        resources_out: List[JsonType] = []
+        d = {"model": version, "resources": resources_out}
+        resource_action_lookup: Dict[ResourceVersionIdStr, List[data.ResourceAction]] = {}
+
         for res_dict in resources:
+            resources_out.append(res_dict)
             if bool(include_logs):
-                res_dict["actions"] = await data.ResourceAction.get_log(
-                    env.id, res_dict["resource_version_id"], log_filter, limit
-                )
+                actions: List[data.ResourceAction] = []
+                res_dict["actions"] = actions
+                resource_action_lookup[res_dict["resource_version_id"]] = actions
 
-            d["resources"].append(res_dict)
+        if include_logs:
+            # get all logs, unsorted
+            all_logs = await data.ResourceAction.get_logs_for_version(env.id, version_id, log_filter, limit)
+            for log in all_logs:
+                for resource_version_id in log.resource_version_ids:
+                    resource_action_lookup[resource_version_id].append(log)
 
         d["unknowns"] = await data.UnknownParameter.get_list(environment=env.id, version=version_id)
 

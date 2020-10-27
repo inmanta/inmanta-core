@@ -369,6 +369,9 @@ class EnvironmentService(protocol.ServerSlice):
 
     @protocol.handle(methods_v2.environment_decommission, env="id")
     async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
+        is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)
+        if is_protected_environment:
+            raise Forbidden(f"Environment {env.id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
         version = await env.get_next_version()
         if metadata is None:
             metadata = model.ModelMetadata(message="Decommission of environment", type="api")

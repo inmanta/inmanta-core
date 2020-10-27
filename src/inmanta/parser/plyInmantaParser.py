@@ -188,9 +188,9 @@ def p_stmt_list_collect(p: YaccProduction) -> None:
     p[0] = v
 
 
-def p_stmt_list_term(p: YaccProduction) -> None:
-    "stmt_list : statement"
-    p[0] = [p[1]]
+def p_stmt_list_empty(p: YaccProduction) -> None:
+    "stmt_list : empty"
+    p[0] = []
 
 
 def p_assign(p: YaccProduction) -> None:
@@ -420,11 +420,6 @@ def p_implementation_1(p: YaccProduction) -> None:
 def p_block(p: YaccProduction) -> None:
     "block : stmt_list END"
     p[0] = p[1]
-
-
-def p_block_empty(p: YaccProduction) -> None:
-    "block : END"
-    p[0] = []
 
 
 # RELATION

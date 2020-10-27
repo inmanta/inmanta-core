@@ -17,11 +17,11 @@ Initialize the PostgreSQL server:
 
   sudo /usr/pgsql-10/bin/postgresql-10-setup initdb
 
-Start the PostgreSQL database
+Start the PostgreSQL database and make sure it is started at boot.
 
 .. code-block:: sh
 
-   sudo systemctl start postgresql-10
+   sudo systemctl enable --now postgresql-10
 
 Create a inmanta user and an inmanta database by executing the following command. This command will request you to choose a
 password for the inmanta database.

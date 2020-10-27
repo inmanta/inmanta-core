@@ -1126,13 +1126,17 @@ class Module(ModuleLike):
         """
         Load all plug-ins from a configuration module
         """
-        try:
-            for _, fq_mod_name in self.get_plugin_files():
+        for _, fq_mod_name in self.get_plugin_files():
+            try:
                 LOGGER.debug("Loading module %s", fq_mod_name)
                 importlib.import_module(fq_mod_name)
-
-        except ImportError as e:
-            raise CompilerException("Unable to load all plug-ins for module %s" % self._meta["name"]) from e
+            except loader.PluginModuleLoadException as e:
+                exception = CompilerException(
+                    f"Unable to load all plug-ins for module {self._meta['name']}:"
+                    f"\n\t{e.get_cause_type_name()} while loading plugin module {e.module}: {e.cause}"
+                )
+                exception.set_location(Location(e.path, e.lineno if e.lineno is not None else 0))
+                raise exception
 
     def _get_fq_mod_name_for_py_file(self, py_file: str, plugin_dir: str, mod_name: str) -> str:
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)

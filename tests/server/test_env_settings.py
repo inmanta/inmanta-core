@@ -225,3 +225,57 @@ async def test_clear_protected_environment(server, client):
     result = await client.environment_settings_set(env_id, data.PROTECTED_ENVIRONMENT, False)
     assert result.code == 200
     await assert_clear_env(env_id, clear_succeeds=True)
+
+
+@pytest.mark.asyncio
+async def test_decommission_protected_environment(server, client):
+    result = await client.create_project("env-test")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    result = await client.create_environment(project_id=project_id, name="dev")
+    assert result.code == 200
+    env_id = result.result["environment"]["id"]
+
+    async def push_version_to_environment() -> None:
+        res = await client.reserve_version(env_id)
+        assert res.code == 200
+        version = res.result["data"]
+
+        result = await client.put_version(
+            tid=env_id,
+            version=version,
+            resources=[],
+            unknowns=[],
+            compiler_version=get_compiler_version(),
+        )
+        assert result.code == 200
+
+    async def assert_decomission_env(env_id: str, decommission_succeeds: bool) -> None:
+        result = await client.list_versions(env_id)
+        assert result.code == 200
+        original_number_of_versions = len(result.result["versions"])
+        assert original_number_of_versions != 0
+        # Execute clear operation
+        result = await client.environment_decommission(env_id)
+        assert result.code == 200 if decommission_succeeds else 403
+        # Assert result
+        result = await client.list_versions(env_id)
+        assert result.code == 200
+        # Another version is added when decommissioning succeeds
+        assert (len(result.result["versions"]) > original_number_of_versions) == decommission_succeeds
+
+    # Test default settings
+    await push_version_to_environment()
+    await assert_decomission_env(env_id, decommission_succeeds=True)
+
+    # Test environment is protected
+    await push_version_to_environment()
+    result = await client.environment_settings_set(env_id, data.PROTECTED_ENVIRONMENT, True)
+    assert result.code == 200
+    await assert_decomission_env(env_id, decommission_succeeds=False)
+
+    # Test environment is unprotected
+    result = await client.environment_settings_set(env_id, data.PROTECTED_ENVIRONMENT, False)
+    assert result.code == 200
+    await assert_decomission_env(env_id, decommission_succeeds=True)

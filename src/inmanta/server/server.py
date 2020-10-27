@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Union, cast
 import importlib_metadata
 
 from inmanta import data
+from inmanta.const import ApiDocsFormat
 from inmanta.data.model import ExtensionStatus, FeatureStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, methods, methods_v2
 from inmanta.protocol.common import HTML_CONTENT_WITH_UTF8_CHARSET, ReturnValue, attach_warnings
@@ -212,13 +213,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return response
 
     @protocol.handle(methods_v2.get_api_docs)
-    async def get_api_docs(self, format: Optional[str]) -> ReturnValue[Union[OpenAPI, str]]:
+    async def get_api_docs(self, format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> ReturnValue[Union[OpenAPI, str]]:
         url_map = self._server._transport.get_global_url_map(self._server.get_slices().values())
         feature_manager = self.feature_manager
         openapi = OpenApiConverter(url_map, feature_manager)
         # Get rid of none values with custom json encoder
         openapi_json_str = openapi.generate_openapi_json()
-        if format == "openapi":
+        if format == ApiDocsFormat.openapi:
             openapi_dict = json.loads(openapi_json_str)
             return ReturnValue(response=openapi_dict)
 

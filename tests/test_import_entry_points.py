@@ -43,5 +43,41 @@ def import_entry_point() -> Iterator[Callable[[str], Optional[int]]]:
     yield do_import
 
 
+def test_import_exceptions(import_entry_point) -> None:
+    assert import_entry_point("inmanta.ast") == 0
+    assert import_entry_point("inmanta.parser") == 0
+
+
+def test_import_plugins(import_entry_point) -> None:
+    assert import_entry_point("inmanta.plugins") == 0
+
+
+def test_import_resources(import_entry_point) -> None:
+    assert import_entry_point("inmanta.resources") == 0
+    assert import_entry_point("inmanta.execute.util") == 0
+
+
+def test_import_handlers(import_entry_point) -> None:
+    assert import_entry_point("inmanta.agent.handler") == 0
+    assert import_entry_point("inmanta.agent.io.local") == 0
+
+
+def test_import_export(import_entry_point) -> None:
+    assert import_entry_point("inmanta.export") == 0
+
+
+def test_import_attributes(import_entry_point) -> None:
+    assert import_entry_point("inmanta.ast.attribute") == 0
+
+
+def test_import_typing(import_entry_point) -> None:
+    assert import_entry_point("inmanta.ast.type") == 0
+
+
 def test_import_proxy(import_entry_point) -> None:
     assert import_entry_point("inmanta.execute.proxy") == 0
+
+
+def test_import_compile_data(import_entry_point) -> None:
+    assert import_entry_point("inmanta.data.model") == 0
+    assert import_entry_point("inmanta.ast.export") == 0

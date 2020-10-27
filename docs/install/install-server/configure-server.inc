@@ -27,8 +27,13 @@ When virtual machines are started by this server that install the inmanta agent,
 :inmanta.config:option:`server.server-address` needs to be
 configured. This address is used to create the correct boot script for the virtual machine.
 
-Set this value to the hostname or IP address that others systems use to connect to the server
+Set this value to the hostname or IP address that other systems use to connect to the server
 in the configuration file stored at ``/etc/inmanta/inmanta.d/server.cfg``.
+
+.. code-block:: text
+
+  [server]
+  server-address=<server-ip-address-or-hostname>
 
 .. note:: If you deploy configuration models that modify resolver configuration it is recommended to use the IP address instead
   of the hostname.
@@ -74,21 +79,31 @@ ssh and if the remote agent is used.
 4. Test if you can login into a machine that has the public key and make sure ssh does not show you any prompts to store
    the host key.
 
+Step 7: Configure the server bind address
+-----------------------------------------
 
-Step 7: Start the Inmanta server
+By default the server only listens on localhost, port 8888.
+This can be changed by altering the
+:inmanta.config:option:`server.bind-address` and :inmanta.config:option:`server.bind-port`
+options in the ``/etc/inmanta/inmanta.d/server.cfg`` file.
+
+.. code-block:: text
+
+  [server]
+  bind-address=<server-bind-address>
+  bind-port=<server-bind-port>
+
+Step 8: Start the Inmanta server
 --------------------------------
 
 Start the Inmanta server and make sure it is started at boot.
 
 .. code-block:: sh
 
-  sudo systemctl enable inmanta-server
-  sudo systemctl start inmanta-server
+  sudo systemctl enable --now inmanta-server
 
-Step 8: Connect to the dashboard
---------------------------------
 
-The server dashboard is now available on port '8888'
+The server dashboard is now available on the port and host configured in step 7.
 
 Optional Step 9: Setup influxdb for collection of performance metrics
 ---------------------------------------------------------------------

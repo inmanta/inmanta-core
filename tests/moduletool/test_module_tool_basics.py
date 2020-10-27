@@ -15,10 +15,12 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import os
 import re
 import shutil
 import subprocess
+import sys
 
 import pytest
 import yaml
@@ -188,3 +190,30 @@ def test_commit_no_tags(modules_dir, module_without_tags, dev, tag, version_tag_
     add_file(module_without_tags, "dummyfile", "Content", "Commit without tags", version="5.0", dev=dev, tag=tag)
     output = subprocess.check_output(["git", "tag", "-l"], cwd=module_without_tags, stderr=subprocess.STDOUT)
     assert ("5.0" in str(output)) is version_tag_in_output
+
+
+@pytest.mark.asyncio
+async def test_version_argument(modules_repo):
+    make_module_simple(modules_repo, "mod-version", [], "1.2")
+    module_path = os.path.join(modules_repo, "mod-version")
+
+    mod = module.Module(None, module_path)
+    assert mod.version == "1.2"
+
+    args = [sys.executable, "-m", "inmanta.app", "module", "commit", "-m", "msg", "-v", "1.3.1", "-r"]
+    process = await asyncio.subprocess.create_subprocess_exec(
+        *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=module_path
+    )
+    try:
+        await asyncio.wait_for(process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+
+    # Make sure exitcode is zero
+    assert process.returncode == 0
+
+    # Load the changes
+    mod.load_module_file()
+    assert mod.version == "1.3.1"

@@ -561,7 +561,12 @@ def cmd_parser() -> ArgumentParser:
         "-X", "--extended-errors", dest="errors", help="Show stack traces for errors", action="store_true", default=False
     )
     parser.add_argument(
-        "--version", action="store_true", dest="version", help="Show current version of Inmanta", default=False, required=False
+        "--version",
+        action="store_true",
+        dest="inmanta_version",
+        help="Show current version of Inmanta",
+        default=False,
+        required=False,
     )
     subparsers = parser.add_subparsers(title="commands")
     for cmd_name, cmd_options in Commander.commands().items():
@@ -643,7 +648,7 @@ def app() -> None:
     options, other = parser.parse_known_args()
     options.other = other
 
-    if options.version:
+    if options.inmanta_version:
         get_current_version_and_exit()
 
     # Log everything to a log_file if logfile is provided

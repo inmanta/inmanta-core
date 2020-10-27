@@ -52,3 +52,6 @@ A test case, to test this plugin looks like this:
 * **Line 6:** Calls the function ``project.get_plugin_function(plugin_name: str): FunctionType``, which returns the plugin
   function named ``plugin_name``. As such, this line tests whether ``host`` is returned when the plugin function
   ``hostname`` is called with the parameter ``fqdn``.
+
+
+For more information see: `pytest-inmanta <https://github.com/inmanta/pytest-inmanta>`_

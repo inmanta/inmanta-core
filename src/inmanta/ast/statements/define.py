@@ -184,6 +184,7 @@ class DefineEntity(TypeDefinitionStatement):
             entity_type.comment = self.comment
 
             add_attributes: Dict[str, Attribute] = {}
+            attribute: DefineAttribute
             for attribute in self.attributes:
                 attr_type: Type = attribute.type.get_type(self.namespace)
                 if not isinstance(attr_type, (Type, type)):
@@ -194,10 +195,10 @@ class DefineEntity(TypeDefinitionStatement):
                     entity_type,
                     attribute.type.get_basetype(self.namespace),
                     name,
+                    attribute.get_location(),
                     attribute.type.multi,
                     attribute.type.nullable,
                 )
-                attr_obj.location = attribute.get_location()
                 self.anchors.append(TypeReferenceAnchor(self.namespace, attribute.type.basetype))
 
                 if name in add_attributes:
@@ -603,11 +604,10 @@ class DefineRelation(BiStatement):
             )
 
         if self.left[1] is not None:
-            left_end = RelationAttribute(right, left, str(self.left[1]))
+            left_end = RelationAttribute(right, left, str(self.left[1]), self.left[1].get_location())
             left_end.target_annotations = self.annotations
             left_end.set_multiplicity(self.left[2])
             left_end.comment = self.comment
-            left_end.location = self.left[1].get_location()
         else:
             left_end = None
 
@@ -616,11 +616,10 @@ class DefineRelation(BiStatement):
                 # relation is its own inverse
                 right_end = left_end
             else:
-                right_end = RelationAttribute(left, right, str(self.right[1]))
+                right_end = RelationAttribute(left, right, str(self.right[1]), self.right[1].get_location())
                 right_end.source_annotations = self.annotations
                 right_end.set_multiplicity(self.right[2])
                 right_end.comment = self.comment
-                right_end.location = self.right[1].get_location()
         else:
             right_end = None
 

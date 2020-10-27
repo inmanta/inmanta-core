@@ -361,7 +361,7 @@ class AgentManager(ServerSlice, SessionListener):
         Note: This method call is allowed to fail when the database connection is lost.
         """
         now = datetime.now()
-        await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add, now)
+        await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add)
         await data.AgentInstance.log_instance_expiry(session.id, endpoints_to_remove, now)
         await data.Agent.update_primary(session.tid, endpoints_with_new_primary, now)
         await data.AgentProcess.update_last_seen(session.id, now)
@@ -404,7 +404,7 @@ class AgentManager(ServerSlice, SessionListener):
         Note: This method call is allowed to fail when the database connection is lost.
         """
         await data.AgentProcess.seen(tid, session.nodename, session.id, now)
-        await data.AgentInstance.log_instance_creation(tid, session.id, endpoint_names, now)
+        await data.AgentInstance.log_instance_creation(tid, session.id, endpoint_names)
         await data.Agent.update_primary(tid, endpoints_with_new_primary, now)
 
     # Session expiry
