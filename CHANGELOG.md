@@ -1,19 +1,28 @@
-# Release 2020.4.3 (2020-10-05)
+# Release 2020.5 (2020-10-27)
 
-## Bug fixes
-- Fixed compiler bug (#2378)
-- Don't remove resource independent parameters on version deletion (#2370)
-
-# Release 2020.4.2 (2020-09-17)
-
-## Bug fixes
-- Fix "compile_data_json_file" referenced before assignment (#2361)
-
-# Release 2020.4.1 (2020-09-16)
+## New features
+- Added support for environment markers as described in PEP 508 to module requirements parsing (#2359)
+- Improved error message when plugin loading fails to include original exception and location (#2385)
+- Improved duplicate attributes error message (#2386)
 
 ## Bug fixes
 - Fixed import loop when using `inmanta.execute.proxy` as entry point (#2341)
+- Fixed import loop when using `inmanta.resources` as entry point (#2342)
 - Clearing an environment with merged compile requests no longer fails (#2350)
+- Fixed compiler bug (#2378)
+- Fix "compile_data_json_file" referenced before assignment (#2361)
+- Fix server-autorecompile-wait config option (#2262)
+- Specify the supported values of the 'format' parameter of the OpenAPI endpoint explicitly (#2369)
+- Fix version cli argument conflict (#2358)
+- Don't remove resource independent parameters on version deletion (#2370)
+- Enhance installation documentation (#2241, #2356, #2357)
+- Ensure that a protected environment can't be decommissioned (#2376)
+- Don't load all code on agent start (#2343)
+- Allow empty body in else branch for if-else statement (#2375)
+- Fixed export failure with null in dict (#2437)
+- Fixed small documentation issues
+- Only store single agent instance in database for each distinct instance to prevent database overflow when agent rapidly and
+    repeatadly dis- and reconnects (#2394)
 
 # Release 2020.4 (2020-09-08)
 
@@ -32,10 +41,8 @@
 - Added API method for halting all environment operations (#2228)
 
 ## Upgrade notes
-
+- Ensure the database is backed up before executing an upgrade.
 - Option `inmanta compile --json` is renamed to `inmanta compile --export-compile-data`
-
-## Upgrade notes
 - `DynamicProxy.__getattr__` now raises an `AttributeError` instead of a plain `NotFoundException` when an attribute can not be
     found, for compatibility with Python's builtin `hasattr`. This change is backwards compatible, though it is recommended to
     except on `AttributeError` over `NotFoundException`. (#2991)

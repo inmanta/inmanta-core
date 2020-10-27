@@ -49,6 +49,8 @@ Resources
 .. autoclass:: inmanta.resources.ManagedResource
 .. autoclass:: inmanta.resources.IgnoreResourceException
 
+.. autoclass:: inmanta.execute.util.Unknown
+
 Handlers
 --------
 
@@ -74,6 +76,12 @@ Handlers
     :members:
     :inherited-members:
     :undoc-members:
+
+
+Export
+------
+
+.. autodecorator:: inmanta.export.dependency_manager
 
 
 Attributes

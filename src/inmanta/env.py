@@ -175,6 +175,7 @@ class VirtualEnv(object):
 
             url = None
             version = None
+            marker = None
             try:
                 # this will fail is an url is supplied
                 parsed_req = list(pkg_resources.parse_requirements(req_spec))
@@ -185,16 +186,20 @@ class VirtualEnv(object):
                     elif hasattr(item, "unsafe_name"):
                         name = item.unsafe_name
                     version = item.specs
+                    marker = item.marker
                     if hasattr(item, "url"):
                         url = item.url
             except InvalidRequirement:
                 url = req_spec
 
             if name not in modules:
-                modules[name] = {"name": name, "version": []}
+                modules[name] = {"name": name, "version": [], "markers": []}
 
             if version is not None:
                 modules[name]["version"].extend(version)
+
+            if marker is not None:
+                modules[name]["markers"].append(marker)
 
             if url is not None:
                 modules[name]["url"] = url
@@ -202,13 +207,17 @@ class VirtualEnv(object):
         requirements_file = ""
         for module, info in modules.items():
             version_spec = ""
+            markers: str = ""
             if len(info["version"]) > 0:
                 version_spec = " " + (", ".join(["%s %s" % (a, b) for a, b in info["version"]]))
+
+            if len(info["markers"]) > 0:
+                markers = " ; " + (" and ".join(map(str, info["markers"])))
 
             if "url" in info:
                 module = info["url"]
 
-            requirements_file += module + version_spec + "\n"
+            requirements_file += module + version_spec + markers + "\n"
 
         return requirements_file
 

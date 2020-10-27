@@ -466,7 +466,7 @@ async def test_agent_instance(init_dataclasses_and_load_schema):
     assert len(current_instances) == 1
     assert current_instances[0].id == agi2.id
 
-    await agi1.update_fields(expired=datetime.datetime.now())
+    await data.AgentInstance.log_instance_expiry(sid=agent_proc.sid, endpoints={agi1_name}, now=datetime.datetime.now())
 
     active_instances = await data.AgentInstance.active()
     assert len(active_instances) == 1
@@ -478,6 +478,11 @@ async def test_agent_instance(init_dataclasses_and_load_schema):
     current_instances = await data.AgentInstance.active_for(env.id, agi2_name)
     assert len(current_instances) == 1
     assert current_instances[0].id == agi2.id
+
+    await data.AgentInstance.log_instance_creation(process=agent_proc.sid, endpoints={agi1_name}, tid=env.id)
+    current_instances = await data.AgentInstance.active_for(env.id, agi1_name)
+    assert len(current_instances) == 1
+    assert current_instances[0].id == agi1.id
 
 
 @pytest.mark.asyncio
@@ -1771,6 +1776,7 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     assert action.action == const.ResourceAction.dryrun
     assert action.messages[0]["level"] == LogLevel.WARNING.name
     assert action.messages[0]["timestamp"] == times
+
     resource_actions = await data.ResourceAction.get_log(
         env.id, "std::File[agent1,path=/etc/motd],v=%1", const.ResourceAction.deploy.name, limit=2
     )
@@ -1782,6 +1788,15 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     # Get logs for non-existing resource_version_id
     resource_actions = await data.ResourceAction.get_log(env.id, "std::File[agent11,path=/etc/motd],v=%1")
     assert len(resource_actions) == 0
+
+    resource_actions = await data.ResourceAction.get_logs_for_version(env.id, version)
+    assert len(resource_actions) == 11
+    for i in range(len(resource_actions)):
+        action = resource_actions[i]
+        if i == 0:
+            assert action.action == const.ResourceAction.dryrun
+        else:
+            assert action.action == const.ResourceAction.deploy
 
 
 @pytest.mark.asyncio

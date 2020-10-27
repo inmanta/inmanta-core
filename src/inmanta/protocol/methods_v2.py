@@ -19,7 +19,7 @@ import datetime
 import uuid
 from typing import Dict, List, Optional, Union
 
-from inmanta.const import AgentAction, ClientType
+from inmanta.const import AgentAction, ApiDocsFormat, ClientType
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
 
@@ -181,6 +181,12 @@ def environment_decommission(id: uuid.UUID, metadata: Optional[model.ModelMetada
     """
     Decommission an environment. This is done by uploading an empty model to the server and let purge_on_delete handle
     removal.
+
+    :param id: The uuid of the environment.
+    :param metadata: Optional metadata associated with the decommissioning
+
+    :raises NotFound: The given environment doesn't exist.
+    :raises Forbidden: The given environment is protected.
     """
 
 
@@ -294,10 +300,10 @@ def reserve_version(tid: uuid.UUID) -> int:
 
 
 @typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2)
-def get_api_docs(format: Optional[str] = None) -> ReturnValue[Union[OpenAPI, str]]:
+def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> ReturnValue[Union[OpenAPI, str]]:
     """
     Get the OpenAPI definition of the API
-    :param format: Use 'openapi' to get the schema in json format
+    :param format: Use 'openapi' to get the schema in json format, leave empty or use 'swagger' to get the Swagger-UI view
     """
 
 
@@ -381,7 +387,7 @@ def get_resource_actions(
     :param attribute: Attribute name used for filtering
     :param attribute_value: Attribute value used for filtering. Attribute and attribute value should be supplied together.
     :param log_severity: Only include ResourceActions which have a log message with this severity.
-    :param limit: Limit the number of resource actions included in the response
+    :param limit: Limit the number of resource actions included in the response, up to 1000
     :param action_id: Start the query from this action_id.
             To be used in combination with either the first or last timestamp.
     :param first_timestamp: Limit the results to resource actions that started later

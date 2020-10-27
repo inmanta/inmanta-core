@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from collections import Mapping
+from collections.abc import Mapping
 from copy import copy
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -212,7 +212,8 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
         return IteratorProxy(instance.__iter__())
 
     def json_serialization_step(self) -> List[PrimitiveTypes]:
-        return self._get_instance()
+        # Ensure proper unwrapping by using __getitem__
+        return [i for i in self]
 
 
 class DictProxy(DynamicProxy, Mapping, JSONSerializable):
@@ -235,7 +236,8 @@ class DictProxy(DynamicProxy, Mapping, JSONSerializable):
         return IteratorProxy(instance.__iter__())
 
     def json_serialization_step(self) -> Dict[str, PrimitiveTypes]:
-        return self._get_instance()
+        # Ensure proper unwrapping by using __getitem__
+        return {k: v for k, v in self.items()}
 
 
 class CallProxy(DynamicProxy):
