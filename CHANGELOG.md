@@ -1,5 +1,11 @@
 # Release 2020.6 (?)
 
+## New features
+- Add support to use a custom venv path in the Project class (#2466)
+
+## Upgrade notes
+- Ensure the database is backed up before executing an upgrade.
+
 # Release 2020.5 (2020-10-27)
 
 ## New features

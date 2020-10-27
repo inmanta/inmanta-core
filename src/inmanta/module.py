@@ -373,7 +373,9 @@ class Project(ModuleLike):
     PROJECT_FILE = "project.yml"
     _project = None
 
-    def __init__(self, path: str, autostd: bool = True, main_file: str = "main.cf") -> None:
+    def __init__(
+        self, path: str, autostd: bool = True, main_file: str = "main.cf", venv_path: Optional[str] = None
+    ) -> None:
         """
         Initialize the project, this includes
          * Loading the project.yaml (into self._meta)
@@ -427,7 +429,11 @@ class Project(ModuleLike):
             if not os.path.exists(self.downloadpath):
                 os.mkdir(self.downloadpath)
 
-        self.virtualenv = env.VirtualEnv(os.path.join(path, ".env"))
+        if venv_path is None:
+            venv_path = os.path.join(path, ".env")
+        else:
+            venv_path = os.path.abspath(venv_path)
+        self.virtualenv = env.VirtualEnv(venv_path)
 
         self.loaded = False
         self.modules = {}  # type: Dict[str, Module]
@@ -439,7 +445,7 @@ class Project(ModuleLike):
         if "install_mode" in self._meta:
             mode = self._meta["install_mode"]
             if mode not in INSTALL_OPTS:
-                LOGGER.warning("Invallid value for install_mode, should be one of [%s]" % ",".join(INSTALL_OPTS))
+                LOGGER.warning("Invalid value for install_mode, should be one of [%s]" % ",".join(INSTALL_OPTS))
             else:
                 self._install_mode = mode
 
