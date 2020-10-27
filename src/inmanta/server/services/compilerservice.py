@@ -276,7 +276,7 @@ class CompileRun(object):
             result = await self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=env_vars_compile)
             success = result.returncode == 0
             if not success:
-                LOGGER.debug("Compile %s failed", self.request.id)
+                LOGGER.warning("Compile %s failed", self.request.id)
 
             print("---", self.tail_stdout, result.errstream)
             match = re.search(r"Committed resources with version (\d+)", self.tail_stdout)
