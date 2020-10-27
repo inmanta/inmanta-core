@@ -22,10 +22,10 @@ import shutil
 import sys
 from typing import List, Optional, Set
 
+import py
 import pytest
 from pytest import fixture
 
-import py
 from inmanta import loader
 from inmanta.loader import ModuleSource, SourceInfo
 from inmanta.module import Project
