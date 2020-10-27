@@ -46,7 +46,6 @@ src/*/parser/parsetab.py
 
 # Venv
 .env
-venv
 
 # Inmanta Release Tool
 docs/reference/modules
