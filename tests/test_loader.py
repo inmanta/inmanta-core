@@ -20,12 +20,12 @@ import inspect
 import os
 import shutil
 import sys
-from typing import List, Set, Optional
-import py
+from typing import List, Optional, Set
 
 import pytest
 from pytest import fixture
 
+import py
 from inmanta import loader
 from inmanta.loader import ModuleSource, SourceInfo
 from inmanta.module import Project

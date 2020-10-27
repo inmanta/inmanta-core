@@ -373,9 +373,7 @@ class Project(ModuleLike):
     PROJECT_FILE = "project.yml"
     _project = None
 
-    def __init__(
-        self, path: str, autostd: bool = True, main_file: str = "main.cf", venv_path: Optional[str] = None
-    ) -> None:
+    def __init__(self, path: str, autostd: bool = True, main_file: str = "main.cf", venv_path: Optional[str] = None) -> None:
         """
         Initialize the project, this includes
          * Loading the project.yaml (into self._meta)
