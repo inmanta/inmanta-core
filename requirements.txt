@@ -30,7 +30,7 @@ sphinx==3.2.1
 sphinxcontrib-serializinghtml==1.1.4
 sphinxcontrib-redoc==1.6.0
 texttable==1.6.3
-tornado==6.0.4
+tornado==6.1
 tox==3.20.1
 tox-venv==0.4.0
 asyncpg==0.21.0
