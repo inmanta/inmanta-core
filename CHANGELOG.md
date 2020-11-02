@@ -2,6 +2,7 @@
 
 ## New features
 - Add support to use a custom venv path in the Project class (#2466)
+- Added more specific location information for attributes (#2481)
 
 ## Upgrade notes
 - Ensure the database is backed up before executing an upgrade.
