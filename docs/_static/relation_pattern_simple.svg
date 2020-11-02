@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" contentScriptType="application/ecmascript" contentStyleType="text/css" height="328px" preserveAspectRatio="none" style="width:579px;height:328px;" version="1.1" viewBox="0 0 579 328" width="579px" zoomAndPan="magnify"><defs/><g><!--class VirtualMachine--><rect fill="#F8F8F8" height="86.4141" id="VirtualMachine" style="stroke: #383838; stroke-width: 1.5;" width="124" x="6" y="167"/><ellipse cx="21" cy="183" fill="#C2C2C2" rx="11" ry="11" style="stroke: #383838; stroke-width: 1.0;"/><path d="M23.9688,188.6406 Q23.3906,188.9375 22.75,189.0781 Q22.1094,189.2344 21.4063,189.2344 Q18.9063,189.2344 17.5781,187.5938 Q16.2656,185.9375 16.2656,182.8125 Q16.2656,179.6875 17.5781,178.0313 Q18.9063,176.375 21.4063,176.375 Q22.1094,176.375 22.75,176.5313 Q23.4063,176.6875 23.9688,176.9844 L23.9688,179.7031 Q23.3438,179.125 22.75,178.8594 Q22.1563,178.5781 21.5313,178.5781 Q20.1875,178.5781 19.5,179.6563 Q18.8125,180.7188 18.8125,182.8125 Q18.8125,184.9063 19.5,185.9844 Q20.1875,187.0469 21.5313,187.0469 Q22.1563,187.0469 22.75,186.7813 Q23.3438,186.5 23.9688,185.9219 L23.9688,188.6406 Z "/><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacingAndGlyphs" textLength="92" x="35" y="187.1543">VirtualMachine</text><line style="stroke: #383838; stroke-width: 1.5;" x1="7" x2="129" y1="199" y2="199"/><text fill="#000000" font-family="sans-serif" font-size="11" lengthAdjust="spacingAndGlyphs" textLength="71" x="12" y="213.2104">string image</text><text fill="#000000" font-family="sans-serif" font-size="11" lengthAdjust="spacingAndGlyphs" textLength="58" x="12" y="226.0151">string size</text><text fill="#000000" font-family="sans-serif" font-size="11" lengthAdjust="spacingAndGlyphs" textLength="12" x="12" y="238.8198">...</text><line style="stroke: #383838; stroke-width: 1.5;" x1="7" x2="129" y1="245.4141" y2="245.4141"/><!--class SecurityGroupReference--><rect fill="#F8F8F8" height="60.8047" id="SecurityGroupReference" style="stroke: #383838; stroke-width: 1.5;" width="184" x="338" y="179.5"/><ellipse cx="353" cy="195.5" fill="#C2C2C2" rx="11" ry="11" style="stroke: #383838; stroke-width: 1.0;"/><path d="M355.9688,201.1406 Q355.3906,201.4375 354.75,201.5781 Q354.1094,201.7344 353.4063,201.7344 Q350.9063,201.7344 349.5781,200.0938 Q348.2656,198.4375 348.2656,195.3125 Q348.2656,192.1875 349.5781,190.5313 Q350.9063,188.875 353.4063,188.875 Q354.1094,188.875 354.75,189.0313 Q355.4063,189.1875 355.9688,189.4844 L355.9688,192.2031 Q355.3438,191.625 354.75,191.3594 Q354.1563,191.0781 353.5313,191.0781 Q352.1875,191.0781 351.5,192.1563 Q350.8125,193.2188 350.8125,195.3125 Q350.8125,197.4063 351.5,198.4844 Q352.1875,199.5469 353.5313,199.5469 Q354.1563,199.5469 354.75,199.2813 Q355.3438,199 355.9688,198.4219 L355.9688,201.1406 Z "/><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacingAndGlyphs" textLength="152" x="367" y="199.6543">SecurityGroupReference</text><line style="stroke: #383838; stroke-width: 1.5;" x1="339" x2="521" y1="211.5" y2="211.5"/><text fill="#000000" font-family="sans-serif" font-size="11" lengthAdjust="spacingAndGlyphs" textLength="68" x="344" y="225.7104">string name</text><line style="stroke: #383838; stroke-width: 1.5;" x1="339" x2="521" y1="232.3047" y2="232.3047"/><path d="M293,276 L293,316.2656 A0,0 0 0 0 293,316.2656 L567,316.2656 A0,0 0 0 0 567,316.2656 L567,286 L557,276 L434,276 L430,240.61 L426,276 L293,276 A0,0 0 0 0 293,276 " fill="#ECECEC" style="stroke: #383838; stroke-width: 1.0;"/><path d="M557,276 L557,286 L567,286 L557,276 " fill="#ECECEC" style="stroke: #383838; stroke-width: 1.0;"/><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="182" x="299" y="293.0669">This entity is used to refer to</text><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="249" x="303" y="308.1997">an existing, unmanaged SecurityGroup</text><!--class SecurityGroup--><rect fill="#F8F8F8" height="60.8047" id="SecurityGroup" style="stroke: #383838; stroke-width: 1.5;" width="120" x="370" y="83.5"/><ellipse cx="385" cy="99.5" fill="#C2C2C2" rx="11" ry="11" style="stroke: #383838; stroke-width: 1.0;"/><path d="M387.9688,105.1406 Q387.3906,105.4375 386.75,105.5781 Q386.1094,105.7344 385.4063,105.7344 Q382.9063,105.7344 381.5781,104.0938 Q380.2656,102.4375 380.2656,99.3125 Q380.2656,96.1875 381.5781,94.5313 Q382.9063,92.875 385.4063,92.875 Q386.1094,92.875 386.75,93.0313 Q387.4063,93.1875 387.9688,93.4844 L387.9688,96.2031 Q387.3438,95.625 386.75,95.3594 Q386.1563,95.0781 385.5313,95.0781 Q384.1875,95.0781 383.5,96.1563 Q382.8125,97.2188 382.8125,99.3125 Q382.8125,101.4063 383.5,102.4844 Q384.1875,103.5469 385.5313,103.5469 Q386.1563,103.5469 386.75,103.2813 Q387.3438,103 387.9688,102.4219 L387.9688,105.1406 Z "/><text fill="#000000" font-family="sans-serif" font-size="12" lengthAdjust="spacingAndGlyphs" textLength="88" x="399" y="103.6543">SecurityGroup</text><line style="stroke: #383838; stroke-width: 1.5;" x1="371" x2="489" y1="115.5" y2="115.5"/><text fill="#000000" font-family="sans-serif" font-size="11" lengthAdjust="spacingAndGlyphs" textLength="99" x="376" y="129.7104">string description</text><line style="stroke: #383838; stroke-width: 1.5;" x1="371" x2="489" y1="136.3047" y2="136.3047"/><path d="M308.5,8 L308.5,48.2656 A0,0 0 0 0 308.5,48.2656 L426,48.2656 L430,83.43 L434,48.2656 L551.5,48.2656 A0,0 0 0 0 551.5,48.2656 L551.5,18 L541.5,8 L308.5,8 A0,0 0 0 0 308.5,8 " fill="#ECECEC" style="stroke: #383838; stroke-width: 1.0;"/><path d="M541.5,8 L541.5,18 L551.5,18 L541.5,8 " fill="#ECECEC" style="stroke: #383838; stroke-width: 1.0;"/><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="222" x="314.5" y="25.0669">This entity expresses desired state</text><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="144" x="314.5" y="40.1997">about a SecurityGroup</text><!--link VirtualMachine to SecurityGroupReference--><path d="M130.07,210 C187.04,210 272.78,210 337.85,210 " fill="none" id="VirtualMachine-SecurityGroupReference" style="stroke: #383838; stroke-width: 1.0;"/><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="101" x="161" y="206.0669">security_groups</text><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="8" x="138.1223" y="222.9638">1</text><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="7" x="322.929" y="222.7016">*</text><!--link SecurityGroup to SecurityGroupReference--><path d="M430,144.59 C430,149.46 430,154.34 430,159.21 " fill="none" id="SecurityGroup-SecurityGroupReference" style="stroke: #383838; stroke-width: 1.0;"/><polygon fill="none" points="437,159.25,430,179.25,423,159.25,437,159.25" style="stroke: #383838; stroke-width: 1.0;"/><!--
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+set namespaceSeparator ::
+left to right direction
+
+class VirtualMachine {
+    string image
+    string size
+    ...
+}
+
+class SecurityGroupReference {
+    string name
+}
+
+note bottom of SecurityGroupReference : This entity is used to refer to \n an existing, unmanaged SecurityGroup
+
+class SecurityGroup {
+    string description
+}
+
+note top of SecurityGroup : This entity expresses desired state\nabout a SecurityGroup
+
+VirtualMachine "1" - - "*" SecurityGroupReference : security_groups
+SecurityGroup -|> SecurityGroupReference
+@enduml
+
+PlantUML version 1.2019.01(Sat Feb 09 16:32:04 CET 2019)
+(LGPL source distribution)
+Java Runtime: OpenJDK Runtime Environment
+JVM: OpenJDK 64-Bit Server VM
+Java Version: 1.8.0_265-b01
+Operating System: Linux
+OS Version: 5.8.15-201.fc32.x86_64
+Default Encoding: UTF-8
+Language: en
+Country: US
+--></g></svg>
