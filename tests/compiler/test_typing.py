@@ -98,7 +98,7 @@ entity Test:
     int i = 0.0
 end
         """,
-        "Invalid value '0.0', expected int (reported in int i = 0.0 ({dir}/main.cf:3))",
+        "Invalid value '0.0', expected int (reported in int i = 0.0 ({dir}/main.cf:3:9))",
     )
 
 
@@ -281,7 +281,8 @@ entity Child extends Parent:
     number{child_modifier} n
 end
         """,
-        "Incompatible attributes (original at ({dir}/main.cf:7)) (duplicate at ({dir}/main.cf:3))",
+        "Incompatible attributes (original at ({dir}/main.cf:7:%d)) (duplicate at ({dir}/main.cf:3:%d))"
+        % (12 + len(child_modifier), 12 + len(parent_modifier)),
     )
 
 

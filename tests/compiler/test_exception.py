@@ -184,7 +184,7 @@ mm = nn
             """
 Reported 1 errors
 error 0:
-  The object __config__::A (instantiated at {dir}/main.cf:9) is not complete: attribute n ({dir}/main.cf:3) is not set
+  The object __config__::A (instantiated at {dir}/main.cf:9) is not complete: attribute n ({dir}/main.cf:3:12) is not set
 data trace:
 attribute n on __config__::A instance
 SUBTREE for __config__::A instance:

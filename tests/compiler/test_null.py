@@ -131,7 +131,7 @@ def test_null_err(snippetcompiler):
         a = A()
 
     """,
-        "Invalid value 'null', expected String (reported in string a = null ({dir}/main.cf:3))",
+        "Invalid value 'null', expected String (reported in string a = null ({dir}/main.cf:3:20))",
     )
 
 
@@ -144,5 +144,5 @@ def test_null_on_list_err(snippetcompiler):
         implement A using std::none
         a = A()
     """,
-        "Invalid value 'null', expected string[] (reported in string[] a = null ({dir}/main.cf:3))",
+        "Invalid value 'null', expected string[] (reported in string[] a = null ({dir}/main.cf:3:22))",
     )
