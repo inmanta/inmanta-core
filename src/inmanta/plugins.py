@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional
 
 import inmanta.ast.type as InmantaType
 from inmanta import const, protocol
-from inmanta.ast import CompilerException, LocatableString, Namespace, Range, RuntimeException, TypeNotFoundException
+from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
@@ -196,7 +196,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
         filename: Optional[str] = inspect.getsourcefile(self.__class__.__function__)
         assert filename is not None
         line: int = inspect.getsourcelines(self.__class__.__function__)[1] + 1
-        self.location: Range = Range(filename, line, 1, line, 2)
+        self.location = Location(filename, line)
 
     def normalize(self) -> None:
         self.resolver = self.namespace
@@ -289,7 +289,8 @@ class Plugin(NamedType, metaclass=PluginMeta):
         if arg_type == "dict":
             return InmantaType.TypedDict(allowed_element_type)
 
-        locatable_type: LocatableString = LocatableString(arg_type, self.location, 0, None)
+        plugin_line: Range = Range(self.location.file, self.location.lnr, 1, self.location.lnr + 1, 1)
+        locatable_type: LocatableString = LocatableString(arg_type, plugin_line, 0, None)
 
         # stack of transformations to be applied to the base InmantaType.Type
         # transformations will be applied right to left
