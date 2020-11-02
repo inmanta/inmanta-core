@@ -22,6 +22,7 @@ requires = [
     "importlib_metadata",
     "docstring-parser",
     "cookiecutter",
+    "more-itertools",
 ]
 
 # Package a dummy extensions so that the namespace package for extensions is not empty
@@ -33,7 +34,7 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    version="2020.5",
+    version="2020.6",
     python_requires=">=3.6",  # also update classifiers
     # Meta data
     name="inmanta",

@@ -1,8 +1,18 @@
-# Release 2020.5 (?)
+# Release 2020.6 (?)
+
+## New features
+- Add support to use a custom venv path in the Project class (#2466)
+
+## Upgrade notes
+- Ensure the database is backed up before executing an upgrade.
+
+# Release 2020.5 (2020-10-27)
 
 ## New features
 - Added support for environment markers as described in PEP 508 to module requirements parsing (#2359)
 - Added design guide to the documentation
+- Improved error message when plugin loading fails to include original exception and location (#2385)
+- Improved duplicate attributes error message (#2386)
 
 ## Bug fixes
 - Fixed import loop when using `inmanta.execute.proxy` as entry point (#2341)
@@ -20,6 +30,8 @@
 - Allow empty body in else branch for if-else statement (#2375)
 - Fixed export failure with null in dict (#2437)
 - Fixed small documentation issues
+- Only store single agent instance in database for each distinct instance to prevent database overflow when agent rapidly and
+    repeatadly dis- and reconnects (#2394)
 
 # Release 2020.4 (2020-09-08)
 

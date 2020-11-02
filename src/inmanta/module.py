@@ -373,7 +373,7 @@ class Project(ModuleLike):
     PROJECT_FILE = "project.yml"
     _project = None
 
-    def __init__(self, path: str, autostd: bool = True, main_file: str = "main.cf") -> None:
+    def __init__(self, path: str, autostd: bool = True, main_file: str = "main.cf", venv_path: Optional[str] = None) -> None:
         """
         Initialize the project, this includes
          * Loading the project.yaml (into self._meta)
@@ -383,7 +383,8 @@ class Project(ModuleLike):
          * verify if project.yml corresponds to the modules in self.modules
 
         :param path: The directory where the project is located
-
+        :param venv_path: Path to the directory that will contain the Python virtualenv.
+                          This can be an existing or a non-existing directory.
         """
         super().__init__(path)
         self.project_path = path
@@ -427,7 +428,11 @@ class Project(ModuleLike):
             if not os.path.exists(self.downloadpath):
                 os.mkdir(self.downloadpath)
 
-        self.virtualenv = env.VirtualEnv(os.path.join(path, ".env"))
+        if venv_path is None:
+            venv_path = os.path.join(path, ".env")
+        else:
+            venv_path = os.path.abspath(venv_path)
+        self.virtualenv = env.VirtualEnv(venv_path)
 
         self.loaded = False
         self.modules = {}  # type: Dict[str, Module]
@@ -439,7 +444,7 @@ class Project(ModuleLike):
         if "install_mode" in self._meta:
             mode = self._meta["install_mode"]
             if mode not in INSTALL_OPTS:
-                LOGGER.warning("Invallid value for install_mode, should be one of [%s]" % ",".join(INSTALL_OPTS))
+                LOGGER.warning("Invalid value for install_mode, should be one of [%s]" % ",".join(INSTALL_OPTS))
             else:
                 self._install_mode = mode
 
@@ -1126,13 +1131,17 @@ class Module(ModuleLike):
         """
         Load all plug-ins from a configuration module
         """
-        try:
-            for _, fq_mod_name in self.get_plugin_files():
+        for _, fq_mod_name in self.get_plugin_files():
+            try:
                 LOGGER.debug("Loading module %s", fq_mod_name)
                 importlib.import_module(fq_mod_name)
-
-        except ImportError as e:
-            raise CompilerException("Unable to load all plug-ins for module %s" % self._meta["name"]) from e
+            except loader.PluginModuleLoadException as e:
+                exception = CompilerException(
+                    f"Unable to load all plug-ins for module {self._meta['name']}:"
+                    f"\n\t{e.get_cause_type_name()} while loading plugin module {e.module}: {e.cause}"
+                )
+                exception.set_location(Location(e.path, e.lineno if e.lineno is not None else 0))
+                raise exception
 
     def _get_fq_mod_name_for_py_file(self, py_file: str, plugin_dir: str, mod_name: str) -> str:
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)
