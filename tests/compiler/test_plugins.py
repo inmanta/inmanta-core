@@ -220,7 +220,7 @@ def test_1920_type_double_defined_plugin(snippetcompiler):
 import test_1920
         """,
         "Type test_1920::some_name is already defined"
-        f" (original at ({modpath}/plugins/__init__.py:5:1))"
+        f" (original at ({modpath}/plugins/__init__.py:5))"
         f" (duplicate at ({modpath}/model/_init.cf:1:16))",
     )
 
