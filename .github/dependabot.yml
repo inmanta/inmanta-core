@@ -9,7 +9,5 @@ updates:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
   ignore:
-    # ignore until this is resolved: https://github.com/ClearcodeHQ/pytest-postgresql/issues/338
-    - dependency-name: "pytest-postgresql"
     # Ignore until this is resolved: https://github.com/inmanta/inmanta/issues/2495
     - dependency-name: "sphinx"
