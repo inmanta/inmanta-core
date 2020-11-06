@@ -166,6 +166,12 @@ def setup_signal_handlers(shutdown_function: Callable[[], Coroutine[Any, Any, No
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGUSR1, handle_signal_dump)
+    try:
+        import rpdb
+
+        rpdb.handle_trap()
+    except ImportError:
+        pass
 
 
 def safe_shutdown(ioloop: IOLoop, shutdown_function: Callable[[], None]) -> None:
