@@ -15,9 +15,13 @@
 
     Contact: code@inmanta.com
 """
+import os
 from collections import defaultdict
 
+import more_itertools
+
 from inmanta import compiler
+from inmanta.ast import Range
 
 
 def test_anchors_basic(snippetcompiler):
@@ -114,6 +118,30 @@ implement Test using a
     verify_anchor(11, 22, 26, 2)
     verify_anchor(15, 22, 23, 11)
     verify_anchor(15, 11, 15, 2)
+
+
+def test_anchors_plugin(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import tests
+
+l = tests::length("Hello World!")
+        """
+    )
+    anchormap = compiler.anchormap()
+    location: Range
+    resolves_to: Range
+    location, resolves_to = more_itertools.one(
+        (location, resolves_to)
+        for location, resolves_to in anchormap
+        if location.file == os.path.join(snippetcompiler.project_dir, "main.cf")
+    )
+    assert location.lnr == 4
+    assert location.start_char == 5
+    assert location.end_lnr == 4
+    assert location.end_char == 18
+    assert resolves_to.file == os.path.join(snippetcompiler.modules_dir, "tests", "plugins", "__init__.py")
+    assert resolves_to.lnr == 13
 
 
 def test_get_types_and_scopes(snippetcompiler):

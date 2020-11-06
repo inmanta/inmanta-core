@@ -76,7 +76,7 @@ end
 implement Test using std::none
         """,
         "Invalid value 'value', does not match constraint `(self in ['accepted','values'])`"
-        " (reported in mytype v = 'value' ({dir}/main.cf:5))",
+        " (reported in mytype v = 'value' ({dir}/main.cf:5:16))",
     )
 
 
@@ -92,7 +92,7 @@ end
 implement Test using std::none
         """,
         "Invalid value 'value', does not match constraint `/accepted_value/`"
-        " (reported in mytype v = 'value' ({dir}/main.cf:5))",
+        " (reported in mytype v = 'value' ({dir}/main.cf:5:16))",
     )
 
 
@@ -106,7 +106,7 @@ entity A:
 end
         """,
         "Invalid value [42, 42], does not match constraint `(std::unique(self) == true)`"
-        " (reported in mytype v = List() ({dir}/main.cf:5))",
+        " (reported in mytype v = List() ({dir}/main.cf:5:16))",
     )
 
 

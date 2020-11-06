@@ -1,7 +1,27 @@
-# Release 2020.5 (?)
+# Release 2020.6 (?)
+
+## New features
+- Add support to use a custom venv path in the Project class (#2466)
+- Added more specific location information for attributes (#2481)
+- Added plugin call anchors to support ctrl-clicking a plugin call (#1954)
+
+## Bug fixes
+- Fix broken links in the documentation (#2495)
+
+## Upgrade notes
+- Ensure the database is backed up before executing an upgrade.
+
+# Release 2020.5 (2020-10-27)
+
+## New features
+- Added support for environment markers as described in PEP 508 to module requirements parsing (#2359)
+- Added design guide to the documentation
+- Improved error message when plugin loading fails to include original exception and location (#2385)
+- Improved duplicate attributes error message (#2386)
 
 ## Bug fixes
 - Fixed import loop when using `inmanta.execute.proxy` as entry point (#2341)
+- Fixed import loop when using `inmanta.resources` as entry point (#2342)
 - Clearing an environment with merged compile requests no longer fails (#2350)
 - Fixed compiler bug (#2378)
 - Fix "compile_data_json_file" referenced before assignment (#2361)
@@ -12,6 +32,11 @@
 - Enhance installation documentation (#2241, #2356, #2357)
 - Ensure that a protected environment can't be decommissioned (#2376)
 - Don't load all code on agent start (#2343)
+- Allow empty body in else branch for if-else statement (#2375)
+- Fixed export failure with null in dict (#2437)
+- Fixed small documentation issues
+- Only store single agent instance in database for each distinct instance to prevent database overflow when agent rapidly and
+    repeatadly dis- and reconnects (#2394)
 
 # Release 2020.4 (2020-09-08)
 

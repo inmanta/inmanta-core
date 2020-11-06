@@ -28,12 +28,12 @@ from inmanta.protocol import Client
 from inmanta.util import get_compiler_version
 
 
-async def retry_limited(fun, timeout):
+async def retry_limited(fun, timeout, *args, **kwargs):
     async def fun_wrapper():
         if inspect.iscoroutinefunction(fun):
-            return await fun()
+            return await fun(*args, **kwargs)
         else:
-            return fun()
+            return fun(*args, **kwargs)
 
     start = time.time()
     while time.time() - start < timeout and not (await fun_wrapper()):

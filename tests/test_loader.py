@@ -20,8 +20,9 @@ import inspect
 import os
 import shutil
 import sys
-from typing import List, Set
+from typing import List, Optional, Set
 
+import py
 import pytest
 from pytest import fixture
 
@@ -206,6 +207,50 @@ def module_path(tmpdir):
     sys.meta_path.insert(0, module_finder)
     yield str(tmpdir)
     sys.meta_path.remove(module_finder)
+
+
+def test_venv_path(tmpdir: py.path.local):
+    original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
+    project_dir = os.path.join(tmpdir, "plugins_project")
+    shutil.copytree(original_project_dir, project_dir)
+
+    def load_project(venv_path: Optional[str]) -> None:
+        if venv_path is None:
+            project: Project = Project(project_dir)
+        else:
+            project: Project = Project(project_dir, venv_path=venv_path)
+        Project.set(project)
+        project.load()
+
+    # Use default venv dir
+    default_venv_dir = os.path.join(project_dir, ".env")
+    shutil.rmtree(default_venv_dir, ignore_errors=True)
+    assert not os.path.exists(default_venv_dir)
+    load_project(venv_path=None)
+    assert os.path.exists(default_venv_dir)
+    shutil.rmtree(default_venv_dir)
+
+    # Use non-default venv dir
+    non_default_venv_dir = os.path.join(project_dir, "non-default-venv-dir")
+    assert not os.path.exists(default_venv_dir)
+    assert not os.path.exists(non_default_venv_dir)
+    load_project(venv_path=non_default_venv_dir)
+    assert not os.path.exists(default_venv_dir)
+    assert os.path.exists(non_default_venv_dir)
+    shutil.rmtree(non_default_venv_dir)
+
+    # venv_path points to symlink
+    os.mkdir(non_default_venv_dir)
+    symlink_dir = os.path.join(project_dir, "symlink-dir")
+    os.symlink(non_default_venv_dir, symlink_dir)
+    for p in [non_default_venv_dir, symlink_dir]:
+        assert os.path.exists(p)
+        assert not os.path.exists(os.path.join(p, "bin", "python"))
+    assert not os.path.islink(non_default_venv_dir)
+    assert os.path.islink(symlink_dir)
+    load_project(venv_path=symlink_dir)
+    for p in [non_default_venv_dir, symlink_dir]:
+        assert os.path.exists(os.path.join(p, "bin", "python"))
 
 
 def test_module_loader(module_path, tmpdir, capsys):

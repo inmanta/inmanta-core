@@ -429,7 +429,7 @@ implement Test1 using std::none
 t1 = Test1()
 """,
         "The object __config__::Test1 (instantiated at {dir}/main.cf:10) is not complete: "
-        "attribute a ({dir}/main.cf:5) is not set",
+        "attribute a ({dir}/main.cf:5:12) is not set",
     )
 
 

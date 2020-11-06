@@ -17,12 +17,30 @@
 """
 from asyncpg import Connection
 
-DISABLED = True
+DISABLED = False
 
 
 async def update(connection: Connection) -> None:
     await connection.execute(
         """
-
+        CREATE INDEX resourceaction_environment_version_started_index ON resourceaction(environment,version,started DESC);
         """
     )
+    await enforce_unique_agent_instances(connection)
+
+
+async def enforce_unique_agent_instances(connection: Connection) -> None:
+    """
+    Deletes duplicate AgentInstance records and adds a uniqueness constraint.
+    """
+    async with connection.transaction():
+        await connection.execute(
+            """
+            DELETE FROM public.agentinstance a
+            USING public.agentinstance b
+            WHERE a.id < b.id AND a.tid = b.tid AND a.process = b.process AND a.name = b.name
+            ;
+
+            ALTER TABLE public.agentinstance ADD CONSTRAINT agentinstance_unique UNIQUE (tid, process, name);
+            """
+        )

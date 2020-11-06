@@ -32,17 +32,17 @@ import asyncpg
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
-from inmanta import const, util
+from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.types import JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
 
 DBLIMIT = 100000
+APILIMIT = 1000
 
 
 # TODO: disconnect
@@ -140,7 +140,7 @@ class DocumentMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
-T = TypeVar("T")
+TBaseDocument = TypeVar("TBaseDocument", bound="BaseDocument")
 
 
 class BaseDocument(object, metaclass=DocumentMeta):
@@ -390,7 +390,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 result[name] = default_value
         return result
 
-    async def update(self, **kwargs: Any) -> None:
+    async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         """
         Update this document in the database. It will update the fields in this object and send a full update to database.
         Use update_fields to only update specific fields.
@@ -403,7 +403,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(column_names) + 1)
         values = values + values_for_filter
         query = "UPDATE " + self.table_name() + " SET " + values_as_parameterize_sql_string + " WHERE " + filter_statement
-        await self._execute_query(query, *values)
+        await self._execute_query(query, *values, connection=connection)
 
     def _get_set_statement(self, **kwargs):
         counter = 1
@@ -435,8 +435,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     async def get_by_id(
-        cls: Type[T], doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Optional[T]:
+        cls: Type[TBaseDocument], doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Optional[TBaseDocument]:
         """
         Get a specific document based on its ID
 
@@ -448,14 +448,17 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return None
 
     @classmethod
-    async def get_one(cls: Type[T], connection: Optional[asyncpg.connection.Connection] = None, **query) -> T:
+    async def get_one(
+        cls: Type[TBaseDocument], connection: Optional[asyncpg.connection.Connection] = None, **query
+    ) -> Optional[TBaseDocument]:
         results = await cls.get_list(connection=connection, **query)
         if results:
             return results[0]
+        return None
 
     @classmethod
     async def get_list(
-        cls: Type[T],
+        cls: Type[TBaseDocument],
         order_by_column: str = None,
         order: str = "ASC",
         limit: int = None,
@@ -463,7 +466,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         no_obj: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Any,
-    ) -> List[T]:
+    ) -> List[TBaseDocument]:
         """
         Get a list of documents matching the filter args
         """
@@ -1170,6 +1173,9 @@ class AgentProcess(BaseDocument):
         return result
 
 
+TAgentInstance = TypeVar("TAgentInstance", bound="AgentInstance")
+
+
 class AgentInstance(BaseDocument):
     """
     A physical server/node in the infrastructure that reports to the management server.
@@ -1187,8 +1193,12 @@ class AgentInstance(BaseDocument):
 
     @classmethod
     async def active_for(
-        cls, tid, endpoint, process: uuid.UUID = None, connection: Optional[asyncpg.connection.Connection] = None
-    ):
+        cls: Type[TAgentInstance],
+        tid: uuid.UUID,
+        endpoint: str,
+        process: Optional[uuid.UUID] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> List[TAgentInstance]:
         if process is not None:
             objects = await cls.get_list(expired=None, tid=tid, name=endpoint, process=process, connection=connection)
         else:
@@ -1196,49 +1206,41 @@ class AgentInstance(BaseDocument):
         return objects
 
     @classmethod
-    async def active(cls):
+    async def active(cls: Type[TAgentInstance]) -> List[TAgentInstance]:
         objects = await cls.get_list(expired=None)
         return objects
 
     @classmethod
-    async def _expire_endpoints_for_process(
-        cls, tid: uuid.UUID, process: uuid.UUID, endpoints: Set[str], now: datetime.datetime
-    ) -> None:
-        """
-        Expire the agent instances for the given endpoints if they are not expired yet.
-        """
-        if not endpoints:
-            return
-        names_subquery = ",".join([f"${i}" for i in range(4, 4 + len(endpoints))])
-        query = f"""UPDATE {cls.table_name()}
-                    SET expired=$1
-                    WHERE tid=$2 AND process=$3 AND name IN ({names_subquery}) AND expired IS NULL
-                 """
-        values = [cls._get_value(now), cls._get_value(tid), cls._get_value(process)] + [cls._get_value(e) for e in endpoints]
-        await cls._execute_query(query, *values)
-
-    @classmethod
-    async def log_instance_creation(
-        cls, tid: uuid.UUID, process: uuid.UUID, endpoints: Set[str], now: datetime.datetime
-    ) -> None:
+    async def log_instance_creation(cls: Type[TAgentInstance], tid: uuid.UUID, process: uuid.UUID, endpoints: Set[str]) -> None:
         """
         Create new agent instances for a given session.
         """
         if not endpoints:
             return
-        # Fix database corruption when database was down
-        await cls._expire_endpoints_for_process(tid, process, endpoints, now)
-        for nh in endpoints:
-            await cls(tid=tid, process=process, name=nh).insert()
+        async with cls.get_connection() as connection:
+            await connection.executemany(
+                f"""
+                INSERT INTO
+                {cls.table_name()}
+                (id, tid, process, name, expired)
+                VALUES ($1, $2, $3, $4, null)
+                ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
+                SET expired = null
+                ;
+                """,
+                [tuple(map(cls._get_value, (cls._new_id(), tid, process, name))) for name in endpoints],
+            )
 
     @classmethod
-    async def log_instance_expiry(cls, sid: uuid.UUID, endpoints: Set[str], now: datetime.datetime) -> None:
+    async def log_instance_expiry(
+        cls: Type[TAgentInstance], sid: uuid.UUID, endpoints: Set[str], now: datetime.datetime
+    ) -> None:
         """
         Expire specific instances for a given session id.
         """
         if not endpoints:
             return
-        instances = await cls.get_list(process=sid)
+        instances: List[TAgentInstance] = await cls.get_list(process=sid)
         for ai in instances:
             if ai.name in endpoints:
                 await ai.update_fields(expired=now)
@@ -1723,6 +1725,26 @@ class ResourceAction(BaseDocument):
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
     @classmethod
+    async def get_logs_for_version(
+        cls, environment: uuid.UUID, version: int, action: Optional[str] = None, limit: int = 0
+    ) -> List["ResourceAction"]:
+        query = f"""SELECT *
+                        FROM {cls.table_name()}
+                        WHERE environment=$1 AND version=$2
+                     """
+        values = [cls._get_value(environment), cls._get_value(version)]
+        if action is not None:
+            query += " AND action=$3"
+            values.append(cls._get_value(action))
+        query += " ORDER BY started DESC"
+        if limit is not None and limit > 0:
+            query += " LIMIT $%d" % (len(values) + 1)
+            values.append(cls._get_value(limit))
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
+
+    @classmethod
     async def get(cls, action_id, connection: Optional[asyncpg.connection.Connection] = None):
         return await cls.get_one(action_id=action_id, connection=connection)
 
@@ -1913,10 +1935,10 @@ class Resource(BaseDocument):
         query = "SELECT * FROM " + cls.table_name() + " WHERE environment=$1 AND attribute_hash IN " + hashes_as_str
         values = [cls._get_value(environment)] + [cls._get_value(h) for h in hashes]
         result = await cls._fetch_query(query, *values)
-        resources = []
+        resources_list = []
         for res in result:
-            resources.append(cls(from_postgres=True, **res))
-        return resources
+            resources_list.append(cls(from_postgres=True, **res))
+        return resources_list
 
     @classmethod
     async def get_resources(
@@ -2038,7 +2060,7 @@ class Resource(BaseDocument):
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource_id = record["resource_id"]
-                    parsed_id = Id.parse_id(resource_id)
+                    parsed_id = resources.Id.parse_id(resource_id)
                     result.append(
                         {
                             "resource_id": resource_id,
@@ -2061,7 +2083,7 @@ class Resource(BaseDocument):
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
 
         query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
-        resources = []
+        resources_list = []
         async with cls._connection_pool.acquire() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
@@ -2069,12 +2091,12 @@ class Resource(BaseDocument):
                         record = dict(record)
                         record["attributes"] = json.loads(record["attributes"])
                         record["id"] = record["resource_version_id"]
-                        parsed_id = Id.parse_id(record["resource_version_id"])
+                        parsed_id = resources.Id.parse_id(record["resource_version_id"])
                         record["resource_type"] = parsed_id.entity_type
-                        resources.append(record)
+                        resources_list.append(record)
                     else:
-                        resources.append(cls(from_postgres=True, **record))
-        return resources
+                        resources_list.append(cls(from_postgres=True, **record))
+        return resources_list
 
     @classmethod
     async def get_resources_for_version_raw(cls, environment, version, projection):
@@ -2114,7 +2136,7 @@ class Resource(BaseDocument):
 
     @classmethod
     def new(cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, **kwargs: Any) -> "Resource":
-        vid = Id.parse_id(resource_version_id)
+        vid = resources.Id.parse_id(resource_version_id)
 
         attr = dict(
             environment=environment,
@@ -2228,9 +2250,9 @@ class Resource(BaseDocument):
             doc.make_hash()
         await super(Resource, cls).insert_many(documents)
 
-    async def update(self, **kwargs: Any) -> None:
+    async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         self.make_hash()
-        await super(Resource, self).update(**kwargs)
+        await super(Resource, self).update(connection=connection, **kwargs)
 
     async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         self.make_hash()

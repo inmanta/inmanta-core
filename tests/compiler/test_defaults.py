@@ -237,7 +237,7 @@ end
 
 Test(t=5)
         """,
-        "Invalid value 'str', expected Number (reported in number t = 'str' ({dir}/main.cf:3))",
+        "Invalid value 'str', expected Number (reported in number t = 'str' ({dir}/main.cf:3:12))",
     )
 
 
@@ -252,7 +252,7 @@ implement Test using std::none
 
 Test(t = ["str"])
         """,
-        "Invalid value '1', expected String (reported in string[]? t = List() ({dir}/main.cf:3))",
+        "Invalid value '1', expected String (reported in string[]? t = List() ({dir}/main.cf:3:15))",
     )
 
 
@@ -267,7 +267,7 @@ implement Test using std::none
 
 Test(t = 12)
         """,
-        "Invalid value '[1, 2]', expected Number (reported in number? t = List() ({dir}/main.cf:3))",
+        "Invalid value '[1, 2]', expected Number (reported in number? t = List() ({dir}/main.cf:3:13))",
     )
 
 
@@ -285,7 +285,7 @@ implement Test using std::none
 Test(t = 8)
         """,
         "Invalid value 12, does not match constraint `((self > 0) and (self < 10))`"
-        " (reported in digit t = 12 ({dir}/main.cf:5))",
+        " (reported in digit t = 12 ({dir}/main.cf:5:11))",
     )
 
 
@@ -296,7 +296,7 @@ entity Test:
     number t = "str"
 end
         """,
-        "Invalid value 'str', expected Number (reported in number t = 'str' ({dir}/main.cf:3))",
+        "Invalid value 'str', expected Number (reported in number t = 'str' ({dir}/main.cf:3:12))",
     )
 
 
@@ -319,5 +319,5 @@ entity Test:
 end
         """,
         "Invalid value 'nodatevalue', does not match constraint `(std::validate_type('datetime.date',self) == true)`"
-        " (reported in std::date d = 'nodatevalue' ({dir}/main.cf:3))",
+        " (reported in std::date d = 'nodatevalue' ({dir}/main.cf:3:15))",
     )

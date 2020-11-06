@@ -1,0 +1,27 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+set namespaceSeparator ::
+left to right direction
+
+class VirtualMachine {
+    string image
+    string size
+    ...
+}
+
+class SecurityGroupReference {
+    string name
+}
+
+note bottom of SecurityGroupReference : This entity is used to refer to \n an existing, unmanaged SecurityGroup
+
+class SecurityGroup {
+    string description
+}
+
+note top of SecurityGroup : This entity expresses desired state\nabout a SecurityGroup
+
+VirtualMachine "1" -- "*" SecurityGroupReference : security_groups
+SecurityGroup -|> SecurityGroupReference
+@enduml

@@ -53,7 +53,7 @@ if 0 == 1:
 end
         """,
         "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete: "
-        "attribute field ({dir}/main.cf:3) is not set",
+        "attribute field ({dir}/main.cf:3:12) is not set",
     )
 
 

@@ -18,7 +18,7 @@
 
 from typing import List, Optional, Tuple
 
-from inmanta.ast import CompilerException, Locatable, RuntimeException, TypingException
+from inmanta.ast import CompilerException, Locatable, Location, RuntimeException, TypingException
 from inmanta.ast.type import NullableType, TypedList
 from inmanta.execute.runtime import (
     AttributeVariable,
@@ -48,8 +48,11 @@ class Attribute(Locatable):
     :param entity: The entity this attribute belongs to
     """
 
-    def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool = False, nullable: bool = False) -> None:
+    def __init__(
+        self, entity: "Entity", value_type: "Type", name: str, location: Location, multi: bool = False, nullable: bool = False
+    ) -> None:
         Locatable.__init__(self)
+        self.location = location
         self.__name: str = name
         entity.add_attribute(self)
         self.__entity = entity
@@ -147,8 +150,8 @@ class RelationAttribute(Attribute):
     An attribute that is a relation
     """
 
-    def __init__(self, entity: "Entity", value_type: "Type", name: str) -> None:
-        Attribute.__init__(self, entity, value_type, name)
+    def __init__(self, entity: "Entity", value_type: "Type", name: str, location: Location) -> None:
+        Attribute.__init__(self, entity, value_type, name, location)
         self.end: Optional[RelationAttribute] = None
         self.low = 1
         self.high = 1

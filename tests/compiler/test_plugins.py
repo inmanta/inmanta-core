@@ -16,9 +16,12 @@
     Contact: code@inmanta.com
 """
 import os
+import re
+
+import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import ExplicitPluginException, Namespace
+from inmanta.ast import CompilerException, ExplicitPluginException, Namespace
 
 
 def test_plugin_excn(snippetcompiler):
@@ -217,7 +220,7 @@ def test_1920_type_double_defined_plugin(snippetcompiler):
 import test_1920
         """,
         "Type test_1920::some_name is already defined"
-        f" (original at ({modpath}/plugins/__init__.py:5:1))"
+        f" (original at ({modpath}/plugins/__init__.py:5))"
         f" (duplicate at ({modpath}/model/_init.cf:1:16))",
     )
 
@@ -239,3 +242,16 @@ tests::raise_exception("%s")
         assert e.__cause__.message == "Test: " + msg
     except Exception as e:
         assert False, "Expected ExplicitPluginException, got %s" % e
+
+
+def test_plugin_load_exception(snippetcompiler):
+    module: str = "test_plugin_load_error"
+    snippetcompiler.setup_for_snippet(f"import {module}")
+    modpath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "modules", module)
+    expected: str = (
+        "Unable to load all plug-ins for module test_plugin_load_error:"
+        "\n\tNameError while loading plugin module inmanta_plugins.test_plugin_load_error.invalid_code:"
+        f" name 'invalid_token_at_line_42' is not defined ({modpath}/plugins/invalid_code.py:42)"
+    )
+    with pytest.raises(CompilerException, match=re.escape(expected)):
+        compiler.do_compile()

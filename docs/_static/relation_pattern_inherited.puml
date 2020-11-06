@@ -1,0 +1,36 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+set namespaceSeparator ::
+left to right direction
+
+Rule "1" -- NamedObject: source
+Rule "1" -- NamedObject: target
+
+NamedObject <|-- Host
+NamedObject <|-- Network
+NamedObject <|-- Group
+
+class NamedObject {
+    string name
+}
+
+class Host {
+    ...
+}
+
+class Network {
+    ...
+}
+
+class Group {
+    ...
+}
+
+note bottom of NamedObject : This entity is used to refer to \n an existing, unmanaged Object
+note "These entities express desired state \nover different specific types of Objects." as N1
+Host .. N1
+Network .. N1
+Group .. N1
+
+@enduml
