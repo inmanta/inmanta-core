@@ -70,7 +70,6 @@ tests_common/src/inmanta_tests/db/*
 # ??
 build-result
 /env/
-venv
 .cache
 .coverage
 .coverage*
