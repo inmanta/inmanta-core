@@ -5,7 +5,9 @@
 SPHINXOPTS    =
 SPHINXBUILD   = sphinx-build
 PAPER         = a4
+ifeq ($(BUILDDIR),)
 BUILDDIR      = build
+endif
 SOURCEDIR	  = .
 #IMAGEDIRS can be a list of directories that contain SVG files and are relative to the SOURCEDIR
 IMAGEDIRS     = _static
@@ -53,7 +55,8 @@ clean:
 	-rm -rf $(BUILDDIR)/*
 	-rm -rf $(PNGs)
 
-html: openapi
+html: openapi latexpdf
+	cp $(BUILDDIR)/latex/inmanta.pdf $(SOURCEDIR)
 	$(SPHINXBUILD) -b html -t include_redoc $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."

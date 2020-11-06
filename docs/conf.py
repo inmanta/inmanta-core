@@ -269,7 +269,9 @@ texinfo_documents = [
 # How to display URL addresses: 'footnote', 'no', or 'inline'.
 # texinfo_show_urls = 'footnote'
 
-linkcheck_ignore = [r'http(s)?://localhost:\d+/', r'http://127.0.0.1:\d+']
+# Ingnore link check of openapi.html because it's used in a toctree.
+# A trick was required to include a non-sphinx document in a toctee.
+linkcheck_ignore = [r'http(s)?://localhost:\d+/', r'http://127.0.0.1:\d+', r'openapi.html']
 
 # Do not print the warning that tabs only work in html
 # https://github.com/djungelorm/sphinx-tabs/issues/39
