@@ -96,7 +96,7 @@ section expects the following keys:
 
 * algorithm: The algorithm used for this key. Only HS256 and RS256 are supported.
 * sign: Whether the server can use this key to sign JWT it issues. Only one section may have this set to true.
-* client_types: The client types from the urn:inmanta:ct claim that can be valided and/or signed with this key.
+* client_types: The client types from the ``urn:inmanta:ct`` claim that can be valided and/or signed with this key.
 * key: The secret key used by symmetric algorithms such as HS256. Generate the key with a secure prng with minimal length equal
   to the length of the HMAC (For HS256 == 256). The key should be a urlsafe base64 encoded bytestring without padding.
   (see below of a command to generate such a key)
@@ -133,7 +133,7 @@ External authentication providers
 ---------------------------------
 
 Inmanta supports all external authentication providers that support JWT tokens with RS256 or HS256. These providers need to
-add a claims that indicate the allowed client type (urn:inmanta:ct). Currently, the dashboard only has support for keycloak.
+add a claims that indicate the allowed client type (``urn:inmanta:ct``). Currently, the dashboard only has support for keycloak.
 However, each provider that can insert custom (private) claims should work. The dashboard now relies on the keycloak js library
 to implement the OAuth2 implicit flow, required to obtain a JWT.
 
@@ -217,9 +217,9 @@ Add a mapper to add custom claims to the issued tokens for the API client type. 
    :width: 100%
    :align: center
 
-   Add a custom mapper to the client to include `:urn:inmanta:ct`
+   Add a custom mapper to the client to include ``:urn:inmanta:ct``
 
-Select hardcoded claim, enter `:urn:inmanta:ct` as claim name and `api` as claim value and string as type. It should only be
+Select hardcoded claim, enter ``:urn:inmanta:ct`` as claim name and `api` as claim value and string as type. It should only be
 added to the access token.
 
 .. figure:: /administrators/images/kc_ct_mapper.png
