@@ -5,6 +5,9 @@
 - Added more specific location information for attributes (#2481)
 - Added plugin call anchors to support ctrl-clicking a plugin call (#1954)
 
+## Bug fixes
+- Fix broken links in the documentation (#2495)
+
 ## Upgrade notes
 - Ensure the database is backed up before executing an upgrade.
 
