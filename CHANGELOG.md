@@ -6,6 +6,9 @@
 - Added plugin call anchors to support ctrl-clicking a plugin call (#1954)
 - Added rpdb signal handler (#2170)
 
+## Bug fixes
+- Fix broken links in the documentation (#2495)
+
 ## Upgrade notes
 - Ensure the database is backed up before executing an upgrade.
 
