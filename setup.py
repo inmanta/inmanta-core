@@ -69,6 +69,9 @@ setup(
     zip_safe=False,
     include_package_data=True,
     install_requires=requires,
+    extras_require={
+      "debug": ["rpdb"]
+    },
     entry_points={
         "console_scripts": [
             "inmanta-cli = inmanta.main:main",
