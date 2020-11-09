@@ -281,7 +281,14 @@ Debugging
 =========
 
 Debugging the server is possible in case the `rpdb <https://pypi.org/project/rpdb/>`_ package is installed.
-It can be triggered by sending a TRAP signal to the inmanta server process.
+Installing the ``rpdb`` package to the virtual environment used by Inmanta by default can be done the following way:
+
+.. code-block:: sh
+
+   $ /opt/inmanta/bin/python3 -m pip install rpdb
+
+
+Rpdb can be triggered by sending a TRAP signal to the inmanta server process.
 
 .. code-block:: sh
 
