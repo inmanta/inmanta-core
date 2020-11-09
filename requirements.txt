@@ -55,6 +55,7 @@ pip==20.2.4
 docstring-parser==0.7.3
 bumpversion==0.6.0
 sphinx-click==2.5.0
+rpdb==0.1.6
 
 # Transitive dependencies
 MarkupSafe==1.1.1

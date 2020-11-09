@@ -4,6 +4,7 @@
 - Add support to use a custom venv path in the Project class (#2466)
 - Added more specific location information for attributes (#2481)
 - Added plugin call anchors to support ctrl-clicking a plugin call (#1954)
+- Added rpdb signal handler (#2170)
 
 ## Bug fixes
 - Fix broken links in the documentation (#2495)

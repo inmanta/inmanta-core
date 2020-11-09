@@ -64,6 +64,11 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
 
+try:
+    import rpdb
+except ImportError:
+    rpdb = None
+
 LOGGER = logging.getLogger("inmanta")
 
 
@@ -166,6 +171,8 @@ def setup_signal_handlers(shutdown_function: Callable[[], Coroutine[Any, Any, No
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGUSR1, handle_signal_dump)
+    if rpdb:
+        rpdb.handle_trap()
 
 
 def safe_shutdown(ioloop: IOLoop, shutdown_function: Callable[[], None]) -> None:
