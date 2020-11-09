@@ -276,3 +276,10 @@ the log level of the command to the DEBUG level and the ``-X`` option shows stac
 .. code-block:: sh
 
    $ inmanta -vvv export -X
+
+Debugging
+=========
+
+Debugging the server is possible in case the `rpdb <https://pypi.org/project/rpdb/>`_ package installed. It can be triggered by sending a TRAP signal to the
+inmanta server process. After receiving the signal, the process hangs, and it's possible to access a ``pdb`` debugger
+by connecting to 127.0.0.1, on port 4444 (for example using telnet).
