@@ -2,7 +2,7 @@ openapi-spec-validator==0.2.9
 PyJWT==1.7.1
 click==7.1.2
 click-plugins==1.1.1
-colorlog==4.5.0
+colorlog==4.6.2
 cookiecutter==1.7.2
 cryptography==3.2.1
 execnet==1.7.1
@@ -55,6 +55,7 @@ pip==20.2.4
 docstring-parser==0.7.3
 bumpversion==0.6.0
 sphinx-click==2.5.0
+rpdb==0.1.6
 
 # Transitive dependencies
 MarkupSafe==1.1.1
