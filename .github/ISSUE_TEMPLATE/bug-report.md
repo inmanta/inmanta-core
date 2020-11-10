@@ -9,7 +9,8 @@ assignees: ''
 
 # Describe your issue
 
-(Tell us what the problem is in a few words)
+(Tell us what the problem is in a few words)  
+*Ex: As an end user, when I access the console and see a service inventory, if attributes have too long values, I can't see any of the right buttons anymore*
 
 # Steps to reproduce
 
@@ -20,11 +21,13 @@ assignees: ''
 
 # Expected behavior
 
-(Tell us what you expected this list of steps to do)
+(Tell us what you expected this list of steps to do)  
+*Ex: On the right side of the service I should see 4 buttons: show resources, edit, delete and diagnose*
 
 # Work around (if any)
 
-(You can add detail about the resolution of this issue here)
+(You can add detail about the resolution of this issue here)  
+*Ex: Buy 8K monitor to every user so that there is room for such long test*
 
 # Your environment
 
