@@ -9,7 +9,7 @@ assignees: ''
 
 # Describe your issue
 
-(Tell us what the problem is in a few word)
+(Tell us what the problem is in a few words)
 
 # Steps to reproduce
 
@@ -28,7 +28,7 @@ assignees: ''
 
 # Your environment
 
-Please provide the following informations:
+Please provide the following information:
  - Current Inmanta version: 
  - Operating System: 
  - Python version:
