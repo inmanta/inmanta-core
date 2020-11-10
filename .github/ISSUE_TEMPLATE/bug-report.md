@@ -11,6 +11,21 @@ assignees: ''
 
 (Tell us what the problem is in a few word)
 
+# Steps to reproduce
+
+1. step 1
+2. step 2
+3. ...
+4. result
+
+# Expected behavior
+
+(Tell us what you expected this list of steps to do)
+
+# Work around (if any)
+
+(You can add detail about the resolution of this issue here)
+
 # Your environment
 
 Please provide the following informations:
@@ -24,24 +39,3 @@ echo " - $(inmanta --version)"; \
 echo " - OS: $(source /etc/os-release; echo $PRETTY_NAME)"; \
 echo " - Python version: $(python3 --version)"; \
 echo " - PostreSQL version: $(psql --version)"
-
-# Steps to reproduce
-
-1. step 1
-2. step 2
-3. you get it...
-
-# Expected behavior
-
-(Tell us what you expected this list of steps to do)
-
-# Actual behavior
-
-(Tell us what actually happened)
-
-# (Optional) You already found the solution to this problem?
-
-(You can add detail about the resolution of this issue here)
-
-# (Optional) Are you willing to contribute and try solving this issue?
- - [ ] Yes
