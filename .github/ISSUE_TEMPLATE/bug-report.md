@@ -27,7 +27,7 @@ assignees: ''
 # Work around (if any)
 
 (You can add detail about the resolution of this issue here)  
-*Ex: Buy 8K monitor to every user so that there is room for such long test*
+*Ex: none*
 
 # Your environment
 
