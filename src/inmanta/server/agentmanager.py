@@ -909,18 +909,24 @@ class AutostartedAgentManager(ServerSlice):
         err: str = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
 
         agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
-        proc = await self._fork_inmanta(
-            ["-vvvv", "--timed-logs", "--config", config_path, "--log-file", agent_log, "agent"], out, err
-        )
 
-        if env.id in self._agent_procs and self._agent_procs[env.id] is not None:
-            # If the return code is not None the process is already terminated
-            if self._agent_procs[env.id].returncode is None:
-                LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].pid)
-                self._agent_procs[env.id].terminate()
-                await self._wait_for_proc_bounded([self._agent_procs[env.id]])
+        try:
+            proc = await self._fork_inmanta(
+                ["-vvvv", "--timed-logs", "--config", config_path, "--log-file", agent_log, "agent"], out, err
+            )
 
-        self._agent_procs[env.id] = proc
+            if env.id in self._agent_procs and self._agent_procs[env.id] is not None:
+                # If the return code is not None the process is already terminated
+                if self._agent_procs[env.id].returncode is None:
+                    LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].pid)
+                    self._agent_procs[env.id].terminate()
+                    await self._wait_for_proc_bounded([self._agent_procs[env.id]])
+            self._agent_procs[env.id] = proc
+        except Exception as e:
+            # Prevent dangling processes
+            if proc.returncode is None:
+                proc.kill()
+            raise e
 
         # Wait for all agents to start
         try:
