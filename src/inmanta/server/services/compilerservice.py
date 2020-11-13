@@ -139,11 +139,16 @@ class CompileRun(object):
         return ret
 
     async def get_branch(self) -> Optional[str]:
-        sub_process = await asyncio.create_subprocess_exec(
-            "git", "branch", stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self._project_dir
-        )
+        try:
+            sub_process = await asyncio.create_subprocess_exec(
+                "git", "branch", stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self._project_dir
+            )
 
-        out, err = await sub_process.communicate()
+            out, err = await sub_process.communicate()
+        finally:
+            if sub_process.returncode is None:
+                # The process is still running, kill it
+                sub_process.kill()
 
         if sub_process.returncode != 0:
             return None
@@ -174,6 +179,10 @@ class CompileRun(object):
         except Exception as e:
             await self._error("".join(traceback.format_exception(type(e), e, e.__traceback__)))
             return await self._end_stage(RETURNCODE_INTERNAL_ERROR)
+        finally:
+            if sub_process.returncode is None:
+                # The process is still running, kill it
+                sub_process.kill()
 
     async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, Optional[model.CompileData]]:
         success = False
