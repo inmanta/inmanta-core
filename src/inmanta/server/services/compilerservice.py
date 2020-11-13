@@ -168,7 +168,9 @@ class CompileRun(object):
 
             returncode = await self.drain(sub_process)
             return await self._end_stage(returncode)
-
+        except CancelledError:
+            """ Propagate Cancel """
+            raise
         except Exception as e:
             await self._error("".join(traceback.format_exception(type(e), e, e.__traceback__)))
             return await self._end_stage(RETURNCODE_INTERNAL_ERROR)
@@ -374,8 +376,11 @@ class CompilerService(ServerSlice):
         LOGGER.info("Cleaning up compile reports that are older than %s", oldest_retained_date)
         try:
             await data.Compile.delete_older_than(oldest_retained_date)
+        except CancelledError:
+            """ Propagate Cancel """
+            raise
         except Exception:
-            LOGGER.error("The following exception occured while cleaning up old compiler reports", exc_info=True)
+            LOGGER.error("The following exception occurred while cleaning up old compiler reports", exc_info=True)
 
     async def request_recompile(
         self,
@@ -421,6 +426,8 @@ class CompilerService(ServerSlice):
 
     async def _queue(self, compile: data.Compile) -> None:
         async with self._global_lock:
+            if self.is_stopping():
+                return
             env: Optional[data.Environment] = await data.Environment.get_by_id(compile.environment)
             if env is None:
                 raise Exception("Can't queue compile: environment %s does not exist" % compile.environment)
@@ -435,6 +442,8 @@ class CompilerService(ServerSlice):
 
     async def _dequeue(self, environment: uuid.UUID) -> None:
         async with self._global_lock:
+            if self.is_stopping():
+                return
             env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
             if env is None:
                 raise Exception("Can't queue compile: environment %s does not exist" % environment)

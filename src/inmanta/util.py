@@ -135,6 +135,7 @@ class Scheduler(object):
     def __init__(self, name: str) -> None:
         self.name = name
         self._scheduled: Dict[Callable, object] = {}
+        self._stopped = False
 
     def add_action(self, action: Union[Callable, Coroutine], interval: float, initial_delay: float = None) -> None:
         """
@@ -145,6 +146,10 @@ class Scheduler(object):
         :param initial_delay: Delay to the first execution, defaults to interval
         """
         assert inspect.iscoroutinefunction(action) or gen.is_coroutine_function(action)
+
+        if self._stopped:
+            LOGGER.warning("Scheduling action '%s', while scheduler is stopped", action.__name__)
+            return
 
         if initial_delay is None:
             initial_delay = interval
@@ -178,6 +183,7 @@ class Scheduler(object):
         """
         Stop the scheduler
         """
+        self._stopped = True
         try:
             # remove can still run during stop. That is why we loop until we get a keyerror == the dict is empty
             while True:

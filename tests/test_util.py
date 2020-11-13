@@ -72,6 +72,10 @@ async def test_scheduler_stop(caplog):
     assert len(i) == length
     no_error_in_logs(caplog)
 
+    caplog.clear()
+    sched.add_action(action, 0.05, 0)
+    assert "Scheduling action 'action', while scheduler is stopped" in caplog.messages
+
 
 @pytest.mark.asyncio
 async def test_scheduler_async_run_fail(caplog):
