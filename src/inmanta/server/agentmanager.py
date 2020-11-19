@@ -28,12 +28,15 @@ from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from uuid import UUID
 
 import asyncpg
+import dateutil
+import dateutil.parser
 
 from inmanta import const, data
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
+from inmanta.data import APILIMIT
 from inmanta.protocol import encode_token, methods, methods_v2
-from inmanta.protocol.exceptions import Forbidden, NotFound, ShutdownInProgress
+from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -636,23 +639,35 @@ class AgentManager(ServerSlice, SessionListener):
         raise NotImplementedError()
 
     @protocol.handle(methods.list_agent_processes)
-    async def list_agent_processes(self, environment: Optional[UUID], expired: bool) -> Apireturn:
+    async def list_agent_processes(
+        self,
+        environment: Optional[UUID],
+        expired: bool,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> Apireturn:
+        argscount = len([x for x in [start, end, limit] if x is not None])
+        if argscount == 3:
+            return 500, {"message": "Limit, start and end can not be set together"}
         if environment is not None:
             env = await data.Environment.get_by_id(environment)
             if env is None:
                 return 404, {"message": "The given environment id does not exist!"}
 
-        tid = environment
-        if tid is not None:
-            if expired:
-                aps = await data.AgentProcess.get_by_env(tid)
-            else:
-                aps = await data.AgentProcess.get_live_by_env(tid)
-        else:
-            if expired:
-                aps = await data.AgentProcess.get_list()
-            else:
-                aps = await data.AgentProcess.get_live()
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        start_time = None
+        end_time = None
+        if start is not None:
+            start_time = dateutil.parser.parse(start)
+        if end is not None:
+            end_time = dateutil.parser.parse(end)
+
+        aps = await data.AgentProcess.get_agent_processes(environment, expired, limit, start_time, end_time)
 
         processes = []
         for p in aps:

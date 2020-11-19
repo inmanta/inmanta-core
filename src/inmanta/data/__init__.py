@@ -33,6 +33,7 @@ from asyncpg.protocol import Record
 
 import inmanta.db.versions
 from inmanta import const, resources, util
+from inmanta.config import Option
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
@@ -1112,6 +1113,38 @@ class AgentProcess(BaseDocument):
     sid: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
 
     @classmethod
+    async def get_agent_processes(
+        cls,
+        environment_id: Optional[uuid.UUID] = None,
+        expired: bool = True,
+        limit: Optional[int] = DBLIMIT,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+    ) -> List["AgentProcess"]:
+        query = "SELECT * FROM " + cls.table_name()
+        conditions_in_where_clause = []
+        values = []
+        if not expired:
+            conditions_in_where_clause.append("expired IS NULL")
+        if environment_id is not None:
+            conditions_in_where_clause.append("environment=$1")
+            values.append(cls._get_value(environment_id))
+        if start:
+            conditions_in_where_clause.append("last_seen > $" + str(len(values) + 1))
+            values.append(cls._get_value(start))
+        if end:
+            conditions_in_where_clause.append("last_seen < $" + str(len(values) + 1))
+            values.append(cls._get_value(end))
+        if len(conditions_in_where_clause) > 0:
+            query += " WHERE " + " AND ".join(conditions_in_where_clause)
+        query += f" ORDER BY last_seen ASC NULLS LAST"
+        if limit:
+            query += " LIMIT $" + str(len(values) + 1)
+            values.append(cls._get_value(limit))
+
+        return await cls.select_query(query, values)
+
+    @classmethod
     async def get_live(cls, environment: Optional[uuid.UUID] = None) -> List["AgentProcess"]:
         if environment is not None:
             result = await cls.get_list(
@@ -1127,7 +1160,13 @@ class AgentProcess(BaseDocument):
         return result
 
     @classmethod
-    async def get_by_env(cls, env: uuid.UUID) -> List["AgentProcess"]:
+    async def get_by_env(
+        cls,
+        env: uuid.UUID,
+        limit: Optional[int] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+    ) -> List["AgentProcess"]:
         nodes = await cls.get_list(environment=env, order_by_column="last_seen", order="ASC NULLS LAST")
         return nodes
 
