@@ -895,11 +895,14 @@ def trigger_agent(tid: uuid.UUID, id: str):
 
 
 @method(path="/agent", operation="GET", api=True, timeout=5, arg_options=ENV_OPTS, client_types=[const.ClientType.api])
-def list_agents(tid: uuid.UUID):
+def list_agents(tid: uuid.UUID, start: str = None, end: str = None, limit: int = None):
     """
     List all agent for an environment
 
     :param tid: The environment the agents are defined in
+    :param start: Agent after start (sorted by name in ASC)
+    :param end: Agent before end (sorted by name in ASC)
+    :param limit: Maximum number of results, up to a maximum of 1000
     """
 
 

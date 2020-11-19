@@ -1317,6 +1317,35 @@ class Agent(BaseDocument):
     primary = property(get_primary, set_primary, del_primary)
 
     @classmethod
+    async def get_agents(
+        cls,
+        environment_id: Optional[uuid.UUID] = None,
+        limit: Optional[int] = DBLIMIT,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+    ) -> List["Agent"]:
+        query = "SELECT * FROM " + cls.table_name()
+        conditions_in_where_clause = []
+        values = []
+        if environment_id is not None:
+            conditions_in_where_clause.append("environment=$1")
+            values.append(cls._get_value(environment_id))
+        if start:
+            conditions_in_where_clause.append("name > $" + str(len(values) + 1))
+            values.append(cls._get_value(start))
+        if end:
+            conditions_in_where_clause.append("name < $" + str(len(values) + 1))
+            values.append(cls._get_value(end))
+        if len(conditions_in_where_clause) > 0:
+            query += " WHERE " + " AND ".join(conditions_in_where_clause)
+        query += f" ORDER BY name ASC NULLS LAST"
+        if limit:
+            query += " LIMIT $" + str(len(values) + 1)
+            values.append(cls._get_value(limit))
+
+        return await cls.select_query(query, values)
+
+    @classmethod
     async def get_statuses(cls, env_id: uuid.UUID, agent_names: Set[str]) -> Dict[str, Optional[AgentStatus]]:
         result: Dict[str, Optional[AgentStatus]] = {}
         for agent_name in agent_names:

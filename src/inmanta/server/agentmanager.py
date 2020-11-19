@@ -676,12 +676,18 @@ class AgentManager(ServerSlice, SessionListener):
         return 200, {"processes": processes}
 
     @protocol.handle(methods.list_agents, env="tid")
-    async def list_agents(self, env: Optional[data.Environment]) -> Apireturn:
-        if env is not None:
-            tid = env.id
-            ags = await data.Agent.get_list(environment=tid)
-        else:
-            ags = await data.Agent.get_list()
+    async def list_agents(self, env: Optional[data.Environment], start: str = None, end: str = None, limit: int = None) -> Apireturn:
+        argscount = len([x for x in [start, end, limit] if x is not None])
+        if argscount == 3:
+            return 500, {"message": "Limit, start and end can not be set together"}
+
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+        
+        tid = env.id
+        ags = await data.Agent.get_agents(tid, start, end, limit)
 
         return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec="microseconds")}
 
