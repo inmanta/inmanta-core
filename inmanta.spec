@@ -4,13 +4,15 @@
 %define buildid %{nil}
 %define buildid_egg %{nil}
 %define venv %{buildroot}/opt/inmanta
-%define _p3 %{venv}/bin/python3
+%define _p3 %{venv}/bin/python%{python_version}
 %define _unique_build_ids 0
 %define _debugsource_packages 0
 %define _debuginfo_subpackages 0
 %define _enable_debug_packages 0
 %define debug_package %{nil}
 
+%define python_version 3.6
+%define undotted_python_version %(v=%{python_version}; echo "${v//\./}")
 
 %define sourceversion %{version}%{?buildid}
 %define sourceversion_egg %{version}%{?buildid_egg}
@@ -42,23 +44,23 @@ Requires:       libffi
 Requires(pre):  shadow-utils
 
 %if 0%{?rhel}
-BuildRequires:  python36-devel
-Requires:       python36
-Requires:       python36-devel
-%define __python3 /usr/bin/python3
+BuildRequires:  python%{undotted_python_version}-devel
+Requires:       python%{undotted_python_version}
+Requires:       python%{undotted_python_version}-devel
+%define __python3 /usr/bin/python%{python_version}
 %else
 %if 0%{?fedora} >= 29
 BuildRequires:  gcc
-BuildRequires:  python36
+BuildRequires:  python%{undotted_python_version}
 BuildRequires:  python3-devel
-Requires:       python36
+Requires:       python%{undotted_python_version}
 Requires:       python3-devel
-%define __python3 /usr/bin/python3.6
+%define __python3 /usr/bin/python%{python_version}
 %else
-BuildRequires:  python36-devel
-Requires:       python36
-Requires:       python36-devel
-%define __python3 /usr/bin/python3.6
+BuildRequires:  python%{undotted_python_version}-devel
+Requires:       python%{undotted_python_version}
+Requires:       python%{undotted_python_version}-devel
+%define __python3 /usr/bin/python%{python_version}
 %endif
 %endif
 
@@ -98,9 +100,8 @@ mkdir -p %{buildroot}/opt/inmanta
 find %{venv}/bin/ -type f | xargs sed -i "s|%{buildroot}||g"
 find %{venv} -name RECORD | xargs sed -i "s|%{buildroot}||g"
 
-# Make sure we use python3.6 and don't have dangeling symlink
-# This is a fix for centos > 7.7 where only python3.6 is available
-ln -sf /usr/bin/python3.6 %{venv}/bin/python3
+# Make sure we use the correct python version and don't have dangeling symlink
+ln -sf /usr/bin/python%{python_version} %{venv}/bin/python3
 
 # Put symlinks
 mkdir -p %{buildroot}%{_bindir}
@@ -193,4 +194,3 @@ exit
 
 * Thu Jan 08 2015 Bart Vanbrabant <bart.vanbrabant@inmanta.com> - 0.1
 - Initial release
-
