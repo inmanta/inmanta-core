@@ -1118,8 +1118,8 @@ class AgentProcess(BaseDocument):
         environment_id: Optional[uuid.UUID] = None,
         expired: bool = True,
         limit: Optional[int] = DBLIMIT,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
+        start: Optional[uuid.UUID] = None,
+        end: Optional[uuid.UUID] = None,
     ) -> List["AgentProcess"]:
         query = "SELECT * FROM " + cls.table_name()
         conditions_in_where_clause = []
@@ -1130,14 +1130,14 @@ class AgentProcess(BaseDocument):
             conditions_in_where_clause.append("environment=$1")
             values.append(cls._get_value(environment_id))
         if start:
-            conditions_in_where_clause.append("last_seen > $" + str(len(values) + 1))
+            conditions_in_where_clause.append("sid > $" + str(len(values) + 1))
             values.append(cls._get_value(start))
         if end:
-            conditions_in_where_clause.append("last_seen < $" + str(len(values) + 1))
+            conditions_in_where_clause.append("sid < $" + str(len(values) + 1))
             values.append(cls._get_value(end))
         if len(conditions_in_where_clause) > 0:
             query += " WHERE " + " AND ".join(conditions_in_where_clause)
-        query += f" ORDER BY last_seen ASC NULLS LAST"
+        query += f" ORDER BY sid ASC NULLS LAST"
         if limit:
             query += " LIMIT $" + str(len(values) + 1)
             values.append(cls._get_value(limit))

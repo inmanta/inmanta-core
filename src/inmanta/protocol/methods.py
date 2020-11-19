@@ -858,15 +858,15 @@ def get_report(id: uuid.UUID):
 
 @method(path="/agentproc", operation="GET", client_types=[const.ClientType.api])
 def list_agent_processes(
-    environment: uuid.UUID = None, expired: bool = True, start: str = None, end: str = None, limit: int = None
+    environment: uuid.UUID = None, expired: bool = True, start: uuid.UUID = None, end: uuid.UUID = None, limit: int = None
 ):
     """
     Return a list of all nodes and the agents for these nodes
 
     :param environment: An optional environment. If set, only the agents that belong to this environment are returned
     :param all: Optional, also show expired.
-    :param start: Reports after start
-    :param end: Reports before end
+    :param start: Agent processes after start (sorted by sid in ASC)
+    :param end: Agent processes before end (sorted by sid in ASC)
     :param limit: Maximum number of results, up to a maximum of 1000
     :return: A list of nodes
     """

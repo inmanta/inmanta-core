@@ -643,9 +643,9 @@ class AgentManager(ServerSlice, SessionListener):
         self,
         environment: Optional[UUID],
         expired: bool,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        limit: Optional[int] = None,
+        start: Optional[UUID] = None,
+        end: Optional[UUID] = None,
+        limit: Optional[UUID] = None,
     ) -> Apireturn:
         argscount = len([x for x in [start, end, limit] if x is not None])
         if argscount == 3:
@@ -660,14 +660,7 @@ class AgentManager(ServerSlice, SessionListener):
         elif limit > APILIMIT:
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
-        start_time = None
-        end_time = None
-        if start is not None:
-            start_time = dateutil.parser.parse(start)
-        if end is not None:
-            end_time = dateutil.parser.parse(end)
-
-        aps = await data.AgentProcess.get_agent_processes(environment, expired, limit, start_time, end_time)
+        aps = await data.AgentProcess.get_agent_processes(environment, expired, limit, start, end)
 
         processes = []
         for p in aps:
