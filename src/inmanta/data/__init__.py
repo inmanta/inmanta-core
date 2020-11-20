@@ -486,6 +486,41 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return result
 
     @classmethod
+    async def get_list_paged(
+        cls: Type[TBaseDocument],
+        order_by_column: str = None,
+        order: str = "ASC",
+        limit: Optional[int] = None,
+        start: Optional[Any] = None,
+        end: Optional[Any] = None,
+        no_obj: bool = False,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        **query: Any,
+    ) -> List[TBaseDocument]:
+        """
+        Get a list of documents matching the filter args
+        """
+        query = cls._convert_field_names_to_db_column_names(query)
+        (filter_statement, values) = cls._get_composed_filter(**query)
+        if start:
+            filter_statement += f" AND {order_by_column} > $" + str(len(values) + 1)
+            values.append(cls._get_value(start))
+        if end:
+            filter_statement += f" AND {order_by_column} < $" + str(len(values) + 1)
+            values.append(cls._get_value(end))
+        sql_query = "SELECT * FROM " + cls.table_name()
+        if filter_statement:
+            sql_query += " WHERE " + filter_statement
+        if order_by_column is not None:
+            sql_query += " ORDER BY " + str(order_by_column) + " " + str(order)
+        if limit is not None and limit > 0:
+            sql_query += " LIMIT " + str(limit)
+        print(query)
+        print(sql_query)
+        result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
+        return result
+
+    @classmethod
     async def delete_all(cls, connection: Optional[asyncpg.connection.Connection] = None, **query):
         """
         Delete all documents that match the given query
@@ -1113,38 +1148,6 @@ class AgentProcess(BaseDocument):
     sid: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
 
     @classmethod
-    async def get_agent_processes(
-        cls,
-        environment_id: Optional[uuid.UUID] = None,
-        expired: bool = True,
-        limit: Optional[int] = DBLIMIT,
-        start: Optional[uuid.UUID] = None,
-        end: Optional[uuid.UUID] = None,
-    ) -> List["AgentProcess"]:
-        query = "SELECT * FROM " + cls.table_name()
-        conditions_in_where_clause = []
-        values = []
-        if not expired:
-            conditions_in_where_clause.append("expired IS NULL")
-        if environment_id is not None:
-            conditions_in_where_clause.append("environment=$1")
-            values.append(cls._get_value(environment_id))
-        if start:
-            conditions_in_where_clause.append("sid > $" + str(len(values) + 1))
-            values.append(cls._get_value(start))
-        if end:
-            conditions_in_where_clause.append("sid < $" + str(len(values) + 1))
-            values.append(cls._get_value(end))
-        if len(conditions_in_where_clause) > 0:
-            query += " WHERE " + " AND ".join(conditions_in_where_clause)
-        query += f" ORDER BY sid ASC NULLS LAST"
-        if limit:
-            query += " LIMIT $" + str(len(values) + 1)
-            values.append(cls._get_value(limit))
-
-        return await cls.select_query(query, values)
-
-    @classmethod
     async def get_live(cls, environment: Optional[uuid.UUID] = None) -> List["AgentProcess"]:
         if environment is not None:
             result = await cls.get_list(
@@ -1315,35 +1318,6 @@ class Agent(BaseDocument):
         del self.id_primary
 
     primary = property(get_primary, set_primary, del_primary)
-
-    @classmethod
-    async def get_agents(
-        cls,
-        environment_id: Optional[uuid.UUID] = None,
-        limit: Optional[int] = DBLIMIT,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-    ) -> List["Agent"]:
-        query = "SELECT * FROM " + cls.table_name()
-        conditions_in_where_clause = []
-        values = []
-        if environment_id is not None:
-            conditions_in_where_clause.append("environment=$1")
-            values.append(cls._get_value(environment_id))
-        if start:
-            conditions_in_where_clause.append("name > $" + str(len(values) + 1))
-            values.append(cls._get_value(start))
-        if end:
-            conditions_in_where_clause.append("name < $" + str(len(values) + 1))
-            values.append(cls._get_value(end))
-        if len(conditions_in_where_clause) > 0:
-            query += " WHERE " + " AND ".join(conditions_in_where_clause)
-        query += f" ORDER BY name ASC NULLS LAST"
-        if limit:
-            query += " LIMIT $" + str(len(values) + 1)
-            values.append(cls._get_value(limit))
-
-        return await cls.select_query(query, values)
 
     @classmethod
     async def get_statuses(cls, env_id: uuid.UUID, agent_names: Set[str]) -> Dict[str, Optional[AgentStatus]]:

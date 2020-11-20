@@ -641,26 +641,37 @@ class AgentManager(ServerSlice, SessionListener):
     @protocol.handle(methods.list_agent_processes)
     async def list_agent_processes(
         self,
-        environment: Optional[UUID],
-        expired: bool,
+        environment: Optional[UUID] = None,
+        expired: Optional[bool] = None,
         start: Optional[UUID] = None,
         end: Optional[UUID] = None,
         limit: Optional[UUID] = None,
     ) -> Apireturn:
+        query = {}
         argscount = len([x for x in [start, end, limit] if x is not None])
         if argscount == 3:
             return 500, {"message": "Limit, start and end can not be set together"}
         if environment is not None:
+            query["environment"] = environment
             env = await data.Environment.get_by_id(environment)
             if env is None:
                 return 404, {"message": "The given environment id does not exist!"}
+        if expired is None or not expired:
+            query["expired"] = None
 
         if limit is None:
             limit = APILIMIT
         elif limit > APILIMIT:
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
-        aps = await data.AgentProcess.get_agent_processes(environment, expired, limit, start, end)
+        aps = await data.AgentProcess.get_list_paged(
+            order_by_column="sid",
+            order="ASC NULLS LAST",
+            limit=limit,
+            start=start,
+            end=end,
+            **query
+        )
 
         processes = []
         for p in aps:
@@ -677,17 +688,26 @@ class AgentManager(ServerSlice, SessionListener):
 
     @protocol.handle(methods.list_agents, env="tid")
     async def list_agents(self, env: Optional[data.Environment], start: str = None, end: str = None, limit: int = None) -> Apireturn:
+        query = {}
         argscount = len([x for x in [start, end, limit] if x is not None])
         if argscount == 3:
             return 500, {"message": "Limit, start and end can not be set together"}
+        if env is not None:
+            query["environment"] = env.id
 
         if limit is None:
             limit = APILIMIT
         elif limit > APILIMIT:
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
         
-        tid = env.id
-        ags = await data.Agent.get_agents(tid, limit, start, end)
+        ags = await data.Agent.get_list_paged(
+            order_by_column="name",
+            order="ASC NULLS LAST",
+            limit=limit,
+            start=start,
+            end=end,
+            **query
+        )
 
         return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec="microseconds")}
 
