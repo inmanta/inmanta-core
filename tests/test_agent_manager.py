@@ -404,18 +404,14 @@ async def test_api(init_dataclasses_and_load_schema):
     start = "agent2"
     code, all_agents = await am.list_agents(None, start=start)
     assert code == 200
-    for agent in all_agents["agents"]:
-        assert (
-            agent["name"] > start
-        ), f"List of agent should not contain a name (={agent['name']}) before or equal to start (={start})"
+    for a in all_agents["agents"]:
+        assert a["name"] > start, f"List of agent should not contain a name (={a['name']}) before or equal to start (={start})"
 
     end = "agent2"
     code, all_agents = await am.list_agents(None, end=end)
     assert code == 200
-    for agent in all_agents["agents"]:
-        assert (
-            agent["name"] < end
-        ), f"List of agent should not contain a name (={agent['name']}) after or equal to end (={end})"
+    for a in all_agents["agents"]:
+        assert a["name"] < end, f"List of agent should not contain a name (={a['name']}) after or equal to end (={end})"
 
     code, all_agents = await am.list_agents(env2)
     assert code == 200
