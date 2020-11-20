@@ -313,6 +313,23 @@ async def test_api(init_dataclasses_and_load_schema):
     assert_equal_ish(shouldbe, all_agents, sortby=["hostname", "name"])
     agentid = all_agents["processes"][0]["sid"]
 
+    start = agentid
+    code, all_agents_processes = await am.list_agent_processes(None, None, start=start)
+    print(all_agents_processes)
+    assert code == 200
+    for agent_process in all_agents_processes["processes"]:
+        assert (
+            agent_process["sid"] > start
+        ), f"List of agent processes should not contain a name (={agent_process['sid']}) before or equal to start (={start})"
+
+    end = agentid
+    code, all_agents_processes = await am.list_agent_processes(None, None, end=end)
+    assert code == 200
+    for agent_process in all_agents_processes["processes"]:
+        assert (
+            agent_process["sid"] < end
+        ), f"List of agent processes should not contain a name (={agent_process['sid']}) after or equal to end (={end})"
+
     code, all_agents = await am.list_agent_processes(env.id, None)
     assert code == 200
 
@@ -383,6 +400,22 @@ async def test_api(init_dataclasses_and_load_schema):
         ]
     }
     assert_equal_ish(shouldbe, all_agents, sortby=["environment", "name"])
+
+    start = "agent2"
+    code, all_agents = await am.list_agents(None, start=start)
+    assert code == 200
+    for agent in all_agents["agents"]:
+        assert (
+            agent["name"] > start
+        ), f"List of agent should not contain a name (={agent['name']}) before or equal to start (={start})"
+
+    end = "agent2"
+    code, all_agents = await am.list_agents(None, end=end)
+    assert code == 200
+    for agent in all_agents["agents"]:
+        assert (
+            agent["name"] < end
+        ), f"List of agent should not contain a name (={agent['name']}) after or equal to end (={end})"
 
     code, all_agents = await am.list_agents(env2)
     assert code == 200
