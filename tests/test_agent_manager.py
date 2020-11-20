@@ -54,6 +54,10 @@ async def empty_future(*args, **kwargs):
     pass
 
 
+async def api_call_future(*args, **kwargs) -> Result:
+    return Result(200, "X")
+
+
 class MockSession(object):
     """
     An environment that segments agents connected to the server
@@ -66,6 +70,7 @@ class MockSession(object):
         self.nodename = nodename
         self.client = Mock()
         self.client.set_state.side_effect = empty_future
+        self.client.get_status = api_call_future
 
     def get_id(self):
         return self._sid
@@ -372,6 +377,7 @@ async def test_api(init_dataclasses_and_load_schema):
         return Result(200, "X")
 
     ts1.get_client().get_status.side_effect = dummy_status
+
     report = await am.get_agent_process_report(agentid)
     assert (200, "X") == report
 
