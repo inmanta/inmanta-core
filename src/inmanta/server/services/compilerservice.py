@@ -603,7 +603,15 @@ class CompilerService(ServerSlice):
             start_time = dateutil.parser.parse(start)
         if end is not None:
             end_time = dateutil.parser.parse(end)
-        models = await data.Compile.get_reports(env.id, limit, start_time, end_time)
+
+        models = await data.Compile.get_list_paged(
+            order_by_column="started",
+            order="DESC",
+            limit=limit,
+            start=start_time,
+            end=end_time,
+            environment=env.id,
+        )
 
         return 200, {"reports": models}
 

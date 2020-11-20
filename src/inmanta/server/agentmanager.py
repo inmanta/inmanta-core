@@ -28,8 +28,6 @@ from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from uuid import UUID
 
 import asyncpg
-import dateutil
-import dateutil.parser
 
 from inmanta import const, data
 from inmanta.config import Config
@@ -665,12 +663,7 @@ class AgentManager(ServerSlice, SessionListener):
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
         aps = await data.AgentProcess.get_list_paged(
-            order_by_column="sid",
-            order="ASC NULLS LAST",
-            limit=limit,
-            start=start,
-            end=end,
-            **query
+            order_by_column="sid", order="ASC NULLS LAST", limit=limit, start=start, end=end, **query
         )
 
         processes = []
@@ -687,7 +680,9 @@ class AgentManager(ServerSlice, SessionListener):
         return 200, {"processes": processes}
 
     @protocol.handle(methods.list_agents, env="tid")
-    async def list_agents(self, env: Optional[data.Environment], start: str = None, end: str = None, limit: int = None) -> Apireturn:
+    async def list_agents(
+        self, env: Optional[data.Environment], start: str = None, end: str = None, limit: int = None
+    ) -> Apireturn:
         query = {}
         argscount = len([x for x in [start, end, limit] if x is not None])
         if argscount == 3:
@@ -699,14 +694,9 @@ class AgentManager(ServerSlice, SessionListener):
             limit = APILIMIT
         elif limit > APILIMIT:
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
-        
+
         ags = await data.Agent.get_list_paged(
-            order_by_column="name",
-            order="ASC NULLS LAST",
-            limit=limit,
-            start=start,
-            end=end,
-            **query
+            order_by_column="name", order="ASC NULLS LAST", limit=limit, start=start, end=end, **query
         )
 
         return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec="microseconds")}

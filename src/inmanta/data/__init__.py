@@ -33,7 +33,6 @@ from asyncpg.protocol import Record
 
 import inmanta.db.versions
 from inmanta import const, resources, util
-from inmanta.config import Option
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
@@ -515,8 +514,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             sql_query += " ORDER BY " + str(order_by_column) + " " + str(order)
         if limit is not None and limit > 0:
             sql_query += " LIMIT " + str(limit)
-        print(query)
-        print(sql_query)
+
         result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
         return result
 
