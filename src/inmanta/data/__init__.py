@@ -487,7 +487,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     async def get_list_paged(
         cls: Type[TBaseDocument],
-        order_by_column: str = None,
+        order_by_column: str,
         order: str = "ASC",
         limit: Optional[int] = None,
         start: Optional[Any] = None,
@@ -510,7 +510,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
-        filter_statements = filter_statement.split(" AND ")
+        filter_statements = filter_statement.split(" AND ") if filter_statement != "" else []
         if start is not None:
             filter_statements.append(f"{order_by_column} > $" + str(len(values) + 1))
             values.append(cls._get_value(start))
@@ -520,8 +520,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         sql_query = "SELECT * FROM " + cls.table_name()
         if len(filter_statements) > 0:
             sql_query += " WHERE " + " AND ".join(filter_statements)
-        if order_by_column is not None:
-            sql_query += " ORDER BY " + str(order_by_column) + " " + str(order)
+        sql_query += " ORDER BY " + str(order_by_column) + " " + str(order)
         if limit is not None and limit > 0:
             sql_query += " LIMIT " + str(limit)
 

@@ -315,7 +315,6 @@ async def test_api(init_dataclasses_and_load_schema):
 
     start = agentid
     code, all_agents_processes = await am.list_agent_processes(None, None, start=start)
-    print(all_agents_processes)
     assert code == 200
     for agent_process in all_agents_processes["processes"]:
         assert (
