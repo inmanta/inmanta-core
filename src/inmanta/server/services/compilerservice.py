@@ -610,6 +610,8 @@ class CompilerService(ServerSlice):
             limit=limit,
             start=start_time,
             end=end_time,
+            no_obj=False,
+            connection=None,
             environment=env.id,
         )
 

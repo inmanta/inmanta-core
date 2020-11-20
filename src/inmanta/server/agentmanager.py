@@ -24,7 +24,7 @@ import uuid
 from asyncio import queues, subprocess
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from uuid import UUID
 
 import asyncpg
@@ -643,9 +643,9 @@ class AgentManager(ServerSlice, SessionListener):
         expired: Optional[bool] = None,
         start: Optional[UUID] = None,
         end: Optional[UUID] = None,
-        limit: Optional[UUID] = None,
+        limit: Optional[int] = None,
     ) -> Apireturn:
-        query = {}
+        query: Dict[str, Any] = {}
         argscount = len([x for x in [start, end, limit] if x is not None])
         if argscount == 3:
             return 500, {"message": "Limit, start and end can not be set together"}
@@ -663,7 +663,7 @@ class AgentManager(ServerSlice, SessionListener):
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
         aps = await data.AgentProcess.get_list_paged(
-            order_by_column="sid", order="ASC NULLS LAST", limit=limit, start=start, end=end, **query
+            order_by_column="sid", order="ASC NULLS LAST", limit=limit, start=start, end=end, no_obj=False, connection=None, **query
         )
 
         processes = []
@@ -700,7 +700,7 @@ class AgentManager(ServerSlice, SessionListener):
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
         ags = await data.Agent.get_list_paged(
-            order_by_column="name", order="ASC NULLS LAST", limit=limit, start=start, end=end, **query
+            order_by_column="name", order="ASC NULLS LAST", limit=limit, start=start, end=end, no_obj=False, connection=None, **query
         )
 
         return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec="microseconds")}
