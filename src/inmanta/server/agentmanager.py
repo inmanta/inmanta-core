@@ -687,7 +687,7 @@ class AgentManager(ServerSlice, SessionListener):
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
         
         tid = env.id
-        ags = await data.Agent.get_agents(tid, start, end, limit)
+        ags = await data.Agent.get_agents(tid, limit, start, end)
 
         return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec="microseconds")}
 
