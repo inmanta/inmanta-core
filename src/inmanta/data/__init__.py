@@ -497,14 +497,23 @@ class BaseDocument(object, metaclass=DocumentMeta):
         **query: Any,
     ) -> List[TBaseDocument]:
         """
-        Get a list of documents matching the filter args
+        Get a list of documents matching the filter args, with paging support
+
+        :param order_by_column: The name of the column in the database the sorting should be based on
+        :param order: The order to apply to the sorting
+        :param limit: If specified, the maximum number of entries to return
+        :param start: A value conforming the sorting column type, all returned rows will have greater value in the sorted column
+        :param end: A value conforming the sorting column type, all returned rows will have lower value in the sorted column
+        :param no_obj: Whether not to cast the query result into a matching object
+        :param connection: An optional connection
+        :param **query: Any additonnal filter to apply
         """
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
-        if start:
+        if start is not None:
             filter_statement += f" AND {order_by_column} > $" + str(len(values) + 1)
             values.append(cls._get_value(start))
-        if end:
+        if end is not None:
             filter_statement += f" AND {order_by_column} < $" + str(len(values) + 1)
             values.append(cls._get_value(end))
         sql_query = "SELECT * FROM " + cls.table_name()
