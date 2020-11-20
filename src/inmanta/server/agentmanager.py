@@ -663,7 +663,14 @@ class AgentManager(ServerSlice, SessionListener):
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
         aps = await data.AgentProcess.get_list_paged(
-            order_by_column="sid", order="ASC NULLS LAST", limit=limit, start=start, end=end, no_obj=False, connection=None, **query
+            order_by_column="sid",
+            order="ASC NULLS LAST",
+            limit=limit,
+            start=start,
+            end=end,
+            no_obj=False,
+            connection=None,
+            **query,
         )
 
         processes = []
@@ -700,7 +707,14 @@ class AgentManager(ServerSlice, SessionListener):
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
         ags = await data.Agent.get_list_paged(
-            order_by_column="name", order="ASC NULLS LAST", limit=limit, start=start, end=end, no_obj=False, connection=None, **query
+            order_by_column="name",
+            order="ASC NULLS LAST",
+            limit=limit,
+            start=start,
+            end=end,
+            no_obj=False,
+            connection=None,
+            **query,
         )
 
         return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec="microseconds")}
