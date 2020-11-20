@@ -373,11 +373,6 @@ async def test_api(init_dataclasses_and_load_schema):
 
     assert_equal_ish(shouldbe, all_agents)
 
-    async def dummy_status():
-        return Result(200, "X")
-
-    ts1.get_client().get_status.side_effect = dummy_status
-
     report = await am.get_agent_process_report(agentid)
     assert (200, "X") == report
 
