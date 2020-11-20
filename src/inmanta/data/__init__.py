@@ -1529,32 +1529,6 @@ class Compile(BaseDocument):
     compile_data: Optional[dict] = Field(field_type=dict)
 
     @classmethod
-    async def get_reports(
-        cls,
-        environment_id: uuid.UUID,
-        limit: Optional[int] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-    ) -> List[JsonType]:
-        query = "SELECT * FROM " + cls.table_name()
-        conditions_in_where_clause = ["environment=$1"]
-        values = [cls._get_value(environment_id)]
-        if start:
-            conditions_in_where_clause.append("started > $" + str(len(values) + 1))
-            values.append(cls._get_value(start))
-        if end:
-            conditions_in_where_clause.append("started < $" + str(len(values) + 1))
-            values.append(cls._get_value(end))
-        if len(conditions_in_where_clause) > 0:
-            query += " WHERE " + " AND ".join(conditions_in_where_clause)
-        query += " ORDER BY started DESC"
-        if limit:
-            query += " LIMIT $" + str(len(values) + 1)
-            values.append(cls._get_value(limit))
-
-        return [m.to_dict() for m in await cls.select_query(query, values)]
-
-    @classmethod
     # TODO: Use join
     async def get_report(cls, compile_id: uuid.UUID) -> "Compile":
         """

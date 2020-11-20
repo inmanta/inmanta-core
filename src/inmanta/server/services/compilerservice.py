@@ -613,7 +613,7 @@ class CompilerService(ServerSlice):
             environment=env.id,
         )
 
-        return 200, {"reports": models}
+        return 200, {"reports": [m.to_dict() for m in models]}
 
     @protocol.handle(methods.get_report, compile_id="id")
     async def get_report(self, compile_id: uuid.UUID) -> Apireturn:

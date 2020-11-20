@@ -681,7 +681,11 @@ class AgentManager(ServerSlice, SessionListener):
 
     @protocol.handle(methods.list_agents, env="tid")
     async def list_agents(
-        self, env: Optional[data.Environment], start: str = None, end: str = None, limit: int = None
+        self,
+        env: Optional[data.Environment],
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        limit: Optional[int] = None,
     ) -> Apireturn:
         query = {}
         argscount = len([x for x in [start, end, limit] if x is not None])
