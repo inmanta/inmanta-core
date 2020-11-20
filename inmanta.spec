@@ -3,6 +3,8 @@
 %define version 2017.2
 %define buildid %{nil}
 %define buildid_egg %{nil}
+%define python_version 3.6
+%define undotted_python_version %(v=%{python_version}; echo "${v//\./}")
 %define venv %{buildroot}/opt/inmanta
 %define _p3 %{venv}/bin/python%{python_version}
 %define _unique_build_ids 0
@@ -10,9 +12,6 @@
 %define _debuginfo_subpackages 0
 %define _enable_debug_packages 0
 %define debug_package %{nil}
-
-%define python_version 3.6
-%define undotted_python_version %(v=%{python_version}; echo "${v//\./}")
 
 %define sourceversion %{version}%{?buildid}
 %define sourceversion_egg %{version}%{?buildid_egg}
