@@ -639,8 +639,8 @@ class AgentManager(ServerSlice, SessionListener):
     @protocol.handle(methods.list_agent_processes)
     async def list_agent_processes(
         self,
-        environment: Optional[UUID] = None,
-        expired: Optional[bool] = None,
+        environment: Optional[UUID],
+        expired: bool,
         start: Optional[UUID] = None,
         end: Optional[UUID] = None,
         limit: Optional[int] = None,
@@ -654,7 +654,7 @@ class AgentManager(ServerSlice, SessionListener):
             env = await data.Environment.get_by_id(environment)
             if env is None:
                 raise NotFound("The given environment id does not exist!")
-        if expired is None or not expired:
+        if not expired:
             query["expired"] = None
 
         if limit is None:

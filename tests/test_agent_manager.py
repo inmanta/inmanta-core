@@ -269,7 +269,7 @@ async def test_api(init_dataclasses_and_load_schema):
     await futures.proccess()
     assert len(am.sessions) == 4
 
-    code, all_agents = await am.list_agent_processes(environment=None, expired=None)
+    code, all_agents = await am.list_agent_processes(environment=None, expired=False)
     assert code == 200
 
     shouldbe = {
@@ -322,7 +322,7 @@ async def test_api(init_dataclasses_and_load_schema):
     agentid = all_agents["processes"][0]["sid"]
 
     start = agentid
-    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=None, start=start)
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=False, start=start)
     assert code == 200
     for agent_process in all_agents_processes["processes"]:
         assert agent_process["expired"] is None
@@ -342,7 +342,7 @@ async def test_api(init_dataclasses_and_load_schema):
             agent_process["sid"] < end
         ), f"List of agent processes should not contain a sid (={agent_process['sid']}) after or equal to end (={end})"
 
-    code, all_agents = await am.list_agent_processes(env.id, None)
+    code, all_agents = await am.list_agent_processes(environment=env.id, expired=False)
     assert code == 200
 
     shouldbe = {
@@ -374,7 +374,7 @@ async def test_api(init_dataclasses_and_load_schema):
 
     assert_equal_ish(shouldbe, all_agents, sortby=["hostname", "name"])
 
-    code, all_agents = await am.list_agent_processes(env2.id, None)
+    code, all_agents = await am.list_agent_processes(environment=env2.id, expired=False)
     assert code == 200
 
     shouldbe = {"processes": []}
