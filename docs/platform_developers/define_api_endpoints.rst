@@ -56,6 +56,7 @@ An example is shown in the code snippet below.
     from inmanta.types import Apireturn
     from inmanta import data
     from inmanta.protocol import methods
+    from inmanta.protocol.exceptions import NotFound, ServerError
 
     @protocol.handle(methods.get_project, project_id="id")
     async def get_project(self, project_id: uuid.UUID) -> Apireturn:
@@ -64,16 +65,16 @@ An example is shown in the code snippet below.
             environments = await data.Environment.get_list(project=project_id)
 
             if project is None:
-                return 404, {"message": "The project with given id does not exist."}
+                raise NotFound("The project with given id does not exist.")
 
             project_dict = project.to_dict()
             project_dict["environments"] = [e.id for e in environments]
 
             return 200, {"project": project_dict}
         except ValueError:
-            return 404, {"message": "The project with given id does not exist."}
+            raise NotFound("The project with given id does not exist.")
 
-        return 500
+        raise ServerError()
 
 The first argument of the ``handle`` decorator defines that this is the handle function for the ``get_project`` API method.
 The second argument remaps the ``id`` argument of the API method to the ``project_id`` argument in the handle function.

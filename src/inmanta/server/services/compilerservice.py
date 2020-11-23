@@ -588,9 +588,9 @@ class CompilerService(ServerSlice):
     ) -> Apireturn:
         argscount = len([x for x in [start, end, limit] if x is not None])
         if argscount == 3:
-            return 500, {"message": "Limit, start and end can not be set together"}
+            raise BadRequest("Limit, start and end can not be set together")
         if env is None:
-            return 404, {"message": "The given environment id does not exist!"}
+            raise NotFound("The given environment id does not exist!")
 
         if limit is None:
             limit = APILIMIT
@@ -623,7 +623,7 @@ class CompilerService(ServerSlice):
         report = await data.Compile.get_report(compile_id)
 
         if report is None:
-            return 404
+            raise NotFound("This report wasn't found")
 
         return 200, {"report": report}
 

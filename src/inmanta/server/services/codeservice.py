@@ -55,7 +55,7 @@ class CodeService(protocol.ServerSlice):
 
         hasherrors = any((k != hash_file(content[2].encode()) for k, content in sources.items()))
         if hasherrors:
-            return 400, {"message": "Hashes in source map do not match to source_code"}
+            raise BadRequest("Hashes in source map do not match to source_code")
 
         for file_hash in self.file_slice.stat_file_internal(sources.keys()):
             self.file_slice.upload_file_internal(file_hash, sources[file_hash][2].encode())

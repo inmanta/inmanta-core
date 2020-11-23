@@ -41,6 +41,7 @@ from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, Event, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
+from inmanta.protocol.exceptions import Forbidden, NotFound, ServerError
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
 from inmanta.util import add_future
@@ -645,7 +646,7 @@ class AgentInstance(object):
 
     def unpause(self) -> Apireturn:
         if self._stopped:
-            return 403, "Cannot unpause stopped agent instance"
+            raise Forbidden("Cannot unpause stopped agent instance")
 
         if self.is_enabled():
             return 200, "already running"
@@ -903,7 +904,7 @@ class AgentInstance(object):
                 self.logger.warning(
                     "Cannot retrieve fact for %s because resource is undeployable or code could not be loaded", resource["id"]
                 )
-                return 500
+                raise ServerError(f"Cannot retrieve fact for {resource['id']} because resource is undeployable or code could not be loaded")
 
             started = datetime.datetime.now()
             provider = None
@@ -950,7 +951,7 @@ class AgentInstance(object):
 
             except Exception:
                 self.logger.exception("Unable to find a handler for %s", resource["id"])
-                return 500
+                raise ServerError(f"Unable to find a handler for {resource['id']}")
             finally:
                 if provider is not None:
                     provider.close()
@@ -1192,14 +1193,14 @@ class Agent(SessionEndpoint):
     def unpause(self, name: str) -> Apireturn:
         instance = self._instances.get(name)
         if not instance:
-            return 404, "No such agent"
+            raise NotFound("No such agent")
 
         return instance.unpause()
 
     def pause(self, name: str) -> Apireturn:
         instance = self._instances.get(name)
         if not instance:
-            return 404, "No such agent"
+            raise NotFound("No such agent")
 
         return instance.pause()
 
@@ -1289,7 +1290,7 @@ class Agent(SessionEndpoint):
             return 200
 
         if not instance.is_enabled():
-            return 500, "Agent is not _enabled"
+            raise ServerError("Agent is not _enabled")
 
         LOGGER.info("Agent %s got a trigger to update in environment %s", agent, env)
         self.add_background_task(

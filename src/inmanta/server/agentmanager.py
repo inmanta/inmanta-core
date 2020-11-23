@@ -30,6 +30,7 @@ from uuid import UUID
 import asyncpg
 
 from inmanta import const, data
+from inmanta.ast.constraint.expression import Not
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.data import APILIMIT
@@ -648,12 +649,12 @@ class AgentManager(ServerSlice, SessionListener):
         query: Dict[str, Any] = {}
         argscount = len([x for x in [start, end, limit] if x is not None])
         if argscount == 3:
-            return 500, {"message": "Limit, start and end can not be set together"}
+            raise BadRequest("Limit, start and end can not be set together")
         if environment is not None:
             query["environment"] = environment
             env = await data.Environment.get_by_id(environment)
             if env is None:
-                return 404, {"message": "The given environment id does not exist!"}
+                raise NotFound("The given environment id does not exist!")
         if expired is None or not expired:
             query["expired"] = None
 
@@ -696,7 +697,7 @@ class AgentManager(ServerSlice, SessionListener):
         query = {}
         argscount = len([x for x in [start, end, limit] if x is not None])
         if argscount == 3:
-            return 500, {"message": "Limit, start and end can not be set together"}
+            raise BadRequest("Limit, start and end can not be set together")
         if env is not None:
             query["environment"] = env.id
 
@@ -733,11 +734,11 @@ class AgentManager(ServerSlice, SessionListener):
     async def get_agent_process_report(self, agent_sid: uuid.UUID) -> Apireturn:
         ap = await data.AgentProcess.get_one(sid=agent_sid)
         if ap is None:
-            return 404, {"message": "The given AgentProcess id does not exist!"}
+            raise NotFound("The given AgentProcess id does not exist!")
         sid = ap.sid
         session_for_ap = self.sessions.get(sid, None)
         if session_for_ap is None:
-            return 404, {"message": "The given AgentProcess is not live!"}
+            raise NotFound("The given AgentProcess is not live!")
         client = session_for_ap.get_client()
         result = await client.get_status()
         return result.code, result.get_result()
@@ -756,7 +757,7 @@ class AgentManager(ServerSlice, SessionListener):
             res = await data.Resource.get_latest_version(env_id, resource_id)
 
             if res is None:
-                return 404, {"message": "The resource has no recent version."}
+                raise NotFound("The resource has no recent version.")
 
             rid: Id = Id.parse_id(res.resource_version_id)
             version: int = rid.version
@@ -786,7 +787,7 @@ class AgentManager(ServerSlice, SessionListener):
 
             return 503, {"message": "Agents queried for resource parameter."}
         else:
-            return 404, {"message": "resource_id parameter is required."}
+            raise NotFound("resource_id parameter is required.")
 
 
 class AutostartedAgentManager(ServerSlice):

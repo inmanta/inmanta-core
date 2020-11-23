@@ -64,7 +64,7 @@ class DyrunService(protocol.ServerSlice):
     async def dryrun_request(self, env: data.Environment, version_id: int) -> Apireturn:
         model = await data.ConfigurationModel.get_version(environment=env.id, version=version_id)
         if model is None:
-            return 404, {"message": "The request version does not exist."}
+            raise NotFound("The request version does not exist.")
 
         # fetch all resource in this cm and create a list of distinct agents
         rvs = await data.Resource.get_list(model=version_id, environment=env.id)
