@@ -904,7 +904,9 @@ class AgentInstance(object):
                 self.logger.warning(
                     "Cannot retrieve fact for %s because resource is undeployable or code could not be loaded", resource["id"]
                 )
-                raise ServerError(f"Cannot retrieve fact for {resource['id']} because resource is undeployable or code could not be loaded")
+                raise ServerError(
+                    f"Cannot retrieve fact for {resource['id']} because resource is undeployable or code could not be loaded"
+                )
 
             started = datetime.datetime.now()
             provider = None

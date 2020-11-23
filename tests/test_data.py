@@ -414,7 +414,9 @@ async def test_agent_process(init_dataclasses_and_load_schema):
     assert len(live_procs) == 1
     assert live_procs[0].sid == agent_proc.sid
 
-    live_by_env_procs = await data.AgentProcess.get_list(environment=env.id, expired=None, order_by_column="last_seen", order="ASC NULLS LAST")
+    live_by_env_procs = await data.AgentProcess.get_list(
+        environment=env.id, expired=None, order_by_column="last_seen", order="ASC NULLS LAST"
+    )
     assert len(live_by_env_procs) == 1
     assert live_by_env_procs[0].sid == agent_proc.sid
 
@@ -423,7 +425,9 @@ async def test_agent_process(init_dataclasses_and_load_schema):
     live_procs = await data.AgentProcess.get_live()
     assert len(live_procs) == 0
 
-    live_by_env_procs = await data.AgentProcess.get_list(environment=env.id, expired=None, order_by_column="last_seen", order="ASC NULLS LAST")
+    live_by_env_procs = await data.AgentProcess.get_list(
+        environment=env.id, expired=None, order_by_column="last_seen", order="ASC NULLS LAST"
+    )
     assert len(live_by_env_procs) == 0
 
     await agent_proc.delete_cascade()

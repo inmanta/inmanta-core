@@ -326,7 +326,7 @@ async def test_api(init_dataclasses_and_load_schema):
     assert code == 200
     for agent_process in all_agents_processes["processes"]:
         assert agent_process["expired"] is None
-        
+
     code, all_agents_processes = await am.list_agent_processes(environment=None, expired=True, start=start)
     assert code == 200
     for agent_process in all_agents_processes["processes"]:
