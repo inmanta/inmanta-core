@@ -508,7 +508,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         :param end: A value conforming the sorting column type, all returned rows will have lower value in the sorted column
         :param no_obj: Whether not to cast the query result into a matching object
         :param connection: An optional connection
-        :param **query: Any additonnal filter to apply
+        :param **query: Any additional filter to apply
         """
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
