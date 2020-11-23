@@ -319,7 +319,7 @@ async def test_api(init_dataclasses_and_load_schema):
     agentid = all_agents["processes"][0]["sid"]
 
     start = agentid
-    code, all_agents_processes = await am.list_agent_processes(None, None, start=start)
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=None, start=start)
     assert code == 200
     for agent_process in all_agents_processes["processes"]:
         assert (
