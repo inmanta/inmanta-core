@@ -605,6 +605,7 @@ class CompilerService(ServerSlice):
             end_time = dateutil.parser.parse(end)
 
         models = await data.Compile.get_list_paged(
+            page_by_column="started",
             order_by_column="started",
             order="DESC",
             limit=limit,

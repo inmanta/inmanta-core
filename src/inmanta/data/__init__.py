@@ -487,7 +487,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     async def get_list_paged(
         cls: Type[TBaseDocument],
-        order_by_column: str,
+        page_by_column: str,
+        order_by_column: Optional[str] = None,
         order: str = "ASC",
         limit: Optional[int] = None,
         start: Optional[Any] = None,
@@ -499,6 +500,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         Get a list of documents matching the filter args, with paging support
 
+        :param page_by_column: The name of the column in the database on which the paging should be applied
         :param order_by_column: The name of the column in the database the sorting should be based on
         :param order: The order to apply to the sorting
         :param limit: If specified, the maximum number of entries to return
@@ -512,17 +514,20 @@ class BaseDocument(object, metaclass=DocumentMeta):
         (filter_statement, values) = cls._get_composed_filter(**query)
         filter_statements = filter_statement.split(" AND ") if filter_statement != "" else []
         if start is not None:
-            filter_statements.append(f"{order_by_column} > $" + str(len(values) + 1))
+            filter_statements.append(f"{page_by_column} > $" + str(len(values) + 1))
             values.append(cls._get_value(start))
         if end is not None:
-            filter_statements.append(f"{order_by_column} < $" + str(len(values) + 1))
+            filter_statements.append(f"{page_by_column} < $" + str(len(values) + 1))
             values.append(cls._get_value(end))
         sql_query = "SELECT * FROM " + cls.table_name()
         if len(filter_statements) > 0:
             sql_query += " WHERE " + " AND ".join(filter_statements)
-        sql_query += " ORDER BY " + str(order_by_column) + " " + str(order)
+        if order_by_column is not None:
+            sql_query += " ORDER BY " + str(len(values) + 1) + " " + str(len(values) + 1)
+            values.extend([order_by_column, order])
         if limit is not None and limit > 0:
-            sql_query += " LIMIT " + str(limit)
+            sql_query += " LIMIT " + str(len(values) + 1)
+            values.append(limit)
 
         result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
         return result
@@ -1163,22 +1168,6 @@ class AgentProcess(BaseDocument):
         else:
             result = await cls.get_list(limit=DBLIMIT, expired=None, order_by_column="last_seen", order="ASC NULLS LAST")
         return result
-
-    @classmethod
-    async def get_live_by_env(cls, env: uuid.UUID) -> List["AgentProcess"]:
-        result = await cls.get_live(env)
-        return result
-
-    @classmethod
-    async def get_by_env(
-        cls,
-        env: uuid.UUID,
-        limit: Optional[int] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-    ) -> List["AgentProcess"]:
-        nodes = await cls.get_list(environment=env, order_by_column="last_seen", order="ASC NULLS LAST")
-        return nodes
 
     @classmethod
     async def get_by_sid(cls, sid: uuid.UUID) -> Optional["AgentProcess"]:

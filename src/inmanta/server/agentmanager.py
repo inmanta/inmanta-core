@@ -663,8 +663,7 @@ class AgentManager(ServerSlice, SessionListener):
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
         aps = await data.AgentProcess.get_list_paged(
-            order_by_column="sid",
-            order="ASC NULLS LAST",
+            page_by_column="sid",
             limit=limit,
             start=start,
             end=end,
@@ -707,6 +706,7 @@ class AgentManager(ServerSlice, SessionListener):
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
         ags = await data.Agent.get_list_paged(
+            page_by_column="name",
             order_by_column="name",
             order="ASC NULLS LAST",
             limit=limit,
