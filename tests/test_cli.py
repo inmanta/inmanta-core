@@ -23,38 +23,10 @@ from typing import Dict
 
 import pytest
 
-from inmanta import config, data
+from inmanta import data
 from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.util import get_compiler_version
 from utils import get_resource, log_contains
-
-
-@pytest.mark.asyncio
-async def test_export(server, client, cli):
-    # create a new project
-    project_name = "test_project"
-    result = await client.create_project(project_name)
-    assert result.code == 200
-    project_id = result.result["project"]["id"]
-
-    # create a new environment
-    environment_name = "test_environment"
-    result = await client.create_environment(project_id, environment_name, ".", ".")
-    assert result.code == 200
-    environment_id = result.result["environment"]["id"]
-
-    result = await cli.run(
-        "export",
-        "-e",
-        environment_id,
-        "--server_address",
-        config.Config.get("server", "bind-address"),
-        "--server_port",
-        config.Config.get("server", "bind-port"),
-        "-f",
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "simple_project", "main.cf")
-    )
-    assert result.exit_code == 0, f"export exit code should be 0, but go {result.exit_code}: \nOutput: {result.output}"
 
 
 @pytest.mark.asyncio
