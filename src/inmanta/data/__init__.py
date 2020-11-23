@@ -1132,8 +1132,12 @@ class AgentProcess(BaseDocument):
         return nodes
 
     @classmethod
-    async def get_by_sid(cls, sid: uuid.UUID) -> Optional["AgentProcess"]:
-        objects = await cls.get_list(limit=DBLIMIT, expired=None, sid=sid)
+    async def get_by_sid(
+        cls,
+        sid: uuid.UUID,
+        connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Optional["AgentProcess"]:
+        objects = await cls.get_list(limit=DBLIMIT, connection=connection, expired=None, sid=sid)
         if len(objects) == 0:
             return None
         elif len(objects) > 1:
@@ -1143,28 +1147,79 @@ class AgentProcess(BaseDocument):
             return objects[0]
 
     @classmethod
-    async def seen(cls, env: uuid.UUID, nodename: str, sid: uuid.UUID, now: datetime.datetime):
+    async def seen(
+        cls,
+        env: uuid.UUID,
+        nodename: str,
+        sid: uuid.UUID,
+        now: datetime.datetime,
+        connection: Optional[asyncpg.connection.Connection] = None
+    ):
         """
         Update the last_seen parameter of the process and mark as not expired.
         """
-        proc = await cls.get_one(sid=sid)
+        proc = await cls.get_one(connection=connection, sid=sid)
         if proc is None:
             proc = cls(hostname=nodename, environment=env, first_seen=now, last_seen=now, sid=sid)
-            await proc.insert()
+            await proc.insert(connection=connection)
         else:
-            await proc.update_fields(last_seen=now, expired=None)
+            await proc.update_fields(connection=connection, last_seen=now, expired=None)
 
     @classmethod
-    async def update_last_seen(cls, sid: uuid.UUID, last_seen: datetime.datetime) -> None:
-        aps = await cls.get_by_sid(sid=sid)
+    async def update_last_seen(
+        cls,
+        sid: uuid.UUID,
+        last_seen: datetime.datetime,
+        connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        aps = await cls.get_by_sid(sid=sid, connection=connection)
         if aps:
-            await aps.update_fields(last_seen=last_seen)
+            await aps.update_fields(connection=connection, last_seen=last_seen)
 
     @classmethod
-    async def expire_process(cls, sid: uuid.UUID, now: datetime.datetime) -> None:
-        aps = await cls.get_by_sid(sid=sid)
+    async def expire_process(
+        cls,
+        sid: uuid.UUID,
+        now: datetime.datetime,
+        connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        aps = await cls.get_by_sid(sid=sid, connection=connection)
         if aps is not None:
-            await aps.update_fields(expired=now)
+            await aps.update_fields(connection=connection, expired=now)
+
+    @classmethod
+    async def expire_all(cls, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None):
+        query = f"""
+                UPDATE {cls.table_name()}
+                SET expired=$1
+                WHERE expired IS NULL
+        """
+        await cls._execute_query(query, cls._get_value(now), connection=connection)
+
+    @classmethod
+    async def cleanup(cls, nr_expired_records_to_keep: int) -> None:
+        query = f"""
+            DELETE FROM {cls.table_name()} as a1
+            WHERE a1.expired IS NOT NULL AND
+                  (
+                    -- Take nr_expired_records_to_keep into account
+                    SELECT count(*)
+                    FROM {cls.table_name()} a2
+                    WHERE a1.environment=a2.environment AND
+                          a1.hostname=a2.hostname AND
+                          a2.expired IS NOT NULL AND
+                          a2.expired > a1.expired
+                  ) >= $1
+                  AND
+                  -- Agent process only has expired agent instances
+                  NOT EXISTS(
+                    SELECT 1
+                    FROM {cls.table_name()} as agentprocess INNER JOIN {AgentInstance.table_name()} as agentinstance
+                         ON agentinstance.process = agentprocess.sid
+                    WHERE agentprocess.sid = a1.sid and agentinstance.expired IS NULL
+                  )
+        """
+        await cls._execute_query(query, cls._get_value(nr_expired_records_to_keep))
 
     def to_dict(self) -> JsonType:
         result = super(AgentProcess, self).to_dict()
@@ -1211,39 +1266,64 @@ class AgentInstance(BaseDocument):
         return objects
 
     @classmethod
-    async def log_instance_creation(cls: Type[TAgentInstance], tid: uuid.UUID, process: uuid.UUID, endpoints: Set[str]) -> None:
+    async def log_instance_creation(
+        cls: Type[TAgentInstance],
+        tid: uuid.UUID,
+        process: uuid.UUID,
+        endpoints: Set[str],
+        connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
         """
         Create new agent instances for a given session.
         """
         if not endpoints:
             return
-        async with cls.get_connection() as connection:
-            await connection.executemany(
+
+        async def _execute_query(con: asyncpg.connection.Connection):
+            await con.executemany(
                 f"""
-                INSERT INTO
-                {cls.table_name()}
-                (id, tid, process, name, expired)
-                VALUES ($1, $2, $3, $4, null)
-                ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
-                SET expired = null
-                ;
-                """,
+                            INSERT INTO
+                            {cls.table_name()}
+                            (id, tid, process, name, expired)
+                            VALUES ($1, $2, $3, $4, null)
+                            ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
+                            SET expired = null
+                            ;
+                            """,
                 [tuple(map(cls._get_value, (cls._new_id(), tid, process, name))) for name in endpoints],
             )
+        if connection:
+            await _execute_query(connection)
+        else:
+            async with cls.get_connection() as connection:
+                await _execute_query(connection)
 
     @classmethod
     async def log_instance_expiry(
-        cls: Type[TAgentInstance], sid: uuid.UUID, endpoints: Set[str], now: datetime.datetime
+        cls: Type[TAgentInstance],
+        sid: uuid.UUID,
+        endpoints: Set[str],
+        now: datetime.datetime,
+        connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
         """
         Expire specific instances for a given session id.
         """
         if not endpoints:
             return
-        instances: List[TAgentInstance] = await cls.get_list(process=sid)
+        instances: List[TAgentInstance] = await cls.get_list(connection=connection, process=sid)
         for ai in instances:
             if ai.name in endpoints:
-                await ai.update_fields(expired=now)
+                await ai.update_fields(connection=connection, expired=now)
+
+    @classmethod
+    async def expire_all(cls, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None):
+        query = f"""
+                UPDATE {cls.table_name()}
+                SET expired=$1
+                WHERE expired IS NULL
+        """
+        await cls._execute_query(query, cls._get_value(now), connection=connection)
 
 
 class Agent(BaseDocument):
@@ -1412,6 +1492,16 @@ class Agent(BaseDocument):
                     await agent.update_fields(last_failover=now, primary=instances[0].id, connection=connection)
                 else:
                     await agent.update_fields(last_failover=now, primary=None, connection=connection)
+
+    @classmethod
+    async def mark_all_as_non_primary(cls, connection: Optional[asyncpg.connection.Connection] = None):
+        query = f"""
+                UPDATE {cls.table_name()}
+                SET id_primary=NULL
+                WHERE id_primary IS NOT NULL
+        """
+        # TODO: ADD index on primary
+        await cls._execute_query(query, connection=connection)
 
 
 class Report(BaseDocument):

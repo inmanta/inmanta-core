@@ -9,6 +9,7 @@
 ## Bug fixes
 - Fix broken links in the documentation (#2495)
 - Ensure all running compilations are stopped when the server is stopped (#2508)
+- Cleanup old entries in the agentprocess and agentinstance database tables (#2499)
 
 ## Upgrade notes
 - Ensure the database is backed up before executing an upgrade.

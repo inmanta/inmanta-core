@@ -482,6 +482,7 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("server", "bind-port", port)
     config.Config.set("server", "bind-address", "127.0.0.1")
+    config.Config.set("config", "agent-repair-interval", "0")
     config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("server", "auto-recompile-wait", "0")

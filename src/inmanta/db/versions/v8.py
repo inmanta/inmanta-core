@@ -17,12 +17,18 @@
 """
 from asyncpg import Connection
 
-DISABLED = True
+DISABLED = False
 
 
 async def update(connection: Connection) -> None:
     await connection.execute(
         """
-
+        -- Ensure agent records don't get deleted when the referenced agent_instance is deleted
+        ALTER TABLE public.agent DROP CONSTRAINT agent_id_primary_fkey;
+        ALTER TABLE  public.agent
+        ADD CONSTRAINT agent_id_primary_fkey
+        FOREIGN KEY (id_primary)
+        REFERENCES public.agentinstance(id)
+        ON DELETE RESTRICT;
         """
     )

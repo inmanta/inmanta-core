@@ -449,6 +449,7 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     am.add_background_task = futures
     am.running = True
     await am._expire_all_sessions_in_db()
+    await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.down, AgentStatus.down)
 
     # one session
     ts1 = MockSession(uuid4(), env.id, {"agent1", "agent2"}, "ts1")
