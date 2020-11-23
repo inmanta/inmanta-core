@@ -476,11 +476,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if filter_statement:
             sql_query += " WHERE " + filter_statement
         if order_by_column is not None:
-            sql_query += " ORDER BY " + str(order_by_column) + " " + str(order)
+            sql_query += " ORDER BY $" + str(len(values) + 1) + " $" + str(len(values) + 2)
+            values.extend([str(order_by_column), str(order)])
         if limit is not None and limit > 0:
-            sql_query += " LIMIT " + str(limit)
+            sql_query += " LIMIT $" + str(len(values) + 1)
+            values.append(str(limit))
         if offset is not None and offset > 0:
-            sql_query += " OFFSET " + str(offset)
+            sql_query += " OFFSET $" + str(len(values) + 1)
+            values.append(str(offset))
         result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
         return result
 
@@ -523,11 +526,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if len(filter_statements) > 0:
             sql_query += " WHERE " + " AND ".join(filter_statements)
         if order_by_column is not None:
-            sql_query += " ORDER BY " + str(len(values) + 1) + " " + str(len(values) + 1)
-            values.extend([order_by_column, order])
+            sql_query += " ORDER BY $" + str(len(values) + 1) + " $" + str(len(values) + 2)
+            values.extend([str(order_by_column), str(order)])
         if limit is not None and limit > 0:
-            sql_query += " LIMIT " + str(len(values) + 1)
-            values.append(limit)
+            sql_query += " LIMIT $" + str(len(values) + 1)
+            values.append(str(limit))
 
         result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
         return result
