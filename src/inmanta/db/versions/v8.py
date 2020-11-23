@@ -30,5 +30,14 @@ async def update(connection: Connection) -> None:
         FOREIGN KEY (id_primary)
         REFERENCES public.agentinstance(id)
         ON DELETE RESTRICT;
+
+        -- Used by data.Agent.expire_all()
+        CREATE INDEX agent_id_primary_index ON agent (id_primary) WHERE (id_primary IS NULL);
+        -- Used by data.AgentProcess.expire_all()
+        CREATE INDEX agentprocess_expired_index ON agentprocess (expired) WHERE (expired IS NULL);
+        -- Used by data.AgentProcess.cleanup()
+        CREATE INDEX agentprocess_env_hostname_expired_index ON agentprocess (environment, hostname, expired);
+        -- Used by data.AgentInstance.expire_all()
+        CREATE INDEX agentinstance_expired_index ON agentinstance (expired) WHERE (expired IS NULL);
         """
     )

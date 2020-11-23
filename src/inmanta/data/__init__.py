@@ -1274,14 +1274,14 @@ class AgentInstance(BaseDocument):
         async def _execute_query(con: asyncpg.connection.Connection):
             await con.executemany(
                 f"""
-                            INSERT INTO
-                            {cls.table_name()}
-                            (id, tid, process, name, expired)
-                            VALUES ($1, $2, $3, $4, null)
-                            ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
-                            SET expired = null
-                            ;
-                            """,
+                INSERT INTO
+                {cls.table_name()}
+                (id, tid, process, name, expired)
+                VALUES ($1, $2, $3, $4, null)
+                ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
+                SET expired = null
+                ;
+                """,
                 [tuple(map(cls._get_value, (cls._new_id(), tid, process, name))) for name in endpoints],
             )
 
@@ -1493,7 +1493,6 @@ class Agent(BaseDocument):
                 SET id_primary=NULL
                 WHERE id_primary IS NOT NULL
         """
-        # TODO: ADD index on primary
         await cls._execute_query(query, connection=connection)
 
 
