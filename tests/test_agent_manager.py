@@ -55,6 +55,9 @@ async def empty_future(*args, **kwargs):
 
 
 async def api_call_future(*args, **kwargs) -> Result:
+    """
+    Mock implementation of Client methods
+    """
     return Result(200, "X")
 
 
@@ -266,7 +269,7 @@ async def test_api(init_dataclasses_and_load_schema):
     await futures.proccess()
     assert len(am.sessions) == 4
 
-    code, all_agents = await am.list_agent_processes(None, None)
+    code, all_agents = await am.list_agent_processes(environment=None, expired=None)
     assert code == 200
 
     shouldbe = {
@@ -322,17 +325,22 @@ async def test_api(init_dataclasses_and_load_schema):
     code, all_agents_processes = await am.list_agent_processes(environment=None, expired=None, start=start)
     assert code == 200
     for agent_process in all_agents_processes["processes"]:
+        assert agent_process["expired"] is None
+        
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=True, start=start)
+    assert code == 200
+    for agent_process in all_agents_processes["processes"]:
         assert (
             agent_process["sid"] > start
-        ), f"List of agent processes should not contain a name (={agent_process['sid']}) before or equal to start (={start})"
+        ), f"List of agent processes should not contain a sid (={agent_process['sid']}) before or equal to start (={start})"
 
     end = agentid
-    code, all_agents_processes = await am.list_agent_processes(None, None, end=end)
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=True, end=end)
     assert code == 200
     for agent_process in all_agents_processes["processes"]:
         assert (
             agent_process["sid"] < end
-        ), f"List of agent processes should not contain a name (={agent_process['sid']}) after or equal to end (={end})"
+        ), f"List of agent processes should not contain a sid (={agent_process['sid']}) after or equal to end (={end})"
 
     code, all_agents = await am.list_agent_processes(env.id, None)
     assert code == 200
@@ -402,13 +410,13 @@ async def test_api(init_dataclasses_and_load_schema):
     assert_equal_ish(shouldbe, all_agents, sortby=["environment", "name"])
 
     start = "agent2"
-    code, all_agents = await am.list_agents(None, start=start)
+    code, all_agents = await am.list_agents(environment=None, start=start)
     assert code == 200
     for a in all_agents["agents"]:
         assert a["name"] > start, f"List of agent should not contain a name (={a['name']}) before or equal to start (={start})"
 
     end = "agent2"
-    code, all_agents = await am.list_agents(None, end=end)
+    code, all_agents = await am.list_agents(environment=None, end=end)
     assert code == 200
     for a in all_agents["agents"]:
         assert a["name"] < end, f"List of agent should not contain a name (={a['name']}) after or equal to end (={end})"
