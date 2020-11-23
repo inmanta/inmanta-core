@@ -16,9 +16,12 @@
     Contact: code@inmanta.com
 """
 import pytest
+from typing import Optional, Union, Tuple
 
 import inmanta.compiler as compiler
-from inmanta.ast import DuplicateException, NotFoundException, RuntimeException, TypingException
+import inmanta.ast.type as ast_type
+from inmanta.ast import CompilerException, DuplicateException, Namespace, NotFoundException, RuntimeException, TypingException
+from inmanta.execute.runtime import Instance, ResultVariable
 
 
 def test_issue_93(snippetcompiler):
@@ -589,3 +592,69 @@ container.aa = A()
         "  Exceeded relation arity on attribute 'aa' of instance '__config__::AContainer (instantiated at {dir}/main.cf:12)'"
         " (reported in container.aa = Construct(A) ({dir}/main.cf:13))",
     )
+
+
+@pytest.mark.parametrize("multi", (True, False))
+def test_relation_null(snippetcompiler, multi: bool) -> None:
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+end
+
+A.other [0:%s] -- A
+
+implement A using std::none
+
+
+a = A()
+a.other = null
+        """ % ("" if multi else "1")
+    )
+    root_ns: Namespace
+    (_, root_ns) = compiler.do_compile()
+    config_ns: Optional[Namespace] = root_ns.get_child("__config__")
+    assert config_ns is not None
+    a_var: Union[ast_type.Type, ResultVariable] = config_ns.lookup("a")
+    assert isinstance(a_var, ResultVariable)
+    a: object = a_var.get_value()
+    assert isinstance(a, Instance)
+    other_var: ResultVariable = a.get_attribute("other")
+    if multi:
+        assert other_var.value == []
+    else:
+        assert other_var.value == None
+
+
+@pytest.mark.parametrize(
+    "statements,valid",
+    [
+        (("a.other = null", "a.other = null"), True),
+        (("a.other = A()", "a.other = null"), False),
+        (("a.other = null", "a.other = A()"), False),
+        (("a.others = null", "a.others = null"), True),
+        (("a.others = [A(), A()]", "a.others = null"), False),
+        (("a.others = null", "a.others = [A(), A()]"), False),
+    ]
+)
+def test_relation_null_multiple_assignments(snippetcompiler, statements: Tuple[str, str], valid: bool) -> None:
+    snippetcompiler.setup_for_snippet(
+        f"""
+entity A:
+end
+
+A.other [0:1] -- A
+A.others [0:] -- A
+
+implement A using std::none
+
+
+a = A()
+{statements[0]}
+{statements[1]}
+        """
+    )
+    if valid:
+        compiler.do_compile()
+    else:
+        with pytest.raises(CompilerException):
+            compiler.do_compile()
