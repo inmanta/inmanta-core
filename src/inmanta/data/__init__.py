@@ -1284,12 +1284,11 @@ class AgentInstance(BaseDocument):
                 """,
                 [tuple(map(cls._get_value, (cls._new_id(), tid, process, name))) for name in endpoints],
             )
-
         if connection:
             await _execute_query(connection)
         else:
-            async with cls.get_connection() as connection:
-                await _execute_query(connection)
+            async with cls.get_connection() as con:
+                await _execute_query(con)
 
     @classmethod
     async def log_instance_expiry(
