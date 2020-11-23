@@ -5,6 +5,7 @@
 - Added more specific location information for attributes (#2481)
 - Added plugin call anchors to support ctrl-clicking a plugin call (#1954)
 - Added rpdb signal handler (#2170)
+- Added support to build RPMs for a python version different from Python3.6 (#1857)
 
 ## Bug fixes
 - Fix broken links in the documentation (#2495)
