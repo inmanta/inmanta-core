@@ -1133,9 +1133,7 @@ class AgentProcess(BaseDocument):
 
     @classmethod
     async def get_by_sid(
-        cls,
-        sid: uuid.UUID,
-        connection: Optional[asyncpg.connection.Connection] = None
+        cls, sid: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
     ) -> Optional["AgentProcess"]:
         objects = await cls.get_list(limit=DBLIMIT, connection=connection, expired=None, sid=sid)
         if len(objects) == 0:
@@ -1153,7 +1151,7 @@ class AgentProcess(BaseDocument):
         nodename: str,
         sid: uuid.UUID,
         now: datetime.datetime,
-        connection: Optional[asyncpg.connection.Connection] = None
+        connection: Optional[asyncpg.connection.Connection] = None,
     ):
         """
         Update the last_seen parameter of the process and mark as not expired.
@@ -1167,10 +1165,7 @@ class AgentProcess(BaseDocument):
 
     @classmethod
     async def update_last_seen(
-        cls,
-        sid: uuid.UUID,
-        last_seen: datetime.datetime,
-        connection: Optional[asyncpg.connection.Connection] = None
+        cls, sid: uuid.UUID, last_seen: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
         aps = await cls.get_by_sid(sid=sid, connection=connection)
         if aps:
@@ -1178,10 +1173,7 @@ class AgentProcess(BaseDocument):
 
     @classmethod
     async def expire_process(
-        cls,
-        sid: uuid.UUID,
-        now: datetime.datetime,
-        connection: Optional[asyncpg.connection.Connection] = None
+        cls, sid: uuid.UUID, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
         aps = await cls.get_by_sid(sid=sid, connection=connection)
         if aps is not None:
@@ -1271,7 +1263,7 @@ class AgentInstance(BaseDocument):
         tid: uuid.UUID,
         process: uuid.UUID,
         endpoints: Set[str],
-        connection: Optional[asyncpg.connection.Connection] = None
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
         Create new agent instances for a given session.
@@ -1292,6 +1284,7 @@ class AgentInstance(BaseDocument):
                             """,
                 [tuple(map(cls._get_value, (cls._new_id(), tid, process, name))) for name in endpoints],
             )
+
         if connection:
             await _execute_query(connection)
         else:
@@ -1304,7 +1297,7 @@ class AgentInstance(BaseDocument):
         sid: uuid.UUID,
         endpoints: Set[str],
         now: datetime.datetime,
-        connection: Optional[asyncpg.connection.Connection] = None
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
         Expire specific instances for a given session id.

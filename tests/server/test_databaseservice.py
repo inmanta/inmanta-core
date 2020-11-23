@@ -15,13 +15,14 @@
 
     Contact: code@inmanta.com
 """
-import pytest
 import asyncio
-from inmanta import data
 
+import pytest
+
+from inmanta import data
 from inmanta.server import config as opt
-from utils import retry_limited
 from inmanta.server.services import databaseservice
+from utils import retry_limited
 
 
 @pytest.mark.asyncio

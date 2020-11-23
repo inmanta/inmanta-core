@@ -20,7 +20,8 @@ import datetime
 import logging
 import time
 import uuid
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional
+
 import asyncpg
 import pytest
 from asyncpg import Connection, ForeignKeyViolationError
@@ -445,20 +446,13 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql
     now = datetime.datetime.now()
 
     async def insert_agent_proc_and_instances(
-        env_id: uuid.UUID,
-        hostname: str,
-        expired_proc: Optional[datetime.datetime],
-        expired_instances: List[datetime.datetime]
+        env_id: uuid.UUID, hostname: str, expired_proc: Optional[datetime.datetime], expired_instances: List[datetime.datetime]
     ) -> None:
         agent_proc = data.AgentProcess(hostname=hostname, environment=env_id, expired=expired_proc, sid=uuid.uuid4())
         await agent_proc.insert()
         for i in range(len(expired_instances)):
             agent_instance = data.AgentInstance(
-                id=uuid.uuid4(),
-                process=agent_proc.sid,
-                name=f"agent_instance{i}",
-                expired=expired_instances[i],
-                tid=env_id
+                id=uuid.uuid4(), process=agent_proc.sid, name=f"agent_instance{i}", expired=expired_instances[i], tid=env_id
             )
             await agent_instance.insert()
 
@@ -507,8 +501,8 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql
 @pytest.mark.asyncio
 async def test_delete_agentinstance_which_is_primary(init_dataclasses_and_load_schema):
     """
-        It should be impossible to delete an AgentInstance record which is references
-        from the Agent stable.
+    It should be impossible to delete an AgentInstance record which is references
+    from the Agent stable.
     """
     project = data.Project(name="test")
     await project.insert()
@@ -518,11 +512,7 @@ async def test_delete_agentinstance_which_is_primary(init_dataclasses_and_load_s
     agent_proc = data.AgentProcess(hostname="test", environment=env.id, expired=None, sid=uuid.uuid4())
     await agent_proc.insert()
     agent_instance = data.AgentInstance(
-        id=uuid.uuid4(),
-        process=agent_proc.sid,
-        name=f"agent_instance",
-        expired=None,
-        tid=env.id
+        id=uuid.uuid4(), process=agent_proc.sid, name="agent_instance", expired=None, tid=env.id
     )
     await agent_instance.insert()
     agent = data.Agent(environment=env.id, name="test", id_primary=agent_instance.id)
