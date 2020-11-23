@@ -625,6 +625,29 @@ a.other = null
         assert other_var.value == None
 
 
+def test_optional_variable_relation(snippetcompiler):
+    """
+    Make sure DeprecatedOptionVariables do not allow `null`.
+    """
+    snippetcompiler.setup_for_error(
+        """
+entity A:
+    number[] ns
+end
+
+implement A using std::none
+
+
+a = A()
+a.ns = null
+        """,
+        "Could not set attribute `ns` on instance `__config__::A (instantiated at {dir}/main.cf:9)`"
+        " (reported in a.ns = null ({dir}/main.cf:10))"
+        "\ncaused by:"
+        "\n  Invalid value 'null', expected number[] (reported in a.ns = null ({dir}/main.cf:10))",
+    )
+
+
 @pytest.mark.parametrize(
     "statements,valid",
     [
