@@ -393,8 +393,9 @@ async def test_set_deployment_status_in_process_events(
             hostname=f"agent{i}",
             agent_map={f"agent{i}": "localhost"},
             code_loader=False,
-            agent_names=[f"agent{i}"]
-        ) for i in range(1, 3)
+            agent_names=[f"agent{i}"],
+        )
+        for i in range(1, 3)
     ]
     await asyncio.gather(*agents)
 
