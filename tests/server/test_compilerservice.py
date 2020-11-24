@@ -896,8 +896,8 @@ async def test_issue_2361(environment_factory: EnvironmentFactory, server, clien
 @pytest.mark.asyncio
 async def test_git_uses_environment_variables(environment_factory: EnvironmentFactory, server, client, tmpdir, monkeypatch):
     """
-        Make sure that the git clone command on the compilerservice takes into account the environment variables
-        set on the system.
+    Make sure that the git clone command on the compilerservice takes into account the environment variables
+    set on the system.
     """
     env = await environment_factory.create_environment(main="")
     result = await client.environment_modify(id=env.id, name=env.id, branch="master")
