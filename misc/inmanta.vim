@@ -11,17 +11,34 @@ if exists("b:current_syntax")
     finish
 endif
 
-syn region Comment start="#" end="$"
+syn region Comment start="#" end="$" contains=Todo
 syn region String start="\"" skip="\\\"" end="\""
 syn region String start="\"\"\"" end="\"\"\""
 syn region regex start="/" skip="\\/" end="/"
 syn match number "\<[0123456789]*\>'\@!"
 
-syn keyword Keyword implementation end using entity when implement extends in not or and as matching index for parents if else is defined
-syn keyword PreProc import
-syn keyword Typedef typedef
+" Constant
+syn keyword Constant null
 syn keyword Boolean true false
+
+" Identifier
+syn keyword Identifier self
+
+" Statement
+syn keyword Conditional if else when
+syn keyword Repeat for
+syn keyword Operator in not or and matching is defined
+syn keyword Keyword entity implementation end using implement extends as index parents
+
+" PreProc
+syn keyword PreProc import
+
+" Type
 syn keyword Type string number int bool list dict
+syn keyword Typedef typedef
+
+" Todo
+syn keyword Todo contained TODO
 
 "syn match impInstance "\%(\%(def\s\|class\s\|@\)\s*\)\@<=\h\%(\w\|\.\)*" contained
 
