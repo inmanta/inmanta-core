@@ -7,10 +7,14 @@
 - Added rpdb signal handler (#2170)
 - Added pagination support on api calls for agent and agentproc (#2500)
 - Added support to build RPMs for a python version different from Python3.6 (#1857)
+- Added support for assigning `null` to relations with lower arity 0 (#2459)
 
 ## Bug fixes
 - Fix broken links in the documentation (#2495)
 - Ensure all running compilations are stopped when the server is stopped (#2508)
+- Cleanup old entries in the agentprocess and agentinstance database tables (#2499)
+- Ensure the compiler service takes into account the environment variables set on the system (#2413)
+- Fix `--server_address` option on `inmanta export` (#2514)
 
 ## Upgrade notes
 - Ensure the database is backed up before executing an upgrade.

@@ -20,11 +20,11 @@ import datetime
 import logging
 import time
 import uuid
-from typing import Dict
+from typing import Dict, List, Optional
 
 import asyncpg
 import pytest
-from asyncpg import Connection
+from asyncpg import Connection, ForeignKeyViolationError
 from asyncpg.pool import Pool
 
 from inmanta import const, data
@@ -435,6 +435,95 @@ async def test_agent_process(init_dataclasses_and_load_schema):
     assert (await data.AgentProcess.get_one(sid=agent_proc.sid)) is None
     assert (await data.AgentInstance.get_by_id(agi1.id)) is None
     assert (await data.AgentInstance.get_by_id(agi2.id)) is None
+
+
+@pytest.mark.asyncio
+async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql_client):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env1 = data.Environment(name="env1", project=project.id, repo_url="", repo_branch="")
+    await env1.insert()
+    env2 = data.Environment(name="env2", project=project.id, repo_url="", repo_branch="")
+    await env2.insert()
+
+    now = datetime.datetime.now()
+
+    async def insert_agent_proc_and_instances(
+        env_id: uuid.UUID, hostname: str, expired_proc: Optional[datetime.datetime], expired_instances: List[datetime.datetime]
+    ) -> None:
+        agent_proc = data.AgentProcess(hostname=hostname, environment=env_id, expired=expired_proc, sid=uuid.uuid4())
+        await agent_proc.insert()
+        for i in range(len(expired_instances)):
+            agent_instance = data.AgentInstance(
+                id=uuid.uuid4(), process=agent_proc.sid, name=f"agent_instance{i}", expired=expired_instances[i], tid=env_id
+            )
+            await agent_instance.insert()
+
+    async def verify_nr_of_records(env: uuid.UUID, hostname: str, expected_nr_procs: int, expected_nr_instances: int):
+        # Verify expected_nr_procs
+        result = await data.AgentProcess.get_list(environment=env, hostname=hostname)
+        assert len(result) == expected_nr_procs, result
+        # Verify expected_nr_instances
+        query = """
+            SELECT count(*)
+            FROM agentprocess AS proc INNER JOIN agentinstance AS instance ON proc.sid=instance.process
+            WHERE environment=$1 AND hostname=$2
+        """
+        result = await postgresql_client.fetch(query, env, hostname)
+        assert result[0]["count"] == expected_nr_instances, result
+
+    # Setup env1
+    await insert_agent_proc_and_instances(env1.id, "proc1", None, [None])
+    await insert_agent_proc_and_instances(env1.id, "proc1", datetime.datetime(2020, 1, 1, 1, 0), [now])
+    await insert_agent_proc_and_instances(env1.id, "proc2", None, [None])
+    # Setup env2
+    await insert_agent_proc_and_instances(env2.id, "proc2", None, [None, None])
+    await insert_agent_proc_and_instances(env2.id, "proc2", datetime.datetime(2020, 1, 1, 1, 0), [now, now, now])
+    await insert_agent_proc_and_instances(env2.id, "proc2", datetime.datetime(2020, 1, 1, 2, 0), [now, now])
+    await insert_agent_proc_and_instances(env2.id, "proc2", datetime.datetime(2020, 1, 1, 3, 0), [now])
+
+    # Run cleanup twice to verify stability
+    for i in range(2):
+        # Perform cleanup
+        await data.AgentProcess.cleanup(nr_expired_records_to_keep=1)
+        # Assert outcome
+        await verify_nr_of_records(env1.id, hostname="proc1", expected_nr_procs=2, expected_nr_instances=2)
+        await verify_nr_of_records(env1.id, hostname="proc2", expected_nr_procs=1, expected_nr_instances=1)
+        await verify_nr_of_records(env2.id, hostname="proc2", expected_nr_procs=2, expected_nr_instances=3)
+        # Assert records are deleted in the correct order
+        query = """
+            SELECT expired
+            FROM agentprocess
+            WHERE environment=$1 AND hostname=$2 AND expired IS NOT NULL
+        """
+        result = await postgresql_client.fetch(query, env2.id, "proc2")
+        assert len(result) == 1
+        assert result[0]["expired"] == datetime.datetime(2020, 1, 1, 3, 0)
+
+
+@pytest.mark.asyncio
+async def test_delete_agentinstance_which_is_primary(init_dataclasses_and_load_schema):
+    """
+    It should be impossible to delete an AgentInstance record which is references
+    from the Agent stable.
+    """
+    project = data.Project(name="test")
+    await project.insert()
+    env = data.Environment(name="env1", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    agent_proc = data.AgentProcess(hostname="test", environment=env.id, expired=None, sid=uuid.uuid4())
+    await agent_proc.insert()
+    agent_instance = data.AgentInstance(
+        id=uuid.uuid4(), process=agent_proc.sid, name="agent_instance", expired=None, tid=env.id
+    )
+    await agent_instance.insert()
+    agent = data.Agent(environment=env.id, name="test", id_primary=agent_instance.id)
+    await agent.insert()
+
+    with pytest.raises(ForeignKeyViolationError):
+        await agent_instance.delete()
 
 
 @pytest.mark.asyncio
