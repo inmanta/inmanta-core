@@ -470,6 +470,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         Get a list of documents matching the filter args
         """
+        for o in order.split(" "):
+            possible = ["ASC", "DESC", "NULLS", "FIRST", "LAST"]
+            if o not in possible:
+                raise RuntimeError("The following order can not be applied: {order}, {o} should be one of {possible}")
+        
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
         sql_query = "SELECT * FROM " + cls.table_name()
@@ -513,6 +518,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         :param connection: An optional connection
         :param **query: Any additional filter to apply
         """
+        for o in order.split(" "):
+            possible = ["ASC", "DESC", "NULLS", "FIRST", "LAST"]
+            if o not in possible:
+                raise RuntimeError("The following order can not be applied: {order}, {o} should be one of {possible}")
+        
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
         filter_statements = filter_statement.split(" AND ") if filter_statement != "" else []

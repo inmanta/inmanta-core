@@ -649,8 +649,8 @@ class AgentManager(ServerSlice, SessionListener):
 
         :param environment: Optional, the environment the agent should come from.
         :param expired: If True, expired agents will also be shown, they are hidden otherwise.
-        :param start: The sid all of the selected agent process should be greater than (non included in output), defaults to None
-        :param end: The sid all of the selected agent process should be smaller than (non included in output), defaults to None
+        :param start: The sid all of the selected agent process should be greater than this, defaults to None
+        :param end: The sid all of the selected agent process should be smaller than this, defaults to None
         :param limit: Whether to limit the number of returned entries, defaults to None
         :raises BadRequest: Limit, start and end can not be set together
         :raises NotFound: The given environment id does not exist!
@@ -707,8 +707,8 @@ class AgentManager(ServerSlice, SessionListener):
         """List all agents whose name is after start and before end
 
         :param env: The environment the agents should come from
-        :param start: The name all of the selected agent should be greater than (non included in output), defaults to None
-        :param end: The name all of the selected agent should be smaller than (non included in output), defaults to None
+        :param start: The name all of the selected agent should be greater than this, defaults to None
+        :param end: The name all of the selected agent should be smaller than this, defaults to None
         :param limit: Whether to limit the number of returned entries, defaults to None
         :raises BadRequest: Limit, start and end can not be set together
         :raises BadRequest: Limit parameter can not exceed 1000
