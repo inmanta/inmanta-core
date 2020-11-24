@@ -869,7 +869,6 @@ def list_agent_processes(
     :param end: Agent processes before end (sorted by sid in ASC)
     :param limit: Maximum number of results, up to a maximum of 1000
 
-    :raises BadRequest: Limit, start and end can not be set together
     :raises BadRequest: limit parameter can not exceed 1000
     :raises NotFound: The given environment id does not exist!
 
@@ -909,7 +908,6 @@ def list_agents(tid: uuid.UUID, start: str = None, end: str = None, limit: int =
     :param end: Agent before end (sorted by name in ASC)
     :param limit: Maximum number of results, up to a maximum of 1000
 
-    :raises BadRequest: Limit, start and end can not be set together
     :raises BadRequest: limit parameter can not exceed 1000
     :raises NotFound: The given environment id does not exist!
     """
