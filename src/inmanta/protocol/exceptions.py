@@ -79,7 +79,7 @@ class UnauthorizedException(BaseHttpException):
 
 class BadRequest(BaseHttpException):
     """
-    This exception is raised for a mailformed request
+    This exception is raised for a malformed request
     """
 
     def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:

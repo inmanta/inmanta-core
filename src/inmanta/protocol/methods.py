@@ -33,7 +33,7 @@ async def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environmen
     metadata[const.INMANTA_URN + "env"] = str(env)
     env = await data.Environment.get_by_id(env)
     if env is None:
-        raise exceptions.NotFound("the given environment id does not exist!")
+        raise exceptions.NotFound("The given environment id does not exist!")
     return env
 
 
@@ -849,7 +849,7 @@ def get_report(id: uuid.UUID):
     """
     Get a compile report from the server
 
-    :param compile_id: The id of the compile and its reports to fetch.
+    :param id: The id of the compile and its reports to fetch.
     """
 
 
@@ -857,12 +857,21 @@ def get_report(id: uuid.UUID):
 
 
 @method(path="/agentproc", operation="GET", client_types=[const.ClientType.api])
-def list_agent_processes(environment: uuid.UUID = None, expired: bool = True):
+def list_agent_processes(
+    environment: uuid.UUID = None, expired: bool = True, start: uuid.UUID = None, end: uuid.UUID = None, limit: int = None
+):
     """
     Return a list of all nodes and the agents for these nodes
 
     :param environment: An optional environment. If set, only the agents that belong to this environment are returned
-    :param all: Optional, also show expired.
+    :param expired: Optional, also show expired processes, otherwise only living processes are shown.
+    :param start: Agent processes after start (sorted by sid in ASC)
+    :param end: Agent processes before end (sorted by sid in ASC)
+    :param limit: Maximum number of results, up to a maximum of 1000
+
+    :raises BadRequest: limit parameter can not exceed 1000
+    :raises NotFound: The given environment id does not exist!
+
     :return: A list of nodes
     """
 
@@ -872,7 +881,7 @@ def get_agent_process(id: uuid.UUID):
     """
     Return a detailed report for a node
 
-    :param agent_sid: The session id of the agent
+    :param id: The session id of the agent
     :return: The requested node
     """
 
@@ -890,11 +899,17 @@ def trigger_agent(tid: uuid.UUID, id: str):
 
 
 @method(path="/agent", operation="GET", api=True, timeout=5, arg_options=ENV_OPTS, client_types=[const.ClientType.api])
-def list_agents(tid: uuid.UUID):
+def list_agents(tid: uuid.UUID, start: str = None, end: str = None, limit: int = None):
     """
     List all agent for an environment
 
     :param tid: The environment the agents are defined in
+    :param start: Agent after start (sorted by name in ASC)
+    :param end: Agent before end (sorted by name in ASC)
+    :param limit: Maximum number of results, up to a maximum of 1000
+
+    :raises BadRequest: limit parameter can not exceed 1000
+    :raises NotFound: The given environment id does not exist!
     """
 
 

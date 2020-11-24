@@ -586,11 +586,8 @@ class CompilerService(ServerSlice):
     async def get_reports(
         self, env: data.Environment, start: Optional[str] = None, end: Optional[str] = None, limit: Optional[int] = None
     ) -> Apireturn:
-        argscount = len([x for x in [start, end, limit] if x is not None])
-        if argscount == 3:
-            return 500, {"message": "Limit, start and end can not be set together"}
         if env is None:
-            return 404, {"message": "The given environment id does not exist!"}
+            raise NotFound("The given environment id does not exist!")
 
         if limit is None:
             limit = APILIMIT
@@ -603,16 +600,27 @@ class CompilerService(ServerSlice):
             start_time = dateutil.parser.parse(start)
         if end is not None:
             end_time = dateutil.parser.parse(end)
-        models = await data.Compile.get_reports(env.id, limit, start_time, end_time)
 
-        return 200, {"reports": models}
+        models = await data.Compile.get_list_paged(
+            page_by_column="started",
+            order_by_column="started",
+            order="DESC",
+            limit=limit,
+            start=start_time,
+            end=end_time,
+            no_obj=False,
+            connection=None,
+            environment=env.id,
+        )
+
+        return 200, {"reports": [m.to_dict() for m in models]}
 
     @protocol.handle(methods.get_report, compile_id="id")
     async def get_report(self, compile_id: uuid.UUID) -> Apireturn:
         report = await data.Compile.get_report(compile_id)
 
         if report is None:
-            return 404
+            raise NotFound("This report wasn't found")
 
         return 200, {"report": report}
 

@@ -24,7 +24,7 @@ import uuid
 from asyncio import queues, subprocess
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from uuid import UUID
 
 import asyncpg
@@ -32,8 +32,9 @@ import asyncpg
 from inmanta import const, data
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
+from inmanta.data import APILIMIT
 from inmanta.protocol import encode_token, methods, methods_v2
-from inmanta.protocol.exceptions import Forbidden, NotFound, ShutdownInProgress
+from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -634,23 +635,48 @@ class AgentManager(ServerSlice, SessionListener):
         raise NotImplementedError()
 
     @protocol.handle(methods.list_agent_processes)
-    async def list_agent_processes(self, environment: Optional[UUID], expired: bool) -> Apireturn:
+    async def list_agent_processes(
+        self,
+        environment: Optional[UUID],
+        expired: bool,
+        start: Optional[UUID] = None,
+        end: Optional[UUID] = None,
+        limit: Optional[int] = None,
+    ) -> Apireturn:
+        """List all agent processes whose sid is after start and before end
+
+        :param environment: Optional, the environment the agent should come from.
+        :param expired: If True, expired agents will also be shown, they are hidden otherwise.
+        :param start: The sid all of the selected agent process should be greater than this, defaults to None
+        :param end: The sid all of the selected agent process should be smaller than this, defaults to None
+        :param limit: Whether to limit the number of returned entries, defaults to None
+        :raises BadRequest: Limit, start and end can not be set together
+        :raises NotFound: The given environment id does not exist!
+        :raises BadRequest: Limit parameter can not exceed 1000
+        """
+        query: Dict[str, Any] = {}
         if environment is not None:
+            query["environment"] = environment
             env = await data.Environment.get_by_id(environment)
             if env is None:
-                return 404, {"message": "The given environment id does not exist!"}
+                raise NotFound("The given environment id does not exist!")
+        if not expired:
+            query["expired"] = None
 
-        tid = environment
-        if tid is not None:
-            if expired:
-                aps = await data.AgentProcess.get_by_env(tid)
-            else:
-                aps = await data.AgentProcess.get_live_by_env(tid)
-        else:
-            if expired:
-                aps = await data.AgentProcess.get_list()
-            else:
-                aps = await data.AgentProcess.get_live()
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"Limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        aps = await data.AgentProcess.get_list_paged(
+            page_by_column="sid",
+            limit=limit,
+            start=start,
+            end=end,
+            no_obj=False,
+            connection=None,
+            **query,
+        )
 
         processes = []
         for p in aps:
@@ -666,12 +692,42 @@ class AgentManager(ServerSlice, SessionListener):
         return 200, {"processes": processes}
 
     @protocol.handle(methods.list_agents, env="tid")
-    async def list_agents(self, env: Optional[data.Environment]) -> Apireturn:
+    async def list_agents(
+        self,
+        env: Optional[data.Environment],
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> Apireturn:
+        """List all agents whose name is after start and before end
+
+        :param env: The environment the agents should come from
+        :param start: The name all of the selected agent should be greater than this, defaults to None
+        :param end: The name all of the selected agent should be smaller than this, defaults to None
+        :param limit: Whether to limit the number of returned entries, defaults to None
+        :raises BadRequest: Limit, start and end can not be set together
+        :raises BadRequest: Limit parameter can not exceed 1000
+        """
+        query = {}
         if env is not None:
-            tid = env.id
-            ags = await data.Agent.get_list(environment=tid)
-        else:
-            ags = await data.Agent.get_list()
+            query["environment"] = env.id
+
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"Limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        ags = await data.Agent.get_list_paged(
+            page_by_column="name",
+            order_by_column="name",
+            order="ASC NULLS LAST",
+            limit=limit,
+            start=start,
+            end=end,
+            no_obj=False,
+            connection=None,
+            **query,
+        )
 
         return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec="microseconds")}
 
@@ -689,11 +745,11 @@ class AgentManager(ServerSlice, SessionListener):
     async def get_agent_process_report(self, agent_sid: uuid.UUID) -> Apireturn:
         ap = await data.AgentProcess.get_one(sid=agent_sid)
         if ap is None:
-            return 404, {"message": "The given AgentProcess id does not exist!"}
+            raise NotFound("The given AgentProcess id does not exist!")
         sid = ap.sid
         session_for_ap = self.sessions.get(sid, None)
         if session_for_ap is None:
-            return 404, {"message": "The given AgentProcess is not live!"}
+            raise NotFound("The given AgentProcess is not live!")
         client = session_for_ap.get_client()
         result = await client.get_status()
         return result.code, result.get_result()
@@ -712,7 +768,7 @@ class AgentManager(ServerSlice, SessionListener):
             res = await data.Resource.get_latest_version(env_id, resource_id)
 
             if res is None:
-                return 404, {"message": "The resource has no recent version."}
+                raise NotFound("The resource has no recent version.")
 
             rid: Id = Id.parse_id(res.resource_version_id)
             version: int = rid.version
@@ -742,7 +798,7 @@ class AgentManager(ServerSlice, SessionListener):
 
             return 503, {"message": "Agents queried for resource parameter."}
         else:
-            return 404, {"message": "resource_id parameter is required."}
+            raise NotFound("resource_id parameter is required.")
 
 
 class AutostartedAgentManager(ServerSlice):
