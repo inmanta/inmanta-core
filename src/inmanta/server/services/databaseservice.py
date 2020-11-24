@@ -39,6 +39,10 @@ class DatabaseService(protocol.ServerSlice):
     async def start(self) -> None:
         await super().start()
         await self.connect_database()
+        # Schedule cleanup agentprocess and agentinstance tables
+        agent_process_purge_interval = opt.agent_process_purge_interval.get()
+        if agent_process_purge_interval > 0:
+            self.schedule(self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0)
 
     async def stop(self) -> None:
         await self.disconnect_database()
@@ -98,3 +102,7 @@ class DatabaseService(protocol.ServerSlice):
             except Exception:
                 LOGGER.exception("Connection to PostgreSQL failed")
         return False
+
+    async def _purge_agent_processes(self) -> None:
+        agent_processes_to_keep = opt.agent_processes_to_keep.get()
+        await data.AgentProcess.cleanup(nr_expired_records_to_keep=agent_processes_to_keep)
