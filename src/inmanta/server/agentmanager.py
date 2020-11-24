@@ -645,6 +645,17 @@ class AgentManager(ServerSlice, SessionListener):
         end: Optional[UUID] = None,
         limit: Optional[int] = None,
     ) -> Apireturn:
+        """List all agent processes whose sid is after start and before end
+
+        :param environment: Optional, the environment the agent should come from.
+        :param expired: If True, expired agents will also be shown, they are hidden otherwise.
+        :param start: The sid all of the selected agent process should be greater than (non included in output), defaults to None
+        :param end: The sid all of the selected agent process should be smaller than (non included in output), defaults to None
+        :param limit: Whether to limit the number of returned entries, defaults to None
+        :raises BadRequest: Limit, start and end can not be set together
+        :raises NotFound: The given environment id does not exist!
+        :raises BadRequest: Limit parameter can not exceed 1000
+        """
         query: Dict[str, Any] = {}
         argscount = len([x for x in [start, end, limit] if x is not None])
         if argscount == 3:
@@ -660,7 +671,7 @@ class AgentManager(ServerSlice, SessionListener):
         if limit is None:
             limit = APILIMIT
         elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+            raise BadRequest(f"Limit parameter can not exceed {APILIMIT}, got {limit}.")
 
         aps = await data.AgentProcess.get_list_paged(
             page_by_column="sid",
@@ -693,6 +704,15 @@ class AgentManager(ServerSlice, SessionListener):
         end: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> Apireturn:
+        """List all agents whose name is after start and before end
+
+        :param env: The environment the agents should come from
+        :param start: The name all of the selected agent should be greater than (non included in output), defaults to None
+        :param end: The name all of the selected agent should be smaller than (non included in output), defaults to None
+        :param limit: Whether to limit the number of returned entries, defaults to None
+        :raises BadRequest: Limit, start and end can not be set together
+        :raises BadRequest: Limit parameter can not exceed 1000
+        """
         query = {}
         argscount = len([x for x in [start, end, limit] if x is not None])
         if argscount == 3:
@@ -703,7 +723,7 @@ class AgentManager(ServerSlice, SessionListener):
         if limit is None:
             limit = APILIMIT
         elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+            raise BadRequest(f"Limit parameter can not exceed {APILIMIT}, got {limit}.")
 
         ags = await data.Agent.get_list_paged(
             page_by_column="name",

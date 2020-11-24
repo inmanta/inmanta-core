@@ -849,7 +849,7 @@ def get_report(id: uuid.UUID):
     """
     Get a compile report from the server
 
-    :param compile_id: The id of the compile and its reports to fetch.
+    :param id: The id of the compile and its reports to fetch.
     """
 
 
@@ -864,7 +864,7 @@ def list_agent_processes(
     Return a list of all nodes and the agents for these nodes
 
     :param environment: An optional environment. If set, only the agents that belong to this environment are returned
-    :param expired: Optional, also show expired.
+    :param expired: Optional, also show expired processes, otherwise only living processes are shown.
     :param start: Agent processes after start (sorted by sid in ASC)
     :param end: Agent processes before end (sorted by sid in ASC)
     :param limit: Maximum number of results, up to a maximum of 1000
@@ -882,7 +882,7 @@ def get_agent_process(id: uuid.UUID):
     """
     Return a detailed report for a node
 
-    :param agent_sid: The session id of the agent
+    :param id: The session id of the agent
     :return: The requested node
     """
 
