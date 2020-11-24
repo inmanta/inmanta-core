@@ -15,11 +15,12 @@
 
     Contact: code@inmanta.com
 """
-import pytest
-from typing import Optional, Union, Tuple
+from typing import Optional, Tuple, Union
 
-import inmanta.compiler as compiler
+import pytest
+
 import inmanta.ast.type as ast_type
+import inmanta.compiler as compiler
 from inmanta.ast import CompilerException, DuplicateException, Namespace, NotFoundException, RuntimeException, TypingException
 from inmanta.execute.runtime import Instance, ResultVariable
 
@@ -608,7 +609,8 @@ implement A using std::none
 
 a = A()
 a.other = null
-        """ % ("" if multi else "1")
+        """
+        % ("" if multi else "1")
     )
     root_ns: Namespace
     (_, root_ns) = compiler.do_compile()
@@ -622,7 +624,7 @@ a.other = null
     if multi:
         assert other_var.value == []
     else:
-        assert other_var.value == None
+        assert other_var.value is None
 
 
 def test_optional_variable_relation(snippetcompiler):
@@ -657,7 +659,7 @@ a.ns = null
         (("a.others = null", "a.others = null"), True),
         (("a.others = [A(), A()]", "a.others = null"), False),
         (("a.others = null", "a.others = [A(), A()]"), False),
-    ]
+    ],
 )
 def test_relation_null_multiple_assignments(snippetcompiler, statements: Tuple[str, str], valid: bool) -> None:
     snippetcompiler.setup_for_snippet(
