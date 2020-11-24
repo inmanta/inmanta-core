@@ -230,7 +230,7 @@ class ResourceService(protocol.ServerSlice):
             raise Conflict("This agent is not currently the primary for the endpoint %s (sid: %s)" % (agent, sid))
         if incremental_deploy:
             if version is not None:
-                raise Forbidden("Cannot request increment for a specific version")
+                raise BadRequest("Cannot request increment for a specific version")
             result = await self.get_resource_increment_for_agent(env, agent)
         else:
             result = await self.get_all_resources_for_agent(env, agent, version)
@@ -455,7 +455,7 @@ class ResourceService(protocol.ServerSlice):
                 if resource_action is None:
                     # new
                     if started is None:
-                        raise Forbidden("A resource action can only be created with a start datetime.")
+                        raise BadRequest("A resource action can only be created with a start datetime.")
 
                     version = Id.parse_id(resource_ids[0]).version
                     resource_action = data.ResourceAction(
