@@ -473,7 +473,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         for o in order.split(" "):
             possible = ["ASC", "DESC", "NULLS", "FIRST", "LAST"]
             if o not in possible:
-                raise RuntimeError("The following order can not be applied: {order}, {o} should be one of {possible}")
+                raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
 
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
