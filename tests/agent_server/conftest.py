@@ -183,6 +183,7 @@ def resource_container():
         """
         Set `ctx.set_status(const.ResourceState.failed)` in process_events().
         """
+
         fields = ("key", "value", "purged")
 
     @resource("test::BadPost", agent="agent", id_attribute="key")
