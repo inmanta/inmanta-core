@@ -657,9 +657,6 @@ class AgentManager(ServerSlice, SessionListener):
         :raises BadRequest: Limit parameter can not exceed 1000
         """
         query: Dict[str, Any] = {}
-        argscount = len([x for x in [start, end, limit] if x is not None])
-        if argscount == 3:
-            raise BadRequest("Limit, start and end can not be set together")
         if environment is not None:
             query["environment"] = environment
             env = await data.Environment.get_by_id(environment)
@@ -714,9 +711,6 @@ class AgentManager(ServerSlice, SessionListener):
         :raises BadRequest: Limit parameter can not exceed 1000
         """
         query = {}
-        argscount = len([x for x in [start, end, limit] if x is not None])
-        if argscount == 3:
-            raise BadRequest("Limit, start and end can not be set together")
         if env is not None:
             query["environment"] = env.id
 

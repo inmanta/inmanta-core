@@ -586,9 +586,6 @@ class CompilerService(ServerSlice):
     async def get_reports(
         self, env: data.Environment, start: Optional[str] = None, end: Optional[str] = None, limit: Optional[int] = None
     ) -> Apireturn:
-        argscount = len([x for x in [start, end, limit] if x is not None])
-        if argscount == 3:
-            raise BadRequest("Limit, start and end can not be set together")
         if env is None:
             raise NotFound("The given environment id does not exist!")
 
