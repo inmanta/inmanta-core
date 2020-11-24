@@ -11,6 +11,7 @@
 ## Bug fixes
 - Fix broken links in the documentation (#2495)
 - Ensure all running compilations are stopped when the server is stopped (#2508)
+- Ensure the compiler service takes into account the environment variables set on the system (#2413)
 - Fix `--server_address` option on `inmanta export` (#2514)
 - Handle failure in an event handler consistently for local and non-local agents (#2509)
 
