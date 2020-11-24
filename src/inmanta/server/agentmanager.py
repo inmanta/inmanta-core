@@ -361,10 +361,12 @@ class AgentManager(ServerSlice, SessionListener):
         Note: This method call is allowed to fail when the database connection is lost.
         """
         now = datetime.now()
-        await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add)
-        await data.AgentInstance.log_instance_expiry(session.id, endpoints_to_remove, now)
-        await data.Agent.update_primary(session.tid, endpoints_with_new_primary, now)
-        await data.AgentProcess.update_last_seen(session.id, now)
+        async with data.AgentProcess.get_connection() as connection:
+            async with connection.transaction():
+                await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add, connection)
+                await data.AgentInstance.log_instance_expiry(session.id, endpoints_to_remove, now, connection)
+                await data.Agent.update_primary(session.tid, endpoints_with_new_primary, now, connection)
+                await data.AgentProcess.update_last_seen(session.id, now, connection)
 
     # Session registration
     async def _register_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str], now: datetime) -> None:
@@ -403,9 +405,11 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Note: This method call is allowed to fail when the database connection is lost.
         """
-        await data.AgentProcess.seen(tid, session.nodename, session.id, now)
-        await data.AgentInstance.log_instance_creation(tid, session.id, endpoint_names)
-        await data.Agent.update_primary(tid, endpoints_with_new_primary, now)
+        async with data.AgentProcess.get_connection() as connection:
+            async with connection.transaction():
+                await data.AgentProcess.seen(tid, session.nodename, session.id, now, connection)
+                await data.AgentInstance.log_instance_creation(tid, session.id, endpoint_names, connection)
+                await data.Agent.update_primary(tid, endpoints_with_new_primary, now, connection)
 
     # Session expiry
     async def _expire_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str], now: datetime) -> None:
@@ -439,26 +443,20 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Note: This method call is allowed to fail when the database connection is lost.
         """
-        await data.AgentProcess.expire_process(session.id, now)
-        await data.AgentInstance.log_instance_expiry(session.id, session.endpoint_names, now)
-        await data.Agent.update_primary(tid, endpoints_with_new_primary, now)
+        async with data.AgentProcess.get_connection() as connection:
+            async with connection.transaction():
+                await data.AgentProcess.expire_process(session.id, now, connection)
+                await data.AgentInstance.log_instance_expiry(session.id, session.endpoint_names, now, connection)
+                await data.Agent.update_primary(tid, endpoints_with_new_primary, now, connection)
 
     async def _expire_all_sessions_in_db(self) -> None:
         async with self.session_lock:
             LOGGER.debug("Cleaning server session DB")
-
-            # TODO: do as one query
-            procs = await data.AgentProcess.get_live()
-            for proc in procs:
-                await proc.update_fields(expired=datetime.now())
-
-            ais = await data.AgentInstance.active()
-            for ai in ais:
-                await ai.update_fields(expired=datetime.now())
-
-            agents = await data.Agent.get_list()
-            for agent in agents:
-                await agent.update_fields(primary=None)
+            async with data.AgentProcess.get_connection() as connection:
+                async with connection.transaction():
+                    await data.AgentProcess.expire_all(now=datetime.now(), connection=connection)
+                    await data.AgentInstance.expire_all(now=datetime.now(), connection=connection)
+                    await data.Agent.mark_all_as_non_primary(connection=connection)
 
     # Util
     async def _use_new_active_session_for_agent(self, tid: uuid.UUID, endpoint_name: str) -> Optional[protocol.Session]:
