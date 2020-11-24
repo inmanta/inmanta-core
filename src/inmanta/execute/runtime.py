@@ -37,7 +37,7 @@ from inmanta.ast.type import Type
 from inmanta.execute import dataflow, proxy
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.tracking import Tracker
-from inmanta.execute.util import Unknown
+from inmanta.execute.util import NoneValue, Unknown
 
 try:
     from typing import TYPE_CHECKING
@@ -414,6 +414,17 @@ class ListVariable(BaseListVariable):
         super().__init__(queue)
 
     def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
+        if isinstance(value, NoneValue):
+            if len(self.value) > 0:
+                exception: CompilerException = RuntimeException(
+                    None,
+                    "Trying to set relation attribute `%s` of instance `%s` to null but it has values `%s` assigned already"
+                    % (self.attribute.name, self.myself, ", ".join(str(v) for v in self.value)),
+                )
+                exception.set_location(location)
+                raise exception
+            self.freeze()
+            return
         try:
             if not self._set_value(value, location, recur):
                 return
@@ -459,26 +470,41 @@ class OptionVariable(DelayedResultVariable["Instance"]):
         self.myself = instance
         self.location = None
 
-    def set_value(self, value: "Instance", location: Location, recur: bool = True) -> None:
+    def _get_null_value(self) -> object:
+        return None
+
+    def set_value(self, value: object, location: Location, recur: bool = True) -> None:
         assert location is not None
         if self.hasValue:
             if self.value is None:
-                raise ModifiedAfterFreezeException(
-                    self, instance=self.myself, attribute=self.attribute, value=value, location=location, reverse=not recur
-                )
-            if self.value != value:
+                if isinstance(value, NoneValue):
+                    return
+                else:
+                    raise ModifiedAfterFreezeException(
+                        self, instance=self.myself, attribute=self.attribute, value=value, location=location, reverse=not recur
+                    )
+            elif self.value != value:
                 raise DoubleSetException(self, None, value, location)
 
-        if not isinstance(value, Unknown) and self.type is not None:
-            self.type.validate(value)
+        self._validate_value(value)
 
-        # set counterpart
-        if self.attribute.end is not None and recur:
-            value.set_attribute(self.attribute.end.name, self.myself, location, False)
+        if isinstance(value, Instance):
+            # set counterpart
+            if self.attribute.end is not None and recur:
+                value.set_attribute(self.attribute.end.name, self.myself, location, False)
 
-        self.value = value
+        self.value = value if not isinstance(value, NoneValue) else self._get_null_value()
         self.location = location
         self.freeze()
+
+    def _validate_value(self, value: object) -> None:
+        if isinstance(value, Unknown):
+            return
+        if isinstance(value, NoneValue):
+            return
+        if self.type is None:
+            return
+        self.type.validate(value)
 
     def get_waiting_providers(self) -> int:
         # todo: optimize?
@@ -516,6 +542,16 @@ class DeprecatedOptionVariable(OptionVariable):
             warning.set_location(self.myself.get_location())
             inmanta_warnings.warn(warning)
         super().freeze()
+
+    def _get_null_value(self) -> object:
+        return NoneValue()
+
+    def _validate_value(self, value: object) -> None:
+        if isinstance(value, Unknown):
+            return
+        if self.type is None:
+            return
+        self.type.validate(value)
 
 
 class QueueScheduler(object):

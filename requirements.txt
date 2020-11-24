@@ -37,11 +37,11 @@ psutil==5.7.3
 pyformance==0.4
 pydantic==1.7.2
 typing_inspect==0.6.0
-importlib_metadata==3.0.0
+importlib_metadata==3.1.0
 setuptools==50.3.2
 pip==20.2.4
 docstring-parser==0.7.3
 bumpversion==0.6.0
 sphinx-click==2.5.0
 rpdb==0.1.6
-inmanta-dev-dependencies[async,extension]==1.1.0
+inmanta-dev-dependencies[async,extension]==1.2.0
