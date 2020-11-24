@@ -387,8 +387,8 @@ async def test_consistenly_handle_failure_in_process_events(
     resource_container, environment, server, client, async_finalizer, clienthelper, agent_factory
 ):
     """
-        Setting `ctx.set_status(const.ResourceState.failed)` in process events should result
-        in the same behavior for local and remote agents.
+    Setting `ctx.set_status(const.ResourceState.failed)` in process events should result
+    in the same behavior for local and remote agents.
     """
     # Start agent1 and agent2
     agents = [
