@@ -411,13 +411,13 @@ async def test_api(init_dataclasses_and_load_schema):
     assert_equal_ish(shouldbe, all_agents, sortby=["environment", "name"])
 
     start = "agent2"
-    code, all_agents = await am.list_agents(environment=None, start=start)
+    code, all_agents = await am.list_agents(env=None, start=start)
     assert code == 200
     for a in all_agents["agents"]:
         assert a["name"] > start, f"List of agent should not contain a name (={a['name']}) before or equal to start (={start})"
 
     end = "agent2"
-    code, all_agents = await am.list_agents(environment=None, end=end)
+    code, all_agents = await am.list_agents(env=None, end=end)
     assert code == 200
     for a in all_agents["agents"]:
         assert a["name"] < end, f"List of agent should not contain a name (={a['name']}) after or equal to end (={end})"
