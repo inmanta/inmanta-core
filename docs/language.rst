@@ -342,7 +342,9 @@ Instances of an entity are created with a constructor statement
 A constructor can assign values to any of the properties (attributes or relations) of the entity. It can also leave the properties unassigned.
 For attributes with default values, the constructor is the only place where the defaults can be overridden.
 
-Values can be assigned to the remaining properties as if they are variables. To relations with a higher arity, multiple values can be assigned
+Values can be assigned to the remaining properties as if they are variables. To relations with a higher arity, multiple values can be assigned.
+Additionally, `null` can be assigned to relations with a lower arity of 0 to indicate explicitly that the model will not assign
+any values to the relation attribute.
 
 .. code-block:: inmanta
 
