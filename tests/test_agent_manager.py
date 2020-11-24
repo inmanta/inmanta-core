@@ -30,6 +30,7 @@ from inmanta.agent import Agent, agent
 from inmanta.agent import config as agent_config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result
+from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.agentmanager import AgentManager, SessionAction, SessionManager
 from inmanta.server.protocol import Session
@@ -384,8 +385,8 @@ async def test_api(init_dataclasses_and_load_schema):
     report = await am.get_agent_process_report(agentid)
     assert (200, "X") == report
 
-    report = await am.get_agent_process_report(uuid4())
-    assert 404 == report[0]
+    with pytest.raises(NotFound):
+        await am.get_agent_process_report(uuid4())
 
     code, all_agents = await am.list_agents(None)
     assert code == 200
