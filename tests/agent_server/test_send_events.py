@@ -383,9 +383,13 @@ async def test_send_events_cross_agent_fail(resource_container, environment, ser
 
 
 @pytest.mark.asyncio
-async def test_set_deployment_status_in_process_events(
+async def test_consistenly_handle_failure_in_process_events(
     resource_container, environment, server, client, async_finalizer, clienthelper, agent_factory
 ):
+    """
+        Setting `ctx.set_status(const.ResourceState.failed)` in process events should result
+        in the same behavior for local and remote agents.
+    """
     # Start agent1 and agent2
     agents = [
         agent_factory(
