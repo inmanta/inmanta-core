@@ -239,6 +239,9 @@ async def test_api(init_dataclasses_and_load_schema):
     # Exact replica of one to detect crosstalk
     env4 = data.Environment(name="testenv4", project=project.id)
     await env4.insert()
+    env5 = data.Environment(name="testenv5", project=project.id)
+    await env5.insert()
+
     await data.Agent(environment=env.id, name="agent1", paused=True).insert()
     await data.Agent(environment=env.id, name="agent2", paused=False).insert()
     await data.Agent(environment=env.id, name="agent3", paused=False).insert()
@@ -246,6 +249,7 @@ async def test_api(init_dataclasses_and_load_schema):
     await data.Agent(environment=env4.id, name="agent1", paused=True).insert()
     await data.Agent(environment=env4.id, name="agent2", paused=False).insert()
     await data.Agent(environment=env4.id, name="agent3", paused=False).insert()
+    await data.Agent(environment=env5.id, name="agent1", paused=False).insert()
 
     server = Mock()
     futures = Collector()
@@ -266,12 +270,41 @@ async def test_api(init_dataclasses_and_load_schema):
     # fourth session
     ts4 = MockSession(uuid4(), env4.id, {"agent1", "agent2"}, "ts4")
     await am._register_session(ts4, set(ts4.endpoint_names), datetime.datetime.now())
+    # fifth session
+    ts5 = MockSession(uuid4(), env5.id, {"agent1"}, "ts5")
+    await am._register_session(ts5, set(ts5.endpoint_names), datetime.datetime.now())
+
+    await futures.proccess()
+    assert len(am.sessions) == 5
+
+    # Getting all non expired agent processes
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=False)
+    assert code == 200
+    assert len(all_agents_processes["processes"]) == 5
+
+    # Getting all agent processes (including expired)
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=True)
+    assert code == 200
+    assert len(all_agents_processes["processes"]) == 5
+
+    # Making fifth session expire
+    expiration = datetime.datetime.now()
+    await am._expire_session(ts5, set(ts5.endpoint_names), expiration)
 
     await futures.proccess()
     assert len(am.sessions) == 4
 
-    code, all_agents = await am.list_agent_processes(environment=None, expired=False)
+    # Getting all non expired agent processes
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=False)
     assert code == 200
+    assert len(all_agents_processes["processes"]) == 4
+    for agent_process in all_agents_processes["processes"]:
+        assert agent_process["expired"] is None
+
+    # Getting all agent processes (including expired)
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=True)
+    assert code == 200
+    assert len(all_agents_processes["processes"]) == 5
 
     shouldbe = {
         "processes": [
@@ -316,18 +349,23 @@ async def test_api(init_dataclasses_and_load_schema):
                 ],
                 "environment": env4.id,
             },
+            {
+                "first_seen": UNKWN,
+                "expired": expiration,
+                "hostname": "ts5",
+                "last_seen": UNKWN,
+                "endpoints": [
+                    {"expired": expiration, "id": UNKWN, "name": "agent1", "process": UNKWN},
+                ],
+                "environment": env5.id,
+            },
         ]
     }
 
-    assert_equal_ish(shouldbe, all_agents, sortby=["hostname", "name"])
-    agentid = all_agents["processes"][0]["sid"]
+    assert_equal_ish(shouldbe, all_agents_processes, sortby=["hostname", "name"])
+    agentid = all_agents_processes["processes"][0]["sid"]
 
     start = agentid
-    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=False, start=start)
-    assert code == 200
-    for agent_process in all_agents_processes["processes"]:
-        assert agent_process["expired"] is None
-
     code, all_agents_processes = await am.list_agent_processes(environment=None, expired=True, start=start)
     assert code == 200
     for agent_process in all_agents_processes["processes"]:
@@ -393,6 +431,14 @@ async def test_api(init_dataclasses_and_load_schema):
     shouldbe = {
         "agents": [
             {"name": "agent1", "paused": True, "last_failover": "", "primary": "", "environment": env.id, "state": "paused"},
+            {
+                "name": "agent1",
+                "paused": False,
+                "last_failover": expiration,
+                "primary": "",
+                "environment": env5.id,
+                "state": "down",
+            },
             {"name": "agent2", "paused": False, "last_failover": UNKWN, "primary": UNKWN, "environment": env.id, "state": "up"},
             {"name": "agent3", "paused": False, "last_failover": UNKWN, "primary": UNKWN, "environment": env.id, "state": "up"},
             {"name": "agent1", "paused": True, "last_failover": "", "primary": "", "environment": env4.id, "state": "paused"},
