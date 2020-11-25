@@ -546,6 +546,8 @@ class ResourceService(protocol.ServerSlice):
             for agent, resource_id in waiting_agents:
                 aclient = self.agentmanager_service.get_agent_client(env.id, agent)
                 if aclient is not None:
+                    if change is None:
+                        change = const.Change.nochange
                     await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
 
         return 200

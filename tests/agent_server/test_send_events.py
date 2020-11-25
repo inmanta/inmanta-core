@@ -25,7 +25,7 @@ from inmanta import config, const
 from inmanta.agent.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version
-from utils import _wait_until_deployment_finishes, retry_limited
+from utils import _wait_until_deployment_finishes, log_doesnt_contain, retry_limited
 
 logger = logging.getLogger("inmanta.test.send_events")
 
@@ -463,3 +463,89 @@ async def test_consistenly_handle_failure_in_process_events(
     await assert_deployment_status(res_id=res_id_key2, expected_state=const.ResourceState.skipped)
     # Skipped due to failed local dependency
     await assert_deployment_status(res_id=res_id_key1, expected_state=const.ResourceState.skipped)
+
+
+@pytest.mark.asyncio(timeout=15)
+async def test_send_events_cross_agent_unavailable(
+    resource_container, environment, server, client, clienthelper, no_agent_backoff, async_finalizer, caplog
+):
+    """
+    Having unavailable cross agent dependencies shouldn't result in invalid Event objects (#2501)
+    """
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+
+    resource_container.Provider.reset()
+
+    agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
+
+    async_finalizer.add(agent2.stop)
+    await agent2.add_end_point_name("agent2")
+    await agent2.start()
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    async_finalizer.add(agent.stop)
+    await agent.add_end_point_name("agent1")
+    await agent.start()
+    await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
+
+    version = await clienthelper.get_version()
+
+    res_id_1 = "test::Resource[agent1,key=key1],v=%d" % version
+    res_id_2 = "test::ResourceNoHandler[agent2,key=key2],v=%d" % version
+    res_id_3 = "test::Resource[agent2,key=key3],v=%d" % version
+    # resource 1 requires an available and an unavailable resource
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": res_id_1,
+            "send_event": True,
+            "requires": [res_id_2, res_id_3],
+            "purged": False,
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": res_id_2,
+            "send_event": True,
+            "requires": [],
+            "purged": False,
+        },
+        {
+            "key": "key3",
+            "value": "value3",
+            "id": res_id_3,
+            "send_event": True,
+            "requires": [],
+            "purged": False,
+        },
+    ]
+    await clienthelper.put_version_simple(resources, version)
+
+    # do a deploy
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    async def check_resource_state(environment, id, state):
+        result = await client.get_resource(tid=environment, id=id, logs=False, status=True)
+        assert result.code == 200
+        return result.result["status"] == state
+
+    assert await check_resource_state(environment, res_id_1, "skipped")
+
+    assert await check_resource_state(environment, res_id_2, "unavailable")
+
+    assert await check_resource_state(environment, res_id_3, "deployed")
+
+    log_doesnt_contain(
+        caplog, "inmanta.util", logging.ERROR, "An exception occurred while handling a future: 1 validation error for Event"
+    )

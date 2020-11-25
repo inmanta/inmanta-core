@@ -92,7 +92,7 @@ class ResourceAction(object):
         self.running: bool = False
         self.gid: uuid.UUID = gid
         self.status: Optional[const.ResourceState] = None
-        self.change: Optional[const.Change] = None
+        self.change: Optional[const.Change] = const.Change.nochange
         self.undeployable: Optional[const.ResourceState] = None
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
