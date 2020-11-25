@@ -380,3 +380,86 @@ async def test_send_events_cross_agent_fail(resource_container, environment, ser
     r_to_s = {r["resource_version_id"]: r["status"] for r in result.result["resources"]}
     assert r_to_s[res_id_1] == "skipped"
     assert r_to_s[fail_r] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_consistenly_handle_failure_in_process_events(
+    resource_container, environment, server, client, async_finalizer, clienthelper, agent_factory
+):
+    """
+    Setting `ctx.set_status(const.ResourceState.failed)` in process events should result
+    in the same behavior for local and remote agents.
+    """
+    # Start agent1 and agent2
+    agents = [
+        agent_factory(
+            environment=environment,
+            hostname=f"agent{i}",
+            agent_map={f"agent{i}": "localhost"},
+            code_loader=False,
+            agent_names=[f"agent{i}"],
+        )
+        for i in range(1, 3)
+    ]
+    await asyncio.gather(*agents)
+
+    version = await clienthelper.get_version()
+    res_id_key1 = f"test::Resource[agent1,key=key1],v={version}"
+    res_id_key2 = f"test::Resource[agent2,key=key2],v={version}"
+    res_id_key3 = f"test::BadEventsStatus[agent1,key=key3],v={version}"
+    res_id_key4 = f"test::Resource[agent1,key=key4],v={version}"
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": res_id_key1,
+            "send_event": True,
+            "requires": [res_id_key3],
+            "purged": False,
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": res_id_key2,
+            "send_event": True,
+            "purged": False,
+            "requires": [res_id_key3],
+        },
+        {
+            "key": "key3",
+            "value": "value3",
+            "id": res_id_key3,
+            "send_event": True,
+            "requires": [res_id_key4],
+            "purged": False,
+        },
+        {
+            "key": "key4",
+            "value": "value4",
+            "id": res_id_key4,
+            "send_event": True,
+            "requires": [],
+            "purged": False,
+        },
+    ]
+
+    await clienthelper.put_version_simple(resources, version)
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+
+    await resource_container.wait_for_done_with_waiters(
+        client, environment, version, wait_for_this_amount_of_resources_in_done=4, timeout=15
+    )
+
+    async def assert_deployment_status(res_id: str, expected_state: const.ResourceState) -> None:
+        result = await client.get_resource(tid=environment, id=res_id, logs=False, status=True)
+        assert result.code == 200
+        assert result.result["status"] == expected_state
+
+    await assert_deployment_status(res_id=res_id_key4, expected_state=const.ResourceState.deployed)
+    # Failed via ctx.set_status(const.ResourceState.failed) in process_events()
+    await assert_deployment_status(res_id=res_id_key3, expected_state=const.ResourceState.failed)
+    # Skipped due to failed cross-agent dependency
+    await assert_deployment_status(res_id=res_id_key2, expected_state=const.ResourceState.skipped)
+    # Skipped due to failed local dependency
+    await assert_deployment_status(res_id=res_id_key1, expected_state=const.ResourceState.skipped)

@@ -208,6 +208,10 @@ class ResourceAction(object):
                     "Could not send events for %(resource_id)s", resource_id=str(self.resource.id), events=str(events_dict)
                 )
 
+        # Prevent that status set by execute() is overridden in process_events()
+        if success and ctx.status is not const.ResourceState.deployed:
+            success = False
+
         provider.close()
 
         return success, send_event

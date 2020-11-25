@@ -15,6 +15,7 @@
 - Cleanup old entries in the agentprocess and agentinstance database tables (#2499)
 - Ensure the compiler service takes into account the environment variables set on the system (#2413)
 - Fix `--server_address` option on `inmanta export` (#2514)
+- Handle failure in an event handler consistently for local and non-local agents (#2509)
 
 ## Upgrade notes
 - Ensure the database is backed up before executing an upgrade.
