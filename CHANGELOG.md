@@ -1,3 +1,11 @@
+# Release 2020.5.1 (2020-11-25)
+
+## Bug fixes
+- Ensure the compiler service takes into account the environment variables set on the system (#2413)
+
+## Upgrade notes
+- Ensure the database is backed up before executing an upgrade.
+
 # Release 2020.5 (2020-10-27)
 
 ## New features
