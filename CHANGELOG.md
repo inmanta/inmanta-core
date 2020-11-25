@@ -1,3 +1,8 @@
+# Release 2020.4.4 (2020-11-25)
+
+## Bug fixes
+- Ensure the compiler service takes into account the environment variables set on the system (#2413)
+
 # Release 2020.4.3 (2020-10-05)
 
 ## Bug fixes

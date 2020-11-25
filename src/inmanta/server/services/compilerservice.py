@@ -162,7 +162,7 @@ class CompileRun(object):
                 env_all.update(env)
 
             sub_process = await asyncio.create_subprocess_exec(
-                cmd[0], *cmd[1:], stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env
+                cmd[0], *cmd[1:], stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env_all
             )
 
             returncode = await self.drain(sub_process)

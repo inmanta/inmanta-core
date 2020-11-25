@@ -890,3 +890,37 @@ async def test_issue_2361(environment_factory: EnvironmentFactory, server, clien
     success, compile_data = await cr.run()
     assert not success
     assert compile_data is None
+
+
+@pytest.mark.asyncio
+async def test_git_uses_environment_variables(environment_factory: EnvironmentFactory, server, client, tmpdir, monkeypatch):
+    """
+    Make sure that the git clone command on the compilerservice takes into account the environment variables
+    set on the system.
+    """
+    env = await environment_factory.create_environment(main="")
+    result = await client.environment_modify(id=env.id, name=env.id, branch="master")
+    assert result.code == 200
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    compile = data.Compile(
+        remote_id=uuid.uuid4(),
+        environment=env.id,
+        do_export=True,
+        metadata={},
+        environment_variables={},
+        force_update=True,
+    )
+    await compile.insert()
+
+    # Make sure git clone logs trace lines
+    monkeypatch.setenv("GIT_TRACE", "1")
+    cr = CompileRun(compile, project_work_dir)
+    await cr.run()
+
+    report = await data.Report.get_one(compile=compile.id, name="Cloning repository")
+    # Assert presence of trace lines
+    assert "trace: " in report.errstream
+
