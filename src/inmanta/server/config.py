@@ -307,7 +307,7 @@ agent_process_purge_interval = Option(
     "agent-process-purge-interval",
     3600,
     """The number of seconds between two purges of old and expired agent processes.
-       Set to zero to disable the cleanup. see :inmanta.config:option:`server.agent_processes_to_keep`""",
+       Set to zero to disable the cleanup. see :inmanta.config:option:`server.agent-processes-to-keep`""",
     is_time,
 )
 
