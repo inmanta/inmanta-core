@@ -31,11 +31,7 @@ from inmanta.data import APILIMIT
 from inmanta.data.model import Resource, ResourceAction, ResourceType, ResourceVersionIdStr
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import ReturnValue
-<<<<<<< HEAD
-from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
-=======
 from inmanta.protocol.exceptions import BadRequest
->>>>>>> parent of fa6eafe2... Use protocol.exceptions
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
 from inmanta.server import config as opt
@@ -234,11 +230,7 @@ class ResourceService(protocol.ServerSlice):
             return 409, {"message": "This agent is not currently the primary for the endpoint %s (sid: %s)" % (agent, sid)}
         if incremental_deploy:
             if version is not None:
-<<<<<<< HEAD
-                raise BadRequest("Cannot request increment for a specific version")
-=======
                 return 500, {"message": "Cannot request increment for a specific version"}
->>>>>>> parent of fa6eafe2... Use protocol.exceptions
             result = await self.get_resource_increment_for_agent(env, agent)
         else:
             result = await self.get_all_resources_for_agent(env, agent, version)
@@ -463,11 +455,7 @@ class ResourceService(protocol.ServerSlice):
                 if resource_action is None:
                     # new
                     if started is None:
-<<<<<<< HEAD
-                        raise BadRequest("A resource action can only be created with a start datetime.")
-=======
                         return 500, {"message": "A resource action can only be created with a start datetime."}
->>>>>>> parent of fa6eafe2... Use protocol.exceptions
 
                     version = Id.parse_id(resource_ids[0]).version
                     resource_action = data.ResourceAction(
