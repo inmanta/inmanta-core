@@ -33,7 +33,7 @@ from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange
-from inmanta.protocol import Result
+from inmanta.protocol import Result, json_encode
 from inmanta.types import SimpleTypes
 from inmanta.util import hash_file
 
@@ -348,6 +348,10 @@ class HandlerContext(object):
             kwargs["traceback"] = traceback.format_exc()
         else:
             exc_info = False
+        try:
+            json_encode(kwargs)
+        except Exception as e:
+            raise Exception("Exception during serializing log message arguments") from e
         log = data.LogLine.log(level, msg, **kwargs)
         self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
         self._logs.append(log)
@@ -358,6 +362,8 @@ class HandlerContext(object):
 
         To pass exception information, use the keyword argument exc_info with
         a true value, e.g.
+
+        Keyword arguments should be JSON serializable.
 
         ``logger.debug("Houston, we have a %s", "thorny problem", exc_info=1)``
         """
@@ -370,6 +376,8 @@ class HandlerContext(object):
         To pass exception information, use the keyword argument exc_info with
         a true value, e.g.
 
+        Keyword arguments should be JSON serializable.
+
         ``logger.info("Houston, we have a %s", "interesting problem", exc_info=1)``
         """
         self.log_msg(logging.INFO, msg, args, kwargs)
@@ -380,6 +388,8 @@ class HandlerContext(object):
 
         To pass exception information, use the keyword argument exc_info with
         a true value, e.g.
+
+        Keyword arguments should be JSON serializable.
 
         ``logger.warning("Houston, we have a %s", "bit of a problem", exc_info=1)``
         """

@@ -194,6 +194,14 @@ def resource_container():
 
         fields = ("key", "value", "purged")
 
+    @resource("test::BadLogging", agent="agent", id_attribute="key")
+    class BadLoggingR(Resource):
+        """
+        Raises an exception when trying to log a message that's not serializable.
+        """
+
+        fields = ("key", "value", "purged")
+
     @provider("test::Resource", name="test_resource")
     class Provider(ResourceHandler):
         def check_resource(self, ctx, resource):
@@ -440,6 +448,18 @@ def resource_container():
     class BadPost(Provider):
         def post(self, ctx, resource) -> None:
             raise Exception()
+
+    class Empty:
+        pass
+
+    @provider("test::BadLogging", name="test_bad_logging")
+    class BadLogging(ResourceHandler):
+        def check_resource(self, ctx, resource):
+            current = resource.clone()
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            ctx.info("This is not JSON serializable: %(val)s", val=Empty())
 
     @resource("test::AgentConfig", agent="agent", id_attribute="agentname")
     class AgentConfig(PurgeableResource):
