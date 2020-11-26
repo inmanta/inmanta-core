@@ -75,7 +75,7 @@ class FileService(protocol.ServerSlice):
         if os.path.exists(file_name):
             return 200
         else:
-            raise NotFound()
+            return 404
 
     @protocol.handle(methods.get_file, file_hash="id")
     async def get_file(self, file_hash: str) -> Apireturn:

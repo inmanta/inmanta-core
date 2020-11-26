@@ -587,7 +587,7 @@ class CompilerService(ServerSlice):
         self, env: data.Environment, start: Optional[str] = None, end: Optional[str] = None, limit: Optional[int] = None
     ) -> Apireturn:
         if env is None:
-            raise NotFound("The given environment id does not exist!")
+            return 404, {"message": "The given environment id does not exist!"}
 
         if limit is None:
             limit = APILIMIT
@@ -620,7 +620,7 @@ class CompilerService(ServerSlice):
         report = await data.Compile.get_report(compile_id)
 
         if report is None:
-            raise NotFound("This report wasn't found")
+            return 404
 
         return 200, {"report": report}
 

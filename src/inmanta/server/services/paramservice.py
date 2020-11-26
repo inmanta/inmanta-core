@@ -23,7 +23,6 @@ from inmanta import data
 from inmanta.const import ParameterSource
 from inmanta.protocol import methods
 from inmanta.protocol.common import attach_warnings
-from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PARAM, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
@@ -111,7 +110,7 @@ class ParameterService(protocol.ServerSlice):
             if resource_id is not None:
                 out = await self.agentmanager.request_parameter(env.id, resource_id)
                 return out
-            raise NotFound()
+            return 404
 
         param = params[0]
 
@@ -244,7 +243,7 @@ class ParameterService(protocol.ServerSlice):
             params = await data.Parameter.get_list(environment=env.id, name=parameter_name, resource_id=resource_id)
 
         if len(params) == 0:
-            raise NotFound()
+            return 404
 
         param = params[0]
         await param.delete()
