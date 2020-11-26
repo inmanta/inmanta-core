@@ -197,7 +197,7 @@ def resource_container():
     @resource("test::BadLogging", agent="agent", id_attribute="key")
     class BadLoggingR(Resource):
         """
-        Set `ctx.set_status(const.ResourceState.failed)` in process_events().
+        Raises an exception when trying to log a message that's not serializable.
         """
 
         fields = ("key", "value", "purged")
@@ -453,10 +453,13 @@ def resource_container():
         pass
 
     @provider("test::BadLogging", name="test_bad_logging")
-    class BadLogging(Provider):
+    class BadLogging(ResourceHandler):
+        def check_resource(self, ctx, resource):
+            current = resource.clone()
+            return current
+
         def do_changes(self, ctx, resource, changes):
             ctx.info("This is not JSON serializable: %(val)s", val=Empty())
-            super().do_changes(ctx, resource, changes)
 
     @resource("test::AgentConfig", agent="agent", id_attribute="agentname")
     class AgentConfig(PurgeableResource):
