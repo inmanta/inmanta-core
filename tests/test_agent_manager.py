@@ -30,7 +30,6 @@ from inmanta.agent import Agent, agent
 from inmanta.agent import config as agent_config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result
-from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.agentmanager import AgentManager, SessionAction, SessionManager
 from inmanta.server.protocol import Session
