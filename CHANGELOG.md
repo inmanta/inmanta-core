@@ -17,6 +17,7 @@
 - Fix `--server_address` option on `inmanta export` (#2514)
 - Handle failure in an event handler consistently for local and non-local agents (#2509)
 - Fix for cross agent dependencies responding to unavailable resources (#2501)
+- Handle JSON serialization errors in handler log messages (#1875)
 
 ## Upgrade notes
 - Ensure the database is backed up before executing an upgrade.
