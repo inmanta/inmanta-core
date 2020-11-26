@@ -659,7 +659,7 @@ class AgentManager(ServerSlice, SessionListener):
             query["environment"] = environment
             env = await data.Environment.get_by_id(environment)
             if env is None:
-                raise NotFound("The given environment id does not exist!")
+                return 404, {"message": "The given environment id does not exist!"}
         if not expired:
             query["expired"] = None
 
@@ -745,11 +745,11 @@ class AgentManager(ServerSlice, SessionListener):
     async def get_agent_process_report(self, agent_sid: uuid.UUID) -> Apireturn:
         ap = await data.AgentProcess.get_one(sid=agent_sid)
         if ap is None:
-            raise NotFound("The given AgentProcess id does not exist!")
+            return 404, {"message": "The given AgentProcess id does not exist!"}
         sid = ap.sid
         session_for_ap = self.sessions.get(sid, None)
         if session_for_ap is None:
-            raise NotFound("The given AgentProcess is not live!")
+            return 404, {"message": "The given AgentProcess is not live!"}
         client = session_for_ap.get_client()
         result = await client.get_status()
         return result.code, result.get_result()
@@ -768,7 +768,7 @@ class AgentManager(ServerSlice, SessionListener):
             res = await data.Resource.get_latest_version(env_id, resource_id)
 
             if res is None:
-                raise NotFound("The resource has no recent version.")
+                return 404, {"message": "The resource has no recent version."}
 
             rid: Id = Id.parse_id(res.resource_version_id)
             version: int = rid.version
@@ -798,7 +798,7 @@ class AgentManager(ServerSlice, SessionListener):
 
             return 503, {"message": "Agents queried for resource parameter."}
         else:
-            raise NotFound("resource_id parameter is required.")
+            return 404, {"message": "resource_id parameter is required."}
 
 
 class AutostartedAgentManager(ServerSlice):

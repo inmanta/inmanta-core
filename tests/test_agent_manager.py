@@ -30,7 +30,6 @@ from inmanta.agent import Agent, agent
 from inmanta.agent import config as agent_config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result
-from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.agentmanager import AgentManager, SessionAction, SessionManager
 from inmanta.server.protocol import Session
@@ -386,6 +385,8 @@ async def test_api(init_dataclasses_and_load_schema):
 
     code, all_agents = await am.list_agent_processes(environment=env.id, expired=False)
     assert code == 200
+    agentid1 = all_agents["processes"][0]["sid"]
+    agentid2 = all_agents["processes"][1]["sid"]
 
     shouldbe = {
         "processes": [
@@ -423,11 +424,14 @@ async def test_api(init_dataclasses_and_load_schema):
 
     assert_equal_ish(shouldbe, all_agents)
 
-    report = await am.get_agent_process_report(agentid)
+    report = await am.get_agent_process_report(agentid1)
     assert (200, "X") == report
 
-    with pytest.raises(NotFound):
-        await am.get_agent_process_report(uuid4())
+    report = await am.get_agent_process_report(agentid2)
+    assert (200, "X") == report
+
+    result, _ = await am.get_agent_process_report(uuid4())
+    assert result == 404
 
     code, all_agents = await am.list_agents(None)
     assert code == 200

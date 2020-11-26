@@ -31,7 +31,7 @@ from inmanta.data import APILIMIT
 from inmanta.data.model import Resource, ResourceAction, ResourceType, ResourceVersionIdStr
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import ReturnValue
-from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
+from inmanta.protocol.exceptions import BadRequest
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
 from inmanta.server import config as opt
@@ -194,7 +194,7 @@ class ResourceService(protocol.ServerSlice):
     ) -> Apireturn:
         resv = await data.Resource.get(env.id, resource_id)
         if resv is None:
-            raise NotFound("The resource with the given id does not exist in the given environment")
+            return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
         if status is not None and status:
             return 200, {"status": resv.status}
@@ -227,10 +227,10 @@ class ResourceService(protocol.ServerSlice):
         self, env: data.Environment, agent: str, version: int, sid: uuid.UUID, incremental_deploy: bool
     ) -> Apireturn:
         if not self.agentmanager_service.is_primary(env, sid, agent):
-            raise Conflict("This agent is not currently the primary for the endpoint %s (sid: %s)" % (agent, sid))
+            return 409, {"message": "This agent is not currently the primary for the endpoint %s (sid: %s)" % (agent, sid)}
         if incremental_deploy:
             if version is not None:
-                raise BadRequest("Cannot request increment for a specific version")
+                return 500, {"message": "Cannot request increment for a specific version"}
             result = await self.get_resource_increment_for_agent(env, agent)
         else:
             result = await self.get_all_resources_for_agent(env, agent, version)
@@ -241,12 +241,12 @@ class ResourceService(protocol.ServerSlice):
         if version is None:
             version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
             if version is None:
-                raise NotFound("No version available")
+                return 404, {"message": "No version available"}
 
         else:
             exists = await data.ConfigurationModel.version_exists(environment=env.id, version=version)
             if not exists:
-                raise NotFound("The given version does not exist")
+                return 404, {"message": "The given version does not exist"}
 
         deploy_model = []
 
@@ -284,7 +284,7 @@ class ResourceService(protocol.ServerSlice):
 
         version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
         if version is None:
-            raise NotFound("No version available")
+            return 404, {"message": "No version available"}
 
         increment = self._increment_cache.get(env.id, None)
         if increment is None:
@@ -455,7 +455,7 @@ class ResourceService(protocol.ServerSlice):
                 if resource_action is None:
                     # new
                     if started is None:
-                        raise BadRequest("A resource action can only be created with a start datetime.")
+                        return 500, {"message": "A resource action can only be created with a start datetime."}
 
                     version = Id.parse_id(resource_ids[0]).version
                     resource_action = data.ResourceAction(

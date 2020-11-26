@@ -30,7 +30,6 @@ import utils
 from inmanta import config, const, data
 from inmanta.agent.agent import Agent
 from inmanta.const import ResourceAction, ResourceState
-from inmanta.protocol.exceptions import BadRequest
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
@@ -311,10 +310,12 @@ async def test_deploy(server, agent: Agent, environment, caplog):
         assert len(payload["resources"]) == 0
 
         # Cannot request increment for specific version
-        with pytest.raises(BadRequest):
-            await resource_service.get_resources_for_agent(env, "agent1", version=version, incremental_deploy=True, sid=sid)
-        with pytest.raises(BadRequest):
-            await resource_service.get_resources_for_agent(env, "agent1", version=v2, incremental_deploy=True, sid=sid)
+        result, _ = await resource_service.get_resources_for_agent(
+            env, "agent1", version=version, incremental_deploy=True, sid=sid
+        )
+        assert result == 500
+        result, _ = await resource_service.get_resources_for_agent(env, "agent1", version=v2, incremental_deploy=True, sid=sid)
+        assert result == 500
 
     for record in caplog.records:
         assert record.levelname != "WARNING"

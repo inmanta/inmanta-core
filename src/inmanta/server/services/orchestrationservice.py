@@ -29,7 +29,7 @@ from inmanta.data import APILIMIT, ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DE
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import attach_warnings
-from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest, ServerError
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -129,11 +129,11 @@ class OrchestrationService(protocol.ServerSlice):
     ) -> Apireturn:
         version = await data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
-            raise NotFound("The given configuration model does not exist yet.")
+            return 404, {"message": "The given configuration model does not exist yet."}
 
         resources = await data.Resource.get_resources_for_version(env.id, version_id, no_obj=True)
         if resources is None:
-            raise NotFound("The given configuration model does not exist yet.")
+            return 404, {"message": "The given configuration model does not exist yet."}
 
         if limit is None:
             limit = APILIMIT
@@ -169,7 +169,7 @@ class OrchestrationService(protocol.ServerSlice):
     async def delete_version(self, env, version_id):
         version = await data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
-            raise NotFound("The given configuration model does not exist yet.")
+            return 404, {"message": "The given configuration model does not exist yet."}
 
         await version.delete_cascade()
         return 200
@@ -406,7 +406,7 @@ class OrchestrationService(protocol.ServerSlice):
     ) -> Apireturn:
         model = await data.ConfigurationModel.get_version(env.id, version_id)
         if model is None:
-            raise NotFound("The request version does not exist.")
+            return 404, {"message": "The request version does not exist."}
 
         await model.update_fields(released=True, result=const.VersionState.deploying)
 
@@ -483,7 +483,7 @@ class OrchestrationService(protocol.ServerSlice):
         # get latest version
         version_id = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
         if version_id is None:
-            raise NotFound("No version available")
+            return 404, {"message": "No version available"}
 
         # filter agents
         allagents = await data.ConfigurationModel.get_agents(env.id, version_id)
