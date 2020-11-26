@@ -34,7 +34,6 @@ from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
 from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD
-from inmanta.protocol.exceptions import Forbidden
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
@@ -3447,8 +3446,8 @@ async def test_agentinstance_stops_deploying_when_stopped(
     assert agent_instance.is_stopped()
 
     # Agent cannot be unpaused after it is stopped
-    with pytest.raises(Forbidden):
-        agent_instance.unpause()
+    result, _ = agent_instance.unpause()
+    assert result == 403
     assert agent_instance._nq.finished()
     assert not agent_instance.is_enabled()
     assert agent_instance.is_stopped()

@@ -426,8 +426,8 @@ async def test_api(init_dataclasses_and_load_schema):
     report = await am.get_agent_process_report(agentid)
     assert (200, "X") == report
 
-    with pytest.raises(NotFound):
-        await am.get_agent_process_report(uuid4())
+    result, _ = await am.get_agent_process_report(uuid4())
+    assert result == 404
 
     code, all_agents = await am.list_agents(None)
     assert code == 200
