@@ -265,7 +265,7 @@ class HandlerContext(object):
     def change(self) -> const.Change:
         return self._change
 
-    def add_change(self, name: str, desired: typing.Any, current: typing.Any = None) -> None:
+    def add_change(self, name: str, desired: object, current: object = None) -> None:
         """
         Report a change of a field. This field is added to the set of updated fields
 
