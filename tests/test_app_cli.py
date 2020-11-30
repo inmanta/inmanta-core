@@ -226,7 +226,15 @@ std::ConfigFile(host=vm1, path="/test", content="")
 
 
 @pytest.mark.asyncio
-async def test_export_with_specific_export_plugin(tmpdir):
+async def test_export_with_specific_export_plugin(tmpdir, client):
+    server_port = Config.get("client_rest_transport", "port")
+    server_host = Config.get("client_rest_transport", "host", "localhost")
+    result = await client.create_project("test")
+    assert result.code == 200
+    proj_id = result.result["project"]["id"]
+    result = await client.create_environment(proj_id, "test", None, None)
+    assert result.code == 200
+    env_id = result.result["environment"]["id"]
     workspace = tmpdir.mkdir("tmp")
     libs_dir = workspace.join("libs")
 
@@ -294,7 +302,20 @@ def other_exporter(exporter: Exporter) -> None:
 
     os.chdir(workspace)
 
-    args = [sys.executable, "-m", "inmanta.app", "export", "--export-plugin", "test_exporter"]
+    args = [
+        sys.executable,
+        "-m",
+        "inmanta.app",
+        "export",
+        "--export-plugin",
+        "test_exporter",
+        "-e",
+        str(env_id),
+        "--server_port",
+        str(server_port),
+        "--server_address",
+        str(server_host),
+    ]
 
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
@@ -334,5 +355,69 @@ vm1.name = "other"
 
     assert "test_exporter ran" not in stdout.decode("utf-8")
     assert "other_exporter" not in stdout.decode("utf-8")
+
+    shutil.rmtree(workspace)
+
+
+@pytest.mark.parametrize("push_method", [([]), (["-d"]), (["-d", "--full"])])
+@pytest.mark.asyncio
+async def test_export_without_environment(tmpdir, server, client, push_method):
+    server_port = Config.get("client_rest_transport", "port")
+    server_host = Config.get("client_rest_transport", "host", "localhost")
+
+    result = await client.create_project("test")
+    assert result.code == 200
+    proj_id = result.result["project"]["id"]
+    result = await client.create_environment(proj_id, "test", None, None)
+    assert result.code == 200
+    env_id = result.result["environment"]["id"]
+
+    workspace = tmpdir.mkdir("tmp")
+    path_main_file = workspace.join("main.cf")
+    path_project_yml_file = workspace.join("project.yml")
+    libs_dir = workspace.join("libs")
+
+    path_project_yml_file.write(
+        f"""
+name: testproject
+modulepath: {libs_dir}
+downloadpath: {libs_dir}
+repo: https://github.com/inmanta/
+"""
+    )
+
+    path_main_file.write(
+        """
+vm1=std::Host(name="non-existing-machine", os=std::linux)
+std::ConfigFile(host=vm1, path="/test", content="")
+"""
+    )
+
+    os.chdir(workspace)
+
+    args = [
+        sys.executable,
+        "-m",
+        "inmanta.app",
+        "export",
+    ]
+    args.extend(["--server_port", str(server_port)])
+    args.extend(["--server_address", str(server_host)])
+    args += push_method
+
+    process = await subprocess.create_subprocess_exec(*args, stdout=sys.stdout, stderr=sys.stderr)
+    try:
+        await asyncio.wait_for(process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+
+    # Make sure exitcode is one
+    assert process.returncode == 1, f"Process ended with bad return code, got {process.returncode} (expected 1)"
+
+    result = await client.list_versions(env_id)
+    assert result.code == 200
+    assert len(result.result["versions"]) == 0
 
     shutil.rmtree(workspace)
