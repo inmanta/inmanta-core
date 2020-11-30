@@ -160,7 +160,7 @@ This display is continuously updated, both during deploys and after, when the or
 
 Taking a closer look at the a specific resource, there are 2 important buttons, the ``Dependency`` button and a ``magnifying glass``.
 The ``Dependency`` button is only available if a resource depends on toehr resources.
-When pressed it will add lines to the table dispalying the each dependency and it's current state:
+When pressed it will add lines to the table displaying the each dependency and it's current state:
 
 .. figure:: /dashboard/images/img_9.png
    :width: 100%
