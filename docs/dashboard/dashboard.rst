@@ -32,7 +32,7 @@ Let's go over what some of these buttons do:
    Displays a list of projects and their environmentes.
    Allows for navigate to any environment, by simply clicking it's name.
 6. Create new project button:
-   This will take you through the creation of a new project and the creation of it's first environment.
+   This will take you through the creation of a new project and the creation of its first environment.
 7. Green checkmark:
    This will take you to the orchestrator status page, displaying all sorts of usefull information about the orchestrator instance.
 
