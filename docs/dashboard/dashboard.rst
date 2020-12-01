@@ -11,6 +11,15 @@ It has several elements:
 
    The project overview page
 
+1. The inmanta "home" button: takes you back to this page.
+2. List of created projects: Lists all existing projects.
+   Clicking on the name of a project will take you to its page.
+3. Project delete button:
+   Deletes the project and all the environments it contains.
+   This will delete the history and environments, but it will not purge the system of changes made or managed by inmanta.
+4. Report an issue:
+   If you run into any issues/bugs, this button will take you to github with the "new issue" page open for the inmanta repository.
+
 .. figure:: /dashboard/images/img_2.png
    :width: 100%
    :align: center
@@ -20,21 +29,14 @@ It has several elements:
 
 Let's go over what some of these buttons do:
 
-1. The inmanta "home" button: takes you back to this page.
-2. List of created projects: Lists all existing projects.
-   Clicking on the name of a project will take you to its page.
-3. Project delete button:
-   Deletes the project and all the environments it contains.
-   This will delete the history and environments, but it will not purge the system of changes made or managed by inmanta.
-4. Report an issue:
-   If you run into any issues/bugs, this button will take you to github with the "new issue" page open for the inmanta repository.
 5. Environment navigation button:
-   Displays a list of projects and their environmentes.
+   Displays a list of projects and their environments.
    Allows for navigate to any environment, by simply clicking it's name.
 6. Create new project button:
    This will take you through the creation of a new project and the creation of its first environment.
 7. Green checkmark:
-   This will take you to the orchestrator status page, displaying all sorts of usefull information about the orchestrator instance.
+   This will take you to the orchestrator status page, displaying all sorts of useful information about the orchestrator instance.
+   If the dashboard loses connection tot eh server, this green checkmark will tun in to a red cross.
 
 Create a new project
 --------------------
@@ -48,7 +50,7 @@ Using the ``Add new project`` button we can create new projects:
 
    Adding a new project
 
-Once create is pressed, you are immidiatly taken to the "Create a new Environment" sctreen.
+Once create is pressed, you are immediately taken to the "Create a new Environment" screen.
 This will help you set up your first environment.
 Pressing cancel will leave the project empty.
 
@@ -79,7 +81,7 @@ When in an environment, a new button at the bottom will appear:
 This big red button will stop any and all inmanta operations for the current environment.
 
 
-The Environment portal
+The Environment Portal
 ----------------------
 
 Once you press the create button, you will be taken to the portal of the newly created environment:
@@ -99,7 +101,7 @@ This will pull in any new commits and then compile the model.
 
 Once the compile has succeeded, inmanta will automatically deploy the model and display the currently deployed model in the portal.
 
-Using the compile report button we can diagnose problems if our compile failed.
+Using the ``compile report`` button we can diagnose problems if our compile failed.
 
 .. figure:: /dashboard/images/img_6.png
    :width: 100%
@@ -116,7 +118,7 @@ Those are similar in function, and can be confusing to new users:
 - The ``Force deploy`` button will go through *Every* resource and redeploy the resource.
 - The ``Force repair`` button by contrast, will only go through resources that are currently not in a deployed state.
 
-Finaly we have the ``Decommission``, ``Edit``, ``Clone`` and ``Clear`` buttons, found under the Decommission dropdown menu:
+Finally we have the ``Decommission``, ``Edit``, ``Clone`` and ``Clear`` buttons, found under the Decommission dropdown menu:
 
 - Decommission: pushes a model that purges all resources deployed by the model.
 - Edit: change the configuration of the environment, such as the git repo url or what branch to use.
@@ -126,7 +128,7 @@ Finaly we have the ``Decommission``, ``Edit``, ``Clone`` and ``Clear`` buttons, 
 .. note::
     When using clear followed by a recompile, the version number will be incremented as if the previous version are still there, but these versions will no longer be present.
 
-The Version overview
+The Version Overview
 --------------------
 
 Below the ``Portal`` we have the ``Versions``.
@@ -142,24 +144,24 @@ Each version has 4 buttons on the right to interact with it:
 
 They are, in order from left to right:
 
-- Perform dry run: the orchestrator will go through all resources in the model and compare their current state to their desired state. This can be usefull to doublecheck what effect the deployment of a version might have on your current environment.
+- Perform dry run: the orchestrator will go through all resources in the model and compare their current state to their desired state. This can be useful to double-check what effect the deployment of a version might have on your current environment.
 - Dry run report: will take you to the report of the last performed dry run, without performing a new one.
-- Release version: deploys the specific version of said model. For example, this can be used to deploy an older version of a model or to skip several versions.
-- Remove version: removes the slected version from the inmanta environment.
+- Release version: If ``auto-deploy`` in the ``environment settings`` is set to ``False``, this button can be used to deploy the model, otherwise this button will be grayed out.
+- Remove version: removes the selected version from the inmanta environment.
 
-Finaly, clicking the version number will take us to the overview of that particular version.
+Finally, clicking the version number will take us to the overview of that particular version.
 It gives the same options as the version overview does and it displays a list of all resources and their current state.
 
 .. figure:: /dashboard/images/img_8.png
    :width: 100%
    :align: center
-   :alt: Resource overiew
+   :alt: Resource overview
 
 Using the filters we can filter for resources by type, by agent used to deploy the resource, value and, maybe most importantly, by deploy state.
 This display is continuously updated, both during deploys and after, when the orchestrator goes through all resources to make sure they remain in the desired state.
 
 Taking a closer look at the a specific resource, there are 2 important buttons, the ``Dependency`` button and a ``magnifying glass``.
-The ``Dependency`` button is only available if a resource depends on toehr resources.
+The ``Dependency`` button is only available if a resource depends on other resources.
 When pressed it will add lines to the table displaying the each dependency and it's current state:
 
 .. figure:: /dashboard/images/img_9.png
@@ -197,7 +199,7 @@ Again we can further inspect an action by pressing the drop down arrow.
 
 Each of these logs can then be further analyzed by pressing the ``magnifying glass``.
 
-The Resources overview
+The Resources Overview
 ----------------------
 
 The resources overview, not to be confused with the similar resource version overview, gives an overview of all known resources.
@@ -215,7 +217,9 @@ While not as in depth as the resource version overview, it does link every resou
 The Parameters View
 -------------------
 
-The parameter overview gives a list of parameters, pieces of information that are not part of the desired state model.
+The parameter overview gives a list of parameters.
+Parameters are part of the model, but their value may or may not be known at compile time.
+For example, the IP Address of Virtual machine that is created by the model.
 
 .. figure:: /dashboard/images/img_13.png
    :width: 100%
@@ -227,7 +231,7 @@ The parameter overview gives a list of parameters, pieces of information that ar
 Each parameter can be individually inspected or deleted.
 Inspecting the resource allows us to read additional metadata if any is available.
 
-The Agent overview
+The Agent Overview
 ------------------
 
 The agent overview shows different agents and the state they are in.
@@ -241,7 +245,7 @@ The agent overview shows different agents and the state they are in.
 
 This overview allows us to ``Force deploy`` and ``Force repair`` resources on a per agent basis.
 Pausing an agent stops deployments for that agent.
-Usefull when, for example, diagnosing problems on the machine the agent deploys to, without having to stop enforcement of the whole model.
+Useful when, for example, diagnosing problems on the machine the agent deploys to, without having to stop enforcement of the whole model.
 
 The Agent Processes overview, lists the different processes running agents.
 The magnifying glass allows us to inspect each process in more detail:
@@ -253,7 +257,7 @@ The magnifying glass allows us to inspect each process in more detail:
 
    Agent process inspection
 
-Here we can find the process ``pid``, the ip's the server has bound to and what version of python inmanta is running on, amongst other things.
+Here we can find the process ``pid``, the ip addresses the server has bound to and what version of python inmanta is running on, amongst other things.
 
 Environment Settings
 --------------------
