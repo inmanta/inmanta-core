@@ -1,5 +1,5 @@
 The project overview
-====================
+--------------------
 
 When opening the dashboard the project overview page will be the first page greeting you.
 It has several elements:
