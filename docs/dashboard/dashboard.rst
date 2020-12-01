@@ -11,6 +11,8 @@ It has several elements:
 
    The project overview page
 
+Let's go over what some of these buttons do:
+
 1. The inmanta "home" button: takes you back to this page.
 2. List of created projects: Lists all existing projects.
    Clicking on the name of a project will take you to its page.
@@ -26,8 +28,6 @@ It has several elements:
    :alt: The project overview
 
    The project overview page
-
-Let's go over what some of these buttons do:
 
 5. Environment navigation button:
    Displays a list of projects and their environments.
