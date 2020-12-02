@@ -12,6 +12,7 @@ more-itertools==8.6.0
 netifaces==0.10.9
 ply==3.11
 pytest-cover==3.0.0
+pytest-dependency==0.5.1
 pytest-instafail==0.4.2
 pytest-randomly==3.5.0
 pytest-sugar==0.9.4
