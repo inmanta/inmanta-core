@@ -157,7 +157,7 @@ It gives the same options as the version overview does and it displays a list of
    :align: center
    :alt: Resource overview
 
-Using the filters we can filter for resources by type, by agent used to deploy the resource, value and, maybe most importantly, by deploy state.
+Using the filters we can filter for resources by type, by agent used to deploy the resource, by value and by deploy state.
 This display is continuously updated, both during deploys and after, when the orchestrator goes through all resources to make sure they remain in the desired state.
 
 Taking a closer look at the a specific resource, there are 2 important buttons, the ``Dependency`` button and a ``magnifying glass``.
