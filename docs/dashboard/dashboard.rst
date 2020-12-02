@@ -99,7 +99,7 @@ This will clone the repository if it hadn't been already and then compile the cu
 There is also an extra option for the recompile, which is ``Update project & Recompile``.
 This will pull in any new commits and then compile the model.
 
-Once the compile has succeeded, inmanta will automatically deploy the model and display the currently deployed model in the portal.
+Once the compile has succeeded, the orchestrator will automatically deploy the model.  The deployment state is then shown in the portal.
 
 Using the ``Compile Reports`` button we can diagnose problems if our compile failed.
 
