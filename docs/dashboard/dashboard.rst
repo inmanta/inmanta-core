@@ -101,7 +101,7 @@ This will pull in any new commits and then compile the model.
 
 Once the compile has succeeded, inmanta will automatically deploy the model and display the currently deployed model in the portal.
 
-Using the ``compile report`` button we can diagnose problems if our compile failed.
+Using the ``Compile Reports`` button we can diagnose problems if our compile failed.
 
 .. figure:: /dashboard/images/img_6.png
    :width: 100%
