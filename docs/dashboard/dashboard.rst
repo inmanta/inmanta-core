@@ -126,7 +126,7 @@ Finally we have the ``Decommission``, ``Edit``, ``Clone`` and ``Clear`` buttons,
 - Clear: Clears the environment. This will remove all versions and compilations. It does not decommission the currently deployed model.
 
 .. note::
-    When using clear followed by a recompile, the version number will be incremented as if the previous version are still there, but these versions will no longer be present.
+    When using ``Clear`` followed by a ``Recompile``, the version number will be incremented as if the previous versions were still there, but these versions will no longer be present.
 
 The Version Overview
 --------------------
