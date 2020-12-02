@@ -18,7 +18,7 @@ Let's go over what some of these buttons do:
    Clicking on the name of a project will take you to its page.
 3. Project delete button:
    Deletes the project and all the environments it contains.
-   This will delete the history and environments, but it will not purge the system of changes made or managed by inmanta.
+   This will delete the history and environments, but it will not purge the system of changes made or managed by the orchestrator.
 4. Report an issue:
    If you run into any issues/bugs, this button will take you to github with the "new issue" page open for the inmanta repository.
 
