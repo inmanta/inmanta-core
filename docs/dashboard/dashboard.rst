@@ -20,7 +20,7 @@ Let's go over what some of these buttons do:
    Deletes the project and all the environments it contains.
    This will delete the history and environments, but it will not purge the system of changes made or managed by the orchestrator.
 4. Report an issue:
-   If you run into any issues/bugs, this button will take you to github with the "new issue" page open for the inmanta repository.
+   If you run into any issues/bugs, this button will take you to a page where you can open a new issue.
 
 .. figure:: /dashboard/images/img_2.png
    :width: 100%
