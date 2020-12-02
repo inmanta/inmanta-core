@@ -257,7 +257,7 @@ Clicking on the ``magnifying glass`` allows us to inspect each process in more d
 
    Agent process inspection
 
-Here we can find the process ``pid``, the ip addresses the server has bound to and what version of python inmanta is running on, amongst other things.
+Here we can find the process ``pid``, the ip addresses the server has bound to and what version of Python inmanta is running on, amongst other things.
 
 Environment Settings
 --------------------
