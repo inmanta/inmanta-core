@@ -13,7 +13,7 @@ It has several elements:
 
 Let's go over what some of these buttons do:
 
-1. The inmanta "home" button: takes you back to this page.
+1. The "inmanta logo" button: takes you back to this page.
 2. List of created projects: Lists all existing projects.
    Clicking on the name of a project will take you to its page.
 3. Project delete button:
@@ -78,7 +78,7 @@ When in an environment, a new button at the bottom will appear:
 
    The emergency stop button
 
-This big red button will stop any and all inmanta operations for the current environment.
+This big red button will stop all of the orchestrator's operations for the current environment.
 
 
 The Environment Portal
