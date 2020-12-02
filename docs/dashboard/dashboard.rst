@@ -219,7 +219,7 @@ The Parameters View
 
 The parameter overview gives a list of parameters.
 Parameters are part of the model, but their value may or may not be known at compile time.
-For example, the IP Address of Virtual machine that is created by the model.
+For example, the IP address of a virtual machine that is created by the model.
 
 .. figure:: /dashboard/images/img_13.png
    :width: 100%
