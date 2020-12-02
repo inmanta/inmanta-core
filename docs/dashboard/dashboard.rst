@@ -36,7 +36,7 @@ Let's go over what some of these buttons do:
    This will take you through the creation of a new project and the creation of its first environment.
 7. Green checkmark:
    This will take you to the orchestrator status page, displaying all sorts of useful information about the orchestrator instance.
-   If the dashboard loses connection tot eh server, this green checkmark will tun in to a red cross.
+   If the dashboard loses its connection to the server, this green checkmark will turn into a red cross.
 
 Create a new project
 --------------------
