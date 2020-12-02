@@ -172,7 +172,7 @@ When pressed, it will add lines to the table displaying each dependency and it's
    Resource dependencies
 
 The `magnifying glass` icon will take us to an in depth overview of the resource.
-This will show a complete breakdown of the resource's desired state at the top and.
+This will show a complete breakdown of the resource's desired state at the top and an action log at the bottom.
 
 The desired state breakdown allows for easy inspection of the impact the resource will have.
 For example, the resource in the image below will deploy a file with path `/etc/my.cnf` and file permission `644`.
@@ -185,7 +185,7 @@ We can even inspect the file's content.
 
    Resource desired state view
 
-Below is the action log, shows a log of actions taken on the given resource.
+The action log shows a log of actions taken on the given resource.
 This varies from dry-runs to deploys.
 This log will typically start filling up with deploys due to the orchestrator enforcing the desired state.
 Again we can further inspect an action by pressing the drop down arrow.
