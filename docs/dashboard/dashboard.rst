@@ -248,7 +248,7 @@ Pausing an agent stops deployments for that agent.
 Useful when, for example, diagnosing problems on the machine the agent deploys to, without having to stop enforcement of the whole model.
 
 The Agent Processes overview, lists the different processes running agents.
-The magnifying glass allows us to inspect each process in more detail:
+Clicking on the ``magnifying glass`` allows us to inspect each process in more detail:
 
 .. figure:: /dashboard/images/img_15.png
    :width: 100%
