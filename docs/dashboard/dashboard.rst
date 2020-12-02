@@ -50,7 +50,7 @@ Using the ``Add new project`` button we can create new projects:
 
    Adding a new project
 
-Once create is pressed, you are immediately taken to the "Create a new Environment" screen.
+Once ``Create`` is pressed, you are immediately taken to the "Create a new Environment" screen.
 This will help you set up your first environment.
 Pressing cancel will leave the project empty.
 
