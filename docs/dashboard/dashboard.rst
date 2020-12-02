@@ -212,7 +212,7 @@ This is not only for resources of the currently deployed model, but potentially 
 
    The Resources Overview
 
-While not as in depth as the resource version overview, it does link every resource to it's deployed version, so the resource can be inspected there.
+While not as in depth as the resource version overview, it does link every resource to its deployed version, so the resource can be inspected there.
 
 The Parameters View
 -------------------
