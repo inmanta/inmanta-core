@@ -8,7 +8,7 @@
 - Added pagination support on api calls for agent and agentproc (#2500)
 - Added support to build RPMs for a python version different from Python3.6 (#1857)
 - Added support for assigning `null` to relations with lower arity 0 (#2459)
-- Added documention on the core dashboard (#dashboard-63)
+- Added documentation on the core dashboard (#dashboard-63)
 
 ## Bug fixes
 - Fix broken links in the documentation (#2495)
