@@ -118,7 +118,7 @@ Those are similar in function, and can be confusing to new users:
 - The ``Force deploy`` button will go through *Every* resource and redeploy the resource.
 - The ``Force repair`` button by contrast, will only go through resources that are currently not in a deployed state.
 
-Finally we have the ``Decommission``, ``Edit``, ``Clone`` and ``Clear`` buttons, found under the Decommission dropdown menu:
+Finally we have the ``Decommission``, ``Edit``, ``Clone`` and ``Clear`` buttons, found under the ``Decommission`` dropdown menu:
 
 - Decommission: pushes a model that purges all resources deployed by the model.
 - Edit: change the configuration of the environment, such as the git repo url or what branch to use.
