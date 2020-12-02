@@ -95,7 +95,7 @@ Once you press the create button, you will be taken to the portal of the newly c
 
 This environment is currently empty because the model has not been compiled yet.
 We can use the ``Recompile`` button to do this.
-This will clone the repository if it hadn't been already and then compile the current environment.
+This will clone the repository if it hadn't been already and then compile the current model.
 There is also an extra option for the recompile, which is ``Update project & Recompile``.
 This will pull in any new commits and then compile the model.
 
