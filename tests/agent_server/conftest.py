@@ -178,10 +178,26 @@ def resource_container():
 
         fields = ("key", "value", "purged")
 
+    @resource("test::BadEventsStatus", agent="agent", id_attribute="key")
+    class BadEventS(Resource):
+        """
+        Set `ctx.set_status(const.ResourceState.failed)` in process_events().
+        """
+
+        fields = ("key", "value", "purged")
+
     @resource("test::BadPost", agent="agent", id_attribute="key")
     class BadPostR(Resource):
         """
         A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::BadLogging", agent="agent", id_attribute="key")
+    class BadLoggingR(Resource):
+        """
+        Raises an exception when trying to log a message that's not serializable.
         """
 
         fields = ("key", "value", "purged")
@@ -413,10 +429,37 @@ def resource_container():
         def process_events(self, ctx, resource, events):
             raise Exception()
 
+    @provider("test::BadEventsStatus", name="test_bad_events_status")
+    class BadEventStatus(ResourceHandler):
+        def check_resource(self, ctx, resource):
+            current = resource.clone()
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            pass
+
+        def can_process_events(self) -> bool:
+            return True
+
+        def process_events(self, ctx, resource, events):
+            ctx.set_status(const.ResourceState.failed)
+
     @provider("test::BadPost", name="test_bad_posts")
     class BadPost(Provider):
         def post(self, ctx, resource) -> None:
             raise Exception()
+
+    class Empty:
+        pass
+
+    @provider("test::BadLogging", name="test_bad_logging")
+    class BadLogging(ResourceHandler):
+        def check_resource(self, ctx, resource):
+            current = resource.clone()
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            ctx.info("This is not JSON serializable: %(val)s", val=Empty())
 
     @resource("test::AgentConfig", agent="agent", id_attribute="agentname")
     class AgentConfig(PurgeableResource):

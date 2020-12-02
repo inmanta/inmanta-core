@@ -454,7 +454,7 @@ def export(options: argparse.Namespace) -> None:
     if options.server is not None:
         Config.set("compiler_rest_transport", "host", options.server)
 
-    if options.server is not None:
+    if options.port is not None:
         Config.set("compiler_rest_transport", "port", options.port)
 
     if options.token is not None:

@@ -441,7 +441,7 @@ class Exporter(object):
         tid = cfg_env.get()
         if tid is None:
             LOGGER.error("The environment for this model should be set!")
-            return
+            raise Exception("The environment for this model should be set!")
 
         conn = protocol.SyncClient("compiler")
         self.deploy_code(conn, tid, version)

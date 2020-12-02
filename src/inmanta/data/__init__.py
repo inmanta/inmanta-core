@@ -470,17 +470,78 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         Get a list of documents matching the filter args
         """
+        for o in order.split(" "):
+            possible = ["ASC", "DESC", "NULLS", "FIRST", "LAST"]
+            if o not in possible:
+                raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
+
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
         sql_query = "SELECT * FROM " + cls.table_name()
         if filter_statement:
             sql_query += " WHERE " + filter_statement
         if order_by_column is not None:
-            sql_query += " ORDER BY " + str(order_by_column) + " " + str(order)
+            sql_query += " ORDER BY $" + str(len(values) + 1) + str(order)
+            values.append(str(order_by_column))
         if limit is not None and limit > 0:
-            sql_query += " LIMIT " + str(limit)
+            sql_query += " LIMIT $" + str(len(values) + 1)
+            values.append(int(limit))
         if offset is not None and offset > 0:
-            sql_query += " OFFSET " + str(offset)
+            sql_query += " OFFSET $" + str(len(values) + 1)
+            values.append(int(offset))
+        result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
+        return result
+
+    @classmethod
+    async def get_list_paged(
+        cls: Type[TBaseDocument],
+        page_by_column: str,
+        order_by_column: Optional[str] = None,
+        order: str = "ASC",
+        limit: Optional[int] = None,
+        start: Optional[Any] = None,
+        end: Optional[Any] = None,
+        no_obj: bool = False,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        **query: Any,
+    ) -> List[TBaseDocument]:
+        """
+        Get a list of documents matching the filter args, with paging support
+
+        :param page_by_column: The name of the column in the database on which the paging should be applied
+        :param order_by_column: The name of the column in the database the sorting should be based on
+        :param order: The order to apply to the sorting
+        :param limit: If specified, the maximum number of entries to return
+        :param start: A value conforming the sorting column type, all returned rows will have greater value in the sorted column
+        :param end: A value conforming the sorting column type, all returned rows will have lower value in the sorted column
+        :param no_obj: Whether not to cast the query result into a matching object
+        :param connection: An optional connection
+        :param **query: Any additional filter to apply
+        """
+        for o in order.split(" "):
+            possible = ["ASC", "DESC", "NULLS", "FIRST", "LAST"]
+            if o not in possible:
+                raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
+
+        query = cls._convert_field_names_to_db_column_names(query)
+        (filter_statement, values) = cls._get_composed_filter(**query)
+        filter_statements = filter_statement.split(" AND ") if filter_statement != "" else []
+        if start is not None:
+            filter_statements.append(f"{page_by_column} > $" + str(len(values) + 1))
+            values.append(cls._get_value(start))
+        if end is not None:
+            filter_statements.append(f"{page_by_column} < $" + str(len(values) + 1))
+            values.append(cls._get_value(end))
+        sql_query = "SELECT * FROM " + cls.table_name()
+        if len(filter_statements) > 0:
+            sql_query += " WHERE " + " AND ".join(filter_statements)
+        if order_by_column is not None:
+            sql_query += " ORDER BY $" + str(len(values) + 1) + str(order)
+            values.append(str(order_by_column))
+        if limit is not None and limit > 0:
+            sql_query += " LIMIT $" + str(len(values) + 1)
+            values.append(int(limit))
+
         result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
         return result
 
@@ -1122,18 +1183,10 @@ class AgentProcess(BaseDocument):
         return result
 
     @classmethod
-    async def get_live_by_env(cls, env: uuid.UUID) -> List["AgentProcess"]:
-        result = await cls.get_live(env)
-        return result
-
-    @classmethod
-    async def get_by_env(cls, env: uuid.UUID) -> List["AgentProcess"]:
-        nodes = await cls.get_list(environment=env, order_by_column="last_seen", order="ASC NULLS LAST")
-        return nodes
-
-    @classmethod
-    async def get_by_sid(cls, sid: uuid.UUID) -> Optional["AgentProcess"]:
-        objects = await cls.get_list(limit=DBLIMIT, expired=None, sid=sid)
+    async def get_by_sid(
+        cls, sid: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Optional["AgentProcess"]:
+        objects = await cls.get_list(limit=DBLIMIT, connection=connection, expired=None, sid=sid)
         if len(objects) == 0:
             return None
         elif len(objects) > 1:
@@ -1143,28 +1196,73 @@ class AgentProcess(BaseDocument):
             return objects[0]
 
     @classmethod
-    async def seen(cls, env: uuid.UUID, nodename: str, sid: uuid.UUID, now: datetime.datetime):
+    async def seen(
+        cls,
+        env: uuid.UUID,
+        nodename: str,
+        sid: uuid.UUID,
+        now: datetime.datetime,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ):
         """
         Update the last_seen parameter of the process and mark as not expired.
         """
-        proc = await cls.get_one(sid=sid)
+        proc = await cls.get_one(connection=connection, sid=sid)
         if proc is None:
             proc = cls(hostname=nodename, environment=env, first_seen=now, last_seen=now, sid=sid)
-            await proc.insert()
+            await proc.insert(connection=connection)
         else:
-            await proc.update_fields(last_seen=now, expired=None)
+            await proc.update_fields(connection=connection, last_seen=now, expired=None)
 
     @classmethod
-    async def update_last_seen(cls, sid: uuid.UUID, last_seen: datetime.datetime) -> None:
-        aps = await cls.get_by_sid(sid=sid)
+    async def update_last_seen(
+        cls, sid: uuid.UUID, last_seen: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        aps = await cls.get_by_sid(sid=sid, connection=connection)
         if aps:
-            await aps.update_fields(last_seen=last_seen)
+            await aps.update_fields(connection=connection, last_seen=last_seen)
 
     @classmethod
-    async def expire_process(cls, sid: uuid.UUID, now: datetime.datetime) -> None:
-        aps = await cls.get_by_sid(sid=sid)
+    async def expire_process(
+        cls, sid: uuid.UUID, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        aps = await cls.get_by_sid(sid=sid, connection=connection)
         if aps is not None:
-            await aps.update_fields(expired=now)
+            await aps.update_fields(connection=connection, expired=now)
+
+    @classmethod
+    async def expire_all(cls, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None):
+        query = f"""
+                UPDATE {cls.table_name()}
+                SET expired=$1
+                WHERE expired IS NULL
+        """
+        await cls._execute_query(query, cls._get_value(now), connection=connection)
+
+    @classmethod
+    async def cleanup(cls, nr_expired_records_to_keep: int) -> None:
+        query = f"""
+            DELETE FROM {cls.table_name()} as a1
+            WHERE a1.expired IS NOT NULL AND
+                  (
+                    -- Take nr_expired_records_to_keep into account
+                    SELECT count(*)
+                    FROM {cls.table_name()} a2
+                    WHERE a1.environment=a2.environment AND
+                          a1.hostname=a2.hostname AND
+                          a2.expired IS NOT NULL AND
+                          a2.expired > a1.expired
+                  ) >= $1
+                  AND
+                  -- Agent process only has expired agent instances
+                  NOT EXISTS(
+                    SELECT 1
+                    FROM {cls.table_name()} as agentprocess INNER JOIN {AgentInstance.table_name()} as agentinstance
+                         ON agentinstance.process = agentprocess.sid
+                    WHERE agentprocess.sid = a1.sid and agentinstance.expired IS NULL
+                  )
+        """
+        await cls._execute_query(query, cls._get_value(nr_expired_records_to_keep))
 
     def to_dict(self) -> JsonType:
         result = super(AgentProcess, self).to_dict()
@@ -1211,14 +1309,21 @@ class AgentInstance(BaseDocument):
         return objects
 
     @classmethod
-    async def log_instance_creation(cls: Type[TAgentInstance], tid: uuid.UUID, process: uuid.UUID, endpoints: Set[str]) -> None:
+    async def log_instance_creation(
+        cls: Type[TAgentInstance],
+        tid: uuid.UUID,
+        process: uuid.UUID,
+        endpoints: Set[str],
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
         """
         Create new agent instances for a given session.
         """
         if not endpoints:
             return
-        async with cls.get_connection() as connection:
-            await connection.executemany(
+
+        async def _execute_query(con: asyncpg.connection.Connection):
+            await con.executemany(
                 f"""
                 INSERT INTO
                 {cls.table_name()}
@@ -1231,19 +1336,38 @@ class AgentInstance(BaseDocument):
                 [tuple(map(cls._get_value, (cls._new_id(), tid, process, name))) for name in endpoints],
             )
 
+        if connection:
+            await _execute_query(connection)
+        else:
+            async with cls.get_connection() as con:
+                await _execute_query(con)
+
     @classmethod
     async def log_instance_expiry(
-        cls: Type[TAgentInstance], sid: uuid.UUID, endpoints: Set[str], now: datetime.datetime
+        cls: Type[TAgentInstance],
+        sid: uuid.UUID,
+        endpoints: Set[str],
+        now: datetime.datetime,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
         Expire specific instances for a given session id.
         """
         if not endpoints:
             return
-        instances: List[TAgentInstance] = await cls.get_list(process=sid)
+        instances: List[TAgentInstance] = await cls.get_list(connection=connection, process=sid)
         for ai in instances:
             if ai.name in endpoints:
-                await ai.update_fields(expired=now)
+                await ai.update_fields(connection=connection, expired=now)
+
+    @classmethod
+    async def expire_all(cls, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None):
+        query = f"""
+                UPDATE {cls.table_name()}
+                SET expired=$1
+                WHERE expired IS NULL
+        """
+        await cls._execute_query(query, cls._get_value(now), connection=connection)
 
 
 class Agent(BaseDocument):
@@ -1413,6 +1537,15 @@ class Agent(BaseDocument):
                 else:
                     await agent.update_fields(last_failover=now, primary=None, connection=connection)
 
+    @classmethod
+    async def mark_all_as_non_primary(cls, connection: Optional[asyncpg.connection.Connection] = None):
+        query = f"""
+                UPDATE {cls.table_name()}
+                SET id_primary=NULL
+                WHERE id_primary IS NOT NULL
+        """
+        await cls._execute_query(query, connection=connection)
+
 
 class Report(BaseDocument):
     """
@@ -1487,32 +1620,6 @@ class Compile(BaseDocument):
     substitute_compile_id: Optional[uuid.UUID] = Field(field_type=uuid.UUID)
 
     compile_data: Optional[dict] = Field(field_type=dict)
-
-    @classmethod
-    async def get_reports(
-        cls,
-        environment_id: uuid.UUID,
-        limit: Optional[int] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-    ) -> List[JsonType]:
-        query = "SELECT * FROM " + cls.table_name()
-        conditions_in_where_clause = ["environment=$1"]
-        values = [cls._get_value(environment_id)]
-        if start:
-            conditions_in_where_clause.append("started > $" + str(len(values) + 1))
-            values.append(cls._get_value(start))
-        if end:
-            conditions_in_where_clause.append("started < $" + str(len(values) + 1))
-            values.append(cls._get_value(end))
-        if len(conditions_in_where_clause) > 0:
-            query += " WHERE " + " AND ".join(conditions_in_where_clause)
-        query += " ORDER BY started DESC"
-        if limit:
-            query += " LIMIT $" + str(len(values) + 1)
-            values.append(cls._get_value(limit))
-
-        return [m.to_dict() for m in await cls.select_query(query, values)]
 
     @classmethod
     # TODO: Use join

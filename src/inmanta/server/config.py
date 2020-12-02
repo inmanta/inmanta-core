@@ -301,3 +301,20 @@ def default_hangtime():
 agent_hangtime = Option(
     "server", "agent-hold", default_hangtime, "Maximal time the server will hold an agent heartbeat call", is_time
 )
+
+agent_process_purge_interval = Option(
+    "server",
+    "agent-process-purge-interval",
+    3600,
+    """The number of seconds between two purges of old and expired agent processes.
+       Set to zero to disable the cleanup. see :inmanta.config:option:`server.agent-processes-to-keep`""",
+    is_time,
+)
+
+agent_processes_to_keep = Option(
+    "server",
+    "agent-processes-to-keep",
+    5,
+    """Keep this amount of expired agent processes for a certain hostname""",
+    is_int,
+)

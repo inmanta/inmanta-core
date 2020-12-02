@@ -54,6 +54,13 @@ async def empty_future(*args, **kwargs):
     pass
 
 
+async def api_call_future(*args, **kwargs) -> Result:
+    """
+    Mock implementation of Client methods
+    """
+    return Result(200, "X")
+
+
 class MockSession(object):
     """
     An environment that segments agents connected to the server
@@ -66,6 +73,7 @@ class MockSession(object):
         self.nodename = nodename
         self.client = Mock()
         self.client.set_state.side_effect = empty_future
+        self.client.get_status = api_call_future
 
     def get_id(self):
         return self._sid
@@ -230,6 +238,9 @@ async def test_api(init_dataclasses_and_load_schema):
     # Exact replica of one to detect crosstalk
     env4 = data.Environment(name="testenv4", project=project.id)
     await env4.insert()
+    env5 = data.Environment(name="testenv5", project=project.id)
+    await env5.insert()
+
     await data.Agent(environment=env.id, name="agent1", paused=True).insert()
     await data.Agent(environment=env.id, name="agent2", paused=False).insert()
     await data.Agent(environment=env.id, name="agent3", paused=False).insert()
@@ -237,6 +248,7 @@ async def test_api(init_dataclasses_and_load_schema):
     await data.Agent(environment=env4.id, name="agent1", paused=True).insert()
     await data.Agent(environment=env4.id, name="agent2", paused=False).insert()
     await data.Agent(environment=env4.id, name="agent3", paused=False).insert()
+    await data.Agent(environment=env5.id, name="agent1", paused=False).insert()
 
     server = Mock()
     futures = Collector()
@@ -257,12 +269,41 @@ async def test_api(init_dataclasses_and_load_schema):
     # fourth session
     ts4 = MockSession(uuid4(), env4.id, {"agent1", "agent2"}, "ts4")
     await am._register_session(ts4, set(ts4.endpoint_names), datetime.datetime.now())
+    # fifth session
+    ts5 = MockSession(uuid4(), env5.id, {"agent1"}, "ts5")
+    await am._register_session(ts5, set(ts5.endpoint_names), datetime.datetime.now())
+
+    await futures.proccess()
+    assert len(am.sessions) == 5
+
+    # Getting all non expired agent processes
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=False)
+    assert code == 200
+    assert len(all_agents_processes["processes"]) == 5
+
+    # Getting all agent processes (including expired)
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=True)
+    assert code == 200
+    assert len(all_agents_processes["processes"]) == 5
+
+    # Making fifth session expire
+    expiration = datetime.datetime.now()
+    await am._expire_session(ts5, set(ts5.endpoint_names), expiration)
 
     await futures.proccess()
     assert len(am.sessions) == 4
 
-    code, all_agents = await am.list_agent_processes(None, None)
+    # Getting all non expired agent processes
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=False)
     assert code == 200
+    assert len(all_agents_processes["processes"]) == 4
+    for agent_process in all_agents_processes["processes"]:
+        assert agent_process["expired"] is None
+
+    # Getting all agent processes (including expired)
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=True)
+    assert code == 200
+    assert len(all_agents_processes["processes"]) == 5
 
     shouldbe = {
         "processes": [
@@ -307,14 +348,45 @@ async def test_api(init_dataclasses_and_load_schema):
                 ],
                 "environment": env4.id,
             },
+            {
+                "first_seen": UNKWN,
+                "expired": expiration,
+                "hostname": "ts5",
+                "last_seen": UNKWN,
+                "endpoints": [
+                    {"expired": expiration, "id": UNKWN, "name": "agent1", "process": UNKWN},
+                ],
+                "environment": env5.id,
+            },
         ]
     }
 
-    assert_equal_ish(shouldbe, all_agents, sortby=["hostname", "name"])
-    agentid = all_agents["processes"][0]["sid"]
+    assert_equal_ish(shouldbe, all_agents_processes, sortby=["hostname", "name"])
+    # There is 5 agent processes, we take the 3rd one and will select the two before, and two after it.
+    agentid = sorted(all_agents_processes["processes"], key=lambda p: p["sid"])[2]["sid"]
 
-    code, all_agents = await am.list_agent_processes(env.id, None)
+    start = agentid
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=True, start=start)
     assert code == 200
+    assert len(all_agents_processes["processes"]) == 2
+    for agent_process in all_agents_processes["processes"]:
+        assert (
+            agent_process["sid"] > start
+        ), f"List of agent processes should not contain a sid (={agent_process['sid']}) before or equal to start (={start})"
+
+    end = agentid
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=True, end=end)
+    assert code == 200
+    assert len(all_agents_processes["processes"]) == 2
+    for agent_process in all_agents_processes["processes"]:
+        assert (
+            agent_process["sid"] < end
+        ), f"List of agent processes should not contain a sid (={agent_process['sid']}) after or equal to end (={end})"
+
+    code, all_agents = await am.list_agent_processes(environment=env.id, expired=False)
+    assert code == 200
+    agentid1 = all_agents["processes"][0]["sid"]
+    agentid2 = all_agents["processes"][1]["sid"]
 
     shouldbe = {
         "processes": [
@@ -345,28 +417,35 @@ async def test_api(init_dataclasses_and_load_schema):
 
     assert_equal_ish(shouldbe, all_agents, sortby=["hostname", "name"])
 
-    code, all_agents = await am.list_agent_processes(env2.id, None)
+    code, all_agents = await am.list_agent_processes(environment=env2.id, expired=False)
     assert code == 200
 
     shouldbe = {"processes": []}
 
     assert_equal_ish(shouldbe, all_agents)
 
-    async def dummy_status():
-        return Result(200, "X")
-
-    ts1.get_client().get_status.side_effect = dummy_status
-    report = await am.get_agent_process_report(agentid)
+    report = await am.get_agent_process_report(agentid1)
     assert (200, "X") == report
 
-    report = await am.get_agent_process_report(uuid4())
-    assert 404 == report[0]
+    report = await am.get_agent_process_report(agentid2)
+    assert (200, "X") == report
+
+    result, _ = await am.get_agent_process_report(uuid4())
+    assert result == 404
 
     code, all_agents = await am.list_agents(None)
     assert code == 200
     shouldbe = {
         "agents": [
             {"name": "agent1", "paused": True, "last_failover": "", "primary": "", "environment": env.id, "state": "paused"},
+            {
+                "name": "agent1",
+                "paused": False,
+                "last_failover": expiration,
+                "primary": "",
+                "environment": env5.id,
+                "state": "down",
+            },
             {"name": "agent2", "paused": False, "last_failover": UNKWN, "primary": UNKWN, "environment": env.id, "state": "up"},
             {"name": "agent3", "paused": False, "last_failover": UNKWN, "primary": UNKWN, "environment": env.id, "state": "up"},
             {"name": "agent1", "paused": True, "last_failover": "", "primary": "", "environment": env4.id, "state": "paused"},
@@ -383,6 +462,20 @@ async def test_api(init_dataclasses_and_load_schema):
         ]
     }
     assert_equal_ish(shouldbe, all_agents, sortby=["environment", "name"])
+
+    start = "agent2"
+    code, all_agents = await am.list_agents(env=None, start=start)
+    assert code == 200
+    assert len(all_agents["agents"]) == 3
+    for a in all_agents["agents"]:
+        assert a["name"] > start, f"List of agent should not contain a name (={a['name']}) before or equal to start (={start})"
+
+    end = "agent2"
+    code, all_agents = await am.list_agents(env=None, end=end)
+    assert code == 200
+    assert len(all_agents["agents"]) == 3
+    for a in all_agents["agents"]:
+        assert a["name"] < end, f"List of agent should not contain a name (={a['name']}) after or equal to end (={end})"
 
     code, all_agents = await am.list_agents(env2)
     assert code == 200
@@ -449,6 +542,7 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     am.add_background_task = futures
     am.running = True
     await am._expire_all_sessions_in_db()
+    await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.down, AgentStatus.down)
 
     # one session
     ts1 = MockSession(uuid4(), env.id, {"agent1", "agent2"}, "ts1")

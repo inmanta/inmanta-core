@@ -91,7 +91,7 @@ class ResourceAction(object):
         self.running: bool = False
         self.gid: uuid.UUID = gid
         self.status: Optional[const.ResourceState] = None
-        self.change: Optional[const.Change] = None
+        self.change: Optional[const.Change] = const.Change.nochange
         self.undeployable: Optional[const.ResourceState] = None
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
@@ -206,6 +206,10 @@ class ResourceAction(object):
                 ctx.exception(
                     "Could not send events for %(resource_id)s", resource_id=str(self.resource.id), events=str(events_dict)
                 )
+
+        # Prevent that status set by execute() is overridden in process_events()
+        if success and ctx.status is not const.ResourceState.deployed:
+            success = False
 
         provider.close()
 

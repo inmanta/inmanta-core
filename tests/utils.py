@@ -81,7 +81,7 @@ def assert_equal_ish(minimal, actual, sortby=[]):
     elif minimal is UNKWN:
         return
     else:
-        assert minimal == actual
+        assert minimal == actual, f"Minimal value expected is '{minimal}' but got '{actual}'"
 
 
 def assert_graph(graph, expected):

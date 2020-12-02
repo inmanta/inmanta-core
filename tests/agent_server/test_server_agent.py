@@ -3446,8 +3446,8 @@ async def test_agentinstance_stops_deploying_when_stopped(
     assert agent_instance.is_stopped()
 
     # Agent cannot be unpaused after it is stopped
-    return_code, _ = agent_instance.unpause()
-    assert return_code == 403
+    result, _ = agent_instance.unpause()
+    assert result == 403
     assert agent_instance._nq.finished()
     assert not agent_instance.is_enabled()
     assert agent_instance.is_stopped()

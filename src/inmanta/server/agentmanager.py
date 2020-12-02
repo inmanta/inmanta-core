@@ -24,7 +24,7 @@ import uuid
 from asyncio import queues, subprocess
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from uuid import UUID
 
 import asyncpg
@@ -32,8 +32,9 @@ import asyncpg
 from inmanta import const, data
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
+from inmanta.data import APILIMIT
 from inmanta.protocol import encode_token, methods, methods_v2
-from inmanta.protocol.exceptions import Forbidden, NotFound, ShutdownInProgress
+from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -361,10 +362,12 @@ class AgentManager(ServerSlice, SessionListener):
         Note: This method call is allowed to fail when the database connection is lost.
         """
         now = datetime.now()
-        await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add)
-        await data.AgentInstance.log_instance_expiry(session.id, endpoints_to_remove, now)
-        await data.Agent.update_primary(session.tid, endpoints_with_new_primary, now)
-        await data.AgentProcess.update_last_seen(session.id, now)
+        async with data.AgentProcess.get_connection() as connection:
+            async with connection.transaction():
+                await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add, connection)
+                await data.AgentInstance.log_instance_expiry(session.id, endpoints_to_remove, now, connection)
+                await data.Agent.update_primary(session.tid, endpoints_with_new_primary, now, connection)
+                await data.AgentProcess.update_last_seen(session.id, now, connection)
 
     # Session registration
     async def _register_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str], now: datetime) -> None:
@@ -403,9 +406,11 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Note: This method call is allowed to fail when the database connection is lost.
         """
-        await data.AgentProcess.seen(tid, session.nodename, session.id, now)
-        await data.AgentInstance.log_instance_creation(tid, session.id, endpoint_names)
-        await data.Agent.update_primary(tid, endpoints_with_new_primary, now)
+        async with data.AgentProcess.get_connection() as connection:
+            async with connection.transaction():
+                await data.AgentProcess.seen(tid, session.nodename, session.id, now, connection)
+                await data.AgentInstance.log_instance_creation(tid, session.id, endpoint_names, connection)
+                await data.Agent.update_primary(tid, endpoints_with_new_primary, now, connection)
 
     # Session expiry
     async def _expire_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str], now: datetime) -> None:
@@ -439,26 +444,20 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Note: This method call is allowed to fail when the database connection is lost.
         """
-        await data.AgentProcess.expire_process(session.id, now)
-        await data.AgentInstance.log_instance_expiry(session.id, session.endpoint_names, now)
-        await data.Agent.update_primary(tid, endpoints_with_new_primary, now)
+        async with data.AgentProcess.get_connection() as connection:
+            async with connection.transaction():
+                await data.AgentProcess.expire_process(session.id, now, connection)
+                await data.AgentInstance.log_instance_expiry(session.id, session.endpoint_names, now, connection)
+                await data.Agent.update_primary(tid, endpoints_with_new_primary, now, connection)
 
     async def _expire_all_sessions_in_db(self) -> None:
         async with self.session_lock:
             LOGGER.debug("Cleaning server session DB")
-
-            # TODO: do as one query
-            procs = await data.AgentProcess.get_live()
-            for proc in procs:
-                await proc.update_fields(expired=datetime.now())
-
-            ais = await data.AgentInstance.active()
-            for ai in ais:
-                await ai.update_fields(expired=datetime.now())
-
-            agents = await data.Agent.get_list()
-            for agent in agents:
-                await agent.update_fields(primary=None)
+            async with data.AgentProcess.get_connection() as connection:
+                async with connection.transaction():
+                    await data.AgentProcess.expire_all(now=datetime.now(), connection=connection)
+                    await data.AgentInstance.expire_all(now=datetime.now(), connection=connection)
+                    await data.Agent.mark_all_as_non_primary(connection=connection)
 
     # Util
     async def _use_new_active_session_for_agent(self, tid: uuid.UUID, endpoint_name: str) -> Optional[protocol.Session]:
@@ -636,23 +635,48 @@ class AgentManager(ServerSlice, SessionListener):
         raise NotImplementedError()
 
     @protocol.handle(methods.list_agent_processes)
-    async def list_agent_processes(self, environment: Optional[UUID], expired: bool) -> Apireturn:
+    async def list_agent_processes(
+        self,
+        environment: Optional[UUID],
+        expired: bool,
+        start: Optional[UUID] = None,
+        end: Optional[UUID] = None,
+        limit: Optional[int] = None,
+    ) -> Apireturn:
+        """List all agent processes whose sid is after start and before end
+
+        :param environment: Optional, the environment the agent should come from.
+        :param expired: If True, expired agents will also be shown, they are hidden otherwise.
+        :param start: The sid all of the selected agent process should be greater than this, defaults to None
+        :param end: The sid all of the selected agent process should be smaller than this, defaults to None
+        :param limit: Whether to limit the number of returned entries, defaults to None
+        :raises BadRequest: Limit, start and end can not be set together
+        :raises NotFound: The given environment id does not exist!
+        :raises BadRequest: Limit parameter can not exceed 1000
+        """
+        query: Dict[str, Any] = {}
         if environment is not None:
+            query["environment"] = environment
             env = await data.Environment.get_by_id(environment)
             if env is None:
                 return 404, {"message": "The given environment id does not exist!"}
+        if not expired:
+            query["expired"] = None
 
-        tid = environment
-        if tid is not None:
-            if expired:
-                aps = await data.AgentProcess.get_by_env(tid)
-            else:
-                aps = await data.AgentProcess.get_live_by_env(tid)
-        else:
-            if expired:
-                aps = await data.AgentProcess.get_list()
-            else:
-                aps = await data.AgentProcess.get_live()
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"Limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        aps = await data.AgentProcess.get_list_paged(
+            page_by_column="sid",
+            limit=limit,
+            start=start,
+            end=end,
+            no_obj=False,
+            connection=None,
+            **query,
+        )
 
         processes = []
         for p in aps:
@@ -668,12 +692,42 @@ class AgentManager(ServerSlice, SessionListener):
         return 200, {"processes": processes}
 
     @protocol.handle(methods.list_agents, env="tid")
-    async def list_agents(self, env: Optional[data.Environment]) -> Apireturn:
+    async def list_agents(
+        self,
+        env: Optional[data.Environment],
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> Apireturn:
+        """List all agents whose name is after start and before end
+
+        :param env: The environment the agents should come from
+        :param start: The name all of the selected agent should be greater than this, defaults to None
+        :param end: The name all of the selected agent should be smaller than this, defaults to None
+        :param limit: Whether to limit the number of returned entries, defaults to None
+        :raises BadRequest: Limit, start and end can not be set together
+        :raises BadRequest: Limit parameter can not exceed 1000
+        """
+        query = {}
         if env is not None:
-            tid = env.id
-            ags = await data.Agent.get_list(environment=tid)
-        else:
-            ags = await data.Agent.get_list()
+            query["environment"] = env.id
+
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"Limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        ags = await data.Agent.get_list_paged(
+            page_by_column="name",
+            order_by_column="name",
+            order="ASC NULLS LAST",
+            limit=limit,
+            start=start,
+            end=end,
+            no_obj=False,
+            connection=None,
+            **query,
+        )
 
         return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec="microseconds")}
 
@@ -909,18 +963,24 @@ class AutostartedAgentManager(ServerSlice):
         err: str = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
 
         agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
-        proc = await self._fork_inmanta(
-            ["-vvvv", "--timed-logs", "--config", config_path, "--log-file", agent_log, "agent"], out, err
-        )
 
-        if env.id in self._agent_procs and self._agent_procs[env.id] is not None:
-            # If the return code is not None the process is already terminated
-            if self._agent_procs[env.id].returncode is None:
-                LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].pid)
-                self._agent_procs[env.id].terminate()
-                await self._wait_for_proc_bounded([self._agent_procs[env.id]])
+        try:
+            proc = await self._fork_inmanta(
+                ["-vvvv", "--timed-logs", "--config", config_path, "--log-file", agent_log, "agent"], out, err
+            )
 
-        self._agent_procs[env.id] = proc
+            if env.id in self._agent_procs and self._agent_procs[env.id] is not None:
+                # If the return code is not None the process is already terminated
+                if self._agent_procs[env.id].returncode is None:
+                    LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].pid)
+                    self._agent_procs[env.id].terminate()
+                    await self._wait_for_proc_bounded([self._agent_procs[env.id]])
+            self._agent_procs[env.id] = proc
+        except Exception as e:
+            # Prevent dangling processes
+            if proc.returncode is None:
+                proc.kill()
+            raise e
 
         # Wait for all agents to start
         try:
