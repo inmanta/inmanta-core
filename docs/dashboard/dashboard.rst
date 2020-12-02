@@ -31,7 +31,7 @@ Let's go over what some of these buttons do:
 
 5. Environment navigation button:
    Displays a list of projects and their environments.
-   Allows for navigate to any environment, by simply clicking it's name.
+   Allows navigation to any environment managed by this orchestrator, by simply clicking it's name.
 6. Add new project button:
    This will take you through the creation of a new project and the creation of its first environment.
 7. Green checkmark:
