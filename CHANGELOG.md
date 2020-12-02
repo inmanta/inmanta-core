@@ -18,6 +18,7 @@
 - Handle failure in an event handler consistently for local and non-local agents (#2509)
 - Fix for cross agent dependencies responding to unavailable resources (#2501)
 - Handle JSON serialization errors in handler log messages (#1875)
+- Fixed too restrictive typing (and coercing) of AttributeStateChange (#2540)
 - Export command should raise exception on failure (#2487)
 
 ## Upgrade notes

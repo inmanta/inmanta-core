@@ -130,8 +130,8 @@ class AttributeStateChange(BaseModel):
     Changes in the attribute
     """
 
-    current: Optional[Union[SimpleTypes, List[SimpleTypes], Dict[str, SimpleTypes]]] = None
-    desired: Optional[Union[SimpleTypes, List[SimpleTypes], Dict[str, SimpleTypes]]] = None
+    current: Optional[Any] = None
+    desired: Optional[Any] = None
 
 
 class Event(BaseModel):

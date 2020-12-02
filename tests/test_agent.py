@@ -63,6 +63,12 @@ def test_context_changes():
     assert len(ctx.changes) == 1
     assert isinstance(ctx.changes["value"], AttributeStateChange)
 
+    # use dict with empty string
+    ctx.update_changes({"value": dict(current="", desired="value")})
+    assert len(ctx.changes) == 1
+    assert ctx.changes["value"].current == ""
+    assert ctx.changes["value"].desired == "value"
+
     # use tuple
     ctx.update_changes({"value": ("a", "b")})
     assert len(ctx.changes) == 1
