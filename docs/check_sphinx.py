@@ -2,7 +2,6 @@ import os
 import subprocess
 
 import pytest
-import pytest_dependency
 
 @pytest.fixture(scope="session")
 def build_docs(tmpdir_factory):
@@ -16,13 +15,11 @@ def build_docs(tmpdir_factory):
 
 
 @pytest.mark.build
-@pytest.mark.dependency()
 def test_build_docs(build_docs):
     _, _, _, build_proc = build_docs
     assert build_proc.check_returncode()
 
 
-@pytest.mark.dependency(depends=["test_build_docs"])
 def test_linkcheck(build_docs):
     docs_dir, doctrees, htmldir, _ = build_docs
     # Execute link check
