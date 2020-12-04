@@ -14,12 +14,12 @@ def build_docs(tmpdir_factory):
     return docs_dir, doctrees, htmldir, build_proc
 
 
-@pytest.mark.build
 def test_build_docs(build_docs):
     _, _, _, build_proc = build_docs
-    assert build_proc.check_returncode()
+    build_proc.check_returncode()
 
 
+@pytest.mark.link_check
 def test_linkcheck(build_docs):
     docs_dir, doctrees, htmldir, _ = build_docs
     # Execute link check
