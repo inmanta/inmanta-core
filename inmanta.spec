@@ -33,14 +33,20 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 BuildRequires:  systemd
 BuildRequires:  sed
 BuildRequires:  libffi-devel
-BuildRequires:  openssl-devel >= 1.1.1
 
 Requires:       git
 Requires:       gcc
-Requires:       openssl >= 1.1.1
 Requires:       logrotate
 Requires:       libffi
 Requires(pre):  shadow-utils
+
+%if 0%{?el7}
+BuildRequires:  openssl11-devel
+Requires:       openssl11
+%else
+BuildRequires:  openssl-devel
+Requires:       openssl
+%endif
 
 %if 0%{?rhel}
 BuildRequires:  python%{undotted_python_version}-devel
@@ -83,14 +89,14 @@ Requires:       python3-inmanta
 %setup -T -D -a 2 -n inmanta-%{sourceversion_egg}
 
 %build
-
-%install
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/opt/inmanta
 %{__python3} -m venv --symlinks %{venv}
 %{_p3} -m pip install -U --no-index --find-links dependencies wheel setuptools pip
 %{_p3} -m pip install --no-index --find-links dependencies .
 %{_p3} -m inmanta.app
+
+%install
 
 # Use the correct python for bycompiling
 %define __python %{_p3}
