@@ -89,6 +89,12 @@ Requires:       python3-inmanta
 %setup -T -D -a 2 -n inmanta-%{sourceversion_egg}
 
 %build
+
+%if 0%{?el7}
+export CFLAGS=$(pkg-config --cflags-only-I openssl11)
+export LDFLAGS=$(pkg-config --libs-only-L openssl11)
+%endif
+
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/opt/inmanta
 %{__python3} -m venv --symlinks %{venv}
