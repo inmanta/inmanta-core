@@ -35,11 +35,10 @@ modules. project.yml defines the following settings:
     * ``license`` License the module is released under
     * ``copyright`` Copyright holder name and date.
     * ``install_mode`` This key determines what version of a module should be selected when a module
-      is downloaded. This is used when the module version is not "pinned" in the ``requires`` list.
-      The available values are:
+      is downloaded. The available values are:
 
         * release (default): Only use a released version, that is compatible with the current
-          compiler.
+          compiler and the version constraints defined ``requires`` list.
         * prerelease: Similar to release, but also prerelease versions are allowed.
         * master: Use the master branch.
 
