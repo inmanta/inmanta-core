@@ -11,6 +11,7 @@
 
 ## Bug fixes
 - Fix broken links in the documentation (#2495)
+- Fixed documentation of `install_mode`
 - Ensure all running compilations are stopped when the server is stopped (#2508)
 - Cleanup old entries in the agentprocess and agentinstance database tables (#2499)
 - Ensure the compiler service takes into account the environment variables set on the system (#2413)
