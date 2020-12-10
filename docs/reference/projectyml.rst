@@ -28,7 +28,7 @@ Project.yml defines the following settings:
       is downloaded. The available values are:
 
         * release (default): Only use a released version, that is compatible with the current
-          compiler and the version constraints defined ``requires`` list.
+          compiler and the version constraints defined in the ``requires`` list.
           A version is released when there is a tag on a commit. This tag should be a
           valid version identifier (PEP440) and should not be a prerelease version. Inmanta selects
           the latest available version (version sort based on PEP440).

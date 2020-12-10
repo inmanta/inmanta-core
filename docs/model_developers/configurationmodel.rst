@@ -38,7 +38,7 @@ modules. project.yml defines the following settings:
       is downloaded. The available values are:
 
         * release (default): Only use a released version, that is compatible with the current
-          compiler and the version constraints defined ``requires`` list.
+          compiler and the version constraints defined in the ``requires`` list.
         * prerelease: Similar to release, but also prerelease versions are allowed.
         * master: Use the master branch.
 
