@@ -33,11 +33,11 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 BuildRequires:  systemd
 BuildRequires:  sed
 BuildRequires:  libffi-devel
-BuildRequires:  openssl-devel > 1.0.2
+BuildRequires:  openssl-devel >= 1.1.1
 
 Requires:       git
 Requires:       gcc
-Requires:       openssl > 1.0.2
+Requires:       openssl >= 1.1.1
 Requires:       logrotate
 Requires:       libffi
 Requires(pre):  shadow-utils
