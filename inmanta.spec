@@ -98,11 +98,6 @@ mkdir -p %{buildroot}/opt/inmanta
 
 %install
 
-%if 0%{?el7}
-export CFLAGS=$(pkg-config --cflags-only-I openssl11)
-export LDFLAGS=$(pkg-config --libs-only-L openssl11)
-%endif
-
 # Use the correct python for bycompiling
 %define __python %{_p3}
 
