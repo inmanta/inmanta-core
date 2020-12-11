@@ -44,8 +44,8 @@ Requires(pre):  shadow-utils
 BuildRequires:  openssl11-devel
 Requires:       openssl11
 %else
-BuildRequires:  openssl-devel
-Requires:       openssl
+BuildRequires:  openssl-devel >= 1:1.1.1
+Requires:       openssl >= 1:1.1.1
 %endif
 
 %if 0%{?rhel}
