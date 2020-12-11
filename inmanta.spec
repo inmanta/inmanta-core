@@ -90,6 +90,8 @@ Requires:       python3-inmanta
 
 %build
 
+%install
+
 %if 0%{?el7}
 export CFLAGS=$(pkg-config --cflags-only-I openssl11)
 export LDFLAGS=$(pkg-config --libs-only-L openssl11)
@@ -101,8 +103,6 @@ mkdir -p %{buildroot}/opt/inmanta
 %{_p3} -m pip install -U --no-index --find-links dependencies wheel setuptools pip
 %{_p3} -m pip install --no-index --find-links dependencies .
 %{_p3} -m inmanta.app
-
-%install
 
 # Use the correct python for bycompiling
 %define __python %{_p3}
