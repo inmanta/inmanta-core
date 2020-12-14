@@ -33,14 +33,20 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 BuildRequires:  systemd
 BuildRequires:  sed
 BuildRequires:  libffi-devel
-BuildRequires:  openssl-devel
 
 Requires:       git
 Requires:       gcc
-Requires:       openssl
 Requires:       logrotate
 Requires:       libffi
 Requires(pre):  shadow-utils
+
+%if 0%{?el7}
+BuildRequires:  openssl11-devel
+Requires:       openssl11
+%else
+BuildRequires:  openssl-devel >= 1:1.1.1
+Requires:       openssl >= 1:1.1.1
+%endif
 
 %if 0%{?rhel}
 BuildRequires:  python%{undotted_python_version}-devel
@@ -85,6 +91,12 @@ Requires:       python3-inmanta
 %build
 
 %install
+
+%if 0%{?el7}
+export CFLAGS=$(pkg-config --cflags-only-I openssl11)
+export LDFLAGS=$(pkg-config --libs-only-L openssl11)
+%endif
+
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/opt/inmanta
 %{__python3} -m venv --symlinks %{venv}
