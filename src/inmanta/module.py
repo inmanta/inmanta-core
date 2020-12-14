@@ -912,14 +912,10 @@ class Module(ModuleLike):
             versions = [x for x in r.specifier.filter(versions, not release_only)]
 
         comp_version_raw = get_compiler_version()
-        if comp_version_raw is not None:
-            comp_version = parse_version(comp_version_raw)
-            # use base version, to make sure dev versions work as expected
-            comp_version = parse_version(comp_version.base_version)
-            return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
-        else:
-            LOGGER.warning("The Inmanta compiler is not installed")
-            return versions[0] if len(versions) > 0 else None
+        comp_version = parse_version(comp_version_raw)
+        # use base version, to make sure dev versions work as expected
+        comp_version = parse_version(comp_version.base_version)
+        return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
 
     @classmethod
     def __best_for_compiler_version(
