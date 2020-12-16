@@ -591,10 +591,10 @@ def print_versions_installed_components_and_exit():
     app_context = bootloader.load_slices()
     product_metadata = app_context.get_product_metadata()
     extension_statuses = app_context.get_extension_statuses()
-    if product_metadata["version"]:
-        print(f"{product_metadata['product']} ({product_metadata['edition']}): {product_metadata['version']}")
+    if product_metadata.version:
+        print(f"{product_metadata.product} ({product_metadata.edition}): {product_metadata.version}")
     else:
-        print(f"{product_metadata['product']} ({product_metadata['edition']}): version unknown")
+        print(f"{product_metadata.product} ({product_metadata.edition}): version unknown")
     print(f"Compiler version: {get_compiler_version()}")
     if extension_statuses:
         print("Extensions:")
