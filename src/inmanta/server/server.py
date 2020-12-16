@@ -21,11 +21,9 @@ import os
 import uuid
 from typing import TYPE_CHECKING, Dict, List, Optional, Union, cast
 
-import importlib_metadata
-
 from inmanta import data
 from inmanta.const import ApiDocsFormat
-from inmanta.data.model import ExtensionStatus, FeatureStatus, SliceStatus, StatusResponse
+from inmanta.data.model import FeatureStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, methods, methods_v2
 from inmanta.protocol.common import HTML_CONTENT_WITH_UTF8_CHARSET, ReturnValue, attach_warnings
 from inmanta.protocol.openapi.converter import OpenApiConverter
@@ -172,7 +170,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             )
 
         slices = []
-        extension_names = set()
         for slice_name, slice in self._server.get_slices().items():
             try:
                 slices.append(SliceStatus(name=slice_name, status=await slice.get_status()))
@@ -182,27 +179,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                     exc_info=True,
                 )
 
-            ext_name = slice_name.split(".")[0]
-            package_name = slice.__class__.__module__.split(".")[0]
-
-            try:
-                distribution = importlib_metadata.distribution(package_name)
-                extension_names.add((ext_name, package_name, distribution.version))
-            except importlib_metadata.PackageNotFoundError:
-                LOGGER.info(
-                    "Package %s of slice %s is not packaged in a distribution. Unable to determine its extension.",
-                    package_name,
-                    slice_name,
-                )
-
         response = StatusResponse(
             product=product_metadata["product"],
             edition=product_metadata["edition"],
             version=product_metadata["version"],
             license=product_metadata["license"],
-            extensions=[
-                ExtensionStatus(name=name, package=package, version=version) for name, package, version in extension_names
-            ],
+            extensions=self.get_extension_statuses(list(self._server.get_slices().values())),
             slices=slices,
             features=[
                 FeatureStatus(slice=feature.slice, name=feature.name, value=self.feature_manager.get_value(feature))

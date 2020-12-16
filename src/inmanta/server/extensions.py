@@ -18,16 +18,14 @@
 import logging
 import os
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 
+import pkg_resources
 import yaml
 
 from inmanta.config import feature_file_config
-from inmanta.util import get_compiler_version
-
-if TYPE_CHECKING:
-    from inmanta.server.protocol import ServerSlice
-
+from inmanta.data.model import ExtensionStatus
+from inmanta.server.protocol import ServerSlice
 
 LOGGER = logging.getLogger(__name__)
 
@@ -121,15 +119,23 @@ class FeatureManager:
             return result["slices"]
         return {}
 
-    def get_product_metadata(self) -> Dict[str, str]:
+    def get_product_metadata(self) -> Dict[str, Optional[str]]:
+        product_version = None
+        try:
+            product_version = pkg_resources.get_distribution("inmanta").version
+        except pkg_resources.DistributionNotFound:
+            LOGGER.error(
+                "Could not find version number for the inmanta product."
+                "Is inmanta installed? Use setuptools install or setuptools dev to install."
+            )
         return {
-            "product": "Inmanta Service Orchestator",
+            "product": "Inmanta Service Orchestrator",
             "edition": "Open Source Edition",
             "license": "Apache Software License 2",
-            "version": get_compiler_version(),
+            "version": product_version,
         }
 
-    def add_slice(self, slice: "ServerSlice") -> None:
+    def add_slice(self, slice: ServerSlice) -> None:
         for feature in slice.define_features():
             if feature.slice != slice.name:
                 raise InvalidFeature(
@@ -168,11 +174,11 @@ class ApplicationContext:
         self._slices: List[ServerSlice] = []
         self._feature_manager: Optional[FeatureManager] = None
 
-    def register_slice(self, slice: "ServerSlice") -> None:
+    def register_slice(self, slice: ServerSlice) -> None:
         assert slice is not None
         self._slices.append(slice)
 
-    def get_slices(self) -> "List[ServerSlice]":
+    def get_slices(self) -> List[ServerSlice]:
         return self._slices
 
     def set_feature_manager(self, feature_manager: FeatureManager):
@@ -183,3 +189,9 @@ class ApplicationContext:
         if self._feature_manager is None:
             self._feature_manager = FeatureManager()
         return self._feature_manager
+
+    def get_product_metadata(self) -> Dict[str, Optional[str]]:
+        return self.get_feature_manager().get_product_metadata()
+
+    def get_extension_statuses(self) -> List[ExtensionStatus]:
+        return ServerSlice.get_extension_statuses(list(self._slices))

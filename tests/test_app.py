@@ -442,10 +442,10 @@ end
 @pytest.mark.parametrize(
     "with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines",
     [
-        (False, True, [r"Current Inmanta version:"], []),
-        (True, True, [r"Current Inmanta version:"], []),
-        (False, False, [], [r"Current Inmanta version:"]),
-        (True, False, [], [r"Current Inmanta version:"]),
+        (False, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
+        (True, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
+        (False, False, [], [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
+        (True, False, [], [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"]),
     ],
 )
 @pytest.mark.timeout(20)

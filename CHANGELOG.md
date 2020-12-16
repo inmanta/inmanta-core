@@ -8,6 +8,7 @@
 - Added pagination support on api calls for agent and agentproc (#2500)
 - Added support to build RPMs for a python version different from Python3.6 (#1857)
 - Added support for assigning `null` to relations with lower arity 0 (#2459)
+- Show versions of all installed components when running `inmanta --version` (#2574)
 
 ## Bug fixes
 - Fix broken links in the documentation (#2495)
