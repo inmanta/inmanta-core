@@ -49,14 +49,14 @@ from inmanta.ast.statements.generator import ConditionalExpression, Constructor,
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException, SyntaxDeprecationWarning
-from inmanta.parser.plyInmantaParser import parse
+from inmanta.parser.plyInmantaParser import myparse
 
 
 def parse_code(model_code: str):
     root_ns = Namespace("__root__")
     main_ns = Namespace("__config__")
     main_ns.parent = root_ns
-    statements = parse(main_ns, "test", model_code)
+    statements = myparse(main_ns, "test", model_code)
 
     return statements
 
