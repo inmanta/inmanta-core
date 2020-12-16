@@ -571,7 +571,7 @@ def cmd_parser() -> ArgumentParser:
         "--version",
         action="store_true",
         dest="inmanta_version",
-        help="Show current version of Inmanta",
+        help="Show the version of the installed Inmanta product and the version of its subcomponents",
         default=False,
         required=False,
     )
