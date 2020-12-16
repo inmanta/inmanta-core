@@ -85,7 +85,6 @@ class StringListFeature(Feature[List[str]]):
 
 
 class ProductMetadata:
-
     def __init__(self, product: str, edition: str, license: str, version: Optional[str]) -> None:
         self.product = product
         self.edition = edition
@@ -141,7 +140,7 @@ class FeatureManager:
             product="Inmanta Service Orchestrator",
             edition="Open Source Edition",
             license="Apache Software License 2",
-            version=product_version
+            version=product_version,
         )
 
     def add_slice(self, slice: ServerSlice) -> None:
