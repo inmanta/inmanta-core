@@ -163,7 +163,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @protocol.handle(methods.get_server_status)
     async def get_server_status(self) -> StatusResponse:
         product_metadata = self.feature_manager.get_product_metadata()
-        if product_metadata["version"] is None:
+        if product_metadata.version is None:
             raise exceptions.ServerError(
                 "Could not find version number for the inmanta compiler."
                 "Is inmanta installed? Use setuptools install or setuptools dev to install."
@@ -180,10 +180,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 )
 
         response = StatusResponse(
-            product=product_metadata["product"],
-            edition=product_metadata["edition"],
-            version=product_metadata["version"],
-            license=product_metadata["license"],
+            product=product_metadata.product,
+            edition=product_metadata.edition,
+            version=product_metadata.version,
+            license=product_metadata.license,
             extensions=self.get_extension_statuses(list(self._server.get_slices().values())),
             slices=slices,
             features=[
