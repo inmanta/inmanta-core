@@ -8,9 +8,12 @@
 - Added pagination support on api calls for agent and agentproc (#2500)
 - Added support to build RPMs for a python version different from Python3.6 (#1857)
 - Added support for assigning `null` to relations with lower arity 0 (#2459)
+- Decouple the compiler version from the OSS product version (#2573)
+- Show versions of all installed components when running `inmanta --version` (#2574)
 
 ## Bug fixes
 - Fix broken links in the documentation (#2495)
+- Fixed documentation of `install_mode`
 - Ensure all running compilations are stopped when the server is stopped (#2508)
 - Cleanup old entries in the agentprocess and agentinstance database tables (#2499)
 - Ensure the compiler service takes into account the environment variables set on the system (#2413)

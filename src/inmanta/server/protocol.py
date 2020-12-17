@@ -23,19 +23,23 @@ import uuid
 from collections import defaultdict
 from typing import Callable, Coroutine, Dict, List, Optional, Set, Tuple, Union
 
+import importlib_metadata
 from tornado import gen, queues, routing, web
 from tornado.ioloop import IOLoop
 
 import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
+from inmanta.data.model import ExtensionStatus
 from inmanta.protocol import Client, common, endpoints, handle, methods
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
-from inmanta.server.extensions import Feature, FeatureManager
-from inmanta.types import ArgumentTypes, JsonType
+from inmanta.types import TYPE_CHECKING, ArgumentTypes, JsonType
 from inmanta.util import CycleException, Scheduler, TaskHandler, stable_depth_first
+
+if TYPE_CHECKING:
+    from inmanta.server.extensions import Feature, FeatureManager
 
 LOGGER = logging.getLogger(__name__)
 
@@ -211,7 +215,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
     To schedule background tasks, use :func:`add_background_task`
     """
 
-    feature_manager: FeatureManager
+    feature_manager: "FeatureManager"
 
     def __init__(self, name: str) -> None:
         super().__init__()
@@ -318,13 +322,36 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
             )
         )
 
+    def get_extension_status(self) -> Optional[ExtensionStatus]:
+        ext_name = self.name.split(".")[0]
+        package_name = self.__class__.__module__.split(".")[0]
+        try:
+            distribution = importlib_metadata.distribution(package_name)
+            return ExtensionStatus(name=ext_name, package=ext_name, version=distribution.version)
+        except importlib_metadata.PackageNotFoundError:
+            LOGGER.info(
+                "Package %s of slice %s is not packaged in a distribution. Unable to determine its extension.",
+                package_name,
+                self.name,
+            )
+            return None
+
+    @classmethod
+    def get_extension_statuses(cls, slices: List["ServerSlice"]) -> List[ExtensionStatus]:
+        result = {}
+        for server_slice in slices:
+            ext_status = server_slice.get_extension_status()
+            if ext_status is not None:
+                result[ext_status.name] = ext_status
+        return list(result.values())
+
     async def get_status(self) -> Dict[str, ArgumentTypes]:
         """
         Get the status of this slice.
         """
         return {}
 
-    def define_features(self) -> List[Feature]:
+    def define_features(self) -> List["Feature"]:
         """Return a list of feature that this slice offers"""
         return []
 

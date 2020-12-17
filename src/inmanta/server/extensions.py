@@ -18,16 +18,14 @@
 import logging
 import os
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 
+import pkg_resources
 import yaml
 
 from inmanta.config import feature_file_config
-from inmanta.util import get_compiler_version
-
-if TYPE_CHECKING:
-    from inmanta.server.protocol import ServerSlice
-
+from inmanta.data.model import ExtensionStatus
+from inmanta.server.protocol import ServerSlice
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,7 +63,7 @@ class Feature(Generic[T]):
         return self._slice
 
     @property
-    def default_value(self) -> T:
+    def default_value(self) -> Optional[T]:
         return self._default_value
 
     def __str__(self) -> str:
@@ -84,6 +82,14 @@ class StringListFeature(Feature[List[str]]):
 
     def __init__(self, slice: str, name: str, description: str = "") -> None:
         super().__init__(slice, name, description, default_value=["*"])
+
+
+class ProductMetadata:
+    def __init__(self, product: str, edition: str, license: str, version: Optional[str]) -> None:
+        self.product = product
+        self.edition = edition
+        self.license = license
+        self.version = version
 
 
 class FeatureManager:
@@ -121,15 +127,23 @@ class FeatureManager:
             return result["slices"]
         return {}
 
-    def get_product_metadata(self) -> Dict[str, str]:
-        return {
-            "product": "Inmanta Service Orchestator",
-            "edition": "Open Source Edition",
-            "license": "Apache Software License 2",
-            "version": get_compiler_version(),
-        }
+    def get_product_metadata(self) -> ProductMetadata:
+        product_version = None
+        try:
+            product_version = pkg_resources.get_distribution("inmanta").version
+        except pkg_resources.DistributionNotFound:
+            LOGGER.error(
+                "Could not find version number for the inmanta product."
+                "Is inmanta installed? Use setuptools install or setuptools dev to install."
+            )
+        return ProductMetadata(
+            product="Inmanta Service Orchestrator",
+            edition="Open Source Edition",
+            license="Apache Software License 2",
+            version=product_version,
+        )
 
-    def add_slice(self, slice: "ServerSlice") -> None:
+    def add_slice(self, slice: ServerSlice) -> None:
         for feature in slice.define_features():
             if feature.slice != slice.name:
                 raise InvalidFeature(
@@ -139,7 +153,7 @@ class FeatureManager:
             self._features[feature.slice][feature.name] = feature
         slice.feature_manager = self
 
-    def get_value(self, feature: Feature[T]) -> T:
+    def get_value(self, feature: Feature[T]) -> Any:
         """Get the value of a feature"""
         if feature.slice not in self._features or feature.name not in self._features[feature.slice]:
             raise InvalidFeature("Feature should be defined be slices at boot time.")
@@ -168,11 +182,11 @@ class ApplicationContext:
         self._slices: List[ServerSlice] = []
         self._feature_manager: Optional[FeatureManager] = None
 
-    def register_slice(self, slice: "ServerSlice") -> None:
+    def register_slice(self, slice: ServerSlice) -> None:
         assert slice is not None
         self._slices.append(slice)
 
-    def get_slices(self) -> "List[ServerSlice]":
+    def get_slices(self) -> List[ServerSlice]:
         return self._slices
 
     def set_feature_manager(self, feature_manager: FeatureManager):
@@ -183,3 +197,9 @@ class ApplicationContext:
         if self._feature_manager is None:
             self._feature_manager = FeatureManager()
         return self._feature_manager
+
+    def get_product_metadata(self) -> ProductMetadata:
+        return self.get_feature_manager().get_product_metadata()
+
+    def get_extension_statuses(self) -> List[ExtensionStatus]:
+        return ServerSlice.get_extension_statuses(list(self._slices))

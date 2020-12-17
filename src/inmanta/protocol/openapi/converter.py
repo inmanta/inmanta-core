@@ -78,7 +78,7 @@ class OpenApiConverter:
 
     def _get_inmanta_version(self) -> Optional[str]:
         metadata = self.feature_manager.get_product_metadata()
-        return metadata["version"]
+        return metadata.version
 
     def generate_openapi_definition(self) -> OpenAPI:
         version = self._get_inmanta_version()
