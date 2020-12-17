@@ -1,4 +1,4 @@
-# Release 2020.6 (?)
+# Release 4.0.0 (?)
 
 ## New features
 - Add support to use a custom venv path in the Project class (#2466)
@@ -26,6 +26,11 @@
 
 ## Upgrade notes
 - Ensure the database is backed up before executing an upgrade.
+
+## Other notes
+- The inmanta core package is renamed from `inmanta` to `inmanta-core` to allow for true semantic versioning
+    starting at `4.0.0`. A new `inmanta` package is provided that includes `inmanta-core` and continues the
+    `<year>.<minor>[.<patch>]` version schema.
 
 # Release 2020.5 (2020-10-27)
 
