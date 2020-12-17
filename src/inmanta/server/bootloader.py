@@ -97,7 +97,7 @@ class InmantaBootloader(object):
         inmanta_ext = importlib.import_module(EXTENSION_NAMESPACE)
         available = {name[len(EXTENSION_NAMESPACE) + 1 :]: name for finder, name, ispkg in iter_namespace(inmanta_ext)}
 
-        LOGGER.info("Discoverd extensions: %s", ", ".join(available.keys()))
+        LOGGER.info("Discovered extensions: %s", ", ".join(available.keys()))
 
         extensions = []
         enabled = [x for x in config.server_enabled_extensions.get() if len(x)]
