@@ -20,6 +20,7 @@ Install the software
           enabled_metadata=1
           EOF
 
+          sudo yum install -y epel-release
           sudo yum install -y python3-inmanta python3-inmanta-server python3-inmanta-agent
 
         The first package (python3-inmanta) contains all the code and the commands. The server and the agent packages install config
