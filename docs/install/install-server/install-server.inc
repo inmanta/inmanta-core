@@ -79,7 +79,7 @@ Install the software
 
         .. code-block:: sh
 
-            git clone https://github.com/inmanta/inmanta.git
+            git clone https://github.com/inmanta/inmanta-core.git
             cd inmanta
             pip install -c requirements.txt .
 
