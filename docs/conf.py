@@ -276,3 +276,6 @@ linkcheck_ignore = [r'http(s)?://localhost:\d+/', r'http://127.0.0.1:\d+', r'ope
 # Do not print the warning that tabs only work in html
 # https://github.com/djungelorm/sphinx-tabs/issues/39
 sphinx_tabs_nowarn = True
+
+# Set the sphinx user-agent string to that of chrome (standard linux)
+user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36"
