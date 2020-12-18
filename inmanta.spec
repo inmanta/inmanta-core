@@ -72,11 +72,11 @@ Requires:       python%{undotted_python_version}-devel
 
 %package -n python3-inmanta-server
 Summary:        The configuration and service files to start the Inmanta server
-Requires:       python3-inmanta
+Requires:       python3-inmanta-core
 
 %package -n python3-inmanta-agent
 Summary:        The configuration and service files to start the Inmanta agent
-Requires:       python3-inmanta
+Requires:       python3-inmanta-core
 
 %description
 
