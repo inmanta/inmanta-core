@@ -25,7 +25,7 @@ Summary:        Inmanta automation and orchestration tool
 Group:          Development/Languages
 License:        ASL 2
 URL:            http://inmanta.com
-Source0:        inmanta-%{sourceversion_egg}.tar.gz
+Source0:        inmanta-core-%{sourceversion_egg}.tar.gz
 Source1:        dependencies.tar.gz
 Source2:        inmanta-inmanta-dashboard-%{dashboard_version}.tgz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
