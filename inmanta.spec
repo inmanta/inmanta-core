@@ -70,10 +70,12 @@ Requires:       python%{undotted_python_version}-devel
 %endif
 
 %package -n python3-inmanta-server
+Epoch:          1
 Summary:        The configuration and service files to start the Inmanta server
 Requires:       python3-inmanta
 
 %package -n python3-inmanta-agent
+Epoch:          1
 Summary:        The configuration and service files to start the Inmanta agent
 Requires:       python3-inmanta
 
