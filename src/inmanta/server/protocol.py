@@ -324,7 +324,9 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
     def get_extension_status(self) -> Optional[ExtensionStatus]:
         ext_name = self.name.split(".")[0]
-        package_name = self.__class__.__module__.split(".")[0]
+        source_package_name = self.__class__.__module__.split(".")[0]
+        # workaround for #2586
+        package_name = "inmanta-core" if source_package_name == "inmanta" else source_package_name
         try:
             distribution = importlib_metadata.distribution(package_name)
             return ExtensionStatus(name=ext_name, package=ext_name, version=distribution.version)
