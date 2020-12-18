@@ -75,11 +75,11 @@ Install the software
 
     .. tab:: Source
 
-        Get the source either from our `release page on github <https://github.com/inmanta/inmanta/releases>`_ or clone/download a branch directly.
+        Get the source either from our `release page on github <https://github.com/inmanta/inmanta-core/releases>`_ or clone/download a branch directly.
 
         .. code-block:: sh
 
-            git clone https://github.com/inmanta/inmanta.git
+            git clone https://github.com/inmanta/inmanta-core.git
             cd inmanta
             pip install -c requirements.txt .
 
