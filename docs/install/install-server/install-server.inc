@@ -75,7 +75,7 @@ Install the software
 
     .. tab:: Source
 
-        Get the source either from our `release page on github <https://github.com/inmanta/inmanta/releases>`_ or clone/download a branch directly.
+        Get the source either from our `release page on github <https://github.com/inmanta/inmanta-core/releases>`_ or clone/download a branch directly.
 
         .. code-block:: sh
 
