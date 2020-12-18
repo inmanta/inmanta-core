@@ -79,9 +79,9 @@ Requires:       python3-inmanta
 
 %description
 
-%description server
+%description -n python3-inmanta-server
 
-%description agent
+%description -n python3-inmanta-agent
 
 %prep
 %setup -q -n inmanta-%{sourceversion_egg}
@@ -162,23 +162,23 @@ rm -rf %{buildroot}
 %config(noreplace) %attr(-, root, root)/etc/sysconfig/inmanta-server
 %config(noreplace) %attr(-, root, root)/etc/sysconfig/inmanta-agent
 
-%files server
+%files -n python3-inmanta-server
 /opt/inmanta/dashboard
 %attr(-,root,root) %{_unitdir}/inmanta-server.service
 
-%files agent
+%files -n python3-inmanta-agent
 %attr(-,root,root) %{_unitdir}/inmanta-agent.service
 
-%post agent
+%post -n python3-inmanta-agent
 %systemd_post inmanta-agent.service
 
-%preun agent
+%preun -n python3-inmanta-agent
 %systemd_preun inmanta-agent.service
 
-%postun agent
+%postun -n python3-inmanta-agent
 %systemd_postun_with_restart inmanta-agent.service
 
-%post server
+%post -n python3-inmanta-server
 %systemd_post inmanta-server.service
 
 # Move server.cfg file for backward compatibility
@@ -186,10 +186,10 @@ if [ -e "/etc/inmanta/server.cfg" ]; then
   mv /etc/inmanta/server.cfg /etc/inmanta/inmanta.d/
 fi
 
-%preun server
+%preun -n python3-inmanta-server
 %systemd_preun inmanta-server.service
 
-%postun server
+%postun -n python3-inmanta-server
 %systemd_postun_with_restart inmanta-server.service
 
 %pre
