@@ -84,9 +84,9 @@ Requires:       python3-inmanta
 %description -n python3-inmanta-agent
 
 %prep
-%setup -q -n inmanta-%{sourceversion_egg}
-%setup -T -D -a 1 -n inmanta-%{sourceversion_egg}
-%setup -T -D -a 2 -n inmanta-%{sourceversion_egg}
+%setup -q -n inmanta-core-%{sourceversion_egg}
+%setup -T -D -a 1 -n inmanta-core-%{sourceversion_egg}
+%setup -T -D -a 2 -n inmanta-core-%{sourceversion_egg}
 
 %build
 
