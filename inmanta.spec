@@ -16,7 +16,7 @@
 %define sourceversion %{version}%{?buildid}
 %define sourceversion_egg %{version}%{?buildid_egg}
 
-Name:           python3-inmanta
+Name:           python3-inmanta-core
 Version:        %{version}
 
 Release:        %{release}%{?buildid}%{?tag}%{?dist}
@@ -69,11 +69,11 @@ Requires:       python%{undotted_python_version}-devel
 %endif
 %endif
 
-%package server
+%package -n python3-inmanta-server
 Summary:        The configuration and service files to start the Inmanta server
 Requires:       python3-inmanta
 
-%package agent
+%package -n python3-inmanta-agent
 Summary:        The configuration and service files to start the Inmanta agent
 Requires:       python3-inmanta
 
