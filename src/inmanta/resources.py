@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import json
 import logging
 import re
 from typing import (
@@ -35,6 +35,8 @@ from typing import (
     Union,
     cast,
 )
+
+from inmanta.util import custom_json_encoder
 
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, runtime, util
@@ -298,7 +300,7 @@ class Resource(metaclass=ResourceMeta):
                     value = cls.map[field_name](exporter, model_object)
                 else:
                     value = getattr(model_object, field_name)
-
+                json.dumps(value, default=custom_json_encoder)
                 return value
             except proxy.UnknownException as e:
                 return e.unknown
