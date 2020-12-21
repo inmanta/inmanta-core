@@ -36,11 +36,10 @@ from typing import (
     cast,
 )
 
-from inmanta.util import custom_json_encoder
-
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, runtime, util
 from inmanta.types import JsonType
+from inmanta.util import custom_json_encoder
 
 if TYPE_CHECKING:
     from inmanta import export
