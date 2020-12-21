@@ -16,14 +16,6 @@
     Contact: code@inmanta.com
 """
 import inmanta.compiler as compiler
-from inmanta.util import get_compiler_version
-
-
-def test_compiler_installed():
-    """
-    If this test fails, make sure inmanta is installed. For example with pip install -e .
-    """
-    assert get_compiler_version() is not None
 
 
 def test_str_on_instance_pos(snippetcompiler):

@@ -20,6 +20,7 @@ Install the software
           enabled_metadata=1
           EOF
 
+          sudo yum install -y epel-release
           sudo yum install -y python3-inmanta python3-inmanta-server python3-inmanta-agent
 
         The first package (python3-inmanta) contains all the code and the commands. The server and the agent packages install config
@@ -74,11 +75,11 @@ Install the software
 
     .. tab:: Source
 
-        Get the source either from our `release page on github <https://github.com/inmanta/inmanta/releases>`_ or clone/download a branch directly.
+        Get the source either from our `release page on github <https://github.com/inmanta/inmanta-core/releases>`_ or clone/download a branch directly.
 
         .. code-block:: sh
 
-            git clone https://github.com/inmanta/inmanta.git
+            git clone https://github.com/inmanta/inmanta-core.git
             cd inmanta
             pip install -c requirements.txt .
 

@@ -12,7 +12,7 @@
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 
-import sys, os, pkg_resources
+import sys, os, pkg_resources, datetime
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -69,7 +69,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'Inmanta'
-copyright = '2019 Inmanta NV'
+copyright = f'{datetime.datetime.now().year} Inmanta NV'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -271,7 +271,7 @@ texinfo_documents = [
 
 # Ingnore link check of openapi.html because it's used in a toctree.
 # A trick was required to include a non-sphinx document in a toctee.
-linkcheck_ignore = [r'http(s)?://localhost:\d+/', r'http://127.0.0.1:\d+', r'openapi.html']
+linkcheck_ignore = [r'http(s)?://localhost:\d+/', r'http://127.0.0.1:\d+', r'openapi.html', r'https://twitter.com/inmanta_com']
 
 # Do not print the warning that tabs only work in html
 # https://github.com/djungelorm/sphinx-tabs/issues/39

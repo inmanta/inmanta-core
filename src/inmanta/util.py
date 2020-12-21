@@ -31,14 +31,13 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
-from functools import lru_cache
 from logging import Logger
-from typing import Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
+from typing import Callable, Coroutine, Dict, Iterator, List, Set, Tuple, TypeVar, Union
 
-import pkg_resources
 from tornado import gen
 from tornado.ioloop import IOLoop
 
+from inmanta import COMPILER_VERSION
 from inmanta.data.model import BaseModel
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 
@@ -62,16 +61,8 @@ def memoize(obj):
     return memoizer
 
 
-@lru_cache(maxsize=1)
-def get_compiler_version() -> Optional[str]:
-    try:
-        return pkg_resources.get_distribution("inmanta").version
-    except pkg_resources.DistributionNotFound:
-        LOGGER.error(
-            "Could not find version number for the inmanta compiler."
-            "Is inmanta installed? Use setuptools install or setuptools dev to install."
-        )
-        return None
+def get_compiler_version() -> str:
+    return COMPILER_VERSION
 
 
 def groupby(mylist: List[T], f: Callable[[T], S]) -> Iterator[Tuple[S, Iterator[T]]]:

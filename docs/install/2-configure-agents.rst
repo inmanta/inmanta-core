@@ -103,6 +103,7 @@ machine that will run the agent.
     enabled_metadata=1
     EOF
 
+    sudo yum install -y epel-release
     sudo yum install -y python3-inmanta python3-inmanta-agent
 
 
