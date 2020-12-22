@@ -39,7 +39,6 @@ from typing import (
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, runtime, util
 from inmanta.types import JsonType
-from inmanta.util import custom_json_encoder
 
 if TYPE_CHECKING:
     from inmanta import export
@@ -290,6 +289,7 @@ class Resource(metaclass=ResourceMeta):
     def map_field(
         cls, exporter: Optional["export.Exporter"], entity_name: str, field_name: str, model_object: "proxy.DynamicProxy"
     ) -> str:
+        from inmanta.data import json_encode
         try:
             try:
                 if hasattr(cls, "get_" + field_name):
@@ -299,7 +299,7 @@ class Resource(metaclass=ResourceMeta):
                     value = cls.map[field_name](exporter, model_object)
                 else:
                     value = getattr(model_object, field_name)
-                json.dumps(value, default=custom_json_encoder)
+                json_encode(value)
                 return value
             except proxy.UnknownException as e:
                 return e.unknown
