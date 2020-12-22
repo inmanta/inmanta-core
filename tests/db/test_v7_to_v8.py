@@ -17,16 +17,16 @@
 """
 
 import os
+import uuid
 from typing import AsyncIterator
 
 import pytest
-import uuid
 from asyncpg import Connection, exceptions
-from utils import retry_limited
-from inmanta import data
 
 from db.common import PGRestore
+from inmanta import data
 from inmanta.server.bootloader import InmantaBootloader
+from utils import retry_limited
 
 
 @pytest.fixture
@@ -51,7 +51,7 @@ async def migrate_v7_to_v8(
 @pytest.mark.asyncio(timeout=20)
 async def test_foreign_key_agent_to_agentinstance(migrate_v7_to_v8: None, postgresql_client: Connection) -> None:
     """
-        Deleting an entry in the agentInstance table should not be allowed when it's references from the agent stable.
+    Deleting an entry in the agentInstance table should not be allowed when it's references from the agent stable.
     """
     env_id = "a21a4bdc-68f0-4c4e-a4f2-a6b42880661a"
 
@@ -61,9 +61,7 @@ async def test_foreign_key_agent_to_agentinstance(migrate_v7_to_v8: None, postgr
 
     async def get_id_primary_internal_agent() -> uuid.UUID:
         # Return the id of the AgentInstance that is the primary for the internal agent
-        result = await data.Agent.get_one(
-            environment=env_id, name="internal"
-        )
+        result = await data.Agent.get_one(environment=env_id, name="internal")
         assert result.id_primary is not None
         return result.id_primary
 
