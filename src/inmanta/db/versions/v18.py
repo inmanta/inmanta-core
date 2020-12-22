@@ -17,11 +17,27 @@
 """
 from asyncpg import Connection
 
-DISABLED = True
+DISABLED = False
 
 
 async def update(connection: Connection) -> None:
     await connection.execute(
         """
+        -- Ensure agent records don't get deleted when the referenced agent_instance is deleted
+        ALTER TABLE public.agent DROP CONSTRAINT agent_id_primary_fkey;
+        ALTER TABLE  public.agent
+        ADD CONSTRAINT agent_id_primary_fkey
+        FOREIGN KEY (id_primary)
+        REFERENCES public.agentinstance(id)
+        ON DELETE RESTRICT;
+
+        -- Used by data.Agent.expire_all()
+        CREATE INDEX agent_id_primary_index ON agent (id_primary) WHERE (id_primary IS NULL);
+        -- Used by data.AgentProcess.expire_all()
+        CREATE INDEX agentprocess_expired_index ON agentprocess (expired) WHERE (expired IS NULL);
+        -- Used by data.AgentProcess.cleanup()
+        CREATE INDEX agentprocess_env_hostname_expired_index ON agentprocess (environment, hostname, expired);
+        -- Used by data.AgentInstance.expire_all()
+        CREATE INDEX agentinstance_expired_index ON agentinstance (expired) WHERE (expired IS NULL);
         """
     )
