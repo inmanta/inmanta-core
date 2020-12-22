@@ -33,7 +33,7 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    version="2020.4.4",
+    version="2020.4.5",
     python_requires=">=3.6",  # also update classifiers
     # Meta data
     name="inmanta",
