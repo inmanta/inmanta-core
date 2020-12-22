@@ -368,14 +368,15 @@ async def test_dbschema_update_db_downgrade(postgresql_client):
 
     db_schema = schema.DBSchema(schema_name, inmanta.db.versions, postgresql_client)
     update_function_map = await db_schema._get_update_functions()
-    original_version = len(update_function_map) + 1
+    version_latest_schema_file = update_function_map[-1].version
+    db_schema_version_to_set = version_latest_schema_file + 1
     await postgresql_client.execute(
-        f"INSERT INTO {SCHEMA_VERSION_TABLE} (name, current_version) VALUES ($1, $2)", schema_name, original_version
+        f"INSERT INTO {SCHEMA_VERSION_TABLE} (name, current_version) VALUES ($1, $2)", schema_name, db_schema_version_to_set
     )
     with pytest.raises(InvalidSchemaVersion):
         await db_schema.ensure_db_schema()
     current_db_version = await db_schema.get_current_version()
-    assert original_version == current_db_version
+    assert db_schema_version_to_set == current_db_version
 
 
 @pytest.mark.asyncio
