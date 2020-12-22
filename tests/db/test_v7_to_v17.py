@@ -30,11 +30,11 @@ from utils import retry_limited
 
 
 @pytest.fixture
-async def migrate_v7_to_v18(
+async def migrate_v7_to_v17(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, server_config
 ) -> AsyncIterator[None]:
     """
-    Performs a v7 database restore and migrates to v8.
+    Performs a v7 database restore and migrates to v17.
     """
     # Get old tables
     with open(os.path.join(os.path.dirname(__file__), "dumps/v7.sql"), "r") as fh:
@@ -49,7 +49,7 @@ async def migrate_v7_to_v18(
 
 
 @pytest.mark.asyncio(timeout=20)
-async def test_foreign_key_agent_to_agentinstance(migrate_v7_to_v18: None, postgresql_client: Connection) -> None:
+async def test_foreign_key_agent_to_agentinstance(migrate_v7_to_v17: None, postgresql_client: Connection) -> None:
     """
     Deleting an entry in the agentInstance table should not be allowed when it's references from the agent stable.
     """
