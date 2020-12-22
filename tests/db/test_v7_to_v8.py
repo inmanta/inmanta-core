@@ -43,7 +43,7 @@ async def migrate_v7_to_v8(
     ibl = InmantaBootloader()
 
     await ibl.start()
-    # When the bootloader is started, it also executes the migration to v7
+    # When the bootloader is started, it also executes the migration to v8
     yield
     await ibl.stop()
 
