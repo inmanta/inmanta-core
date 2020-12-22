@@ -923,4 +923,3 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
     report = await data.Report.get_one(compile=compile.id, name="Cloning repository")
     # Assert presence of trace lines
     assert "trace: " in report.errstream
-

@@ -21,6 +21,7 @@ import os
 import pytest
 
 from inmanta import config, const
+from inmanta.const import ResourceState
 from inmanta.export import DependencyCycleException
 
 
@@ -242,7 +243,40 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
     _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 1
-    print(_version, json_value, status, model)
+
+
+def test_export_null_in_collection(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import exp
+
+a = exp::Test2(mydict={"a": null}, mylist=["a",null])
+"""
+    )
+    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+
+    assert len(json_value) == 1
+    json_dict = snippetcompiler.get_exported_json()
+    resource = json_dict[0]
+    assert resource["mylist"] == ["a", None]
+    assert resource["mydict"] == {"a": None}
+
+
+def test_export_unknown_in_collection(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import exp
+import tests
+
+a = exp::Test2(mydict={"a": tests::unknown()}, mylist=["a"])
+b = exp::Test2(name="idb", mydict={"a": "b"}, mylist=["a", tests::unknown()])
+"""
+    )
+    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+
+    assert len(json_value) == 2
+    assert status["exp::Test2[agenta,name=ida]"] == ResourceState.undefined
+    assert status["exp::Test2[agenta,name=idb]"] == ResourceState.undefined
 
 
 def test_1934_cycle_in_dep_mgmr(snippetcompiler):
