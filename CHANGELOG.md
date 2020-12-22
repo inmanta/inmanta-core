@@ -13,6 +13,7 @@
 
 ## Bug fixes
 - Fix broken links in the documentation (#2495)
+- Fixed bug in serialization of Resource with Unknowns in collections (#2603)
 - Fixed documentation of `install_mode`
 - Ensure all running compilations are stopped when the server is stopped (#2508)
 - Cleanup old entries in the agentprocess and agentinstance database tables (#2499)

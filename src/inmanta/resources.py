@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import json
 import logging
 import re
 from typing import (
@@ -36,6 +36,7 @@ from typing import (
     cast,
 )
 
+import inmanta.util
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, runtime, util
 from inmanta.types import JsonType
@@ -298,7 +299,10 @@ class Resource(metaclass=ResourceMeta):
                     value = cls.map[field_name](exporter, model_object)
                 else:
                     value = getattr(model_object, field_name)
-
+                # serialize to weed out all unknowns
+                # not very efficient, but the tree has to be traversed anyways
+                # passing along the serialized version would break the resource apis
+                json.dumps(value, default=inmanta.util.custom_json_encoder)
                 return value
             except proxy.UnknownException as e:
                 return e.unknown
