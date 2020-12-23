@@ -19,4 +19,4 @@ exclude = '''
 
 
 [tool.irt]
-dashboard = 'master'
+dashboard = '3.6.0'
