@@ -1,6 +1,4 @@
-# Release 4.1.0 (?)
-
-# Release 4.0.0 (2020-12-23)
+# Release 4.1.0 (2021-01-04)
 
 ## New features
 - Add support to use a custom venv path in the Project class (#2466)
