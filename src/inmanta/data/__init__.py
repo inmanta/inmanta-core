@@ -36,6 +36,7 @@ from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
+from inmanta.data.model import ResourceIdStr
 from inmanta.server import config
 from inmanta.types import JsonType, PrimitiveTypes
 
@@ -326,16 +327,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         (column_names, values) = self._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
         values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
-        query = (
-            "INSERT INTO "
-            + self.table_name()
-            + " ("
-            + column_names_as_sql_string
-            + ") "
-            + "VALUES ("
-            + values_as_parameterize_sql_string
-            + ")"
-        )
+        query = f"INSERT INTO {self.table_name()} ({column_names_as_sql_string}) VALUES ({values_as_parameterize_sql_string})"
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
@@ -457,6 +449,22 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return None
 
     @classmethod
+    def _validate_order(cls, order_by_column: Optional[str], order: str) -> None:
+        """Validate the correct values for order and if the order column is an existing column name
+        :param order_by_column: The name of the column to order by
+        :param order: The sorting order.
+        :return:
+        """
+        for o in order.split(" "):
+            possible = ["ASC", "DESC", "NULLS", "FIRST", "LAST"]
+            if o not in possible:
+                raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
+
+        print(cls._fields, order_by_column)
+        if order_by_column is not None and order_by_column not in cls._fields:
+            raise RuntimeError(f"{order_by_column} is not a valid field name.")
+
+    @classmethod
     async def get_list(
         cls: Type[TBaseDocument],
         order_by_column: str = None,
@@ -470,10 +478,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         Get a list of documents matching the filter args
         """
-        for o in order.split(" "):
-            possible = ["ASC", "DESC", "NULLS", "FIRST", "LAST"]
-            if o not in possible:
-                raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
+        cls._validate_order(order_by_column, order)
 
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
@@ -481,8 +486,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if filter_statement:
             sql_query += " WHERE " + filter_statement
         if order_by_column is not None:
-            sql_query += " ORDER BY $" + str(len(values) + 1) + str(order)
-            values.append(str(order_by_column))
+            sql_query += f" ORDER BY {order_by_column} {order}"
         if limit is not None and limit > 0:
             sql_query += " LIMIT $" + str(len(values) + 1)
             values.append(int(limit))
@@ -518,10 +522,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         :param connection: An optional connection
         :param **query: Any additional filter to apply
         """
-        for o in order.split(" "):
-            possible = ["ASC", "DESC", "NULLS", "FIRST", "LAST"]
-            if o not in possible:
-                raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
+        cls._validate_order(order_by_column, order)
 
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
@@ -536,8 +537,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if len(filter_statements) > 0:
             sql_query += " WHERE " + " AND ".join(filter_statements)
         if order_by_column is not None:
-            sql_query += " ORDER BY $" + str(len(values) + 1) + str(order)
-            values.append(str(order_by_column))
+            sql_query += f" ORDER BY {order_by_column} {order}"
         if limit is not None and limit > 0:
             sql_query += " LIMIT $" + str(len(values) + 1)
             values.append(int(limit))
@@ -2063,13 +2063,8 @@ class Resource(BaseDocument):
         (filter_statement, values) = cls._get_composed_filter(environment=environment)
         values = values + cls._get_value(resource_version_ids)
         query = (
-            "SELECT * FROM "
-            + cls.table_name()
-            + " WHERE "
-            + filter_statement
-            + " AND resource_version_id IN ("
-            + resource_version_ids_statement
-            + ")"
+            f"SELECT * FROM {cls.table_name()} "
+            "WHERE {filter_statement} AND resource_version_id IN ({ resource_version_ids_statement})"
         )
         resources = await cls.select_query(query, values, connection=connection)
         return resources
@@ -2206,7 +2201,9 @@ class Resource(BaseDocument):
         return resources_list
 
     @classmethod
-    async def get_resources_for_version_raw(cls, environment, version, projection):
+    async def get_resources_for_version_raw(
+        cls, environment: uuid.UUID, version: int, projection: Optional[List[str]]
+    ) -> List[Dict[str, Any]]:
         if not projection:
             projection = "*"
         else:
@@ -2221,7 +2218,7 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    async def get_latest_version(cls, environment, resource_id):
+    async def get_latest_version(cls, environment: uuid.UUID, resource_id: ResourceIdStr) -> Optional["Resource"]:
         resources = await cls.get_list(
             order_by_column="model", order="DESC", limit=1, environment=environment, resource_id=resource_id
         )

@@ -1,4 +1,6 @@
 # Release 4.1.0 (?)
+## Bug fixes
+- Fix broken order by (#2638)
 
 # Release 4.0.0 (2020-12-23)
 
