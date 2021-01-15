@@ -2064,7 +2064,7 @@ class Resource(BaseDocument):
         values = values + cls._get_value(resource_version_ids)
         query = (
             f"SELECT * FROM {cls.table_name()} "
-            "WHERE {filter_statement} AND resource_version_id IN ({ resource_version_ids_statement})"
+            f"WHERE {filter_statement} AND resource_version_id IN ({resource_version_ids_statement})"
         )
         resources = await cls.select_query(query, values, connection=connection)
         return resources
