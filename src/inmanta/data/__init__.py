@@ -460,7 +460,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
             if o not in possible:
                 raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
 
-        print(cls._fields, order_by_column)
         if order_by_column is not None and order_by_column not in cls._fields:
             raise RuntimeError(f"{order_by_column} is not a valid field name.")
 
@@ -2449,6 +2448,15 @@ class ConfigurationModel(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Any,
     ) -> List["ConfigurationModel"]:
+        # sanitize and validate order parameters
+        cls._validate_order(order_by_column, order)
+
+        # ensure limit and offset is an integer
+        if limit is not None:
+            limit = int(limit)
+        if offset is not None:
+            offset = int(limit)
+
         transient_states = ",".join(["$" + str(i) for i in range(1, len(const.TRANSIENT_STATES) + 1)])
         transient_states_values = [cls._get_value(s) for s in const.TRANSIENT_STATES]
         (filterstr, values) = cls._get_composed_filter(col_name_prefix="c", offset=len(transient_states_values) + 1, **query)
