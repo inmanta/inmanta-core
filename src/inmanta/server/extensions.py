@@ -130,7 +130,7 @@ class FeatureManager:
     def get_product_metadata(self) -> ProductMetadata:
         product_version = None
         try:
-            product_version = pkg_resources.get_distribution("inmanta-core").version
+            product_version = pkg_resources.get_distribution("inmanta").version
         except pkg_resources.DistributionNotFound:
             LOGGER.error(
                 "Could not find version number for the inmanta product."
