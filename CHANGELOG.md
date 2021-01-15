@@ -1,5 +1,9 @@
 # Release 4.1.0 (?)
 
+## Bug fixes
+- Report the Inmanta OSS product version correctly (#2622)
+
+
 # Release 4.0.0 (2020-12-23)
 
 ## New features
