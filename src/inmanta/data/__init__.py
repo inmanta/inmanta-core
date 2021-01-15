@@ -2455,7 +2455,7 @@ class ConfigurationModel(BaseDocument):
         if limit is not None:
             limit = int(limit)
         if offset is not None:
-            offset = int(limit)
+            offset = int(offset)
 
         transient_states = ",".join(["$" + str(i) for i in range(1, len(const.TRANSIENT_STATES) + 1)])
         transient_states_values = [cls._get_value(s) for s in const.TRANSIENT_STATES]
