@@ -1,8 +1,7 @@
 # Release 4.1.0 (?)
-## Bug fixes
-- Fix broken order by (#2638)
 
 ## Bug fixes
+- Fix broken order by (#2638)
 - Report the Inmanta OSS product version correctly (#2622)
 
 
