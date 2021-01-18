@@ -128,20 +128,23 @@ class FeatureManager:
         return {}
 
     def get_product_metadata(self) -> ProductMetadata:
-        product_version = None
-        try:
-            product_version = pkg_resources.get_distribution("inmanta-core").version
-        except pkg_resources.DistributionNotFound:
-            LOGGER.error(
-                "Could not find version number for the inmanta product."
-                "Is inmanta installed? Use setuptools install or setuptools dev to install."
-            )
         return ProductMetadata(
             product="Inmanta Service Orchestrator",
             edition="Open Source Edition",
             license="Apache Software License 2",
-            version=product_version,
+            version=self._get_product_version(),
         )
+
+    def _get_product_version(self) -> str:
+        packages = ["inmanta-oss", "inmanta", "inmanta-core"]
+        for package in packages:
+            try:
+                return pkg_resources.get_distribution(package).version
+            except pkg_resources.DistributionNotFound:
+                pass
+
+        LOGGER.warning("Couldn't determine product version. Make sure inmanta is properly installed.")
+        return "0.0.0"
 
     def add_slice(self, slice: ServerSlice) -> None:
         for feature in slice.define_features():
