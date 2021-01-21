@@ -136,8 +136,6 @@ class VirtualEnv(object):
         os.environ["PATH"] = binpath + os.pathsep + old_os_path
         prev_sys_path = list(sys.path)
 
-        os.environ["PYTHONPATH"] = site_packages + os.pathsep + os.environ.get("PYTHONPATH", "")
-
         site.addsitedir(site_packages)
         sys.real_prefix = sys.prefix
         sys.prefix = base
@@ -148,6 +146,9 @@ class VirtualEnv(object):
                 new_sys_path.append(item)
                 sys.path.remove(item)
         sys.path[:0] = new_sys_path
+
+        # Also set the python path environment variable for any subprocess
+        os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
 
     def _parse_line(self, req_line: str) -> Tuple[Optional[str], str]:
         """
@@ -166,7 +167,7 @@ class VirtualEnv(object):
         return None, req_line
 
     def _gen_requirements_file(self, requirements_list: List[str]) -> str:
-        """ Generate a new requirements file based on the requirements list that was built from all the different modules.
+        """Generate a new requirements file based on the requirements list that was built from all the different modules.
         :param requirements_list:  A list of requirements from all the requirements files in all modules.
         :return: A string that can be written to a requirements file that pip understands.
         """
@@ -242,6 +243,7 @@ class VirtualEnv(object):
             assert self.virtual_python is not None
             cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-r", path]
             try:
+                print(subprocess.check_output([self.virtual_python, "-m", "pip", "list"]))
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             except CalledProcessError as e:
                 LOGGER.error("%s: %s", cmd, e.output.decode())
@@ -305,37 +307,20 @@ class VirtualEnv(object):
         for x in requirements_list:
             self.__cache_done.add(x)
 
-    def _remove_requirements_present_in_parent_env(self, requirements_list: List[str]) -> List[str]:
-        """ Given an existing list of requirements, remove all the requirements that are already present in the parent
-        virtual environment.
-
-        :param requirements_list: The full list of requirements.
-        :return: A list of requirements with the packages installed in the parent filtered from it.
-        """
-        reqs_to_remove = []
-        packages_installed_in_parent = self.get_package_installed_in_parent_env()
-        for r in requirements_list:
-            # Always install url-based requirements
-            if "://" in r:
-                continue
-            parsed_req = list(pkg_resources.parse_requirements(r))[0]
-            # Package is installed and its version fits the constraint
-            if (
-                parsed_req.project_name in packages_installed_in_parent
-                and packages_installed_in_parent[parsed_req.project_name] in parsed_req
-            ):
-                reqs_to_remove.append(r)
-        return [r for r in requirements_list if r not in reqs_to_remove]
-
     @classmethod
-    def _get_installed_packages(cls, python_interpreter: str) -> Dict[str, str]:
+    def _get_installed_packages(cls, python_interpreter: str, inherit_python_path: bool = True) -> Dict[str, str]:
         """Return a list of all installed packages in the site-packages of a python interpreter.
         :param python_interpreter: The python interpreter to get the packages for
+        :param inherit_python_path: Should it inherit the python path from this process or not?
         :return: A dict with package names as keys and versions as values
         """
         cmd = [python_interpreter, "-m", "pip", "list", "--format", "json"]
         try:
-            output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
+            environment = os.environ.copy()
+            if not inherit_python_path and "PYTHONPATH" in environment:
+                del environment["PYTHONPATH"]
+
+            output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, env=environment)
         except CalledProcessError as e:
             LOGGER.error("%s: %s", cmd, e.output.decode())
             raise
