@@ -166,6 +166,10 @@ class VirtualEnv(object):
         return None, req_line
 
     def _gen_requirements_file(self, requirements_list: List[str]) -> str:
+        """ Generate a new requirements file based on the requirements list that was built from all the different modules.
+        :param requirements_list:  A list of requirements from all the requirements files in all modules.
+        :return: A string that can be written to a requirements file that pip understands.
+        """
         modules: Dict[str, Any] = {}
         for req in requirements_list:
             parsed_name, req_spec = self._parse_line(req)
@@ -284,7 +288,7 @@ class VirtualEnv(object):
             if len(requirements_list) == 0:
                 return
 
-        requirements_list = sorted(self._remove_requirements_present_in_parent_env(requirements_list))
+        requirements_list = sorted(requirements_list)
 
         # hash it
         sha1sum = hashlib.sha1()
