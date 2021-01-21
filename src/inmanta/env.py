@@ -243,7 +243,6 @@ class VirtualEnv(object):
             assert self.virtual_python is not None
             cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-r", path]
             try:
-                print(subprocess.check_output([self.virtual_python, "-m", "pip", "list"]))
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             except CalledProcessError as e:
                 LOGGER.error("%s: %s", cmd, e.output.decode())
