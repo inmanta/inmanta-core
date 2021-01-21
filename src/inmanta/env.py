@@ -136,6 +136,8 @@ class VirtualEnv(object):
         os.environ["PATH"] = binpath + os.pathsep + old_os_path
         prev_sys_path = list(sys.path)
 
+        os.environ["PYTHONPATH"] = site_packages + os.pathsep + os.environ.get("PYTHONPATH", "")
+
         site.addsitedir(site_packages)
         sys.real_prefix = sys.prefix
         sys.prefix = base
@@ -267,7 +269,7 @@ class VirtualEnv(object):
 
     def _set_current_requirements_hash(self, new_hash):
         """
-        Set the current requirements hahs
+        Set the current requirements hash
         """
         path = os.path.join(self.env_path, "requirements.sha1sum")
         with open(path, "w+", encoding="utf-8") as fd:
@@ -300,6 +302,12 @@ class VirtualEnv(object):
             self.__cache_done.add(x)
 
     def _remove_requirements_present_in_parent_env(self, requirements_list: List[str]) -> List[str]:
+        """ Given an existing list of requirements, remove all the requirements that are already present in the parent
+        virtual environment.
+
+        :param requirements_list: The full list of requirements.
+        :return: A list of requirements with the packages installed in the parent filtered from it.
+        """
         reqs_to_remove = []
         packages_installed_in_parent = self.get_package_installed_in_parent_env()
         for r in requirements_list:
@@ -317,6 +325,10 @@ class VirtualEnv(object):
 
     @classmethod
     def _get_installed_packages(cls, python_interpreter: str) -> Dict[str, str]:
+        """Return a list of all installed packages in the site-packages of a python interpreter.
+        :param python_interpreter: The python interpreter to get the packages for
+        :return: A dict with package names as keys and versions as values
+        """
         cmd = [python_interpreter, "-m", "pip", "list", "--format", "json"]
         try:
             output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
