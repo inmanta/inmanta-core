@@ -1,8 +1,5 @@
 #!/usr/bin/env sh
 
-# add source to path
-export PYTHONPATH="$(pwd)/src"
-
 # start inmanta app to generate parser/lexer in place
 env=$(mktemp -d)
 python3 -m venv ${env}
