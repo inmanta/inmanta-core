@@ -16,7 +16,6 @@
     Contact: bart@inmanta.com
 """
 import logging
-import os
 import sys
 from subprocess import CalledProcessError
 
@@ -72,13 +71,10 @@ def test_install_fails(tmpdir, caplog):
     venv.use_virtual_env()
     caplog.clear()
     package_name = "non-existing-pkg-inmanta"
-    exception_raised = False
-    try:
-        venv.install_from_list([package_name])
-    except Exception:
-        exception_raised = True
 
-    assert exception_raised
+    with pytest.raises(Exception):
+        venv.install_from_list([package_name])
+
     log_sequence = LogSequence(caplog)
     log_sequence.contains("inmanta.env", logging.ERROR, f"requirements: {package_name}")
 
@@ -99,6 +95,7 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     ]
 
     # verify that the venv sees all parent packages
+    assert not set(parent_installed) - set(installed_packages)
 
     # test installing a package that is already present in the parent venv
     random_package = parent_installed[0]
