@@ -22,5 +22,5 @@ exclude = '''
 dashboard = 'master'
 public = true
 
-[tool.irt.hooks]
-prebuild = 'prebuild.sh'
+[tool.irt.build]
+hooks = { 'pre': 'pre-build.sh' }
