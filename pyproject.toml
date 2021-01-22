@@ -20,7 +20,9 @@ exclude = '''
 
 [tool.irt]
 dashboard = 'master'
-public = true
 
-[tool.irt.build]
+[tool.irt.build.python]
 hooks = { 'pre': 'pre-build.sh' }
+
+[tool.irt.publish.python]
+public = true
