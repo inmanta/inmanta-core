@@ -20,3 +20,9 @@ exclude = '''
 
 [tool.irt]
 dashboard = '3.5.1'
+
+[tool.irt.build.python]
+hooks = { 'pre' = 'pre-build.sh' }
+
+[tool.irt.publish.python]
+public = true
