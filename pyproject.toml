@@ -22,7 +22,7 @@ exclude = '''
 dashboard = 'master'
 
 [tool.irt.build.python]
-hooks = { 'pre': 'pre-build.sh' }
+hooks = { 'pre' = 'pre-build.sh' }
 
 [tool.irt.publish.python]
 public = true
