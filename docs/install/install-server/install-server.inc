@@ -21,9 +21,9 @@ Install the software
           EOF
 
           sudo yum install -y epel-release
-          sudo yum install -y python3-inmanta python3-inmanta-server python3-inmanta-agent
+          sudo yum install -y inmanta-oss inmanta-oss-server inmanta-oss-agent
 
-        The first package (python3-inmanta) contains all the code and the commands. The server and the agent packages install config
+        The first package (inmanta-oss) contains all the code and the commands. The server and the agent packages install config
         files and systemd unit files. The dashboard is installed with the server package.
 
 
