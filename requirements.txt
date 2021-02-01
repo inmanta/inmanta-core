@@ -30,6 +30,7 @@ texttable==1.6.3
 tornado==6.1
 asyncpg==0.21.0
 pytest-postgresql==2.5.3
+psycopg2==2.8.6
 pytest-env==0.6.2
 jinja2==2.11.2
 pep8-naming==0.11.1
