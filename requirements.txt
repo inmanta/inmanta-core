@@ -39,7 +39,7 @@ pydantic==1.7.3
 typing_inspect==0.6.0
 importlib_metadata==2.1.0
 setuptools==52.0.0
-pip==21.0
+pip==21.0.1
 docstring-parser==0.7.3
 bumpversion==0.6.0
 sphinx-click==2.5.0
