@@ -1,7 +1,7 @@
 FROM centos:7
 ARG branch
 
-RUN curl -sL https://rpm.nodesource.com/setup_11.x | bash -
+RUN curl -sL https://rpm.nodesource.com/setup_12.x | bash -
 RUN curl --silent --location https://dl.yarnpkg.com/rpm/yarn.repo >/etc/yum.repos.d/yarn.repo
 RUN yum install -y \
 		git \
@@ -16,7 +16,8 @@ RUN yum install -y \
 		gcc \
 		make \
 		yarn \
-		postgresql
+		postgresql \
+		libpq-devel
 RUN npm install -g grunt
 
 # install the server
