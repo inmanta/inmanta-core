@@ -17,7 +17,8 @@ RUN yum install -y \
 		make \
 		yarn \
 		postgresql \
-		libpq-devel
+		postgresql-devel
+
 RUN npm install -g grunt
 
 # install the server
