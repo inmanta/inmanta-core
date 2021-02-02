@@ -1,1 +1,2 @@
-pytest-inmanta-extensions~=3.0.0
+inmanta-dev-dependencies[pytest,async,extension,sphinx]==1.14.0
+bumpversion==0.6.0
