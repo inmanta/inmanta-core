@@ -18,6 +18,7 @@ RUN yum install -y \
 		yarn \
 		postgresql \
 		postgresql-devel
+
 ENV PATH "${PATH}:/usr/pgsql-10/bin"                                                                 
 ENV PG_CONFIG_DIR /usr/pgsql-10/bin  
 RUN npm install -g grunt
