@@ -27,6 +27,7 @@ requires = [
     "pytest-asyncio",
     "pytest-env",
     "pytest-postgresql",
+    "psycopg2",
     "tornado",
 ]
 
