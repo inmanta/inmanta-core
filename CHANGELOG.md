@@ -3,7 +3,7 @@
 ## Bug fixes
 - Fix broken order by (#2638)
 - Report the Inmanta OSS product version correctly (#2622)
-
+- Set PYTHONPATH so that all subprocesses also see packages in parent venv (#2650)
 
 # Release 4.0.0 (2020-12-23)
 

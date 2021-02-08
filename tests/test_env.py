@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2021 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
 
     Contact: bart@inmanta.com
 """
-
 import logging
+import sys
 from subprocess import CalledProcessError
 
 import pytest
@@ -71,28 +71,39 @@ def test_install_fails(tmpdir, caplog):
     venv.use_virtual_env()
     caplog.clear()
     package_name = "non-existing-pkg-inmanta"
-    exception_raised = False
-    try:
-        venv.install_from_list([package_name])
-    except Exception:
-        exception_raised = True
 
-    assert exception_raised
+    with pytest.raises(Exception):
+        venv.install_from_list([package_name])
+
     log_sequence = LogSequence(caplog)
     log_sequence.contains("inmanta.env", logging.ERROR, f"requirements: {package_name}")
 
 
 def test_install_package_already_installed_in_parent_env(tmpdir):
+    """Test using and installing a package that is already present in the parent virtual environment."""
+    # get all packages in the parent
+    parent_installed = [
+        p for p in env.VirtualEnv._get_installed_packages(sys.executable).keys() if p not in ["pip", "setuptools"]
+    ]
+
+    # create a venv and list all packages available in the venv
     venv = env.VirtualEnv(tmpdir)
     venv.use_virtual_env()
+
     installed_packages = [
-        p for p in env.VirtualEnv._get_installed_packages(venv._parent_python).keys() if p != "pip" and p != "setuptools"
+        p for p in env.VirtualEnv._get_installed_packages(venv._parent_python).keys() if p not in ["pip", "setuptools"]
     ]
-    random_package = installed_packages[0]
+
+    # verify that the venv sees all parent packages
+    assert not set(parent_installed) - set(installed_packages)
+
+    # test installing a package that is already present in the parent venv
+    random_package = parent_installed[0]
     venv.install_from_list([random_package])
 
-    # Assert not installed in virtual_python venv
-    assert random_package not in env.VirtualEnv._get_installed_packages(venv.virtual_python).keys()
+    # Assert not installed in virtual_python venv by doing a pip list in the virtual env without inheriting PYTHONPATH
+    venv_installed = env.VirtualEnv._get_installed_packages(venv.virtual_python, inherit_python_path=False).keys()
+    assert random_package not in venv_installed
 
 
 def test_req_parser(tmpdir):
@@ -133,41 +144,3 @@ def test_gen_req_file(tmpdir):
         'lorem == 0.1.1, > 0.1 ; python_version < "3.7" and platform_machine == "x86_64" and platform_system == "Linux"'
         in req_lines
     )
-
-
-def test_remove_requirements_present_in_parent_env(tmpdir):
-    v = env.VirtualEnv(tmpdir)
-    v.use_virtual_env()
-
-    # Verify parsing works
-    reqs = [
-        "lorem == 0.1.1",
-        "lorem > 0.1",
-        "lorem >= 1.1,<1.5",
-        "dummy-yummy",
-        "iplib@git+https://github.com/bartv/python3-iplib",
-    ]
-    assert v._remove_requirements_present_in_parent_env(reqs) == reqs
-
-    installed_packages = {
-        k: v for k, v in env.VirtualEnv._get_installed_packages(v._parent_python).items() if k != "pip" and k != "setuptools"
-    }
-    package = next(iter(installed_packages.keys()))
-    package_version = installed_packages[package]
-    splitted_package_version = package_version.split(".", maxsplit=1)
-    newer_package_version = f"{int(splitted_package_version[0]) + 1}.{splitted_package_version[1]}"
-
-    # Package is present in parent venv and constraint is met
-    reqs = [f"{package}=={package_version}", "non_existing_package==1.1.1"]
-    reqs_after_removal = ["non_existing_package==1.1.1"]
-    assert v._remove_requirements_present_in_parent_env(reqs) == reqs_after_removal
-
-    reqs = [f"{package}>={package_version},<{newer_package_version}", "non_existing_package==1.1.1"]
-    assert v._remove_requirements_present_in_parent_env(reqs) == reqs_after_removal
-
-    # Package is present in parent venv, but constraint isn't met
-    reqs = [f"{package}=={newer_package_version}", "non_existing_package==1.1.1"]
-    assert v._remove_requirements_present_in_parent_env(reqs) == reqs
-
-    reqs = [f"{package}>{package_version}", "non_existing_package==1.1.1"]
-    assert v._remove_requirements_present_in_parent_env(reqs) == reqs
