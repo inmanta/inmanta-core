@@ -25,3 +25,4 @@ setuptools==53.0.0
 pip==21.0.1
 docstring-parser==0.7.3
 rpdb==0.1.6
+pyformance==0.4
