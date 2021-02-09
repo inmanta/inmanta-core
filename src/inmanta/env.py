@@ -107,9 +107,9 @@ class VirtualEnv(object):
         LOGGER.debug("Ensuring latest pip and wheel versions available")
         cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-U", "pip", "wheel"]
         try:
-            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-        except CalledProcessError:
-            LOGGER.exception("Failed to upgrade pip")
+            subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except CalledProcessError as e:
+            LOGGER.exception("Failed to upgrade pip: %s", e.output.decode())
 
         return True
 
@@ -251,6 +251,7 @@ class VirtualEnv(object):
 
             assert self.virtual_python is not None
             cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-r", path]
+            output: bytes = b""  # Make sure the var is always defined in the except bodies
             try:
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             except CalledProcessError as e:
