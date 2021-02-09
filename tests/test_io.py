@@ -298,6 +298,7 @@ def test_run_pythonpath(io, tmpdir):
     assert "PYTHONPATH" not in result[0]
 
     if not hasattr(io, "run_as") or not io.run_as:
-        # This does not work as expected when using the run_as root feature with bash and sudo
+        # This does not work as expected when using the run_as root feature with bash and sudo because by default
+        # PYTHONPATH is a "bad" variable
         result = io.run("env", env={"PYTHONPATH": "test"})
         assert "PYTHONPATH" in result[0]
