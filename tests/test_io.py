@@ -285,10 +285,11 @@ def test_uri_parse():
     assert config["host"] == "1.2.3.4"
     assert config["python"] == "/usr/bin/python2"
 
+
 @pytest.mark.parametrize("io", io_list)
 def test_run_pythonpath(io, tmpdir):
-    """ Test to see if the python path of the venv is removed for the subprocess
-        See issue #2676
+    """Test to see if the python path of the venv is removed for the subprocess
+    See issue #2676
     """
     venv = env.VirtualEnv(tmpdir)
     venv.use_virtual_env()
