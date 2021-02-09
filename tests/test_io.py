@@ -25,6 +25,7 @@ import tempfile
 
 import pytest
 
+from inmanta import env
 from inmanta.agent.io import parse_agent_uri
 from inmanta.agent.io.local import BashIO, LocalIO
 
@@ -32,7 +33,7 @@ io_list = [LocalIO("local:", {}), BashIO("local:", {}), BashIO("local:", {}, run
 io_names = ["local", "bash", "bash_root"]
 
 
-@pytest.yield_fixture
+@pytest.fixture
 def testdir():
     testdir = tempfile.mkdtemp()
     yield testdir
@@ -75,7 +76,6 @@ def test_check_read_binary(io, testdir):
 def test_check_run_pipe_actual(io, testdir):
     filename = os.path.join(testdir, "testfile")
     result = io.run("sh", ["-c", "export PATH=$PATH:/usr/lib/jvm/jre-1.7.0-openjdk/bin; env >" + filename + " 2>&1"])
-    print(result)
     assert "/usr/lib/jvm/jre-1.7.0-openjdk/bin" not in result[0]
     assert result[2] == 0
     assert os.path.exists(filename)
@@ -284,3 +284,21 @@ def test_uri_parse():
     assert config["port"] == "22"
     assert config["host"] == "1.2.3.4"
     assert config["python"] == "/usr/bin/python2"
+
+
+@pytest.mark.parametrize("io", io_list)
+def test_run_pythonpath(io, tmpdir):
+    """Test to see if the python path of the venv is removed for the subprocess
+    See issue #2676
+    """
+    venv = env.VirtualEnv(tmpdir)
+    venv.use_virtual_env()
+
+    result = io.run("env")
+    assert "PYTHONPATH" not in result[0]
+
+    if not hasattr(io, "run_as") or not io.run_as:
+        # This does not work as expected when using the run_as root feature with bash and sudo because by default
+        # PYTHONPATH is a "bad" variable in sudo https://fossies.org/linux/sudo/plugins/sudoers/env.c#l_190
+        result = io.run("env", env={"PYTHONPATH": "test"})
+        assert "PYTHONPATH" in result[0]
