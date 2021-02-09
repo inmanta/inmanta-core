@@ -33,7 +33,7 @@ io_list = [LocalIO("local:", {}), BashIO("local:", {}), BashIO("local:", {}, run
 io_names = ["local", "bash", "bash_root"]
 
 
-@pytest.yield_fixture
+@pytest.fixture
 def testdir():
     testdir = tempfile.mkdtemp()
     yield testdir
@@ -290,10 +290,13 @@ def test_run_pythonpath(io, tmpdir):
     """ Test to see if the python path of the venv is removed for the subprocess
         See issue #2676
     """
-    print(os.environ.get("PYTHONPATH"))
     venv = env.VirtualEnv(tmpdir)
     venv.use_virtual_env()
-    print(os.environ.get("PYTHONPATH"))
-    result = io.run("env")
 
+    result = io.run("env")
     assert "PYTHONPATH" not in result[0]
+
+    if not hasattr(io, "run_as") or not io.run_as:
+        # This does not work as expected when using the run_as root feature with bash and sudo
+        result = io.run("env", env={"PYTHONPATH": "test"})
+        assert "PYTHONPATH" in result[0]
