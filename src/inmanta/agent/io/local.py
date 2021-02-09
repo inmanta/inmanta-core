@@ -172,6 +172,10 @@ class BashIO(IOBase):
         if env is not None:
             current_env.update(env)
 
+        if "PYTHONPATH" not in env:
+            # Remove the inherited python path
+            del current_env["PYTHONPATH"]
+
         cmds = [command] + arguments
         result = subprocess.Popen(
             self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd
@@ -433,6 +437,11 @@ class LocalIO(IOBase):
         current_env = os.environ.copy()
         if env is not None:
             current_env.update(env)
+
+        if "PYTHONPATH" not in env:
+            # Remove the inherited python path
+            del current_env["PYTHONPATH"]
+
         if sys.version_info < (3, 0, 0):
             # python < 2.7 does not support dict comprehensions
             new_env = {}
