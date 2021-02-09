@@ -102,6 +102,15 @@ class VirtualEnv(object):
 
         # set the path to the python and the pip executables
         self.virtual_python = python_bin
+
+        # update pip to the latest version and install wheel
+        LOGGER.debug("Ensuring latest pip and wheel versions available")
+        cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-U", "pip", "wheel"]
+        try:
+            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except CalledProcessError:
+            LOGGER.exception("Failed to upgrade pip")
+
         return True
 
     def use_virtual_env(self) -> None:
