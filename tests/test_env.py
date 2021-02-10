@@ -17,6 +17,7 @@
 """
 import logging
 import os
+import subprocess
 import sys
 from subprocess import CalledProcessError
 
@@ -104,6 +105,15 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
 
     # Assert nothing installed in the virtual env
     assert not os.listdir(site_dir)
+
+    # Install a package and verify that it is in the site dir
+    assert "lorem" not in installed_packages
+    venv.install_from_list(["lorem"])
+    assert "lorem" in os.listdir(site_dir)
+
+    # report json
+    output = subprocess.check_output([os.path.join(venv.env_path, "bin/pip"), "list"])
+    assert "lorem" in output.decode()
 
 
 def test_req_parser(tmpdir):
