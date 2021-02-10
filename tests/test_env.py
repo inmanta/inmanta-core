@@ -83,6 +83,9 @@ def test_install_fails(tmpdir, caplog):
 
 def test_install_package_already_installed_in_parent_env(tmpdir):
     """Test using and installing a package that is already present in the parent virtual environment."""
+    # make sure lorem is not installed
+    subprocess.check_output(["pip", "uninstall", "lorem"], stderr=subprocess.PIPE)
+
     # get all packages in the parent
     parent_installed = list(env.VirtualEnv._get_installed_packages(sys.executable).keys())
 
