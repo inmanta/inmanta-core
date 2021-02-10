@@ -81,7 +81,7 @@ def test_install_fails(tmpdir, caplog):
     log_sequence.contains("inmanta.env", logging.ERROR, f"requirements: {package_name}")
 
 
-def test_install_package_already_installed_in_parent_env(tmpdir, lorem):
+def test_install_package_already_installed_in_parent_env(tmpdir):
     """Test using and installing a package that is already present in the parent virtual environment."""
     # get all packages in the parent
     parent_installed = list(env.VirtualEnv._get_installed_packages(sys.executable).keys())
@@ -107,8 +107,7 @@ def test_install_package_already_installed_in_parent_env(tmpdir, lorem):
     assert not os.listdir(site_dir)
 
     # report json
-    output = subprocess.check_output([os.path.join(venv.env_path, "bin/pip"), "list"])
-    assert "lorem" in output.decode()
+    subprocess.check_output([os.path.join(venv.env_path, "bin/pip"), "list"])
 
 
 def test_req_parser(tmpdir):
