@@ -27,13 +27,7 @@ from inmanta import env
 from utils import LogSequence
 
 
-@pytest.mark.fixture
-def lorem():
-    # make sure lorem is not installed
-    subprocess.check_output(["pip", "uninstall", "lorem"], stderr=subprocess.PIPE)
-
-
-def test_basic_install(tmpdir, lorem):
+def test_basic_install(tmpdir):
     """If this test fails, try running "pip uninstall lorem dummy-yummy iplib" before running it."""
 
     env_dir1 = tmpdir.mkdir("env1").strpath
@@ -111,11 +105,6 @@ def test_install_package_already_installed_in_parent_env(tmpdir, lorem):
 
     # Assert nothing installed in the virtual env
     assert not os.listdir(site_dir)
-
-    # Install a package and verify that it is in the site dir
-    assert "lorem" not in installed_packages
-    venv.install_from_list(["lorem"])
-    assert "lorem" in os.listdir(site_dir)
 
     # report json
     output = subprocess.check_output([os.path.join(venv.env_path, "bin/pip"), "list"])
