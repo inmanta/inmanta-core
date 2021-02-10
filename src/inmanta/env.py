@@ -91,7 +91,7 @@ class VirtualEnv(object):
 
             # --clear is required in python prior to 3.4 if the folder already exists
             try:
-                venv.create(path, clear=True, with_pip=True)
+                venv.create(path, clear=True, with_pip=False)
             except CalledProcessError as e:
                 LOGGER.exception("Unable to create new virtualenv at %s (%s)", self.env_path, e.stdout.decode())
                 return False
@@ -102,14 +102,6 @@ class VirtualEnv(object):
 
         # set the path to the python and the pip executables
         self.virtual_python = python_bin
-
-        # update pip to the latest version and install wheel
-        LOGGER.debug("Ensuring latest pip and wheel versions available")
-        cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-U", "pip", "wheel"]
-        try:
-            subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-        except CalledProcessError as e:
-            LOGGER.exception("Failed to upgrade pip: %s", e.output.decode())
 
         return True
 
@@ -317,18 +309,14 @@ class VirtualEnv(object):
             self.__cache_done.add(x)
 
     @classmethod
-    def _get_installed_packages(cls, python_interpreter: str, inherit_python_path: bool = True) -> Dict[str, str]:
+    def _get_installed_packages(cls, python_interpreter: str) -> Dict[str, str]:
         """Return a list of all installed packages in the site-packages of a python interpreter.
         :param python_interpreter: The python interpreter to get the packages for
-        :param inherit_python_path: Should it inherit the python path from this process or not?
         :return: A dict with package names as keys and versions as values
         """
         cmd = [python_interpreter, "-m", "pip", "list", "--format", "json"]
         try:
             environment = os.environ.copy()
-            if not inherit_python_path and "PYTHONPATH" in environment:
-                del environment["PYTHONPATH"]
-
             output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, env=environment)
         except CalledProcessError as e:
             LOGGER.error("%s: %s", cmd, e.output.decode())

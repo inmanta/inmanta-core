@@ -16,6 +16,7 @@
     Contact: bart@inmanta.com
 """
 import logging
+import os
 import sys
 from subprocess import CalledProcessError
 
@@ -82,28 +83,27 @@ def test_install_fails(tmpdir, caplog):
 def test_install_package_already_installed_in_parent_env(tmpdir):
     """Test using and installing a package that is already present in the parent virtual environment."""
     # get all packages in the parent
-    parent_installed = [
-        p for p in env.VirtualEnv._get_installed_packages(sys.executable).keys() if p not in ["pip", "setuptools"]
-    ]
+    parent_installed = list(env.VirtualEnv._get_installed_packages(sys.executable).keys())
 
     # create a venv and list all packages available in the venv
     venv = env.VirtualEnv(tmpdir)
     venv.use_virtual_env()
 
-    installed_packages = [
-        p for p in env.VirtualEnv._get_installed_packages(venv._parent_python).keys() if p not in ["pip", "setuptools"]
-    ]
+    installed_packages = list(env.VirtualEnv._get_installed_packages(venv._parent_python).keys())
 
     # verify that the venv sees all parent packages
     assert not set(parent_installed) - set(installed_packages)
+
+    # site dir should be empty
+    site_dir = os.path.join(venv.env_path, "lib/python3.6/site-packages")
+    assert not os.listdir(site_dir)
 
     # test installing a package that is already present in the parent venv
     random_package = parent_installed[0]
     venv.install_from_list([random_package])
 
-    # Assert not installed in virtual_python venv by doing a pip list in the virtual env without inheriting PYTHONPATH
-    venv_installed = env.VirtualEnv._get_installed_packages(venv.virtual_python, inherit_python_path=False).keys()
-    assert random_package not in venv_installed
+    # Assert nothing installed in the virtual env
+    assert not os.listdir(site_dir)
 
 
 def test_req_parser(tmpdir):
