@@ -27,7 +27,13 @@ from inmanta import env
 from utils import LogSequence
 
 
-def test_basic_install(tmpdir):
+@pytest.mark.fixture
+def lorem():
+    # make sure lorem is not installed
+    subprocess.check_output(["pip", "uninstall", "lorem"], stderr=subprocess.PIPE)
+
+
+def test_basic_install(tmpdir, lorem):
     """If this test fails, try running "pip uninstall lorem dummy-yummy iplib" before running it."""
 
     env_dir1 = tmpdir.mkdir("env1").strpath
@@ -81,11 +87,8 @@ def test_install_fails(tmpdir, caplog):
     log_sequence.contains("inmanta.env", logging.ERROR, f"requirements: {package_name}")
 
 
-def test_install_package_already_installed_in_parent_env(tmpdir):
+def test_install_package_already_installed_in_parent_env(tmpdir, lorem):
     """Test using and installing a package that is already present in the parent virtual environment."""
-    # make sure lorem is not installed
-    subprocess.check_output(["pip", "uninstall", "lorem"], stderr=subprocess.PIPE)
-
     # get all packages in the parent
     parent_installed = list(env.VirtualEnv._get_installed_packages(sys.executable).keys())
 
