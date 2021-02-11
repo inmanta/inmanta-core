@@ -3,6 +3,8 @@
 ## Bug fixes
 - Fixed bug in serialization of Resource with Unknowns in collections (#2603)
 - Fixed export failure with null in dict
+- Set PYTHONPATH so that all subprocesses also see packages in parent venv (#2650)
+- Create virtual environments without pip and use the pip of the parent venv
 
 # Release 2020.4.4 (2020-11-25)
 
