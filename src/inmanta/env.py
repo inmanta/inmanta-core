@@ -152,8 +152,8 @@ class VirtualEnv(object):
         os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
 
         # write out a "stub" pip so that pip list works in the virtual env
-        bin_path = os.path.join(self.env_path, "bin", "pip")
-        with open(bin_path, "w") as fd:
+        pip_path = os.path.join(self.env_path, "bin", "pip")
+        with open(pip_path, "w") as fd:
             fd.write(
                 f"""#!/bin/sh
 source activate
@@ -162,7 +162,7 @@ python -m pip $@
             """
             )
 
-        os.chmod(bin_path, 0o755)
+        os.chmod(pip_path, 0o755)
 
     def _parse_line(self, req_line: str) -> Tuple[Optional[str], str]:
         """
