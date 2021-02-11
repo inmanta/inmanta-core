@@ -91,7 +91,7 @@ class VirtualEnv(object):
 
             # --clear is required in python prior to 3.4 if the folder already exists
             try:
-                venv.create(path, clear=True, with_pip=True)
+                venv.create(path, clear=True, with_pip=False)
             except CalledProcessError as e:
                 LOGGER.exception("Unable to create new virtualenv at %s (%s)", self.env_path, e.stdout.decode())
                 return False
@@ -102,6 +102,7 @@ class VirtualEnv(object):
 
         # set the path to the python and the pip executables
         self.virtual_python = python_bin
+
         return True
 
     def use_virtual_env(self) -> None:
@@ -149,6 +150,20 @@ class VirtualEnv(object):
 
         # Also set the python path environment variable for any subprocess
         os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
+
+        # write out a "stub" pip so that pip list works in the virtual env
+        pip_path = os.path.join(self.env_path, "bin", "pip")
+
+        with open(pip_path, "w") as fd:
+            fd.write(
+                f"""#!/bin/sh
+source activate
+export PYTHONPATH="{os.pathsep.join(sys.path)}"
+python -m pip $@
+            """
+            )
+
+        os.chmod(pip_path, 0o755)
 
     def _parse_line(self, req_line: str) -> Tuple[Optional[str], str]:
         """
@@ -234,6 +249,7 @@ class VirtualEnv(object):
         """
         requirements_file = self._gen_requirements_file(requirements_list)
 
+        path = ""
         try:
             fdnum, path = tempfile.mkstemp()
             fd = os.fdopen(fdnum, "w+", encoding="utf-8")
@@ -242,6 +258,7 @@ class VirtualEnv(object):
 
             assert self.virtual_python is not None
             cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-r", path]
+            output: bytes = b""  # Make sure the var is always defined in the except bodies
             try:
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             except CalledProcessError as e:
@@ -307,18 +324,15 @@ class VirtualEnv(object):
             self.__cache_done.add(x)
 
     @classmethod
-    def _get_installed_packages(cls, python_interpreter: str, inherit_python_path: bool = True) -> Dict[str, str]:
+    def _get_installed_packages(cls, python_interpreter: str) -> Dict[str, str]:
         """Return a list of all installed packages in the site-packages of a python interpreter.
         :param python_interpreter: The python interpreter to get the packages for
-        :param inherit_python_path: Should it inherit the python path from this process or not?
         :return: A dict with package names as keys and versions as values
         """
         cmd = [python_interpreter, "-m", "pip", "list", "--format", "json"]
+        output = b""
         try:
             environment = os.environ.copy()
-            if not inherit_python_path and "PYTHONPATH" in environment:
-                del environment["PYTHONPATH"]
-
             output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, env=environment)
         except CalledProcessError as e:
             LOGGER.error("%s: %s", cmd, e.output.decode())
