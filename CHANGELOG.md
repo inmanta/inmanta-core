@@ -2,7 +2,8 @@
 
 ## Bug fixes
 - Report the Inmanta OSS product version correctly (#2622)
-
+- Set PYTHONPATH so that all subprocesses also see packages in parent venv (#2650)
+- Create virtual environments without pip and use the pip of the parent venv
 
 # Release 4.0.0 (2021-01-04)
 
