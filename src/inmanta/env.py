@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import glob
 import hashlib
 import json
 import logging
@@ -153,11 +154,12 @@ class VirtualEnv(object):
 
         # write out a "stub" pip so that pip list works in the virtual env
         pip_path = os.path.join(self.env_path, "bin", "pip")
+
         with open(pip_path, "w") as fd:
             fd.write(
                 f"""#!/bin/sh
 source activate
-export PYTHONPATH="{self.env_path}/lib/python3.6/site-packages:$PYTHONPATH"
+export PYTHONPATH="{os.pathsep.join(sys.path)}"
 python -m pip $@
             """
             )
