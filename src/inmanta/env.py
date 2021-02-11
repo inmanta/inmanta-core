@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import glob
 import hashlib
 import json
 import logging
