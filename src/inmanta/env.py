@@ -154,9 +154,9 @@ class VirtualEnv(object):
         # write out a "stub" pip so that pip list works in the virtual env
         bin_path = os.path.join(self.env_path, "bin", "pip")
         with open(bin_path, "w") as fd:
-            fd.write("""#!/bin/sh
+            fd.write(f"""#!/bin/sh
 source activate
-export PYTHONPATH=/home/bart/.virtualenvs/inmanta/lib/python3.6/site-packages:$PYTHONPATH
+export PYTHONPATH="{self.env_path}/lib/python3.6/site-packages:$PYTHONPATH"
 python -m pip $@
             """)
 
