@@ -247,6 +247,7 @@ python -m pip $@
         """
         requirements_file = self._gen_requirements_file(requirements_list)
 
+        path = ""
         try:
             fdnum, path = tempfile.mkstemp()
             fd = os.fdopen(fdnum, "w+", encoding="utf-8")
@@ -327,6 +328,7 @@ python -m pip $@
         :return: A dict with package names as keys and versions as values
         """
         cmd = [python_interpreter, "-m", "pip", "list", "--format", "json"]
+        output = b""
         try:
             environment = os.environ.copy()
             output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, env=environment)
