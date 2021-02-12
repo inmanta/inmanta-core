@@ -15,7 +15,7 @@
 
     Contact: bart@inmanta.com
 """
-
+import glob
 import logging
 import os
 import subprocess
@@ -99,7 +99,11 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     assert not set(parent_installed) - set(installed_packages)
 
     # site dir should be empty
-    site_dir = os.path.join(venv.env_path, "lib/python3.6/site-packages")
+    site_dir = os.path.join(venv.env_path, "lib/python*/site-packages")
+    dirs = glob.glob(site_dir)
+    assert len(dirs) == 1
+    site_dir = dirs[0]
+
     assert not os.listdir(site_dir)
 
     # test installing a package that is already present in the parent venv
