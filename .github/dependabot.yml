@@ -8,8 +8,10 @@ updates:
   allow:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
-  ignore:
+  ignored:
+      # Conflict with tox
     - dependency-name: "importlib-metadata"
-      version_requirement: "<3"
+      versions: "<3"
+      # Conflict with requests
     - dependency-name: "pyjwt"
-      version_requirement: "<2"
+      versions: "<2"
