@@ -8,3 +8,8 @@ updates:
   allow:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
+  ignore:
+    - dependency-name: "importlib-metadata"
+      version_requirement: "<3"
+    - dependency-name: "pyjwt"
+      version_requirement: "<2"
