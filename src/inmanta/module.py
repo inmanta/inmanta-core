@@ -382,6 +382,11 @@ class Project(ModuleLike):
         It does not include
          * verify if project.yml corresponds to the modules in self.modules
 
+        Instances of this class can be created by in two different ways:
+        1) Via the Project.get() method
+        2) Via the constructor: Always call the Project.set() method after the constructor call.
+                                Project instances should only be created via the constructor in test cases.
+
         :param path: The directory where the project is located
 
         """
@@ -472,7 +477,7 @@ class Project(ModuleLike):
     @classmethod
     def set(cls, project: "Project") -> None:
         """
-        Get the instance of the project
+        Set the instance of the project
         """
         cls._project = project
         os.chdir(project._path)
