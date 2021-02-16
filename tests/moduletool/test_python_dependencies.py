@@ -50,6 +50,7 @@ dummy-yummy # A comment
     common.add_file(mod2, "requirements.txt", mod2_req_txt, msg="initial commit")
 
     project = Project(project_dir)
+    Project.set(project)
     project.load_module("mod1")
     project.load_module("mod2")
     reqs = project.collect_python_requirements()
@@ -75,8 +76,8 @@ iplib>=0.0.1
         """
     common.add_file(mod1, "requirements.txt", mod1_req_txt, msg="initial commit")
     project = Project(project_dir)
-    project.load_module("mod1")
     Project.set(project)
+    project.load_module("mod1")
     requirements = SourceInfo(mod1, "inmanta_plugins.mod1").requires
     assert sorted(requirements) == sorted(["pytest>=1.5", "iplib>=0.0.1"])
     project.virtualenv.use_virtual_env()
