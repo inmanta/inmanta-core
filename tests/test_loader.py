@@ -283,6 +283,7 @@ install_mode: master
     shutil.copytree(origin_mod_dir, mod_dir)
 
     project = Project(tmpdir, autostd=False)
+    Project.set(project)
     project.load()
 
     (stdout, stderr) = capsys.readouterr()

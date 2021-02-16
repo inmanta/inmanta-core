@@ -257,7 +257,8 @@ def get_columns_in_db_table(postgresql_client):
 def deactive_venv():
     old_os_path = os.environ.get("PATH", "")
     old_prefix = sys.prefix
-    old_path = sys.path
+    old_path = list(sys.path)
+    old_pythonpath = os.environ.get("PYTHONPATH", "")
 
     yield
 
@@ -265,6 +266,7 @@ def deactive_venv():
     sys.prefix = old_prefix
     sys.path = old_path
     pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+    os.environ["PYTHONPATH"] = old_pythonpath
 
 
 def reset_metrics():
