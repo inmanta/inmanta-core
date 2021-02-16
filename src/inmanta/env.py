@@ -57,6 +57,7 @@ class VirtualEnv(object):
         self.env_path: str = env_path
         self.virtual_python: Optional[str] = None
         self.__cache_done: Set[str] = set()
+        self.__using_venv: bool = False
         self._parent_python: Optional[str] = None
         self._packages_installed_in_parent_env: Optional[Dict[str, str]] = None
 
@@ -66,7 +67,7 @@ class VirtualEnv(object):
 
         return self._packages_installed_in_parent_env
 
-    def init_env(self) -> bool:
+    def _init_env(self) -> bool:
         """
         Init the virtual environment
         """
@@ -109,15 +110,20 @@ class VirtualEnv(object):
         """
         Use the virtual environment
         """
-        if not self.init_env():
+        if self.__using_venv:
+            raise Exception(f"Already using venv {self.env_path}.")
+
+        if not self._init_env():
             raise Exception("Unable to init virtual environment")
 
-        self.activate_that()
+        self._activate_that()
 
         # patch up pkg
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
-    def activate_that(self) -> None:
+        self.__using_venv = True
+
+    def _activate_that(self) -> None:
         # adapted from https://github.com/pypa/virtualenv/blob/master/virtualenv_embedded/activate_this.py
         # MIT license
         # Copyright (c) 2007 Ian Bicking and Contributors
@@ -301,6 +307,9 @@ python -m pip $@
         """
         Install requirements from a list of requirement strings
         """
+        if not self.__using_venv:
+            raise Exception(f"Not using venv {self.__using_venv}. use_virtual_env() should be called first.")
+
         if detailed_cache:
             requirements_list = sorted(list(set(requirements_list) - self.__cache_done))
             if len(requirements_list) == 0:
