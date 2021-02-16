@@ -8,7 +8,7 @@ updates:
   allow:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
-  ignored:
+  ignore:
       # Conflict with tox
     - dependency-name: "importlib-metadata"
       versions: "<3"
