@@ -79,6 +79,6 @@ iplib>=0.0.1
     Project.set(project)
     requirements = SourceInfo(mod1, "inmanta_plugins.mod1").requires
     assert sorted(requirements) == sorted(["pytest>=1.5", "iplib>=0.0.1"])
-    project.virtualenv.init_env()
+    project.virtualenv.use_virtual_env()
     # This would fail if the comments weren't filtered out
     project.virtualenv.install_from_list(requirements)
