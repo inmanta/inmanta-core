@@ -122,7 +122,8 @@ end
 A.opt [%s:1] -- A
 
 index A(name,opt)
-""" % ("0" if explicit else "")
+"""
+            % ("0" if explicit else "")
         )
         compiler.do_compile()
 
