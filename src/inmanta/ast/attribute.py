@@ -156,7 +156,7 @@ class RelationAttribute(Attribute):
         Attribute.__init__(self, entity, value_type, name, location)
         self.end: Optional[RelationAttribute] = None
         self.low = 1
-        self.high: Optional[int] = 1
+        self.high = 1
         self.depends = False
         self.source_annotations = []
         self.target_annotations = []
