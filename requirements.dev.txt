@@ -1,0 +1,1 @@
+pytest-inmanta-extensions~=3.0.0
