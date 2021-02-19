@@ -76,7 +76,10 @@ copyright = f'{datetime.datetime.now().year} Inmanta NV'
 # built documents.
 #
 # The short X.Y version.
-version = pkg_resources.get_distribution("inmanta").version
+if "INMANTA_RUNNING_TESTS" in os.environ:
+    version = "1.0.0"
+else:
+    version = pkg_resources.get_distribution("inmanta").version
 # The full version, including alpha/beta/rc tags.
 release = version
 
