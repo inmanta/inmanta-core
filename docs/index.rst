@@ -62,5 +62,5 @@ Additional resources
 PDF version
 -----------
 
-Download: `inmanta.pdf <inmanta.pdf>`_
+Download: :download:`inmanta.pdf <inmanta.pdf>`
 
