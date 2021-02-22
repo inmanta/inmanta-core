@@ -1,6 +1,7 @@
 # Release 4.0.1 (?)
 
 ## Bug fixes
+- Fix broken order by (#2638)
 - Report the Inmanta OSS product version correctly (#2622)
 - Set PYTHONPATH so that all subprocesses also see packages in parent venv (#2650)
 - Create virtual environments without pip and use the pip of the parent venv
@@ -15,6 +16,7 @@
 - Added pagination support on api calls for agent and agentproc (#2500)
 - Added support to build RPMs for a python version different from Python3.6 (#1857)
 - Added support for assigning `null` to relations with lower arity 0 (#2459)
+- Added documentation on the core dashboard (inmanta/dashboard#63)
 - Decouple the compiler version from the OSS product version (#2573)
 - Show versions of all installed components when running `inmanta --version` (#2574)
 
