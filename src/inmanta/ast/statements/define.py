@@ -523,7 +523,7 @@ class DefineTypeDefault(TypeDefinitionStatement):
             default.add_default(name, value)
 
 
-Relationside = Tuple[LocatableString, LocatableString, Tuple[Optional[int], Optional[int]]]
+Relationside = Tuple[LocatableString, Optional[LocatableString], Optional[Tuple[int, Optional[int]]]]
 
 
 class DefineRelation(BiStatement):
@@ -544,8 +544,8 @@ class DefineRelation(BiStatement):
         self.anchors.append(TypeReferenceAnchor(left[0].namespace, left[0]))
         self.anchors.append(TypeReferenceAnchor(right[0].namespace, right[0]))
 
-        self.left = left
-        self.right = right
+        self.left: Relationside = left
+        self.right: Relationside = right
 
         self.comment = None
 
@@ -603,6 +603,7 @@ class DefineRelation(BiStatement):
                 ("Attribute name %s is already defined in %s, unable to define relationship") % (str(self.left[1]), right.name),
             )
 
+        left_end: Optional[RelationAttribute]
         if self.left[1] is not None:
             left_end = RelationAttribute(right, left, str(self.left[1]), self.left[1].get_location())
             left_end.target_annotations = self.annotations
@@ -611,6 +612,7 @@ class DefineRelation(BiStatement):
         else:
             left_end = None
 
+        right_end: Optional[RelationAttribute]
         if self.right[1] is not None:
             if right == left and str(self.left[1]) == str(self.right[1]):
                 # relation is its own inverse

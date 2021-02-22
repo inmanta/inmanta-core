@@ -220,7 +220,7 @@ Test tests [3] -- [:10] Foo bars
     assert str(rel.right[1]) == "bars"
 
     assert rel.left[2] == (3, 3)
-    assert rel.right[2] == (None, 10)
+    assert rel.right[2] == (0, 10)
 
 
 def test_new_relation():
