@@ -62,7 +62,9 @@ class Attribute(Locatable):
         if nullable:
             self.__type = NullableType(self.__type)
 
-        self.low = 0 if nullable else 1
+        self.low: int = 0 if nullable else 1
+        # This attribute is only used for the DeprecatedOptionVariable
+        self.high: Optional[int] = None
         self.comment = None  # type: Optional[str]
         self.end: Optional[RelationAttribute] = None
 
@@ -162,7 +164,7 @@ class RelationAttribute(Attribute):
     def __repr__(self) -> str:
         return "[%d:%s] %s" % (self.low, self.high if self.high is not None else "", self.name)
 
-    def set_multiplicity(self, values: "Tuple[int, int]") -> None:
+    def set_multiplicity(self, values: "Tuple[int, Optional[int]]") -> None:
         """
         Set the multiplicity of this end
         """
@@ -170,12 +172,13 @@ class RelationAttribute(Attribute):
         self.high = values[1]
 
     def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
+        out: ResultVariable
         if self.low == 1 and self.high == 1:
-            out = AttributeVariable(self, instance)  # type: ResultVariable
+            out = AttributeVariable(self, instance)
         elif self.low == 0 and self.high == 1:
-            out = OptionVariable(self, instance, queue)  # type: ResultVariable
+            out = OptionVariable(self, instance, queue)
         else:
-            out = ListVariable(self, instance, queue)  # type: ResultVariable
+            out = ListVariable(self, instance, queue)
         out.set_type(self.type)
         return out
 

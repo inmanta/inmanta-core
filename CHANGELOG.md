@@ -5,6 +5,7 @@
 - Fixed export failure with null in dict
 - Set PYTHONPATH so that all subprocesses also see packages in parent venv (#2650)
 - Create virtual environments without pip and use the pip of the parent venv
+- Correctly set `[:n]` as syntactic sugar for `[0:n]` instead of leaving lower unbound (#2689)
 
 # Release 2020.4.4 (2020-11-25)
 

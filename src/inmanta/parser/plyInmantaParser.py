@@ -527,7 +527,7 @@ def p_multi_3(p: YaccProduction) -> None:
 
 def p_multi_4(p: YaccProduction) -> None:
     "multi : '['  ':' INT ']' "
-    p[0] = (None, p[3])
+    p[0] = (0, p[3])
 
 
 # typedef

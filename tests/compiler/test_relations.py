@@ -589,3 +589,21 @@ container.aa = A()
         "  Exceeded relation arity on attribute 'aa' of instance '__config__::AContainer (instantiated at {dir}/main.cf:12)'"
         " (reported in container.aa = Construct(A) ({dir}/main.cf:13))",
     )
+
+
+def test_2689_relation_unset_lower(snippetcompiler) -> None:
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+end
+
+entity B:
+end
+B.a [:1] -- A
+B(a=A())
+
+implement A using std::none
+implement B using std::none
+        """
+    )
+    compiler.do_compile()
