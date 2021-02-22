@@ -683,3 +683,21 @@ a = A()
     else:
         with pytest.raises(CompilerException):
             compiler.do_compile()
+
+
+def test_2689_relation_unset_lower(snippetcompiler) -> None:
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+end
+
+entity B:
+end
+B.a [:1] -- A
+B(a=A())
+
+implement A using std::none
+implement B using std::none
+        """
+    )
+    compiler.do_compile()

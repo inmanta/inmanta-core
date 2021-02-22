@@ -110,7 +110,8 @@ index A(name,opt)
         compiler.do_compile()
 
 
-def test_issue_745_index_on_optional(snippetcompiler):
+@pytest.mark.parametrize("explicit", [True, False])
+def test_issue_745_2689_index_on_optional(snippetcompiler, explicit: bool):
     with pytest.raises(IndexException):
         snippetcompiler.setup_for_snippet(
             """
@@ -118,10 +119,11 @@ entity A:
     string name
 end
 
-A.opt [0:1] -- A
+A.opt [%s:1] -- A
 
 index A(name,opt)
 """
+            % ("0" if explicit else "")
         )
         compiler.do_compile()
 

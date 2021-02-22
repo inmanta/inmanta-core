@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 from builtins import str
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 """
     Objects defining the serialization format for type information.
@@ -194,7 +194,7 @@ class Relation(object):
     def __init__(
         self,
         mytype: str,
-        multi: Tuple[int, int],
+        multi: Tuple[int, Optional[int]],
         reverse: str,
         comment: str,
         location: Location,
@@ -203,8 +203,6 @@ class Relation(object):
     ) -> None:
         self.type = mytype
         lower = multi[0]
-        if lower is None:
-            lower = -1
         upper = multi[1]
         if upper is None:
             upper = -1
