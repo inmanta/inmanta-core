@@ -192,7 +192,7 @@ agent is added as an endpoint to the process:
     inmanta.agent.agent Adding endpoint <agent-name>
 
 
-When the agent is not added as an endpoint, log an issue on https://github.com/inmanta/inmanta/issues.
+When the agent is not added as an endpoint, log an issue on https://github.com/inmanta/inmanta-core/issues.
 
 An autostarted-agent connects to the Inmanta server via the address configured in the
 :inmanta.config:option:`server.server-address` config option. If this option is set incorrectly, the agent will not be able to
