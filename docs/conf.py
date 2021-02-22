@@ -76,7 +76,13 @@ copyright = f'{datetime.datetime.now().year} Inmanta NV'
 # built documents.
 #
 # The short X.Y version.
-if "INMANTA_RUNNING_TESTS" in os.environ:
+if "INMANTA_DONT_DISCOVER_VERSION" in os.environ:
+    # Used to:
+    # 1) Decouple the inmanta-core package from the inmanta
+    #    package when running the tests.
+    # 2) Build the ISO documentation, which is built on top
+    #    of the inmanta-core documentation. During the ISO docs build,
+    #    this value will be overwritten with the ISO product version.
     version = "1.0.0"
 else:
     version = pkg_resources.get_distribution("inmanta").version
