@@ -22,7 +22,7 @@ from setuptools import find_packages, setup
 requires = [
     "asyncpg",
     "click",
-    "inmanta",
+    "inmanta~=2020.4.4.dev",
     "pyformance",
     "pytest-asyncio",
     "pytest-env",
@@ -35,7 +35,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
-    version="3.0.0",
+    version="3.0.1",
     python_requires=">=3.6",  # also update classifiers
     # Meta data
     name="pytest-inmanta-extensions",
