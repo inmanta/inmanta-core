@@ -22,7 +22,7 @@ from setuptools import find_packages, setup
 requires = [
     "asyncpg",
     "click",
-    "inmanta",
+    "inmanta~=2020.4.4",
     "pyformance",
     "pytest-asyncio",
     "pytest-env",
