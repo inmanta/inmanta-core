@@ -932,7 +932,7 @@ async def async_finalizer():
 
 class CompileRunnerMock(object):
     def __init__(
-        self, request: data.Compile, make_compile_fail: bool = False, runner_queue: Optional[queue.Queue] = None
+        self, request: data.Compile, make_compile_fail: bool = False, runner_queue: Optional[asyncio.Queue] = None
     ) -> None:
         self.request = request
         self.version: Optional[int] = None
@@ -959,7 +959,7 @@ class CompileRunnerMock(object):
         return success, None
 
 
-def monkey_patch_compiler_service(monkeypatch, server, make_compile_fail, runner_queue=None):
+def monkey_patch_compiler_service(monkeypatch, server, make_compile_fail, runner_queue: Optional[queue.Queue] = None):
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     def patch(compile: data.Compile, project_dir: str) -> CompileRun:
