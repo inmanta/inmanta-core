@@ -599,14 +599,16 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 
 
 async def run_compile_and_wait_until_compile_is_done(
-    compiler_service: CompilerService, mocked_compiler_service_block: queue.Queue, env_id: uuid.UUID
+    compiler_service: CompilerService, compiler_queue: queue.Queue, env_id: uuid.UUID
 ) -> None:
-
+    """
+    Unblock the first compile in the compiler queue and wait until the compile finishes.
+    """
     current_task = compiler_service._recompiles[env_id]
 
-    # prevent race conditions where compile is not yet in queue
-    await retry_limited(lambda: not mocked_compiler_service_block.empty(), timeout=10)
-    run = mocked_compiler_service_block.get(block=True)
+    # prevent race conditions where compile request is not yet in queue
+    await retry_limited(lambda: not compiler_queue.empty(), timeout=10)
+    run = compiler_queue.get(block=True)
     run.block = False
 
     def _is_compile_finished() -> bool:
