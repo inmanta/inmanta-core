@@ -620,7 +620,7 @@ async def run_compile_and_wait_until_compile_is_done(
 
 
 @pytest.mark.asyncio(timeout=90)
-async def test_compileservice_queue(mocked_compiler_service_block: asyncio.Queue, server, client, environment):
+async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, server, client, environment):
     """
     Test the inspection of the compile queue. The compile runner is mocked out so the "started" field does not have the
     correct value in this test.

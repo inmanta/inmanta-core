@@ -932,7 +932,7 @@ async def async_finalizer():
 
 class CompileRunnerMock(object):
     def __init__(
-        self, request: data.Compile, make_compile_fail: bool = False, runner_queue: Optional[asyncio.Queue] = None
+        self, request: data.Compile, make_compile_fail: bool = False, runner_queue: Optional[queue.Queue] = None
     ) -> None:
         self.request = request
         self.version: Optional[int] = None
