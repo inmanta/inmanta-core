@@ -19,6 +19,7 @@ import asyncio
 import datetime
 import logging
 import os
+import queue
 import shutil
 import subprocess
 import uuid
@@ -596,8 +597,31 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert not os.path.exists(project_dir)
 
 
+async def run_compile_and_wait_until_compile_is_done(
+    compiler_service: CompilerService, compiler_queue: queue.Queue, env_id: uuid.UUID
+) -> None:
+    """
+    Unblock the first compile in the compiler queue and wait until the compile finishes.
+    """
+    current_task = compiler_service._recompiles[env_id]
+
+    # prevent race conditions where compile request is not yet in queue
+    await retry_limited(lambda: not compiler_queue.empty(), timeout=10)
+    run = compiler_queue.get(block=True)
+    run.block = False
+
+    def _is_compile_finished() -> bool:
+        if env_id not in compiler_service._recompiles:
+            return True
+        if current_task is not compiler_service._recompiles[env_id]:
+            return True
+        return False
+
+    await retry_limited(_is_compile_finished, timeout=10)
+
+
 @pytest.mark.asyncio(timeout=90)
-async def test_compileservice_queue(mocked_compiler_service_block, server, client, environment):
+async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, server, client, environment):
     """
     Test the inspection of the compile queue. The compile runner is mocked out so the "started" field does not have the
     correct value in this test.
@@ -663,13 +687,7 @@ async def test_compileservice_queue(mocked_compiler_service_block, server, clien
     assert result.code == 200
 
     # finish a compile and wait for service to take on next
-    current_task = compilerslice._recompiles[env.id]
-
-    run = mocked_compiler_service_block.get()
-    run.block = False
-
-    while current_task is compilerslice._recompiles[env.id]:
-        await asyncio.sleep(0.01)
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
     # api should return five when ready
     result = await client.get_compile_queue(environment)
@@ -678,18 +696,14 @@ async def test_compileservice_queue(mocked_compiler_service_block, server, clien
     assert result.code == 200
 
     # finish second compile
-    current_task = compilerslice._recompiles[env.id]
-    run = mocked_compiler_service_block.get(block=True, timeout=2)
-    run.block = False
-
-    while current_task is compilerslice._recompiles[env.id]:
-        await asyncio.sleep(0.2)
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
     assert await compilerslice.get_report(compile_id2) == await compilerslice.get_report(compile_id4)
 
     # finish third compile
-    current_task = compilerslice._recompiles[env.id]
-    run = mocked_compiler_service_block.get(block=True, timeout=2)
+    # prevent race conditions where compile is not yet in queue
+    await retry_limited(lambda: not mocked_compiler_service_block.empty(), timeout=10)
+    run = mocked_compiler_service_block.get(block=True)
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 3
     assert result.result["queue"][0]["remote_id"] == str(remote_id3)
@@ -923,3 +937,4 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
     report = await data.Report.get_one(compile=compile.id, name="Cloning repository")
     # Assert presence of trace lines
     assert "trace: " in report.errstream
+
