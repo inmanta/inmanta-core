@@ -869,7 +869,7 @@ def snippetcompiler_global():
 @pytest.fixture(scope="function")
 def snippetcompiler(inmanta_config, snippetcompiler_global, modules_dir):
     # Test with compiler cache enabled
-    compiler.config.feature_compiler_cache.set(True)
+    compiler.config.feature_compiler_cache.set("True")
     snippetcompiler_global.setup_func(modules_dir)
     yield snippetcompiler_global
     snippetcompiler_global.tear_down_func()

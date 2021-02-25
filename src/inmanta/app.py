@@ -53,7 +53,6 @@ from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 
 import inmanta.compiler as compiler
-import inmanta.compiler.config as compiler_config
 from inmanta import const, module, moduletool, protocol
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, Commander, ShowUsageException, command
@@ -243,7 +242,7 @@ class FeatureFlags:
 
 
 compiler_features = FeatureFlags()
-compiler_features.add(compiler_config.feature_compiler_cache)
+compiler_features.add(compiler.config.feature_compiler_cache)
 
 
 def compiler_config(parser: ArgumentParser) -> None:

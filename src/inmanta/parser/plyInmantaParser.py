@@ -16,10 +16,7 @@
     Contact: code@inmanta.com
 """
 
-# Yacc example
-
 import logging
-import os
 import re
 from typing import List, Optional, Union
 
@@ -49,7 +46,7 @@ from inmanta.ast.statements.generator import ConditionalExpression, Constructor,
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException, SyntaxDeprecationWarning, plyInmantaLex
-from inmanta.parser.pickle import ASTPickler, ASTUnpickler
+from inmanta.parser.chache import CacheManager
 from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 
 # the token map is imported from the lexer. This is required.
@@ -1012,7 +1009,8 @@ lexer = plyInmantaLex.lexer
 parser = yacc.yacc()
 
 
-def myparse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statement]:
+def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statement]:
+    """ Actual parsing code """
     global file
     file = tfile
     lexer.inmfile = tfile
@@ -1042,25 +1040,13 @@ def myparse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statement
         return parser.parse(data, lexer=lexer, debug=False)
 
 
-def un_cache(namespace: Namespace, filename: str):
-    cache_filename = filename + "c"
-    if not os.path.exists(cache_filename):
-        return None
-    if os.path.getmtime(filename) > os.path.getmtime(cache_filename):
-        return None
-    with open(cache_filename, "rb") as fh:
-        return ASTUnpickler(fh, namespace).load()
-
-
-def cache(filename: str, statements: List[Statement]) -> None:
-    with open(filename + "c", "wb") as fh:
-        ASTPickler(fh).dump(statements)
+cache_manager = CacheManager()
 
 
 def parse(namespace: Namespace, filename: str, content: Optional[str] = None) -> List[Statement]:
-    statements = un_cache(namespace, filename)
+    statements = cache_manager.un_cache(namespace, filename)
     if statements is not None:
         return statements
-    statements = myparse(namespace, filename, content)
-    cache(filename, statements)
+    statements = base_parse(namespace, filename, content)
+    cache_manager.cache(filename, statements)
     return statements
