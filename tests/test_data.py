@@ -1210,7 +1210,7 @@ async def test_issue_422(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
-async def test_get_latest_resource(init_dataclasses_and_load_schema):
+async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_client):
     project = data.Project(name="test")
     await project.insert()
 
@@ -1260,6 +1260,18 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema):
 
     res = await data.Resource.get_latest_version(env.id, key)
     assert res.model == 2
+
+
+@pytest.mark.asyncio
+async def test_order_by_validation(init_dataclasses_and_load_schema):
+    """Test the validation of the order by column names and the sort order value. This test case checks that wrong values
+    are rejected. Other test cases validate that the parameters work.
+    """
+    with pytest.raises(RuntimeError):
+        await data.Resource.get_list(order_by_column="; DROP DATABASE")
+
+    with pytest.raises(RuntimeError):
+        await data.Resource.get_list(order="BAD")
 
 
 @pytest.mark.asyncio

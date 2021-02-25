@@ -22,11 +22,12 @@ from setuptools import find_packages, setup
 requires = [
     "asyncpg",
     "click",
-    "inmanta-core",
+    "inmanta-core~=4.0.dev",
     "pyformance",
     "pytest-asyncio",
     "pytest-env",
     "pytest-postgresql",
+    "psycopg2",
     "tornado",
 ]
 

@@ -17,6 +17,8 @@ exclude = '''
 )/
 '''
 
+[tool.irt.build.python]
+hooks = { 'pre' = 'pre-build.sh' }
 
-[tool.irt]
-dashboard = '3.6.0'
+[tool.irt.publish.python]
+public = true

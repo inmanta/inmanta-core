@@ -1,6 +1,6 @@
 # Shortcuts for various dev tasks. Based on makefile from pydantic
 .DEFAULT_GOAL := all
-isort = isort -rc src tests tests_common
+isort = isort src tests tests_common
 black = black src tests tests_common
 
 .PHONY: install

@@ -87,7 +87,7 @@ device is remote with respect to the Inmanta agent and the agent has to execute 
 Step 1: Installing the required Inmanta packages
 ================================================
 
-In order to run a manually started agent, the ``python3-inmanta`` and the ``python3-inmanta-agent`` packages are required on the
+In order to run a manually started agent, the ``inmanta-oss`` and the ``inmanta-oss-agent`` packages are required on the
 machine that will run the agent.
 
 .. code-block:: sh
@@ -104,7 +104,7 @@ machine that will run the agent.
     EOF
 
     sudo yum install -y epel-release
-    sudo yum install -y python3-inmanta python3-inmanta-agent
+    sudo yum install -y inmanta-oss inmanta-oss-agent
 
 
 Step 2: Configuring the manually-started agent
