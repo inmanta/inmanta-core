@@ -169,7 +169,7 @@ doctest:
 
 .PHONY: openapi
 openapi:
-	pip install pytest-inmanta-extensions
+	pip install -r ../requirements.dev.txt
 	pytest ./extract_openapi_json.py
 	mv openapi.json reference/openapi.json
 
