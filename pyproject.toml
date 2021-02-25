@@ -17,10 +17,6 @@ exclude = '''
 )/
 '''
 
-
-[tool.irt]
-dashboard = 'master'
-
 [tool.irt.build.python]
 hooks = { 'pre' = 'pre-build.sh' }
 
