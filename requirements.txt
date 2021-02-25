@@ -10,7 +10,7 @@ importlib_metadata==1.7.0
 jinja2==2.11.2
 more-itertools==8.5.0
 netifaces==0.10.9
-pip==20.2.2
+pip==21.0.1
 ply==3.11
 pydantic==1.6.1
 pyformance==0.4
