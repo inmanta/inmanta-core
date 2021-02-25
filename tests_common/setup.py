@@ -22,11 +22,12 @@ from setuptools import find_packages, setup
 requires = [
     "asyncpg",
     "click",
-    "inmanta",
+    "inmanta-core>=5.0.0.dev",
     "pyformance",
     "pytest-asyncio",
     "pytest-env",
     "pytest-postgresql",
+    "psycopg2",
     "tornado",
 ]
 
@@ -35,7 +36,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
-    version="2020.6",
+    version="5.0.0",
     python_requires=">=3.6",  # also update classifiers
     # Meta data
     name="pytest-inmanta-extensions",
@@ -58,7 +59,7 @@ setup(
         "Framework :: Pytest",
     ],
     keywords="pytest inmanta tests",
-    project_urls={"Bug Tracker": "https://github.com/inmanta/inmanta/issues"},
+    project_urls={"Bug Tracker": "https://github.com/inmanta/inmanta-core/issues"},
     # Packaging
     package_dir={"": "src"},
     packages=find_packages("src"),

@@ -8,3 +8,13 @@ updates:
   allow:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
+  ignore:
+      # Conflict with tox
+    - dependency-name: "importlib-metadata"
+      versions: [">=3"]
+      # Breaking change
+    - dependency-name: "pyjwt"
+      versions: [">=2"]
+      # Breaking change, see #2729 
+    - dependency-name: "openapi-spec-validator"
+      versions: [">=0.3.0"]

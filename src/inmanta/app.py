@@ -571,7 +571,7 @@ def cmd_parser() -> ArgumentParser:
         "--version",
         action="store_true",
         dest="inmanta_version",
-        help="Show current version of Inmanta",
+        help="Show the version of the installed Inmanta product and the version of its subcomponents",
         default=False,
         required=False,
     )
@@ -586,8 +586,22 @@ def cmd_parser() -> ArgumentParser:
     return parser
 
 
-def get_current_version_and_exit():
-    print(f"Current Inmanta version: {get_compiler_version()}")
+def print_versions_installed_components_and_exit():
+    bootloader = InmantaBootloader()
+    app_context = bootloader.load_slices()
+    product_metadata = app_context.get_product_metadata()
+    extension_statuses = app_context.get_extension_statuses()
+    if product_metadata.version:
+        print(f"{product_metadata.product} ({product_metadata.edition}): {product_metadata.version}")
+    else:
+        print(f"{product_metadata.product} ({product_metadata.edition}): version unknown")
+    print(f"Compiler version: {get_compiler_version()}")
+    if extension_statuses:
+        print("Extensions:")
+        for ext_status in extension_statuses:
+            print(f"    * {ext_status.name}: {ext_status.version}")
+    else:
+        print("Extensions: No extensions found")
     sys.exit(0)
 
 
@@ -655,9 +669,6 @@ def app() -> None:
     options, other = parser.parse_known_args()
     options.other = other
 
-    if options.inmanta_version:
-        get_current_version_and_exit()
-
     # Log everything to a log_file if logfile is provided
     if options.log_file:
         watched_file_handler = _get_watched_file_handler(options)
@@ -671,6 +682,9 @@ def app() -> None:
         stream_handler.setLevel(log_level)
 
     logging.captureWarnings(True)
+
+    if options.inmanta_version:
+        print_versions_installed_components_and_exit()
 
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)

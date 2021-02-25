@@ -15,3 +15,5 @@
 
     Contact: code@inmanta.com
 """
+
+COMPILER_VERSION = "2020.6"

@@ -382,6 +382,11 @@ class Project(ModuleLike):
         It does not include
          * verify if project.yml corresponds to the modules in self.modules
 
+        Instances of this class can be created by in two different ways:
+        1) Via the Project.get() method
+        2) Via the constructor: Always call the Project.set() method after the constructor call.
+                                Project instances should only be created via the constructor in test cases.
+
         :param path: The directory where the project is located
         :param venv_path: Path to the directory that will contain the Python virtualenv.
                           This can be an existing or a non-existing directory.
@@ -477,7 +482,7 @@ class Project(ModuleLike):
     @classmethod
     def set(cls, project: "Project") -> None:
         """
-        Get the instance of the project
+        Set the instance of the project
         """
         cls._project = project
         os.chdir(project._path)
@@ -912,14 +917,8 @@ class Module(ModuleLike):
             versions = [x for x in r.specifier.filter(versions, not release_only)]
 
         comp_version_raw = get_compiler_version()
-        if comp_version_raw is not None:
-            comp_version = parse_version(comp_version_raw)
-            # use base version, to make sure dev versions work as expected
-            comp_version = parse_version(comp_version.base_version)
-            return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
-        else:
-            LOGGER.warning("The Inmanta compiler is not installed")
-            return versions[0] if len(versions) > 0 else None
+        comp_version = parse_version(comp_version_raw)
+        return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
 
     @classmethod
     def __best_for_compiler_version(

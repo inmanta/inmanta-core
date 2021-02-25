@@ -1,4 +1,13 @@
-# Release 2020.6 (?)
+# Release 5.0.0 (?)
+
+## Bug fixes
+- Fix broken order by (#2638)
+- Report the Inmanta OSS product version correctly (#2622)
+- Set PYTHONPATH so that all subprocesses also see packages in parent venv (#2650)
+- Create virtual environments without pip and use the pip of the parent venv
+- Correctly set `[:n]` as syntactic sugar for `[0:n]` instead of leaving lower unbound (#2689)
+
+# Release 4.0.0 (2020-12-23)
 
 ## New features
 - Add support to use a custom venv path in the Project class (#2466)
@@ -8,9 +17,14 @@
 - Added pagination support on api calls for agent and agentproc (#2500)
 - Added support to build RPMs for a python version different from Python3.6 (#1857)
 - Added support for assigning `null` to relations with lower arity 0 (#2459)
+- Added documentation on the core dashboard (inmanta/dashboard#63)
+- Decouple the compiler version from the OSS product version (#2573)
+- Show versions of all installed components when running `inmanta --version` (#2574)
 
 ## Bug fixes
 - Fix broken links in the documentation (#2495)
+- Fixed bug in serialization of Resource with Unknowns in collections (#2603)
+- Fixed documentation of `install_mode`
 - Ensure all running compilations are stopped when the server is stopped (#2508)
 - Cleanup old entries in the agentprocess and agentinstance database tables (#2499)
 - Ensure the compiler service takes into account the environment variables set on the system (#2413)
@@ -23,6 +37,11 @@
 
 ## Upgrade notes
 - Ensure the database is backed up before executing an upgrade.
+
+## Other notes
+- The inmanta core package is renamed from `inmanta` to `inmanta-core` to allow for true semantic versioning
+    starting at `4.0.0`. A new `inmanta` package is provided that includes `inmanta-core` and continues the
+    `<year>.<minor>[.<patch>]` version schema.
 
 # Release 2020.5 (2020-10-27)
 

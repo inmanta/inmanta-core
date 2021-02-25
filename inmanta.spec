@@ -16,7 +16,8 @@
 %define sourceversion %{version}%{?buildid}
 %define sourceversion_egg %{version}%{?buildid_egg}
 
-Name:           python3-inmanta
+Name:           python3-inmanta-core
+Epoch:          1
 Version:        %{version}
 
 Release:        %{release}%{?buildid}%{?tag}%{?dist}
@@ -25,7 +26,7 @@ Summary:        Inmanta automation and orchestration tool
 Group:          Development/Languages
 License:        ASL 2
 URL:            http://inmanta.com
-Source0:        inmanta-%{sourceversion_egg}.tar.gz
+Source0:        inmanta-core-%{sourceversion_egg}.tar.gz
 Source1:        dependencies.tar.gz
 Source2:        inmanta-inmanta-dashboard-%{dashboard_version}.tgz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
@@ -33,14 +34,20 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 BuildRequires:  systemd
 BuildRequires:  sed
 BuildRequires:  libffi-devel
-BuildRequires:  openssl-devel
 
 Requires:       git
 Requires:       gcc
-Requires:       openssl
 Requires:       logrotate
 Requires:       libffi
 Requires(pre):  shadow-utils
+
+%if 0%{?el7}
+BuildRequires:  openssl11-devel
+Requires:       openssl11
+%else
+BuildRequires:  openssl-devel >= 1:1.1.1
+Requires:       openssl >= 1:1.1.1
+%endif
 
 %if 0%{?rhel}
 BuildRequires:  python%{undotted_python_version}-devel
@@ -63,28 +70,34 @@ Requires:       python%{undotted_python_version}-devel
 %endif
 %endif
 
-%package server
+%package -n python3-inmanta-server
 Summary:        The configuration and service files to start the Inmanta server
-Requires:       python3-inmanta
+Requires:       python3-inmanta-core
 
-%package agent
+%package -n python3-inmanta-agent
 Summary:        The configuration and service files to start the Inmanta agent
-Requires:       python3-inmanta
+Requires:       python3-inmanta-core
 
 %description
 
-%description server
+%description -n python3-inmanta-server
 
-%description agent
+%description -n python3-inmanta-agent
 
 %prep
-%setup -q -n inmanta-%{sourceversion_egg}
-%setup -T -D -a 1 -n inmanta-%{sourceversion_egg}
-%setup -T -D -a 2 -n inmanta-%{sourceversion_egg}
+%setup -q -n inmanta-core-%{sourceversion_egg}
+%setup -T -D -a 1 -n inmanta-core-%{sourceversion_egg}
+%setup -T -D -a 2 -n inmanta-core-%{sourceversion_egg}
 
 %build
 
 %install
+
+%if 0%{?el7}
+export CFLAGS=$(pkg-config --cflags-only-I openssl11)
+export LDFLAGS=$(pkg-config --libs-only-L openssl11)
+%endif
+
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/opt/inmanta
 %{__python3} -m venv --symlinks %{venv}
@@ -150,23 +163,23 @@ rm -rf %{buildroot}
 %config(noreplace) %attr(-, root, root)/etc/sysconfig/inmanta-server
 %config(noreplace) %attr(-, root, root)/etc/sysconfig/inmanta-agent
 
-%files server
+%files -n python3-inmanta-server
 /opt/inmanta/dashboard
 %attr(-,root,root) %{_unitdir}/inmanta-server.service
 
-%files agent
+%files -n python3-inmanta-agent
 %attr(-,root,root) %{_unitdir}/inmanta-agent.service
 
-%post agent
+%post -n python3-inmanta-agent
 %systemd_post inmanta-agent.service
 
-%preun agent
+%preun -n python3-inmanta-agent
 %systemd_preun inmanta-agent.service
 
-%postun agent
+%postun -n python3-inmanta-agent
 %systemd_postun_with_restart inmanta-agent.service
 
-%post server
+%post -n python3-inmanta-server
 %systemd_post inmanta-server.service
 
 # Move server.cfg file for backward compatibility
@@ -174,10 +187,10 @@ if [ -e "/etc/inmanta/server.cfg" ]; then
   mv /etc/inmanta/server.cfg /etc/inmanta/inmanta.d/
 fi
 
-%preun server
+%preun -n python3-inmanta-server
 %systemd_preun inmanta-server.service
 
-%postun server
+%postun -n python3-inmanta-server
 %systemd_postun_with_restart inmanta-server.service
 
 %pre
