@@ -15,6 +15,6 @@ updates:
       # Breaking change
     - dependency-name: "pyjwt"
       versions: [">=2"]
-      # Breaking change
+      # Breaking change, see #2729 
     - dependency-name: "openapi-spec-validator"
       versions: [">=0.3.0"]
