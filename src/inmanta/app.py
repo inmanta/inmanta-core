@@ -207,7 +207,7 @@ async def safe_shutdown_wrapper(shutdown_function: Callable[[], Coroutine[Any, A
         IOLoop.current().stop()
 
 
-class FeatureFlags:
+class ExperimentalFeatureFlags:
     """
     Class to expose feature flag configs as options in a uniform matter
     """
@@ -223,7 +223,7 @@ class FeatureFlags:
         self.metavar_to_option[self._get_name(option)] = option
 
     def add_arguments(self, parser: ArgumentParser):
-        """ Add all feature flag option to the argument parser """
+        """ Add all feature flag options to the argument parser """
         for metavar, option in self.metavar_to_option.items():
             parser.add_argument(
                 f"--experimental-{option.name}",
@@ -234,14 +234,20 @@ class FeatureFlags:
             )
 
     def read_options_to_config(self, options: argparse.Namespace):
-        """ Read all feature flags from th argument parser into the configs v"""
+        """
+        This method takes input from the commandline parser
+        and sets the appropriate feature flag config based
+        on the parsed command line arguments
+
+        :param options: the options, as parsed by argparse.
+        """
         for metavar, option in self.metavar_to_option.items():
             value = getattr(options, metavar, False)
             if value:
                 option.set("true")
 
 
-compiler_features = FeatureFlags()
+compiler_features = ExperimentalFeatureFlags()
 compiler_features.add(compiler.config.feature_compiler_cache)
 
 

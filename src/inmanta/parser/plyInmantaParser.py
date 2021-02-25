@@ -46,7 +46,7 @@ from inmanta.ast.statements.generator import ConditionalExpression, Constructor,
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException, SyntaxDeprecationWarning, plyInmantaLex
-from inmanta.parser.chache import CacheManager
+from inmanta.parser.cache import CacheManager
 from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 
 # the token map is imported from the lexer. This is required.

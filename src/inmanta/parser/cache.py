@@ -35,6 +35,14 @@ class CacheManager:
         self.failures = 0
 
     def get_file_name(self, filename: str) -> Optional[str]:
+        """
+        Returns the name for the cached file, based on the name of the original source file
+
+        Also ensures the cache folder exists.
+
+        :param filename: the filename of the source file
+        :return: the filename of the cached file
+        """
         base_folder = os.path.dirname(filename)
         if not os.path.isdir(base_folder):
             return None
