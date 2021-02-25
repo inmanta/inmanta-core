@@ -50,6 +50,7 @@ from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
+import inmanta.compiler.config
 import inmanta.main
 from inmanta import config, const, data, loader, protocol, resources
 from inmanta.agent import handler
@@ -866,7 +867,9 @@ def snippetcompiler_global():
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler(snippetcompiler_global, modules_dir):
+def snippetcompiler(inmanta_config, snippetcompiler_global, modules_dir):
+    # Test with compiler cache enabled
+    compiler.config.feature_compiler_cache.set(True)
     snippetcompiler_global.setup_func(modules_dir)
     yield snippetcompiler_global
     snippetcompiler_global.tear_down_func()

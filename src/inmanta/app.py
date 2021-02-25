@@ -44,7 +44,7 @@ from argparse import ArgumentParser
 from asyncio import ensure_future
 from configparser import ConfigParser
 from threading import Timer
-from typing import Any, Callable, Coroutine
+from typing import Any, Callable, Coroutine, Dict
 
 import colorlog
 import yaml
@@ -53,11 +53,12 @@ from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 
 import inmanta.compiler as compiler
+import inmanta.compiler.config as compiler_config
 from inmanta import const, module, moduletool, protocol
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, Commander, ShowUsageException, command
 from inmanta.compiler import do_compile
-from inmanta.config import Config
+from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
 from inmanta.export import ModelExporter, cfg_env
 from inmanta.server.bootloader import InmantaBootloader
@@ -207,6 +208,44 @@ async def safe_shutdown_wrapper(shutdown_function: Callable[[], Coroutine[Any, A
         IOLoop.current().stop()
 
 
+class FeatureFlags:
+    """
+    Class to expose feature flag configs as options in a uniform matter
+    """
+
+    def __init__(self):
+        self.metavar_to_option: Dict[str, Option[bool]] = {}
+
+    def _get_name(self, option: Option[bool]) -> str:
+        return f"flag_{option.name}"
+
+    def add(self, option: Option) -> None:
+        """ Add an option to the set of feature flags """
+        self.metavar_to_option[self._get_name(option)] = option
+
+    def add_arguments(self, parser: ArgumentParser):
+        """ Add all feature flag option to the argument parser """
+        for metavar, option in self.metavar_to_option.items():
+            parser.add_argument(
+                f"--experimental-{option.name}",
+                dest=metavar,
+                help=option.documentation,
+                action="store_true",
+                default=False,
+            )
+
+    def read_options_to_config(self, options: argparse.Namespace):
+        """ Read all feature flags from th argument parser into the configs v"""
+        for metavar, option in self.metavar_to_option.items():
+            value = getattr(options, metavar, False)
+            if value:
+                option.set("true")
+
+
+compiler_features = FeatureFlags()
+compiler_features.add(compiler_config.feature_compiler_cache)
+
+
 def compiler_config(parser: ArgumentParser) -> None:
     """
     Configure the compiler of the export function
@@ -252,6 +291,7 @@ def compiler_config(parser: ArgumentParser) -> None:
         action="store_true",
         default=False,
     )
+    compiler_features.add_arguments(parser)
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
 
 
@@ -291,6 +331,8 @@ def compile_project(options: argparse.Namespace):
 
     if options.dataflow_graphic is True:
         Config.set("compiler", "dataflow_graphic_enable", "true")
+
+    compiler_features.read_options_to_config(options)
 
     module.Project.get(options.main_file)
 
