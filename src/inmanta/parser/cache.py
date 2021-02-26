@@ -34,7 +34,7 @@ class CacheManager:
         self.misses = 0
         self.failures = 0
 
-    def get_file_name(self, filename: str) -> Optional[str]:
+    def get_file_name(self, filename: str) -> str:
         """
         Returns the name for the cached file, based on the name of the original source file
 
