@@ -77,8 +77,9 @@ class CacheManager:
                 self.misses += 1
                 return None
             with open(cache_filename, "rb") as fh:
+                result = ASTUnpickler(fh, namespace).load()
                 self.hits += 1
-                return ASTUnpickler(fh, namespace).load()
+                return result
         except Exception:
             self.failures += 1
             LOGGER.exception("Compile cache loading failure, ignoring cache entry for %s", filename)
