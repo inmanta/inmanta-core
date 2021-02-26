@@ -43,18 +43,22 @@ class CacheManager:
         :param filename: the filename of the source file
         :return: the filename of the cached file
         """
+        # get module folder name
         base_folder = os.path.dirname(filename)
-        if not os.path.isdir(base_folder):
-            return None
 
+        # get file name without extension
         filepart = os.path.basename(filename).rsplit(".", 1)[0]
 
+        # determine cache folder
         cache_folder = os.path.join(base_folder, "__cfcache__")
 
+        # create cache folder
         os.makedirs(cache_folder, exist_ok=True)
 
+        # make filename with compiler version specific extension
         filename = f"{filepart}.{get_compiler_version().replace('.','_')}.cfc"
 
+        # construct final path
         return os.path.join(cache_folder, filename)
 
     def un_cache(self, namespace: Namespace, filename: str) -> Optional[List[Statement]]:
