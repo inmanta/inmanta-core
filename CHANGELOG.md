@@ -1,4 +1,4 @@
-# Release 2020.4.5 (?)
+# Release 2020.4.5 (2021-02-25)
 
 ## Bug fixes
 - Fixed bug in serialization of Resource with Unknowns in collections (#2603)
