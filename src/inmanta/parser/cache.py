@@ -67,9 +67,6 @@ class CacheManager:
             return None
         try:
             cache_filename = self.get_file_name(filename)
-            if not cache_filename:
-                self.misses += 1
-                return None
             if not os.path.exists(cache_filename):
                 self.misses += 1
                 return None
@@ -92,10 +89,6 @@ class CacheManager:
             return
         try:
             cache_filename = self.get_file_name(filename)
-            if not cache_filename:
-                # could not find file
-                return
-
             with open(cache_filename, "wb") as fh:
                 ASTPickler(fh, protocol=4).dump(statements)
         except Exception:
