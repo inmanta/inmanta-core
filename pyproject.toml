@@ -19,7 +19,7 @@ exclude = '''
 
 
 [tool.irt]
-dashboard = '3.5.1'
+dashboard = '3.5.2'
 
 [tool.irt.build.python]
 hooks = { 'pre' = 'pre-build.sh' }
