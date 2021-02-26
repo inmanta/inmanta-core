@@ -99,14 +99,14 @@ class CacheManager:
             with open(cache_filename, "wb") as fh:
                 ASTPickler(fh, protocol=4).dump(statements)
         except Exception:
-            LOGGER.exception("Compile cache failure, failed to write for %s", filename)
+            LOGGER.exception("Compile cache failure, failed to cache statements for %s", filename)
 
     def log_stats(self) -> None:
         if not feature_compiler_cache.get():
             # cache not enabled
             return
         LOGGER.info(
-            "Compiler cache observed %d hits and %d misses (%.d%%)",
+            "Compiler cache observed %d hits and %d misses (%d%%)",
             self.hits,
             self.misses,
             (100 * self.hits) / (self.hits + self.misses),
