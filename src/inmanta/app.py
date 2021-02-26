@@ -491,6 +491,7 @@ def export_parser_config(parser: ArgumentParser) -> None:
         dest="export_compile_data_file",
         help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
+    compiler_features.add_arguments(parser)
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
@@ -518,6 +519,8 @@ def export(options: argparse.Namespace) -> None:
 
     if options.export_compile_data_file is not None:
         Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
+
+    compiler_features.read_options_to_config(options)
 
     # try to parse the metadata as json. If a normal string, create json for it.
     if options.metadata is not None and len(options.metadata) > 0:
