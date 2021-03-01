@@ -12,7 +12,7 @@ more-itertools==8.7.0
 netifaces==0.10.9
 pip==21.0.1
 ply==3.11
-pydantic==1.7.3
+pydantic==1.8
 pyformance==0.4
 PyJWT==1.7.1
 python-dateutil==2.8.1
