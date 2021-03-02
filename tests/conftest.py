@@ -258,7 +258,7 @@ def deactive_venv():
     old_os_path = os.environ.get("PATH", "")
     old_prefix = sys.prefix
     old_path = list(sys.path)
-    old_pythonpath = os.environ.get("PYTHONPATH", "")
+    old_pythonpath = os.environ.get("PYTHONPATH", None)
 
     yield
 
@@ -266,7 +266,12 @@ def deactive_venv():
     sys.prefix = old_prefix
     sys.path = old_path
     pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
-    os.environ["PYTHONPATH"] = old_pythonpath
+    # Restore PYTHONPATH
+    if "PYTHONPATH" in os.environ:
+        if old_pythonpath is not None:
+            os.environ["PYTHONPATH"] = old_pythonpath
+        else:
+            del os.environ["PYTHONPATH"]
 
 
 def reset_metrics():

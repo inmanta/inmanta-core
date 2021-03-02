@@ -3,7 +3,7 @@
 ## Bug fixes
 - Fixed bug in serialization of Resource with Unknowns in collections (#2603)
 - Fixed export failure with null in dict
-- Set PYTHONPATH so that all subprocesses also see packages in parent venv (#2650)
+- Set PYTHONPATH so that all subprocesses also see packages in parent venv (#2650, #2747)
 - Create virtual environments without pip and use the pip of the parent venv
 - Correctly set `[:n]` as syntactic sugar for `[0:n]` instead of leaving lower unbound (#2689)
 
