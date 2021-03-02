@@ -7,6 +7,10 @@
 - Create virtual environments without pip and use the pip of the parent venv
 - Correctly set `[:n]` as syntactic sugar for `[0:n]` instead of leaving lower unbound (#2689)
 
+## New features
+
+- Add installation procedure for el8 to installation documentation
+
 # Release 4.0.0 (2020-12-23)
 
 ## New features
