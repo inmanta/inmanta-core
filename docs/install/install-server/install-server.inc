@@ -5,19 +5,24 @@ Install the software
 
     .. tab:: CentOS 7
 
-        For CentOS use yum:
+        For CentOS 7 use yum:
 
         .. code-block:: sh
 
           sudo tee /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
           [inmanta-oss-stable]
-          name=Inmanta OSS stable
-          baseurl=https://pkg.inmanta.com/inmanta-oss-stable/el7/
-          gpgcheck=1
-          gpgkey=https://pkg.inmanta.com/inmanta-oss-stable/inmanta-oss-stable-public-key
+          name=inmanta-oss-stable
+          baseurl=https://packages.inmanta.com/public/oss-stable/rpm/el/$releasever/$basearch
           repo_gpgcheck=1
           enabled=1
-          enabled_metadata=1
+          gpgkey=https://packages.inmanta.com/public/oss-stable/gpg.A34DD0A274F07713.key
+          gpgcheck=1
+          sslverify=1
+          sslcacert=/etc/pki/tls/certs/ca-bundle.crt
+          metadata_expire=300
+          pkg_gpgcheck=1
+          autorefresh=1
+          type=rpm-md
           EOF
 
           sudo yum install -y epel-release
@@ -26,6 +31,33 @@ Install the software
         The first package (inmanta-oss) contains all the code and the commands. The server and the agent packages install config
         files and systemd unit files. The dashboard is installed with the server package.
 
+    .. tab:: CentOS 8
+
+        For CentOS 8 use dnf:
+
+        .. code-block:: sh
+
+          sudo tee /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
+          [inmanta-oss-stable]
+          name=inmanta-oss-stable
+          baseurl=https://packages.inmanta.com/public/oss-stable/rpm/el/$releasever/$basearch
+          repo_gpgcheck=1
+          enabled=1
+          gpgkey=https://packages.inmanta.com/public/oss-stable/gpg.A34DD0A274F07713.key
+          gpgcheck=1
+          sslverify=1
+          sslcacert=/etc/pki/tls/certs/ca-bundle.crt
+          metadata_expire=300
+          pkg_gpgcheck=1
+          autorefresh=1
+          type=rpm-md
+          EOF
+
+          sudo dnf install -y epel-release
+          sudo dnf install -y inmanta-oss inmanta-oss-server inmanta-oss-agent
+
+        The first package (inmanta-oss) contains all the code and the commands. The server and the agent packages install config
+        files and systemd unit files. The dashboard is installed with the server package.
 
     .. tab:: Other Linux and Mac
 
@@ -88,8 +120,8 @@ Install the software
 
 Configure server
 ################
-This guide goes through the steps to set up an Inmanta service orchestrator server. This guide assumes a RHEL 7 or CentOS 7
-server is used. The rpm packages install the server configuration file in `/etc/inmanta/inmanta.cfg`.
+This guide goes through the steps to set up an Inmanta service orchestrator server. This guide assumes a RHEL (7 or 8) or CentOS
+(7 or 8) server is used. The rpm packages install the server configuration file in `/etc/inmanta/inmanta.cfg`.
 
 Optional step 1: Setup SSL and authentication
 ---------------------------------------------
