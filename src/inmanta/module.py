@@ -28,6 +28,7 @@ from functools import lru_cache
 from io import BytesIO
 from subprocess import CalledProcessError
 from tarfile import TarFile
+from time import time
 from typing import Any, Dict, Iterable, Iterator, List, Mapping, NewType, Optional, Set, Tuple, Union
 
 import yaml
@@ -39,6 +40,7 @@ from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
 from inmanta.parser import plyInmantaParser
+from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.types import JsonType
 from inmanta.util import get_compiler_version
 
@@ -529,6 +531,7 @@ class Project(ModuleLike):
 
     @lru_cache()
     def get_complete_ast(self) -> Tuple[List[Statement], List[BasicBlock]]:
+        start = time()
         # load ast
         (statements, block) = self.get_ast()
         blocks = [block]
@@ -540,6 +543,9 @@ class Project(ModuleLike):
             statements.extend(nstmt)
             blocks.append(nb)
 
+        end = time()
+        LOGGER.debug("Parsing took %f seconds", end - start)
+        cache_manager.log_stats()
         return (statements, blocks)
 
     def __load_ast(self) -> Tuple[List[Statement], BasicBlock]:

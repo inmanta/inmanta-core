@@ -44,7 +44,7 @@ from argparse import ArgumentParser
 from asyncio import ensure_future
 from configparser import ConfigParser
 from threading import Timer
-from typing import Any, Callable, Coroutine
+from typing import Any, Callable, Coroutine, Dict
 
 import colorlog
 import yaml
@@ -57,7 +57,7 @@ from inmanta import const, module, moduletool, protocol
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, Commander, ShowUsageException, command
 from inmanta.compiler import do_compile
-from inmanta.config import Config
+from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
 from inmanta.export import ModelExporter, cfg_env
 from inmanta.server.bootloader import InmantaBootloader
@@ -207,6 +207,50 @@ async def safe_shutdown_wrapper(shutdown_function: Callable[[], Coroutine[Any, A
         IOLoop.current().stop()
 
 
+class ExperimentalFeatureFlags:
+    """
+    Class to expose feature flag configs as options in a uniform matter
+    """
+
+    def __init__(self):
+        self.metavar_to_option: Dict[str, Option[bool]] = {}
+
+    def _get_name(self, option: Option[bool]) -> str:
+        return f"flag_{option.name}"
+
+    def add(self, option: Option) -> None:
+        """ Add an option to the set of feature flags """
+        self.metavar_to_option[self._get_name(option)] = option
+
+    def add_arguments(self, parser: ArgumentParser):
+        """ Add all feature flag options to the argument parser """
+        for metavar, option in self.metavar_to_option.items():
+            parser.add_argument(
+                f"--experimental-{option.name}",
+                dest=metavar,
+                help=option.documentation,
+                action="store_true",
+                default=False,
+            )
+
+    def read_options_to_config(self, options: argparse.Namespace):
+        """
+        This method takes input from the commandline parser
+        and sets the appropriate feature flag config based
+        on the parsed command line arguments
+
+        :param options: the options, as parsed by argparse.
+        """
+        for metavar, option in self.metavar_to_option.items():
+            value = getattr(options, metavar, False)
+            if value:
+                option.set("true")
+
+
+compiler_features = ExperimentalFeatureFlags()
+compiler_features.add(compiler.config.feature_compiler_cache)
+
+
 def compiler_config(parser: ArgumentParser) -> None:
     """
     Configure the compiler of the export function
@@ -252,6 +296,7 @@ def compiler_config(parser: ArgumentParser) -> None:
         action="store_true",
         default=False,
     )
+    compiler_features.add_arguments(parser)
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
 
 
@@ -291,6 +336,8 @@ def compile_project(options: argparse.Namespace):
 
     if options.dataflow_graphic is True:
         Config.set("compiler", "dataflow_graphic_enable", "true")
+
+    compiler_features.read_options_to_config(options)
 
     module.Project.get(options.main_file)
 
@@ -444,6 +491,7 @@ def export_parser_config(parser: ArgumentParser) -> None:
         dest="export_compile_data_file",
         help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
+    compiler_features.add_arguments(parser)
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
@@ -471,6 +519,8 @@ def export(options: argparse.Namespace) -> None:
 
     if options.export_compile_data_file is not None:
         Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
+
+    compiler_features.read_options_to_config(options)
 
     # try to parse the metadata as json. If a normal string, create json for it.
     if options.metadata is not None and len(options.metadata) > 0:

@@ -16,8 +16,6 @@
     Contact: code@inmanta.com
 """
 
-# Yacc example
-
 import logging
 import re
 from typing import List, Optional, Union
@@ -48,6 +46,7 @@ from inmanta.ast.statements.generator import ConditionalExpression, Constructor,
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException, SyntaxDeprecationWarning, plyInmantaLex
+from inmanta.parser.cache import CacheManager
 from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 
 # the token map is imported from the lexer. This is required.
@@ -1010,7 +1009,8 @@ lexer = plyInmantaLex.lexer
 parser = yacc.yacc()
 
 
-def myparse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statement]:
+def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statement]:
+    """ Actual parsing code """
     global file
     file = tfile
     lexer.inmfile = tfile
@@ -1040,7 +1040,13 @@ def myparse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statement
         return parser.parse(data, lexer=lexer, debug=False)
 
 
+cache_manager = CacheManager()
+
+
 def parse(namespace: Namespace, filename: str, content: Optional[str] = None) -> List[Statement]:
-    statements = myparse(namespace, filename, content)
-    # self.cache(filename, statements)
+    statements = cache_manager.un_cache(namespace, filename)
+    if statements is not None:
+        return statements
+    statements = base_parse(namespace, filename, content)
+    cache_manager.cache(filename, statements)
     return statements
