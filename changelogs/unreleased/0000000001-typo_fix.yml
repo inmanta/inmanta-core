@@ -1,0 +1,13 @@
+---
+description: Fixed two typos in language.rst file of core docs
+issue-nr: N/A
+change-type: patch
+destination-branches: [master]
+sections:
+  bugfix: "Fixed typos in language.rst file"
+  known-issue: "4 byte unicode character are not supported"
+  upgrade-note: "None"
+  deprecation-note: "None"
+  other-note: |
+    * TCP port ranges from 65565 to 65535
+    * Changed "include" to "included" on string interpolation section
