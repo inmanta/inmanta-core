@@ -18,53 +18,24 @@
 import datetime
 import json
 import logging
-import re
-import time
-from typing import List, Optional
+from typing import Callable, List, Optional
 from uuid import UUID
 
 import pytest
-from pydantic import BaseModel
 
 from agent_server.conftest import ResourceContainer
 from inmanta import const
 from inmanta.const import Change, ResourceAction
+from inmanta.data import model
 from inmanta.protocol.common import Result
 from inmanta.protocol.endpoints import Client
+from inmanta.resources import Id
 from inmanta.util import get_compiler_version
 from utils import _wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.wip")
 
 QUERY_LIMIT = 3  # For testing only
-
-
-class ResourceChange(BaseModel):
-
-    change: Change
-    started: datetime.datetime
-    finished: datetime.datetime
-    version: int
-
-
-class ResourceId(BaseModel):
-
-    resource_type: str
-    agent: str
-    key: str
-    value: str
-
-    def __str__(self) -> str:
-        return f"{self.resource_type}[{self.agent},{self.key}={self.value}]"
-
-    def from_str(id: str) -> "ResourceId":
-        reg_match = re.compile(r"(.*)\[(.*),(.*)=(.*)\]").match(id)
-        return ResourceId(
-            resource_type=reg_match.group(1),
-            agent=reg_match.group(2),
-            key=reg_match.group(3),
-            value=reg_match.group(4),
-        )
 
 
 class EventClient:
@@ -80,13 +51,14 @@ class EventClient:
     def environment(self) -> UUID:
         return self._env
 
-    async def get_resource_change(
+    async def get_resource_action(
         self,
-        resource_id: ResourceId,
+        resource_id: Id,
+        action_filter: Callable[[model.ResourceAction], bool],
         oldest_first: bool = False,
-        before: Optional[datetime.datetime] = None,
         after: Optional[datetime.datetime] = None,
-    ) -> Optional[ResourceChange]:
+        before: Optional[datetime.datetime] = None,
+    ) -> Optional[model.ResourceAction]:
         before = before or datetime.datetime.now()
         after = after or datetime.datetime.fromtimestamp(0)
 
@@ -94,10 +66,10 @@ class EventClient:
             if not oldest_first:
                 response: Result = await self.client.get_resource_actions(
                     tid=self.environment,
-                    resource_type=resource_id.resource_type,
-                    agent=resource_id.agent,
-                    attribute=resource_id.key,
-                    attribute_value=resource_id.value,
+                    resource_type=resource_id.get_entity_type(),
+                    agent=resource_id.get_agent_name(),
+                    attribute=resource_id.get_attribute(),
+                    attribute_value=resource_id.get_attribute_value(),
                     limit=QUERY_LIMIT,
                     last_timestamp=before,
                 )
@@ -106,14 +78,16 @@ class EventClient:
                         f"Unexpected response code when getting resource actions: received {response.code} (expected 200)"
                     )
 
-                actions: List[dict] = response.result.get("data", [])
+                actions: List[model.ResourceAction] = [
+                    model.ResourceAction(**action) for action in response.result.get("data", [])
+                ]
             else:
                 response: Result = await self.client.get_resource_actions(
                     tid=self.environment,
-                    resource_type=resource_id.resource_type,
-                    agent=resource_id.agent,
-                    attribute=resource_id.key,
-                    attribute_value=resource_id.value,
+                    resource_type=resource_id.get_entity_type(),
+                    agent=resource_id.get_agent_name(),
+                    attribute=resource_id.get_attribute(),
+                    attribute_value=resource_id.get_attribute_value(),
                     limit=QUERY_LIMIT,
                     first_timestamp=after,
                 )
@@ -122,47 +96,37 @@ class EventClient:
                         f"Unexpected response code when getting resource actions: received {response.code} (expected 200)"
                     )
 
-                actions: List[dict] = response.result.get("data", [])
+                actions: List[model.ResourceAction] = [
+                    model.ResourceAction(**action) for action in response.result.get("data", [])
+                ]
                 actions.reverse()
 
             for action in actions:
-                timestamp = datetime.datetime.strptime(action.get("started"), "%Y-%m-%dT%H:%M:%S.%f")
-
-                if not oldest_first and timestamp < after:
+                if not oldest_first and action.started < after:
                     # We get fixed size pages so this might happen when we reach the end
                     break
 
-                if oldest_first and timestamp > before:
+                if oldest_first and action.started > before:
                     # We get fixed size pages so this might happen when we reach the end
                     break
 
-                if action.get("action", "") != ResourceAction.deploy:
-                    continue
-
-                change = action.get("change") or Change.nochange
-                if change != Change.nochange:
-                    return ResourceChange(
-                        change=change,
-                        started=timestamp,
-                        finished=datetime.datetime.strptime(action.get("finished"), "%Y-%m-%dT%H:%M:%S.%f"),
-                        version=action.get("version"),
-                    )
+                if action_filter(action):
+                    return action
 
             if len(actions) == 0:
                 before = after
             elif not oldest_first:
-                before = datetime.datetime.strptime(actions[-1].get("started"), "%Y-%m-%dT%H:%M:%S.%f")
+                before = actions[-1].started
             else:
-                after = datetime.datetime.strptime(actions[-1].get("started"), "%Y-%m-%dT%H:%M:%S.%f")
+                after = actions[-1].started
 
         return None
 
     async def get_resource_dependencies(
         self,
-        resource_id: ResourceId,
-        version: int,
-    ) -> List[ResourceId]:
-        response = await self.client.get_resource(self.environment, id=f"{str(resource_id)},v={version}", logs=True)
+        resource_id: Id,
+    ) -> List[Id]:
+        response = await self.client.get_resource(self.environment, id=resource_id.resource_version_str(), logs=True)
         if response.code != 200:
             raise RuntimeError(
                 f"Unexpected response code when getting resource dependencies: received {response.code} (expected 200)"
@@ -172,27 +136,37 @@ class EventClient:
         attributes = resource.get("attributes", {})
         requires = attributes.get("requires", {})
 
-        return [ResourceId.from_str(id) for id in requires]
+        return [Id.parse_id(id) for id in requires]
 
 
-async def need_redeployment(resource_id: ResourceId, environment: str) -> bool:
+def is_deployment(action: model.ResourceAction) -> bool:
+    return action.action == ResourceAction.deploy
+
+
+def is_deployment_with_change(action: model.ResourceAction) -> bool:
+    return is_deployment(action) and (action.change or Change.nochange) != Change.nochange
+
+
+async def need_redeployment(resource_id: Id, environment: str) -> bool:
     custom_client = EventClient(client=Client("agent"), environment=environment)
 
-    last_deployment = await custom_client.get_resource_change(
+    last_deployment = await custom_client.get_resource_action(
         resource_id=resource_id,
+        action_filter=is_deployment_with_change,
         oldest_first=False,
     )
     if last_deployment is None:
         return True
 
     # TODO TBD Should it be resource from last deployed version or current one? or both?
-    dependencies = await custom_client.get_resource_dependencies(resource_id=resource_id, version=last_deployment.version)
+    dependencies = await custom_client.get_resource_dependencies(resource_id=resource_id)
 
     for dependency in dependencies:
-        dep_first_change = await custom_client.get_resource_change(
+        dep_first_change = await custom_client.get_resource_action(
             resource_id=dependency,
+            action_filter=is_deployment_with_change,
             oldest_first=True,
-            after=last_deployment.finished,
+            after=last_deployment.started,
         )
         if dep_first_change is not None:
             return True
@@ -201,7 +175,7 @@ async def need_redeployment(resource_id: ResourceId, environment: str) -> bool:
 
 
 def get_res(key: str, val: str, version: int, requires: List[str]) -> dict:
-    return  {
+    return {
         "key": key,
         "value": val,
         "id": f"test::Resource[agent1,key={key}],v={version}",
@@ -234,7 +208,9 @@ async def deploy_resources(client: Client, environment: UUID, version: int, reso
 
 
 @pytest.mark.asyncio
-async def test_event_client_basic(resource_container: ResourceContainer, environment: UUID, server, client: Client, agent, clienthelper):
+async def test_event_client_basic(
+    resource_container: ResourceContainer, environment: UUID, server, client: Client, agent, clienthelper
+):
     """
     Send and receive events within one agent
     """
@@ -246,14 +222,14 @@ async def test_event_client_basic(resource_container: ResourceContainer, environ
     # Initial version
     version = await clienthelper.get_version()
     res_1 = get_res("1", "init", version, [])
-    res_1_id = ResourceId.from_str(res_1["id"])
+    res_1_id = Id.parse_id(res_1["id"])
 
     res_2 = get_res("2", "init", version, [])
-    res_2_id = ResourceId.from_str(res_2["id"])
+    res_2_id = Id.parse_id(res_2["id"])
     res_1["requires"].append(res_2["id"])
 
     res_3 = get_res("3", "init", version, [])
-    res_3_id = ResourceId.from_str(res_3["id"])
+    res_3_id = Id.parse_id(res_3["id"])
     res_1["requires"].append(res_3["id"])
     res_2["requires"].append(res_3["id"])
 
@@ -262,8 +238,8 @@ async def test_event_client_basic(resource_container: ResourceContainer, environ
     await deploy_resources(client, environment, version, resources)
 
     for res_id in [res_1_id, res_2_id, res_3_id]:
-        last_change = await event_client.get_resource_change(res_id, oldest_first=False)
-        first_change = await event_client.get_resource_change(res_id, oldest_first=True)
+        last_change = await event_client.get_resource_action(res_id, is_deployment_with_change, oldest_first=False)
+        first_change = await event_client.get_resource_action(res_id, is_deployment_with_change, oldest_first=True)
 
         assert last_change == first_change
         assert last_change.change == Change.created
@@ -274,14 +250,14 @@ async def test_event_client_basic(resource_container: ResourceContainer, environ
     # Redeploying the same model
     version = await clienthelper.get_version()
     res_1 = get_res("1", "init", version, [])
-    res_1_id = ResourceId.from_str(res_1["id"])
+    res_1_id = Id.parse_id(res_1["id"])
 
     res_2 = get_res("2", "init", version, [])
-    res_2_id = ResourceId.from_str(res_2["id"])
+    res_2_id = Id.parse_id(res_2["id"])
     res_1["requires"].append(res_2["id"])
 
     res_3 = get_res("3", "init", version, [])
-    res_3_id = ResourceId.from_str(res_3["id"])
+    res_3_id = Id.parse_id(res_3["id"])
     res_1["requires"].append(res_3["id"])
     res_2["requires"].append(res_3["id"])
 
@@ -290,26 +266,26 @@ async def test_event_client_basic(resource_container: ResourceContainer, environ
     await deploy_resources(client, environment, version, resources)
 
     for res_id in [res_1_id, res_2_id, res_3_id]:
-        last_change = await event_client.get_resource_change(res_id, oldest_first=False)
-        first_change = await event_client.get_resource_change(res_id, oldest_first=True)
+        last_change = await event_client.get_resource_action(res_id, is_deployment_with_change, oldest_first=False)
+        first_change = await event_client.get_resource_action(res_id, is_deployment_with_change, oldest_first=True)
 
         assert last_change == first_change
         assert last_change.change == Change.created
         assert last_change.version == version - 1
 
         assert not await need_redeployment(res_id, environment)
-    
+
     # Modifying second resource
     version = await clienthelper.get_version()
     res_1 = get_res("1", "init", version, [])
-    res_1_id = ResourceId.from_str(res_1["id"])
+    res_1_id = Id.parse_id(res_1["id"])
 
     res_2 = get_res("2", "updated", version, [])
-    res_2_id = ResourceId.from_str(res_2["id"])
+    res_2_id = Id.parse_id(res_2["id"])
     res_1["requires"].append(res_2["id"])
 
     res_3 = get_res("3", "init", version, [])
-    res_3_id = ResourceId.from_str(res_3["id"])
+    res_3_id = Id.parse_id(res_3["id"])
     res_1["requires"].append(res_3["id"])
     res_2["requires"].append(res_3["id"])
 
@@ -317,8 +293,8 @@ async def test_event_client_basic(resource_container: ResourceContainer, environ
 
     await deploy_resources(client, environment, version, resources)
 
-    last_change = await event_client.get_resource_change(res_1_id, oldest_first=False)
-    first_change = await event_client.get_resource_change(res_1_id, oldest_first=True)
+    last_change = await event_client.get_resource_action(res_1_id, is_deployment_with_change, oldest_first=False)
+    first_change = await event_client.get_resource_action(res_1_id, is_deployment_with_change, oldest_first=True)
 
     assert last_change == first_change
     assert last_change.change == Change.created
@@ -326,8 +302,8 @@ async def test_event_client_basic(resource_container: ResourceContainer, environ
 
     assert await need_redeployment(res_1_id, environment)
 
-    last_change = await event_client.get_resource_change(res_2_id, oldest_first=False)
-    first_change = await event_client.get_resource_change(res_2_id, oldest_first=True)
+    last_change = await event_client.get_resource_action(res_2_id, is_deployment_with_change, oldest_first=False)
+    first_change = await event_client.get_resource_action(res_2_id, is_deployment_with_change, oldest_first=True)
 
     assert last_change != first_change
     assert last_change.change == Change.updated
@@ -337,18 +313,20 @@ async def test_event_client_basic(resource_container: ResourceContainer, environ
 
     assert not await need_redeployment(res_2_id, environment)
 
-    last_change = await event_client.get_resource_change(res_3_id, oldest_first=False)
-    first_change = await event_client.get_resource_change(res_3_id, oldest_first=True)
+    last_change = await event_client.get_resource_action(res_3_id, is_deployment_with_change, oldest_first=False)
+    first_change = await event_client.get_resource_action(res_3_id, is_deployment_with_change, oldest_first=True)
 
     assert last_change == first_change
     assert last_change.change == Change.created
     assert last_change.version == version - 2
 
     assert not await need_redeployment(res_3_id, environment)
-    
+
 
 @pytest.mark.asyncio
-async def test_event_client(resource_container: ResourceContainer, environment: UUID, server, client: Client, agent, clienthelper):
+async def test_event_client(
+    resource_container: ResourceContainer, environment: UUID, server, client: Client, agent, clienthelper
+):
 
     resource_container.Provider.reset()
 
@@ -384,7 +362,7 @@ async def test_event_client(resource_container: ResourceContainer, environment: 
             "send_event": False,
             "requires": [],
             "purged": False,
-        }
+        },
     ]
 
     response: Result = await client.put_version(
@@ -405,6 +383,4 @@ async def test_event_client(resource_container: ResourceContainer, environment: 
     assert response.code == 200
     assert response.result.get("model", {}).get("version", 0) == version
 
-    resource_container.wait_for_done_with_waiters()
-    resource_container.waiter.notify()
     await _wait_until_deployment_finishes(client, environment, version)
