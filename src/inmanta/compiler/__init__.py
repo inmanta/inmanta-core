@@ -42,7 +42,6 @@ from inmanta.execute.dataflow.datatrace import DataTraceRenderer
 from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ResultVariable
-from inmanta.module import Project
 from inmanta.parser import ParserException
 from inmanta.plugins import Plugin, PluginMeta
 
@@ -183,6 +182,9 @@ class Compiler(object):
         - add all plugins
         - create std::Entity
         """
+        # Fix import loop
+        from inmanta.module import Project
+
         project = Project.get()
         self.__root_ns = project.get_root_namespace()
 
