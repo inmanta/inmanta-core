@@ -41,6 +41,15 @@ def track_dataflow() -> bool:
     return datatrace_enable.get() or dataflow_graphic_enable.get()
 
 
+feature_compiler_cache: Option[bool] = Option(
+    "compiler",
+    "cache",
+    False,
+    "Enables the experimental caching of compiled files.",
+    is_bool,
+)
+
+
 export_compile_data: Option[bool] = Option(
     "compiler",
     "export_compile_data",
