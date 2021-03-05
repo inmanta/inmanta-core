@@ -34,13 +34,11 @@ from typing import Any, Dict, Iterable, Iterator, List, Mapping, NewType, Option
 import yaml
 from pkg_resources import parse_requirements, parse_version
 
-from inmanta import env, loader, plugins
+from inmanta import env, loader, parser, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, ModuleNotFoundException, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
-from inmanta.parser import plyInmantaParser
-from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.types import JsonType
 from inmanta.util import get_compiler_version
 
@@ -288,7 +286,7 @@ class ModuleLike(object):
     def _load_file(self, ns: Namespace, file: str) -> Tuple[List[Statement], BasicBlock]:
         ns.location = Location(file, 1)
         statements = []  # type: List[Statement]
-        stmts = plyInmantaParser.parse(ns, file)
+        stmts = parser.plyInmantaParser.parse(ns, file)
         block = BasicBlock(ns)
         for s in stmts:
             if isinstance(s, BiStatement):
@@ -545,7 +543,7 @@ class Project(ModuleLike):
 
         end = time()
         LOGGER.debug("Parsing took %f seconds", end - start)
-        cache_manager.log_stats()
+        parser.plyInmantaParser.cache_manager.log_stats()
         return (statements, blocks)
 
     def __load_ast(self) -> Tuple[List[Statement], BasicBlock]:

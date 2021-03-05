@@ -21,6 +21,7 @@ from typing import List, Optional
 
 from inmanta.ast import Namespace
 from inmanta.ast.statements import Statement
+from inmanta.compiler.config import feature_compiler_cache
 from inmanta.parser.pickle import ASTPickler, ASTUnpickler
 from inmanta.util import get_compiler_version
 
@@ -32,11 +33,6 @@ class CacheManager:
         self.hits = 0
         self.misses = 0
         self.failures = 0
-
-        # import loop, ....
-        from inmanta.compiler.config import feature_compiler_cache
-
-        self.cache_enabled = feature_compiler_cache
 
     def get_file_name(self, filename: str) -> str:
         """
@@ -66,7 +62,7 @@ class CacheManager:
         return os.path.join(cache_folder, filename)
 
     def un_cache(self, namespace: Namespace, filename: str) -> Optional[List[Statement]]:
-        if not self.cache_enabled.get():
+        if not feature_compiler_cache.get():
             # cache not enabled
             return None
         try:
@@ -88,7 +84,7 @@ class CacheManager:
 
     def cache(self, filename: str, statements: List[Statement]) -> None:
 
-        if not self.cache_enabled.get():
+        if not feature_compiler_cache.get():
             # cache not enabled
             return
         try:
@@ -99,7 +95,7 @@ class CacheManager:
             LOGGER.exception("Compile cache failure, failed to cache statements for %s", filename)
 
     def log_stats(self) -> None:
-        if not self.cache_enabled.get():
+        if not feature_compiler_cache.get():
             # cache not enabled
             return
         LOGGER.info(
