@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, Tupl
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
-from inmanta import const
+from inmanta import const, module
 from inmanta.ast import (
     AttributeException,
     CompilerException,
@@ -182,10 +182,7 @@ class Compiler(object):
         - add all plugins
         - create std::Entity
         """
-        # Fix import loop
-        from inmanta.module import Project
-
-        project = Project.get()
+        project = module.Project.get()
         self.__root_ns = project.get_root_namespace()
 
         project.load()
