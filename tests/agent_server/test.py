@@ -17,13 +17,14 @@
 """
 import datetime
 import logging
+import time
 import uuid
 from typing import Callable, List, Optional, Tuple
 from uuid import UUID
 
 import pytest
+from pytest import fixture
 
-from _pytest.fixtures import fixture
 from agent_server.conftest import ResourceContainer
 from inmanta import const, resources
 from inmanta.agent.handler import CRUDHandler, HandlerContext, provider
@@ -33,7 +34,7 @@ from inmanta.protocol.common import Result
 from inmanta.protocol.endpoints import Client
 from inmanta.resources import Id, PurgeableResource, Resource, resource
 from inmanta.util import get_compiler_version
-from utils import ClientHelper, _wait_until_deployment_finishes
+from utils import ClientHelper, _wait_until_deployment_finishes, retry_limited
 
 logger = logging.getLogger("inmanta.test.event_client")
 
@@ -64,11 +65,8 @@ class EventClient:
         before = before or datetime.datetime.now()
         after = after or datetime.datetime.fromtimestamp(0)
 
-        def args_as_dict(**kwargs):
-            return kwargs
-
         while before > after:
-            kwargs = args_as_dict(
+            kwargs = dict(
                 tid=self.environment,
                 resource_type=resource_id.get_entity_type(),
                 agent=resource_id.get_agent_name(),
@@ -118,7 +116,7 @@ def is_deployment(action: model.ResourceAction) -> bool:
 
 
 def is_deployment_with_change(action: model.ResourceAction) -> bool:
-    return is_deployment(action) and (action.change or Change.nochange) != Change.nochange
+    return is_deployment(action) and action.change != Change.nochange
 
 
 def resource_handler():
@@ -169,7 +167,7 @@ def resource_handler():
 
         def update_resource(self, ctx: HandlerContext, changes: dict, resource: resources.PurgeableResource) -> None:
             logger.info("Calling update resource")
-            resource.operation_uuid = changes["operation_uuid"]
+            # resource.operation_uuid = changes["operation_uuid"]
             ctx.set_updated()
             return super().update_resource(ctx, changes, resource)
 
@@ -179,6 +177,7 @@ def init_model(version: int):
         "root": {
             "key": "1",
             "value": "init",
+            "operation_uuid": str(uuid.uuid4()),
             "id": f"test::DependantResource[agent1,key=1],v={version}",
             "send_event": False,
             "requires": [
@@ -187,24 +186,27 @@ def init_model(version: int):
             ],
             "purged": False,
             "purge_on_delete": True,
-            "operation_uuid": str(uuid.uuid4()),
             "agent": "agent1",
         },
         "dep1": {
             "key": "2",
             "value": "init",
             "id": f"test::Resource[agent1,key=2],v={version}",
-            "send_event": False,
+            "send_event": True,
             "requires": [],
             "purged": False,
+            "purge_on_delete": True,
+            "agent": "agent1",
         },
         "dep2": {
             "key": "3",
             "value": "init",
             "id": f"test::Resource[agent1,key=3],v={version}",
-            "send_event": False,
+            "send_event": True,
             "requires": [],
             "purged": False,
+            "purge_on_delete": True,
+            "agent": "agent1",
         },
     }
 
@@ -239,6 +241,10 @@ async def next_model(client: Client, environment: UUID, current_version: int, ne
 async def initial_deployment(
     resource_container: ResourceContainer, environment: UUID, server, client: Client, agent, clienthelper: ClientHelper
 ) -> Tuple[dict, int]:
+    """
+    Making a first deployment of the resources
+    The deployed model if the one from init_model function
+    """
     resource_container.Provider.reset()
 
     # Setting up handler
@@ -282,10 +288,24 @@ async def test_initial_deployment(
     clienthelper: ClientHelper,
     initial_deployment: Tuple[dict, int],
 ):
+    """
+    Testing the initial deployment of the resources
+    The dependency resources should be deployed once, while being created
+    The dependant resource should have one deployment with change, and this change is an update
+    """
     model, version = initial_deployment
 
     # EventClient setup
     event_client = EventClient(client, environment)
+
+    for resource_id in [Id.parse_id(dep) for dep in model["root"]["requires"]]:
+        last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
+        first_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=True)
+
+        # We check that we only did one deployment, to create the resource
+        assert last_change == first_change
+        assert last_change.change == Change.created
+        assert last_change.version == version
 
     resource_id = Id.parse_id(model["root"]["id"])
     last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
@@ -307,6 +327,11 @@ async def test_full_deployment(
     clienthelper: ClientHelper,
     initial_deployment: Tuple[dict, int],
 ):
+    """
+    Testing a second deployment (full) with an updated model
+    Only one dependency is updated.
+    The dependant resource should be redeployed (meaning it now has two deployments to account for)
+    """
     initial_model, initial_version = initial_deployment
 
     # EventClient setup
@@ -350,6 +375,63 @@ async def test_full_deployment(
 
 
 @pytest.mark.asyncio
+async def test_incremental_deployment(
+    resource_container: ResourceContainer,
+    environment: UUID,
+    server,
+    client: Client,
+    agent,
+    clienthelper: ClientHelper,
+    initial_deployment: Tuple[dict, int],
+):
+    """
+    Testing a second deployment (incremental) with an updated model
+    Only one dependency is updated.  Thanks to the send_event attribute of the dependency resources,
+    the dependant resource should be redeployed (meaning it now has two deployments to account for)
+    """
+    initial_model, initial_version = initial_deployment
+
+    # EventClient setup
+    event_client = EventClient(client, environment)
+
+    # Create new version with changed dependency
+    version = await clienthelper.get_version()
+    model = await next_model(client, environment, version - 1, version)
+    model["dep1"]["value"] = "updated"
+    resources = list(model.values())
+
+    # Exporting new version
+    response: Result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert response.code == 200
+
+    # Deploying
+    response: Result = await client.release_version(
+        environment,
+        version,
+        True,
+        const.AgentTriggerMethod.push_incremental_deploy,
+    )
+    assert response.code == 200
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    resource_id = Id.parse_id(model["root"]["id"])
+    last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
+    first_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=True)
+
+    # We check that we had a second deployment, to update the resource
+    assert last_change != first_change
+    assert last_change.change == Change.updated
+    assert last_change.version == version
+
+
+@pytest.mark.asyncio
 async def test_redeploy_version(
     resource_container: ResourceContainer,
     environment: UUID,
@@ -359,6 +441,11 @@ async def test_redeploy_version(
     clienthelper: ClientHelper,
     initial_deployment: Tuple[dict, int],
 ):
+    """
+    Testing a second deployment (full) of the same version
+    No resource is updated.
+    The dependant resource should not be redeployed
+    """
     model, version = initial_deployment
 
     # EventClient setup
@@ -394,6 +481,11 @@ async def test_redeploy_model(
     clienthelper: ClientHelper,
     initial_deployment: Tuple[dict, int],
 ):
+    """
+    Testing a second deployment (full) of the same model (new version)
+    No resource is updated.
+    The dependant resource should not be redeployed
+    """
     model, version = initial_deployment
 
     # EventClient setup
@@ -433,3 +525,72 @@ async def test_redeploy_model(
     assert last_change == first_change
     assert last_change.change == Change.updated
     assert last_change.version == version - 1
+
+
+@pytest.mark.asyncio
+async def test_repair(
+    resource_container: ResourceContainer,
+    environment: UUID,
+    server,
+    client: Client,
+    agent,
+    clienthelper: ClientHelper,
+    initial_deployment: Tuple[dict, int],
+    no_agent_backoff,
+):
+    """
+    Testing a repair, doing a full deployment of an existing version.
+    Only one dependency value is "altered" (to be fixed by the repair)
+    The dependant resource should be redeployed.
+    """
+    model, version = initial_deployment
+
+    # EventClient setup
+    event_client = EventClient(client, environment)
+
+    # Manually changing resource values
+    resource_id = Id.parse_id(model["dep1"]["id"])
+    resource_container.Provider.set(resource_id.agent_name, resource_id.attribute_value, "updated")
+
+    response = await client.get_version(environment, version, True)
+    assert response.code == 200
+    last_deployment_date = sorted([res["last_deploy"] for res in response.result["resources"]])[-1]
+
+    # Triggering repair
+    response: Result = await client.deploy(
+        environment,
+        const.AgentTriggerMethod.push_full_deploy,
+    )
+    assert response.code == 200
+
+    async def is_repair_finished():
+        response = await client.get_version(environment, version)
+
+        if "deploying" in [res["status"] for res in response.result["model"]["status"].values()]:
+            return False
+
+        for res in response.result["resources"]:
+            if res["last_deploy"] > last_deployment_date:
+                return True
+
+        time.sleep(0.5)
+        return False
+
+    await retry_limited(is_repair_finished, 10)
+
+    last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
+    first_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=True)
+
+    # We check that we did redeploy after the repair
+    assert last_change != first_change
+    assert last_change.change == Change.updated
+    assert last_change.version == first_change.version
+
+    resource_id = Id.parse_id(model["root"]["id"])
+    last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
+    first_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=True)
+
+    # We check that we did redeploy after the repair
+    assert last_change != first_change
+    assert last_change.change == Change.updated
+    assert last_change.version == first_change.version
