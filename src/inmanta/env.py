@@ -188,6 +188,10 @@ python -m pip $@
         return None, req_line
 
     def _gen_requirements_file(self, requirements_list: List[str]) -> str:
+        """Generate a new requirements file based on the requirements list that was built from all the different modules.
+        :param requirements_list:  A list of requirements from all the requirements files in all modules.
+        :return: A string that can be written to a requirements file that pip understands.
+        """
         modules: Dict[str, Any] = {}
         for req in requirements_list:
             parsed_name, req_spec = self._parse_line(req)
@@ -284,7 +288,7 @@ python -m pip $@
 
     def _set_current_requirements_hash(self, new_hash):
         """
-        Set the current requirements hahs
+        Set the current requirements hash
         """
         path = os.path.join(self.env_path, "requirements.sha1sum")
         with open(path, "w+", encoding="utf-8") as fd:
@@ -302,7 +306,7 @@ python -m pip $@
             if len(requirements_list) == 0:
                 return
 
-        requirements_list = sorted(self._remove_requirements_present_in_parent_env(requirements_list))
+        requirements_list = sorted(requirements_list)
 
         # hash it
         sha1sum = hashlib.sha1()
@@ -318,22 +322,6 @@ python -m pip $@
         self._set_current_requirements_hash(new_req_hash)
         for x in requirements_list:
             self.__cache_done.add(x)
-
-    def _remove_requirements_present_in_parent_env(self, requirements_list: List[str]) -> List[str]:
-        reqs_to_remove = []
-        packages_installed_in_parent = self.get_package_installed_in_parent_env()
-        for r in requirements_list:
-            # Always install url-based requirements
-            if "://" in r:
-                continue
-            parsed_req = list(pkg_resources.parse_requirements(r))[0]
-            # Package is installed and its version fits the constraint
-            if (
-                parsed_req.project_name in packages_installed_in_parent
-                and packages_installed_in_parent[parsed_req.project_name] in parsed_req
-            ):
-                reqs_to_remove.append(r)
-        return [r for r in requirements_list if r not in reqs_to_remove]
 
     @classmethod
     def _get_installed_packages(cls, python_interpreter: str) -> Dict[str, str]:
