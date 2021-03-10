@@ -168,6 +168,9 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
 
     env = uuid.uuid4()
 
+    # There shouldn't be any running agent now
+    assert len(server.get_sessions()) == 0
+
     # agent 1
     agent = Agent("agent")
     await agent.add_end_point_name("agent")
