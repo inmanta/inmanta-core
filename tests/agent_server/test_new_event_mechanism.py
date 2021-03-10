@@ -33,7 +33,7 @@ from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.data import model
 from inmanta.protocol.common import Result
 from inmanta.protocol.endpoints import Client
-from inmanta.resources import Id, PurgeableResource, Resource, resource
+from inmanta.resources import Id, PurgeableResource, resource
 from inmanta.util import get_compiler_version
 from utils import ClientHelper, _wait_until_deployment_finishes, retry_limited
 
@@ -134,8 +134,6 @@ def resource_handler():
         def read_resource(self, ctx: HandlerContext, resource: DependentResource) -> None:
             logger.info("Calling read resource")
 
-            id = Resource.object_to_id(resource, "test::DependantResource", "key", "agent")
-
             environment = self._agent._env_id
             dependencies = resource.requires
 
@@ -143,7 +141,7 @@ def resource_handler():
                 custom_client = EventClient(client=Client("agent"), environment=environment)
 
                 last_deployment = await custom_client.get_resource_action(
-                    resource_id=id,
+                    resource_id=resource.id,
                     action_filter=is_deployment,
                     oldest_first=False,
                 )
@@ -239,7 +237,13 @@ async def next_model(client: Client, environment: UUID, current_version: int, ne
 
 @fixture(scope="function")
 async def initial_deployment(
-    resource_container: ResourceContainer, environment: UUID, server, client: Client, agent, clienthelper: ClientHelper
+    resource_container: ResourceContainer,
+    environment: UUID,
+    server,
+    client: Client,
+    agent,
+    clienthelper: ClientHelper,
+    no_agent_backoff,
 ) -> Tuple[dict, int]:
     """
     Making a first deployment of the resources
@@ -287,6 +291,7 @@ async def test_initial_deployment(
     agent,
     clienthelper: ClientHelper,
     initial_deployment: Tuple[dict, int],
+    no_agent_backoff,
 ):
     """
     Testing the initial deployment of the resources
@@ -326,6 +331,7 @@ async def test_full_deployment(
     agent,
     clienthelper: ClientHelper,
     initial_deployment: Tuple[dict, int],
+    no_agent_backoff,
 ):
     """
     Testing a second deployment (full) with an updated model
@@ -383,6 +389,7 @@ async def test_incremental_deployment(
     agent,
     clienthelper: ClientHelper,
     initial_deployment: Tuple[dict, int],
+    no_agent_backoff,
 ):
     """
     Testing a second deployment (incremental) with an updated model
@@ -440,6 +447,7 @@ async def test_redeploy_version(
     agent,
     clienthelper: ClientHelper,
     initial_deployment: Tuple[dict, int],
+    no_agent_backoff,
 ):
     """
     Testing a second deployment (full) of the same version
@@ -480,6 +488,7 @@ async def test_redeploy_model(
     agent,
     clienthelper: ClientHelper,
     initial_deployment: Tuple[dict, int],
+    no_agent_backoff,
 ):
     """
     Testing a second deployment (full) of the same model (new version)
