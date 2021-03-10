@@ -606,19 +606,15 @@ async def test_repair(
 
     await retry_limited(is_repair_finished, 10)
 
-    last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
-    first_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=True)
+    async def check_redeploy_after_repair(resource_id):
+        last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
+        first_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=True)
 
-    # We check that we did redeploy after the repair
-    assert last_change != first_change
-    assert last_change.change == Change.updated
-    assert last_change.version == first_change.version
+        # We check that we did redeploy after the repair
+        assert last_change != first_change
+        assert last_change.change == Change.updated
+        assert last_change.version == first_change.version
 
-    resource_id = Id.parse_id(model["root"]["id"])
-    last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
-    first_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=True)
+    await check_redeploy_after_repair(resource_id)
+    await check_redeploy_after_repair(Id.parse_id(model["root"]["id"]))
 
-    # We check that we did redeploy after the repair
-    assert last_change != first_change
-    assert last_change.change == Change.updated
-    assert last_change.version == first_change.version
