@@ -90,17 +90,6 @@ class DBSchema(object):
 
     async def ensure_db_schema(self) -> None:
         await self.ensure_self_update()
-
-        update_functions = await self._get_update_functions()
-        desired_version = update_functions[-1].version
-        if desired_version > current_version_db_schema:
-            await self._update_db_schema(update_functions)
-        elif desired_version < current_version_db_schema:
-            raise InvalidSchemaVersion(
-                f"Desired database version {desired_version} is lower "
-                f"than the current version {current_version_db_schema}, downgrading is not supported"
-            )
-
         await self._update_db_schema()
 
     async def ensure_self_update(self) -> None:
