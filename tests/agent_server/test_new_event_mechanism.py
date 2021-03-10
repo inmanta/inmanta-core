@@ -36,7 +36,6 @@ from inmanta.resources import Id, PurgeableResource, Resource, resource
 from inmanta.util import get_compiler_version
 from utils import ClientHelper, _wait_until_deployment_finishes, retry_limited
 
-
 logger = logging.getLogger("inmanta.test.event_client")
 
 QUERY_LIMIT = 3  # For testing only, small enough to have multiple queries, big enough to iterate through elements in response
