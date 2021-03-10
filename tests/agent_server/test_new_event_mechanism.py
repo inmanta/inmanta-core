@@ -1,5 +1,5 @@
 """
-    Copyright 2019 Inmanta
+    Copyright 2021 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ from inmanta.protocol.endpoints import Client
 from inmanta.resources import Id, PurgeableResource, Resource, resource
 from inmanta.util import get_compiler_version
 from utils import ClientHelper, _wait_until_deployment_finishes, retry_limited
+
 
 logger = logging.getLogger("inmanta.test.event_client")
 
@@ -167,7 +168,6 @@ def resource_handler():
 
         def update_resource(self, ctx: HandlerContext, changes: dict, resource: resources.PurgeableResource) -> None:
             logger.info("Calling update resource")
-            # resource.operation_uuid = changes["operation_uuid"]
             ctx.set_updated()
             return super().update_resource(ctx, changes, resource)
 
