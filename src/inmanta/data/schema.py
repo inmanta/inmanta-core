@@ -25,7 +25,6 @@ from typing import Any, Callable, Coroutine, List, Optional, Set, Tuple
 
 from asyncpg import Connection, UndefinedColumnError, UndefinedTableError
 from asyncpg.protocol import Record
-from asyncpg.transaction import Transaction
 
 # Name of core schema in the DB schema verions
 CORE_SCHEMA_NAME = "core"
@@ -178,20 +177,11 @@ class DBSchema(object):
         """
         Main update function
 
-        Wrapped in outer transaction, that holds a lock on the schemamanager table.
-        Each version update is wrapped in a subtransaction.
-
-        When a subtransaction fails, it is rolled back.
-        The outer transaction is committed at that point.
-
-        This logic requires manual transaction management,
-        as the exception is propagated over the transaction boundary without causing rollback.
+        Wrapped in transaction, that holds a lock on the schemamanager table.
+        When a version update fails, the whole transaction is rolled back.
         """
         if update_functions is None:
             update_functions = self._get_update_functions()
-        # outer transaction
-        outer: Optional[Transaction]
-        outer = self.connection.transaction()
         async with self.connection.transaction():
             # get lock
             await self.connection.execute(f"LOCK TABLE {SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
@@ -205,22 +195,17 @@ class DBSchema(object):
             updates = [v for v in update_functions if v.version not in sure_db_schema]
             for version in updates:
                 try:
-                    # wrap in subtransaction
-                    async with self.connection.transaction():
-                        # actual update sequence
-                        self.logger.info("Updating database schema to version %d", version.version)
-                        update_function = version.function
-                        await update_function(self.connection)
-                        # also set version, outer tx will always contain consistent version
-                        await self.set_installed_version(version.version)
-                    # commit subtx
+                    # actual update sequence
+                    self.logger.info("Updating database schema to version %d", version.version)
+                    update_function = version.function
+                    await update_function(self.connection)
+                    await self.set_installed_version(version.version)
                 except Exception:
-                    # update failed, subtransaction already rolled back
                     self.logger.exception(
                         "Database schema update for version %d failed. Rolling back all updates.",
                         version.version,
                     )
-                    # propagate excn
+                    # propagate exception => roll back transaction
                     raise
 
     async def get_legacy_version(self) -> int:
