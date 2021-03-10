@@ -22,7 +22,7 @@ import pkgutil
 import types
 import uuid
 from asyncio import Semaphore
-from typing import Optional
+from typing import Optional, Set
 
 import asyncpg
 import pytest
@@ -33,12 +33,12 @@ from data.db import versions
 from data.db_with_invalid_versions import invalid_versions
 from inmanta import data
 from inmanta.data import CORE_SCHEMA_NAME, schema
-from inmanta.data.schema import InvalidSchemaVersion, TableNotFound, Version, create_schemamanager
+from inmanta.data.schema import TableNotFound, Version, create_schemamanager
 from utils import log_contains
 
 
 async def run_updates_and_verify(
-    get_columns_in_db_table, schema_manager: schema.DBSchema, current: Optional[int] = None, prefix: str = ""
+    get_columns_in_db_table, schema_manager: schema.DBSchema, current: Optional[Set[int]] = None, prefix: str = ""
 ):
     async def update_function1(connection):
         await connection.execute(f"CREATE TABLE public.{prefix}tab(id integer primary key, val varchar NOT NULL);")
@@ -46,35 +46,36 @@ async def run_updates_and_verify(
     async def update_function2(connection):
         await connection.execute(f"ALTER TABLE public.{prefix}tab DROP COLUMN val;")
 
-    current_db_version = await schema_manager.get_current_version()
-    assert current is None or current_db_version == current
-    if current_db_version is None:
-        current_db_version = 0
-    version_update1 = current_db_version + 1
-    version_update2 = current_db_version + 2
+    current_db_versions: Set[int] = await schema_manager.get_installed_versions()
+    assert current is None or current_db_versions == current
+    latest_version: int = max(current_db_versions) if len(current_db_versions) > 0 else 0
+    version_update1 = latest_version + 1
+    version_update2 = latest_version + 2
     update_function_map = [Version(f"v{version_update1}", update_function1), Version(f"v{version_update2}", update_function2)]
 
     await schema_manager._update_db_schema(update_function_map)
 
-    assert (await schema_manager.get_current_version()) == version_update2
+    assert (await schema_manager.get_installed_versions()) == current_db_versions.union({version_update1, version_update2})
     assert sorted(["id"]) == sorted(await get_columns_in_db_table("tab"))
 
 
-async def get_core_version(postgresql_client):
+async def get_core_versions(postgresql_client) -> Set[int]:
     dbm = schema.DBSchema(CORE_SCHEMA_NAME, inmanta.db.versions, postgresql_client)
     try:
-        return await dbm.get_current_version()
+        return await dbm.get_installed_versions()
     except TableNotFound:
-        return 0
+        return set()
 
 
-async def assert_core_untouched(postgresql_client, corev=0):
+async def assert_core_untouched(postgresql_client, corev: Optional[Set[int]] = None):
     """
     Verify abscence of side-effect leaks to other cases
     """
+    if corev is None:
+        corev = set()
     dbm = schema.DBSchema(CORE_SCHEMA_NAME, inmanta.db.versions, postgresql_client)
-    current_db_version = await dbm.get_current_version()
-    assert current_db_version == corev
+    current_db_versions = await dbm.get_installed_versions()
+    assert current_db_versions == corev
 
 
 @pytest.mark.asyncio
@@ -82,9 +83,9 @@ async def test_dbschema_clean(postgresql_client: asyncpg.Connection, get_columns
     with caplog.at_level(logging.INFO):
         dbm = schema.DBSchema("test_dbschema_clean", inmanta.db.versions, postgresql_client)
         with pytest.raises(TableNotFound):
-            await dbm.get_current_version()
+            await dbm.get_installed_versions()
         await dbm.ensure_self_update()
-        await run_updates_and_verify(get_columns_in_db_table, dbm, 0)
+        await run_updates_and_verify(get_columns_in_db_table, dbm, set())
         await assert_core_untouched(postgresql_client)
 
         log_contains(caplog, "inmanta.data.schema.schema:test_dbschema_clean", logging.INFO, "Creating schema version table")
@@ -93,14 +94,14 @@ async def test_dbschema_clean(postgresql_client: asyncpg.Connection, get_columns
 @pytest.mark.asyncio
 async def test_dbschema_unclean(postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db):
     dbm = schema.DBSchema("test_dbschema_unclean", inmanta.db.versions, postgresql_client)
-    current_db_version = await dbm.ensure_self_update()
-    assert current_db_version == 0
+    await dbm.ensure_self_update()
+    assert await dbm.get_installed_versions() == set()
 
-    await dbm.set_current_version(5)
-    current_db_version = await dbm.get_current_version()
-    assert current_db_version == 5
+    await dbm.set_installed_version(5)
+    current_versions: Set[int] = await dbm.get_installed_versions()
+    assert current_versions == {5}
 
-    await run_updates_and_verify(get_columns_in_db_table, dbm, current_db_version)
+    await run_updates_and_verify(get_columns_in_db_table, dbm, current_versions)
     await assert_core_untouched(postgresql_client)
 
 
@@ -110,18 +111,18 @@ async def test_dbschema_update_legacy_1(
 ):
     await postgresql_client.execute(
         """
--- Table: public.schemaversion
-CREATE TABLE IF NOT EXISTS public.schemaversion(
-    id uuid PRIMARY KEY,
-    current_version integer NOT NULL UNIQUE
+-- Table: public.schemamanager
+CREATE TABLE IF NOT EXISTS public.schemamanager(
+    name varchar PRIMARY KEY,
+    current_version integer NOT NULL
 );
 """
     )
     dbm = schema.DBSchema("test_l1", inmanta.db.versions, postgresql_client)
     current_db_version = await dbm.get_legacy_version()
     assert current_db_version == 0
-    await dbm.ensure_self_update()
-    await run_updates_and_verify(get_columns_in_db_table, dbm, current_db_version)
+    await dbm._legacy_migration({0, 1, 2})
+    await run_updates_and_verify(get_columns_in_db_table, dbm, set())
 
 
 @pytest.mark.asyncio
@@ -130,20 +131,20 @@ async def test_dbschema_update_legacy_2(
 ):
     await postgresql_client.execute(
         """
--- Table: public.schemaversion
-CREATE TABLE IF NOT EXISTS public.schemaversion(
-    id uuid PRIMARY KEY,
-    current_version integer NOT NULL UNIQUE
+-- Table: public.schemamanager
+CREATE TABLE IF NOT EXISTS public.schemamanager(
+    name varchar PRIMARY KEY,
+    current_version integer NOT NULL
 );
 """
     )
-    await postgresql_client.execute("INSERT INTO public.schemaversion(id, current_version) VALUES ($1, $2);", uuid.uuid4(), 1)
+    await postgresql_client.execute("INSERT INTO public.schemamanager(name, current_version) VALUES ($1, $2);", "myslice", 1)
 
-    dbm = schema.DBSchema(CORE_SCHEMA_NAME, inmanta.db.versions, postgresql_client)
+    dbm = schema.DBSchema("myslice", inmanta.db.versions, postgresql_client)
     current_db_version = await dbm.get_legacy_version()
     assert current_db_version == 1
-    await dbm.ensure_self_update()
-    await run_updates_and_verify(get_columns_in_db_table, dbm, current_db_version)
+    await dbm._legacy_migration({0, 1, 2, 3})
+    await run_updates_and_verify(get_columns_in_db_table, dbm, {0, 1})
 
 
 @pytest.mark.asyncio
@@ -152,16 +153,16 @@ async def test_dbschema_update_db_schema(postgresql_client, get_columns_in_db_ta
     db_schema = schema.DBSchema("test_dbschema_update_db_schema", inmanta.db.versions, postgresql_client)
     await db_schema.ensure_self_update()
 
-    await run_updates_and_verify(get_columns_in_db_table, db_schema, 0)
+    await run_updates_and_verify(get_columns_in_db_table, db_schema, set())
 
     db_schema = schema.DBSchema("test_dbschema_update_db_schema_1", inmanta.db.versions, postgresql_client)
 
-    await run_updates_and_verify(get_columns_in_db_table, db_schema, 0, prefix="C")
+    await run_updates_and_verify(get_columns_in_db_table, db_schema, set(), prefix="C")
 
 
 @pytest.mark.asyncio
 async def test_dbschema_update_db_schema_failure(postgresql_client, get_columns_in_db_table):
-    corev = await get_core_version(postgresql_client)
+    corev: Set[int] = await get_core_versions(postgresql_client)
     db_schema = schema.DBSchema("test_dbschema_update_db_schema_failure", inmanta.db.versions, postgresql_client)
     await db_schema.ensure_self_update()
 
@@ -169,18 +170,19 @@ async def test_dbschema_update_db_schema_failure(postgresql_client, get_columns_
         # Syntax error should trigger database rollback
         await connection.execute("CREATE TABE public.tab(id integer primary key, val varchar NOT NULL);")
 
-    current_db_version = await db_schema.get_current_version()
-    new_db_version = current_db_version + 1
+    current_db_versions: Set[int] = await db_schema.get_installed_versions()
+    assert len(current_db_versions) == 0
+    new_db_version = 1
     update_function_map = [Version(f"v{new_db_version}", update_function)]
 
     with pytest.raises(PostgresSyntaxError):
         await db_schema._update_db_schema(update_function_map)
 
     # Assert rollback
-    assert (await db_schema.get_current_version()) == current_db_version
+    assert (await db_schema.get_installed_versions()) == current_db_versions
     assert (
         await postgresql_client.fetchval(
-            "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='tab'"
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name='tab'"
         )
     ) is None
 
@@ -192,7 +194,7 @@ async def test_dbschema_update_db_schema_failure(postgresql_client, get_columns_
     await db_schema._update_db_schema(update_function_map)
 
     # Assert update
-    assert (await db_schema.get_current_version()) == new_db_version
+    assert (await db_schema.get_installed_versions()) == current_db_versions.union({new_db_version})
     assert sorted(["id", "val"]) == sorted(await get_columns_in_db_table("tab"))
     await assert_core_untouched(postgresql_client, corev)
 
@@ -207,7 +209,7 @@ def make_versions(idx, *fcts):
 
 @pytest.mark.asyncio
 async def test_dbschema_partial_update_db_schema_failure(postgresql_client, get_columns_in_db_table):
-    corev = await get_core_version(postgresql_client)
+    corev: Set[int] = await get_core_versions(postgresql_client)
     db_schema = schema.DBSchema("test_dbschema_partial_update_db_schema_failure", inmanta.db.versions, postgresql_client)
     await db_schema.ensure_self_update()
 
@@ -224,19 +226,18 @@ async def test_dbschema_partial_update_db_schema_failure(postgresql_client, get_
         # Fix syntax issue
         await connection.execute("CREATE TABLE public.tabc(id integer primary key, val varchar NOT NULL);")
 
-    current_db_version = await db_schema.get_current_version()
-    if current_db_version is None:
-        current_db_version = 0
+    current_db_versions: Set[int] = await db_schema.get_installed_versions()
+    assert len(current_db_versions) == 0
 
     update_function_map = make_versions(
-        current_db_version + 1, update_function_good, update_function_bad, update_function_good2
+        1, update_function_good, update_function_bad, update_function_good2
     )
 
     with pytest.raises(PostgresSyntaxError):
         await db_schema._update_db_schema(update_function_map)
 
     # Assert rollback
-    assert (await db_schema.get_current_version()) == current_db_version + 1
+    assert (await db_schema.get_installed_versions()) == {1}
     assert (
         await postgresql_client.fetchval(
             "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='taba'"
@@ -258,8 +259,7 @@ async def test_dbschema_partial_update_db_schema_failure(postgresql_client, get_
     await assert_core_untouched(postgresql_client, corev)
 
 
-@pytest.mark.asyncio
-async def test_dbschema_get_dct_with_update_functions():
+def test_dbschema_get_dct_with_update_functions():
     module_names = [modname for _, modname, ispkg in pkgutil.iter_modules(data.PACKAGE_WITH_UPDATE_FILES.__path__) if not ispkg]
     for module_name in module_names:
         module = __import__(data.PACKAGE_WITH_UPDATE_FILES.__name__ + "." + module_name, fromlist=["update"])
@@ -268,7 +268,7 @@ async def test_dbschema_get_dct_with_update_functions():
     all_versions = [int(mod_name[1:]) for mod_name in module_names]
 
     db_schema = schema.DBSchema(CORE_SCHEMA_NAME, data.PACKAGE_WITH_UPDATE_FILES, None)
-    update_function_map = await db_schema._get_update_functions()
+    update_function_map = db_schema._get_update_functions()
     assert sorted(all_versions) == [v.version for v in update_function_map]
     for version in update_function_map:
         assert version.version >= 0
@@ -283,7 +283,7 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
         async with postgresql_pool.acquire() as postgresql_client2:
 
             # schedule 3 updates, hang on second, unblock one, verify, unblock other, verify
-            corev = await get_core_version(postgresql_client)
+            corev: Set[int] = await get_core_versions(postgresql_client)
 
             db_schema = schema.DBSchema("test_multi_upgrade_lockout", inmanta.db.versions, postgresql_client)
             db_schema2 = schema.DBSchema("test_multi_upgrade_lockout", inmanta.db.versions, postgresql_client2)
@@ -304,11 +304,10 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
                 # Fix syntax issue
                 await connection.execute("CREATE TABLE public.tabc(id integer primary key, val varchar NOT NULL);")
 
-            current_db_version = await db_schema.get_current_version()
-            if current_db_version is None:
-                current_db_version = 0
+            current_db_versions: Set[int] = await db_schema.get_installed_versions()
+            assert len(current_db_versions) == 0
 
-            update_function_map = make_versions(current_db_version + 1, update_function_a, update_function_b, update_function_c)
+            update_function_map = make_versions(1, update_function_a, update_function_b, update_function_c)
 
             r1 = asyncio.ensure_future(db_schema._update_db_schema(update_function_map))
             r2 = asyncio.ensure_future(db_schema2._update_db_schema(update_function_map))
@@ -326,7 +325,7 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
             await second
 
             # Assert done
-            assert (await db_schema.get_current_version()) == current_db_version + 3
+            assert (await db_schema.get_installed_versions()) == {1, 2, 3}
             assert (
                 await postgresql_client.fetchval(
                     "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='taba'"
@@ -351,7 +350,7 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
 @pytest.mark.asyncio
 async def test_dbschema_get_dct_filter_disabled():
     db_schema = schema.DBSchema(CORE_SCHEMA_NAME, versions, None)
-    update_function_map = await db_schema._get_update_functions()
+    update_function_map = db_schema._get_update_functions()
     assert 2 not in [v.version for v in update_function_map]
     for version in update_function_map:
         assert version.version >= 0
@@ -361,28 +360,9 @@ async def test_dbschema_get_dct_filter_disabled():
 
 
 @pytest.mark.asyncio
-async def test_dbschema_update_db_downgrade(postgresql_client):
-    schema_name = "test_dbschema_update_db_downgrade"
-    SCHEMA_VERSION_TABLE = "schemamanager"
-    await postgresql_client.execute(create_schemamanager)
-
-    db_schema = schema.DBSchema(schema_name, inmanta.db.versions, postgresql_client)
-    update_function_map = await db_schema._get_update_functions()
-    version_latest_schema_file = update_function_map[-1].version
-    db_schema_version_to_set = version_latest_schema_file + 1
-    await postgresql_client.execute(
-        f"INSERT INTO {SCHEMA_VERSION_TABLE} (name, current_version) VALUES ($1, $2)", schema_name, db_schema_version_to_set
-    )
-    with pytest.raises(InvalidSchemaVersion):
-        await db_schema.ensure_db_schema()
-    current_db_version = await db_schema.get_current_version()
-    assert db_schema_version_to_set == current_db_version
-
-
-@pytest.mark.asyncio
 async def test_dbschema_get_dct_filter_invalid_names(caplog):
     db_schema = schema.DBSchema(CORE_SCHEMA_NAME, invalid_versions, None)
-    update_function_map = await db_schema._get_update_functions()
+    update_function_map = db_schema._get_update_functions()
     assert len(update_function_map) == 0
     log_contains(caplog, "inmanta.data.schema", logging.WARNING, "V2 doesn't match the expected pattern")
     log_contains(caplog, "inmanta.data.schema", logging.WARNING, "ver1 doesn't match the expected pattern")
