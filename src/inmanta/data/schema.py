@@ -192,9 +192,7 @@ class DBSchema(object):
         # outer transaction
         outer: Optional[Transaction]
         outer = self.connection.transaction()
-        try:
-            # enter transaction
-            await outer.start()
+        async with self.connection.transaction():
             # get lock
             await self.connection.execute(f"LOCK TABLE {SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
             # get current version again, in transaction this time
@@ -218,24 +216,12 @@ class DBSchema(object):
                     # commit subtx
                 except Exception:
                     # update failed, subtransaction already rolled back
-                    self.logger.exception("Database schema update for version %d failed", version.version)
-                    # commit outer
-                    await outer.commit()
-                    # unset it, to prevent double commit
-                    outer = None
+                    self.logger.exception(
+                        "Database schema update for version %d failed. Rolling back all updates.",
+                        version.version,
+                    )
                     # propagate excn
                     raise
-        except Exception:
-            # an exception, from either outer transaction (before subtransaction) or subtransaction
-            if outer is not None:
-                # subtransaction did not set None, so abort
-                await outer.rollback()
-                outer = None
-            raise
-        finally:
-            # if the tx is still there, all is good
-            if outer is not None:
-                await outer.commit()
 
     async def get_legacy_version(self) -> int:
         """

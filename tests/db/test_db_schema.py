@@ -233,13 +233,13 @@ async def test_dbschema_partial_update_db_schema_failure(postgresql_client, get_
     with pytest.raises(PostgresSyntaxError):
         await db_schema._update_db_schema(update_function_map)
 
-    # Assert rollback
-    assert (await db_schema.get_installed_versions()) == {1}
+    # Assert full rollback
+    assert (await db_schema.get_installed_versions()) == set()
     assert (
         await postgresql_client.fetchval(
             "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='taba'"
         )
-    ) is not None
+    ) is None
 
     assert (
         await postgresql_client.fetchval(
