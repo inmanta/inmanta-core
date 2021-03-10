@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import datetime
+import json
 import logging
 import time
 import uuid
@@ -566,12 +567,15 @@ async def test_repair(
         response = await client.get_version(environment, version)
 
         if "deploying" in [res["status"] for res in response.result["model"]["status"].values()]:
+            logger.info(f"A resource is still being deployed: {json.dumps(response.result['model'], indent=2)}")
             return False
 
-        for res in response.result["resources"]:
-            if res["last_deploy"] > last_deployment_date:
+        res_last_deploys = [res["last_deploy"] for res in response.result["resources"]]
+        for last_deploy in res_last_deploys:
+            if last_deploy > last_deployment_date:
                 return True
 
+        logger.info(f"No resource redeployed after {last_deployment_date}: {json.dumps(res_last_deploys)}")
         time.sleep(0.5)
         return False
 
