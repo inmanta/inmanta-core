@@ -20,7 +20,6 @@ import inspect
 import logging
 import pkgutil
 import types
-import uuid
 from asyncio import Semaphore
 from typing import Optional, Set
 
@@ -33,7 +32,7 @@ from data.db import versions
 from data.db_with_invalid_versions import invalid_versions
 from inmanta import data
 from inmanta.data import CORE_SCHEMA_NAME, schema
-from inmanta.data.schema import TableNotFound, Version, create_schemamanager
+from inmanta.data.schema import TableNotFound, Version
 from utils import log_contains
 
 
@@ -229,9 +228,7 @@ async def test_dbschema_partial_update_db_schema_failure(postgresql_client, get_
     current_db_versions: Set[int] = await db_schema.get_installed_versions()
     assert len(current_db_versions) == 0
 
-    update_function_map = make_versions(
-        1, update_function_good, update_function_bad, update_function_good2
-    )
+    update_function_map = make_versions(1, update_function_good, update_function_bad, update_function_good2)
 
     with pytest.raises(PostgresSyntaxError):
         await db_schema._update_db_schema(update_function_map)
