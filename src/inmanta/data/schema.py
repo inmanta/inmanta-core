@@ -234,7 +234,7 @@ class DBSchema(object):
         :raises TableNotFound:
         :raises ColumnNotFound:
         """
-        versions: Record = None
+        versions: Optional[Record] = None
         try:
             versions = await self.connection.fetchrow(
                 f"select installed_versions from {SCHEMA_VERSION_TABLE} where name=$1", self.name
