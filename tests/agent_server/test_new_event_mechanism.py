@@ -82,8 +82,7 @@ class EventClient:
             response: Result = await self.client.get_resource_actions(**kwargs)
             if response.code != 200:
                 raise RuntimeError(
-                    f"Unexpected response code when getting resource actions: received {response.code} "
-                    f"(expected 200): {response.result}"
+                    f"Unexpected response code when getting resource actions: received {response.code} (expected 200)"
                 )
 
             actions: List[model.ResourceAction] = [model.ResourceAction(**action) for action in response.result.get("data", [])]
@@ -140,7 +139,7 @@ def resource_handler():
             dependencies = resource.requires
 
             async def should_redeploy() -> bool:
-                custom_client = EventClient(client=Client("client"), environment=environment)
+                custom_client = EventClient(client=Client("agent"), environment=environment)
 
                 last_deployment = await custom_client.get_resource_action(
                     resource_id=id,
@@ -281,50 +280,22 @@ async def initial_deployment(
 @pytest.mark.asyncio
 async def test_initial_deployment(
     resource_container: ResourceContainer,
-    environment_multi: UUID,
-    server_multi,
-    client_multi: Client,
-    agent_multi,
+    environment: UUID,
+    server,
+    client: Client,
+    agent,
+    clienthelper: ClientHelper,
+    initial_deployment: Tuple[dict, int],
 ):
     """
-    Testing the initial deployment of the resources, with authentication enabled on the server
+    Testing the initial deployment of the resources
     The dependency resources should be deployed once, while being created
     The dependant resource should have one deployment with change, and this change is an update
     """
-    resource_container.Provider.reset()
-
-    # Setting up handler
-    resource_handler()
-
-    clienthelper = ClientHelper(client_multi, environment_multi)
-
-    version = await clienthelper.get_version()
-    model = init_model(version)
-    resources = list(model.values())
-
-    # Initial version
-    response: Result = await client_multi.put_version(
-        tid=environment_multi,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-    )
-    assert response.code == 200
-
-    # Initial deployment
-    response: Result = await client_multi.release_version(
-        environment_multi,
-        version,
-        True,
-        const.AgentTriggerMethod.push_full_deploy,
-    )
-    assert response.code == 200
-    await _wait_until_deployment_finishes(client_multi, environment_multi, version)
+    model, version = initial_deployment
 
     # EventClient setup
-    event_client = EventClient(client_multi, environment_multi)
+    event_client = EventClient(client, environment)
 
     for resource_id in [Id.parse_id(dep) for dep in model["root"]["requires"]]:
         last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
