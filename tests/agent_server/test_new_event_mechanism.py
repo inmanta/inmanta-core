@@ -588,4 +588,3 @@ async def test_repair(
 
     await check_redeploy_after_repair(resource_id)
     await check_redeploy_after_repair(Id.parse_id(model["root"]["id"]))
-
