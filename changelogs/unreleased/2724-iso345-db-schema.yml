@@ -1,0 +1,8 @@
+description: Updated db schema update mechanism to track all installed versions
+issue-nr: 2724
+change-type: minor
+sections:
+  feature: "{{description}}"
+destination-branches:
+  - master
+  - iso4
