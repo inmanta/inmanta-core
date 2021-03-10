@@ -16,9 +16,7 @@
     Contact: code@inmanta.com
 """
 import datetime
-import json
 import logging
-import time
 import uuid
 from typing import Callable, List, Optional, Tuple
 from uuid import UUID
@@ -572,21 +570,16 @@ async def test_repair(
     )
     assert response.code == 200
 
+    res_to_repair = {model["root"]["id"], model["dep1"]["id"]}
+
     async def is_repair_finished():
         response = await client.get_version(environment, version)
-
-        if "deploying" in [res["status"] for res in response.result["model"]["status"].values()]:
-            logger.info(f"A resource is still being deployed: {json.dumps(response.result['model'], indent=2)}")
-            return False
-
-        res_last_deploys = [res["last_deploy"] for res in response.result["resources"]]
-        for last_deploy in res_last_deploys:
-            if last_deploy > last_deployment_date:
-                return True
-
-        logger.info(f"No resource redeployed after {last_deployment_date}: {json.dumps(res_last_deploys)}")
-        time.sleep(0.5)
-        return False
+        res_repaired = [
+            res
+            for res in response.result["resources"]
+            if res["resource_version_id"] in res_to_repair and res["last_deploy"] > last_deployment_date
+        ]
+        return len(res_repaired) == len(res_to_repair)
 
     await retry_limited(is_repair_finished, 10)
 
