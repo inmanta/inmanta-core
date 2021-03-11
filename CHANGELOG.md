@@ -6,6 +6,7 @@
 - Set PYTHONPATH so that all subprocesses also see packages in parent venv (#2650, #2747)
 - Create virtual environments without pip and use the pip of the parent venv
 - Correctly set `[:n]` as syntactic sugar for `[0:n]` instead of leaving lower unbound (#2689)
+- Protect server against large API results (#2432)
 
 # Release 2020.4.4 (2020-11-25)
 

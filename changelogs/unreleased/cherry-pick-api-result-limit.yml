@@ -1,7 +1,0 @@
-description: Protect server against large API results
-issue-nr: 2432
-change-type: patch
-sections:
-  bugfix: "{{description}}"
-destination-branches:
-  - iso3
