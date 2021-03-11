@@ -2013,3 +2013,10 @@ async def test_dict_list_get_by_url(unused_tcp_port, postgres_db, database_name,
         raise_error=False,
     )
     assert response.code == 400
+    filter_with_comma = {"filter.a": "b", "filter.c": "e", "filter.,&?=%": ",&?=%"}
+    url = url_concat(f"http://localhost:{server_bind_port.get()}/api/v1/test/1/monty", filter_with_comma)
+    response = await client.fetch(
+        url,
+        raise_error=False,
+    )
+    assert response.code == 200

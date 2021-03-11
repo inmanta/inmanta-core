@@ -775,14 +775,15 @@ class MethodProperties(object):
             already_processed_params = []
             for query_param_name, query_param_value in qs_map.items():
                 if isinstance(query_param_value, dict):
+                    # Add parameters from the dict as separate parameters for example
+                    # param = { "key1": "val1", "key2": "val2" } to param.key1=val1 and param.key2=val2
                     params_to_add = {**params_to_add, **self._encode_dict_for_get(query_param_name, query_param_value)}
                     already_processed_params.append(query_param_name)
                 if isinstance(query_param_value, list):
                     params_to_add[query_param_name] = self._encode_list_for_get(query_param_value)
-                    already_processed_params.append(query_param_name)
             for param in already_processed_params:
                 del qs_map[param]
-            qs_map = {**qs_map, **params_to_add}
+            qs_map.update(params_to_add)
             # encode arguments in url
             if len(qs_map) > 0:
                 url += "?" + parse.urlencode(qs_map)
