@@ -1,5 +1,5 @@
 description: Update build_tag from dev to .dev
 issue-repo: infra-tickets
-issue-nr: 103
+issue-nr: 104
 change-type: patch
 destination-branches: [master, iso3, iso4]
