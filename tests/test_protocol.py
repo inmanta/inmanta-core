@@ -1705,44 +1705,64 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
 
 
 @pytest.mark.parametrize(
-    "param_type,param_value,expected_url,expected_return_value",
+    "param_type,param_value,expected_url,expected_status_code",
     [
         (
             Dict[str, str],
             {"a": "b", "c": "d", ",&?=%": ",&?=%"},
             "/api/v1/test/1/monty?filter.a=b&filter.c=d&filter.,&?=%=,&?=%",
-            "a,c,,&?=%",
+            200,
+        ),
+        (
+            Dict[str, List[str]],
+            {"a": ["b"], "c": ["d", "e"], "g": ["h"]},
+            "/api/v1/test/1/monty?filter.a=b&filter.c=d,e&filter.g=h",
+            200,
         ),
         (
             Dict[str, List[str]],
             {"a": ["b"], "c": ["d", "e"], ",&?=%": [",&?=%", "f"], "g": ["h"]},
             "/api/v1/test/1/monty?filter.a=b&filter.c=d,e&filter.,&?=%=,&?=%,f&filter.g=h",
-            "a,c,,&?=%,g",
+            400,
         ),
-        (List[str], ["a", "b", ",&?=%"], "/api/v1/test/1/monty?filter=a,b,,&?=%", "a,b,,&?=%"),
+        (
+            List[str],
+            [
+                "a",
+                "b",
+                "c",
+            ],
+            "/api/v1/test/1/monty?filter=a,b,c",
+            200,
+        ),
+        (
+            List[str],
+            [
+                "a",
+                "b",
+                ",&?=%",
+                "c",
+            ],
+            "/api/v1/test/1/monty?filter=a,b,,&?=%,c",
+            400,
+        ),
+        (List[str], ["a", "b", "c", ","], "/api/v1/test/1/monty?filter=a,b,c,,", 400),
     ],
 )
 @pytest.mark.asyncio
-async def test_dict_list_get_valid(
-    unused_tcp_port,
-    postgres_db,
-    database_name,
-    async_finalizer,
-    param_type,
-    param_value,
-    expected_url,
-    expected_return_value,
+async def test_dict_list_get_roundtrip(
+    unused_tcp_port, postgres_db, database_name, async_finalizer, param_type, param_value, expected_url, expected_status_code
 ):
     configure(unused_tcp_port, database_name, postgres_db.port)
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
-        def test_method(id: str, name: str, filter: param_type) -> str:  # NOQA
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"], strict_typing=False)
+        def test_method(id: str, name: str, filter: param_type) -> Any:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, id: str, name: str, filter: param_type) -> str:  # NOQA
-            return ",".join(filter.keys()) if hasattr(filter, "keys") else ",".join(filter)
+        async def test_method(self, id: str, name: str, filter: param_type) -> Any:  # NOQA
+            return filter
 
     rs = Server()
     server = ProjectServer(name="projectserver")
@@ -1758,8 +1778,9 @@ async def test_dict_list_get_valid(
 
     client: protocol.Client = protocol.Client("client")
     response: Result = await client.test_method(1, "monty", filter=param_value)
-    assert response.code == 200
-    assert response.result["data"] == expected_return_value
+    assert response.code == expected_status_code
+    if expected_status_code == 200:
+        assert response.result["data"] == param_value
 
 
 @pytest.mark.asyncio
