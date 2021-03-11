@@ -97,13 +97,14 @@ class DBSchema(object):
         """
         try:
             await self.get_legacy_version()
-            await self._legacy_migration()
         except ColumnNotFound:
             # No legacy column, proceed
             pass
         except TableNotFound:
             # No schema table, proceed
             pass
+        else:
+            await self._legacy_migration()
 
         try:
             await self.get_installed_versions()
@@ -119,10 +120,15 @@ class DBSchema(object):
         3- migrates the existing version to the new column, for all slices
         4- drops legacy colum
         Assumes all versions lower than the current legacy version have been installed at the time of migration.
+
+        :param all_versions: allows overriding the available versions, for example for testing purposes.
+            If not specified, available update functions' versions are used.
         """
         self.logger.info("Migrating from old schema management to new schema management")
-        if all_versions is None:
-            all_versions = [version.version for version in self._get_update_functions()]
+        all_versions = (
+            sorted(all_versions) if all_versions is not None
+            else [version.version for version in self._get_update_functions()]
+        )
         # tx begin
         async with self.connection.transaction():
             # lock table
@@ -179,9 +185,13 @@ class DBSchema(object):
 
         Wrapped in transaction, that holds a lock on the schemamanager table.
         When a version update fails, the whole transaction is rolled back.
+
+        :param update_functions: allows overriding the available update functions, for example for testing purposes.
         """
-        if update_functions is None:
-            update_functions = self._get_update_functions()
+        update_functions = (
+            sorted(update_functions, key=lambda x: x.version) if update_functions is not None
+            else self._get_update_functions()
+        )
         async with self.connection.transaction():
             # get lock
             await self.connection.execute(f"LOCK TABLE {SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
