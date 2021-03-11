@@ -33,6 +33,7 @@ import tornado
 from pydantic.types import StrictBool
 from tornado import gen, web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+from tornado.httputil import url_concat
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 from inmanta import config, const, protocol
@@ -1705,35 +1706,31 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
 
 
 @pytest.mark.parametrize(
-    "param_type,param_value,expected_url,expected_status_code",
+    "param_type,param_value,expected_url",
     [
         (
             Dict[str, str],
             {"a": "b", "c": "d", ",&?=%": ",&?=%"},
             "/api/v1/test/1/monty?filter.a=b&filter.c=d&filter.,&?=%=,&?=%",
-            200,
         ),
         (
             Dict[str, List[str]],
             {"a": ["b"], "c": ["d", "e"], "g": ["h"]},
             "/api/v1/test/1/monty?filter.a=b&filter.c=d,e&filter.g=h",
-            200,
         ),
         (
             Dict[str, List[str]],
             {"a": ["b"], "c": ["d", "e"], ",&?=%": [",&?=%", "f"], "g": ["h"]},
-            "/api/v1/test/1/monty?filter.a=b&filter.c=d,e&filter.,&?=%=,&?=%,f&filter.g=h",
-            400,
+            "/api/v1/test/1/monty?filter.a=b&filter.c=d,e&filter.,&?=%=%2C&?=%,f&filter.g=h",
         ),
         (
             List[str],
             [
-                "a",
-                "b",
+                "a ",
+                "b,",
                 "c",
             ],
-            "/api/v1/test/1/monty?filter=a,b,c",
-            200,
+            "/api/v1/test/1/monty?filter=a ,b%2C,c",
         ),
         (
             List[str],
@@ -1743,15 +1740,14 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
                 ",&?=%",
                 "c",
             ],
-            "/api/v1/test/1/monty?filter=a,b,,&?=%,c",
-            400,
+            "/api/v1/test/1/monty?filter=a,b,%2C&?=%,c",
         ),
-        (List[str], ["a", "b", "c", ","], "/api/v1/test/1/monty?filter=a,b,c,,", 400),
+        (List[str], ["a ", "b", "c", ","], "/api/v1/test/1/monty?filter=a ,b,c,%2C"),
     ],
 )
 @pytest.mark.asyncio
 async def test_dict_list_get_roundtrip(
-    unused_tcp_port, postgres_db, database_name, async_finalizer, param_type, param_value, expected_url, expected_status_code
+    unused_tcp_port, postgres_db, database_name, async_finalizer, param_type, param_value, expected_url
 ):
     configure(unused_tcp_port, database_name, postgres_db.port)
 
@@ -1774,13 +1770,12 @@ async def test_dict_list_get_roundtrip(
     request = MethodProperties.methods["test_method"][0].build_call(
         args=[], kwargs={"id": "1", "name": "monty", "filter": param_value}
     )
-    assert urllib.parse.unquote(request.url) == expected_url
+    assert urllib.parse.unquote_plus(request.url) == expected_url
 
     client: protocol.Client = protocol.Client("client")
     response: Result = await client.test_method(1, "monty", filter=param_value)
-    assert response.code == expected_status_code
-    if expected_status_code == 200:
-        assert response.result["data"] == param_value
+    assert response.code == 200
+    assert response.result["data"] == param_value
 
 
 @pytest.mark.asyncio
@@ -1885,7 +1880,7 @@ async def test_list_get_optional(unused_tcp_port, postgres_db, database_name, as
         args=[], kwargs={"id": "1", "name": "monty", "sort": [1, 2]}
     )
     # comma is url encoded
-    assert urllib.parse.unquote(request.url) == "/api/v1/test/1/monty?sort=1,2"
+    assert urllib.parse.unquote_plus(request.url) == "/api/v1/test/1/monty?sort=1,2"
 
     client: protocol.Client = protocol.Client("client")
 
@@ -1898,7 +1893,7 @@ async def test_list_get_optional(unused_tcp_port, postgres_db, database_name, as
     uuids = [uuid.uuid4(), uuid.uuid4()]
     request = MethodProperties.methods["test_method_uuid"][0].build_call(args=[], kwargs={"id": "1", "sort": uuids})
     # comma is url encoded
-    assert urllib.parse.unquote(request.url) == f"/api/v1/test_uuid/1?sort={uuids[0]},{uuids[1]}"
+    assert urllib.parse.unquote_plus(request.url) == f"/api/v1/test_uuid/1?sort={uuids[0]},{uuids[1]}"
 
 
 @pytest.mark.asyncio
@@ -1927,7 +1922,7 @@ async def test_dicts_multiple_get(unused_tcp_port, postgres_db, database_name, a
         args=[], kwargs={"id": "1", "name": "monty", "filter": {"a": ["b", "c"]}, "another_filter": {"d": "e"}}
     )
     # comma is url encoded
-    assert urllib.parse.unquote(request.url) == "/api/v1/test/1/monty?filter.a=b,c&another_filter.d=e"
+    assert urllib.parse.unquote_plus(request.url) == "/api/v1/test/1/monty?filter.a=b,c&another_filter.d=e"
 
     client: protocol.Client = protocol.Client("client")
 
@@ -1959,7 +1954,7 @@ async def test_dict_list_get_by_url(unused_tcp_port, postgres_db, database_name,
 
         @protocol.handle(test_method_list)
         async def test_method_list(self, id: str, filter: List[int]) -> str:  # NOQA
-            return ",".join(str(filter))
+            return str(filter)
 
         @protocol.handle(test_method_dict_of_lists)
         async def test_method_dict_of_lists(self, id: str, filter: Dict[str, List[str]]) -> str:  # NOQA
@@ -1988,7 +1983,9 @@ async def test_dict_list_get_by_url(unused_tcp_port, postgres_db, database_name,
     )
     assert response.code == 400
     # Integer should also work
-    response = await client.fetch(f"http://localhost:{server_bind_port.get()}/api/v1/test_list/1?filter=42", raise_error=False)
+    response = await client.fetch(
+        f"http://localhost:{server_bind_port.get()}/api/v1/test_list/1?filter=42,45", raise_error=False
+    )
     assert response.code == 200
     # Alternative syntax for lists
     response = await client.fetch(
@@ -1999,6 +1996,14 @@ async def test_dict_list_get_by_url(unused_tcp_port, postgres_db, database_name,
     # Alternative list syntax when nested in dict
     response = await client.fetch(
         f"http://localhost:{server_bind_port.get()}/api/v1/test_dict_of_lists/1?filter.a=42&filter.a=55&filter.b=e",
+        raise_error=False,
+    )
+    assert response.code == 200
+
+    filter_with_comma = {"filter.a": "42,55,%2C70", "filter.b": "e"}
+    url = url_concat(f"http://localhost:{server_bind_port.get()}/api/v1/test_dict_of_lists/1", filter_with_comma)
+    response = await client.fetch(
+        url,
         raise_error=False,
     )
     assert response.code == 200

@@ -807,7 +807,7 @@ class MethodProperties(object):
 
     def _encode_list_for_get(self, query_param_value: List[Any]) -> str:
         """ Lists are encoded in the following manner: param = [1, 2] to param=1,2 """
-        return ",".join([str(param_element) for param_element in query_param_value])
+        return ",".join([str(param_element).replace(",", "%2C") for param_element in query_param_value])
 
 
 class UrlMethod(object):

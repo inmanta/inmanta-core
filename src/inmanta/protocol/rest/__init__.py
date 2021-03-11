@@ -258,13 +258,7 @@ class CallArguments(object):
     def _get_list_value_from_url(self, value: str) -> List[str]:
         # Split by the delimiter
         split_parts = value.split(",")
-        empty_strings = [part for part in split_parts if len(part) == 0]
-        if len(empty_strings):
-            raise exceptions.BadRequest(
-                "Empty strings are not allowed in list parameters for GET requests. "
-                f"This exception may have been caused by using the list delimiter (',') "
-                f"in a list value: {value}"
-            )
+        split_parts = [part.replace("%2C", ",") for part in split_parts]
         return split_parts
 
     async def _get_param_value_from_message(self, arg: str, arg_type: Type) -> Any:
