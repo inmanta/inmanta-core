@@ -1794,7 +1794,7 @@ async def test_dict_get_optional(unused_tcp_port, postgres_db, database_name, as
 
         @protocol.handle(test_method)
         async def test_method(self, id: str, name: str, filter: Optional[Dict[str, str]] = None) -> str:  # NOQA
-            return ",".join(filter.keys()) if filter else ""
+            return ",".join(filter.keys()) if filter is not None else ""
 
     rs = Server()
     server = ProjectServer(name="projectserver")

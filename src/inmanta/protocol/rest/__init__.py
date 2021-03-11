@@ -202,7 +202,11 @@ class CallArguments(object):
                             for param_name, param_value in self._message.items()
                             if param_name.startswith(dict_prefix) and len(param_name) > len(dict_prefix)
                         }
-                        value = await self._get_dict_value_from_message(arg, dict_prefix, dict_with_prefixed_names)
+                        value = (
+                            await self._get_dict_value_from_message(arg, dict_prefix, dict_with_prefixed_names)
+                            if dict_with_prefixed_names
+                            else None
+                        )
 
                         for key in dict_with_prefixed_names.keys():
                             all_fields.remove(key)
