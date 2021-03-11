@@ -1705,11 +1705,21 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
 
 
 @pytest.mark.parametrize(
-    "param_type,param_value,expected_url,expected_return_value, should_unquote",
+    "param_type,param_value,expected_url,expected_return_value",
     [
-        (Dict[str, str], {"a": "b", "c": "d"}, "/api/v1/test/1/monty?filter.a=b&filter.c=d", "a,c", False),
-        (Dict[str, List[str]], {"a": ["b"], "c": ["d", "e"]}, "/api/v1/test/1/monty?filter.a=b&filter.c=d,e", "a,c", True),
-        (List[str], ["a", "b"], "/api/v1/test/1/monty?filter=a,b", "a,b", True),
+        (
+            Dict[str, str],
+            {"a": "b", "c": "d", ",&?=%": ",&?=%"},
+            "/api/v1/test/1/monty?filter.a=b&filter.c=d&filter.,&?=%=,&?=%",
+            "a,c,,&?=%",
+        ),
+        (
+            Dict[str, List[str]],
+            {"a": ["b"], "c": ["d", "e"], ",&?=%": [",&?=%", "f"], "g": ["h"]},
+            "/api/v1/test/1/monty?filter.a=b&filter.c=d,e&filter.,&?=%=,&?=%,f&filter.g=h",
+            "a,c,,&?=%,g",
+        ),
+        (List[str], ["a", "b", ",&?=%"], "/api/v1/test/1/monty?filter=a,b,,&?=%", "a,b,,&?=%"),
     ],
 )
 @pytest.mark.asyncio
@@ -1722,7 +1732,6 @@ async def test_dict_list_get_valid(
     param_value,
     expected_url,
     expected_return_value,
-    should_unquote,
 ):
     configure(unused_tcp_port, database_name, postgres_db.port)
 
@@ -1745,10 +1754,7 @@ async def test_dict_list_get_valid(
     request = MethodProperties.methods["test_method"][0].build_call(
         args=[], kwargs={"id": "1", "name": "monty", "filter": param_value}
     )
-    if should_unquote:
-        assert urllib.parse.unquote(request.url) == expected_url
-    else:
-        assert request.url == expected_url
+    assert urllib.parse.unquote(request.url) == expected_url
 
     client: protocol.Client = protocol.Client("client")
     response: Result = await client.test_method(1, "monty", filter=param_value)
