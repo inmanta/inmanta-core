@@ -22,8 +22,10 @@ import os
 import random
 import threading
 import time
+import urllib
 import uuid
 from enum import Enum
+from itertools import chain
 from typing import Any, Dict, Iterator, List, Optional, Union
 
 import pytest
@@ -1700,3 +1702,282 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
     response: Result = await client.merge_dicts(one, other, None)
     assert response.code == 200
     assert response.result == {"data": {**one, **other}}
+
+
+@pytest.mark.parametrize(
+    "param_type,param_value,expected_url,expected_return_value, should_unquote",
+    [
+        (Dict[str, str], {"a": "b", "c": "d"}, "/api/v1/test/1/monty?filter.a=b&filter.c=d", "a,c", False),
+        (Dict[str, List[str]], {"a": ["b"], "c": ["d", "e"]}, "/api/v1/test/1/monty?filter.a=b&filter.c=d,e", "a,c", True),
+        (List[str], ["a", "b"], "/api/v1/test/1/monty?filter=a,b", "a,b", True),
+    ],
+)
+@pytest.mark.asyncio
+async def test_dict_list_get_valid(
+    unused_tcp_port,
+    postgres_db,
+    database_name,
+    async_finalizer,
+    param_type,
+    param_value,
+    expected_url,
+    expected_return_value,
+    should_unquote,
+):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+        def test_method(id: str, name: str, filter: param_type) -> str:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, id: str, name: str, filter: param_type) -> str:  # NOQA
+            return ",".join(filter.keys()) if hasattr(filter, "keys") else ",".join(filter)
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    request = MethodProperties.methods["test_method"][0].build_call(
+        args=[], kwargs={"id": "1", "name": "monty", "filter": param_value}
+    )
+    if should_unquote:
+        assert urllib.parse.unquote(request.url) == expected_url
+    else:
+        assert request.url == expected_url
+
+    client: protocol.Client = protocol.Client("client")
+    response: Result = await client.test_method(1, "monty", filter=param_value)
+    assert response.code == 200
+    assert response.result["data"] == expected_return_value
+
+
+@pytest.mark.asyncio
+async def test_dict_get_optional(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+        def test_method(id: str, name: str, filter: Optional[Dict[str, str]] = None) -> str:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, id: str, name: str, filter: Optional[Dict[str, str]] = None) -> str:  # NOQA
+            return ",".join(filter.keys()) if filter else ""
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    request = MethodProperties.methods["test_method"][0].build_call(
+        args=[], kwargs={"id": "1", "name": "monty", "filter": {"a": "b"}}
+    )
+    assert request.url == "/api/v1/test/1/monty?filter.a=b"
+
+    client: protocol.Client = protocol.Client("client")
+
+    response: Result = await client.test_method(1, "monty", filter={"a": "b", "c": "d"})
+    assert response.code == 200
+    assert response.result["data"] == "a,c"
+    response: Result = await client.test_method(1, "monty")
+    assert response.code == 200
+    assert response.result["data"] == ""
+
+
+@pytest.mark.parametrize(
+    "param_type,expected_error_message",
+    [
+        (
+            Dict[str, Dict[str, str]],
+            "nested dictionaries and union types for dictionary values are not supported for GET requests",
+        ),
+        (
+            Dict[str, Union[str, List[str]]],
+            "nested dictionaries and union types for dictionary values are not supported for GET requests",
+        ),
+        (List[Dict[str, str]], "lists of dictionaries and lists of lists are not supported for GET requests"),
+        (List[List[str]], "lists of dictionaries and lists of lists are not supported for GET requests"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_dict_list_get_invalid(
+    unused_tcp_port, postgres_db, database_name, async_finalizer, param_type, expected_error_message
+):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    with pytest.raises(InvalidMethodDefinition) as e:
+
+        class ProjectServer(ServerSlice):
+            @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+            def test_method(id: str, name: str, filter: param_type) -> str:  # NOQA
+                pass
+
+            @protocol.handle(test_method)
+            async def test_method(self, id: str, name: str, filter: param_type) -> str:  # NOQA
+                return ""
+
+        assert expected_error_message in str(e)
+
+
+@pytest.mark.asyncio
+async def test_list_get_optional(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+        def test_method(id: str, name: str, sort: Optional[List[int]] = None) -> str:  # NOQA
+            pass
+
+        @protocol.typedmethod(path="/test_uuid/<id>", operation="GET", client_types=["api"])
+        def test_method_uuid(id: str, sort: Optional[List[uuid.UUID]] = None) -> str:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, id: str, name: str, sort: Optional[List[int]] = None) -> str:  # NOQA
+            return str(sort) if sort else ""
+
+        @protocol.handle(test_method_uuid)
+        async def test_method_uuid(self, id: str, sort: Optional[List[uuid.UUID]] = None) -> str:  # NOQA
+            return str(sort) if sort else ""
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    request = MethodProperties.methods["test_method"][0].build_call(
+        args=[], kwargs={"id": "1", "name": "monty", "sort": [1, 2]}
+    )
+    # comma is url encoded
+    assert urllib.parse.unquote(request.url) == "/api/v1/test/1/monty?sort=1,2"
+
+    client: protocol.Client = protocol.Client("client")
+
+    response: Result = await client.test_method(1, "monty", sort=[1, 2])
+    assert response.code == 200
+    assert response.result["data"] == "[1, 2]"
+    response: Result = await client.test_method(1, "monty")
+    assert response.code == 200
+    assert response.result["data"] == ""
+    uuids = [uuid.uuid4(), uuid.uuid4()]
+    request = MethodProperties.methods["test_method_uuid"][0].build_call(args=[], kwargs={"id": "1", "sort": uuids})
+    # comma is url encoded
+    assert urllib.parse.unquote(request.url) == f"/api/v1/test_uuid/1?sort={uuids[0]},{uuids[1]}"
+
+
+@pytest.mark.asyncio
+async def test_dicts_multiple_get(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+        def test_method(id: str, name: str, filter: Dict[str, List[str]], another_filter: Dict[str, str]) -> str:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(
+            self, id: str, name: str, filter: Dict[str, List[str]], another_filter: Dict[str, str]
+        ) -> str:  # NOQA
+            return ",".join(chain(filter.keys(), another_filter.keys()))
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    request = MethodProperties.methods["test_method"][0].build_call(
+        args=[], kwargs={"id": "1", "name": "monty", "filter": {"a": ["b", "c"]}, "another_filter": {"d": "e"}}
+    )
+    # comma is url encoded
+    assert urllib.parse.unquote(request.url) == "/api/v1/test/1/monty?filter.a=b,c&another_filter.d=e"
+
+    client: protocol.Client = protocol.Client("client")
+
+    response: Result = await client.test_method(1, "monty", filter={"a": ["b"], "c": ["d", "e"]}, another_filter={"x": "y"})
+    assert response.code == 200
+    assert response.result["data"] == "a,c,x"
+
+
+@pytest.mark.asyncio
+async def test_dict_list_get_by_url(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+        def test_method(id: str, name: str, filter: Dict[str, str]) -> str:  # NOQA
+            pass
+
+        @protocol.typedmethod(path="/test_list/<id>", operation="GET", client_types=["api"])
+        def test_method_list(id: str, filter: List[int]) -> str:  # NOQA
+            pass
+
+        @protocol.typedmethod(path="/test_dict_of_lists/<id>", operation="GET", client_types=["api"])
+        def test_method_dict_of_lists(id: str, filter: Dict[str, List[str]]) -> str:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, id: str, name: str, filter: Dict[str, str]) -> str:  # NOQA
+            return ",".join(filter.keys())
+
+        @protocol.handle(test_method_list)
+        async def test_method_list(self, id: str, filter: List[int]) -> str:  # NOQA
+            return ",".join(str(filter))
+
+        @protocol.handle(test_method_dict_of_lists)
+        async def test_method_dict_of_lists(self, id: str, filter: Dict[str, List[str]]) -> str:  # NOQA
+            return ",".join(filter.keys())
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    client = AsyncHTTPClient()
+    response = await client.fetch(f"http://localhost:{server_bind_port.get()}/api/v1/test/1/monty?filter.=b", raise_error=False)
+    assert response.code == 400
+    response = await client.fetch(
+        f"http://localhost:{server_bind_port.get()}/api/v1/test/1/monty?filter.a=b&filter.=c", raise_error=False
+    )
+    assert response.code == 400
+    response = await client.fetch(
+        f"http://localhost:{server_bind_port.get()}/api/v1/test/1/monty?filter.a=b&filter.a=c", raise_error=False
+    )
+    assert response.code == 400
+    response = await client.fetch(
+        f"http://localhost:{server_bind_port.get()}/api/v1/test_list/1?filter.a=b&filter.=c", raise_error=False
+    )
+    assert response.code == 400
+    # Integer should also work
+    response = await client.fetch(f"http://localhost:{server_bind_port.get()}/api/v1/test_list/1?filter=42", raise_error=False)
+    assert response.code == 200
+    # Alternative syntax for lists
+    response = await client.fetch(
+        f"http://localhost:{server_bind_port.get()}/api/v1/test_list/1?filter=42&filter=55", raise_error=False
+    )
+    assert response.code == 200
+
+    # Alternative list syntax when nested in dict
+    response = await client.fetch(
+        f"http://localhost:{server_bind_port.get()}/api/v1/test_dict_of_lists/1?filter.a=42&filter.a=55&filter.b=e",
+        raise_error=False,
+    )
+    assert response.code == 200
+
+    response = await client.fetch(
+        f"http://localhost:{server_bind_port.get()}/api/v1/test_dict_of_lists/1?filter.a=42&filter.a=55&filter.&filter.c=a",
+        raise_error=False,
+    )
+    assert response.code == 400

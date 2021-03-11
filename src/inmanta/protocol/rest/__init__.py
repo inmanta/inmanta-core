@@ -189,10 +189,26 @@ class CallArguments(object):
             # get value from headers, defaults or message
             value = self._map_headers(arg)
             if value is None:
-                if not self._is_header_param(arg) and arg in self._message:
-                    value = self._message[arg]
-                    all_fields.remove(arg)
+                if not self._is_header_param(arg):
+                    arg_type = self._argspec.annotations.get(arg)
+                    if arg in self._message:
+                        value = await self._get_param_value_from_message(arg, arg_type)
+                        all_fields.remove(arg)
+                    # Pre-process dict params for GET
+                    elif self._properties.operation == "GET" and self._is_dict_or_optional_dict(arg_type):
+                        dict_prefix = f"{arg}."
+                        dict_with_prefixed_names = {
+                            param_name: param_value
+                            for param_name, param_value in self._message.items()
+                            if param_name.startswith(dict_prefix) and len(param_name) > len(dict_prefix)
+                        }
+                        value = await self._get_dict_value_from_message(arg, dict_prefix, dict_with_prefixed_names)
 
+                        for key in dict_with_prefixed_names.keys():
+                            all_fields.remove(key)
+
+                    else:  # get default value
+                        value = self.get_default_value(arg, i, defaults_start)
                 else:  # get default value
                     value = self.get_default_value(arg, i, defaults_start)
 
@@ -217,6 +233,30 @@ class CallArguments(object):
             )
 
         self._processed = True
+
+    async def _get_dict_value_from_message(
+        self, arg: str, dict_prefix: str, dict_with_prefixed_names: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        value = {k[len(dict_prefix) :]: v for k, v in dict_with_prefixed_names.items()}
+        # Check if the values should be converted to lists
+        type_args = typing_inspect.get_args(self._argspec.annotations.get(arg), evaluate=True)
+        if issubclass(type_args[1], list):
+            value = {key: val.split(",") if not isinstance(val, list) else val for key, val in value.items()}
+        return value
+
+    def _is_dict_or_optional_dict(self, arg_type: Type) -> bool:
+        if typing_inspect.is_optional_type(arg_type):
+            arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+        return issubclass(arg_type, dict)
+
+    async def _get_param_value_from_message(self, arg: str, arg_type: Type) -> Any:
+        value = self._message[arg]
+        if self._properties.operation == "GET":
+            if typing_inspect.is_optional_type(arg_type):
+                arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+            if not typing_inspect.is_union_type(arg_type) and issubclass(arg_type, list) and not isinstance(value, list):
+                value = value.split(",")
+        return value
 
     def _validate_union_return(self, arg_type: Type, value: Any) -> None:
         """Validate a return with a union type
