@@ -134,7 +134,7 @@ class DBSchema(object):
                 self.logger.info("Second process is performing a database update as well.")
                 return
 
-            self.logger.info(
+            self.logger.debug(
                 "Creating installed_versions column in schema version table and setting installed versions based on current"
                 " legacy version."
             )
