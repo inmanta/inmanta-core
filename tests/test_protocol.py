@@ -22,7 +22,6 @@ import os
 import random
 import threading
 import time
-import urllib
 import uuid
 from enum import Enum
 from itertools import chain
@@ -1711,17 +1710,17 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
         (
             Dict[str, str],
             {"a": "b", "c": "d", ",&?=%": ",&?=%"},
-            "/api/v1/test/1/monty?filter.a=b&filter.c=d&filter.,&?=%=,&?=%",
+            "/api/v1/test/1/monty?filter.a=b&filter.c=d&filter.%2C%26%3F%3D%25=%2C%26%3F%3D%25",
         ),
         (
             Dict[str, List[str]],
             {"a": ["b"], "c": ["d", "e"], "g": ["h"]},
-            "/api/v1/test/1/monty?filter.a=b&filter.c=d,e&filter.g=h",
+            "/api/v1/test/1/monty?filter.a=b&filter.c=d%2Ce&filter.g=h",
         ),
         (
             Dict[str, List[str]],
             {"a": ["b"], "c": ["d", "e"], ",&?=%": [",&?=%", "f"], "g": ["h"]},
-            "/api/v1/test/1/monty?filter.a=b&filter.c=d,e&filter.,&?=%=%2C&?=%,f&filter.g=h",
+            "/api/v1/test/1/monty?filter.a=b&filter.c=d%2Ce&filter.%2C%26%3F%3D%25=%252C%26%3F%3D%25%2Cf&filter.g=h",
         ),
         (
             List[str],
@@ -1730,7 +1729,7 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
                 "b,",
                 "c",
             ],
-            "/api/v1/test/1/monty?filter=a ,b%2C,c",
+            "/api/v1/test/1/monty?filter=a+%2Cb%252C%2Cc",
         ),
         (
             List[str],
@@ -1740,9 +1739,9 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
                 ",&?=%",
                 "c",
             ],
-            "/api/v1/test/1/monty?filter=a,b,%2C&?=%,c",
+            "/api/v1/test/1/monty?filter=a%2Cb%2C%252C%26%3F%3D%25%2Cc",
         ),
-        (List[str], ["a ", "b", "c", ","], "/api/v1/test/1/monty?filter=a ,b,c,%2C"),
+        (List[str], ["a ", "b", "c", ","], "/api/v1/test/1/monty?filter=a+%2Cb%2Cc%2C%252C"),
     ],
 )
 @pytest.mark.asyncio
@@ -1770,7 +1769,7 @@ async def test_dict_list_get_roundtrip(
     request = MethodProperties.methods["test_method"][0].build_call(
         args=[], kwargs={"id": "1", "name": "monty", "filter": param_value}
     )
-    assert urllib.parse.unquote_plus(request.url) == expected_url
+    assert request.url == expected_url
 
     client: protocol.Client = protocol.Client("client")
     response: Result = await client.test_method(1, "monty", filter=param_value)
@@ -1879,8 +1878,7 @@ async def test_list_get_optional(unused_tcp_port, postgres_db, database_name, as
     request = MethodProperties.methods["test_method"][0].build_call(
         args=[], kwargs={"id": "1", "name": "monty", "sort": [1, 2]}
     )
-    # comma is url encoded
-    assert urllib.parse.unquote_plus(request.url) == "/api/v1/test/1/monty?sort=1,2"
+    assert request.url == "/api/v1/test/1/monty?sort=1%2C2"
 
     client: protocol.Client = protocol.Client("client")
 
@@ -1892,8 +1890,7 @@ async def test_list_get_optional(unused_tcp_port, postgres_db, database_name, as
     assert response.result["data"] == ""
     uuids = [uuid.uuid4(), uuid.uuid4()]
     request = MethodProperties.methods["test_method_uuid"][0].build_call(args=[], kwargs={"id": "1", "sort": uuids})
-    # comma is url encoded
-    assert urllib.parse.unquote_plus(request.url) == f"/api/v1/test_uuid/1?sort={uuids[0]},{uuids[1]}"
+    assert request.url == f"/api/v1/test_uuid/1?sort={uuids[0]}%2C{uuids[1]}"
 
 
 @pytest.mark.asyncio
@@ -1921,8 +1918,7 @@ async def test_dicts_multiple_get(unused_tcp_port, postgres_db, database_name, a
     request = MethodProperties.methods["test_method"][0].build_call(
         args=[], kwargs={"id": "1", "name": "monty", "filter": {"a": ["b", "c"]}, "another_filter": {"d": "e"}}
     )
-    # comma is url encoded
-    assert urllib.parse.unquote_plus(request.url) == "/api/v1/test/1/monty?filter.a=b,c&another_filter.d=e"
+    assert request.url == "/api/v1/test/1/monty?filter.a=b%2Cc&another_filter.d=e"
 
     client: protocol.Client = protocol.Client("client")
 
