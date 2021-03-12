@@ -105,10 +105,7 @@ class DBSchema(object):
             self.logger.info("Creating schema version table")
             await self.connection.execute(create_schemamanager)
 
-        if (
-            len(await self.get_installed_versions()) == 0
-            and await self.get_legacy_version() > 0
-        ):
+        if len(await self.get_installed_versions()) == 0 and await self.get_legacy_version() > 0:
             await self._legacy_migration_row()
 
     async def _legacy_migration_table(self) -> None:
@@ -125,7 +122,7 @@ class DBSchema(object):
             await self.connection.execute(f"LOCK TABLE {SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
             # get legacy column, under lock => if column no longer exists -> other process has already performed migration
             legacy_column: Record = await self.connection.fetchrow(
-                f"""
+                """
                 SELECT EXISTS(
                     SELECT 1
                     FROM information_schema.columns
@@ -164,8 +161,7 @@ class DBSchema(object):
         """
         self.logger.info("Migrating legacy data for %s", self.name)
         all_versions = (
-            sorted(all_versions) if all_versions is not None
-            else [version.version for version in self._get_update_functions()]
+            sorted(all_versions) if all_versions is not None else [version.version for version in self._get_update_functions()]
         )
         async with self.connection.transaction():
             self.logger.debug("Migrating legacy data for %s", self.name)
@@ -190,8 +186,7 @@ class DBSchema(object):
         :param update_functions: allows overriding the available update functions, for example for testing purposes.
         """
         update_functions = (
-            sorted(update_functions, key=lambda x: x.version) if update_functions is not None
-            else self._get_update_functions()
+            sorted(update_functions, key=lambda x: x.version) if update_functions is not None else self._get_update_functions()
         )
         async with self.connection.transaction():
             # get lock

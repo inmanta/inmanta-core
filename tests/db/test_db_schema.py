@@ -51,7 +51,10 @@ async def run_updates_and_verify(
     current_db_versions: Set[int] = await schema_manager.get_installed_versions()
     assert current is None or current_db_versions == current
     latest_version: int = max(current_db_versions) if len(current_db_versions) > 0 else 0
-    update_function_map = [Version(f"v{latest_version + 1}", update_function1), Version(f"v{latest_version + 3}", update_function3)]
+    update_function_map = [
+        Version(f"v{latest_version + 1}", update_function1),
+        Version(f"v{latest_version + 3}", update_function3),
+    ]
 
     await schema_manager._update_db_schema(update_function_map)
 
