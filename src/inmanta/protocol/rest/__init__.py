@@ -243,8 +243,13 @@ class CallArguments(object):
     ) -> Dict[str, Any]:
         value = {k[len(dict_prefix) :]: v for k, v in dict_with_prefixed_names.items()}
         # Check if the values should be converted to lists
-        type_args = typing_inspect.get_args(self._argspec.annotations.get(arg), evaluate=True)
-        if issubclass(type_args[1], list):
+        type_args = self._argspec.annotations.get(arg)
+        if typing_inspect.is_optional_type(type_args):
+            # If optional, get the type args from the not None type argument
+            dict_args = typing_inspect.get_args(typing_inspect.get_args(type_args, evaluate=True)[0], evaluate=True)
+        else:
+            dict_args = typing_inspect.get_args(self._argspec.annotations.get(arg), evaluate=True)
+        if issubclass(dict_args[1], list):
             value = {key: [val] if not isinstance(val, list) else val for key, val in value.items()}
         return value
 

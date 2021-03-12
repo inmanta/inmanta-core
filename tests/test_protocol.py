@@ -1808,6 +1808,41 @@ async def test_dict_get_optional(unused_tcp_port, postgres_db, database_name, as
     assert response.result["data"] == ""
 
 
+@pytest.mark.asyncio
+async def test_dict_list_nested_get_optional(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
+        def test_method(id: str, name: str, filter: Optional[Dict[str, List[str]]] = None) -> str:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, id: str, name: str, filter: Optional[Dict[str, List[str]]] = None) -> str:  # NOQA
+            return ",".join(filter.keys()) if filter is not None else ""
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    request = MethodProperties.methods["test_method"][0].build_call(
+        args=[], kwargs={"id": "1", "name": "monty", "filter": {"a": ["b"]}}
+    )
+    assert request.url == "/api/v1/test/1/monty?filter.a=b"
+
+    client: protocol.Client = protocol.Client("client")
+
+    response: Result = await client.test_method(1, "monty", filter={"a": "b", "c": ["d", "e"]})
+    assert response.code == 200
+    assert response.result["data"] == "a,c"
+    response: Result = await client.test_method(1, "monty")
+    assert response.code == 200
+    assert response.result["data"] == ""
+
+
 @pytest.mark.parametrize(
     "param_type,expected_error_message",
     [
