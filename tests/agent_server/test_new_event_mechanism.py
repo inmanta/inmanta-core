@@ -27,12 +27,14 @@ from pytest import fixture
 
 from agent_server.conftest import ResourceContainer
 from inmanta import const, resources
+from inmanta.agent.agent import Agent
 from inmanta.agent.handler import CRUDHandler, HandlerContext, provider
 from inmanta.const import Change, ResourceAction, ResourceState, VersionState
 from inmanta.data import model
 from inmanta.protocol.common import Result
 from inmanta.protocol.endpoints import Client
 from inmanta.resources import Id, PurgeableResource, resource
+from inmanta.server.protocol import Server
 from inmanta.util import get_compiler_version
 from utils import ClientHelper, retry_limited
 
@@ -137,7 +139,7 @@ def resource_handler():
             dependencies = resource.requires
 
             async def should_redeploy() -> bool:
-                custom_client = EventClient(client=Client("agent"), environment=environment)
+                custom_client = EventClient(client=Client("client"), environment=environment)
 
                 last_deployment = await custom_client.get_resource_action(
                     resource_id=resource.id,
@@ -277,6 +279,11 @@ async def deploy(
 
     async def is_deployment_finished():
         result = await get_version_or_fail(version, client, environment)
+
+        for res in result.result["model"]["status"].values():
+            if res["status"] != "deployed":
+                return False
+
         # Finished if all resources last deploy is after the last deployment registered
         for res in result.result["resources"]:
             if (res["last_deploy"] or "") <= last_deployment_date:
@@ -299,11 +306,11 @@ async def deploy(
 @fixture(scope="function")
 async def initial_deployment(
     resource_container: ResourceContainer,
-    environment: UUID,
-    server,
-    client: Client,
-    agent,
-    clienthelper: ClientHelper,
+    environment_multi: UUID,
+    server_multi: Server,
+    client_multi: Client,
+    agent_multi: Agent,
+    client_helper_multi: ClientHelper,
     no_agent_backoff,
 ) -> Tuple[dict, int]:
     """
@@ -315,13 +322,13 @@ async def initial_deployment(
     # Setting up handler
     resource_handler()
 
-    version = await clienthelper.get_version()
+    version = await client_helper_multi.get_version()
     model = init_model(version)
     resources = list(model.values())
 
     # Initial version
-    response: Result = await client.put_version(
-        tid=environment,
+    response: Result = await client_multi.put_version(
+        tid=environment_multi,
         version=version,
         resources=resources,
         unknowns=[],
@@ -331,7 +338,7 @@ async def initial_deployment(
     assert response.code == 200
 
     # Initial deployment
-    result: Result = await deploy(client, environment, version, timeout=10)
+    result: Result = await deploy(client_multi, environment_multi, version, timeout=10)
     assert result.result["model"]["result"] == VersionState.success
 
     yield model, version
@@ -340,11 +347,11 @@ async def initial_deployment(
 @pytest.mark.asyncio
 async def test_initial_deployment(
     resource_container: ResourceContainer,
-    environment: UUID,
-    server,
-    client: Client,
-    agent,
-    clienthelper: ClientHelper,
+    environment_multi: UUID,
+    server_multi: Server,
+    client_multi: Client,
+    agent_multi: Agent,
+    client_helper_multi: ClientHelper,
     initial_deployment: Tuple[dict, int],
     no_agent_backoff,
 ):
@@ -356,7 +363,7 @@ async def test_initial_deployment(
     model, version = initial_deployment
 
     # EventClient setup
-    event_client = EventClient(client, environment)
+    event_client = EventClient(client_multi, environment_multi)
 
     for resource_id in [Id.parse_id(dep) for dep in model["root"]["requires"]]:
         last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
@@ -380,11 +387,11 @@ async def test_initial_deployment(
 @pytest.mark.asyncio
 async def test_full_deployment(
     resource_container: ResourceContainer,
-    environment: UUID,
-    server,
-    client: Client,
-    agent,
-    clienthelper: ClientHelper,
+    environment_multi: UUID,
+    server_multi: Server,
+    client_multi: Client,
+    agent_multi: Agent,
+    client_helper_multi: ClientHelper,
     initial_deployment: Tuple[dict, int],
     no_agent_backoff,
 ):
@@ -396,17 +403,17 @@ async def test_full_deployment(
     initial_model, initial_version = initial_deployment
 
     # EventClient setup
-    event_client = EventClient(client, environment)
+    event_client = EventClient(client_multi, environment_multi)
 
     # Create new version with changed dependency
-    version = await clienthelper.get_version()
-    model = await next_model(client, environment, version - 1, version)
+    version = await client_helper_multi.get_version()
+    model = await next_model(client_multi, environment_multi, version - 1, version)
     model["dep1"]["value"] = "updated"
     resources = list(model.values())
 
     # Exporting new version
-    response: Result = await client.put_version(
-        tid=environment,
+    response: Result = await client_multi.put_version(
+        tid=environment_multi,
         version=version,
         resources=resources,
         unknowns=[],
@@ -416,7 +423,7 @@ async def test_full_deployment(
     assert response.code == 200
 
     # Deploying
-    result: Result = await deploy(client, environment, version, full_deploy=True, timeout=10)
+    result: Result = await deploy(client_multi, environment_multi, version, full_deploy=True, timeout=10)
     assert result.result["model"]["result"] == VersionState.success
 
     resource_id = Id.parse_id(model["root"]["id"])
@@ -432,11 +439,11 @@ async def test_full_deployment(
 @pytest.mark.asyncio
 async def test_incremental_deployment(
     resource_container: ResourceContainer,
-    environment: UUID,
-    server,
-    client: Client,
-    agent,
-    clienthelper: ClientHelper,
+    environment_multi: UUID,
+    server_multi: Server,
+    client_multi: Client,
+    agent_multi: Agent,
+    client_helper_multi: ClientHelper,
     initial_deployment: Tuple[dict, int],
     no_agent_backoff,
 ):
@@ -448,17 +455,17 @@ async def test_incremental_deployment(
     initial_model, initial_version = initial_deployment
 
     # EventClient setup
-    event_client = EventClient(client, environment)
+    event_client = EventClient(client_multi, environment_multi)
 
     # Create new version with changed dependency
-    version = await clienthelper.get_version()
-    model = await next_model(client, environment, version - 1, version)
+    version = await client_helper_multi.get_version()
+    model = await next_model(client_multi, environment_multi, version - 1, version)
     model["dep1"]["value"] = "updated"
     resources = list(model.values())
 
     # Exporting new version
-    response: Result = await client.put_version(
-        tid=environment,
+    response: Result = await client_multi.put_version(
+        tid=environment_multi,
         version=version,
         resources=resources,
         unknowns=[],
@@ -468,8 +475,14 @@ async def test_incremental_deployment(
     assert response.code == 200
 
     # Deploying
-    result: Result = await deploy(client, environment, version, timeout=10)
+    result = await get_version_or_fail(version, client_multi, environment_multi)
+    logger.info(json.dumps(result.result, indent=2))
+
+    result: Result = await deploy(client_multi, environment_multi, version, timeout=10)
     assert result.result["model"]["result"] == VersionState.success
+
+    result = await get_version_or_fail(version, client_multi, environment_multi)
+    logger.info(json.dumps(result.result, indent=2))
 
     resource_id = Id.parse_id(model["root"]["id"])
     last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
@@ -484,11 +497,11 @@ async def test_incremental_deployment(
 @pytest.mark.asyncio
 async def test_redeploy_version(
     resource_container: ResourceContainer,
-    environment: UUID,
-    server,
-    client: Client,
-    agent,
-    clienthelper: ClientHelper,
+    environment_multi: UUID,
+    server_multi: Server,
+    client_multi: Client,
+    agent_multi: Agent,
+    client_helper_multi: ClientHelper,
     initial_deployment: Tuple[dict, int],
     no_agent_backoff,
 ):
@@ -500,10 +513,10 @@ async def test_redeploy_version(
     model, version = initial_deployment
 
     # EventClient setup
-    event_client = EventClient(client, environment)
+    event_client = EventClient(client_multi, environment_multi)
 
     # Deploying again the first version
-    result: Result = await deploy(client, environment, version, full_deploy=True, timeout=10)
+    result: Result = await deploy(client_multi, environment_multi, version, full_deploy=True, timeout=10)
     assert result.result["model"]["result"] == VersionState.success
 
     resource_id = Id.parse_id(model["root"]["id"])
@@ -519,11 +532,11 @@ async def test_redeploy_version(
 @pytest.mark.asyncio
 async def test_redeploy_model(
     resource_container: ResourceContainer,
-    environment: UUID,
-    server,
-    client: Client,
-    agent,
-    clienthelper: ClientHelper,
+    environment_multi: UUID,
+    server_multi: Server,
+    client_multi: Client,
+    agent_multi: Agent,
+    client_helper_multi: ClientHelper,
     initial_deployment: Tuple[dict, int],
     no_agent_backoff,
 ):
@@ -535,16 +548,16 @@ async def test_redeploy_model(
     model, version = initial_deployment
 
     # EventClient setup
-    event_client = EventClient(client, environment)
+    event_client = EventClient(client_multi, environment_multi)
 
     # Recreating same model, with incremented version
-    version = await clienthelper.get_version()
+    version = await client_helper_multi.get_version()
     model = init_model(version)
     resources = list(model.values())
 
     # Exporting new version
-    response: Result = await client.put_version(
-        tid=environment,
+    response: Result = await client_multi.put_version(
+        tid=environment_multi,
         version=version,
         resources=resources,
         unknowns=[],
@@ -554,7 +567,7 @@ async def test_redeploy_model(
     assert response.code == 200
 
     # Deploying
-    result: Result = await deploy(client, environment, version, full_deploy=True, timeout=10)
+    result: Result = await deploy(client_multi, environment_multi, version, full_deploy=True, timeout=10)
     assert result.result["model"]["result"] == VersionState.success
 
     resource_id = Id.parse_id(model["root"]["id"])
@@ -570,11 +583,11 @@ async def test_redeploy_model(
 @pytest.mark.asyncio
 async def test_repair(
     resource_container: ResourceContainer,
-    environment: UUID,
-    server,
-    client: Client,
-    agent,
-    clienthelper: ClientHelper,
+    environment_multi: UUID,
+    server_multi: Server,
+    client_multi: Client,
+    agent_multi: Agent,
+    client_helper_multi: ClientHelper,
     initial_deployment: Tuple[dict, int],
     no_agent_backoff,
 ):
@@ -586,14 +599,14 @@ async def test_repair(
     model, version = initial_deployment
 
     # EventClient setup
-    event_client = EventClient(client, environment)
+    event_client = EventClient(client_multi, environment_multi)
 
     # Manually changing resource values
     resource_id = Id.parse_id(model["dep1"]["id"])
     resource_container.Provider.set(resource_id.agent_name, resource_id.attribute_value, "updated")
 
     # Triggering repair
-    result: Result = await deploy(client, environment, version, full_deploy=True, timeout=10)
+    result: Result = await deploy(client_multi, environment_multi, version, full_deploy=True, timeout=10)
     assert result.result["model"]["result"] == VersionState.success
 
     async def check_redeploy_after_repair(resource_id):

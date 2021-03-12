@@ -635,6 +635,11 @@ def clienthelper(client, environment):
     return utils.ClientHelper(client, environment)
 
 
+@pytest.fixture(scope="function")
+def client_helper_multi(client_multi: protocol.Client, environment_multi: uuid.UUID) -> utils.ClientHelper:
+    return utils.ClientHelper(client_multi, environment_multi)
+
+
 @pytest.fixture(scope="function", autouse=True)
 def capture_warnings():
     logging.captureWarnings(True)
