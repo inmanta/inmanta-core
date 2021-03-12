@@ -27,6 +27,7 @@ from tornado.httputil import url_concat
 
 from inmanta import const, data
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
+from inmanta.data import APILIMIT
 from inmanta.data.model import Resource, ResourceAction, ResourceType, ResourceVersionIdStr
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import ReturnValue
@@ -578,6 +579,12 @@ class ResourceService(protocol.ServerSlice):
                 f"The action_id parameter should be used in combination with either the first_timestamp or the last_timestamp "
                 f"Received action_id: {action_id}, first_timestamp: {first_timestamp}, last_timestamp: {last_timestamp}"
             )
+
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+
         resource_actions = await data.ResourceAction.query_resource_actions(
             env.id,
             resource_type,
