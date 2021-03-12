@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import datetime
+import json
 import logging
 import uuid
 from typing import Callable, List, Optional, Tuple
@@ -27,13 +28,13 @@ from pytest import fixture
 from agent_server.conftest import ResourceContainer
 from inmanta import const, resources
 from inmanta.agent.handler import CRUDHandler, HandlerContext, provider
-from inmanta.const import Change, ResourceAction, ResourceState
+from inmanta.const import Change, ResourceAction, ResourceState, VersionState
 from inmanta.data import model
 from inmanta.protocol.common import Result
 from inmanta.protocol.endpoints import Client
 from inmanta.resources import Id, PurgeableResource, resource
 from inmanta.util import get_compiler_version
-from utils import ClientHelper, _wait_until_deployment_finishes, retry_limited
+from utils import ClientHelper, retry_limited
 
 logger = logging.getLogger("inmanta.test.event_client")
 
@@ -233,6 +234,68 @@ async def next_model(client: Client, environment: UUID, current_version: int, ne
     return base
 
 
+async def get_version_or_fail(version: int, client: Client, environment: UUID) -> Result:
+    result: Result = await client.get_version(environment, version)
+    if result.code != 200:
+        raise RuntimeError(
+            f"Unexpected response code when getting version, received {result.code} "
+            f"(expected 200): {json.dumps(result.result, indent=2)}"
+        )
+
+    return result
+
+
+async def deploy(
+    client: Client,
+    environment: UUID,
+    version: int,
+    full_deploy: bool = False,
+    timeout: int = 60,
+) -> Result:
+    """
+    Asynchronously deploy model and wait for its deployment to complete
+    ! Requires the server fixture in the test calling it
+    """
+    result = await get_version_or_fail(version, client, environment)
+    if result.result["model"]["total"] == 0:
+        # Nothing to deploy
+        logger.warning(f"Nothing to deploy: {json.dumps(result.result, indent=2)}")
+        return
+
+    # Checking when did the last deployment finish
+    last_deployment_date = sorted([res["last_deploy"] or "" for res in result.result["resources"]])[-1]
+    logger.info(f"Last deployment date: {last_deployment_date}")
+
+    # Triggering deploy
+    response: Result = await client.release_version(
+        environment,
+        version,
+        True,
+        const.AgentTriggerMethod.push_full_deploy if full_deploy else const.AgentTriggerMethod.push_incremental_deploy,
+    )
+    assert response.code == 200
+
+    async def is_deployment_finished():
+        result = await get_version_or_fail(version, client, environment)
+        # Finished if all resources last deploy is after the last deployment registered
+        for res in result.result["resources"]:
+            if (res["last_deploy"] or "") <= last_deployment_date:
+                return False
+
+        return True
+
+    try:
+        # Waiting for deployment to finish
+        await retry_limited(is_deployment_finished, timeout=timeout)
+
+        return await get_version_or_fail(version, client, environment)
+    except TimeoutError as e:
+        result = await get_version_or_fail(version, client, environment)
+
+        logger.warning(f"Timeout reached when waiting for resource to deploy: {json.dumps(result.result, indent=2)}")
+        raise e
+
+
 @fixture(scope="function")
 async def initial_deployment(
     resource_container: ResourceContainer,
@@ -268,14 +331,8 @@ async def initial_deployment(
     assert response.code == 200
 
     # Initial deployment
-    response: Result = await client.release_version(
-        environment,
-        version,
-        True,
-        const.AgentTriggerMethod.push_full_deploy,
-    )
-    assert response.code == 200
-    await _wait_until_deployment_finishes(client, environment, version)
+    result: Result = await deploy(client, environment, version, timeout=10)
+    assert result.result["model"]["result"] == VersionState.success
 
     yield model, version
 
@@ -359,14 +416,8 @@ async def test_full_deployment(
     assert response.code == 200
 
     # Deploying
-    response: Result = await client.release_version(
-        environment,
-        version,
-        True,
-        const.AgentTriggerMethod.push_full_deploy,
-    )
-    assert response.code == 200
-    await _wait_until_deployment_finishes(client, environment, version)
+    result: Result = await deploy(client, environment, version, full_deploy=True, timeout=10)
+    assert result.result["model"]["result"] == VersionState.success
 
     resource_id = Id.parse_id(model["root"]["id"])
     last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
@@ -417,14 +468,8 @@ async def test_incremental_deployment(
     assert response.code == 200
 
     # Deploying
-    response: Result = await client.release_version(
-        environment,
-        version,
-        True,
-        const.AgentTriggerMethod.push_incremental_deploy,
-    )
-    assert response.code == 200
-    await _wait_until_deployment_finishes(client, environment, version)
+    result: Result = await deploy(client, environment, version, timeout=10)
+    assert result.result["model"]["result"] == VersionState.success
 
     resource_id = Id.parse_id(model["root"]["id"])
     last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
@@ -458,14 +503,8 @@ async def test_redeploy_version(
     event_client = EventClient(client, environment)
 
     # Deploying again the first version
-    response: Result = await client.release_version(
-        environment,
-        version,
-        True,
-        const.AgentTriggerMethod.push_full_deploy,
-    )
-    assert response.code == 200
-    await _wait_until_deployment_finishes(client, environment, version)
+    result: Result = await deploy(client, environment, version, full_deploy=True, timeout=10)
+    assert result.result["model"]["result"] == VersionState.success
 
     resource_id = Id.parse_id(model["root"]["id"])
     last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
@@ -515,14 +554,8 @@ async def test_redeploy_model(
     assert response.code == 200
 
     # Deploying
-    response: Result = await client.release_version(
-        environment,
-        version,
-        True,
-        const.AgentTriggerMethod.push_full_deploy,
-    )
-    assert response.code == 200
-    await _wait_until_deployment_finishes(client, environment, version)
+    result: Result = await deploy(client, environment, version, full_deploy=True, timeout=10)
+    assert result.result["model"]["result"] == VersionState.success
 
     resource_id = Id.parse_id(model["root"]["id"])
     last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
@@ -559,29 +592,9 @@ async def test_repair(
     resource_id = Id.parse_id(model["dep1"]["id"])
     resource_container.Provider.set(resource_id.agent_name, resource_id.attribute_value, "updated")
 
-    response = await client.get_version(environment, version, True)
-    assert response.code == 200
-    last_deployment_date = sorted([res["last_deploy"] for res in response.result["resources"]])[-1]
-
     # Triggering repair
-    response: Result = await client.deploy(
-        environment,
-        const.AgentTriggerMethod.push_full_deploy,
-    )
-    assert response.code == 200
-
-    res_to_repair = {model["root"]["id"], model["dep1"]["id"]}
-
-    async def is_repair_finished():
-        response = await client.get_version(environment, version)
-        res_repaired = [
-            res
-            for res in response.result["resources"]
-            if res["resource_version_id"] in res_to_repair and res["last_deploy"] > last_deployment_date
-        ]
-        return len(res_repaired) == len(res_to_repair)
-
-    await retry_limited(is_repair_finished, 10)
+    result: Result = await deploy(client, environment, version, full_deploy=True, timeout=10)
+    assert result.result["model"]["result"] == VersionState.success
 
     async def check_redeploy_after_repair(resource_id):
         last_change = await event_client.get_resource_action(resource_id, is_deployment_with_change, oldest_first=False)
