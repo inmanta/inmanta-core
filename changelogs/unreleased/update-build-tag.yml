@@ -1,4 +1,4 @@
-description: Update build_tag from dev to .dev
+description: Update build_tag from dev to .dev0
 issue-repo: infra-tickets
 issue-nr: 104
 change-type: patch
