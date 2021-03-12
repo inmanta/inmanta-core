@@ -22,7 +22,7 @@ import pkgutil
 import types
 import uuid
 from asyncio import Semaphore
-from typing import Optional
+from typing import List, Optional
 
 import asyncpg
 import pytest
@@ -388,3 +388,14 @@ async def test_dbschema_get_dct_filter_invalid_names(caplog):
     log_contains(caplog, "inmanta.data.schema", logging.WARNING, "ver1a doesn't match the expected pattern")
     log_contains(caplog, "inmanta.data.schema", logging.WARNING, "version3 doesn't match the expected pattern")
     log_contains(caplog, "inmanta.data.schema", logging.WARNING, "v1b doesn't match the expected pattern")
+
+
+@pytest.mark.asyncio
+async def test_db_schema_version_constraints(postgresql_client):
+    """
+    Make sure the version updates for iso3 remain within the valid range. This is important for compatibility when upgrading to
+    iso4.
+    """
+    db_schema = schema.DBSchema("myschema", inmanta.db.versions, postgresql_client)
+    update_function_map: List[Version] = await db_schema._get_update_functions()
+    assert max((u.version for u in update_function_map), default=0) < 17

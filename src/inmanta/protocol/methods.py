@@ -402,7 +402,9 @@ def get_resource(
     :param status: Only return the status of the resource
     :param log_action: The log action to include, leave empty/none for all actions. Valid actions are one of
                       the action strings in const.ResourceAction
-    :param log_limit: Limit the number of logs included in the response
+    :param log_limit: Limit the number of logs included in the response, up to a maximum of 1000.
+                      To retrieve more entries, use  /api/v2/resource_actions
+                      (:func:`~inmanta.protocol.methods_v2.get_resource_actions`)
     """
 
 
@@ -467,7 +469,7 @@ def list_versions(tid: uuid.UUID, start: int = None, limit: int = None):
 
     :param tid: The id of the environment
     :param start: Optional, parameter to control the amount of results that are returned. 0 is the latest version.
-    :param limit: Optional, parameter to control the amount of results returned.
+    :param limit: Optional, parameter to control the amount of results returned, up to a maximum of 1000.
     """
 
 
@@ -480,7 +482,10 @@ def get_version(tid: uuid.UUID, id: int, include_logs: bool = None, log_filter: 
     :param id: The id of the version to retrieve
     :param include_logs: If true, a log of all operations on all resources is included
     :param log_filter: Filter log to only include actions of the specified type
-    :param limit: The maximal number of actions to return per resource (starting from the latest)
+    :param limit: The maximal number of actions to return per resource (starting from the latest),
+                    up to a maximum of 1000.
+                    To retrieve more entries, use /api/v2/resource_actions
+                    (:func:`~inmanta.protocol.methods_v2.get_resource_actions`)
     """
 
 
@@ -829,7 +834,7 @@ def get_reports(tid: uuid.UUID, start: str = None, end: str = None, limit: int =
     :param tid: The id of the environment to get a report from
     :param start: Reports after start
     :param end: Reports before end
-    :param limit: Maximum number of results
+    :param limit: Maximum number of results, up to a maximum of 1000
     """
 
 
