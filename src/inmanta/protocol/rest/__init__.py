@@ -192,7 +192,7 @@ class CallArguments(object):
                 if not self._is_header_param(arg):
                     arg_type = self._argspec.annotations.get(arg)
                     if arg in self._message:
-                        value = await self._get_param_value_from_message(arg, arg_type)
+                        value = self._message[arg]
                         all_fields.remove(arg)
                     # Pre-process dict params for GET
                     elif self._properties.operation == "GET" and self._is_dict_or_optional_dict(arg_type):
@@ -245,30 +245,13 @@ class CallArguments(object):
         # Check if the values should be converted to lists
         type_args = typing_inspect.get_args(self._argspec.annotations.get(arg), evaluate=True)
         if issubclass(type_args[1], list):
-            value = {
-                key: self._get_list_value_from_url(val) if not isinstance(val, list) else val for key, val in value.items()
-            }
+            value = {key: [val] if not isinstance(val, list) else val for key, val in value.items()}
         return value
 
     def _is_dict_or_optional_dict(self, arg_type: Type) -> bool:
         if typing_inspect.is_optional_type(arg_type):
             arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
         return issubclass(arg_type, dict)
-
-    def _get_list_value_from_url(self, value: str) -> List[str]:
-        # Split by the delimiter
-        split_parts = value.split(",")
-        split_parts = [part.replace("%2C", ",") for part in split_parts]
-        return split_parts
-
-    async def _get_param_value_from_message(self, arg: str, arg_type: Type) -> Any:
-        value = self._message[arg]
-        if self._properties.operation == "GET":
-            if typing_inspect.is_optional_type(arg_type):
-                arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
-            if not typing_inspect.is_union_type(arg_type) and issubclass(arg_type, list) and not isinstance(value, list):
-                value = self._get_list_value_from_url(value)
-        return value
 
     def _validate_union_return(self, arg_type: Type, value: Any) -> None:
         """Validate a return with a union type

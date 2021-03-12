@@ -1709,18 +1709,19 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
     [
         (
             Dict[str, str],
-            {"a": "b", "c": "d", ",&?=%": ",&?=%"},
-            "/api/v1/test/1/monty?filter.a=b&filter.c=d&filter.%2C%26%3F%3D%25=%2C%26%3F%3D%25",
+            {"a": "b", "c": "d", ",&?=%": ",&?=%."},
+            "/api/v1/test/1/monty?filter.a=b&filter.c=d&filter.%2C%26%3F%3D%25=%2C%26%3F%3D%25.",
         ),
         (
             Dict[str, List[str]],
             {"a": ["b"], "c": ["d", "e"], "g": ["h"]},
-            "/api/v1/test/1/monty?filter.a=b&filter.c=d%2Ce&filter.g=h",
+            "/api/v1/test/1/monty?filter.a=b&filter.c=d&filter.c=e&filter.g=h",
         ),
         (
             Dict[str, List[str]],
-            {"a": ["b"], "c": ["d", "e"], ",&?=%": [",&?=%", "f"], "g": ["h"]},
-            "/api/v1/test/1/monty?filter.a=b&filter.c=d%2Ce&filter.%2C%26%3F%3D%25=%252C%26%3F%3D%25%2Cf&filter.g=h",
+            {"a": ["b"], "c": ["d", "e"], ",&?=%": [",&?=%", "f"], ".g.h": ["i"]},
+            "/api/v1/test/1/monty?filter.a=b&filter.c=d&filter.c=e"
+            "&filter.%2C%26%3F%3D%25=%2C%26%3F%3D%25&filter.%2C%26%3F%3D%25=f&filter..g.h=i",
         ),
         (
             List[str],
@@ -1729,19 +1730,14 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
                 "b,",
                 "c",
             ],
-            "/api/v1/test/1/monty?filter=a+%2Cb%252C%2Cc",
+            "/api/v1/test/1/monty?filter=a+&filter=b%2C&filter=c",
         ),
         (
             List[str],
-            [
-                "a",
-                "b",
-                ",&?=%",
-                "c",
-            ],
-            "/api/v1/test/1/monty?filter=a%2Cb%2C%252C%26%3F%3D%25%2Cc",
+            ["a", "b", ",&?=%", "c", "."],
+            "/api/v1/test/1/monty?filter=a&filter=b&filter=%2C%26%3F%3D%25&filter=c&filter=.",
         ),
-        (List[str], ["a ", "b", "c", ","], "/api/v1/test/1/monty?filter=a+%2Cb%2Cc%2C%252C"),
+        (List[str], ["a ", "b", "c", ","], "/api/v1/test/1/monty?filter=a+&filter=b&filter=c&filter=%2C"),
     ],
 )
 @pytest.mark.asyncio
@@ -1878,7 +1874,7 @@ async def test_list_get_optional(unused_tcp_port, postgres_db, database_name, as
     request = MethodProperties.methods["test_method"][0].build_call(
         args=[], kwargs={"id": "1", "name": "monty", "sort": [1, 2]}
     )
-    assert request.url == "/api/v1/test/1/monty?sort=1%2C2"
+    assert request.url == "/api/v1/test/1/monty?sort=1&sort=2"
 
     client: protocol.Client = protocol.Client("client")
 
@@ -1890,7 +1886,7 @@ async def test_list_get_optional(unused_tcp_port, postgres_db, database_name, as
     assert response.result["data"] == ""
     uuids = [uuid.uuid4(), uuid.uuid4()]
     request = MethodProperties.methods["test_method_uuid"][0].build_call(args=[], kwargs={"id": "1", "sort": uuids})
-    assert request.url == f"/api/v1/test_uuid/1?sort={uuids[0]}%2C{uuids[1]}"
+    assert request.url == f"/api/v1/test_uuid/1?sort={uuids[0]}&sort={uuids[1]}"
 
 
 @pytest.mark.asyncio
@@ -1918,7 +1914,7 @@ async def test_dicts_multiple_get(unused_tcp_port, postgres_db, database_name, a
     request = MethodProperties.methods["test_method"][0].build_call(
         args=[], kwargs={"id": "1", "name": "monty", "filter": {"a": ["b", "c"]}, "another_filter": {"d": "e"}}
     )
-    assert request.url == "/api/v1/test/1/monty?filter.a=b%2Cc&another_filter.d=e"
+    assert request.url == "/api/v1/test/1/monty?filter.a=b&filter.a=c&another_filter.d=e"
 
     client: protocol.Client = protocol.Client("client")
 
@@ -1980,16 +1976,11 @@ async def test_dict_list_get_by_url(unused_tcp_port, postgres_db, database_name,
     assert response.code == 400
     # Integer should also work
     response = await client.fetch(
-        f"http://localhost:{server_bind_port.get()}/api/v1/test_list/1?filter=42,45", raise_error=False
-    )
-    assert response.code == 200
-    # Alternative syntax for lists
-    response = await client.fetch(
-        f"http://localhost:{server_bind_port.get()}/api/v1/test_list/1?filter=42&filter=55", raise_error=False
+        f"http://localhost:{server_bind_port.get()}/api/v1/test_list/1?filter=42&filter=45", raise_error=False
     )
     assert response.code == 200
 
-    # Alternative list syntax when nested in dict
+    # list nested in dict
     response = await client.fetch(
         f"http://localhost:{server_bind_port.get()}/api/v1/test_dict_of_lists/1?filter.a=42&filter.a=55&filter.b=e",
         raise_error=False,

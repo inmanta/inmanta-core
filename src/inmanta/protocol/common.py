@@ -779,14 +779,12 @@ class MethodProperties(object):
                     # param = { "key1": "val1", "key2": "val2" } to param.key1=val1 and param.key2=val2
                     params_to_add = {**params_to_add, **self._encode_dict_for_get(query_param_name, query_param_value)}
                     already_processed_params.append(query_param_name)
-                if isinstance(query_param_value, list):
-                    params_to_add[query_param_name] = self._encode_list_for_get(query_param_value)
             for param in already_processed_params:
                 del qs_map[param]
             qs_map.update(params_to_add)
             # encode arguments in url
             if len(qs_map) > 0:
-                url += "?" + parse.urlencode(qs_map)
+                url += "?" + parse.urlencode(qs_map, True)
 
             body = None
         else:
@@ -798,17 +796,8 @@ class MethodProperties(object):
         self, query_param_name: str, query_param_value: Dict[str, Union[Any, List[Any]]]
     ) -> Dict[str, str]:
         """ Dicts are encoded in the following manner: param = {'ab': 1, 'cd': 2} to param.abc=1&param.cd=2 """
-        sub_dict = {}
-        for key, value in query_param_value.items():
-            if isinstance(value, list):
-                sub_dict[f"{query_param_name}.{key}"] = self._encode_list_for_get(value)
-            else:
-                sub_dict[f"{query_param_name}.{key}"] = value
+        sub_dict = {f"{query_param_name}.{key}": value for key, value in query_param_value.items()}
         return sub_dict
-
-    def _encode_list_for_get(self, query_param_value: List[Any]) -> str:
-        """ Lists are encoded in the following manner: param = [1, 2] to param=1,2 """
-        return ",".join([str(param_element).replace(",", "%2C") for param_element in query_param_value])
 
 
 class UrlMethod(object):
