@@ -67,4 +67,3 @@ def test_function_rescheduling(snippetcompiler):
     )
 
     compiler.do_compile()
-

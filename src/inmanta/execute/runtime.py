@@ -652,7 +652,7 @@ class Waiter(object):
 
     def _requeue_with_additional_requires(self, key: object, waitable: ResultVariable) -> None:
         """
-            Re-queue with an additional requirement
+        Re-queue with an additional requirement
         """
         self.requires[key] = waitable
         self.waitfor(waitable)
