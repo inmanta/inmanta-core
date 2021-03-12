@@ -1,0 +1,6 @@
+description: Fixed compiler issue on rescheduling of plugins breaking the cycle breaking
+issue-nr: 2787
+change-type: patch
+destination-branches: [master, iso3, iso4]
+sections:
+    bugfix: "{{description}}"
