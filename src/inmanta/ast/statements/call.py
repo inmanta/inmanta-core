@@ -253,7 +253,7 @@ class FunctionUnit(Waiter):
         self.result = result
         result.set_provider(self)
         self.requires = requires
-        self.base_requires = requires
+        self.base_requires = dict(requires)
         self.function = function
         self.resolver = resolver
         self.queue_scheduler = queue_scheduler
