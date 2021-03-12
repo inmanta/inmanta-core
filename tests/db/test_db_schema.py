@@ -43,19 +43,24 @@ async def run_updates_and_verify(
         await connection.execute(f"CREATE TABLE public.{prefix}tab(id integer primary key, val varchar NOT NULL);")
 
     async def update_function2(connection):
+        await connection.execute(f"ALTER TABLE public.{prefix}tab ADD COLUMN mycolumn varchar;")
+
+    async def update_function3(connection):
         await connection.execute(f"ALTER TABLE public.{prefix}tab DROP COLUMN val;")
 
     current_db_versions: Set[int] = await schema_manager.get_installed_versions()
     assert current is None or current_db_versions == current
     latest_version: int = max(current_db_versions) if len(current_db_versions) > 0 else 0
-    version_update1 = latest_version + 1
-    version_update2 = latest_version + 2
-    update_function_map = [Version(f"v{version_update1}", update_function1), Version(f"v{version_update2}", update_function2)]
+    update_function_map = [Version(f"v{latest_version + 1}", update_function1), Version(f"v{latest_version + 3}", update_function3)]
 
     await schema_manager._update_db_schema(update_function_map)
 
-    assert (await schema_manager.get_installed_versions()) == current_db_versions.union({version_update1, version_update2})
-    assert sorted(["id"]) == sorted(await get_columns_in_db_table("tab"))
+    assert (await schema_manager.get_installed_versions()) == current_db_versions.union({latest_version + i for i in (1, 3)})
+    assert set(await get_columns_in_db_table(f"{prefix}tab")) == {"id"}
+
+    await schema_manager._update_db_schema([*update_function_map, Version(f"v{latest_version + 2}", update_function2)])
+    assert (await schema_manager.get_installed_versions()) == current_db_versions.union({latest_version + i for i in (1, 2, 3)})
+    assert set(await get_columns_in_db_table(f"{prefix}tab")) == {"id", "mycolumn"}
 
 
 async def get_core_versions(postgresql_client) -> Set[int]:
@@ -118,7 +123,9 @@ CREATE TABLE IF NOT EXISTS public.schemamanager(
 """
     )
     dbm = schema.DBSchema("test_l1", inmanta.db.versions, postgresql_client)
+    assert set(await get_columns_in_db_table("schemamanager")) == {"name", "current_version"}
     await dbm._legacy_migration_table()
+    assert set(await get_columns_in_db_table("schemamanager")) == {"name", "legacy_version", "installed_versions"}
     current_db_version = await dbm.get_legacy_version()
     assert current_db_version == 0
     await dbm._legacy_migration_row({0, 1, 2})
@@ -149,6 +156,89 @@ CREATE TABLE IF NOT EXISTS public.schemamanager(
 
 
 @pytest.mark.asyncio
+async def test_dbschema_update_legacy_contained(
+    postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db, hard_clean_db_post
+):
+    """
+    Verify that the legacy row migration is contained to the instance it is called on.
+    """
+    await postgresql_client.execute(
+        """
+-- Table: public.schemamanager
+CREATE TABLE IF NOT EXISTS public.schemamanager(
+    name varchar PRIMARY KEY,
+    current_version integer NOT NULL
+);
+"""
+    )
+    await postgresql_client.execute("INSERT INTO public.schemamanager(name, current_version) VALUES ($1, $2);", "myslice", 1)
+    await postgresql_client.execute("INSERT INTO public.schemamanager(name, current_version) VALUES ($1, $2);", "otherslice", 3)
+    dbm1 = schema.DBSchema("myslice", versions, postgresql_client)
+    dbm2 = schema.DBSchema("otherslice", versions, postgresql_client)
+    await dbm1.ensure_self_update()
+    assert await dbm1.get_legacy_version() == 1
+    assert await dbm1.get_installed_versions() == {1}
+    assert await dbm2.get_legacy_version() == 3
+    assert await dbm2.get_installed_versions() == set()
+    await dbm2.ensure_self_update()
+    assert await dbm1.get_legacy_version() == 1
+    assert await dbm1.get_installed_versions() == {1}
+    assert await dbm2.get_legacy_version() == 3
+    assert await dbm2.get_installed_versions() == {1, 3}
+
+
+@pytest.mark.asyncio
+async def test_dbschema_update_legacy_table_concurrent(
+    postgres_db, database_name, get_columns_in_db_table, hard_clean_db, hard_clean_db_post
+):
+    """
+    Verify that no conflicts arise from multiple concurrent processes trying to migrate from the legacy table.
+    """
+    client1 = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name)
+    client2 = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name)
+    await client1.execute(
+        """
+-- Table: public.schemamanager
+CREATE TABLE IF NOT EXISTS public.schemamanager(
+    name varchar PRIMARY KEY,
+    current_version integer NOT NULL
+);
+"""
+    )
+    dbm1 = schema.DBSchema("myslice", inmanta.db.versions, client1)
+    dbm2 = schema.DBSchema("otherslice", inmanta.db.versions, client2)
+    assert set(await get_columns_in_db_table("schemamanager")) == {"name", "current_version"}
+    await asyncio.gather(
+        dbm1._legacy_migration_table(),
+        dbm2._legacy_migration_table(),
+    )
+    assert set(await get_columns_in_db_table("schemamanager")) == {"name", "legacy_version", "installed_versions"}
+
+
+@pytest.mark.asyncio
+async def test_dbschema_ensure_self_update(
+    postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db, hard_clean_db_post
+):
+    await postgresql_client.execute(
+        """
+-- Table: public.schemamanager
+CREATE TABLE IF NOT EXISTS public.schemamanager(
+    name varchar PRIMARY KEY,
+    current_version integer NOT NULL
+);
+"""
+    )
+    await postgresql_client.execute("INSERT INTO public.schemamanager(name, current_version) VALUES ($1, $2);", "myslice", 3)
+    dbm = schema.DBSchema("myslice", versions, postgresql_client)
+    await dbm.ensure_self_update()
+    assert await dbm.get_installed_versions() == {1, 3}
+    # make sure legacy update gets executed only once
+    await postgresql_client.execute("UPDATE public.schemamanager SET legacy_version=$1 WHERE name=$2", 2, "myslice")
+    dbm.ensure_self_update()
+    assert await dbm.get_installed_versions() == {1, 3}
+
+
+@pytest.mark.asyncio
 async def test_dbschema_update_db_schema(postgresql_client, get_columns_in_db_table, hard_clean_db, hard_clean_db_post):
 
     db_schema = schema.DBSchema("test_dbschema_update_db_schema", inmanta.db.versions, postgresql_client)
@@ -158,7 +248,7 @@ async def test_dbschema_update_db_schema(postgresql_client, get_columns_in_db_ta
 
     db_schema = schema.DBSchema("test_dbschema_update_db_schema_1", inmanta.db.versions, postgresql_client)
 
-    await run_updates_and_verify(get_columns_in_db_table, db_schema, set(), prefix="C")
+    await run_updates_and_verify(get_columns_in_db_table, db_schema, set(), prefix="c")
 
 
 @pytest.mark.asyncio

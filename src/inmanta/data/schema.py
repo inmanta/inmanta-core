@@ -105,12 +105,11 @@ class DBSchema(object):
             self.logger.info("Creating schema version table")
             await self.connection.execute(create_schemamanager)
 
-        # TODO: add a test for this logic
         if (
             len(await self.get_installed_versions()) == 0
             and await self.get_legacy_version() > 0
         ):
-            self._legacy_migration_row()
+            await self._legacy_migration_row()
 
     async def _legacy_migration_table(self) -> None:
         """
@@ -120,7 +119,6 @@ class DBSchema(object):
         3- renames the current_version column to legacy_version
         4- adds the new installed_versions column
         """
-        # TODO: test two consecutive calls to this method
         self.logger.info("Migrating from old schema management to new schema management")
         async with self.connection.transaction():
             # lock table
@@ -156,7 +154,6 @@ class DBSchema(object):
                 self.logger.info("Other process has already performed a database upgrade.")
 
     async def _legacy_migration_row(self, all_versions: Optional[List[int]] = None) -> None:
-        # TODO: test legacy migration for extension leaves core untouched
         """
         Migration for this instance's row to new (2021) schema management. Backfills the installed_versions column for this
         instance based on the legacy_version column and the currently available versions. Assumes all versions lower than the
@@ -192,7 +189,6 @@ class DBSchema(object):
 
         :param update_functions: allows overriding the available update functions, for example for testing purposes.
         """
-        # TODO: add test that installs older version
         update_functions = (
             sorted(update_functions, key=lambda x: x.version) if update_functions is not None
             else self._get_update_functions()
@@ -253,7 +249,7 @@ class DBSchema(object):
             )
         except UndefinedTableError as e:
             raise TableNotFound() from e
-        if versions is None:
+        if versions is None or versions["installed_versions"] is None:
             return set()
         return set(versions["installed_versions"])
 
