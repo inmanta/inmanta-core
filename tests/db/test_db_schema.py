@@ -118,9 +118,10 @@ CREATE TABLE IF NOT EXISTS public.schemamanager(
 """
     )
     dbm = schema.DBSchema("test_l1", inmanta.db.versions, postgresql_client)
+    await dbm._legacy_migration_table()
     current_db_version = await dbm.get_legacy_version()
     assert current_db_version == 0
-    await dbm._legacy_migration({0, 1, 2})
+    await dbm._legacy_migration_row({0, 1, 2})
     await run_updates_and_verify(get_columns_in_db_table, dbm, set())
 
 
@@ -140,9 +141,10 @@ CREATE TABLE IF NOT EXISTS public.schemamanager(
     await postgresql_client.execute("INSERT INTO public.schemamanager(name, current_version) VALUES ($1, $2);", "myslice", 1)
 
     dbm = schema.DBSchema("myslice", inmanta.db.versions, postgresql_client)
+    await dbm._legacy_migration_table()
     current_db_version = await dbm.get_legacy_version()
     assert current_db_version == 1
-    await dbm._legacy_migration({0, 1, 2, 3})
+    await dbm._legacy_migration_row({0, 1, 2, 3})
     await run_updates_and_verify(get_columns_in_db_table, dbm, {0, 1})
 
 
@@ -348,7 +350,7 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
 async def test_dbschema_get_dct_filter_disabled():
     db_schema = schema.DBSchema(CORE_SCHEMA_NAME, versions, None)
     update_function_map = db_schema._get_update_functions()
-    assert 2 not in [v.version for v in update_function_map]
+    assert {v.version for v in update_function_map} == {1, 3}
     for version in update_function_map:
         assert version.version >= 0
         assert isinstance(version.function, types.FunctionType)
