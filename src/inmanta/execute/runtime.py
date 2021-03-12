@@ -382,7 +382,8 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
     def listener(self, resultcollector: ResultCollector, location: Location) -> None:
         for value in self.value:
             resultcollector.receive_result(value, location)
-        self.listeners.append(resultcollector)
+        if not self.hasValue:
+            self.listeners.append(resultcollector)
 
     def is_multi(self) -> bool:
         return True
@@ -648,6 +649,13 @@ class Waiter(object):
         self.queue = queue
         self.queue.add_to_all(self)
         self.done = False
+
+    def _requeue_with_additional_requires(self, key: object, waitable: ResultVariable) -> None:
+        """
+            Re-queue with an additional requirement
+        """
+        self.requires[key] = waitable
+        self.waitfor(waitable)
 
     def waitfor(self, waitable: ResultVariable) -> None:
         self.waitcount = self.waitcount + 1

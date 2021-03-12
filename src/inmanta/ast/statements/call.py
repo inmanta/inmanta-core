@@ -253,6 +253,7 @@ class FunctionUnit(Waiter):
         self.result = result
         result.set_provider(self)
         self.requires = requires
+        self.base_requires = requires
         self.function = function
         self.resolver = resolver
         self.queue_scheduler = queue_scheduler
@@ -261,13 +262,14 @@ class FunctionUnit(Waiter):
         self.ready(self)
 
     def execute(self):
-        requires = {k: v.get_value() for (k, v) in self.requires.items()}
+        requires = {k: v.get_value() for (k, v) in self.base_requires.items()}
         try:
             self.function.resume(requires, self.resolver, self.queue_scheduler, self.result)
             self.done = True
         except UnsetException as e:
             LOGGER.debug("Unset value in python code in plugin %s %s.%s.", self.function.function, e.instance, e.attribute)
-            self.waitfor(e.get_result_variable())
+            # Don't handle it here!
+            raise
         except RuntimeException as e:
             e.set_statement(self.function)
             raise e

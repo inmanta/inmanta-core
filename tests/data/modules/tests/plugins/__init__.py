@@ -31,6 +31,15 @@ def do_uknown(inp: "any") -> "string":
 
 counter = defaultdict(lambda: 0)
 
+@plugin
+def resolve_rule_purged_status(
+    sources: "list",
+) -> "bool":
+    for source in sources:
+        if len(source.effective_services) == 0:
+            return True
+
+    return False
 
 @plugin
 def once(string: "string") -> "number":
