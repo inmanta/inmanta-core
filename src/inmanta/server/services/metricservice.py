@@ -108,7 +108,7 @@ class CPUMicroBenchMark(CachingCallbackGuage):
         """
         start = perf_counter()
         # this value was chosen to be around 1ms on a reference machine
-        # which is long enough to be meaningful, short enough to no be disturbing.
+        # which is long enough to be meaningful, short enough to not be disturbing.
         # the value is cached for 1s, making this at most 0.1% of additional overhead
         self.factor(6667)
         end = perf_counter()
