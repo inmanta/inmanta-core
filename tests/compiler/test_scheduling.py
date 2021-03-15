@@ -19,7 +19,7 @@
 from inmanta import compiler
 
 
-def test_function_rescheduling(snippetcompiler):
+def test_2787_function_rescheduling(snippetcompiler):
     """
     Particular case where a bug in handling of plugin calls causes cycle breaking to fail
     """

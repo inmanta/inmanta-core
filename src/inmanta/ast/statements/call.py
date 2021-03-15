@@ -269,6 +269,9 @@ class FunctionUnit(Waiter):
         except UnsetException as e:
             LOGGER.debug("Unset value in python code in plugin %s %s.%s.", self.function.function, e.instance, e.attribute)
             # Don't handle it here!
+            # This exception is used by the scheduler to re-queue the unit
+            # If it is handled here, the re-queueing can not be done,
+            # leading to very subtle errors such as #2787
             raise
         except RuntimeException as e:
             e.set_statement(self.function)
