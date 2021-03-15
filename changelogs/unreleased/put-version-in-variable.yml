@@ -1,0 +1,3 @@
+description: Add version of pytest-inmanta-extensions package in variable
+change-type: patch
+destination-branches: [iso4]
