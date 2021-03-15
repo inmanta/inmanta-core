@@ -3,26 +3,26 @@ from os import path
 
 requires = [
     "asyncpg",
-    "click",
     "click-plugins",
+    "click",
     "colorlog",
+    "cookiecutter",
+    "cryptography",
+    "docstring-parser",
     "execnet",
+    "importlib_metadata",
+    "jinja2",
+    "more-itertools",
     "netifaces",
     "ply",
+    "pydantic",
+    "pyformance",
+    "PyJWT",
     "python-dateutil",
     "pyyaml",
     "texttable",
     "tornado",
-    "PyJWT",
-    "cryptography",
-    "jinja2",
-    "pyformance",
-    "pydantic",
     "typing_inspect",
-    "importlib_metadata",
-    "docstring-parser",
-    "cookiecutter",
-    "more-itertools",
 ]
 
 # Package a dummy extensions so that the namespace package for extensions is not empty
@@ -34,7 +34,7 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    version="4.0.0",
+    version="4.1.0",
     python_requires=">=3.6",  # also update classifiers
     # Meta data
     name="inmanta-core",

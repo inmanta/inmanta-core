@@ -4,6 +4,7 @@ include tox.ini
 include setup.py
 include setup.cfg
 include src/inmanta/py.typed
+include src/inmanta/parser/parser.out
 
 recursive-include src *.j2
 recursive-include docs *

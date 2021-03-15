@@ -1,3 +1,15 @@
+# Release 4.1.0 (2021-02-25)
+
+## Bug fixes
+- Fix broken order by (#2638)
+- Report the Inmanta OSS product version correctly (#2622)
+- Set PYTHONPATH so that all subprocesses also see packages in parent venv (#2650, #2747)
+- Create virtual environments without pip and use the pip of the parent venv
+- Correctly set `[:n]` as syntactic sugar for `[0:n]` instead of leaving lower unbound (#2689)
+
+## New features
+- Add installation procedure for el8 to installation documentation
+
 # Release 4.0.0 (2020-12-23)
 
 ## New features
@@ -8,6 +20,7 @@
 - Added pagination support on api calls for agent and agentproc (#2500)
 - Added support to build RPMs for a python version different from Python3.6 (#1857)
 - Added support for assigning `null` to relations with lower arity 0 (#2459)
+- Added documentation on the core dashboard (inmanta/dashboard#63)
 - Decouple the compiler version from the OSS product version (#2573)
 - Show versions of all installed components when running `inmanta --version` (#2574)
 
