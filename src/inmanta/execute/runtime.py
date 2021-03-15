@@ -17,7 +17,7 @@
 """
 
 from abc import abstractmethod
-from typing import Deque, Dict, Generic, List, Optional, Set, TypeVar, Union, cast
+from typing import Deque, Dict, Generic, List, Optional, Set, TypeVar, Union, cast, Hashable
 
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
@@ -650,7 +650,7 @@ class Waiter(object):
         self.queue.add_to_all(self)
         self.done = False
 
-    def _requeue_with_additional_requires(self, key: object, waitable: ResultVariable) -> None:
+    def _requeue_with_additional_requires(self, key: Hashable, waitable: ResultVariable) -> None:
         """
         Re-queue with an additional requirement
         """
