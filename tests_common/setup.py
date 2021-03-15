@@ -19,10 +19,12 @@ from os import path
 
 from setuptools import find_packages, setup
 
+version = "5.0.1"
+
 requires = [
     "asyncpg",
     "click",
-    "inmanta-core>=5.0.0.dev",
+    f"inmanta-core>={version}.dev",
     "pyformance",
     "pytest-asyncio",
     "pytest-env",
@@ -36,7 +38,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
-    version="5.0.1",
+    version=version,
     python_requires=">=3.6",  # also update classifiers
     # Meta data
     name="pytest-inmanta-extensions",
