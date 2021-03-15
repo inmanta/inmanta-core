@@ -195,12 +195,12 @@ class DBSchema(object):
             await self.connection.execute(f"LOCK TABLE {SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
             # get current version again, in transaction this time
             try:
-                sure_db_schema: Set[int] = await self.get_installed_versions()
+                installed_versions: Set[int] = await self.get_installed_versions()
             except TableNotFound:
                 self.logger.exception("Schemamanager table disappeared, should not occur.")
                 raise
             # get relevant updates
-            updates = [v for v in update_functions if v.version not in sure_db_schema]
+            updates = [v for v in update_functions if v.version not in installed_versions]
             for version in updates:
                 try:
                     # actual update sequence

@@ -216,6 +216,8 @@ CREATE TABLE IF NOT EXISTS public.schemamanager(
         dbm2._legacy_migration_table(),
     )
     assert set(await get_columns_in_db_table("schemamanager")) == {"name", "legacy_version", "installed_versions"}
+    assert await dbm1.get_installed_versions() == set()
+    assert await dbm2.get_installed_versions() == set()
 
 
 @pytest.mark.asyncio
