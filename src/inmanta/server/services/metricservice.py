@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import logging
-from time import time, perf_counter
+from time import perf_counter, time
 from typing import Optional
 
 from pyformance import global_registry
@@ -71,6 +71,13 @@ class MetricsService(protocol.ServerSlice):
 
 
 class CachingCallbackGuage(Gauge):
+    """
+    A gauge that calculates a value on the fly and holds it for a specific time interval.
+
+    Intended to keep load under control.
+
+    Be aware that the callback has to be short, as it is called from the IOLoop main thread.
+    """
 
     def __init__(self, interval: int = 1):
         self.next_time: float = 0
@@ -78,41 +85,50 @@ class CachingCallbackGuage(Gauge):
         self.interval: int = interval
 
     def get_value(self) -> int:
-        "returns the result of callback which is executed each time"
         now = time()
-        if  now < self.next_time:
+        if now < self.next_time:
             return self.last_value
         self.last_value = self.callback()
         self.next_time = now + self.interval
         return self.last_value
 
     def callback(self) -> int:
+        """
+        Be aware that the callback has to be short, as it is called from the IOLoop main thread.
+        :return: the value of the gauge
+        """
         raise NotImplementedError()
 
 
 class CPUMicroBenchMark(CachingCallbackGuage):
-
     def callback(self) -> int:
+        """
+        Determine baseline performance of the machine by running a short cpu benchmark
+
+        :return: time required to perform a specific calculation, in ns, 100% cpu bound
+        """
         start = perf_counter()
+        # this value was chosen to be around 1ms on a reference machine
+        # which is long enough to be meaningful, short enough to no be disturbing.
+        # the value is cached for 1s, making this at most 0.1% of additional overhead
         self.factor(6667)
         end = perf_counter()
-        result = int((end-start) * 1000000000)
+        result = int((end - start) * 1000000000)
         return result
 
     @staticmethod
     def factor(number: int) -> int:
+        """ A CPU intensive algorithm"""
         out = 0
         # for each potential factor i
-        for i in range(2, number+1):
-            #if i is a factor of N, repeatedly divide it out
-            while (number % i == 0):
+        for i in range(2, number + 1):
+            # if i is a factor of N, repeatedly divide it out
+            while number % i == 0:
                 out += i
                 number = number / i
 
-        #if biggest factor occurs only once, n > 1
-        if (number > 1):
+        # if biggest factor occurs only once, n > 1
+        if number > 1:
             out += number
 
         return out
-
-

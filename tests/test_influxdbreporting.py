@@ -23,7 +23,7 @@ from statistics import mean
 
 import pytest
 import tornado
-from pyformance import timer, gauge
+from pyformance import gauge, timer
 from tornado.httpserver import HTTPServer
 from tornado.web import url
 
@@ -121,8 +121,6 @@ async def test_influxdb(influxdb):
 
     # cpu micro has none-empty cache
     assert cpu_micro.last_value is not None
-    # we want this to be under 1ms
-    assert cpu_micro.last_value < 1000000
 
     if influxdb.failure:
         raise influxdb.failure
