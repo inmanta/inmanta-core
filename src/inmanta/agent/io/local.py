@@ -172,7 +172,7 @@ class BashIO(IOBase):
         if env is not None:
             current_env.update(env)
 
-        if not env or "PYTHONPATH" not in env:
+        if (not env or "PYTHONPATH" not in env) and "PYTHONPATH" in current_env:
             # Remove the inherited python path
             del current_env["PYTHONPATH"]
 
@@ -438,7 +438,7 @@ class LocalIO(IOBase):
         if env is not None:
             current_env.update(env)
 
-        if not env or "PYTHONPATH" not in env:
+        if (not env or "PYTHONPATH" not in env) and "PYTHONPATH" in current_env:
             # Remove the inherited python path
             del current_env["PYTHONPATH"]
 
