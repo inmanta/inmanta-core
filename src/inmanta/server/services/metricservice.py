@@ -16,7 +16,11 @@
     Contact: code@inmanta.com
 """
 import logging
+from time import time, perf_counter
 from typing import Optional
+
+from pyformance import global_registry
+from pyformance.meters import Gauge
 
 from inmanta.reporter import InfluxReporter
 from inmanta.server import SLICE_METRICS
@@ -34,6 +38,7 @@ class MetricsService(protocol.ServerSlice):
         self._influx_db_reporter: Optional[InfluxReporter] = None
 
     async def start(self) -> None:
+        self.start_auto_benchmark()
         self.start_metric_reporters()
         await super().start()
 
@@ -59,3 +64,55 @@ class MetricsService(protocol.ServerSlice):
                 tags=opt.influxdb_tags.get(),
             )
             self._influx_db_reporter.start()
+
+    def start_autobenchmark(self):
+        registry = global_registry()
+        registry.gauge("self.spec.cpu", CPUMicroBenchMark())
+
+
+class CachingCallbackGuage(Gauge):
+
+    def __init__(self, interval: int = 1):
+        self.next_time: float = 0
+        self.last_value: int = None
+        self.interval: int = interval
+
+    def get_value(self) -> int:
+        "returns the result of callback which is executed each time"
+        now = time()
+        if  now < self.next_time:
+            return self.last_value
+        self.last_value = self.callback()
+        self.next_time = now + self.interval
+        return self.last_value
+
+    def callback(self) -> int:
+        raise NotImplementedError()
+
+
+class CPUMicroBenchMark(CachingCallbackGuage):
+
+    def callback(self) -> int:
+        start = perf_counter()
+        self.factor(6667)
+        end = perf_counter()
+        result = int((end-start) * 1000000000)
+        return result
+
+    @staticmethod
+    def factor(number: int) -> int:
+        out = 0
+        # for each potential factor i
+        for i in range(2, number+1):
+            #if i is a factor of N, repeatedly divide it out
+            while (number % i == 0):
+                out += i
+                number = number / i
+
+        #if biggest factor occurs only once, n > 1
+        if (number > 1):
+            out += number
+
+        return out
+
+

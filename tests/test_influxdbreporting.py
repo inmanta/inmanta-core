@@ -16,15 +16,19 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import math
 import re
+import statistics
+from statistics import mean
 
 import pytest
 import tornado
-from pyformance import timer
+from pyformance import timer, gauge
 from tornado.httpserver import HTTPServer
 from tornado.web import url
 
 from inmanta.reporter import AsyncReporter, InfluxReporter
+from inmanta.server.services.metricservice import CPUMicroBenchMark
 
 
 class QueryMockHandler(tornado.web.RequestHandler):
@@ -108,10 +112,17 @@ async def test_influxdb(influxdb):
     with timer("test2").time():
         pass
 
+    cpu_micro = CPUMicroBenchMark()
+    gauge("CPU", cpu_micro)
     await rep.report_now()
 
     assert influxdb.querycount == 1
     assert influxdb.writecount == 1
+
+    # cpu micro has none-empty cache
+    assert cpu_micro.last_value is not None
+    # we want this to be under 1ms
+    assert cpu_micro.last_value < 1000000
 
     if influxdb.failure:
         raise influxdb.failure
