@@ -121,7 +121,7 @@ class DBSchema(object):
             # lock table
             await self.connection.execute(f"LOCK TABLE {SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
             # get legacy column, under lock => if column no longer exists -> other process has already performed migration
-            legacy_column: Record = await self.connection.fetchrow(
+            legacy_column: Optional[Record] = await self.connection.fetchrow(
                 """
                 SELECT EXISTS(
                     SELECT 1
@@ -132,6 +132,8 @@ class DBSchema(object):
                 SCHEMA_VERSION_TABLE,
                 "current_version",
             )
+            if legacy_column is None:
+                raise Exception("Failed to query existence of legacy column, this should not happen.")
             if legacy_column["exists"]:
                 self.logger.info("Migrating legacy schema version table")
                 await self.connection.execute(
@@ -231,7 +233,7 @@ class DBSchema(object):
             raise TableNotFound() from e
         return version["legacy_version"] if version is not None else 0
 
-    async def get_installed_versions(self) -> Optional[Set[int]]:
+    async def get_installed_versions(self) -> Set[int]:
         """
         Returns the set of all versions that have been installed.
 
