@@ -19,7 +19,7 @@ import logging
 from time import perf_counter, time
 from typing import Optional
 
-from pyformance import global_registry
+from pyformance import gauge
 from pyformance.meters import Gauge
 
 from inmanta.reporter import InfluxReporter
@@ -65,9 +65,8 @@ class MetricsService(protocol.ServerSlice):
             )
             self._influx_db_reporter.start()
 
-    def start_autobenchmark(self):
-        registry = global_registry()
-        registry.gauge("self.spec.cpu", CPUMicroBenchMark())
+    def start_auto_benchmark(self):
+        gauge("self.spec.cpu", CPUMicroBenchMark())
 
 
 class CachingCallbackGuage(Gauge):
@@ -81,7 +80,7 @@ class CachingCallbackGuage(Gauge):
 
     def __init__(self, interval: int = 1):
         self.next_time: float = 0
-        self.last_value: int = None
+        self.last_value: int = 0
         self.interval: int = interval
 
     def get_value(self) -> int:
