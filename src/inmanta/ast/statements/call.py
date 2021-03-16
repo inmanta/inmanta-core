@@ -252,7 +252,10 @@ class FunctionUnit(Waiter):
         Waiter.__init__(self, queue_scheduler)
         self.result = result
         result.set_provider(self)
+        # requires is used to track all required RV's
+        # It can grow larger as new requires are discovered
         self.requires = requires
+        # base_requires are the original requires for this function call
         self.base_requires = dict(requires)
         self.function = function
         self.resolver = resolver
