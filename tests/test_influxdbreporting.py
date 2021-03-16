@@ -16,10 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
-import math
 import re
-import statistics
-from statistics import mean
 
 import pytest
 import tornado
