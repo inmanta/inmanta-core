@@ -252,7 +252,11 @@ class FunctionUnit(Waiter):
         Waiter.__init__(self, queue_scheduler)
         self.result = result
         result.set_provider(self)
+        # requires is used to track all required RV's
+        # It can grow larger as new requires are discovered
         self.requires = requires
+        # base_requires are the original requires for this function call
+        self.base_requires = dict(requires)
         self.function = function
         self.resolver = resolver
         self.queue_scheduler = queue_scheduler
@@ -261,13 +265,17 @@ class FunctionUnit(Waiter):
         self.ready(self)
 
     def execute(self):
-        requires = {k: v.get_value() for (k, v) in self.requires.items()}
+        requires = {k: v.get_value() for (k, v) in self.base_requires.items()}
         try:
             self.function.resume(requires, self.resolver, self.queue_scheduler, self.result)
             self.done = True
         except UnsetException as e:
             LOGGER.debug("Unset value in python code in plugin %s %s.%s.", self.function.function, e.instance, e.attribute)
-            self.waitfor(e.get_result_variable())
+            # Don't handle it here!
+            # This exception is used by the scheduler to re-queue the unit
+            # If it is handled here, the re-queueing can not be done,
+            # leading to very subtle errors such as #2787
+            raise
         except RuntimeException as e:
             e.set_statement(self.function)
             raise e
