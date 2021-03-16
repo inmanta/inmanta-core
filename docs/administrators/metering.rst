@@ -62,9 +62,9 @@ Reported Metrics
 This section assumes familiarity with influxdb. See `here <https://docs.influxdata.com/influxdb/v1.7/concepts/key_concepts/#field-key>`_.
 
 All metrics are reported under the measurement `metrics`.
-Different measurements are distinguished bt a tag called `key`.
+Different measurements are distinguished by a tag called `key`.
 
-There a two main types of metrics reported:
+Two main types of metrics are reported:
 1. Metrics related to API performance
 2. Others
 
