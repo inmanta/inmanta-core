@@ -1,0 +1,6 @@
+description: Add partial support for collection type parameters for GET methods
+issue-nr: 2775
+change-type: minor
+destination-branches: [master, iso4]
+sections:
+    feature: "{{description}}"

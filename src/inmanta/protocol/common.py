@@ -549,11 +549,6 @@ class MethodProperties(object):
                     raise InvalidMethodDefinition(f"Union of argument {arg} can contain only one generic {name}")
 
         elif typing_inspect.is_generic_type(arg_type):
-            if in_url:
-                raise InvalidMethodDefinition(
-                    f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, as it can not be part of the URL"
-                )
-
             orig = typing_inspect.get_origin(arg_type)
             if not issubclass(orig, (list, dict)):
                 raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} can only be generic List or Dict")
@@ -565,12 +560,22 @@ class MethodProperties(object):
                 )
 
             elif len(args) == 1:  # A generic list
+                if in_url and (issubclass(args[0], dict) or issubclass(args[0], list)):
+                    raise InvalidMethodDefinition(
+                        f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
+                        f"lists of dictionaries and lists of lists are not supported for GET requests"
+                    )
                 self._validate_type_arg(arg, args[0], strict=strict, allow_none_type=allow_none_type, in_url=in_url)
 
             elif len(args) == 2:  # Generic Dict
                 if not issubclass(args[0], str):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} must be a Dict with str keys and not {args[0].__name__}"
+                    )
+                if in_url and (typing_inspect.is_union_type(args[1]) or issubclass(args[1], dict)):
+                    raise InvalidMethodDefinition(
+                        f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
+                        f"nested dictionaries and union types for dictionary values are not supported for GET requests"
                     )
 
                 self._validate_type_arg(arg, args[1], strict=strict, allow_none_type=True, in_url=in_url)
@@ -765,16 +770,34 @@ class MethodProperties(object):
 
         if self.operation not in ("POST", "PUT", "PATCH"):
             qs_map = {k: v for k, v in msg.items() if v is not None and k not in path_params}
-
+            # Preprocess dict and list parameters for GET
+            params_to_add = {}
+            already_processed_params = []
+            for query_param_name, query_param_value in qs_map.items():
+                if isinstance(query_param_value, dict):
+                    # Add parameters from the dict as separate parameters for example
+                    # param = { "key1": "val1", "key2": "val2" } to param.key1=val1 and param.key2=val2
+                    params_to_add = {**params_to_add, **self._encode_dict_for_get(query_param_name, query_param_value)}
+                    already_processed_params.append(query_param_name)
+            for param in already_processed_params:
+                del qs_map[param]
+            qs_map.update(params_to_add)
             # encode arguments in url
             if len(qs_map) > 0:
-                url += "?" + parse.urlencode(qs_map)
+                url += "?" + parse.urlencode(qs_map, True)
 
             body = None
         else:
             body = msg
 
         return Request(url=url, method=self.operation, headers=headers, body=body)
+
+    def _encode_dict_for_get(
+        self, query_param_name: str, query_param_value: Dict[str, Union[Any, List[Any]]]
+    ) -> Dict[str, str]:
+        """ Dicts are encoded in the following manner: param = {'ab': 1, 'cd': 2} to param.abc=1&param.cd=2 """
+        sub_dict = {f"{query_param_name}.{key}": value for key, value in query_param_value.items()}
+        return sub_dict
 
 
 class UrlMethod(object):
