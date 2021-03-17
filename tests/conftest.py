@@ -350,7 +350,7 @@ def inmanta_config():
 
 
 @pytest.fixture
-def server_pre_start():
+def server_pre_start(server_config):
     """This fixture is called by the server. Override this fixture to influence server config"""
 
 
@@ -500,7 +500,7 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
 
 
 @pytest.fixture(scope="function")
-async def server(server_pre_start, server_config):
+async def server(server_pre_start):
     """
     :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
     May not be required
