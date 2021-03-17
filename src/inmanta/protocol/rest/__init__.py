@@ -249,13 +249,17 @@ class CallArguments(object):
             dict_args = typing_inspect.get_args(typing_inspect.get_args(type_args, evaluate=True)[0], evaluate=True)
         else:
             dict_args = typing_inspect.get_args(self._argspec.annotations.get(arg), evaluate=True)
-        if issubclass(dict_args[1], list):
+        dict_value_arg_type = (
+            typing_inspect.get_origin(dict_args[1]) if typing_inspect.get_origin(dict_args[1]) else dict_args[1]
+        )
+        if issubclass(dict_value_arg_type, list):
             value = {key: [val] if not isinstance(val, list) else val for key, val in value.items()}
         return value
 
     def _is_dict_or_optional_dict(self, arg_type: Type) -> bool:
         if typing_inspect.is_optional_type(arg_type):
             arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+        arg_type = typing_inspect.get_origin(arg_type) if typing_inspect.get_origin(arg_type) else arg_type
         return issubclass(arg_type, dict)
 
     def _validate_union_return(self, arg_type: Type, value: Any) -> None:

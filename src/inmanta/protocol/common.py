@@ -560,7 +560,8 @@ class MethodProperties(object):
                 )
 
             elif len(args) == 1:  # A generic list
-                if in_url and (issubclass(args[0], dict) or issubclass(args[0], list)):
+                unsubscripted_arg = typing_inspect.get_origin(args[0]) if typing_inspect.get_origin(args[0]) else args[0]
+                if in_url and (issubclass(unsubscripted_arg, dict) or issubclass(unsubscripted_arg, list)):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
                         f"lists of dictionaries and lists of lists are not supported for GET requests"
@@ -572,7 +573,8 @@ class MethodProperties(object):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} must be a Dict with str keys and not {args[0].__name__}"
                     )
-                if in_url and (typing_inspect.is_union_type(args[1]) or issubclass(args[1], dict)):
+                unsubscripted_dict_value_arg = typing_inspect.get_origin(args[1]) if typing_inspect.get_origin(args[1]) else args[1]
+                if in_url and (typing_inspect.is_union_type(args[1]) or issubclass(unsubscripted_dict_value_arg, dict)):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
                         f"nested dictionaries and union types for dictionary values are not supported for GET requests"
