@@ -1,4 +1,7 @@
 """
+Module defining the v2 rest api
+"""
+"""
     Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
