@@ -573,7 +573,9 @@ class MethodProperties(object):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} must be a Dict with str keys and not {args[0].__name__}"
                     )
-                unsubscripted_dict_value_arg = typing_inspect.get_origin(args[1]) if typing_inspect.get_origin(args[1]) else args[1]
+                unsubscripted_dict_value_arg = (
+                    typing_inspect.get_origin(args[1]) if typing_inspect.get_origin(args[1]) else args[1]
+                )
                 if in_url and (typing_inspect.is_union_type(args[1]) or issubclass(unsubscripted_dict_value_arg, dict)):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
