@@ -73,7 +73,7 @@ API performance metrics
 Each API method is reported with a `key=rpc.{endpoint_name}`.
 The `endpoint_name` is the server's internal name for the endpoint.
 To know which url corresponds to which method, please consult either the `operationId`
-field of the `OpenAPI spec <./openapi.json>`_ or
+field of the `OpenAPI spec <./_specs/openapi.json>`_ or
 `methods.py <https://github.com/inmanta/inmanta-core/blob/master/src/inmanta/protocol/methods.py>`_ and .
 `methodsv2.py <https://github.com/inmanta/inmanta-core/blob/master/src/inmanta/protocol/methods_v2.py>`_.
 
