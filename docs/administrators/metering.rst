@@ -74,7 +74,7 @@ Each API method is reported with a `key=rpc.{endpoint_name}`.
 The `endpoint_name` is the server's internal name for the endpoint.
 
 To know which url corresponds to which method, please consult either
- * the `operationId` field of the `OpenAPI spec <./_specs/openapi.json>`_ or
+ * the `operationId` field of the `OpenAPI spec </_specs/openapi.json>`_ or
  * the method names in :mod:`inmanta.protocol.methods` and :mod:`inmanta.protocol.methods_v2`
 
 
