@@ -1,3 +1,3 @@
 description: Fix race condition in `test_agent_timeout` test case.
 change-type: patch
-destination-branches: [master, iso3, iso4]
+destination-branches: [iso3, iso4]
