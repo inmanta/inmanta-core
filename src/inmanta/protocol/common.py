@@ -348,7 +348,7 @@ class MethodProperties(object):
         if properties.api_version in current_list:
             raise Exception(
                 f"Method {properties.function.__name__} already has a "
-                "method definition for api version {properties.api_version}"
+                f"method definition for api version {properties.api_version}"
             )
 
         cls.methods[properties.function.__name__].append(properties)
