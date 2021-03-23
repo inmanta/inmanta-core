@@ -254,6 +254,9 @@ class Scheduler(object):
         for waiter in allwaiters:
             for rv in waiter.requires.values():
                 if isinstance(rv, DelayedResultVariable):
+                    if rv.hasValue:
+                        # get_progress_potential fails when there is a value already
+                        continue
                     if rv.get_waiting_providers() > 0 and rv.get_progress_potential() > 0:
                         LOGGER.debug("Waiting blocked on %s", rv)
                         rv.freeze()
