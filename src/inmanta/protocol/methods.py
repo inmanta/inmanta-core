@@ -1,7 +1,4 @@
 """
-Module defining the v1 rest api
-"""
-"""
     Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +14,8 @@ Module defining the v1 rest api
     limitations under the License.
 
     Contact: code@inmanta.com
+
+    Module defining the v1 rest api
 """
 
 import datetime
