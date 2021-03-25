@@ -33,6 +33,7 @@ extensions = [
 ]
 
 def setup(app):
+    # cut off license headers
     from sphinx.ext.autodoc import cut_lines
     app.connect('autodoc-process-docstring', cut_lines(15, what=['module']))
 
