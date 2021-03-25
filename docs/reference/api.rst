@@ -1,7 +1,7 @@
 Inmanta API reference
 =====================
 
-This page describes parts of the compiler that provide a stable API that could be used from modules.
+This page describes parts of inmanta code base that provide a stable API that could be used from modules or extensions.
 
 .. warning::
     Only those parts explicitly mentioned here are part of the API. They provide a stable
@@ -167,3 +167,14 @@ when bypassing the usual plugin workflow by calling internal methods directly.
 .. autoclass:: inmanta.execute.proxy.DynamicProxy()
     :members: return_value, unwrap
     :undoc-members:
+
+Rest API
+---------
+
+The rest API is also available as a `swagger spec <openapi.html#http://>`_
+
+.. automodule:: inmanta.protocol.methods
+    :members:
+
+.. automodule:: inmanta.protocol.methods_v2
+    :members:

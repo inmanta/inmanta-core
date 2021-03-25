@@ -32,6 +32,10 @@ extensions = [
     'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext'
 ]
 
+def setup(app):
+    # cut off license headers
+    from sphinx.ext.autodoc import cut_lines
+    app.connect('autodoc-process-docstring', cut_lines(15, what=['module']))
 
 try:
     # noinspection PyUnresolvedReferences
