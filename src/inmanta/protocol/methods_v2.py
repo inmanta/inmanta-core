@@ -14,6 +14,8 @@
     limitations under the License.
 
     Contact: code@inmanta.com
+
+    Module defining the v2 rest api
 """
 import datetime
 import uuid
