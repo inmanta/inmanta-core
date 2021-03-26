@@ -248,6 +248,9 @@ class PluginFunction(Function):
 
 
 class FunctionUnit(Waiter):
+
+    __slots__ = ("result", "base_requires", "function", "resolver")
+
     def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall):
         Waiter.__init__(self, queue_scheduler)
         self.result = result
@@ -259,7 +262,6 @@ class FunctionUnit(Waiter):
         self.base_requires = dict(requires)
         self.function = function
         self.resolver = resolver
-        self.queue_scheduler = queue_scheduler
         for r in requires.values():
             self.waitfor(r)
         self.ready(self)
@@ -267,7 +269,7 @@ class FunctionUnit(Waiter):
     def execute(self):
         requires = {k: v.get_value() for (k, v) in self.base_requires.items()}
         try:
-            self.function.resume(requires, self.resolver, self.queue_scheduler, self.result)
+            self.function.resume(requires, self.resolver, self.queue, self.result)
             self.done = True
         except UnsetException as e:
             LOGGER.debug("Unset value in python code in plugin %s %s.%s.", self.function.function, e.instance, e.attribute)
