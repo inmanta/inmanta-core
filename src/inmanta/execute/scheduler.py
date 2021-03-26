@@ -334,7 +334,7 @@ class Scheduler(object):
                     count = count + 1
                 except UnsetException as e:
                     # some statements don't know all their dependencies up front,...
-                    next.requeue_with_additional_requires(e, e.get_result_variable())
+                    next.requeue_with_additional_requires(object(), e.get_result_variable())
 
             # all safe stmts are done
             progress = False
