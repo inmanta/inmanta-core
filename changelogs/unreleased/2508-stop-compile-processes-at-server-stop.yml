@@ -1,0 +1,6 @@
+description: Ensure that the CompilerService stops the running compiler processes when the server is stopped.
+issue-nr: 2508
+change-type: patch
+destination-branches: [iso3]
+sections:
+    bugfix: "{{description}}"
