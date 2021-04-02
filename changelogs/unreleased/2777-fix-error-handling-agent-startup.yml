@@ -1,0 +1,8 @@
+description: Ensure that an error at agent startup time is properly logged.
+issue-nr: 2777
+change-type: patch
+sections:
+  bugfix: "{{description}}"
+destination-branches:
+  - master
+  - iso4
