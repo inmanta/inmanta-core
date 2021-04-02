@@ -6,3 +6,4 @@ sections:
 destination-branches:
   - master
   - iso4
+  - iso3
