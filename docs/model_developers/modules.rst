@@ -63,7 +63,7 @@ three keys mandatory:
 * *version*: The version of this module. For a new module a start version could be 0.1dev0 These
   versions are parsed using the same version parser as python setuptools.
 
-For example the following module.yaml from the :doc:`../quickstart`
+For example the following module.yml from the :doc:`../quickstart`
 
 .. code-block:: yaml
 
@@ -72,7 +72,7 @@ For example the following module.yaml from the :doc:`../quickstart`
     version: 0.1
 
 Module dependencies are indicated by importing a module in a model file. However, these imports do not
-have a specifc version identifier. The version of a module import can be constrained in the
+have a specific version identifier. The version of a module import can be constrained in the
 module.yml file. The *requires* key expects a list of version specs. These version specs use `PEP440
 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
 
@@ -83,8 +83,8 @@ To specify specific version are required, constraints can be added to the requir
     source: git@github.com:inmanta/ip
     version: 0.1.15
     requires:
-        net: net ~= 0.2.4
-        std: std >1.0 <2.5
+        - net ~= 0.2.4
+        - std >1.0 <2.5
 
 A module can also indicate a minimal compiler version with the ``compiler_version`` key.
 
