@@ -104,6 +104,7 @@ Or for the the current project
 	inmanta project freeze --recursive --operator ==
 
 
+For more information about the ``module.yml`` file see :ref:`module_yml`.
 
 Versioning
 ----------

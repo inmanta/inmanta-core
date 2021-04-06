@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import enum
 import glob
 import importlib
 import logging
@@ -24,15 +25,33 @@ import re
 import subprocess
 import sys
 import traceback
+from abc import ABC, abstractmethod
 from functools import lru_cache
 from io import BytesIO
 from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
-from typing import Any, Dict, Iterable, Iterator, List, Mapping, NewType, Optional, Set, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    Generic,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    NewType,
+    Optional,
+    Set,
+    TextIO,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 
 import yaml
 from pkg_resources import parse_requirements, parse_version
+from pydantic import BaseModel, NameEmail, ValidationError, constr, validator
 
 from inmanta import env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, ModuleNotFoundException, Namespace, Range
@@ -41,7 +60,6 @@ from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStat
 from inmanta.ast.statements.define import DefineImport
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
-from inmanta.types import JsonType
 from inmanta.util import get_compiler_version
 
 try:
@@ -80,13 +98,13 @@ class InvalidModuleException(CompilerException):
         return out
 
 
-class InvalidModuleFileException(CompilerException):
+class InvalidMetadata(CompilerException):
     """
-    This exception is raised if a module file is invalid
+    This exception is raised if the metadata file of a project or module is invalid.
     """
 
 
-class ProjectNotFoundExcpetion(CompilerException):
+class ProjectNotFoundException(CompilerException):
     """
     This exception is raised when inmanta is unable to find a valid project
     """
@@ -268,7 +286,78 @@ def merge_specs(mainspec: "Dict[str, List[Requirement]]", new: "List[Requirement
             mainspec[key] = mainspec[key] + [req]
 
 
-class ModuleLike(object):
+class InstallMode(str, enum.Enum):
+    release = "release"
+    prerelease = "prerelease"
+    master = "master"
+
+
+class FreezeOperator(str, enum.Enum):
+    eq = "=="
+    compatible = "~="
+    ge = ">="
+
+    @classmethod
+    def get_regex_for_validation(cls) -> str:
+        all_values = [o.value for o in FreezeOperator]
+        return f"^({'|'.join(all_values)})$"
+
+
+class Metadata(BaseModel):
+    name: str
+    description: Optional[str] = None
+    requires: List[str] = []
+    freeze_recursive: bool = False
+    freeze_operator: constr(regex=FreezeOperator.get_regex_for_validation()) = "~="
+
+    @classmethod
+    def to_list(cls, v: Optional[Any]) -> List[Any]:
+        if v is None:
+            return []
+        if not isinstance(v, list):
+            return [v]
+        return v
+
+    @validator("requires", pre=True)
+    @classmethod
+    def requires_to_list(cls, v: Optional[Any]) -> List[Any]:
+        return cls.to_list(v)
+
+
+class ModuleMetadata(Metadata):
+    version: str
+    license: str
+    compiler_version: Optional[str] = None
+
+    @validator("version", "compiler_version")
+    @classmethod
+    def is_pep440_version(cls, v):
+        try:
+            parse_version(v)
+        except Exception as e:
+            raise ValueError(f"Version {v} is not PEP440 complient") from e
+
+
+class ProjectMetadata(Metadata):
+    author: Optional[str] = None
+    author_email: Optional[NameEmail] = None
+    license: Optional[str] = None
+    copyright: Optional[str] = None
+    modulepath: List[str] = []
+    repo: List[str] = []
+    downloadpath: Optional[str] = None
+    install_mode: InstallMode = InstallMode.release
+
+    @validator("repo", "modulepath", pre=True)
+    @classmethod
+    def repo_and_modulepath_to_list(cls, v: Optional[Any]) -> List[Any]:
+        return cls.to_list(v)
+
+
+T = TypeVar("T", bound=Metadata)
+
+
+class ModuleLike(ABC, Generic[T]):
     """
     Commons superclass for projects and modules, which are both versioned by git
     """
@@ -278,12 +367,48 @@ class ModuleLike(object):
         :param path: root git directory
         """
         self._path = path
-        self._meta = {}  # type: JsonType
+        self._metadata = self._get_metadata_from_disk()
+
+    def _get_metadata_from_disk(self) -> T:
+        metadata_file_path = self.get_metadata_file_path()
+
+        if not os.path.exists(metadata_file_path):
+            raise InvalidModuleException(f"Metadata file {metadata_file_path} does not exist")
+
+        with open(metadata_file_path, "r", encoding="utf-8") as fd:
+            return self.get_metadata_from_source(fd)
+
+    def get_metadata_from_source(self, source: Union[str, TextIO]) -> T:
+        """
+        :param source: Either the yaml content as a string or an input stream from the yaml file
+        """
+        schema_type = self.get_metadata_file_schema_type()
+        try:
+            metadata_obj = yaml.safe_load(source)
+            return schema_type(**dict(metadata_obj))
+        except ValidationError as e:
+            raise InvalidMetadata(str(e)) from e
 
     def get_name(self) -> str:
-        raise NotImplementedError()
+        return self._metadata.name
 
     name = property(get_name)
+
+    @property
+    def freeze_recursive(self) -> bool:
+        return self._metadata.freeze_recursive
+
+    @property
+    def freeze_operator(self) -> str:
+        return self._metadata.freeze_operator
+
+    @abstractmethod
+    def get_metadata_file_path(self) -> str:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_metadata_file_schema_type(self) -> Metadata:
+        raise NotImplementedError()
 
     def _load_file(self, ns: Namespace, file: str) -> Tuple[List[Statement], BasicBlock]:
         ns.location = Location(file, 1)
@@ -309,24 +434,14 @@ class ModuleLike(object):
         Get the requires for this module
         """
         # filter on import stmt
-
-        if "requires" not in self._meta or self._meta["requires"] is None:
-            return []
-
         reqs = []
-        for spec in self._meta["requires"]:
+        for spec in self._metadata.requires:
             req = [x for x in parse_requirements(spec)]
             if len(req) > 1:
                 print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
             reqe = req[0]
             reqs.append(reqe)
         return reqs
-
-    def get_config(self, name: str, default: Any) -> Any:
-        if name not in self._meta:
-            return default
-        else:
-            return self._meta[name]
 
     def _remove_comments(self, lines: List[str]) -> List[str]:
         """
@@ -361,13 +476,7 @@ class ModuleLike(object):
         return result
 
 
-INSTALL_RELEASES = "release"
-INSTALL_PRERELEASES = "prerelease"
-INSTALL_MASTER = "master"
-INSTALL_OPTS = [INSTALL_MASTER, INSTALL_PRERELEASES, INSTALL_RELEASES]
-
-
-class Project(ModuleLike):
+class Project(ModuleLike[ProjectMetadata]):
     """
     An inmanta project
     """
@@ -378,7 +487,7 @@ class Project(ModuleLike):
     def __init__(self, path: str, autostd: bool = True, main_file: str = "main.cf", venv_path: Optional[str] = None) -> None:
         """
         Initialize the project, this includes
-         * Loading the project.yaml (into self._meta)
+         * Loading the project.yaml (into self._metadata)
          * Setting paths from project.yaml
          * Loading all modules in the module path (into self.modules)
         It does not include
@@ -393,42 +502,19 @@ class Project(ModuleLike):
         :param venv_path: Path to the directory that will contain the Python virtualenv.
                           This can be an existing or a non-existing directory.
         """
+        if not os.path.exists(path):
+            raise ProjectNotFoundException(f"Directory {path} doesn't exist")
         super().__init__(path)
         self.project_path = path
         self.main_file = main_file
 
-        if not os.path.exists(path):
-            raise Exception("Unable to find project directory %s" % path)
-
-        project_file = os.path.join(path, Project.PROJECT_FILE)
-
-        if not os.path.exists(project_file):
-            raise Exception("Project directory does not contain a project file")
-
-        with open(project_file, "r", encoding="utf-8") as fd:
-            self._meta = yaml.safe_load(fd)
-
-        if "modulepath" not in self._meta:
-            raise Exception("modulepath is required in the project(.yml) file")
-
-        modulepath = self._meta["modulepath"]
-        if not isinstance(modulepath, list):
-            modulepath = [modulepath]
-        self.modulepath = [os.path.abspath(os.path.join(path, x)) for x in modulepath]
+        self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
         self.resolver = CompositeModuleRepo([make_repo(x) for x in self.modulepath])
-
-        if "repo" not in self._meta:
-            raise Exception("repo is required in the project(.yml) file")
-
-        repo = self._meta["repo"]
-        if not isinstance(repo, list):
-            repo = [repo]
-        self.repolist = [x for x in repo]
+        self.repolist = [x for x in self._metadata.repo]
         self.externalResolver = CompositeModuleRepo([make_repo(x, root=path) for x in self.repolist])
 
-        self.downloadpath = None
-        if "downloadpath" in self._meta:
-            self.downloadpath = os.path.abspath(os.path.join(path, self._meta["downloadpath"]))
+        if self._metadata.downloadpath is not None:
+            self._metadata.downloadpath = os.path.abspath(os.path.join(path, self._metadata.downloadpath))
             if self.downloadpath not in self.modulepath:
                 LOGGER.warning("Downloadpath is not in module path! Module install will not work as expected")
 
@@ -440,20 +526,28 @@ class Project(ModuleLike):
         else:
             venv_path = os.path.abspath(venv_path)
         self.virtualenv = env.VirtualEnv(venv_path)
-
         self.loaded = False
-        self.modules = {}  # type: Dict[str, Module]
-
+        self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
-
         self.autostd = autostd
-        self._install_mode = INSTALL_RELEASES
-        if "install_mode" in self._meta:
-            mode = self._meta["install_mode"]
-            if mode not in INSTALL_OPTS:
-                LOGGER.warning("Invalid value for install_mode, should be one of [%s]" % ",".join(INSTALL_OPTS))
-            else:
-                self._install_mode = mode
+
+    @property
+    def _install_mode(self) -> InstallMode:
+        return self._metadata.install_mode
+
+    @property
+    def modulepath(self) -> List[str]:
+        return self._metadata.modulepath
+
+    @property
+    def downloadpath(self) -> Optional[str]:
+        return self._metadata.downloadpath
+
+    def get_metadata_file_path(self) -> str:
+        return os.path.join(self._path, Project.PROJECT_FILE)
+
+    def get_metadata_file_schema_type(self) -> Type[ProjectMetadata]:
+        return ProjectMetadata
 
     @classmethod
     def get_project_dir(cls, cur_dir: str) -> str:
@@ -467,7 +561,7 @@ class Project(ModuleLike):
 
         parent_dir = os.path.abspath(os.path.join(cur_dir, os.pardir))
         if parent_dir == cur_dir:
-            raise ProjectNotFoundExcpetion("Unable to find an inmanta project (project.yml expected)")
+            raise ProjectNotFoundException("Unable to find an inmanta project (project.yml expected)")
 
         return cls.get_project_dir(parent_dir)
 
@@ -537,9 +631,7 @@ class Project(ModuleLike):
         blocks = [block]
         statements = [x for x in statements]
 
-        # get imports
-        imports = [x for x in self.get_imports()]
-        for _, nstmt, nb in self.load_module_recursive(imports):
+        for _, nstmt, nb in self.load_module_recursive():
             statements.extend(nstmt)
             blocks.append(nb)
 
@@ -564,7 +656,7 @@ class Project(ModuleLike):
             return self.modules[module_name]
         return self.load_module(module_name)
 
-    def load_module_recursive(self, imports: List[DefineImport]) -> List[Tuple[str, List[Statement], BasicBlock]]:
+    def load_module_recursive(self) -> List[Tuple[str, List[Statement], BasicBlock]]:
         """
         Load a specific module and all submodules into this project
 
@@ -716,14 +808,6 @@ class Project(ModuleLike):
         req_lines = self._remove_line_continuations(req_lines)
         return list(set(req_lines))
 
-    def get_name(self) -> str:
-        return "project.yml"
-
-    name = property(get_name)
-
-    def get_config_file_name(self) -> str:
-        return os.path.join(self._path, "project.yml")
-
     def get_root_namespace(self) -> Namespace:
         return self.root_ns
 
@@ -748,42 +832,37 @@ class Module(ModuleLike):
     """
 
     MODEL_DIR = "model"
-    requires_fields = ["name", "license", "version"]
+    MODULE_FILE = "module.yml"
 
-    def __init__(self, project: Project, path: str, **kwmeta: dict) -> None:
+    def __init__(self, project: Project, path: str) -> None:
         """
         Create a new configuration module
 
         :param project: A reference to the project this module belongs to.
         :param path: Where is the module stored
-        :param kwmeta: Meta-data
         """
+        if not os.path.exists(path):
+            raise ModuleNotFoundException(f"Directory {path} doesn't exist")
         super().__init__(path)
-        self._project = project
-        self._meta = kwmeta
 
-        if not Module.is_valid_module(self._path):
-            raise InvalidModuleException(
-                (
-                    "Module %s is not a valid inmanta configuration module. Make sure that a "
-                    "model/_init.cf file exists and a module.yml definition file."
-                )
-                % self._path
+        if self._metadata.name != os.path.basename(self._path):
+            LOGGER.warning(
+                "The name in the module file (%s) does not match the directory name (%s)",
+                self._metadata.name,
+                os.path.basename(self._path),
             )
 
-        self.load_module_file()
+        self._project = project
         self.is_versioned()
 
     def rewrite_version(self, new_version: str) -> None:
         new_version = str(new_version)  # make sure it is a string!
-        with open(self.get_config_file_name(), "r", encoding="utf-8") as fd:
+        with open(self.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             module_def = fd.read()
 
-        module_info = yaml.safe_load(module_def)
-        if "version" not in module_info:
-            raise Exception("Not a valid module definition")
+        module_metadata = self.get_metadata_from_source(module_def)
 
-        current_version = str(module_info["version"])
+        current_version = module_metadata.version
         if current_version == new_version:
             LOGGER.debug("Current version is the same as the new version: %s", current_version)
 
@@ -792,33 +871,25 @@ class Module(ModuleLike):
         )
 
         try:
-            new_info = yaml.safe_load(new_module_def)
+            module_metadata = self.get_metadata_from_source(new_module_def)
         except Exception:
-            raise Exception("Unable to rewrite module definition %s" % self.get_config_file_name())
+            raise Exception(f"Unable to rewrite module definition {self.get_metadata_file_path()}")
 
-        if str(new_info["version"]) != new_version:
+        if module_metadata.version != new_version:
             raise Exception(
-                "Unable to write module definition, should be %s got %s instead." % (new_version, new_info["version"])
+                f"Unable to write module definition, should be {new_version} got {module_metadata.version} instead."
             )
 
-        with open(self.get_config_file_name(), "w+", encoding="utf-8") as fd:
+        with open(self.get_metadata_file_path(), "w+", encoding="utf-8") as fd:
             fd.write(new_module_def)
 
-        self._meta = new_info
-
-    def get_name(self) -> str:
-        """
-        Returns the name of the module (if the meta data is set)
-        """
-        return self._meta["name"]
-
-    name = property(get_name)
+        self._metadata = module_metadata
 
     def get_version(self) -> str:
         """
         Return the version of this module
         """
-        return str(self._meta["version"])
+        return str(self._metadata.version)
 
     version = property(get_version)
 
@@ -828,9 +899,7 @@ class Module(ModuleLike):
         Get the minimal compiler version required for this module version. Returns none is the compiler version is not
         constrained.
         """
-        if "compiler_version" in self._meta:
-            return str(self._meta["compiler_version"])
-        return None
+        return str(self._metadata.compiler_version)
 
     @classmethod
     def install(
@@ -839,12 +908,12 @@ class Module(ModuleLike):
         modulename: str,
         requirements: "Iterable[Requirement]",
         install: bool = True,
-        install_mode: str = INSTALL_RELEASES,
+        install_mode: InstallMode = InstallMode.release,
     ) -> "Module":
         """
         Install a module, return module object
         """
-        # verify pressence in module path
+        # verify presence in module path
         path = project.resolver.path_for(modulename)
         if path is not None:
             # if exists, report
@@ -871,7 +940,7 @@ class Module(ModuleLike):
         requirements: "Iterable[Requirement]",
         path: str = None,
         fetch: bool = True,
-        install_mode: str = INSTALL_RELEASES,
+        install_mode: InstallMode = InstallMode.release,
     ) -> "Module":
         """
         Update a module, return module object
@@ -886,14 +955,14 @@ class Module(ModuleLike):
             LOGGER.info("Performing fetch on %s", mypath)
             gitprovider.fetch(mypath)
 
-        if install_mode == INSTALL_MASTER:
+        if install_mode == InstallMode.master:
             LOGGER.info("Checking out master on %s", mypath)
             gitprovider.checkout_tag(mypath, "master")
             if fetch:
                 LOGGER.info("Pulling master on %s", mypath)
                 gitprovider.pull(mypath)
         else:
-            release_only = install_mode == INSTALL_RELEASES
+            release_only = install_mode == InstallMode.release
             version = cls.get_suitable_version_for(modulename, requirements, mypath, release_only=release_only)
 
             if version is None:
@@ -931,7 +1000,7 @@ class Module(ModuleLike):
         cls, modulename: str, versions: "List[Version]", path: str, comp_version: "Version"
     ) -> "Optional[Version]":
         def get_cv_for(best: "Version") -> "Optional[Version]":
-            cfg_raw = gitprovider.get_file_for_version(path, str(best), "module.yml")
+            cfg_raw = gitprovider.get_file_for_version(path, str(best), cls.MODULE_FILE)
             cfg = yaml.safe_load(cfg_raw)
             if "compiler_version" not in cfg:
                 return None
@@ -971,50 +1040,16 @@ class Module(ModuleLike):
         """
         if not os.path.exists(os.path.join(self._path, ".git")):
             LOGGER.warning(
-                "Module %s is not version controlled, we recommend you do this as soon as possible." % self._meta["name"]
+                "Module %s is not version controlled, we recommend you do this as soon as possible.", self._metadata.name
             )
             return False
         return True
 
-    @classmethod
-    def is_valid_module(cls, module_path: str) -> bool:
-        """
-        Checks if this module is a valid configuration module. A module should contain a
-        module.yml file.
-        """
-        if not os.path.isfile(os.path.join(module_path, "module.yml")):
-            return False
+    def get_metadata_file_schema_type(self) -> Type[ModuleMetadata]:
+        return ModuleMetadata
 
-        return True
-
-    def load_module_file(self) -> None:
-        """
-        Load the module definition file
-        """
-        with open(self.get_config_file_name(), "r", encoding="utf-8") as fd:
-            mod_def = yaml.safe_load(fd)
-
-            if mod_def is None or len(mod_def) < len(Module.requires_fields):
-                raise InvalidModuleFileException(
-                    "The module file of %s does not have the required fields: %s"
-                    % (self._path, ", ".join(Module.requires_fields))
-                )
-
-            for name, value in mod_def.items():
-                self._meta[name] = value
-
-        for req_field in Module.requires_fields:
-            if req_field not in self._meta:
-                raise InvalidModuleFileException("%s is required in module file of module %s" % (req_field, self._path))
-
-        if self._meta["name"] != os.path.basename(self._path):
-            LOGGER.warning(
-                "The name in the module file (%s) does not match the directory name (%s)"
-                % (self._meta["name"], os.path.basename(self._path))
-            )
-
-    def get_config_file_name(self) -> str:
-        return os.path.join(self._path, "module.yml")
+    def get_metadata_file_path(self) -> str:
+        return os.path.join(self._path, self.MODULE_FILE)
 
     def get_module_files(self) -> List[str]:
         """
@@ -1127,7 +1162,7 @@ class Module(ModuleLike):
         return (
             (
                 Path(file_name),
-                ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self._meta["name"])),
+                ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self._metadata.name)),
             )
             for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True)
         )
@@ -1142,7 +1177,7 @@ class Module(ModuleLike):
                 importlib.import_module(fq_mod_name)
             except loader.PluginModuleLoadException as e:
                 exception = CompilerException(
-                    f"Unable to load all plug-ins for module {self._meta['name']}:"
+                    f"Unable to load all plug-ins for module {self._metadata.name}:"
                     f"\n\t{e.get_cause_type_name()} while loading plugin module {e.module}: {e.cause}"
                 )
                 exception.set_location(Location(e.path, e.lineno if e.lineno is not None else 0))
@@ -1179,13 +1214,13 @@ class Module(ModuleLike):
             files = [x.strip() for x in output.split("\n") if x != ""]
 
             if len(files) > 0:
-                print("Module %s (%s)" % (self._meta["name"], self._path))
+                print(f"Module {self._metadata.name} ({self._path})")
                 for f in files:
                     print("\t%s" % f)
 
                 print()
             else:
-                print("Module %s (%s) has no changes" % (self._meta["name"], self._path))
+                print(f"Module {self._metadata.name} ({self._path}) has no changes")
         except Exception:
             print("Failed to get status of module")
             LOGGER.exception("Failed to get status of module %s")

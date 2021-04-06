@@ -1,6 +1,7 @@
 description: "Correctly describe in the documentation how version constraints can be set on module dependencies in the module.yml file"
 issue-nr: 2723
 change-type: patch
-destination-branches: [master, iso3, iso4]
+destination-branches: [master, iso4]
 sections:
   bugfix: "{{description}}"
+  feature: "More strictly validate the schema of the project.yml and module.yml file"

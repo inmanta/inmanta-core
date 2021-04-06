@@ -214,6 +214,5 @@ async def test_version_argument(modules_repo):
     # Make sure exitcode is zero
     assert process.returncode == 0
 
-    # Load the changes
-    mod.load_module_file()
-    assert mod.version == "1.3.1"
+    # Verify changes
+    assert mod._get_metadata_from_disk().version == "1.3.1"
