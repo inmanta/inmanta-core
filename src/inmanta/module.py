@@ -311,7 +311,7 @@ class Metadata(BaseModel):
     freeze_operator: constr(regex=FreezeOperator.get_regex_for_validation()) = "~="
 
     @classmethod
-    def to_list(cls, v: Optional[Any]) -> List[Any]:
+    def to_list(cls, v: object) -> object:
         if v is None:
             return []
         if not isinstance(v, list):
@@ -320,7 +320,7 @@ class Metadata(BaseModel):
 
     @validator("requires", pre=True)
     @classmethod
-    def requires_to_list(cls, v: Optional[Any]) -> List[Any]:
+    def requires_to_list(cls, v: object) -> object:
         return cls.to_list(v)
 
 
@@ -331,11 +331,12 @@ class ModuleMetadata(Metadata):
 
     @validator("version", "compiler_version")
     @classmethod
-    def is_pep440_version(cls, v):
+    def is_pep440_version(cls, v: object) -> object:
         try:
             parse_version(v)
         except Exception as e:
             raise ValueError(f"Version {v} is not PEP440 complient") from e
+        return v
 
 
 class ProjectMetadata(Metadata):
