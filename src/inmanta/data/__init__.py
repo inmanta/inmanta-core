@@ -1596,6 +1596,8 @@ class Compile(BaseDocument):
     :param version: version exported by this compile
     :param remote_id: id as given by the requestor, used by the requestor to distinguish between different requests
     :param compile_data: json data as exported by compiling with the --export-compile-data parameter
+    :param substitute_compile_id: id of this compile's substitute compile, i.e. the compile request that is similar
+        to this one that actually got compiled.
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1621,17 +1623,29 @@ class Compile(BaseDocument):
     compile_data: Optional[dict] = Field(field_type=dict)
 
     @classmethod
-    # TODO: Use join
-    async def get_report(cls, compile_id: uuid.UUID) -> "Compile":
+    async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:
         """
-        Get the compile and the associated reports from the database
+        Get a compile's substitute compile if it exists, otherwise get the compile by id.
+        :param compile_id: The id of the compile for which to get the substitute compile.
+        :returns: The compile object for compile c2 that is the substitute of compile c1 with the given id. If c1 does not have
+            a substitute, returns c1 itself.
         """
         result: Optional[Compile] = await cls.get_by_id(compile_id)
         if result is None:
             return None
+        if result.substitute_compile_id is None:
+            return result
+        return await cls.get_substitute_by_id(result.substitute_compile_id)
 
-        if result.substitute_compile_id is not None:
-            return await cls.get_report(result.substitute_compile_id)
+    @classmethod
+    # TODO: Use join
+    async def get_report(cls, compile_id: uuid.UUID) -> Optional[Dict]:
+        """
+        Get the compile and the associated reports from the database
+        """
+        result: Optional[Compile] = await cls.get_substitute_by_id(compile_id)
+        if result is None:
+            return None
 
         dict_model = result.to_dict()
         reports = await Report.get_list(compile=result.id)
@@ -1640,7 +1654,7 @@ class Compile(BaseDocument):
         return dict_model
 
     @classmethod
-    async def get_last_run(cls, environment_id: uuid.UUID) -> "Compile":
+    async def get_last_run(cls, environment_id: uuid.UUID) -> Optional["Compile"]:
         """Get the last run for the given environment"""
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} where environment=$1 AND completed IS NOT NULL ORDER BY completed DESC LIMIT 1",
@@ -1651,7 +1665,7 @@ class Compile(BaseDocument):
         return results[0]
 
     @classmethod
-    async def get_next_run(cls, environment_id: uuid.UUID) -> "Compile":
+    async def get_next_run(cls, environment_id: uuid.UUID) -> Optional["Compile"]:
         """Get the next compile in the queue for the given environment"""
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND completed IS NULL ORDER BY requested ASC LIMIT 1",
@@ -1780,7 +1794,7 @@ class ResourceAction(BaseDocument):
     started: datetime.datetime = Field(field_type=datetime.datetime, required=True)
     finished: datetime.datetime = Field(field_type=datetime.datetime)
 
-    messages = Field(field_type=list)
+    messages: List = Field(field_type=list)
     status = Field(field_type=const.ResourceState)
     changes = Field(field_type=dict)
     change = Field(field_type=const.Change)
