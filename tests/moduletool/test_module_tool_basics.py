@@ -249,7 +249,7 @@ version: non_pep440_value
 compiler_version: 2017.2
     """
     )
-    with pytest.raises(InvalidMetadata, match="Version non_pep440_value is not PEP440 complient"):
+    with pytest.raises(InvalidMetadata, match="Version non_pep440_value is not PEP440 compliant"):
         module.Module(None, inmanta_module.get_root_dir_of_module())
 
 
