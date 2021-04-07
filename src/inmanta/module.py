@@ -333,12 +333,13 @@ class ModuleMetadata(Metadata):
       is based on the install_model setting of the project. Modules and projects can constrain a version in the
       requires setting. Similar to the module, version constraints are defined using `PEP440 syntax
       <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
-    :param freeze_recursive: This key determined if the freeze command will behave recursively or not. If freeze_recursive is set to false or not set,
-      the current version of all modules imported directly in any submodule of this module will be set in module.yml. If it is set to true,
-      all modules imported in any of those modules will also be set.
+    :param freeze_recursive: This key determined if the freeze command will behave recursively or not. If freeze_recursive is
+      set to false or not set, the current version of all modules imported directly in any submodule of this module will be
+      set in module.yml. If it is set to true, all modules imported in any of those modules will also be set.
     :param freeze_operator: This key determines the comparison operator used by the freeze command.
       Valid values are [==, ~=, >=]. *Default is '~='*
     """
+
     version: str
     license: str
     compiler_version: Optional[str] = None
@@ -382,12 +383,13 @@ class ProjectMetadata(Metadata):
     :param requires: This key can contain a list (a yaml list) of version constraints for modules used in this project.
       Similar to the module, version constraints are defined using `PEP440 syntax
       <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
-    :param freeze_recursive: This key determined if the freeze command will behave recursively or not. If freeze_recursive is set to false or not set,
-      the current version of all modules imported directly in the main.cf file will be set in project.yml. If it is set to true,
-      the versions of all modules used in this project will set in project.yml.
+    :param freeze_recursive: This key determined if the freeze command will behave recursively or not. If freeze_recursive is
+      set to false or not set, the current version of all modules imported directly in the main.cf file will be set in
+      project.yml. If it is set to true, the versions of all modules used in this project will set in project.yml.
     :param freeze_operator: This key determines the comparison operator used by the freeze command.
       Valid values are [==, ~=, >=]. *Default is '~='*
     """
+
     author: Optional[str] = None
     author_email: Optional[NameEmail] = None
     license: Optional[str] = None
