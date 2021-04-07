@@ -61,6 +61,7 @@ from inmanta.ast.statements.define import DefineImport
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.util import get_compiler_version
+from packaging import version
 
 try:
     from typing import TYPE_CHECKING
@@ -333,8 +334,8 @@ class ModuleMetadata(Metadata):
     @classmethod
     def is_pep440_version(cls, v: object) -> object:
         try:
-            parse_version(v)
-        except Exception as e:
+            version.Version(v)
+        except version.InvalidVersion as e:
             raise ValueError(f"Version {v} is not PEP440 complient") from e
         return v
 
@@ -377,18 +378,30 @@ class ModuleLike(ABC, Generic[T]):
             raise InvalidModuleException(f"Metadata file {metadata_file_path} does not exist")
 
         with open(metadata_file_path, "r", encoding="utf-8") as fd:
-            return self.get_metadata_from_source(fd)
+            try:
+                metadata_obj = yaml.safe_load(fd)
+                return self._validate_metadata(dict(metadata_obj))
+            except ValidationError as e:
+                error_message = f"Metadata file {metadata_file_path} is invalid:"
+                for error_obj in e.raw_errors:
+                    fields = ",".join(error_obj.loc_tuple())
+                    mgs = error_obj.exc
+                    error_message += f"\n{fields}\n\t{mgs}"
+                raise InvalidMetadata(error_message) from e
 
     def get_metadata_from_source(self, source: Union[str, TextIO]) -> T:
         """
         :param source: Either the yaml content as a string or an input stream from the yaml file
         """
-        schema_type = self.get_metadata_file_schema_type()
         try:
             metadata_obj = yaml.safe_load(source)
-            return schema_type(**dict(metadata_obj))
+            return self._validate_metadata(dict(metadata_obj))
         except ValidationError as e:
             raise InvalidMetadata(str(e)) from e
+
+    def _validate_metadata(self, obj: Dict) -> T:
+        schema_type = self.get_metadata_file_schema_type()
+        return schema_type(**obj)
 
     def get_name(self) -> str:
         return self._metadata.name

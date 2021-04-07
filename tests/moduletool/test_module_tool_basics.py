@@ -27,7 +27,7 @@ import yaml
 from pkg_resources import parse_version
 
 from inmanta import module
-from inmanta.module import Project
+from inmanta.module import InvalidMetadata, Project
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
@@ -216,3 +216,22 @@ async def test_version_argument(modules_repo):
 
     # Verify changes
     assert mod._get_metadata_from_disk().version == "1.3.1"
+
+
+@pytest.mark.asyncio
+async def test_module_version_non_pep440_complient(tmpdir):
+    module_path = tmpdir.join("mod").mkdir()
+    model = module_path.join("model").mkdir()
+    model.join("_init.cf").write("\n")
+
+    module_yml = module_path.join("module.yml")
+    module_yml.write(
+        """
+name: mod
+license: ASL
+version: non_pep440_value
+compiler_version: 2017.2
+    """
+    )
+    with pytest.raises(InvalidMetadata, match="Version non_pep440_value is not PEP440 complient"):
+        module.Module(None, module_path.strpath)
