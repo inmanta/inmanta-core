@@ -324,6 +324,21 @@ class Metadata(BaseModel):
 
 
 class ModuleMetadata(Metadata):
+    """
+    :param name: The name of the module.
+    :param description: An optional description of the module
+    :param license: The license for this module
+    :param compiler_version: The minimal compiler version required to compile this module.
+    :param requires: Model files import other modules. These imports do not determine a version, this
+      is based on the install_model setting of the project. Modules and projects can constrain a version in the
+      requires setting. Similar to the module, version constraints are defined using `PEP440 syntax
+      <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
+    :param freeze_recursive: This key determined if the freeze command will behave recursively or not. If freeze_recursive is set to false or not set,
+      the current version of all modules imported directly in any submodule of this module will be set in module.yml. If it is set to true,
+      all modules imported in any of those modules will also be set.
+    :param freeze_operator: This key determines the comparison operator used by the freeze command.
+      Valid values are [==, ~=, >=]. *Default is '~='*
+    """
     version: str
     license: str
     compiler_version: Optional[str] = None
@@ -339,6 +354,40 @@ class ModuleMetadata(Metadata):
 
 
 class ProjectMetadata(Metadata):
+    """
+    :param name: The name of the project.
+    :param description: An optional description of the project
+    :param author:  The author of the project
+    :param author_email: The contact email address of author
+    :param license: License the project is released under
+    :param copyright: Copyright holder name and date.
+    :param modulepath: This value is a list of paths where Inmanta should search for modules. Paths
+      are separated with ``:``
+    :param downloadpath: This value determines the path where Inmanta should download modules from
+      repositories. This path is not automatically included in in modulepath!
+    :param install_mode: This key determines what version of a module should be selected when a module
+      is downloaded. The available values are:
+
+        * **release (default):** Only use a released version, that is compatible with the current
+          compiler and the version constraints defined in the ``requires`` list.
+          A version is released when there is a tag on a commit. This tag should be a
+          valid version identifier (PEP440) and should not be a prerelease version. Inmanta selects
+          the latest available version (version sort based on PEP440).
+        * **prerelease:** Similar to release, but also prerelease versions are allowed.
+        * **master:** Use the master branch.
+
+    :param repo: This key requires a list (a yaml list) of repositories where Inmanta can find
+      modules. Inmanta creates the git repo url by formatting {} or {0} with the name of the repo. If no formatter is present it
+      appends the name of the module. Inmanta tries to clone a module in the order in which it is defined in this value.
+    :param requires: This key can contain a list (a yaml list) of version constraints for modules used in this project.
+      Similar to the module, version constraints are defined using `PEP440 syntax
+      <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
+    :param freeze_recursive: This key determined if the freeze command will behave recursively or not. If freeze_recursive is set to false or not set,
+      the current version of all modules imported directly in the main.cf file will be set in project.yml. If it is set to true,
+      the versions of all modules used in this project will set in project.yml.
+    :param freeze_operator: This key determines the comparison operator used by the freeze command.
+      Valid values are [==, ~=, >=]. *Default is '~='*
+    """
     author: Optional[str] = None
     author_email: Optional[NameEmail] = None
     license: Optional[str] = None
