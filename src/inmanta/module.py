@@ -31,27 +31,11 @@ from io import BytesIO
 from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
-from typing import (
-    Any,
-    Dict,
-    Generic,
-    Iterable,
-    Iterator,
-    List,
-    Mapping,
-    NewType,
-    Optional,
-    Set,
-    TextIO,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-)
+from typing import Dict, Generic, Iterable, Iterator, List, Mapping, NewType, Optional, Set, TextIO, Tuple, Type, TypeVar, Union
 
 import yaml
 from pkg_resources import parse_requirements, parse_version
-from pydantic import BaseModel, NameEmail, ValidationError, constr, validator
+from pydantic import BaseModel, Field, NameEmail, ValidationError, validator
 
 from inmanta import env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, ModuleNotFoundException, Namespace, Range
@@ -309,7 +293,7 @@ class Metadata(BaseModel):
     description: Optional[str] = None
     requires: List[str] = []
     freeze_recursive: bool = False
-    freeze_operator: constr(regex=FreezeOperator.get_regex_for_validation()) = "~="
+    freeze_operator: str = Field(default="~=", regex=FreezeOperator.get_regex_for_validation())
 
     @classmethod
     def to_list(cls, v: object) -> object:
@@ -332,7 +316,7 @@ class ModuleMetadata(Metadata):
 
     @validator("version", "compiler_version")
     @classmethod
-    def is_pep440_version(cls, v: object) -> object:
+    def is_pep440_version(cls, v: str) -> str:
         try:
             version.Version(v)
         except version.InvalidVersion as e:
@@ -352,7 +336,7 @@ class ProjectMetadata(Metadata):
 
     @validator("repo", "modulepath", pre=True)
     @classmethod
-    def repo_and_modulepath_to_list(cls, v: Optional[Any]) -> List[Any]:
+    def repo_and_modulepath_to_list(cls, v: object) -> object:
         return cls.to_list(v)
 
 
@@ -383,10 +367,11 @@ class ModuleLike(ABC, Generic[T]):
                 return self._validate_metadata(dict(metadata_obj))
             except ValidationError as e:
                 error_message = f"Metadata file {metadata_file_path} is invalid:"
-                for error_obj in e.raw_errors:
-                    fields = ",".join(error_obj.loc_tuple())
-                    mgs = error_obj.exc
-                    error_message += f"\n{fields}\n\t{mgs}"
+                for error_obj in e.errors():
+                    fields = ",".join(error_obj["loc"])
+                    mgs = error_obj["msg"]
+                    error_type = error_obj["type"]
+                    error_message += f"\n{fields}\n\t{mgs} ({error_type})"
                 raise InvalidMetadata(error_message) from e
 
     def get_metadata_from_source(self, source: Union[str, TextIO]) -> T:
@@ -421,7 +406,7 @@ class ModuleLike(ABC, Generic[T]):
         raise NotImplementedError()
 
     @abstractmethod
-    def get_metadata_file_schema_type(self) -> Metadata:
+    def get_metadata_file_schema_type(self) -> Type[T]:
         raise NotImplementedError()
 
     def _load_file(self, ns: Namespace, file: str) -> Tuple[List[Statement], BasicBlock]:
@@ -529,11 +514,11 @@ class Project(ModuleLike[ProjectMetadata]):
 
         if self._metadata.downloadpath is not None:
             self._metadata.downloadpath = os.path.abspath(os.path.join(path, self._metadata.downloadpath))
-            if self.downloadpath not in self.modulepath:
+            if self._metadata.downloadpath not in self._metadata.modulepath:
                 LOGGER.warning("Downloadpath is not in module path! Module install will not work as expected")
 
-            if not os.path.exists(self.downloadpath):
-                os.mkdir(self.downloadpath)
+            if not os.path.exists(self._metadata.downloadpath):
+                os.mkdir(self._metadata.downloadpath)
 
         if venv_path is None:
             venv_path = os.path.join(path, ".env")
@@ -856,7 +841,7 @@ class Module(ModuleLike):
         :param path: Where is the module stored
         """
         if not os.path.exists(path):
-            raise ModuleNotFoundException(f"Directory {path} doesn't exist")
+            raise InvalidModuleException(f"Directory {path} doesn't exist")
         super().__init__(path)
 
         if self._metadata.name != os.path.basename(self._path):
