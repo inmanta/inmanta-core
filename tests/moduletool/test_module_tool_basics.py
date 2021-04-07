@@ -218,14 +218,30 @@ async def test_version_argument(modules_repo):
     assert mod._get_metadata_from_disk().version == "1.3.1"
 
 
-@pytest.mark.asyncio
-async def test_module_version_non_pep440_complient(tmpdir):
-    module_path = tmpdir.join("mod").mkdir()
-    model = module_path.join("model").mkdir()
-    model.join("_init.cf").write("\n")
+@pytest.fixture
+def inmanta_module(tmpdir):
+    class InmantaModule:
+        def __init__(self) -> None:
+            self._module_path = tmpdir.join("mod").mkdir()
+            model = self._module_path.join("model").mkdir()
+            model.join("_init.cf").write("\n")
+            self._module_yml = self._module_path.join("module.yml")
 
-    module_yml = module_path.join("module.yml")
-    module_yml.write(
+        def write_module_yml_file(self, content: str) -> None:
+            self._module_yml.write(content)
+
+        def get_root_dir_of_module(self) -> str:
+            return self._module_path.strpath
+
+        def get_path_module_yml_file(self) -> str:
+            return self._module_yml.strpath
+
+    yield InmantaModule()
+
+
+@pytest.mark.asyncio
+async def test_module_version_non_pep440_complient(inmanta_module):
+    inmanta_module.write_module_yml_file(
         """
 name: mod
 license: ASL
@@ -234,4 +250,17 @@ compiler_version: 2017.2
     """
     )
     with pytest.raises(InvalidMetadata, match="Version non_pep440_value is not PEP440 complient"):
-        module.Module(None, module_path.strpath)
+        module.Module(None, inmanta_module.get_root_dir_of_module())
+
+
+@pytest.mark.asyncio
+async def test_invalid_yaml_syntax_in_module_yml(inmanta_module):
+    inmanta_module.write_module_yml_file(
+        """
+test:
+ - first
+ second
+"""
+    )
+    with pytest.raises(InvalidMetadata, match=f"Invalid yaml syntax in {inmanta_module.get_path_module_yml_file()}"):
+        module.Module(None, inmanta_module.get_root_dir_of_module())

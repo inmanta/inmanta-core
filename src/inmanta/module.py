@@ -27,7 +27,7 @@ import sys
 import traceback
 from abc import ABC, abstractmethod
 from functools import lru_cache
-from io import BytesIO
+from io import BytesIO, TextIOBase
 from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
@@ -87,6 +87,20 @@ class InvalidMetadata(CompilerException):
     """
     This exception is raised if the metadata file of a project or module is invalid.
     """
+
+    def __init__(self, msg: str, validation_error: Optional[ValidationError] = None) -> None:
+        if validation_error is not None:
+            msg = self._extend_msg_with_validation_information(msg, validation_error)
+        super(InvalidMetadata, self).__init__(msg=msg)
+
+    @classmethod
+    def _extend_msg_with_validation_information(cls, msg: str, validation_error: ValidationError) -> str:
+        for error in validation_error.errors():
+            fields = ",".join(error["loc"])
+            mgs = error["msg"]
+            error_type = error["type"]
+            msg += f"\n{fields}\n\t{mgs} ({error_type})"
+        return msg
 
 
 class ProjectNotFoundException(CompilerException):
@@ -284,7 +298,7 @@ class FreezeOperator(str, enum.Enum):
 
     @classmethod
     def get_regex_for_validation(cls) -> str:
-        all_values = [o.value for o in FreezeOperator]
+        all_values = [re.escape(o.value) for o in FreezeOperator]
         return f"^({'|'.join(all_values)})$"
 
 
@@ -362,31 +376,26 @@ class ModuleLike(ABC, Generic[T]):
             raise InvalidModuleException(f"Metadata file {metadata_file_path} does not exist")
 
         with open(metadata_file_path, "r", encoding="utf-8") as fd:
-            try:
-                metadata_obj = yaml.safe_load(fd)
-                return self._validate_metadata(dict(metadata_obj))
-            except ValidationError as e:
-                error_message = f"Metadata file {metadata_file_path} is invalid:"
-                for error_obj in e.errors():
-                    fields = ",".join(error_obj["loc"])
-                    mgs = error_obj["msg"]
-                    error_type = error_obj["type"]
-                    error_message += f"\n{fields}\n\t{mgs} ({error_type})"
-                raise InvalidMetadata(error_message) from e
+            return self.get_metadata_from_source(source=fd)
 
     def get_metadata_from_source(self, source: Union[str, TextIO]) -> T:
         """
         :param source: Either the yaml content as a string or an input stream from the yaml file
         """
+        schema_type = self.get_metadata_file_schema_type()
         try:
             metadata_obj = yaml.safe_load(source)
-            return self._validate_metadata(dict(metadata_obj))
+            return schema_type(**dict(metadata_obj))
         except ValidationError as e:
-            raise InvalidMetadata(str(e)) from e
-
-    def _validate_metadata(self, obj: Dict) -> T:
-        schema_type = self.get_metadata_file_schema_type()
-        return schema_type(**obj)
+            if isinstance(source, TextIOBase):
+                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid", validation_error=e) from e
+            else:
+                raise InvalidMetadata(msg=str(e), validation_error=e) from e
+        except yaml.YAMLError as e:
+            if isinstance(source, TextIOBase):
+                raise InvalidMetadata(msg=f"Invalid yaml syntax in {source.name}:\n{str(e)}") from e
+            else:
+                raise InvalidMetadata(msg=str(e)) from e
 
     def get_name(self) -> str:
         return self._metadata.name
@@ -825,7 +834,7 @@ class Project(ModuleLike[ProjectMetadata]):
         return out
 
 
-class Module(ModuleLike):
+class Module(ModuleLike[ModuleMetadata]):
     """
     This class models an inmanta configuration module
     """
