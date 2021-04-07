@@ -284,7 +284,7 @@ class FreezeOperator(str, enum.Enum):
 
     @classmethod
     def get_regex_for_validation(cls) -> str:
-        all_values = [o.value for o in FreezeOperator]
+        all_values = [o.value for o in cls]
         return f"^({'|'.join(all_values)})$"
 
 
@@ -320,7 +320,7 @@ class ModuleMetadata(Metadata):
         try:
             version.Version(v)
         except version.InvalidVersion as e:
-            raise ValueError(f"Version {v} is not PEP440 complient") from e
+            raise ValueError(f"Version {v} is not PEP440 compliant") from e
         return v
 
 
