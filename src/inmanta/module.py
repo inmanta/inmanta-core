@@ -289,6 +289,7 @@ class InstallMode(str, enum.Enum):
     """
     Enumeration of all possible module install modes.
     """
+
     release = "release"
     prerelease = "prerelease"
     master = "master"
