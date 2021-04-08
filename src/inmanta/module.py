@@ -310,7 +310,6 @@ class FreezeOperator(str, enum.Enum):
         all_values = [re.escape(o.value) for o in cls]
         return f"^({'|'.join(all_values)})$"
 
-print("loading")
 
 class Metadata(BaseModel):
     name: str
