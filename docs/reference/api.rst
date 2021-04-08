@@ -92,6 +92,18 @@ Attributes
     :undoc-members:
 
 
+Modules
+-------
+
+.. autoclass:: inmanta.module.InstallMode
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+.. autodata:: inmanta.module.INSTALL_OPTS
+
+
 Typing
 ------
 

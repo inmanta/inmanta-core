@@ -286,9 +286,18 @@ def merge_specs(mainspec: "Dict[str, List[Requirement]]", new: "List[Requirement
 
 
 class InstallMode(str, enum.Enum):
+    """
+    Enumeration of all possible module install modes.
+    """
     release = "release"
     prerelease = "prerelease"
     master = "master"
+
+
+INSTALL_OPTS: List[str] = [mode.value for mode in InstallMode]
+"""
+List of possible module install modes, kept for backwards compatibility. New code should use :class:`InstallMode` instead.
+"""
 
 
 class FreezeOperator(str, enum.Enum):
@@ -301,6 +310,7 @@ class FreezeOperator(str, enum.Enum):
         all_values = [re.escape(o.value) for o in cls]
         return f"^({'|'.join(all_values)})$"
 
+print("loading")
 
 class Metadata(BaseModel):
     name: str
