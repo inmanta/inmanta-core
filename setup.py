@@ -9,6 +9,7 @@ requires = [
     "cookiecutter",
     "cryptography",
     "docstring-parser",
+    "email-validator",
     "execnet",
     "importlib_metadata",
     "jinja2",
