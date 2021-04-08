@@ -17,9 +17,9 @@ The source is organized in modules. Each module is a git repository with the fol
     |  +-- _init.cf
     +-- plugins/
     +-- templates/
-    +-- module.yaml
+    +-- module.yml
 
-The ``module.yaml`` file, the ``model`` directory and the ``model/_init.cf`` are required.
+The ``module.yml`` file, the ``model`` directory and the ``model/_init.cf`` are required.
 
 For example::
 
@@ -33,7 +33,7 @@ For example::
     |  |  +-- other.cf
     +-- plugins/
     +-- templates/
-    +-- module.yaml
+    +-- module.yml
 
 The model code is in the ``.cf`` files. Each file forms a namespace. The namespaces for the files are the following.
 
