@@ -286,9 +286,35 @@ def merge_specs(mainspec: "Dict[str, List[Requirement]]", new: "List[Requirement
 
 
 class InstallMode(str, enum.Enum):
+    """
+    The module install mode determines what version of a module should be selected when a module is downloaded.
+    """
+
     release = "release"
+    """
+    Only use a released version that is compatible with the current compiler and any version constraints defined in the
+    ``requires`` lists for the project or any other modules (see :class:`ProjectMetadata` and :class:`ModuleMetadata`).
+
+    A version is released when there is a tag on a commit. This tag should be a valid version identifier (PEP440) and should
+    not be a prerelease version. Inmanta selects the latest available version (version sort based on PEP440) that is compatible
+    with all constraints.
+    """
+
     prerelease = "prerelease"
+    """
+    Similar to :attr:`InstallMode.release` but prerelease versions are allowed as well.
+    """
+
     master = "master"
+    """
+    Use the module's master branch.
+    """
+
+
+INSTALL_OPTS: List[str] = [mode.value for mode in InstallMode]
+"""
+List of possible module install modes, kept for backwards compatibility. New code should use :class:`InstallMode` instead.
+"""
 
 
 class FreezeOperator(str, enum.Enum):
@@ -369,16 +395,7 @@ class ProjectMetadata(Metadata):
     :param downloadpath: (Optional) This value determines the path where Inmanta should download modules from
       repositories. This path is not automatically included in in modulepath!
     :param install_mode: (Optional) This key determines what version of a module should be selected when a module
-      is downloaded. The available values are:
-
-        * **release (default):** Only use a released version, that is compatible with the current
-          compiler and the version constraints defined in the ``requires`` list.
-          A version is released when there is a tag on a commit. This tag should be a
-          valid version identifier (PEP440) and should not be a prerelease version. Inmanta selects
-          the latest available version (version sort based on PEP440).
-        * **prerelease:** Similar to release, but also prerelease versions are allowed.
-        * **master:** Use the master branch.
-
+      is downloaded. For more information see :class:`InstallMode`.
     :param repo: (Optional) This key requires a list (a yaml list) of repositories where Inmanta can find
       modules. Inmanta creates the git repo url by formatting {} or {0} with the name of the repo. If no formatter is present it
       appends the name of the module. Inmanta tries to clone a module in the order in which it is defined in this value.
