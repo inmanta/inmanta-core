@@ -33,7 +33,7 @@ from pkg_resources import parse_version
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
-from inmanta.module import INSTALL_MASTER, INSTALL_RELEASES, Module, Project, gitprovider
+from inmanta.module import FreezeOperator, InstallMode, Module, Project, gitprovider
 
 if TYPE_CHECKING:
     from pkg_resources import Requirement  # noqa: F401
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-def set_yaml_order_perserving():
+def set_yaml_order_preserving():
     """
     Set yaml modules to be order preserving.
 
@@ -168,6 +168,7 @@ class ProjectTool(ModuleLikeTool):
             "--operator",
             help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
             " project.yml is used which defaults to ~=",
+            choices=[o.value for o in FreezeOperator],
             default=None,
         )
         init = subparser.add_parser("init", help="Initialize directory structure for a project")
@@ -187,19 +188,16 @@ class ProjectTool(ModuleLikeTool):
             raise CLIException(1, "Could not load project")
 
         if recursive is None:
-            recursive = bool(project.get_config("freeze_recursive", False))
+            recursive = project.freeze_recursive
 
         if operator is None:
-            operator = project.get_config("freeze_operator", "~=")
-
-        if operator not in ["==", "~=", ">="]:
-            LOGGER.warning("Operator %s is unknown, expecting one of ['==', '~=', '>=']", operator)
+            operator = project.freeze_operator
 
         freeze = project.get_freeze(mode=operator, recursive=recursive)
 
-        set_yaml_order_perserving()
+        set_yaml_order_preserving()
 
-        with open(project.get_config_file_name(), "r", encoding="utf-8") as fd:
+        with open(project.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             newconfig = yaml.safe_load(fd)
 
         requires = sorted([k + " " + v for k, v in freeze.items()])
@@ -208,7 +206,7 @@ class ProjectTool(ModuleLikeTool):
         close = False
 
         if outfile is None:
-            outfile = open(project.get_config_file_name(), "w", encoding="UTF-8")
+            outfile = open(project.get_metadata_file_path(), "w", encoding="UTF-8")
             close = True
         elif outfile == "-":
             outfile = sys.stdout
@@ -309,6 +307,7 @@ class ModuleTool(ModuleLikeTool):
             "--operator",
             help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
             " project.yml is used which defaults to ~=",
+            choices=[o.value for o in FreezeOperator],
             default=None,
         )
 
@@ -400,10 +399,10 @@ version: 0.0.1dev0"""
                 specs[name] = []
 
             try:
-                if project._install_mode == INSTALL_MASTER:
+                if project._install_mode == InstallMode.master:
                     reqv = "master"
                 else:
-                    release_only = project._install_mode == INSTALL_RELEASES
+                    release_only = project._install_mode == InstallMode.release
                     versions = Module.get_suitable_version_for(name, specs[name], mod._path, release_only=release_only)
                     if versions is None:
                         reqv = "None"
@@ -550,7 +549,7 @@ version: 0.0.1dev0"""
 
         module.rewrite_version(str(outversion))
         # commit
-        gitprovider.commit(module._path, message, commit_all, [module.get_config_file_name()])
+        gitprovider.commit(module._path, message, commit_all, [module.get_metadata_file_path()])
         # tag
         if not dev or tag:
             gitprovider.tag(module._path, str(outversion))
@@ -564,10 +563,10 @@ version: 0.0.1dev0"""
         module = self.get_module(module)
 
         if recursive is None:
-            recursive = bool(module.get_config("freeze_recursive", False))
+            recursive = module.freeze_recursive
 
         if operator is None:
-            operator = module.get_config("freeze_operator", "~=")
+            operator = module.freeze_operator
 
         if operator not in ["==", "~=", ">="]:
             LOGGER.warning("Operator %s is unknown, expecting one of ['==', '~=', '>=']", operator)
@@ -577,9 +576,9 @@ version: 0.0.1dev0"""
         for submodule in module.get_all_submodules():
             freeze.update(module.get_freeze(submodule=submodule, mode=operator, recursive=recursive))
 
-        set_yaml_order_perserving()
+        set_yaml_order_preserving()
 
-        with open(module.get_config_file_name(), "r", encoding="utf-8") as fd:
+        with open(module.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             newconfig = yaml.safe_load(fd)
 
         requires = sorted([k + " " + v for k, v in freeze.items()])
@@ -587,7 +586,7 @@ version: 0.0.1dev0"""
 
         close = False
         if outfile is None:
-            outfile = open(module.get_config_file_name(), "w", encoding="UTF-8")
+            outfile = open(module.get_metadata_file_path(), "w", encoding="UTF-8")
             close = True
         elif outfile == "-":
             outfile = sys.stdout
