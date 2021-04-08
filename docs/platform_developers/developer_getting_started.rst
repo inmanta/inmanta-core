@@ -4,8 +4,6 @@ Developer Getting Started Guide
 
 This page describes how to setup your development environment to:
 
-* Setup Inmanta pip artifacts
-* Verify that you already have GitLab SSH keys.
 * Install VS Code and Inmanta extension.
 * Setting up Python virtual environments.
 * Benefit from linting and code navigation by setting up a project.
@@ -13,44 +11,14 @@ This page describes how to setup your development environment to:
 * Module developers guide
 
 
-Setup Inmanta pip artifacts
-#############################
-
-In order to use Inmanta's internal pip artifacts:
-
-.. code-block:: bash
-
-    mkdir   ~/.config/pip
-
-    nano ~/.config/pip/pip.conf
-
-And below text into your ``pip.conf`` file:
-
-::
-    [global]
-    index_url=https://artifacts.internal.inmanta.com/inmanta/dev
-
-
-Verify that you already setup GitLab SSH keys
-###############################################
-
-The steps to add SSH keys have already been mentioned in ``Inmanta Getting Started Guide`` which was emailed to you.
-You can click `here <https://internal.inmanta.com/topics/starting.html>`_ to read it again.
-
-In order to verify that it is working correctly, run below command:
-
-.. code-block:: bash
-    
-    ssh git@git.inmanta.com
-
-
-You should see your name in the response.
-
-
 Install VS Code and Inmanta extension
 #######################################
 
 This step does not need any additional information but if you need some help, you can always ask a colleague.
+
+In order to install VS Code, you can refer to `this <https://code.visualstudio.com/learn/get-started/basics>`_ page.
+
+Further information about Inmanta VS Code extension is available on `this <https://github.com/inmanta/vscode-inmanta>`_ page.
 
 
 Setting up Python virtual environments
