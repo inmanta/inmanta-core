@@ -24,7 +24,9 @@ Further information about Inmanta VS Code extension is available on `this <https
 Setting up Python virtual environments
 ########################################
 
-Python virtual environments have to be created using ``venv`` by running:
+Python ``venv``s are used to create virtual environments. If you need a refresher, you can check out `this <https://docs.python.org/3/tutorial/venv.html>`_ page.
+
+Below example shows you how to create a virtual environment:
 
 .. code-block:: bash
     
