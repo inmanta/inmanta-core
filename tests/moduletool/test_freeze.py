@@ -16,6 +16,8 @@
     Contact: code@inmanta.com
 """
 import os
+import subprocess
+import sys
 
 import pytest
 
@@ -138,33 +140,23 @@ requires:
         )
 
 
-def test_project_freeze_odd_opperator(modules_dir, modules_repo, capsys, caplog):
+def test_project_freeze_odd_opperator(modules_dir, modules_repo):
     coroot = install_project(modules_dir, "projectA")
 
-    app(["project", "freeze", "-o", "-", "--operator", "xxx"])
-
-    out, err = capsys.readouterr()
+    # Start a new subprocess, because inmanta-cli executes sys.exit() when an invalid argument is used.
+    process = subprocess.Popen(
+        [sys.executable, "-m", "inmanta.app", "project", "freeze", "-o", "-", "--operator", "xxx"],
+        encoding="utf-8",
+        cwd=coroot,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    out, err = process.communicate()
 
     assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
-    assert len(err) == 0, err
-    assert (
-        out
-        == """name: projectA
-license: Apache 2.0
-version: 0.0.1
-modulepath: libs
-downloadpath: libs
-repo: %s
-requires:
-- modB xxx 3.2
-- modC xxx 3.2
-- modD xxx 3.2
-- std xxx 3.2
-"""
-        % modules_repo
-    )
 
-    assert "Operator xxx is unknown, expecting one of ['==', '~=', '>=']" in caplog.text
+    assert process.returncode != 0
+    assert "argument --operator: invalid choice: 'xxx'" in err
 
 
 def test_project_options_in_config(modules_dir, modules_repo, capsys):
