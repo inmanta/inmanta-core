@@ -68,7 +68,7 @@ Then activated by running:
     
     source ~/.virtualenvs/<env_name>/bin/activate
 
-**Upgrading your ``pip`` will save you a lot of time and troubleshooting.** you can do so by running:
+**Upgrading your ``pip`` will save you a lot of time and troubleshooting (due to changes in the pip resolver in version 20 and 21).** you can do so by running:
 
 .. code-block:: bash
     
