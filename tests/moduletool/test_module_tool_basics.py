@@ -27,7 +27,7 @@ import yaml
 from pkg_resources import parse_version
 
 from inmanta import module
-from inmanta.module import Project
+from inmanta.module import InvalidMetadata, Project
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
@@ -214,6 +214,53 @@ async def test_version_argument(modules_repo):
     # Make sure exitcode is zero
     assert process.returncode == 0
 
-    # Load the changes
-    mod.load_module_file()
-    assert mod.version == "1.3.1"
+    # Verify changes
+    assert mod._get_metadata_from_disk().version == "1.3.1"
+
+
+@pytest.fixture
+def inmanta_module(tmpdir):
+    class InmantaModule:
+        def __init__(self) -> None:
+            self._module_path = tmpdir.join("mod").mkdir()
+            model = self._module_path.join("model").mkdir()
+            model.join("_init.cf").write("\n")
+            self._module_yml = self._module_path.join("module.yml")
+
+        def write_module_yml_file(self, content: str) -> None:
+            self._module_yml.write(content)
+
+        def get_root_dir_of_module(self) -> str:
+            return self._module_path.strpath
+
+        def get_path_module_yml_file(self) -> str:
+            return self._module_yml.strpath
+
+    yield InmantaModule()
+
+
+@pytest.mark.asyncio
+async def test_module_version_non_pep440_complient(inmanta_module):
+    inmanta_module.write_module_yml_file(
+        """
+name: mod
+license: ASL
+version: non_pep440_value
+compiler_version: 2017.2
+    """
+    )
+    with pytest.raises(InvalidMetadata, match="Version non_pep440_value is not PEP440 compliant"):
+        module.Module(None, inmanta_module.get_root_dir_of_module())
+
+
+@pytest.mark.asyncio
+async def test_invalid_yaml_syntax_in_module_yml(inmanta_module):
+    inmanta_module.write_module_yml_file(
+        """
+test:
+ - first
+ second
+"""
+    )
+    with pytest.raises(InvalidMetadata, match=f"Invalid yaml syntax in {inmanta_module.get_path_module_yml_file()}"):
+        module.Module(None, inmanta_module.get_root_dir_of_module())
