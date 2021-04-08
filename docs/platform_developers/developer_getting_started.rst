@@ -109,7 +109,7 @@ Set project sources
 The next step is to set the sources of your project so that it knows, where to get its required modules from.
 
 1. Find the module you want to work on
-2. Copy the SSH URL by clicking on the ``CLONE`` button.
+2. Copy the SSH URL of the repo
 3. In your vs code, open the ``project.yml`` file and under ``repo:``, add the copied line there but keep in mind to replace the name of a specific module with a place holder, like below example:
 
 .. code-block:: yaml
