@@ -79,7 +79,7 @@ Usually the projects that you will work on, come with ``requirements.txt`` or ``
 1. inmanta-core
 2. pytest
 3. pytest-inmanta
-4. pytest-inmanta-yang
+4. pytest-inmanta-* (Additional pytest fixtures exist for working with yang and lsm, but are only useful when these are used in your project or module.)
 
 
 Benefit from linting and code navigation by setting up a project
