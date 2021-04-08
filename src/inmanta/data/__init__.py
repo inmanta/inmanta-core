@@ -1626,8 +1626,9 @@ class Compile(BaseDocument):
     async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:
         """
         Get a compile's substitute compile if it exists, otherwise get the compile by id.
+
         :param compile_id: The id of the compile for which to get the substitute compile.
-        :returns: The compile object for compile c2 that is the substitute of compile c1 with the given id. If c1 does not have
+        :return: The compile object for compile c2 that is the substitute of compile c1 with the given id. If c1 does not have
             a substitute, returns c1 itself.
         """
         result: Optional[Compile] = await cls.get_by_id(compile_id)
@@ -1767,7 +1768,7 @@ class ResourceAction(BaseDocument):
     """
     Log related to actions performed on a specific resource version by Inmanta.
     Any transactions that update ResourceAction should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel
+    :py:class:`inmanta.data.ConfigurationModel`
 
     :param environment: The environment this action belongs to.
     :param version: The version of the configuration model this action belongs to.
