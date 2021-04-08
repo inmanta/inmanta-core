@@ -1,5 +1,5 @@
 description: Re-added inmanta.module.INSTALL_OPTS and added documentation to fix API used by pytest-inmanta.
 change-type: patch
-destination-repos:
+destination-branches:
   - master
   - iso4
