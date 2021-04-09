@@ -15,6 +15,7 @@ requires = [
     "jinja2",
     "more-itertools",
     "netifaces",
+    "packaging",
     "ply",
     "pydantic",
     "pyformance",
