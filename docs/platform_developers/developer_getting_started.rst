@@ -2,7 +2,8 @@
 Developer Getting Started Guide
 ********************************
 
-This page describes how to setup your development environment to:
+This guide explains how to set up the recommended developer setup on a Linux machine. 
+Other development setups are possible, but this one provides a good starting point.
 
 * Install VS Code and Inmanta extension.
 * Setting up Python virtual environments.
@@ -14,7 +15,7 @@ This page describes how to setup your development environment to:
 Install VS Code and Inmanta extension
 #######################################
 
-This step does not need any additional information but if you need some help, you can always ask a colleague.
+The developer setup is based on VSCode with the Inmanta extension.
 
 In order to install VS Code, you can refer to `this <https://code.visualstudio.com/learn/get-started/basics>`_ page.
 
@@ -55,11 +56,11 @@ Usually the projects that you will work on, come with ``requirements.txt`` or ``
 Benefit from linting and code navigation by setting up a project
 ##################################################################
 
-At the time of this writing, linting and code navigation in IDEs work only if you have a project, so if you want to work on a single module, you still need to have a project.
+At the time of this writing, linting and code navigation in IDEs work only if you have a project, so even if you only work on a single module, it is best to have a project.
 
 There are two things that can be done:
 
-1. Either there is already a project and you ``git clone`` your module there.
+1. Either there is already a project that you can ``git clone``
 2. Make a project.
 
 Steps to create a project are mentioned `here <https://docs.inmanta.com/community/latest/model_developers/configurationmodel.html>`_ for further reading.
@@ -77,6 +78,7 @@ Set project sources
 #####################
 
 The next step is to set the sources of your project so that it knows, where to get its required modules from.
+If you only use opensource modules as provided by Inmanta, you can skip this step. 
 
 1. Find the module you want to work on
 2. Copy the SSH URL of the repo
@@ -94,7 +96,7 @@ To:
     repo:
         - git@code.inmanta.com:example/{}.git
 
-Now, in your ``main.cf`` file, if you import a module like, ``import nokia_service_vprn`` and save the file, you can get code completion.
+Now, in your ``main.cf`` file, if you import a module like, ``import my_module`` and save the file, you can get code completion.
 
 **Please note, code completion and navigation work on modules that are imported in the ``main.cf`` file**
 
