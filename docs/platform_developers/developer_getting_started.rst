@@ -29,7 +29,7 @@ Further information about Inmanta VS Code extension is available on `this <https
 Setting up Python virtual environments
 ########################################
 
-Python ``venv``s are used to create virtual environments. If you need a refresher, you can check out `this <https://docs.python.org/3/tutorial/venv.html>`_ page.
+For every project that you work on, we recommend using a new virtual environment. In Python ``venv``s are used to create virtual environments. If you need a refresher, you can check out `this <https://docs.python.org/3/tutorial/venv.html>`_ page.
 
 Below example shows you how to create a virtual environment:
 
@@ -96,6 +96,8 @@ Once you are done with creating a project and installing the required modules, y
 
 .. code-block:: bash
     
+    cd <project_name>
+    
     code .
 
 Upon opening your vs code, and the ``main.cf`` file, you should see modules downloading in ``libs`` directory.
@@ -106,11 +108,15 @@ Set project sources
 
 When starting a new project, the next step is to set the sources of your project so that it knows, where to get its required modules from. Otherwise, you can skip this step and just ``import`` your desired modules.
 
-If you only use opensource modules as provided by Inmanta, you can skip this step. 
+If you only use opensource modules as provided by Inmanta, you can skip below step. 
 
 1. Find the module you want to work on
 2. Copy the SSH URL of the repo
 3. In your VS code, open the ``project.yml`` file and under ``repo:``, add the copied line there but keep in mind to replace the name of a specific module with a place holder, like below example:
+
+.. code-block:: bash
+
+    code project.yml
 
 .. code-block:: yaml
     
@@ -124,7 +130,7 @@ Becomes:
     repo:
         - git@code.inmanta.com:example/{}.git
 
-Now, in your ``main.cf`` file, if you import a module like, ``import my_module`` and save the file, you can get code completion.
+* Now, in your ``main.cf`` file, if you import a module like, ``import <my_module>`` and save the file, you can get code completion. If you are working on an exisitng project with a populated ``main.``cf file, code completion will work as expected.
 
 **Please note, code completion and navigation work on modules that are imported in the ``main.cf`` file**.
 
@@ -132,7 +138,7 @@ Now, in your ``main.cf`` file, if you import a module like, ``import my_module``
 Module developers guide
 #########################
 
-While you need to work on modules, it is recommended to check the ``readme.md`` files to see the instructions on how to install and use them. There is also a guide `here <https://docs.inmanta.com/community/latest/model_developers/modules.html>`_ that helps you get up and running.
+When starting to work on a new module, it is recommended to check the ``readme.md`` file to see the instructions on how to install and use them. There is also a guide `here <https://docs.inmanta.com/community/latest/model_developers/modules.html>`_ that helps you get up and running.
 
 It is also recommended to set the ``INMANTA_TEST_ENV`` environment variable to speed up your tests and avoid creating virtual environments at each test run. It can be set to something like:
 
