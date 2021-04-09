@@ -117,8 +117,9 @@ Modules
     :undoc-members:
     :show-inheritance:
 
-
 .. autodata:: inmanta.module.INSTALL_OPTS
+
+.. autoclass:: inmanta.module.Module
 
 
 Typing
