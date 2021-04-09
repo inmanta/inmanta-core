@@ -1,0 +1,5 @@
+description: Added packaging dependency
+change-type: patch
+destination-branches:
+  - master
+  - iso4
