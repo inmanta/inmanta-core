@@ -187,6 +187,14 @@ those types.
     type representation for the inmanta type `number` is `Number()`, not `Number`.
 
 
+Protocol
+--------
+
+.. autoclass:: inmanta.protocol.common.Result
+    :members: code, result
+    :undoc-members:
+
+
 Data
 ----
 

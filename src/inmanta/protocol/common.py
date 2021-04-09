@@ -973,6 +973,9 @@ class Result(object):
     def __init__(self, code: int = 0, result: Optional[JsonType] = None) -> None:
         self._result = result
         self.code = code
+        """
+        The result code of the method call.
+        """
         self._callback: Optional[Callable[["Result"], None]] = None
 
     def get_result(self) -> Optional[JsonType]:
@@ -1002,6 +1005,9 @@ class Result(object):
             count += 0.1
 
     result = property(get_result, set_result)
+    """
+    The result object dict.
+    """
 
     def callback(self, fnc: Callable[["Result"], None]) -> None:
         """
