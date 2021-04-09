@@ -96,10 +96,9 @@ class InvalidMetadata(CompilerException):
     @classmethod
     def _extend_msg_with_validation_information(cls, msg: str, validation_error: ValidationError) -> str:
         for error in validation_error.errors():
-            fields = ",".join(error["loc"])
-            mgs = error["msg"]
+            mgs: str = error["msg"]
             error_type = error["type"]
-            msg += f"\n{fields}\n\t{mgs} ({error_type})"
+            msg += f"\n{error['loc']}\n\t{mgs} ({error_type})"
         return msg
 
 
@@ -346,6 +345,14 @@ class Metadata(BaseModel):
     @validator("requires", pre=True)
     @classmethod
     def requires_to_list(cls, v: object) -> object:
+        if isinstance(v, dict):
+            # transform legacy format for backwards compatibility
+            result: List[str] = []
+            for key, value in v.items():
+                if not (isinstance(key, str) and isinstance(value, str) and value.startswith(key)):
+                    raise ValueError("Invalid legacy requires format, expected `mod: mod [constraint]`.")
+                result.append(value)
+            return result
         return cls.to_list(v)
 
 

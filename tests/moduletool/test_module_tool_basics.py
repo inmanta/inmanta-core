@@ -24,7 +24,7 @@ import sys
 
 import pytest
 import yaml
-from pkg_resources import parse_version
+from pkg_resources import Requirement, parse_version
 
 from inmanta import module
 from inmanta.module import InvalidMetadata, Project
@@ -263,4 +263,65 @@ test:
 """
     )
     with pytest.raises(InvalidMetadata, match=f"Invalid yaml syntax in {inmanta_module.get_path_module_yml_file()}"):
+        module.Module(None, inmanta_module.get_root_dir_of_module())
+
+
+@pytest.mark.asyncio
+async def test_module_requires(inmanta_module):
+    inmanta_module.write_module_yml_file(
+        """
+name: mod
+license: ASL
+version: 1.0.0
+requires:
+    - std
+    - ip > 1.0.0
+        """
+    )
+    mod: module.Module = module.Module(None, inmanta_module.get_root_dir_of_module())
+    assert mod.requires() == [Requirement.parse("std"), Requirement.parse("ip > 1.0.0")]
+
+
+@pytest.mark.asyncio
+async def test_module_requires_single(inmanta_module):
+    inmanta_module.write_module_yml_file(
+        """
+name: mod
+license: ASL
+version: 1.0.0
+requires: std > 1.0.0
+        """
+    )
+    mod: module.Module = module.Module(None, inmanta_module.get_root_dir_of_module())
+    assert mod.requires() == [Requirement.parse("std > 1.0.0")]
+
+
+@pytest.mark.asyncio
+async def test_module_requires_legacy(inmanta_module):
+    inmanta_module.write_module_yml_file(
+        """
+name: mod
+license: ASL
+version: 1.0.0
+requires:
+    std: std
+    ip: ip > 1.0.0
+        """
+    )
+    mod: module.Module = module.Module(None, inmanta_module.get_root_dir_of_module())
+    assert mod.requires() == [Requirement.parse("std"), Requirement.parse("ip > 1.0.0")]
+
+
+@pytest.mark.asyncio
+async def test_module_requires_legacy_invalid(inmanta_module):
+    inmanta_module.write_module_yml_file(
+        """
+name: mod
+license: ASL
+version: 1.0.0
+requires:
+    std: ip
+        """
+    )
+    with pytest.raises(InvalidMetadata, match="Invalid legacy requires"):
         module.Module(None, inmanta_module.get_root_dir_of_module())

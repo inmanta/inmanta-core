@@ -1,0 +1,5 @@
+description: Make sure module metadata parsing is compatible with legacy format
+change-type: patch
+destination-branches:
+  - master
+  - iso4
