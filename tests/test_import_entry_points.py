@@ -91,7 +91,8 @@ def test_import_module(import_entry_point) -> None:
     assert import_entry_point("inmanta.module") == 0
 
 
-def test_import_protocol_exceptions(import_entry_point) -> None:
+def test_import_protocol(import_entry_point) -> None:
+    assert import_entry_point("inmanta.protocol") == 0
     assert import_entry_point("inmanta.protocol.exceptions") == 0
 
 
