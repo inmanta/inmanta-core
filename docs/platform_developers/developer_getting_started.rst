@@ -10,6 +10,7 @@ Other development setups are possible, but this one provides a good starting poi
 * Benefit from linting and code navigation by setting up a project.
 * Set project sources
 * Module developers guide
+* Required environment variables
 
 **The examples below are using ``pip`` your system might require you to use ``pip3``**.
 
@@ -77,10 +78,6 @@ To create a new project:
 
 For more details go `here <https://docs.inmanta.com/community/latest/model_developers/configurationmodel.html>`_.
 
-``cookiecutter`` is used to create projects in an easier and more convenient fashion.
-
-Further information about cookiecutter can be found `here <https://github.com/inmanta/inmanta-project-template>`_ and `here <https://docs.inmanta.com/community/latest/model_developers/configurationmodel.html>`_.
-
 
 You need to install some essential packages as follows:
 
@@ -110,7 +107,7 @@ Working on an Existing Project
 When working on an existing project, you need to ``clone`` them first:
 
 .. code-block:: bash
-    
+
     git clone project_name
 
 
@@ -158,7 +155,16 @@ Becomes:
 Module developers guide
 #########################
 
-When starting to work on a new module, it is recommended to check the ``readme.md`` file to see the instructions on how to install and use them. There is also a guide `here <https://docs.inmanta.com/community/latest/model_developers/modules.html>`_ that helps you get up and running.
+Like projects, there are also two scenarios:
+
+1. Working on a new module :ref:`Working on a New Module`.
+2. Working on an existing module :ref:`Working on an Existing Module`.
+
+
+Working on a New Module
+=======================
+
+There is a guide `here <https://docs.inmanta.com/community/latest/model_developers/modules.html>`_ that helps you get up and running.
 
 Same as :ref:`Working on a New Project` part, modules can also be created like:
 
@@ -172,7 +178,18 @@ Same as :ref:`Working on a New Project` part, modules can also be created like:
 For more details go `here <https://github.com/inmanta/inmanta-module-template>`_ and `here <https://docs.inmanta.com/community/dev/model_developers/modules.html>`_.
 
 
-It is also recommended to set the ``INMANTA_TEST_ENV`` environment variable to speed up your tests and avoid creating virtual environments at each test run. It can be set to something like:
+Working on an Existing Module
+=============================
+
+When starting to work on an existing module, it is recommended to check the ``readme.md`` file that comes with the module to see the instructions on how to install and use them. There is also a guide `here <https://docs.inmanta.com/community/latest/model_developers/modules.html>`_ that is useful in case you skipped the previous part.
+
+
+Required Environment Variables
+##############################
+
+There are a few environment variables that are required whenever you need to do unit tests to indicate the device, port, username and password, etc. which are mentioned here.
+
+It is also *recommended* to set the ``INMANTA_TEST_ENV`` environment variable to speed up your tests and avoid creating virtual environments at each test run. It can be set to something like:
 
 1. Create the required TEST directories:
 
