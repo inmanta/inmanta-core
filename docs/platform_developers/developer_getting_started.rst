@@ -29,7 +29,7 @@ Further information about Inmanta VS Code extension is available on `this <https
 Setting up Python virtual environments
 ########################################
 
-For every project that you work on, we recommend using a new virtual environment. In Python ``venv``s are used to create virtual environments. If you need a refresher, you can check out `this <https://docs.python.org/3/tutorial/venv.html>`_ page.
+For every project that you work on, we recommend using a new virtual environment using ``venv``s. If you need a refresher, you can check out `this <https://docs.python.org/3/tutorial/venv.html>`_ page.
 
 To create a virtual environment:
 
@@ -43,7 +43,9 @@ Then activate it by running:
     
     source ~/.virtualenvs/my_project/bin/activate
 
-**Upgrading your ``pip`` will save you a lot of time and troubleshooting (due to changes in the pip resolver in version 20 and 21).** you can do so by running:
+**Upgrading your ``pip`` will save you a lot of time and troubleshooting (due to changes in the pip resolver in version 20 and 21).** 
+
+You can do so by running:
 
 .. code-block:: bash
     
@@ -57,12 +59,14 @@ At the time of this writing, linting and code navigation in IDEs work only if yo
 
 There are two scenarios:
 
-1. There is already an existing project that you can ``git clone``.
-2. Make a new project.
+1. Working on a new project :ref:`Working on a New Project`.
+2. Working on an existing project :ref:`Working on an Existing Project`.
 
-Steps to create a project are mentioned `here <https://docs.inmanta.com/community/latest/model_developers/configurationmodel.html>`_ for further reading.
 
-``cookiecutter`` can be used to create projects in an easier and convenient fashion. It could be utilized like:
+Working on a New Project
+========================
+
+To create a new project: 
 
 .. code-block:: bash
 
@@ -70,18 +74,15 @@ Steps to create a project are mentioned `here <https://docs.inmanta.com/communit
 
     cookiecutter https://github.com/inmanta/inmanta-project-template.git
 
+
+For more details go `here <https://docs.inmanta.com/community/latest/model_developers/configurationmodel.html>`_.
+
+``cookiecutter`` is used to create projects in an easier and more convenient fashion.
+
 Further information about cookiecutter can be found `here <https://github.com/inmanta/inmanta-project-template>`_ and `here <https://docs.inmanta.com/community/latest/model_developers/configurationmodel.html>`_.
 
 
-* If you are working on an existing project, they come with ``requirements.txt`` or ``requirements.dev.txt`` to install the required modules:
-
-.. code-block:: bash
-
-    pip install -r requirements.txt
-
-    pip install -r requirements.dev.txt
-
-* If you are working on a new project, you need to install some essential packages as follows:
+You need to install some essential packages as follows:
 
 .. code-block:: bash
 
@@ -101,6 +102,25 @@ Once you are done with creating a project and installing the required modules, y
     code .
 
 Upon opening your vs code, and the ``main.cf`` file, you should see modules downloading in ``libs`` directory.
+
+
+Working on an Existing Project
+==============================
+
+When working on an existing project, you need to ``clone`` them first:
+
+.. code-block:: bash
+    
+    git clone project_name
+
+
+They also come with ``requirements.txt`` or ``requirements.dev.txt`` to install the required modules:
+
+.. code-block:: bash
+
+    pip install -r requirements.txt
+
+    pip install -r requirements.dev.txt
 
 
 Set project sources
@@ -140,15 +160,35 @@ Module developers guide
 
 When starting to work on a new module, it is recommended to check the ``readme.md`` file to see the instructions on how to install and use them. There is also a guide `here <https://docs.inmanta.com/community/latest/model_developers/modules.html>`_ that helps you get up and running.
 
-It is also recommended to set the ``INMANTA_TEST_ENV`` environment variable to speed up your tests and avoid creating virtual environments at each test run. It can be set to something like:
+Same as :ref:`Working on a New Project` part, modules can also be created like:
 
 .. code-block:: bash
-    
-    mkdir /tmp/env
-    source INMANTA_TEST_ENV=/tmp/env
 
-There are multiple ways to set environment variables:
+    pip install cookiecutter
 
-1. creating a file named ``.env_vars`` in current module directory.
-2. Bash script.
-3. Manually ``export $(cat .env_vars | xargs)``.
+    cookiecutter https://github.com/inmanta/inmanta-module-template.git
+
+
+For more details go `here <https://github.com/inmanta/inmanta-module-template>`_ and `here <https://docs.inmanta.com/community/dev/model_developers/modules.html>`_.
+
+
+It is also recommended to set the ``INMANTA_TEST_ENV`` environment variable to speed up your tests and avoid creating virtual environments at each test run. It can be set to something like:
+
+1. Create the required TEST directories:
+
+.. code-block:: bash
+
+    mkdir -p /tmp/env
+    mkdir -p /tmp/WORKSPACE
+
+2. Export below entries based on your setup:
+
+.. code-block:: bash
+
+    export YANG_DEVICE_HOST="device_IP"
+    export YANG_DEVICE_PORT="device_port"
+    export YANG_DEVICE_USERNAME="device_username"
+    export YANG_DEVICE_PASSWORD="device_password"
+    export YANG_DEVICE_HOSTNAME="device_cfg_file_name"
+    export WORKSPACE="/tmp/WORKSPACE"
+    export INMANTA_TEST_ENV="/tmp/env" 
