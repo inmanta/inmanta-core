@@ -33,6 +33,10 @@ class BaseModel(pydantic.BaseModel):
     """
 
     class Config:
+        """
+        Pydantic config.
+        """
+
         # Populate models with the value property of enums, rather than the raw enum.
         # This is useful to serialise model.dict() later
         use_enum_values = True

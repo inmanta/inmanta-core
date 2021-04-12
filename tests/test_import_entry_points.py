@@ -78,10 +78,23 @@ def test_import_proxy(import_entry_point) -> None:
     assert import_entry_point("inmanta.execute.proxy") == 0
 
 
-def test_import_compile_data(import_entry_point) -> None:
+def test_import_data(import_entry_point) -> None:
+    assert import_entry_point("inmanta.data") == 0
     assert import_entry_point("inmanta.data.model") == 0
+
+
+def test_import_compile_data(import_entry_point) -> None:
     assert import_entry_point("inmanta.ast.export") == 0
 
 
 def test_import_module(import_entry_point) -> None:
     assert import_entry_point("inmanta.module") == 0
+
+
+def test_import_protocol(import_entry_point) -> None:
+    assert import_entry_point("inmanta.protocol") == 0
+    assert import_entry_point("inmanta.protocol.exceptions") == 0
+
+
+def test_import_const(import_entry_point) -> None:
+    assert import_entry_point("inmanta.const") == 0
