@@ -164,8 +164,6 @@ Like projects, there are also two scenarios:
 Working on a New Module
 =======================
 
-There is a guide `here <https://docs.inmanta.com/community/latest/model_developers/modules.html>`_ that helps you get up and running.
-
 Same as :ref:`Working on a New Project` part, modules can also be created like:
 
 .. code-block:: bash
@@ -175,37 +173,40 @@ Same as :ref:`Working on a New Project` part, modules can also be created like:
     cookiecutter https://github.com/inmanta/inmanta-module-template.git
 
 
-For more details go `here <https://github.com/inmanta/inmanta-module-template>`_ and `here <https://docs.inmanta.com/community/dev/model_developers/modules.html>`_.
+There are also guides `here <https://docs.inmanta.com/community/latest/model_developers/modules.html>`_  and `here <https://github.com/inmanta/inmanta-module-template>`_ that help you get up and running.
 
 
 Working on an Existing Module
 =============================
 
+Modules that you want to work on, have to be ``import``ed in the ``main.cf`` file that is located in your main project directory. For instance:
+
+::
+    import vyos
+
+To download the ``import``ed modules in your ``main.cf`` file run:
+
+.. code-block:: bash
+
+    inmanta compile
+    
+    
 When starting to work on an existing module, it is recommended to check the ``readme.md`` file that comes with the module to see the instructions on how to install and use them. There is also a guide `here <https://docs.inmanta.com/community/latest/model_developers/modules.html>`_ that is useful in case you skipped the previous part.
 
 
 Required Environment Variables
 ##############################
 
-There are a few environment variables that are required whenever you need to do unit tests to indicate the device, port, username and password, etc. which are mentioned here.
-
-It is also *recommended* to set the ``INMANTA_TEST_ENV`` environment variable to speed up your tests and avoid creating virtual environments at each test run. It can be set to something like:
+It is *recommended* to set the ``INMANTA_TEST_ENV`` environment variable to speed up your tests and avoid creating virtual environments at each test run. It can be set to something like:
 
 1. Create the required TEST directories:
 
 .. code-block:: bash
 
     mkdir -p /tmp/env
-    mkdir -p /tmp/WORKSPACE
 
 2. Export below entries based on your setup:
 
 .. code-block:: bash
 
-    export YANG_DEVICE_HOST="device_IP"
-    export YANG_DEVICE_PORT="device_port"
-    export YANG_DEVICE_USERNAME="device_username"
-    export YANG_DEVICE_PASSWORD="device_password"
-    export YANG_DEVICE_HOSTNAME="device_cfg_file_name"
-    export WORKSPACE="/tmp/WORKSPACE"
     export INMANTA_TEST_ENV="/tmp/env" 
