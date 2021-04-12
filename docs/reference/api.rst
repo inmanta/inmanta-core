@@ -271,4 +271,3 @@ The rest API is also available as a `swagger spec <openapi.html#http://>`_
 
 .. automodule:: inmanta.protocol.methods_v2
     :members:
- changes added to commit (use "git add" and/or "git commit -a")
