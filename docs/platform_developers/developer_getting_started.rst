@@ -31,17 +31,17 @@ Setting up Python virtual environments
 
 For every project that you work on, we recommend using a new virtual environment. In Python ``venv``s are used to create virtual environments. If you need a refresher, you can check out `this <https://docs.python.org/3/tutorial/venv.html>`_ page.
 
-Below example shows you how to create a virtual environment:
+To create a virtual environment:
 
 .. code-block:: bash
     
-    python3 -m venv ~/.virtualenvs/<env_name>
+    python3 -m venv ~/.virtualenvs/my_project
 
 Then activate it by running:
 
 .. code-block:: bash
     
-    source ~/.virtualenvs/<env_name>/bin/activate
+    source ~/.virtualenvs/my_project/bin/activate
 
 **Upgrading your ``pip`` will save you a lot of time and troubleshooting (due to changes in the pip resolver in version 20 and 21).** you can do so by running:
 
