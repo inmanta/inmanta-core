@@ -24,10 +24,11 @@ from inmanta.types import JsonType
 
 class BaseHttpException(web.HTTPError):
     """
-    A base exception for errors in the server
+    A base exception for errors in the server.
+
     Classes which extend from the BaseHttpException class cannot have mandatory arguments
     in their constructor. This is required to determine the status_code of the exception in
-    inmanta.protocol.common.MethodProperties._get_http_status_code_for_exception()
+    :meth:`inmanta.protocol.common.MethodProperties._get_http_status_code_for_exception`
     """
 
     def __init__(self, status_code: int = 500, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:

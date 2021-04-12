@@ -1269,7 +1269,15 @@ class Module(ModuleLike[ModuleMetadata]):
                 exception.set_location(Location(e.path, e.lineno if e.lineno is not None else 0))
                 raise exception
 
+    # This method is not part of core's stable API but it is currently used by pytest-inmanta (inmanta/pytest-inmanta#76)
     def _get_fq_mod_name_for_py_file(self, py_file: str, plugin_dir: str, mod_name: str) -> str:
+        """
+        Returns the fully qualified Python module name for an inmanta module.
+
+        :param py_file: The Python file for the module, relative to the plugin directory.
+        :param plugin_dir: The plugin directory relative to the inmanta module's root directory.
+        :param mod_name: The top-level name of this module.
+        """
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)
         return loader.PluginModuleLoader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
 

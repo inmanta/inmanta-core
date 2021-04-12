@@ -128,6 +128,10 @@ class VersionState(str, Enum):
 
 
 class ResourceAction(str, Enum):
+    """
+    Enumeration of all resource actions.
+    """
+
     store = "store"
     push = "push"
     pull = "pull"
@@ -153,6 +157,10 @@ class AgentTriggerMethod(str, Enum):
 
 
 class LogLevel(Enum):
+    """
+    Log levels used for various parts of the inmanta orchestrator.
+    """
+
     CRITICAL = 50
     ERROR = 40
     WARNING = 30

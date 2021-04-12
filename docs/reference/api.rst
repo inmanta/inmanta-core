@@ -1,11 +1,25 @@
-Inmanta API reference
-=====================
+Programmatic API reference
+==========================
 
 This page describes parts of inmanta code base that provide a stable API that could be used from modules or extensions.
 
 .. warning::
     Only those parts explicitly mentioned here are part of the API. They provide a stable
     interface. Other parts of the containing modules provide no such guarantees.
+
+
+Constants
+---------
+
+.. autoclass:: inmanta.const.LogLevel
+    :show-inheritance:
+    :members:
+    :undoc-members:
+.. autoclass:: inmanta.const.ResourceAction
+    :show-inheritance:
+    :members:
+    :undoc-members:
+
 
 .. _compiler-exceptions:
 
@@ -48,6 +62,9 @@ Resources
 .. autoclass:: inmanta.resources.PurgeableResource
 .. autoclass:: inmanta.resources.ManagedResource
 .. autoclass:: inmanta.resources.IgnoreResourceException
+.. autoclass:: inmanta.resources.Id
+    :members: parse_id, resource_str
+    :undoc-members:
 
 .. autoclass:: inmanta.execute.util.Unknown
 
@@ -100,8 +117,9 @@ Modules
     :undoc-members:
     :show-inheritance:
 
-
 .. autodata:: inmanta.module.INSTALL_OPTS
+
+.. autoclass:: inmanta.module.Module
 
 
 Typing
@@ -167,6 +185,69 @@ those types.
 .. note::
     The type classes themselves do not represent inmanta types, their instances do. For example, the
     type representation for the inmanta type `number` is `Number()`, not `Number`.
+
+
+Protocol
+--------
+
+.. autoclass:: inmanta.protocol.common.Result
+    :members: code, result
+    :undoc-members:
+
+
+Data
+----
+
+.. warning::
+    In constrast to the rest of this section, the data API interface is subject to change. It is documented here because it is
+    currently the only available API to interact with the data framework. A restructure of the data framework is expected at
+    some point. Until then, this API should be considered unstable.
+
+.. data:: inmanta.data.TBaseDocument
+    :annotation: : typing.TypeVar
+
+    TypeVar with BaseDocument bound.
+
+.. autoclass:: inmanta.data.BaseDocument
+    :members: get_by_id, get_list
+    :undoc-members:
+
+.. autoclass:: inmanta.data.Compile
+    :members: get_substitute_by_id, to_dto
+    :undoc-members:
+    :show-inheritance:
+
+.. autoclass:: inmanta.data.ConfigurationModel
+    :members: get_versions
+    :undoc-members:
+    :show-inheritance:
+
+.. autoclass:: inmanta.data.Environment
+    :show-inheritance:
+
+.. autoclass:: inmanta.data.Report
+    :show-inheritance:
+
+.. autoclass:: inmanta.data.Resource
+    :members: get_resources_for_version
+    :undoc-members:
+    :show-inheritance:
+
+.. autoclass:: inmanta.data.ResourceAction
+    :members: get_logs_for_version
+    :undoc-members:
+    :show-inheritance:
+
+.. autoclass:: inmanta.data.model.BaseModel
+    :show-inheritance:
+
+    .. autoclass:: inmanta.data.model::BaseModel.Config
+        :members:
+        :undoc-members:
+
+.. autodata:: inmanta.data.model.ResourceIdStr
+
+.. autodata:: inmanta.data.model.ResourceVersionIdStr
 
 
 Domain conversion
