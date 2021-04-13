@@ -481,6 +481,10 @@ class ModuleLike(ABC, Generic[T]):
     name = property(get_name)
 
     @property
+    def metadata(self) -> T:
+        return self._metadata
+
+    @property
     def freeze_recursive(self) -> bool:
         return self._metadata.freeze_recursive
 

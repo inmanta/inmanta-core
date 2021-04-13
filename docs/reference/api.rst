@@ -108,6 +108,9 @@ Attributes
     :members: validate, get_type, type
     :undoc-members:
 
+.. autoclass:: inmanta.ast.attribute.RelationAttribute
+    :show-inheritance:
+
 
 Modules
 -------
@@ -119,7 +122,22 @@ Modules
 
 .. autodata:: inmanta.module.INSTALL_OPTS
 
+.. autoclass:: inmanta.module.InvalidMetadata
+
+.. autoclass:: inmanta.module.ModuleLike
+    :members: metadata, name
+    :undoc-members:
+
 .. autoclass:: inmanta.module.Module
+    :show-inheritance:
+
+
+Project
+-------
+
+.. autoclass:: inmanta.module.Project
+    :members: get, load, set
+    :undoc-members:
 
 
 Typing
