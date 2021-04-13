@@ -122,6 +122,8 @@ Modules
 
 .. autodata:: inmanta.module.INSTALL_OPTS
 
+.. autoclass:: inmanta.module.InvalidModuleException
+
 .. autoclass:: inmanta.module.InvalidMetadata
 
 .. autoclass:: inmanta.module.ModuleLike
