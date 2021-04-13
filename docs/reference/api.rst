@@ -138,6 +138,7 @@ Project
 .. autoclass:: inmanta.module.Project
     :members: get, load, set
     :undoc-members:
+    :show-inheritance:
 
 
 Typing
