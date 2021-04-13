@@ -37,6 +37,7 @@ import yaml
 from pkg_resources import parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, validator
 
+import inmanta.warnings
 from inmanta import env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, ModuleNotFoundException, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
@@ -100,6 +101,10 @@ class InvalidMetadata(CompilerException):
             error_type = error["type"]
             msg += f"\n{error['loc']}\n\t{mgs} ({error_type})"
         return msg
+
+
+class MetadataDeprecationWarning(inmanta.warnings.InmantaWarning):
+    pass
 
 
 class ProjectNotFoundException(CompilerException):
@@ -347,6 +352,12 @@ class Metadata(BaseModel):
     def requires_to_list(cls, v: object) -> object:
         if isinstance(v, dict):
             # transform legacy format for backwards compatibility
+            inmanta.warnings.warn(
+                MetadataDeprecationWarning(
+                    "The yaml dictionary syntax for specifying module requirements has been deprecated. Please use the"
+                    " documented list syntax instead."
+                )
+            )
             result: List[str] = []
             for key, value in v.items():
                 if not (isinstance(key, str) and isinstance(value, str) and value.startswith(key)):
