@@ -21,13 +21,14 @@ import re
 import shutil
 import subprocess
 import sys
+import warnings
 
 import pytest
 import yaml
 from pkg_resources import Requirement, parse_version
 
 from inmanta import module
-from inmanta.module import InvalidMetadata, Project
+from inmanta.module import InvalidMetadata, MetadataDeprecationWarning, Project
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
@@ -308,7 +309,13 @@ requires:
     ip: ip > 1.0.0
         """
     )
-    mod: module.Module = module.Module(None, inmanta_module.get_root_dir_of_module())
+    mod: module.Module
+    with warnings.catch_warnings(record=True) as w:
+        mod = module.Module(None, inmanta_module.get_root_dir_of_module())
+        assert len(w) == 1
+        warning = w[0]
+        assert issubclass(warning.category, MetadataDeprecationWarning)
+        assert "yaml dictionary syntax for specifying module requirements has been deprecated" in str(warning.message)
     assert mod.requires() == [Requirement.parse("std"), Requirement.parse("ip > 1.0.0")]
 
 
