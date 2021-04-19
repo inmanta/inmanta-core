@@ -314,13 +314,13 @@ def get_product_meta_data() -> ProductMetadata:
     return context.get_product_metadata()
 
 
-def product_version_lower_then(version: str) -> bool:
+def product_version_lower_than(version: str) -> bool:
     return parse_version(get_product_meta_data().version) < parse_version(version)
 
 
-def mark_only_for_version_higher_then(version: str) -> "MarkDecorator":
+def mark_only_for_version_higher_than(version: str) -> "MarkDecorator":
     current = get_product_meta_data().version
     return pytest.mark.skipif(
-        product_version_lower_then(version),
-        reason=f"This test is only intended for version larger then {version} currently at {current}",
+        product_version_lower_than(version),
+        reason=f"This test is only intended for version larger than {version} currently at {current}",
     )
