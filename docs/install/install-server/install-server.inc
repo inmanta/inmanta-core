@@ -72,19 +72,38 @@ Install the software
             sudo python3 -m venv /opt/inmanta
             sudo /opt/inmanta/bin/pip install inmanta
             sudo /opt/inmanta/bin/inmanta --help
+            
+            # Install PostgreSQL
+            sudo apt-get install postgresql postgresql-client
 
 
-        The misc folder in the source distribution contains systemd service files for both the server and the agent. Also
-        install ``inmanta.cfg`` from the misc folder in ``/etc/inmanta/inmanta.cfg``
+        Download the configuration file named ``inmanta.cfg`` (this name is arbitrary) in your virtual env:
 
-        If you want to use the dashboard you need to install it as well. Get the source from
-        `our github page <https://github.com/inmanta/inmanta-dashboard/packages/81295>`_ on the right and under `Assets`, you will see the source. Next, build and install the dashboard. For
-        this you need to have yarn and grunt:
+        .. code-block:: sh
+
+            wget -O /opt/inmanta/inmanta.cfg "https://raw.githubusercontent.com/inmanta/inmanta-core/master/misc/inmanta.cfg"
+
+
+        If you want to use the dashboard you need to install it as well. There are two available options:
+
+        1. Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/81295>`_ on the right side and under ``Assets``, you will see the compressed package, download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
+
+        .. code-block:: bash
+
+            path=/opt/inmanta/package/dist
+
+
+        OR
+
+        2. Get the source from `our github page <https://github.com/inmanta/inmanta-dashboard/releases>`_ on the right and under `Assets`, you will see the source. Next, build and install the dashboard. For this you need to have yarn and grunt:
 
         .. code-block:: sh
 
             tar xvfz inmanta-dashboard-20xx.x.x.tar.gz
             cd inmanta-dashboard-20xx.x.x
+
+            # Install Grunt (this will install yarn too)
+            sudo apt-get install grunt
             yarn install
             grunt dist
 
