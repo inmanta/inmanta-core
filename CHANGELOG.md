@@ -1,6 +1,6 @@
 # Release 2021.1 (2021-02-25):
 
-## inmanta-core: 5.0.0
+## inmanta-core: 5.0.0 (2021-02-25)
 
 ### Bug fixes
 - Fix broken order by (#2638)
@@ -14,7 +14,7 @@
 
 # Release 2020.6 (2020-12-23)
 
-## inmanta-core: 4.0.0
+## inmanta-core: 4.0.0 (2020-12-23)
 
 ### New features
 - Add support to use a custom venv path in the Project class (#2466)
