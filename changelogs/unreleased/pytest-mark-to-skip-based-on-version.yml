@@ -1,0 +1,7 @@
+---
+description: Added pytest mark to skip based on server version
+change-type: patch
+issue-nr: 320
+issue-repo: lsm
+destination-branches: [master, iso4]
+sections: {}
