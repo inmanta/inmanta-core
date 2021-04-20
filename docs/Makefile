@@ -170,6 +170,7 @@ doctest:
 .PHONY: openapi
 openapi:
 	pytest --rootdir=../tests ./extract_openapi_json.py
+	cp ../CHANGELOG.md .
 	mv openapi.json reference/openapi.json
 
 # Pattern rule for converting SVG to PDF
