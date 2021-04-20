@@ -64,6 +64,8 @@ Install the software
         First make sure Python >= 3.6 and git are installed. Inmanta requires many dependencies so it is recommended to create a virtual env.
         Next install inmanta with pip install in the newly created virtual env.
 
+        Please note, the path to the virtual env is arbitrary. Your desired path can override below example.
+
         .. code-block:: sh
 
             # Install python3 >= 3.6 and git
@@ -76,7 +78,7 @@ Install the software
         install ``inmanta.cfg`` from the misc folder in ``/etc/inmanta/inmanta.cfg``
 
         If you want to use the dashboard you need to install it as well. Get the source from
-        `our github page <https://github.com/inmanta/inmanta-dashboard/releases>`_ Next, build and install the dashboard. For
+        `our github page <https://github.com/inmanta/inmanta-dashboard/packages/81295>`_ on the right and under `Assets`, you will see the source. Next, build and install the dashboard. For
         this you need to have yarn and grunt:
 
         .. code-block:: sh
