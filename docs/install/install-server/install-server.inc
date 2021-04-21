@@ -86,7 +86,7 @@ Install the software
 
         If you want to use the dashboard you need to install it as well. There are two available options:
 
-        1. Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/81295>`_ on the right side and under ``Assets``, you will see the compressed package, download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
+        1. Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/>`_ on the right side and under ``Assets``, you will see the compressed package, download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
 
         .. code-block:: bash
 
