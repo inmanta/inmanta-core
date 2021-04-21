@@ -86,9 +86,9 @@ Install the software
             wget -O /opt/inmanta/inmanta.cfg "https://raw.githubusercontent.com/inmanta/inmanta-core/master/misc/inmanta.cfg"
 
 
-        If you want to use the dashboard you need to install it as well. There are two available options:
+        If you want to use the dashboard you need to install it as well:
 
-        1. Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/>`_ on the right side and under ``Assets``, you will see the compressed package, download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
+        Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/>`_ on the right side and under ``Assets``, you will see the compressed package, download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
 
         .. code-block:: bash
 
@@ -100,24 +100,6 @@ Install the software
         .. code-block:: bash
 
             inmanta -vv -c /opt/inmanta/inmanta.cfg server
-
-        OR
-
-        2. Get the source from `our github page <https://github.com/inmanta/inmanta-dashboard/releases>`_ on the right and under `Assets`, you will see the source. Next, build and install the dashboard. For this you need to have yarn and grunt:
-
-        .. code-block:: sh
-
-            tar xvfz inmanta-dashboard-20xx.x.x.tar.gz
-            cd inmanta-dashboard-20xx.x.x
-
-            # Install Grunt (this will install yarn too)
-            sudo apt-get install grunt
-            yarn install
-            grunt dist
-
-        This creates a dist.tgz file in the current directory. Unpack this tarball in ``/opt/inmanta/dashboard`` and point
-        the server in ``/etc/inmanta/inmanta.cfg`` to this location: set
-        :inmanta.config:option:`dashboard.path` to ``/opt/inmanta/dashboard``
 
 
     .. tab:: Mac
@@ -148,9 +130,9 @@ Install the software
             wget -O /opt/inmanta/inmanta.cfg "https://raw.githubusercontent.com/inmanta/inmanta-core/master/misc/inmanta.cfg"
 
 
-        If you want to use the dashboard you need to install it as well. There are two available options:
+        If you want to use the dashboard you need to install it as well:
 
-        1. Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/>`_ on the right side and under ``Assets``, you will see the compressed package, download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
+        Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/>`_ on the right side and under ``Assets``, you will see the compressed package, download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
 
         .. code-block:: bash
 
@@ -162,26 +144,6 @@ Install the software
         .. code-block:: bash
 
             inmanta -vv -c /opt/inmanta/inmanta.cfg server
-
-        OR
-
-        2. Get the source from `our github page <https://github.com/inmanta/inmanta-dashboard/releases>`_ on the right and under `Assets`, you will see the source. Next, build and install the dashboard. For this you need to have yarn and grunt:
-
-        .. code-block:: sh
-
-            tar xvfz inmanta-dashboard-20xx.x.x.tar.gz
-            cd inmanta-dashboard-20xx.x.x
-
-            # Install Grunt (this will install yarn too)
-            brew install node
-            sudo npm update -g npm
-            npm install -g grunt-cli
-            yarn install
-            grunt dist
-
-        This creates a dist.tgz file in the current directory. Unpack this tarball in ``/opt/inmanta/dashboard`` and point
-        the server in ``/etc/inmanta/inmanta.cfg`` to this location: set
-        :inmanta.config:option:`dashboard.path` to ``/opt/inmanta/dashboard``
 
 
     .. tab:: Windows
