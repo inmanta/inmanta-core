@@ -93,6 +93,12 @@ Install the software
             path=/opt/inmanta/package/dist
 
 
+        Then the dashboard can be started using below command:
+
+        .. code-block:: bash
+
+            inmanta -vv -c /opt/inmanta/inmanta.cfg server
+
         OR
 
         2. Get the source from `our github page <https://github.com/inmanta/inmanta-dashboard/releases>`_ on the right and under `Assets`, you will see the source. Next, build and install the dashboard. For this you need to have yarn and grunt:
