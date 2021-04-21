@@ -77,6 +77,7 @@ setup(
         "debug": ["rpdb"],
         # option to install a matched pair of inmanta-core and pytest-inmanta-extensions
         "pytest-inmanta-extensions": [f"pytest-inmanta-extensions~={version}.0.dev"],
+        "datatrace": ["graphviz"],
     },
     entry_points={
         "console_scripts": [
