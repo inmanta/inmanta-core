@@ -30,17 +30,19 @@ namespace_packages = ["inmanta_ext.core"]
 
 # read the contents of your README file
 this_directory = path.abspath(path.dirname(__file__))
-with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
+with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
+version = "2020.4.6"
+
 setup(
-    version="2020.4.6",
+    version=version,
     python_requires=">=3.6",  # also update classifiers
     # Meta data
     name="inmanta",
     description="Inmanta deployment tool",
     long_description=long_description,
-    long_description_content_type='text/markdown',
+    long_description_content_type="text/markdown",
     author="Inmanta",
     author_email="code@inmanta.com",
     url="https://github.com/inmanta/inmanta",
@@ -69,6 +71,11 @@ setup(
     zip_safe=False,
     include_package_data=True,
     install_requires=requires,
+    extras_require={
+        # option to install a matched pair of inmanta-core and pytest-inmanta-extensions
+        "pytest-inmanta-extensions": [f"pytest-inmanta-extensions~={version}.0.dev"],
+        "datatrace": ["graphviz"],
+    },
     entry_points={
         "console_scripts": [
             "inmanta-cli = inmanta.main:main",

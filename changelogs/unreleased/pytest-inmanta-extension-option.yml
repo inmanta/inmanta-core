@@ -1,0 +1,5 @@
+description: Added ability to do `pip install inmanta-core[pytest-inmanta-extension]`
+change-type: patch
+destination-branches: [iso3]
+sections:
+    feature: "{{description}}"
