@@ -60,7 +60,7 @@ Install the software
         files and systemd unit files. The dashboard is installed with the server package.
 
 
-    .. tab:: Debian and other Linux
+    .. tab:: Debian, Ubuntu and derivatives. 
 
         First make sure Python >= 3.6 and git are installed. Inmanta requires many dependencies so it is recommended to create a virtual env.
         Next install inmanta with pip install in the newly created virtual env.
