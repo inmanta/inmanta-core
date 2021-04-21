@@ -1,6 +1,2 @@
 ---
-description: Improved Inmanta install guide for Debian
-change-type: patch
-destination-branches: [master, iso3, iso4]
-sections:
-    feature: "{{description}}"
+sections: {}
