@@ -69,18 +69,16 @@ Install the software
 
         .. code-block:: sh
 
-            # Install GCC and Wheel
+            # Install GCC
             sudo apt-get update
             sudo apt-get install build-essential
             sudo apt-get install python3-pip
 
-            # Install python3 >= 3.6, venv, Python pip and git
+            # Install python3 >= 3.6, venv, Python pip, wheel and git
             # pip and pip3 are used interchangeably
             sudo apt-get install python3-venv
             sudo python3 -m venv /opt/inmanta
-
             sudo /opt/inmanta/bin/pip install wheel
-
             sudo /opt/inmanta/bin/pip install inmanta
             sudo /opt/inmanta/bin/inmanta --help
             
