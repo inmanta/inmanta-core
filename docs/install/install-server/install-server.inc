@@ -99,9 +99,9 @@ Install the software
 
         If you want to use the dashboard you need to install it as well:
 
-        Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/>`_ click on the latest release and then on the right hand side, under ``Assets``, you will see the compressed package, download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
+        Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/>`_ click on the latest release and then on the right hand side, under ``Assets``, you will see the compressed package. Download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
 
-        .. code-block:: bash
+        .. code-block:: ini
 
             path=/opt/inmanta/package/dist
 
@@ -143,9 +143,9 @@ Install the software
 
         If you want to use the dashboard you need to install it as well:
 
-        Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/>`_ on the right side and under ``Assets``, you will see the compressed package, download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
+        Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/>`_ click on the latest release and then on the right hand side, under ``Assets``, you will see the compressed package, download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
 
-        .. code-block:: bash
+        .. code-block:: ini
 
             path=/opt/inmanta/package/dist
 
