@@ -112,10 +112,10 @@ Install the software
             inmanta -vv -c /opt/inmanta/inmanta.cfg server
 
 
-    .. tab:: Mac
+    .. tab:: Other
 
         First make sure Python >= 3.6 and git are installed. Inmanta requires many dependencies so it is recommended to create a virtual env.
-        Next install inmanta with pip install in the newly created virtual env.
+        Next install inmanta with ``pip install`` in the newly created virtual env.
 
         Please note, the path to the virtual env is arbitrary. Your desired path can override below example.
 
@@ -127,17 +127,15 @@ Install the software
             sudo /opt/inmanta/bin/pip install inmanta
             sudo /opt/inmanta/bin/inmanta --help
             
-            # Install PostgreSQL
-            brew update
-            brew install postgresql
+
+        Install PostgreSQL using this `guide <https://www.postgresql.org/docs/9.3/tutorial-install.html/>`_
 
 
         Download the configuration file named ``inmanta.cfg`` (this name is arbitrary) in your virtual env:
 
         .. code-block:: sh
 
-            brew install wget
-            wget -O /opt/inmanta/inmanta.cfg "https://raw.githubusercontent.com/inmanta/inmanta-core/master/misc/inmanta.cfg"
+            sudo wget -O /opt/inmanta/inmanta.cfg "https://raw.githubusercontent.com/inmanta/inmanta-core/master/misc/inmanta.cfg"
 
 
         If you want to use the dashboard you need to install it as well:
