@@ -69,7 +69,18 @@ Install the software
 
         .. code-block:: sh
 
-            # Install python3 >= 3.6 and git
+            # Install GCC, Python pip and Wheel
+            sudo apt-get update
+            sudo apt-get install build-essential
+            sudo apt-get install python3-pip
+
+            pip3 install wheel
+            # OR
+            pip install wheel
+
+
+            # Install python3 >= 3.6, venv and git
+            sudo apt-get install python3-venv
             sudo python3 -m venv /opt/inmanta
             sudo /opt/inmanta/bin/pip install inmanta
             sudo /opt/inmanta/bin/inmanta --help
@@ -83,19 +94,19 @@ Install the software
         .. code-block:: sh
 
             sudo apt-get install wget
-            wget -O /opt/inmanta/inmanta.cfg "https://raw.githubusercontent.com/inmanta/inmanta-core/master/misc/inmanta.cfg"
+            sudo wget -O /opt/inmanta/inmanta.cfg "https://raw.githubusercontent.com/inmanta/inmanta-core/master/misc/inmanta.cfg"
 
 
         If you want to use the dashboard you need to install it as well:
 
-        Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/>`_ on the right side and under ``Assets``, you will see the compressed package, download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
+        Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/>`_ click on the latest release and then on the right hand side, under ``Assets``, you will see the compressed package, download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
 
         .. code-block:: bash
 
             path=/opt/inmanta/package/dist
 
 
-        Then the dashboard can be started using below command:
+        Then the dashboard can be started using below command (please note, below command has to be run after completing the ``Configure server`` :ref:`Configure server` ) part:
 
         .. code-block:: bash
 
