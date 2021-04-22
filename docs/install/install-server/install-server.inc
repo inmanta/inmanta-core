@@ -79,7 +79,7 @@ Install the software
             sudo apt-get install python3-venv
             sudo python3 -m venv /opt/inmanta
 
-            pip install wheel
+            sudo /opt/inmanta/bin/pip install wheel
 
             sudo /opt/inmanta/bin/pip install inmanta
             sudo /opt/inmanta/bin/inmanta --help
