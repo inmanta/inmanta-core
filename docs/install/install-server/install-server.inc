@@ -106,7 +106,7 @@ Install the software
             path=/opt/inmanta/package/dist
 
 
-        Then the dashboard can be started using below command (please note, below command has to be run after completing the ``Configure server`` :ref:`Configure server` ) part:
+        Then the dashboard can be started using below command (please note, below command has to be run after completing the  :ref:`configure-server`) part:
 
         .. code-block:: bash
 
@@ -184,10 +184,12 @@ Install the software
 .. warning::
     When you use Inmanta modules that depend on python libraries with native code, python headers and a working compiler are required as well.
 
+.. _configure-server:
+
 Configure server
 ################
 This guide goes through the steps to set up an Inmanta service orchestrator server. This guide assumes a RHEL (7 or 8) or CentOS
-(7 or 8) server is used. The rpm packages install the server configuration file in `/etc/inmanta/inmanta.cfg`.
+(7 or 8) server is used. The rpm packages install the server configuration file in `/etc/inmanta/inmanta.cfg`. We will add a detailed part for Debian and its derivatives in the near future but this section will guide you to the right direction. The only difference is some configuration paths are slightly different in Debian.
 
 Optional step 1: Setup SSL and authentication
 ---------------------------------------------
