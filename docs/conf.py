@@ -29,7 +29,7 @@ import sys, os, pkg_resources
 extensions = [
     'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.ifconfig', 'sphinx.ext.viewcode',
     'sphinxarg.ext', 'sphinxcontrib.inmanta.config', 'sphinxcontrib.inmanta.dsl', 'sphinx_tabs.tabs',
-    'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext'
+    'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext', 'recommonmark'
 ]
 
 
@@ -59,7 +59,10 @@ redoc = [
 templates_path = ['_templates']
 
 # The suffix of source filenames.
-source_suffix = '.rst'
+source_suffix = {
+    '.rst': 'restructuredtext',
+    '.md': 'markdown',
+}
 
 # The encoding of source files.
 # source_encoding = 'utf-8-sig'
