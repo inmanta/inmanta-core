@@ -69,13 +69,12 @@ Install the software
 
         .. code-block:: sh
 
-            # Install GCC
+            # Install GCC, python3 >= 3.6 and pip
             sudo apt-get update
             sudo apt-get install build-essential
             sudo apt-get install python3-pip
 
-            # Install python3 >= 3.6, venv, Python pip, wheel and git
-            # pip and pip3 are used interchangeably
+            # Install wheel and inmanta in a python venv
             sudo apt-get install python3-venv
             sudo python3 -m venv /opt/inmanta
             sudo /opt/inmanta/bin/pip install wheel
@@ -126,7 +125,7 @@ Install the software
             sudo /opt/inmanta/bin/inmanta --help
             
 
-        Install PostgreSQL using this `guide <https://www.postgresql.org/docs/9.3/tutorial-install.html/>`_
+        Install PostgreSQL using this `guide <https://www.postgresql.org/docs/10/tutorial-install.html>`_
 
 
         Download the configuration file named ``inmanta.cfg`` (this name is arbitrary) in your virtual env:
