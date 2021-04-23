@@ -183,7 +183,7 @@ Install the software
 Configure server
 ################
 This guide goes through the steps to set up an Inmanta service orchestrator server. This guide assumes a RHEL (7 or 8) or CentOS
-(7 or 8) server is used. The rpm packages install the server configuration file in `/etc/inmanta/inmanta.cfg`. We will add a detailed part for Debian and its derivatives in the near future but this section will guide you to the right direction. The only difference is some configuration paths are slightly different in Debian.
+(7 or 8) server is used. The rpm packages install the server configuration file in `/etc/inmanta/inmanta.cfg`.
 
 Optional step 1: Setup SSL and authentication
 ---------------------------------------------
