@@ -6,7 +6,7 @@ cookiecutter==1.7.2
 cryptography==3.1
 docstring-parser==0.7.2
 execnet==1.7.1
-importlib_metadata==1.7.0
+importlib_metadata==4.0.1
 jinja2==2.11.2
 more-itertools==8.5.0
 netifaces==0.10.9
