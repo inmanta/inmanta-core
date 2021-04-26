@@ -39,6 +39,7 @@ from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.util import get_compiler_version, groupby, hash_file
+from inmanta.decorator import stable_api
 
 LOGGER = logging.getLogger(__name__)
 
@@ -518,6 +519,7 @@ class Exporter(object):
         return env
 
 
+@stable_api
 class dependency_manager(object):  # noqa: N801
     """
     Register a function that manages dependencies in the configuration model that will be deployed.

@@ -18,6 +18,7 @@
 
 from enum import Enum
 from typing import Optional
+from inmanta.decorator import stable_api
 
 import pydantic
 from pydantic import BaseModel
@@ -32,6 +33,7 @@ class Exportable:
         raise NotImplementedError()
 
 
+@stable_api
 class Position(BaseModel):
     """
     Position in a file. Based on the
@@ -42,6 +44,7 @@ class Position(BaseModel):
     character: int
 
 
+@stable_api
 class Range(BaseModel):
     """
     Range in a file. Based on the
@@ -52,6 +55,7 @@ class Range(BaseModel):
     end: Position
 
 
+@stable_api
 class Location(BaseModel):
     """
     Location in a file. Based on the
@@ -62,6 +66,7 @@ class Location(BaseModel):
     range: Range
 
 
+@stable_api
 class ErrorCategory(str, Enum):
     """
     Category of an error.
@@ -83,6 +88,7 @@ class ErrorCategory(str, Enum):
     """
 
 
+@stable_api
 class Error(BaseModel):
     """
     Error occurred while trying to compile.

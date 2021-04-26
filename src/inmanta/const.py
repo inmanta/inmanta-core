@@ -17,6 +17,7 @@
 """
 
 from enum import Enum
+from inmanta.decorator import stable_api
 
 
 class ResourceState(str, Enum):
@@ -127,6 +128,7 @@ class VersionState(str, Enum):
     pending = "pending"
 
 
+@stable_api
 class ResourceAction(str, Enum):
     """
     Enumeration of all resource actions.
@@ -156,6 +158,7 @@ class AgentTriggerMethod(str, Enum):
             return cls.push_incremental_deploy
 
 
+@stable_api
 class LogLevel(Enum):
     """
     Log levels used for various parts of the inmanta orchestrator.

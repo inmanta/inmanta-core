@@ -24,6 +24,7 @@ from inmanta.ast import NotFoundException, RuntimeException
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.types import PrimitiveTypes
 from inmanta.util import JSONSerializable
+from inmanta.decorator import stable_api
 
 try:
     from typing import TYPE_CHECKING
@@ -73,6 +74,7 @@ class AttributeNotFound(NotFoundException, AttributeError):
     pass
 
 
+@stable_api
 class DynamicProxy(object):
     """
     This class wraps an object and makes sure that a model is never modified

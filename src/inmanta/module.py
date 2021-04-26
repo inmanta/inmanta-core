@@ -47,6 +47,7 @@ from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.util import get_compiler_version
 from packaging import version
+from inmanta.decorator import stable_api
 
 try:
     from typing import TYPE_CHECKING
@@ -65,6 +66,7 @@ Path = NewType("Path", str)
 ModuleName = NewType("ModuleName", str)
 
 
+@stable_api
 class InvalidModuleException(CompilerException):
     """
     This exception is raised if a module is invalid
@@ -84,6 +86,7 @@ class InvalidModuleException(CompilerException):
         return out
 
 
+@stable_api
 class InvalidMetadata(CompilerException):
     """
     This exception is raised if the metadata file of a project or module is invalid.
@@ -289,6 +292,7 @@ def merge_specs(mainspec: "Dict[str, List[Requirement]]", new: "List[Requirement
             mainspec[key] = mainspec[key] + [req]
 
 
+@stable_api
 class InstallMode(str, enum.Enum):
     """
     The module install mode determines what version of a module should be selected when a module is downloaded.
@@ -446,6 +450,7 @@ class ProjectMetadata(Metadata):
 T = TypeVar("T", bound=Metadata)
 
 
+@stable_api
 class ModuleLike(ABC, Generic[T]):
     """
     Commons superclass for projects and modules, which are both versioned by git
@@ -577,6 +582,7 @@ class ModuleLike(ABC, Generic[T]):
         return result
 
 
+@stable_api
 class Project(ModuleLike[ProjectMetadata]):
     """
     An inmanta project
@@ -927,6 +933,7 @@ class Project(ModuleLike[ProjectMetadata]):
         return out
 
 
+@stable_api
 class Module(ModuleLike[ModuleMetadata]):
     """
     This class models an inmanta configuration module

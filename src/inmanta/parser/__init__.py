@@ -19,8 +19,10 @@
 import inmanta.ast.export as ast_export
 from inmanta.ast import CompilerException, Range
 from inmanta.warnings import InmantaWarning
+from inmanta.decorator import stable_api
 
 
+@stable_api
 class ParserException(CompilerException):
     """Exception occurring during the parsing of the code"""
 

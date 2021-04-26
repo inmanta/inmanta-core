@@ -33,6 +33,7 @@ from inmanta.ast import (
     TypeNotFoundException,
 )
 from inmanta.execute.util import AnyType, NoneValue
+from inmanta.decorator import stable_api
 
 try:
     from typing import TYPE_CHECKING
@@ -78,6 +79,7 @@ class NameSpacedResolver(object):
         return NameSpacedResolver(namespace)
 
 
+@stable_api
 class Type(Locatable):
     """
     This class is the abstract base class for all types in the Inmanta :term:`DSL` that represent basic data. These are
@@ -143,6 +145,7 @@ class NamedType(Type, Named):
         raise DuplicateException(self, other, "Type %s is already defined" % (self.get_full_name()))
 
 
+@stable_api
 class NullableType(Type):
     """
     Represents a nullable type in the Inmanta :term:`DSL`. For example `NullableType(Number())` represents `number?`.
@@ -183,6 +186,7 @@ class NullableType(Type):
         return self.element_type == other.element_type
 
 
+@stable_api
 class Primitive(Type):
     """
     Abstract base class representing primitive types.
@@ -216,6 +220,7 @@ class Primitive(Type):
         return True
 
 
+@stable_api
 class Number(Primitive):
     """
     This class represents an integer or float in the configuration model. On
@@ -254,6 +259,7 @@ class Number(Primitive):
         return self.type_string()
 
 
+@stable_api
 class Integer(Number):
     """
     An instance of this class represents the int type in the configuration model.
@@ -274,6 +280,7 @@ class Integer(Number):
         return "int"
 
 
+@stable_api
 class Bool(Primitive):
     """
     This class represents a simple boolean that can hold true or false.
@@ -307,6 +314,7 @@ class Bool(Primitive):
         return None
 
 
+@stable_api
 class String(Primitive):
     """
     This class represents a string type in the configuration model.
@@ -348,6 +356,7 @@ class String(Primitive):
         return None
 
 
+@stable_api
 class List(Type):
     """
     Instances of this class represent a list type containing any types of values.
@@ -375,6 +384,7 @@ class List(Type):
         return None
 
 
+@stable_api
 class TypedList(List):
     """
     Instances of this class represent a list type containing any values of type element_type.
@@ -424,6 +434,7 @@ class TypedList(List):
         return self.element_type == other.element_type
 
 
+@stable_api
 class LiteralList(TypedList):
     """
     Instances of this class represent a list type containing only :py:class:`Literal` values.
@@ -449,6 +460,7 @@ class LiteralList(TypedList):
         return True
 
 
+@stable_api
 class Dict(Type):
     """
     Instances of this class represent a dict type with any types of values.
@@ -480,6 +492,7 @@ class Dict(Type):
         return None
 
 
+@stable_api
 class TypedDict(Dict):
     """
     Instances of this class represent a dict type containing only values of type element_type.
@@ -509,6 +522,7 @@ class TypedDict(Dict):
         return None
 
 
+@stable_api
 class LiteralDict(TypedDict):
     """
     Instances of this class represent a dict type containing only :py:class:`Literal` values.
@@ -527,6 +541,7 @@ class LiteralDict(TypedDict):
         return True
 
 
+@stable_api
 class Union(Type):
     """
     Instances of this class represent a union of multiple types.
@@ -549,6 +564,7 @@ class Union(Type):
         return "Union[%s]" % ",".join((t.type_string_internal() for t in self.types))
 
 
+@stable_api
 class Literal(Union):
     """
     Instances of this class represent a literal in the configuration model. A literal is a primitive or a list or dict
@@ -562,6 +578,7 @@ class Literal(Union):
         return "Literal"
 
 
+@stable_api
 class ConstraintType(NamedType):
     """
     A type that is based on a primitive type but defines additional constraints on this type.

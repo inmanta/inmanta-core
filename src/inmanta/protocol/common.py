@@ -63,6 +63,7 @@ from inmanta import const, execute, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes, StrictNonIntBool
+from inmanta.decorator import stable_api
 
 from . import exceptions
 
@@ -965,6 +966,7 @@ def decode_token(token: str) -> Dict[str, str]:
     return payload
 
 
+@stable_api
 class Result(object):
     """
     A result of a method call

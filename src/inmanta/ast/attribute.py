@@ -29,6 +29,7 @@ from inmanta.execute.runtime import (
     ResultVariable,
 )
 from inmanta.execute.util import Unknown
+from inmanta.decorator import stable_api
 
 try:
     from typing import TYPE_CHECKING
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
     from inmanta.execute.runtime import Instance  # noqa: F401
 
 
+@stable_api
 class Attribute(Locatable):
     """
     The attribute base class for entity attributes.
@@ -147,6 +149,7 @@ class Attribute(Locatable):
         pass
 
 
+@stable_api
 class RelationAttribute(Attribute):
     """
     An attribute that is a relation
