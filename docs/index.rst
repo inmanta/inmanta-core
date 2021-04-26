@@ -52,6 +52,7 @@ Currently, the Inmanta project is mainly developed and maintained by `Inmanta nv
     glossary
     reference/index
     troubleshooting
+    changelogs
 
 Additional resources
 --------------------
