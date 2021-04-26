@@ -22,8 +22,8 @@ from functools import lru_cache
 from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple, Union  # noqa: F401
 
 from inmanta.ast import export
-from inmanta.warnings import InmantaWarning
 from inmanta.decorator import stable_api
+from inmanta.warnings import InmantaWarning
 
 try:
     from typing import TYPE_CHECKING

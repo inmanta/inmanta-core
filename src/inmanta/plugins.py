@@ -27,10 +27,10 @@ from inmanta import const, protocol
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
+from inmanta.decorator import stable_api
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import Unknown
-from inmanta.decorator import stable_api
 
 T = TypeVar("T")
 

@@ -18,8 +18,8 @@
 
 import inmanta.ast.export as ast_export
 from inmanta.ast import CompilerException, Range
-from inmanta.warnings import InmantaWarning
 from inmanta.decorator import stable_api
+from inmanta.warnings import InmantaWarning
 
 
 @stable_api

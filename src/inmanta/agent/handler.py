@@ -33,10 +33,10 @@ from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange
+from inmanta.decorator import stable_api
 from inmanta.protocol import Result, json_encode
 from inmanta.types import SimpleTypes
 from inmanta.util import hash_file
-from inmanta.decorator import stable_api
 
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent

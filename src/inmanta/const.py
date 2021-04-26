@@ -17,6 +17,7 @@
 """
 
 from enum import Enum
+
 from inmanta.decorator import stable_api
 
 

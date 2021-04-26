@@ -43,11 +43,11 @@ from inmanta.ast import CompilerException, LocatableString, Location, ModuleNotF
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
+from inmanta.decorator import stable_api
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.util import get_compiler_version
 from packaging import version
-from inmanta.decorator import stable_api
 
 try:
     from typing import TYPE_CHECKING

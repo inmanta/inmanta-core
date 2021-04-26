@@ -38,9 +38,9 @@ from typing import (
 
 import inmanta.util
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
+from inmanta.decorator import stable_api
 from inmanta.execute import proxy, runtime, util
 from inmanta.types import JsonType
-from inmanta.decorator import stable_api
 
 if TYPE_CHECKING:
     from inmanta import export

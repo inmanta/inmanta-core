@@ -18,10 +18,11 @@
 
 from enum import Enum
 from typing import Optional
-from inmanta.decorator import stable_api
 
 import pydantic
 from pydantic import BaseModel
+
+from inmanta.decorator import stable_api
 
 
 # can't inherit from ABC because it breaks __slots__ of child classes in Python 3.6

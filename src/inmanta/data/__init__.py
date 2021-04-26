@@ -37,9 +37,9 @@ from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, Resource
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import ResourceIdStr
+from inmanta.decorator import stable_api
 from inmanta.server import config
 from inmanta.types import JsonType, PrimitiveTypes
-from inmanta.decorator import stable_api
 
 LOGGER = logging.getLogger(__name__)
 

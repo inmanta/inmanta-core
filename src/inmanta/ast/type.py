@@ -32,8 +32,8 @@ from inmanta.ast import (
     RuntimeException,
     TypeNotFoundException,
 )
-from inmanta.execute.util import AnyType, NoneValue
 from inmanta.decorator import stable_api
+from inmanta.execute.util import AnyType, NoneValue
 
 try:
     from typing import TYPE_CHECKING
