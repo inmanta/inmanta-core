@@ -18,7 +18,7 @@
 
 from enum import Enum
 
-from inmanta.decorator import stable_api
+from inmanta.stable_api import stable_api
 
 
 class ResourceState(str, Enum):

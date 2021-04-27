@@ -38,8 +38,8 @@ from typing import (
 
 import inmanta.util
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
-from inmanta.decorator import stable_api
 from inmanta.execute import proxy, runtime, util
+from inmanta.stable_api import stable_api
 from inmanta.types import JsonType
 
 if TYPE_CHECKING:

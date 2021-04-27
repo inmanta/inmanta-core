@@ -21,8 +21,8 @@ from copy import copy
 from typing import Dict, List, Optional, Tuple, Union
 
 from inmanta.ast import NotFoundException, RuntimeException
-from inmanta.decorator import stable_api
 from inmanta.execute.util import NoneValue, Unknown
+from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
 from inmanta.util import JSONSerializable
 

@@ -37,8 +37,8 @@ from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, Resource
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import ResourceIdStr
-from inmanta.decorator import stable_api
 from inmanta.server import config
+from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -142,7 +142,7 @@ class DocumentMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
-TBaseDocument = TypeVar("TBaseDocument", bound="BaseDocument")
+TBaseDocument = TypeVar("TBaseDocument", bound="BaseDocument")  # Part of the stable API
 
 
 @stable_api

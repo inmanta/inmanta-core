@@ -32,8 +32,8 @@ from inmanta.ast import (
     RuntimeException,
     TypeNotFoundException,
 )
-from inmanta.decorator import stable_api
 from inmanta.execute.util import AnyType, NoneValue
+from inmanta.stable_api import stable_api
 
 try:
     from typing import TYPE_CHECKING
@@ -674,7 +674,7 @@ def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
     return function
 
 
-TYPES: typing.Dict[str, Type] = {
+TYPES: typing.Dict[str, Type] = {  # Part of the stable API
     "string": String(),
     "number": Number(),
     "int": Integer(),

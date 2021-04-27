@@ -22,7 +22,7 @@ from typing import Optional
 import pydantic
 from pydantic import BaseModel
 
-from inmanta.decorator import stable_api
+from inmanta.stable_api import stable_api
 
 
 # can't inherit from ABC because it breaks __slots__ of child classes in Python 3.6

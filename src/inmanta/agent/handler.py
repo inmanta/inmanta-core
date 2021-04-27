@@ -33,8 +33,8 @@ from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange
-from inmanta.decorator import stable_api
 from inmanta.protocol import Result, json_encode
+from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
 from inmanta.util import hash_file
 

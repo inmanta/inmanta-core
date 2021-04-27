@@ -15,12 +15,14 @@
 
     Contact: code@inmanta.com
 """
-from typing import Callable, Type, Union
+from typing import Callable, Type, TypeVar
+
+T = TypeVar("T", Callable, Type)
 
 
-def stable_api(func: Union[Callable, Type]) -> Union[Callable, Type]:
+def stable_api(elem: T) -> T:
     """
     A decorator used to annotate the classes and functions which are part
     of the stable API.
     """
-    return func
+    return elem

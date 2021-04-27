@@ -20,7 +20,6 @@ from typing import List, Optional, Tuple
 
 from inmanta.ast import CompilerException, Locatable, Location, RuntimeException, TypingException
 from inmanta.ast.type import NullableType, TypedList
-from inmanta.decorator import stable_api
 from inmanta.execute.runtime import (
     AttributeVariable,
     DeprecatedOptionVariable,
@@ -30,6 +29,7 @@ from inmanta.execute.runtime import (
     ResultVariable,
 )
 from inmanta.execute.util import Unknown
+from inmanta.stable_api import stable_api
 
 try:
     from typing import TYPE_CHECKING

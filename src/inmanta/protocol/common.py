@@ -61,8 +61,8 @@ from tornado import web
 from inmanta import config as inmanta_config
 from inmanta import const, execute, util
 from inmanta.data.model import BaseModel
-from inmanta.decorator import stable_api
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
+from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes, StrictNonIntBool
 
 from . import exceptions
