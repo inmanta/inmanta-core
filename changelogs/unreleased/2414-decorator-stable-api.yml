@@ -1,0 +1,6 @@
+description: Mark the stable API using a decorator
+issue-nr: 2414
+change-type: patch
+destination-branches: [master, iso4]
+sections:
+  feature: "{{description}}"

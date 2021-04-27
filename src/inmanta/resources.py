@@ -39,6 +39,7 @@ from typing import (
 import inmanta.util
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, runtime, util
+from inmanta.stable_api import stable_api
 from inmanta.types import JsonType
 
 if TYPE_CHECKING:
@@ -55,6 +56,7 @@ class ResourceException(Exception):
 T = TypeVar("T", bound="Resource")
 
 
+@stable_api
 class resource(object):  # noqa: N801
     """
     A decorator that registers a new resource. The decorator must be applied to classes that inherit from
@@ -131,6 +133,7 @@ class ResourceNotFoundExcpetion(Exception):
     """
 
 
+@stable_api
 class IgnoreResourceException(Exception):
     """
     Throw this exception when a resource should not be included by the exported.
@@ -185,6 +188,7 @@ class ResourceMeta(type):
 RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"}
 
 
+@stable_api
 class Resource(metaclass=ResourceMeta):
     """
     Plugins should inherit resource from this class so a resource from a model can be serialized and deserialized.
@@ -437,6 +441,7 @@ class Resource(metaclass=ResourceMeta):
         return str(self.model._get_instance().get_type()) == type_name
 
 
+@stable_api
 class PurgeableResource(Resource):
     """
     See :inmanta:entity:`std::PurgeableResource` for more information.
@@ -447,6 +452,7 @@ class PurgeableResource(Resource):
     purge_on_delete: bool
 
 
+@stable_api
 class ManagedResource(Resource):
     """
     See :inmanta:entity:`std::ManagedResource` for more information.
@@ -474,6 +480,7 @@ PARSE_RVID_REGEX = re.compile(
 )
 
 
+@stable_api
 class Id(object):
     """
     A unique id that identifies a resource that is managed by an agent

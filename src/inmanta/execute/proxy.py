@@ -22,6 +22,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from inmanta.ast import NotFoundException, RuntimeException
 from inmanta.execute.util import NoneValue, Unknown
+from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
 from inmanta.util import JSONSerializable
 
@@ -73,6 +74,7 @@ class AttributeNotFound(NotFoundException, AttributeError):
     pass
 
 
+@stable_api
 class DynamicProxy(object):
     """
     This class wraps an object and makes sure that a model is never modified

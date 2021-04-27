@@ -30,6 +30,7 @@ from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import Unknown
+from inmanta.stable_api import stable_api
 
 T = TypeVar("T")
 
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
     from inmanta.compiler import Compiler
 
 
+@stable_api
 class Context(object):
     """
     An instance of this class is used to pass context to the plugin
@@ -456,6 +458,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
         return self.get_full_name()
 
 
+@stable_api
 class PluginException(Exception):
     """
     Base class for custom exceptions raised from a plugin.
@@ -465,6 +468,7 @@ class PluginException(Exception):
         self.message = message
 
 
+@stable_api
 def plugin(
     function: Callable = None, commands: List[str] = None, emits_statements: bool = False, allow_unknown: bool = False
 ) -> None:  # noqa: H801

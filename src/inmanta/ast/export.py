@@ -22,6 +22,8 @@ from typing import Optional
 import pydantic
 from pydantic import BaseModel
 
+from inmanta.stable_api import stable_api
+
 
 # can't inherit from ABC because it breaks __slots__ of child classes in Python 3.6
 class Exportable:
@@ -32,6 +34,7 @@ class Exportable:
         raise NotImplementedError()
 
 
+@stable_api
 class Position(BaseModel):
     """
     Position in a file. Based on the
@@ -42,6 +45,7 @@ class Position(BaseModel):
     character: int
 
 
+@stable_api
 class Range(BaseModel):
     """
     Range in a file. Based on the
@@ -52,6 +56,7 @@ class Range(BaseModel):
     end: Position
 
 
+@stable_api
 class Location(BaseModel):
     """
     Location in a file. Based on the
@@ -62,6 +67,7 @@ class Location(BaseModel):
     range: Range
 
 
+@stable_api
 class ErrorCategory(str, Enum):
     """
     Category of an error.
@@ -83,6 +89,7 @@ class ErrorCategory(str, Enum):
     """
 
 
+@stable_api
 class Error(BaseModel):
     """
     Error occurred while trying to compile.
