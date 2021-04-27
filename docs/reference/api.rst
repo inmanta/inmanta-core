@@ -220,7 +220,7 @@ Data
 ----
 
 .. warning::
-    In constrast to the rest of this section, the data API interface is subject to change. It is documented here because it is
+    In contrast to the rest of this section, the data API interface is subject to change. It is documented here because it is
     currently the only available API to interact with the data framework. A restructure of the data framework is expected at
     some point. Until then, this API should be considered unstable.
 
