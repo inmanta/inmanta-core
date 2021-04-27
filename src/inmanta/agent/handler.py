@@ -34,6 +34,7 @@ from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange
 from inmanta.protocol import Result, json_encode
+from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
 from inmanta.util import hash_file
 
@@ -48,6 +49,7 @@ T = TypeVar("T")
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
 
+@stable_api
 class provider(object):  # noqa: N801
     """
     A decorator that registers a new handler.
@@ -69,6 +71,7 @@ class provider(object):  # noqa: N801
         return function
 
 
+@stable_api
 class SkipResource(Exception):
     """
     A handler should raise this exception when a resource should be skipped. The resource will be marked as skipped
@@ -76,6 +79,7 @@ class SkipResource(Exception):
     """
 
 
+@stable_api
 class ResourcePurged(Exception):
     """
     If the :func:`~inmanta.agent.handler.CRUDHandler.read_resource` method raises this exception, the agent will
@@ -89,6 +93,7 @@ class InvalidOperation(Exception):
     """
 
 
+@stable_api
 def cache(
     func: T_FUNC = None,
     ignore: typing.List[str] = [],
@@ -146,6 +151,7 @@ def cache(
         return actual(func)
 
 
+@stable_api
 class HandlerContext(object):
     """
     Context passed to handler methods for state related "things"
@@ -424,6 +430,7 @@ class HandlerContext(object):
         self.log_msg(logging.CRITICAL, msg, args, kwargs)
 
 
+@stable_api
 class ResourceHandler(object):
     """
     A baseclass for classes that handle resources. New handler are registered with the
@@ -788,6 +795,7 @@ class ResourceHandler(object):
             raise Exception("Unable to upload file to the server.")
 
 
+@stable_api
 class CRUDHandler(ResourceHandler):
     """
     This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler

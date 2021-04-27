@@ -24,9 +24,11 @@ import pydantic
 import inmanta.ast.export as ast_export
 from inmanta import const
 from inmanta.const import Change, ResourceState
+from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
 
+@stable_api
 class BaseModel(pydantic.BaseModel):
     """
     Base class for all data objects in Inmanta
@@ -85,6 +87,7 @@ class StatusResponse(BaseModel):
     features: List[FeatureStatus]
 
 
+@stable_api
 class CompileData(BaseModel):
     """
     Top level structure of compiler data to be exported.
@@ -111,13 +114,13 @@ class CompileRun(BaseModel):
     compile_data: Optional[CompileData]
 
 
-ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)
+ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API
 """
     The resource id with the version included.
 """
 
 
-ResourceIdStr = NewType("ResourceIdStr", str)
+ResourceIdStr = NewType("ResourceIdStr", str)  # Part of the stable API
 """
     The resource id without the version
 """

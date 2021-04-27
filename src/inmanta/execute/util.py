@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+from inmanta.stable_api import stable_api
 
 
 class AnyType(object):
@@ -25,6 +26,7 @@ class AnyType(object):
     pass
 
 
+@stable_api
 class Unknown(AnyType):
     """
     An instance of this class is used to indicate that this value can not be determined yet.

@@ -38,6 +38,7 @@ from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import ResourceIdStr
 from inmanta.server import config
+from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -141,9 +142,10 @@ class DocumentMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
-TBaseDocument = TypeVar("TBaseDocument", bound="BaseDocument")
+TBaseDocument = TypeVar("TBaseDocument", bound="BaseDocument")  # Part of the stable API
 
 
+@stable_api
 class BaseDocument(object, metaclass=DocumentMeta):
     """
     A base document in the database. Subclasses of this document determine collections names. This type is mainly used to
@@ -807,6 +809,7 @@ class Setting(object):
         )
 
 
+@stable_api
 class Environment(BaseDocument):
     """
     A deployment environment of a project
@@ -1546,6 +1549,7 @@ class Agent(BaseDocument):
         await cls._execute_query(query, connection=connection)
 
 
+@stable_api
 class Report(BaseDocument):
     """
     A report of a substep of compilation
@@ -1579,6 +1583,7 @@ class Report(BaseDocument):
         )
 
 
+@stable_api
 class Compile(BaseDocument):
     """
     A run of the compiler
@@ -1764,6 +1769,7 @@ class LogLine(DataDocument):
         return cls(level=const.LogLevel(level), msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
 
 
+@stable_api
 class ResourceAction(BaseDocument):
     """
     Log related to actions performed on a specific resource version by Inmanta.
@@ -2000,6 +2006,7 @@ class ResourceAction(BaseDocument):
         )
 
 
+@stable_api
 class Resource(BaseDocument):
     """
     A specific version of a resource. This entity contains the desired state of a resource.
@@ -2396,6 +2403,7 @@ class Resource(BaseDocument):
         )
 
 
+@stable_api
 class ConfigurationModel(BaseDocument):
     """
     A specific version of the configuration model.
