@@ -15,3 +15,6 @@ updates:
       # Breaking change, see #2729 
     - dependency-name: "openapi-spec-validator"
       versions: [">=0.3.0"]
+      # version 21.1 contains a bug: https://github.com/pypa/pip/issues/9878
+    - dependency-name: "pip"
+      versions: [">=21.1"]
