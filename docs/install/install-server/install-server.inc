@@ -26,36 +26,95 @@ Install the software
         files and systemd unit files. The dashboard is installed with the server package.
 
 
-    .. tab:: Other Linux and Mac
+    .. tab:: Debian, Ubuntu and derivatives. 
 
         First make sure Python >= 3.6 and git are installed. Inmanta requires many dependencies so it is recommended to create a virtual env.
         Next install inmanta with pip install in the newly created virtual env.
 
+        Please note, the path to the virtual env is arbitrary. Your desired path can override below example.
+
+        .. code-block:: sh
+
+            # Install GCC, python3 >= 3.6 and pip
+            sudo apt-get update
+            sudo apt-get install build-essential
+            sudo apt-get install python3-pip
+
+            # Install wheel and inmanta in a python venv
+            sudo apt-get install python3-venv
+            sudo python3 -m venv /opt/inmanta
+            sudo /opt/inmanta/bin/pip install wheel
+            sudo /opt/inmanta/bin/pip install inmanta
+            sudo /opt/inmanta/bin/inmanta --help
+            
+            # Install PostgreSQL
+            sudo apt-get install postgresql postgresql-client
+
+
+        Download the configuration file named ``inmanta.cfg`` (this name is arbitrary) in your virtual env:
+
+        .. code-block:: sh
+
+            sudo apt-get install wget
+            sudo wget -O /opt/inmanta/inmanta.cfg "https://raw.githubusercontent.com/inmanta/inmanta-core/master/misc/inmanta.cfg"
+
+
+        If you want to use the dashboard you need to install it as well:
+
+        Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/>`_ click on the latest release and then on the right hand side, under ``Assets``, you will see the compressed package. Download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
+
+        .. code-block:: ini
+
+            path=/opt/inmanta/package/dist
+
+
+        Then the dashboard can be started using below command (please note, below command has to be run after completing the  :ref:`configure-server`) part:
+
+        .. code-block:: bash
+
+            inmanta -vv -c /opt/inmanta/inmanta.cfg server
+
+
+    .. tab:: Other
+
+        First make sure Python >= 3.6 and git are installed. Inmanta requires many dependencies so it is recommended to create a virtual env.
+        Next install inmanta with ``pip install`` in the newly created virtual env.
+
+        Please note, the path to the virtual env is arbitrary. Your desired path can override below example.
+
         .. code-block:: sh
 
             # Install python3 >= 3.6 and git
+            # If git is not already installed, by running git in your terminal, the installation guide will be shown
             sudo python3 -m venv /opt/inmanta
             sudo /opt/inmanta/bin/pip install inmanta
             sudo /opt/inmanta/bin/inmanta --help
+            
+
+        Install PostgreSQL using this `guide <https://www.postgresql.org/docs/10/tutorial-install.html>`_
 
 
-        The misc folder in the source distribution contains systemd service files for both the server and the agent. Also
-        install ``inmanta.cfg`` from the misc folder in ``/etc/inmanta/inmanta.cfg``
-
-        If you want to use the dashboard you need to install it as well. Get the source from
-        `our github page <https://github.com/inmanta/inmanta-dashboard/releases>`_ Next, build and install the dashboard. For
-        this you need to have yarn and grunt:
+        Download the configuration file named ``inmanta.cfg`` (this name is arbitrary) in your virtual env:
 
         .. code-block:: sh
 
-            tar xvfz inmanta-dashboard-20xx.x.x.tar.gz
-            cd inmanta-dashboard-20xx.x.x
-            yarn install
-            grunt dist
+            sudo wget -O /opt/inmanta/inmanta.cfg "https://raw.githubusercontent.com/inmanta/inmanta-core/master/misc/inmanta.cfg"
 
-        This creates a dist.tgz file in the current directory. Unpack this tarball in ``/opt/inmanta/dashboard`` and point
-        the server in ``/etc/inmanta/inmanta.cfg`` to this location: set
-        :inmanta.config:option:`dashboard.path` to ``/opt/inmanta/dashboard``
+
+        If you want to use the dashboard you need to install it as well:
+
+        Get the pre-built package from `our github page <https://github.com/inmanta/inmanta-dashboard/packages/>`_ click on the latest release and then on the right hand side, under ``Assets``, you will see the compressed package, download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under ``[dashboard]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
+
+        .. code-block:: ini
+
+            path=/opt/inmanta/package/dist
+
+
+        Then the dashboard can be started using below command:
+
+        .. code-block:: bash
+
+            inmanta -vv -c /opt/inmanta/inmanta.cfg server
 
 
     .. tab:: Windows
@@ -84,6 +143,8 @@ Install the software
 
 .. warning::
     When you use Inmanta modules that depend on python libraries with native code, python headers and a working compiler are required as well.
+
+.. _configure-server:
 
 Configure server
 ################
