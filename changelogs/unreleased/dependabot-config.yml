@@ -1,0 +1,5 @@
+change-type: patch
+description: Update dependabot to update import_metadata
+destination-branches:
+- master
+sections: {}

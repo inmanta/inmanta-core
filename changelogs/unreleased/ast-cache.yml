@@ -1,0 +1,8 @@
+description: Added experimental caching support to the compiler
+change-type: minor
+destination-branches: [master, iso4]
+sections:
+    feature: "{{description}}"
+    other-note: |
+        To enable caching on the compiler, either set the config value `compiler.cache` in the `.inmanta` file
+        or pass the option `--experimental-cache` to `inmanta compile`

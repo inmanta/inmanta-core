@@ -24,8 +24,9 @@ from asyncio import subprocess
 
 import pytest
 
-from inmanta.app import cmd_parser
+from inmanta.app import cmd_parser, compiler_features
 from inmanta.command import ShowUsageException
+from inmanta.compiler.config import feature_compiler_cache
 from inmanta.config import Config
 from inmanta.const import VersionState
 
@@ -84,6 +85,24 @@ def test_help_sub(inmanta_config, capsys):
     assert "export" not in out
     # check subcommands help
     assert "update" in out
+
+
+def test_feature_flags(inmanta_config, capsys):
+    with pytest.raises(SystemExit):
+        app(["help", "compile"])
+    out, _ = capsys.readouterr()
+
+    assert out.startswith("usage:")
+    assert "--experimental-cache" in out
+
+    parser = cmd_parser()
+
+    assert not feature_compiler_cache.get()
+
+    options, other = parser.parse_known_args(args=["compile", "--experimental-cache"])
+    compiler_features.read_options_to_config(options)
+
+    assert feature_compiler_cache.get()
 
 
 def test_module_help(inmanta_config, capsys):

@@ -1,0 +1,7 @@
+description: Deprecated yaml dictionary syntax for module requires
+change-type: patch
+destination-branches:
+  - iso4
+  - master
+sections:
+  deprecation-note: "{{description}}"

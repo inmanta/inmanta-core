@@ -17,9 +17,9 @@ The source is organized in modules. Each module is a git repository with the fol
     |  +-- _init.cf
     +-- plugins/
     +-- templates/
-    +-- module.yaml
+    +-- module.yml
 
-The ``module.yaml`` file, the ``model`` directory and the ``model/_init.cf`` are required.
+The ``module.yml`` file, the ``model`` directory and the ``model/_init.cf`` are required.
 
 For example::
 
@@ -33,7 +33,7 @@ For example::
     |  |  +-- other.cf
     +-- plugins/
     +-- templates/
-    +-- module.yaml
+    +-- module.yml
 
 The model code is in the ``.cf`` files. Each file forms a namespace. The namespaces for the files are the following.
 
@@ -139,7 +139,7 @@ For example
 
 .. code-block:: inmanta
 
-    typedef tcp_port as int matching self > 0 and self < 65565
+    typedef tcp_port as int matching self > 0 and self < 65535
     typedef mac_addr as string matching /([0-9a-fA-F]{2})(:[0-9a-fA-F]{2}){5}$/
 
 
@@ -550,7 +550,7 @@ configuration files. To construct configuration files, templates and string inte
 String interpolation
 --------------------
 
-String interpolation allows variables to be include as parameters inside a string.
+String interpolation allows variables to be included as parameters inside a string.
 
 The included variables are resolved in the lexical scope of the string they are included in.
 

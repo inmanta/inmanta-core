@@ -14,6 +14,8 @@
     limitations under the License.
 
     Contact: code@inmanta.com
+
+    Module defining the v1 rest api
 """
 
 import datetime

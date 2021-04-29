@@ -38,6 +38,7 @@ from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import ResourceIdStr
 from inmanta.server import config
+from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -141,9 +142,10 @@ class DocumentMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
-TBaseDocument = TypeVar("TBaseDocument", bound="BaseDocument")
+TBaseDocument = TypeVar("TBaseDocument", bound="BaseDocument")  # Part of the stable API
 
 
+@stable_api
 class BaseDocument(object, metaclass=DocumentMeta):
     """
     A base document in the database. Subclasses of this document determine collections names. This type is mainly used to
@@ -807,6 +809,7 @@ class Setting(object):
         )
 
 
+@stable_api
 class Environment(BaseDocument):
     """
     A deployment environment of a project
@@ -1546,6 +1549,7 @@ class Agent(BaseDocument):
         await cls._execute_query(query, connection=connection)
 
 
+@stable_api
 class Report(BaseDocument):
     """
     A report of a substep of compilation
@@ -1579,6 +1583,7 @@ class Report(BaseDocument):
         )
 
 
+@stable_api
 class Compile(BaseDocument):
     """
     A run of the compiler
@@ -1596,6 +1601,8 @@ class Compile(BaseDocument):
     :param version: version exported by this compile
     :param remote_id: id as given by the requestor, used by the requestor to distinguish between different requests
     :param compile_data: json data as exported by compiling with the --export-compile-data parameter
+    :param substitute_compile_id: id of this compile's substitute compile, i.e. the compile request that is similar
+        to this one that actually got compiled.
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1621,17 +1628,30 @@ class Compile(BaseDocument):
     compile_data: Optional[dict] = Field(field_type=dict)
 
     @classmethod
-    # TODO: Use join
-    async def get_report(cls, compile_id: uuid.UUID) -> "Compile":
+    async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:
         """
-        Get the compile and the associated reports from the database
+        Get a compile's substitute compile if it exists, otherwise get the compile by id.
+
+        :param compile_id: The id of the compile for which to get the substitute compile.
+        :return: The compile object for compile c2 that is the substitute of compile c1 with the given id. If c1 does not have
+            a substitute, returns c1 itself.
         """
         result: Optional[Compile] = await cls.get_by_id(compile_id)
         if result is None:
             return None
+        if result.substitute_compile_id is None:
+            return result
+        return await cls.get_substitute_by_id(result.substitute_compile_id)
 
-        if result.substitute_compile_id is not None:
-            return await cls.get_report(result.substitute_compile_id)
+    @classmethod
+    # TODO: Use join
+    async def get_report(cls, compile_id: uuid.UUID) -> Optional[Dict]:
+        """
+        Get the compile and the associated reports from the database
+        """
+        result: Optional[Compile] = await cls.get_substitute_by_id(compile_id)
+        if result is None:
+            return None
 
         dict_model = result.to_dict()
         reports = await Report.get_list(compile=result.id)
@@ -1640,7 +1660,7 @@ class Compile(BaseDocument):
         return dict_model
 
     @classmethod
-    async def get_last_run(cls, environment_id: uuid.UUID) -> "Compile":
+    async def get_last_run(cls, environment_id: uuid.UUID) -> Optional["Compile"]:
         """Get the last run for the given environment"""
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} where environment=$1 AND completed IS NOT NULL ORDER BY completed DESC LIMIT 1",
@@ -1651,7 +1671,7 @@ class Compile(BaseDocument):
         return results[0]
 
     @classmethod
-    async def get_next_run(cls, environment_id: uuid.UUID) -> "Compile":
+    async def get_next_run(cls, environment_id: uuid.UUID) -> Optional["Compile"]:
         """Get the next compile in the queue for the given environment"""
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND completed IS NULL ORDER BY requested ASC LIMIT 1",
@@ -1749,11 +1769,12 @@ class LogLine(DataDocument):
         return cls(level=const.LogLevel(level), msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
 
 
+@stable_api
 class ResourceAction(BaseDocument):
     """
     Log related to actions performed on a specific resource version by Inmanta.
     Any transactions that update ResourceAction should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel
+    :py:class:`inmanta.data.ConfigurationModel`
 
     :param environment: The environment this action belongs to.
     :param version: The version of the configuration model this action belongs to.
@@ -1780,7 +1801,7 @@ class ResourceAction(BaseDocument):
     started: datetime.datetime = Field(field_type=datetime.datetime, required=True)
     finished: datetime.datetime = Field(field_type=datetime.datetime)
 
-    messages = Field(field_type=list)
+    messages: List = Field(field_type=list)
     status = Field(field_type=const.ResourceState)
     changes = Field(field_type=dict)
     change = Field(field_type=const.Change)
@@ -1985,6 +2006,7 @@ class ResourceAction(BaseDocument):
         )
 
 
+@stable_api
 class Resource(BaseDocument):
     """
     A specific version of a resource. This entity contains the desired state of a resource.
@@ -2381,6 +2403,7 @@ class Resource(BaseDocument):
         )
 
 
+@stable_api
 class ConfigurationModel(BaseDocument):
     """
     A specific version of the configuration model.

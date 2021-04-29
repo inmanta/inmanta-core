@@ -19,18 +19,20 @@ import os
 import subprocess
 import tempfile
 from subprocess import CalledProcessError
+from typing import Optional
 
 import yaml
 
 from inmanta.config import Config
+from inmanta.module import InstallMode
 from inmanta.moduletool import ModuleTool
 
 
-def makeproject(reporoot, name, deps=[], imports=None, install_mode=None, options=""):
-    return makemodule(reporoot, name, deps, project=True, imports=imports, install_mode=install_mode, options=options)
+def makeproject(reporoot, name, deps=[], imports=None, install_mode: Optional[InstallMode] = None):
+    return makemodule(reporoot, name, deps, project=True, imports=imports, install_mode=install_mode)
 
 
-def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode=None, options=""):
+def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode: Optional[InstallMode] = None):
     path = os.path.join(reporoot, name)
     os.makedirs(path)
     mainfile = "module.yml"
@@ -56,7 +58,7 @@ repo: %s"""
             )
 
         if install_mode is not None:
-            projectfile.write("\ninstall_mode: %s" % install_mode)
+            projectfile.write("\ninstall_mode: %s" % install_mode.value)
         if len(deps) != 0:
             projectfile.write("\nrequires:")
             for req in deps:
