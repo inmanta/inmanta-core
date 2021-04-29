@@ -19,6 +19,7 @@ from inmanta.ast import Location, Range
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity, Namespace
 from inmanta.ast.statements import Literal, Resumer, Statement
+from inmanta.ast.statements.call import FunctionUnit
 from inmanta.execute.dataflow import (
     AssignableNode,
     Assignment,
@@ -75,6 +76,8 @@ def test_slots_rt():
     assert_slotted(ExecutionUnit(qs, r, ResultVariable(), {}, Literal(""), None))
     assert_slotted(HangUnit(qs, r, {}, None, Resumer()))
     assert_slotted(RawUnit(qs, r, {}, Resumer()))
+
+    assert_slotted(FunctionUnit(qs, rs, ResultVariable(), {}, None))
 
     assert_slotted(i)
 

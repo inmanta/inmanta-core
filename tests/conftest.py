@@ -50,6 +50,7 @@ from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
+import inmanta.compiler.config
 import inmanta.main
 from inmanta import config, const, data, loader, protocol, resources
 from inmanta.agent import handler
@@ -349,7 +350,7 @@ def inmanta_config():
 
 
 @pytest.fixture
-def server_pre_start():
+def server_pre_start(server_config):
     """This fixture is called by the server. Override this fixture to influence server config"""
 
 
@@ -499,7 +500,7 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
 
 
 @pytest.fixture(scope="function")
-async def server(server_pre_start, server_config):
+async def server(server_pre_start):
     """
     :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
     May not be required
@@ -871,7 +872,9 @@ def snippetcompiler_global():
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler(snippetcompiler_global, modules_dir):
+def snippetcompiler(inmanta_config, snippetcompiler_global, modules_dir):
+    # Test with compiler cache enabled
+    compiler.config.feature_compiler_cache.set("True")
     snippetcompiler_global.setup_func(modules_dir)
     yield snippetcompiler_global
     snippetcompiler_global.tear_down_func()

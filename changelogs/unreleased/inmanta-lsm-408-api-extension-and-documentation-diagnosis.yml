@@ -1,0 +1,9 @@
+description: API extension and documentation for diagnosis endpoint
+issue-repo: inmanta-lsm
+issue-nr: 408
+change-type: minor
+sections:
+  feature: Extended stable API documentation
+destination-branches:
+  - master
+  - iso4

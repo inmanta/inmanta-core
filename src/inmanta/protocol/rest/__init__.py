@@ -189,10 +189,30 @@ class CallArguments(object):
             # get value from headers, defaults or message
             value = self._map_headers(arg)
             if value is None:
-                if not self._is_header_param(arg) and arg in self._message:
-                    value = self._message[arg]
-                    all_fields.remove(arg)
+                if not self._is_header_param(arg):
+                    arg_type = self._argspec.annotations.get(arg)
+                    if arg in self._message:
+                        value = self._message[arg]
+                        all_fields.remove(arg)
+                    # Pre-process dict params for GET
+                    elif self._properties.operation == "GET" and self._is_dict_or_optional_dict(arg_type):
+                        dict_prefix = f"{arg}."
+                        dict_with_prefixed_names = {
+                            param_name: param_value
+                            for param_name, param_value in self._message.items()
+                            if param_name.startswith(dict_prefix) and len(param_name) > len(dict_prefix)
+                        }
+                        value = (
+                            await self._get_dict_value_from_message(arg, dict_prefix, dict_with_prefixed_names)
+                            if dict_with_prefixed_names
+                            else None
+                        )
 
+                        for key in dict_with_prefixed_names.keys():
+                            all_fields.remove(key)
+
+                    else:  # get default value
+                        value = self.get_default_value(arg, i, defaults_start)
                 else:  # get default value
                     value = self.get_default_value(arg, i, defaults_start)
 
@@ -217,6 +237,30 @@ class CallArguments(object):
             )
 
         self._processed = True
+
+    async def _get_dict_value_from_message(
+        self, arg: str, dict_prefix: str, dict_with_prefixed_names: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        value = {k[len(dict_prefix) :]: v for k, v in dict_with_prefixed_names.items()}
+        # Check if the values should be converted to lists
+        type_args = self._argspec.annotations.get(arg)
+        if typing_inspect.is_optional_type(type_args):
+            # If optional, get the type args from the not None type argument
+            dict_args = typing_inspect.get_args(typing_inspect.get_args(type_args, evaluate=True)[0], evaluate=True)
+        else:
+            dict_args = typing_inspect.get_args(self._argspec.annotations.get(arg), evaluate=True)
+        dict_value_arg_type = (
+            typing_inspect.get_origin(dict_args[1]) if typing_inspect.get_origin(dict_args[1]) else dict_args[1]
+        )
+        if issubclass(dict_value_arg_type, list):
+            value = {key: [val] if not isinstance(val, list) else val for key, val in value.items()}
+        return value
+
+    def _is_dict_or_optional_dict(self, arg_type: Type) -> bool:
+        if typing_inspect.is_optional_type(arg_type):
+            arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+        arg_type = typing_inspect.get_origin(arg_type) if typing_inspect.get_origin(arg_type) else arg_type
+        return issubclass(arg_type, dict)
 
     def _validate_union_return(self, arg_type: Type, value: Any) -> None:
         """Validate a return with a union type

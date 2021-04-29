@@ -18,6 +18,8 @@
 
 from enum import Enum
 
+from inmanta.stable_api import stable_api
+
 
 class ResourceState(str, Enum):
     unavailable = "unavailable"  # This state is set by the agent when no handler is available for the resource
@@ -127,7 +129,12 @@ class VersionState(str, Enum):
     pending = "pending"
 
 
+@stable_api
 class ResourceAction(str, Enum):
+    """
+    Enumeration of all resource actions.
+    """
+
     store = "store"
     push = "push"
     pull = "pull"
@@ -152,7 +159,12 @@ class AgentTriggerMethod(str, Enum):
             return cls.push_incremental_deploy
 
 
+@stable_api
 class LogLevel(Enum):
+    """
+    Log levels used for various parts of the inmanta orchestrator.
+    """
+
     CRITICAL = 50
     ERROR = 40
     WARNING = 30

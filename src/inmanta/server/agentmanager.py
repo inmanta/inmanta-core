@@ -964,6 +964,7 @@ class AutostartedAgentManager(ServerSlice):
 
         agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
 
+        proc: Optional[subprocess.Process] = None
         try:
             proc = await self._fork_inmanta(
                 ["-vvvv", "--timed-logs", "--config", config_path, "--log-file", agent_log, "agent"], out, err
@@ -978,7 +979,7 @@ class AutostartedAgentManager(ServerSlice):
             self._agent_procs[env.id] = proc
         except Exception as e:
             # Prevent dangling processes
-            if proc.returncode is None:
+            if proc is not None and proc.returncode is None:
                 proc.kill()
             raise e
 

@@ -22,6 +22,8 @@ import shutil
 import subprocess
 import sys
 
+from inmanta.stable_api import stable_api
+
 try:
     import grp  # @UnresolvedImport
     import pwd
@@ -366,6 +368,7 @@ class BashIO(IOBase):
         return repr(self)
 
 
+@stable_api
 class LocalIO(IOBase):
     """
     This class provides handler IO methods

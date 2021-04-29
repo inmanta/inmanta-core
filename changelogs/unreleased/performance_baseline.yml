@@ -1,0 +1,5 @@
+description: Added built-in performance micro-benchmark, to help diagnose performance issues
+change-type: minor
+destination-branches: [master, iso4]
+sections:
+    feature: "{{description}}"
