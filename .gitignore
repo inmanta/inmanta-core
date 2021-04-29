@@ -50,6 +50,9 @@ src/*/parser/parsetab.py
 # Inmanta Release Tool
 docs/reference/modules
 docs/moduleguides
+docs/inmanta.pdf
+docs/_static/*.pdf
+docs/_static/*.png
 
 # Mypy
 .mypy
