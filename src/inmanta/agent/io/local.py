@@ -29,6 +29,7 @@ except ImportError:
     def stable_api(cls):
         return cls
 
+
 try:
     import grp  # @UnresolvedImport
     import pwd
