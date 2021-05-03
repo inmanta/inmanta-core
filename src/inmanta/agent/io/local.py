@@ -23,14 +23,6 @@ import subprocess
 import sys
 
 try:
-    from inmanta.stable_api import stable_api
-except ImportError:
-    # Use dummy decorator
-    def stable_api(cls):
-        return cls
-
-
-try:
     import grp  # @UnresolvedImport
     import pwd
 except ImportError:
@@ -374,10 +366,11 @@ class BashIO(IOBase):
         return repr(self)
 
 
-@stable_api
 class LocalIO(IOBase):
     """
     This class provides handler IO methods
+
+    This class is part of the stable API.
     """
 
     def is_remote(self):
