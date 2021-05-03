@@ -22,7 +22,12 @@ import shutil
 import subprocess
 import sys
 
-from inmanta.stable_api import stable_api
+try:
+    from inmanta.stable_api import stable_api
+except ImportError:
+    # Use dummy decorator
+    def stable_api(cls):
+        return cls
 
 try:
     import grp  # @UnresolvedImport
