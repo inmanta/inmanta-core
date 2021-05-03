@@ -19,6 +19,7 @@ import asyncio
 import datetime
 import logging
 import typing
+from asyncio import subprocess
 from typing import Dict, List, Optional, Set, Tuple
 from unittest.mock import Mock
 from uuid import UUID, uuid4
@@ -31,7 +32,7 @@ from inmanta.agent import config as agent_config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
-from inmanta.server.agentmanager import AgentManager, SessionAction, SessionManager
+from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager, SessionAction, SessionManager
 from inmanta.server.protocol import Session
 from utils import UNKWN, assert_equal_ish, retry_limited
 
@@ -974,3 +975,26 @@ async def test_add_internal_agent_when_missing_in_agent_map(server, environment,
     env = await data.Environment.get_by_id(UUID(environment))
     autostart_agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
     assert "internal" in autostart_agent_map
+
+
+@pytest.mark.asyncio
+async def test_error_handling_agent_fork(server, environment, monkeypatch):
+    """
+    Verifies resolution of issue: inmanta/inmanta-core#2777
+    """
+    exception_message = "The start of the agent failed"
+
+    async def _dummy_fork_inmanta(
+        self, args: List[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
+    ) -> subprocess.Process:
+        raise Exception(exception_message)
+
+    # Make the _fork_inmanta method raise an Exception
+    monkeypatch.setattr(AutostartedAgentManager, "_fork_inmanta", _dummy_fork_inmanta)
+
+    env = await data.Environment.get_by_id(UUID(environment))
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+    with pytest.raises(Exception) as excinfo:
+        await autostarted_agent_manager._ensure_agents(env=env, agents=["internal"], restart=True)
+
+    assert exception_message in str(excinfo.value)

@@ -1,0 +1,6 @@
+description: "Correctly describe in the documentation how version constraints can be set on module dependencies in the module.yml file"
+issue-nr: 2723
+change-type: patch
+destination-branches: [iso3]
+sections:
+  bugfix: "{{description}}"
