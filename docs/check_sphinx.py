@@ -30,4 +30,6 @@ def test_linkcheck(build_docs):
     # This check verifies that the reference/openapi.html file is created.
     openapi_html_file = htmldir.join("reference/openapi.html")
     assert os.path.exists(openapi_html_file)
+    openapi_json_file = htmldir.join("_specs/openapi.json")
+    assert os.path.exists(openapi_json_file)
 

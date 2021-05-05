@@ -1,0 +1,6 @@
+---
+description: Changed python versions in install doc
+change-type: patch
+destination-branches: [master, iso4]
+sections:
+  bugfix: "{{description}}"

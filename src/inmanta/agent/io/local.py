@@ -369,6 +369,8 @@ class BashIO(IOBase):
 class LocalIO(IOBase):
     """
     This class provides handler IO methods
+
+    This class is part of the stable API.
     """
 
     def is_remote(self):

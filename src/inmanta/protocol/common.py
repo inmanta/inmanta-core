@@ -62,6 +62,7 @@ from inmanta import config as inmanta_config
 from inmanta import const, execute, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
+from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes, StrictNonIntBool
 
 from . import exceptions
@@ -348,7 +349,7 @@ class MethodProperties(object):
         if properties.api_version in current_list:
             raise Exception(
                 f"Method {properties.function.__name__} already has a "
-                "method definition for api version {properties.api_version}"
+                f"method definition for api version {properties.api_version}"
             )
 
         cls.methods[properties.function.__name__].append(properties)
@@ -549,11 +550,6 @@ class MethodProperties(object):
                     raise InvalidMethodDefinition(f"Union of argument {arg} can contain only one generic {name}")
 
         elif typing_inspect.is_generic_type(arg_type):
-            if in_url:
-                raise InvalidMethodDefinition(
-                    f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, as it can not be part of the URL"
-                )
-
             orig = typing_inspect.get_origin(arg_type)
             if not issubclass(orig, (list, dict)):
                 raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} can only be generic List or Dict")
@@ -565,12 +561,26 @@ class MethodProperties(object):
                 )
 
             elif len(args) == 1:  # A generic list
+                unsubscripted_arg = typing_inspect.get_origin(args[0]) if typing_inspect.get_origin(args[0]) else args[0]
+                if in_url and (issubclass(unsubscripted_arg, dict) or issubclass(unsubscripted_arg, list)):
+                    raise InvalidMethodDefinition(
+                        f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
+                        f"lists of dictionaries and lists of lists are not supported for GET requests"
+                    )
                 self._validate_type_arg(arg, args[0], strict=strict, allow_none_type=allow_none_type, in_url=in_url)
 
             elif len(args) == 2:  # Generic Dict
                 if not issubclass(args[0], str):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} must be a Dict with str keys and not {args[0].__name__}"
+                    )
+                unsubscripted_dict_value_arg = (
+                    typing_inspect.get_origin(args[1]) if typing_inspect.get_origin(args[1]) else args[1]
+                )
+                if in_url and (typing_inspect.is_union_type(args[1]) or issubclass(unsubscripted_dict_value_arg, dict)):
+                    raise InvalidMethodDefinition(
+                        f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
+                        f"nested dictionaries and union types for dictionary values are not supported for GET requests"
                     )
 
                 self._validate_type_arg(arg, args[1], strict=strict, allow_none_type=True, in_url=in_url)
@@ -765,16 +775,34 @@ class MethodProperties(object):
 
         if self.operation not in ("POST", "PUT", "PATCH"):
             qs_map = {k: v for k, v in msg.items() if v is not None and k not in path_params}
-
+            # Preprocess dict and list parameters for GET
+            params_to_add = {}
+            already_processed_params = []
+            for query_param_name, query_param_value in qs_map.items():
+                if isinstance(query_param_value, dict):
+                    # Add parameters from the dict as separate parameters for example
+                    # param = { "key1": "val1", "key2": "val2" } to param.key1=val1 and param.key2=val2
+                    params_to_add = {**params_to_add, **self._encode_dict_for_get(query_param_name, query_param_value)}
+                    already_processed_params.append(query_param_name)
+            for param in already_processed_params:
+                del qs_map[param]
+            qs_map.update(params_to_add)
             # encode arguments in url
             if len(qs_map) > 0:
-                url += "?" + parse.urlencode(qs_map)
+                url += "?" + parse.urlencode(qs_map, True)
 
             body = None
         else:
             body = msg
 
         return Request(url=url, method=self.operation, headers=headers, body=body)
+
+    def _encode_dict_for_get(
+        self, query_param_name: str, query_param_value: Dict[str, Union[Any, List[Any]]]
+    ) -> Dict[str, str]:
+        """ Dicts are encoded in the following manner: param = {'ab': 1, 'cd': 2} to param.abc=1&param.cd=2 """
+        sub_dict = {f"{query_param_name}.{key}": value for key, value in query_param_value.items()}
+        return sub_dict
 
 
 class UrlMethod(object):
@@ -938,6 +966,7 @@ def decode_token(token: str) -> Dict[str, str]:
     return payload
 
 
+@stable_api
 class Result(object):
     """
     A result of a method call
@@ -946,6 +975,9 @@ class Result(object):
     def __init__(self, code: int = 0, result: Optional[JsonType] = None) -> None:
         self._result = result
         self.code = code
+        """
+        The result code of the method call.
+        """
         self._callback: Optional[Callable[["Result"], None]] = None
 
     def get_result(self) -> Optional[JsonType]:
@@ -975,6 +1007,9 @@ class Result(object):
             count += 0.1
 
     result = property(get_result, set_result)
+    """
+    The result object dict.
+    """
 
     def callback(self, fnc: Callable[["Result"], None]) -> None:
         """

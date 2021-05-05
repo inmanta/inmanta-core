@@ -23,8 +23,15 @@ import time
 import uuid
 from typing import Any, Dict
 
+import pytest
+from pkg_resources import parse_version
+from pydantic.tools import lru_cache
+
+from _pytest.mark import MarkDecorator
 from inmanta import data
 from inmanta.protocol import Client
+from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version
 
 
@@ -297,3 +304,23 @@ def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: 
         "purged": False,
         "requires": [],
     }
+
+
+@lru_cache(1)
+def get_product_meta_data() -> ProductMetadata:
+    """Get the produce meta-data"""
+    bootloader = InmantaBootloader()
+    context = bootloader.load_slices()
+    return context.get_product_metadata()
+
+
+def product_version_lower_or_equal_than(version: str) -> bool:
+    return parse_version(get_product_meta_data().version) <= parse_version(version)
+
+
+def mark_only_for_version_higher_than(version: str) -> "MarkDecorator":
+    current = get_product_meta_data().version
+    return pytest.mark.skipif(
+        product_version_lower_or_equal_than(version),
+        reason=f"This test is only intended for version larger than {version} currently at {current}",
+    )

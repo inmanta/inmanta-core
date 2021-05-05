@@ -1,0 +1,7 @@
+---
+description: Fixed compiler issue on cycle breaking
+change-type: patch
+destination-branches: [master, iso3, iso4]
+issue-nr: 2811
+sections:
+  bugfix: "{{description}}"

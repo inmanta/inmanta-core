@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, Tupl
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
-from inmanta import const
+from inmanta import const, module
 from inmanta.ast import (
     AttributeException,
     CompilerException,
@@ -42,7 +42,6 @@ from inmanta.execute.dataflow.datatrace import DataTraceRenderer
 from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ResultVariable
-from inmanta.module import Project
 from inmanta.parser import ParserException
 from inmanta.plugins import Plugin, PluginMeta
 
@@ -183,7 +182,7 @@ class Compiler(object):
         - add all plugins
         - create std::Entity
         """
-        project = Project.get()
+        project = module.Project.get()
         self.__root_ns = project.get_root_namespace()
 
         project.load()

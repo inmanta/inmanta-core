@@ -29,9 +29,13 @@ import sys, os, pkg_resources, datetime
 extensions = [
     'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.ifconfig', 'sphinx.ext.viewcode',
     'sphinxarg.ext', 'sphinxcontrib.inmanta.config', 'sphinxcontrib.inmanta.dsl', 'sphinx_tabs.tabs',
-    'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext'
+    'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext', 'recommonmark'
 ]
 
+def setup(app):
+    # cut off license headers
+    from sphinx.ext.autodoc import cut_lines
+    app.connect('autodoc-process-docstring', cut_lines(15, what=['module']))
 
 try:
     # noinspection PyUnresolvedReferences
@@ -59,7 +63,10 @@ redoc = [
 templates_path = ['_templates']
 
 # The suffix of source filenames.
-source_suffix = '.rst'
+source_suffix = {
+    '.rst': 'restructuredtext',
+    '.md': 'markdown',
+}
 
 # The encoding of source files.
 # source_encoding = 'utf-8-sig'
@@ -280,7 +287,7 @@ texinfo_documents = [
 
 # Ingnore link check of openapi.html because it's used in a toctree.
 # A trick was required to include a non-sphinx document in a toctee.
-linkcheck_ignore = [r'http(s)?://localhost:\d+/', r'http://127.0.0.1:\d+', r'openapi.html', r'https://twitter.com/inmanta_com']
+linkcheck_ignore = [r'http(s)?://localhost:\d+/', r'http://127.0.0.1:\d+', r'openapi.html', r'https://twitter.com/inmanta_com', '../_specs/openapi.json']
 
 # Do not print the warning that tabs only work in html
 # https://github.com/djungelorm/sphinx-tabs/issues/39
