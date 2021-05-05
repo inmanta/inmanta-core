@@ -1,0 +1,5 @@
+description: Fix dollar sign escaping issue in installation documentation
+change-type: patch
+destination-branches: [master]
+sections:
+  bugfix: "{{description}}"
