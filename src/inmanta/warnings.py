@@ -27,8 +27,8 @@ class InmantaWarning(Warning):
     Base class for Inmanta Warnings.
     """
 
-    def __init__(self):
-        Warning.__init__(self)
+    def __init__(self, *args):
+        Warning.__init__(self, *args)
 
 
 class WarningBehaviour(Enum):

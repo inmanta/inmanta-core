@@ -254,6 +254,9 @@ class Scheduler(object):
         for waiter in allwaiters:
             for rv in waiter.requires.values():
                 if isinstance(rv, DelayedResultVariable):
+                    if rv.hasValue:
+                        # get_progress_potential fails when there is a value already
+                        continue
                     if rv.get_waiting_providers() > 0 and rv.get_progress_potential() > 0:
                         LOGGER.debug("Waiting blocked on %s", rv)
                         rv.freeze()
@@ -331,7 +334,7 @@ class Scheduler(object):
                     count = count + 1
                 except UnsetException as e:
                     # some statements don't know all their dependencies up front,...
-                    next.waitfor(e.get_result_variable())
+                    next.requeue_with_additional_requires(object(), e.get_result_variable())
 
             # all safe stmts are done
             progress = False

@@ -1,0 +1,6 @@
+description: Make sure that the server_config and the server_pre_start fixture execute in the right order.
+change-type: patch
+destination-branches:
+  - master
+  - iso4
+  - iso3

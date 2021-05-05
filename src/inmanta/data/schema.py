@@ -19,25 +19,26 @@
 import logging
 import pkgutil
 import re
+from itertools import takewhile
 from types import ModuleType
-from typing import Any, Callable, Coroutine, List, Optional, Tuple
+from typing import Any, Callable, Coroutine, List, Optional, Set, Tuple
 
-from asyncpg import Connection, UndefinedTableError
-from asyncpg.transaction import Transaction
+from asyncpg import Connection, UndefinedColumnError, UndefinedTableError
+from asyncpg.protocol import Record
 
 # Name of core schema in the DB schema verions
 CORE_SCHEMA_NAME = "core"
 
 LOGGER = logging.getLogger(__name__)
 
-LEGACY_SCHEMA_VERSION_TABLE = "schemaversion"
 SCHEMA_VERSION_TABLE = "schemamanager"
 
 create_schemamanager = """
 -- Table: public.schemamanager
 CREATE TABLE IF NOT EXISTS public.schemamanager (
     name varchar PRIMARY KEY,
-    current_version integer NOT NULL
+    legacy_version integer,
+    installed_versions integer[]
 );
 """
 
@@ -48,8 +49,8 @@ class TableNotFound(Exception):
     pass
 
 
-class InvalidSchemaVersion(Exception):
-    """ Raised when an invalid database version is found """
+class ColumnNotFound(Exception):
+    """ Raised when a column is not found in the database """
 
     pass
 
@@ -88,159 +89,182 @@ class DBSchema(object):
         self.logger = LOGGER.getChild(f"schema:{self.name}")
 
     async def ensure_db_schema(self) -> None:
-        current_version_db_schema = await self.ensure_self_update()
-        update_functions = await self._get_update_functions()
-        desired_version = update_functions[-1].version
-        if desired_version > current_version_db_schema:
-            await self._update_db_schema(update_functions)
-        elif desired_version < current_version_db_schema:
-            raise InvalidSchemaVersion(
-                f"Desired database version {desired_version} is lower "
-                f"than the current version {current_version_db_schema}, downgrading is not supported"
-            )
+        await self.ensure_self_update()
+        await self._update_db_schema()
 
-    async def ensure_self_update(self) -> int:
+    async def ensure_self_update(self) -> None:
+        """
+        Ensures the table exists and is up to date with respect to the current schema.
+        """
         try:
             await self.get_legacy_version()
-            await self._legacy_migration()
-        except TableNotFound:
-            # No legacy table, proceed
-            pass
-
-        try:
-            return await self.get_current_version()
+        except ColumnNotFound:
+            # Legacy column still has legacy name => migrate
+            await self._legacy_migration_table()
         except TableNotFound:
             self.logger.info("Creating schema version table")
-            # create table
             await self.connection.execute(create_schemamanager)
-            return 0
 
-    async def _legacy_migration(self) -> None:
+        if len(await self.get_installed_versions()) == 0 and await self.get_legacy_version() > 0:
+            await self._legacy_migration_row()
+
+    async def _legacy_migration_table(self) -> None:
         """
-        Migration to new schema management:
-        1- as long as the legacy schemaversion table exists, no other operation is allowed by DBSchema
-        2- takes a lock on the legacy schemaversion table to ensure exclusivity
-        3- migrates the existing version to the new table, for the core slice
-        4- drops legacy table
+        Migration to new (2021) schema management:
+        1- as long as the legacy current_version column exists, no other operation is allowed by DBSchema
+        2- takes a lock on the table to ensure exclusivity
+        3- renames the current_version column to legacy_version
+        4- adds the new installed_versions column
         """
         self.logger.info("Migrating from old schema management to new schema management")
-        # tx begin
         async with self.connection.transaction():
-            # lock legacy table => if gone -> continue
-            try:
-                await self.connection.execute(f"LOCK TABLE {LEGACY_SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
-            except UndefinedTableError:
-                self.logger.info("Second process is preforming a database update as well.")
-                return
-            # get_legacy_version, under lock
-            legacy_version_db_schema = await self.get_legacy_version()
-
-            if legacy_version_db_schema > 0:
-                self.logger.info("Creating schema version table and setting core version to %d", legacy_version_db_schema)
-                # create table
-                await self.connection.execute(create_schemamanager)
+            # lock table
+            await self.connection.execute(f"LOCK TABLE {SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
+            # get legacy column, under lock => if column no longer exists -> other process has already performed migration
+            legacy_column: Optional[Record] = await self.connection.fetchrow(
+                """
+                SELECT EXISTS(
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name=$1 AND column_name=$2
+                )
+                """,
+                SCHEMA_VERSION_TABLE,
+                "current_version",
+            )
+            if legacy_column is None:
+                raise Exception("Failed to query existence of legacy column, this should not happen.")
+            if legacy_column["exists"]:
+                self.logger.info("Migrating legacy schema version table")
                 await self.connection.execute(
-                    f"INSERT INTO {SCHEMA_VERSION_TABLE}(name, current_version) VALUES ($1, $2)",
-                    CORE_SCHEMA_NAME,
-                    legacy_version_db_schema,
+                    f"""
+                    ALTER TABLE {SCHEMA_VERSION_TABLE}
+                    RENAME COLUMN current_version TO legacy_version
+                    ;
+                    ALTER TABLE {SCHEMA_VERSION_TABLE}
+                    ALTER COLUMN legacy_version DROP NOT NULL
+                    ;
+                    ALTER TABLE {SCHEMA_VERSION_TABLE}
+                    ADD COLUMN installed_versions integer[]
+                    ;
+                    """
                 )
             else:
-                self.logger.info("Creating schema version table")
-                # create table
-                await self.connection.execute(create_schemamanager)
+                self.logger.info("Other process has already performed a database upgrade.")
 
-            await self.connection.execute(f"DROP TABLE {LEGACY_SCHEMA_VERSION_TABLE}")
+    async def _legacy_migration_row(self, all_versions: Optional[List[int]] = None) -> None:
+        """
+        Migration for this instance's row to new (2021) schema management. Backfills the installed_versions column for this
+        instance based on the legacy_version column and the currently available versions. Assumes all versions lower than the
+        current version have been applied at the time of migration.
 
-    async def _update_db_schema(self, update_functions: List[Version]) -> None:
+        :param all_versions: allows overriding the available versions, for example for testing purposes.
+            If not specified, available update functions' versions are used.
+        """
+        self.logger.info("Migrating legacy data for %s", self.name)
+        all_versions = (
+            sorted(all_versions) if all_versions is not None else [version.version for version in self._get_update_functions()]
+        )
+        async with self.connection.transaction():
+            self.logger.debug("Migrating legacy data for %s", self.name)
+            legacy_version: int = await self.get_legacy_version()
+            await self.connection.execute(
+                f"""
+                UPDATE {SCHEMA_VERSION_TABLE}
+                SET installed_versions=$1
+                WHERE name=$2
+                """,
+                list(takewhile(lambda x: x <= legacy_version, all_versions)),
+                self.name,
+            )
+
+    async def _update_db_schema(self, update_functions: Optional[List[Version]] = None) -> None:
         """
         Main update function
 
-        Wrapped in outer transaction, that holds a lock on the schemamanager table.
-        Each version update is wrapped in a subtransaction.
+        Wrapped in transaction, that holds a lock on the schemamanager table.
+        When a version update fails, the whole transaction is rolled back.
 
-        When a subtransaction fails, it is rolled back.
-        The outer transaction is committed at that point.
-
-        This logic requires manual transaction management,
-        as the exception is propagated over the transaction boundary without causing rollback.
+        :param update_functions: allows overriding the available update functions, for example for testing purposes.
         """
-        # outer transaction
-        outer: Optional[Transaction]
-        outer = self.connection.transaction()
-        try:
-            # enter transaction
-            await outer.start()
+        update_functions = (
+            sorted(update_functions, key=lambda x: x.version) if update_functions is not None else self._get_update_functions()
+        )
+        async with self.connection.transaction():
             # get lock
             await self.connection.execute(f"LOCK TABLE {SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
             # get current version again, in transaction this time
             try:
-                sure_db_schema = await self.get_current_version()
+                installed_versions: Set[int] = await self.get_installed_versions()
             except TableNotFound:
                 self.logger.exception("Schemamanager table disappeared, should not occur.")
                 raise
             # get relevant updates
-            updates = [v for v in update_functions if v.version > sure_db_schema]
+            updates = [v for v in update_functions if v.version not in installed_versions]
             for version in updates:
                 try:
-                    # wrap in subtransaction
-                    async with self.connection.transaction():
-                        # actual update sequence
-                        self.logger.info("Updating database schema to version %d", version.version)
-                        update_function = version.function
-                        await update_function(self.connection)
-                        # also set version, outer tx will always contain consistent version
-                        await self.set_current_version(version.version)
-                    # commit subtx
+                    # actual update sequence
+                    self.logger.info("Updating database schema to version %d", version.version)
+                    update_function = version.function
+                    await update_function(self.connection)
+                    await self.set_installed_version(version.version)
                 except Exception:
-                    # update failed, subtransaction already rolled back
-                    self.logger.exception("Database schema update to version %d failed", version.version)
-                    # commit outer
-                    await outer.commit()
-                    # unset it, to prevent double commit
-                    outer = None
-                    # propagate excn
+                    self.logger.exception(
+                        "Database schema update for version %d failed. Rolling back all updates.",
+                        version.version,
+                    )
+                    # propagate exception => roll back transaction
                     raise
-        except Exception:
-            # an exception, from either outer transaction (before subtransaction) or subtransaction
-            if outer is not None:
-                # subtransaction did not set None, so abort
-                await outer.rollback()
-                outer = None
-            raise
-        finally:
-            # if the tx is still there, all is good
-            if outer is not None:
-                await outer.commit()
 
     async def get_legacy_version(self) -> int:
-        try:
-            version = await self.connection.fetchrow(f"select current_version from {LEGACY_SCHEMA_VERSION_TABLE}")
-        except UndefinedTableError as e:
-            raise TableNotFound() from e
-        if version is None:
-            return 0
-        return version["current_version"]
+        """
+        Returns the legacy (pre 2021) version from the renamed legacy column.
 
-    async def get_current_version(self) -> int:
+        :raises ColumnNotFound:
+        :raises TableNotFound:
+        """
         try:
             version = await self.connection.fetchrow(
-                f"select current_version from {SCHEMA_VERSION_TABLE} where name=$1", self.name
+                f"select legacy_version from {SCHEMA_VERSION_TABLE} where name=$1", self.name
+            )
+        except UndefinedColumnError as e:
+            raise ColumnNotFound() from e
+        except UndefinedTableError as e:
+            raise TableNotFound() from e
+        return version["legacy_version"] if version is not None else 0
+
+    async def get_installed_versions(self) -> Set[int]:
+        """
+        Returns the set of all versions that have been installed.
+
+        :raises TableNotFound:
+        """
+        versions: Optional[Record] = None
+        try:
+            versions = await self.connection.fetchrow(
+                f"select installed_versions from {SCHEMA_VERSION_TABLE} where name=$1", self.name
             )
         except UndefinedTableError as e:
             raise TableNotFound() from e
-        if version is None:
-            return 0
-        return version["current_version"]
+        if versions is None or versions["installed_versions"] is None:
+            return set()
+        return set(versions["installed_versions"])
 
-    async def set_current_version(self, version: int) -> None:
+    async def set_installed_version(self, version: int) -> None:
+        """
+        Adds a version to the installed versions column.
+        """
         await self.connection.execute(
-            f"INSERT INTO {SCHEMA_VERSION_TABLE}(name, current_version) "
-            "VALUES ($1, $2) ON CONFLICT(name) DO UPDATE SET current_version=$2",
+            f"""
+            INSERT INTO {SCHEMA_VERSION_TABLE} (name, installed_versions)
+            VALUES ($1, $2) ON CONFLICT (name) DO UPDATE
+            SET installed_versions = {SCHEMA_VERSION_TABLE}.installed_versions || excluded.installed_versions
+            """,
             self.name,
-            version,
+            {version},
         )
 
-    async def _get_update_functions(self) -> List[Version]:
+    def _get_update_functions(self) -> List[Version]:
         module_names = [modname for _, modname, ispkg in pkgutil.iter_modules(self.package.__path__) if not ispkg]
 
         def get_modules(mod_name: str) -> Tuple[str, ModuleType]:
@@ -250,6 +274,12 @@ class DBSchema(object):
         def make_version(mod_name: str, module: ModuleType) -> Version:
             update_function = module.update
             return Version(mod_name, update_function)
+
+        def disabled(module: ModuleType) -> bool:
+            try:
+                return module.DISABLED
+            except AttributeError:
+                return False
 
         pattern = re.compile("^v[0-9]+$")
 
@@ -264,7 +294,7 @@ class DBSchema(object):
                 filtered_module_names.append(module_name)
 
         modules_with_names = [get_modules(mod_name) for mod_name in filtered_module_names]
-        filtered_modules = [(module_name, module) for module_name, module in modules_with_names if not module.DISABLED]
+        filtered_modules = [(module_name, module) for module_name, module in modules_with_names if not disabled(module)]
 
         version = [make_version(name, mod) for name, mod in filtered_modules]
 

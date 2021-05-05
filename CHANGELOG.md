@@ -1,18 +1,22 @@
-# Release 5.0.0 (2021-02-25)
+# Release 2021.1 (2021-02-25)
 
-## Bug fixes
+## inmanta-core: 5.0.0 (2021-02-25)
+
+### Bug fixes
 - Fix broken order by (#2638)
 - Report the Inmanta OSS product version correctly (#2622)
 - Set PYTHONPATH so that all subprocesses also see packages in parent venv (#2650, #2747)
 - Create virtual environments without pip and use the pip of the parent venv
 - Correctly set `[:n]` as syntactic sugar for `[0:n]` instead of leaving lower unbound (#2689)
 
-## New features
+### New features
 - Add installation procedure for el8 to installation documentation
 
-# Release 4.0.0 (2020-12-23)
+# Release 2020.6 (2020-12-23)
 
-## New features
+## inmanta-core: 4.0.0 (2020-12-23)
+
+### New features
 - Add support to use a custom venv path in the Project class (#2466)
 - Added more specific location information for attributes (#2481)
 - Added plugin call anchors to support ctrl-clicking a plugin call (#1954)
@@ -24,7 +28,7 @@
 - Decouple the compiler version from the OSS product version (#2573)
 - Show versions of all installed components when running `inmanta --version` (#2574)
 
-## Bug fixes
+### Bug fixes
 - Fix broken links in the documentation (#2495)
 - Fixed bug in serialization of Resource with Unknowns in collections (#2603)
 - Fixed documentation of `install_mode`
@@ -38,10 +42,10 @@
 - Fixed too restrictive typing (and coercing) of AttributeStateChange (#2540)
 - Export command should raise exception on failure (#2487)
 
-## Upgrade notes
+### Upgrade notes
 - Ensure the database is backed up before executing an upgrade.
 
-## Other notes
+### Other notes
 - The inmanta core package is renamed from `inmanta` to `inmanta-core` to allow for true semantic versioning
     starting at `4.0.0`. A new `inmanta` package is provided that includes `inmanta-core` and continues the
     `<year>.<minor>[.<patch>]` version schema.

@@ -61,11 +61,22 @@ Reported Metrics
 
 This section assumes familiarity with influxdb. See `here <https://docs.influxdata.com/influxdb/v1.7/concepts/key_concepts/#field-key>`_.
 
-All API metrics are reported under the measurement `metrics`.
+All metrics are reported under the measurement `metrics`.
+Different measurements are distinguished by a tag called `key`.
 
-The API endpoint is attached as a tag called `key`.
-The API endpoint is reported as the server method, to know which url corresponds to which method, please consult
-`methods.py <https://github.com/inmanta/inmanta-core/blob/master/src/inmanta/protocol/methods.py>`_.
+Two main types of metrics are reported:
+1. Metrics related to API performance
+2. Others
+
+API performance metrics
++++++++++++++++++++++++
+Each API method is reported with a `key=rpc.{endpoint_name}`.
+The `endpoint_name` is the server's internal name for the endpoint.
+
+To know which url corresponds to which method, please consult either
+ * the `operationId` field of the `OpenAPI spec <../_specs/openapi.json>`_ or
+ * the method names in :mod:`inmanta.protocol.methods` and :mod:`inmanta.protocol.methods_v2`
+
 
 The fields available for each API endpoint are (cfr `metrics timer <https://metrics.dropwizard.io>`_):
 
@@ -104,3 +115,12 @@ The fields available for each API endpoint are (cfr `metrics timer <https://metr
 +-----------------+-------+--------------------------------------------------------------------------+
 | sum             | float | total wall-time spent executing this call since server start             |
 +-----------------+-------+--------------------------------------------------------------------------+
+
+Other Metrics
++++++++++++++++++++++++
+
++---------------+------+------+----------------------------------------------------------------------------------------------------------+
+|      Key      | Type | Unit |                                                Description                                               |
++---------------+------+------+----------------------------------------------------------------------------------------------------------+
+| self.spec.cpu | int  | ns   | The result of a small CPU benchmark, executed every second. Provides a baseline for machine performance. |
++---------------+------+------+----------------------------------------------------------------------------------------------------------+

@@ -22,7 +22,7 @@ import tempfile
 
 import pytest
 
-from inmanta.module import INSTALL_MASTER, INSTALL_PRERELEASES
+from inmanta.module import InstallMode
 from moduletool.common import (
     add_file,
     add_file_and_compiler_constraint,
@@ -142,14 +142,14 @@ def modules_repo(modules_dir):
     baddep = makemodule(reporoot, "baddep", [("badmod", None), ("mod2", ">2016")], True)
     commitmodule(baddep, "first commit")
 
-    devproject = makeproject(reporoot, "devproject", imports=["mod8"], install_mode=INSTALL_PRERELEASES)
+    devproject = makeproject(reporoot, "devproject", imports=["mod8"], install_mode=InstallMode.prerelease)
     commitmodule(devproject, "first commit")
 
-    masterproject = makeproject(reporoot, "masterproject", imports=["mod8"], install_mode=INSTALL_MASTER)
+    masterproject = makeproject(reporoot, "masterproject", imports=["mod8"], install_mode=InstallMode.master)
     commitmodule(masterproject, "first commit")
 
     masterproject_multi_mod = makeproject(
-        reporoot, "masterproject_multi_mod", imports=["mod2", "mod8"], install_mode=INSTALL_MASTER
+        reporoot, "masterproject_multi_mod", imports=["mod2", "mod8"], install_mode=InstallMode.master
     )
     commitmodule(masterproject_multi_mod, "first commit")
 

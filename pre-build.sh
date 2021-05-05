@@ -7,3 +7,6 @@ ${env}/bin/python3 -m pip install -U pip
 ${env}/bin/python3 -m pip install -e .
 ${env}/bin/python3 -m inmanta.app -h
 rm -r ${env}
+
+# prepare pytest-inmanta-extensions build
+python3 tests_common/copy_files_from_core.py

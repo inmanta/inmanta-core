@@ -24,7 +24,7 @@ import pytest
 
 from inmanta import util
 from inmanta.util import CycleException, ensure_future_and_handle_exception, stable_depth_first
-from utils import LogSequence, log_contains, no_error_in_logs
+from utils import LogSequence, get_product_meta_data, log_contains, no_error_in_logs
 
 LOGGER = logging.getLogger(__name__)
 
@@ -238,3 +238,8 @@ def test_is_sub_dict():
     assert not util.is_sub_dict({"test": True, "date": now}, dct)
     assert not util.is_sub_dict({"test": False, "date": datetime.datetime.now()}, dct)
     assert not util.is_sub_dict({1: 2, "test": False, "date": now, "id": identifier, "val": "val"}, dct)
+
+
+def test_get_product_meta_data():
+    """ Basic smoke test for testing utils"""
+    assert get_product_meta_data() is not None
