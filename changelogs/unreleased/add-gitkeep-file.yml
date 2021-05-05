@@ -1,0 +1,3 @@
+description: Add .gitkeep file to changelogs/unreleased directory
+change-type: patch
+destination-branches: [master, iso3, iso4]
