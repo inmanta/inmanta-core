@@ -12,7 +12,7 @@ Install the software
           sudo tee /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
           [inmanta-oss-stable]
           name=inmanta-oss-stable
-          baseurl=https://packages.inmanta.com/public/oss-stable/rpm/el/$releasever/$basearch
+          baseurl=https://packages.inmanta.com/public/oss-stable/rpm/el/\$releasever/\$basearch
           repo_gpgcheck=1
           enabled=1
           gpgkey=https://packages.inmanta.com/public/oss-stable/gpg.A34DD0A274F07713.key
@@ -40,7 +40,7 @@ Install the software
           sudo tee /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
           [inmanta-oss-stable]
           name=inmanta-oss-stable
-          baseurl=https://packages.inmanta.com/public/oss-stable/rpm/el/$releasever/$basearch
+          baseurl=https://packages.inmanta.com/public/oss-stable/rpm/el/\$releasever/\$basearch
           repo_gpgcheck=1
           enabled=1
           gpgkey=https://packages.inmanta.com/public/oss-stable/gpg.A34DD0A274F07713.key
