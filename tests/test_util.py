@@ -17,13 +17,14 @@
 """
 import asyncio
 import datetime
+import json
 import logging
 import uuid
 
 import pytest
 
 from inmanta import util
-from inmanta.util import CycleException, ensure_future_and_handle_exception, stable_depth_first
+from inmanta.util import CycleException, custom_json_encoder, ensure_future_and_handle_exception, stable_depth_first
 from utils import LogSequence, get_product_meta_data, log_contains, no_error_in_logs
 
 LOGGER = logging.getLogger(__name__)
@@ -243,3 +244,10 @@ def test_is_sub_dict():
 def test_get_product_meta_data():
     """ Basic smoke test for testing utils"""
     assert get_product_meta_data() is not None
+
+
+def test_custom_json_encoder_datetime():
+    timezone: datetime.timezone = datetime.timezone(datetime.timedelta(hours=2))
+    timestamp: datetime.datetime = datetime.datetime(2021, 5, 7, 16, 20, 20, 232612, tzinfo=timezone)
+    serialized: str = json.dumps(timestamp, default=custom_json_encoder)
+    assert serialized == '"2021-05-07T14:20:20.232612"'

@@ -1,0 +1,7 @@
+description: Convert datetime objects to UTC prior to serialization
+change-type: patch
+sections:
+  feature: "{{description}}"
+destination-branches:
+  - iso4
+  - master
