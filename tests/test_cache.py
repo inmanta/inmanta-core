@@ -346,6 +346,7 @@ def test_decorator():
             self.cache = cache
             self.count = 0
             self.c2 = 0
+            self.c3 = 0
 
         @cache()
         def test_method(self):
@@ -361,6 +362,14 @@ def test_decorator():
         def test_method_3(self):
             self.c2 += 1
             if self.c2 < 2:
+                return None
+            else:
+                return "X"
+
+        @cache(cache_none=False)
+        def test_method_4(self):
+            self.c3 += 1
+            if self.c3 < 2:
                 return None
             else:
                 return "X"
@@ -411,6 +420,13 @@ def test_decorator():
     assert 2 == test.c2
     assert "X" == test.test_method_3()
     assert 2 == test.c2
+
+    assert None is test.test_method_4()
+    assert 1 == test.c3
+    assert "X" == test.test_method_4()
+    assert 2 == test.c3
+    assert "X" == test.test_method_4()
+    assert 2 == test.c3
 
     test.count = 0
     xcache.open_version(3)

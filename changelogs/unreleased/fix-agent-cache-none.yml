@@ -1,0 +1,7 @@
+description: Fixed agent cache behavior when `cache_none` is provided
+change-type: patch
+sections:
+  bugfix: "{{description}}"
+destination-branches:
+  - iso4
+  - master
