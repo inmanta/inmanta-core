@@ -921,14 +921,14 @@ def encode_token(client_types: List[str], environment: str = None, idempotent: b
     if environment is not None:
         payload[const.INMANTA_URN + "env"] = environment
 
-    return jwt.encode(payload, cfg.key, cfg.algo).decode()
+    return jwt.encode(payload, cfg.key, cfg.algo)
 
 
 def decode_token(token: str) -> Dict[str, str]:
     try:
         # First decode the token without verification
         header = jwt.get_unverified_header(token)
-        payload = jwt.decode(token, verify=False)
+        payload = jwt.decode(token, options={"verify_signature": False})
     except Exception:
         raise exceptions.Forbidden("Unable to decode provided JWT bearer token.")
 
