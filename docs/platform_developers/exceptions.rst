@@ -42,5 +42,5 @@ For more details, see :doc:`database`
 .. autoclass:: inmanta.data.schema.TableNotFound
     :show-inheritance:
 
-.. autoclass:: inmanta.data.schema.InvalidSchemaVersion
+.. autoclass:: inmanta.data.schema.ColumnNotFound
     :show-inheritance:
