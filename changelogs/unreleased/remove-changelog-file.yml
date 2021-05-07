@@ -1,4 +1,4 @@
 ---
-description: Fix link to keycloak documentation
+description: Move the CHANGELOG.md file to the product repository
 change-type: patch
-destination-branches: [master, iso4]
+destination-branches: [master]
