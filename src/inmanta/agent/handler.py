@@ -100,7 +100,8 @@ def cache(
     timeout: int = 5000,
     for_version: bool = True,
     cache_none: bool = True,
-    cacheNone: bool = True,  # noqa: N803
+    # deprecated parameter kept for backwards compatibility: if set, overrides cache_none
+    cacheNone: Optional[bool] = None,  # noqa: N803
     call_on_delete: Optional[Callable[[Any], None]] = None,
 ) -> Union[T_FUNC, Callable[[T_FUNC], T_FUNC]]:
     """
@@ -137,9 +138,15 @@ def cache(
             def bound(**kwds):
                 return f(self, **kwds)
 
-            cache_none = cacheNone
             return self.cache.get_or_else(
-                f.__name__, bound, for_version, timeout, myignore, cache_none, **kwds, call_on_delete=call_on_delete
+                f.__name__,
+                bound,
+                for_version,
+                timeout,
+                myignore,
+                cacheNone if cacheNone is not None else cache_none,
+                **kwds,
+                call_on_delete=call_on_delete,
             )
 
         # Too much magic to type statically
