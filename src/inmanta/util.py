@@ -227,8 +227,8 @@ def custom_json_encoder(o: object, datetime_utc: bool = False) -> Union[ReturnTy
 
     if isinstance(o, datetime.datetime):
         # convert to UTC but leave off timezone part from ISO timestamp
-        time: datetime.datetime = o.astimezone(datetime.timezone.utc).replace(tzinfo=None) if datetime_utc else o
-        return time.isoformat(timespec="microseconds")
+        time: datetime.datetime = o.astimezone(datetime.timezone.utc) if datetime_utc else o
+        return time.replace(tzinfo=None).isoformat(timespec="microseconds")
 
     if hasattr(o, "to_dict"):
         return o.to_dict()

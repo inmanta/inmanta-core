@@ -20,6 +20,7 @@ import datetime
 import json
 import logging
 import uuid
+from functools import partial
 
 import pytest
 
@@ -249,5 +250,5 @@ def test_get_product_meta_data():
 def test_custom_json_encoder_datetime():
     timezone: datetime.timezone = datetime.timezone(datetime.timedelta(hours=2))
     timestamp: datetime.datetime = datetime.datetime(2021, 5, 7, 16, 20, 20, 232612, tzinfo=timezone)
-    serialized: str = json.dumps(timestamp, default=custom_json_encoder)
-    assert serialized == '"2021-05-07T14:20:20.232612"'
+    assert json.dumps(timestamp, default=custom_json_encoder) == '"2021-05-07T16:20:20.232612"'
+    assert json.dumps(timestamp, default=partial(custom_json_encoder, datetime_utc=True)) == '"2021-05-07T14:20:20.232612"'
