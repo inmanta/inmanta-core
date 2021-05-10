@@ -213,9 +213,11 @@ class JSONSerializable(ABC):
         raise NotImplementedError()
 
 
-def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
+def custom_json_encoder(o: object, datetime_utc: bool = False) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries
+
+    :param datetime_utc: Assume datetime instances are given in local time and convert to UTC before serializing.
     """
     if isinstance(o, JSONSerializable):
         return o.json_serialization_step()
@@ -225,7 +227,8 @@ def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
 
     if isinstance(o, datetime.datetime):
         # convert to UTC but leave off timezone part from ISO timestamp
-        return o.astimezone(datetime.timezone.utc).replace(tzinfo=None).isoformat(timespec="microseconds")
+        time: datetime.datetime = o.astimezone(datetime.timezone.utc).replace(tzinfo=None) if datetime_utc else o
+        return time.isoformat(timespec="microseconds")
 
     if hasattr(o, "to_dict"):
         return o.to_dict()
