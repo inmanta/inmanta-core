@@ -21,7 +21,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from dateutil import parser
@@ -762,7 +762,8 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
 
     # Start the deploy
     action_id = uuid.uuid4()
-    now = datetime.now()
+    # Server API expects and returns times in UTC
+    now = datetime.now().astimezone(timezone.utc).replace(tzinfo=None)
     result = await aclient.resource_action_update(
         environment, resource_ids, action_id, "deploy", now, status=const.ResourceState.deploying
     )
@@ -875,7 +876,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
         resource_type="std::File",
         attribute="path",
         attribute_value="/etc/motd",
-        last_timestamp=motd_first_start_time + timedelta(minutes=7),
+        last_timestamp=motd_first_start_time.astimezone(timezone.utc).replace(tzinfo=None) + timedelta(minutes=7),
         limit=2,
     )
     assert result.code == 200
