@@ -626,11 +626,11 @@ class ResourceService(protocol.ServerSlice):
             common_query_params = _get_query_params(resource_type, agent, attribute, attribute_value, log_severity, limit)
             # Next is always earlier with regards to 'started' time
             next_params = common_query_params.copy()
-            next_params["last_timestamp"] = resource_action_dtos[-1].started
+            next_params["last_timestamp"] = resource_action_dtos[-1].started.astimezone(datetime.timezone.utc).replace(tzinfo=None)
             next_params["action_id"] = resource_action_dtos[-1].action_id
             links["next"] = url_concat(base_url, next_params)
             previous_params = common_query_params.copy()
-            previous_params["first_timestamp"] = resource_action_dtos[0].started
+            previous_params["first_timestamp"] = resource_action_dtos[0].started.astimezone(datetime.timezone.utc).replace(tzinfo=None)
             previous_params["action_id"] = resource_action_dtos[0].action_id
             links["prev"] = url_concat(base_url, previous_params)
         return_value = ReturnValue(response=resource_action_dtos, links=links if links else None)
