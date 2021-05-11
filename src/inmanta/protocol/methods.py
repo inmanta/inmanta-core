@@ -20,7 +20,7 @@
 
 import datetime
 import uuid
-from typing import Any, List, Union
+from typing import Any, List, Optional, Union
 
 from inmanta import const, data
 from inmanta.data import model
@@ -50,6 +50,10 @@ async def ignore_env(obj: Any, metadata: dict) -> Any:
     """
     metadata[const.INMANTA_URN + "env"] = "all"
     return obj
+
+
+async def datetime_utc_to_local(value: Optional[datetime.datetime], metadata: dict) -> Optional[datetime.datetime]:
+    return None if value is None else value.replace(tzinfo=datetime.timezone.utc).astimezone().replace(tzinfo=None)
 
 
 ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=convert_environment)}
@@ -433,7 +437,17 @@ def get_resources_for_agent(
     """
 
 
-@method(path="/resource", operation="POST", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
+@method(
+    path="/resource",
+    operation="POST",
+    agent_server=True,
+    arg_options={
+        "started": ArgOption(getter=datetime_utc_to_local),
+        "finished": ArgOption(getter=datetime_utc_to_local),
+        **ENV_OPTS,
+    },
+    client_types=[const.ClientType.agent],
+)
 def resource_action_update(
     tid: uuid.UUID,
     resource_ids: list,

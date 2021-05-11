@@ -23,7 +23,7 @@ from typing import Dict, List, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, ClientType
 from inmanta.data import model
-from inmanta.protocol.common import ReturnValue
+from inmanta.protocol.common import ArgOption, ReturnValue
 
 from . import methods
 from .decorators import typedmethod
@@ -366,7 +366,15 @@ def get_compile_data(id: uuid.UUID) -> Optional[model.CompileData]:
 
 
 @typedmethod(
-    path="/resource_actions", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+    path="/resource_actions",
+    operation="GET",
+    arg_options={
+        "first_timestamp": ArgOption(getter=methods.datetime_utc_to_local),
+        "last_timestamp": ArgOption(getter=methods.datetime_utc_to_local),
+        **methods.ENV_OPTS,
+    },
+    client_types=[ClientType.api],
+    api_version=2,
 )
 def get_resource_actions(
     tid: uuid.UUID,
