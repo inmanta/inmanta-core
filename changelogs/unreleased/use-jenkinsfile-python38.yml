@@ -1,0 +1,6 @@
+---
+description: Use Jenkinsfile to run the tests of inmanta-core on python3.8
+issue-nr: 133
+issue-repo: infra-tickets
+change-type: patch
+destination-branches: [master, iso3, iso4]
