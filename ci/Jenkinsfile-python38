@@ -1,0 +1,47 @@
+/*
+ * Run the tests of inmanta-core on python 3.8
+ */
+pipeline {
+  agent any
+
+  environment {
+    PIP_INDEX_URL='https://artifacts.internal.inmanta.com/inmanta/dev'
+  }
+
+  options {
+    disableConcurrentBuilds()
+    skipDefaultCheckout()
+    buildDiscarder(logRotator(numToKeepStr: '30', daysToKeepStr: '5'))
+    timeout(time: 30, unit: 'MINUTES') 
+  }
+
+  stages {
+    stage('Set up workspace and virtual environment') {
+      steps {
+        deleteDir()
+        checkout scm
+        sh '''
+          python3 -m venv ${WORKSPACE}/env
+          ${WORKSPACE}/env/bin/python3 -m pip install -c ${WORKSPACE}/requirements.txt -U tox setuptools pip
+
+          #for debugging purposes
+          ulimit -a
+        '''
+      }
+    }
+
+    stage('Run tests on python3.8') {
+      steps {
+        sh '''
+          ASYNC_TEST_TIMEOUT=60 ${WORKSPACE}/env/bin/python3 -m tox -e py38
+        '''
+      }
+    }
+
+    post {
+      always {
+        junit "junit-*.xml"
+      }
+    }
+  }
+}
