@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump cookiecutter from 1.7.2 to 1.7.3
+destination-branches:
+- master
+sections: {}
