@@ -1,8 +1,17 @@
 /*
  * Run the tests of inmanta-core on python 3.8
  */
+
+def is_development_branch() {
+  return BRANCH_NAME ==~ /master|iso[0-9]+/
+}
+
 pipeline {
   agent any
+
+  triggers {
+    cron(is_development_branch() ? "H H(2-5) * * 1-5": "")
+  }
 
   environment {
     PIP_INDEX_URL='https://artifacts.internal.inmanta.com/inmanta/dev'
