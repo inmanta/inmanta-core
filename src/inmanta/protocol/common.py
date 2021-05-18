@@ -864,7 +864,7 @@ def custom_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
         return const.UNKNOWN_STRING
 
     # handle common python types
-    return util.custom_json_encoder(o)
+    return util.api_boundary_json_encoder(o)
 
 
 def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[List[str]]) -> Tuple[int, JsonType]:

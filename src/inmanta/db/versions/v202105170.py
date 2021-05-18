@@ -46,3 +46,4 @@ async def update(connection: Connection) -> None:
             for table, columns in TIMESTAMP_COLUMNS.items()
         )
     )
+    # TODO: make sure to update resourceaction.messages[i]["timestamp"], then test dryrun

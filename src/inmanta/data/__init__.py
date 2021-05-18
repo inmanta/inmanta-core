@@ -53,7 +53,7 @@ APILIMIT = 1000
 
 def json_encode(value: Any) -> str:
     # see json_encode in tornado.escape
-    return json.dumps(value, default=util.custom_json_encoder)
+    return json.dumps(value, default=util.internal_json_encoder)
 
 
 class Field(object):
@@ -1727,7 +1727,7 @@ class Compile(BaseDocument):
     async def delete_older_than(
         cls, oldest_retained_date: datetime.datetime, connection: Optional[asyncpg.Connection] = None
     ) -> None:
-        query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::timestamp"
+        query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::timestamp with time zone"
         await cls._execute_query(query, oldest_retained_date, connection=connection)
 
     def to_dto(self) -> m.CompileRun:
@@ -1823,7 +1823,7 @@ class ResourceAction(BaseDocument):
             for message in result["messages"]:
                 message = json.loads(message)
                 if "timestamp" in message:
-                    message["timestamp"] = datetime.datetime.strptime(message["timestamp"], "%Y-%m-%dT%H:%M:%S.%f")
+                    message["timestamp"] = datetime.datetime.strptime(message["timestamp"], "%Y-%m-%dT%H:%M:%S.%f%z")
                 new_messages.append(message)
             result["messages"] = new_messages
         if "changes" in result and result["changes"] == {}:

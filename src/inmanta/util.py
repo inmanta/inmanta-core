@@ -213,7 +213,31 @@ class JSONSerializable(ABC):
         raise NotImplementedError()
 
 
-def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
+def internal_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
+    """
+    A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries. This
+    encoder is meant to be used internally.
+    """
+    if isinstance(o, datetime.datetime):
+        # Internally, all naive datetime instances are assumed local. Returns ISO timestamp with explicit timezone offset.
+        return _custom_json_encoder(o if o.tzinfo is not None else o.astimezone())
+
+    return _custom_json_encoder(o)
+
+
+def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
+    """
+    A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries. This
+    encoder is meant to be used for API boundaries.
+    """
+    if isinstance(o, datetime.datetime):
+        # Accross API boundaries, all naive datetime instances are assumed UTC. Returns ISO timestamp implicitly in UTC.
+        return _custom_json_encoder(o if o.tzinfo is None else o.astimezone(datetime.timezone.utc).replace(tzinfo=None))
+
+    return _custom_json_encoder(o)
+
+
+def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries
     """
@@ -224,9 +248,7 @@ def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
         return str(o)
 
     if isinstance(o, datetime.datetime):
-        # Return datetime in UTC without explicit timezone offset
-        utc: datetime.datetime = o if o.tzinfo is None else o.astimezone(datetime.timezone.utc).replace(tzinfo=None)
-        return utc.isoformat(timespec="microseconds")
+        return o.isoformat(timespec="microseconds")
 
     if hasattr(o, "to_dict"):
         return o.to_dict()
