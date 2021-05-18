@@ -237,7 +237,7 @@ class ResourceService(protocol.ServerSlice):
         return result
 
     async def get_all_resources_for_agent(self, env: data.Environment, agent: str, version: int) -> Apireturn:
-        started = datetime.datetime.now()
+        started = datetime.datetime.now().astimezone()
         if version is None:
             version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
             if version is None:
@@ -260,7 +260,7 @@ class ResourceService(protocol.ServerSlice):
         # Don't log ResourceActions without resource_version_ids, because
         # no API call exists to retrieve them.
         if resource_ids:
-            now = datetime.datetime.now()
+            now = datetime.datetime.now().astimezone()
             log_line = data.LogLine.log(
                 logging.INFO, "Resource version pulled by client for agent %(agent)s state", agent=agent
             )
@@ -280,7 +280,7 @@ class ResourceService(protocol.ServerSlice):
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
     async def get_resource_increment_for_agent(self, env: data.Environment, agent: str) -> Apireturn:
-        started = datetime.datetime.now()
+        started = datetime.datetime.now().astimezone()
 
         version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
         if version is None:
@@ -298,7 +298,7 @@ class ResourceService(protocol.ServerSlice):
         increment_ids, neg_increment = increment
 
         # set already done to deployed
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().astimezone()
 
         def on_agent(res: ResourceVersionIdStr) -> bool:
             idr = Id.parse_id(res)
@@ -309,7 +309,7 @@ class ResourceService(protocol.ServerSlice):
         logline = {
             "level": "INFO",
             "msg": "Setting deployed due to known good status",
-            "timestamp": now.isoformat(timespec="microseconds"),
+            "timestamp": now.astimezone(datetime.timezone.utc).replace(tzinfo=None).isoformat(timespec="microseconds"),
             "args": [],
         }
         self.add_background_task(
@@ -488,7 +488,8 @@ class ResourceService(protocol.ServerSlice):
                             env.id,
                             resource_ids,
                             const.LogLevel[msg["level"]].value,
-                            datetime.datetime.strptime(msg["timestamp"], const.TIME_ISOFMT),
+                            # interpret datetimes as UTC
+                            datetime.datetime.strptime(msg["timestamp"], const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc),
                             msg["msg"],
                         )
 

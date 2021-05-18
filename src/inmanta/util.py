@@ -224,7 +224,9 @@ def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
         return str(o)
 
     if isinstance(o, datetime.datetime):
-        return o.isoformat(timespec="microseconds")
+        # Return datetime in UTC without explicit timezone offset
+        utc: datetime.datetime = o if o.tzinfo is None else o.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        return utc.isoformat(timespec="microseconds")
 
     if hasattr(o, "to_dict"):
         return o.to_dict()

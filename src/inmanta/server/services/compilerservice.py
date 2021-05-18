@@ -95,7 +95,7 @@ class CompileRun(object):
 
     async def _start_stage(self, name: str, command: str) -> None:
         LOGGER.log(const.LOG_LEVEL_TRACE, "starting stage %s for %s in %s", name, self.request.id, self.request.environment)
-        start = datetime.datetime.now()
+        start = datetime.datetime.now().astimezone()
         stage = data.Report(compile=self.request.id, started=start, name=name, command=command)
         await stage.insert()
         self.stage = stage
@@ -106,7 +106,7 @@ class CompileRun(object):
             const.LOG_LEVEL_TRACE, "ending stage %s for %s in %s", self.stage.name, self.request.id, self.request.environment
         )
         stage = self.stage
-        end = datetime.datetime.now()
+        end = datetime.datetime.now().astimezone()
         await stage.update_fields(completed=end, returncode=returncode)
         self.stage = None
         return stage
@@ -186,7 +186,7 @@ class CompileRun(object):
 
     async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, Optional[model.CompileData]]:
         success = False
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().astimezone()
         await self.request.update_fields(started=now)
 
         compile_data_json_file = NamedTemporaryFile()
@@ -381,7 +381,7 @@ class CompilerService(ServerSlice):
         self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0)
 
     async def _cleanup(self) -> None:
-        oldest_retained_date = datetime.datetime.now() - datetime.timedelta(seconds=opt.server_compiler_report_retention.get())
+        oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(seconds=opt.server_compiler_report_retention.get())
         LOGGER.info("Cleaning up compile reports that are older than %s", oldest_retained_date)
         try:
             await data.Compile.delete_older_than(oldest_retained_date)
@@ -410,7 +410,7 @@ class CompilerService(ServerSlice):
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
             return None, ["Skipping compile because server compile not enabled for this environment."]
 
-        requested = datetime.datetime.now()
+        requested = datetime.datetime.now().astimezone()
 
         compile = data.Compile(
             environment=env.id,
@@ -523,7 +523,7 @@ class CompilerService(ServerSlice):
             wait: float = 0
         else:
             assert last_run.completed is not None
-            wait = self._calculate_recompile_wait(wait_time, compile.requested, last_run.completed, datetime.datetime.now())
+            wait = self._calculate_recompile_wait(wait_time, compile.requested, last_run.completed, datetime.datetime.now().astimezone())
         if wait > 0:
             LOGGER.info(
                 "server-auto-recompile-wait is enabled and set to %s seconds, "
@@ -556,7 +556,7 @@ class CompilerService(ServerSlice):
 
         version = runner.version
 
-        end = datetime.datetime.now()
+        end = datetime.datetime.now().astimezone()
         compile_data_json: Optional[dict] = None if compile_data is None else compile_data.dict()
         await compile.update_fields(completed=end, success=success, version=version, compile_data=compile_data_json)
         awaitables = [

@@ -22,7 +22,7 @@ import sys
 import time
 import uuid
 from asyncio import queues, subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from uuid import UUID
@@ -235,7 +235,7 @@ class AgentManager(ServerSlice, SessionListener):
                     del self.tid_endpoint_to_session[key]
                     await live_session.get_client().set_state(agent_name, enabled=False)
                     endpoints_with_new_primary.append((agent_name, None))
-            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now(), connection=connection)
+            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection)
 
     async def _unpause_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
@@ -253,7 +253,7 @@ class AgentManager(ServerSlice, SessionListener):
                         self.tid_endpoint_to_session[key] = session
                         await session.get_client().set_state(agent_name, enabled=True)
                         endpoints_with_new_primary.append((agent_name, session.id))
-            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now(), connection=connection)
+            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection)
 
     async def _process_session_listener_actions(self) -> None:
         """
@@ -302,7 +302,7 @@ class AgentManager(ServerSlice, SessionListener):
             action_type=SessionActionType.REGISTER_SESSION,
             session=session,
             endpoint_names_snapshot=endpoint_names_snapshot,
-            timestamp=datetime.now(),
+            timestamp=datetime.now().astimezone(),
         )
         await self._session_listener_actions.put(session_action)
 
@@ -315,7 +315,7 @@ class AgentManager(ServerSlice, SessionListener):
             action_type=SessionActionType.EXPIRE_SESSION,
             session=session,
             endpoint_names_snapshot=endpoint_names_snapshot,
-            timestamp=datetime.now(),
+            timestamp=datetime.now().astimezone(),
         )
         await self._session_listener_actions.put(session_action)
 
@@ -328,7 +328,7 @@ class AgentManager(ServerSlice, SessionListener):
             action_type=SessionActionType.SEEN_SESSION,
             session=session,
             endpoint_names_snapshot=endpoint_names_snapshot,
-            timestamp=datetime.now(),
+            timestamp=datetime.now().astimezone(),
         )
         await self._session_listener_actions.put(session_action)
 
@@ -361,7 +361,7 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Note: This method call is allowed to fail when the database connection is lost.
         """
-        now = datetime.now()
+        now = datetime.now().astimezone()
         async with data.AgentProcess.get_connection() as connection:
             async with connection.transaction():
                 await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add, connection)
@@ -455,8 +455,8 @@ class AgentManager(ServerSlice, SessionListener):
             LOGGER.debug("Cleaning server session DB")
             async with data.AgentProcess.get_connection() as connection:
                 async with connection.transaction():
-                    await data.AgentProcess.expire_all(now=datetime.now(), connection=connection)
-                    await data.AgentInstance.expire_all(now=datetime.now(), connection=connection)
+                    await data.AgentProcess.expire_all(now=datetime.now().astimezone(), connection=connection)
+                    await data.AgentInstance.expire_all(now=datetime.now().astimezone(), connection=connection)
                     await data.Agent.mark_all_as_non_primary(connection=connection)
 
     # Util
@@ -621,7 +621,7 @@ class AgentManager(ServerSlice, SessionListener):
         key = (env.id, nodename)
         session = self.tid_endpoint_to_session.get(key)
         if session:
-            await data.Agent.update_primary(env.id, [(nodename, session.id)], datetime.now())
+            await data.Agent.update_primary(env.id, [(nodename, session.id)], datetime.now().astimezone())
 
         return saved
 
@@ -729,7 +729,7 @@ class AgentManager(ServerSlice, SessionListener):
             **query,
         )
 
-        return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec="microseconds")}
+        return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().astimezone(timezone.utc).replace(tzinfo=None).isoformat(timespec="microseconds")}
 
     @protocol.handle(methods.get_state, env="tid")
     async def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str) -> Apireturn:

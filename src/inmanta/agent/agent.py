@@ -232,7 +232,7 @@ class ResourceAction(object):
             results: List[ResourceActionResult] = cast(List[ResourceActionResult], await asyncio.gather(*waiters))
 
             async with self.scheduler.ratelimiter:
-                start = datetime.datetime.now()
+                start = datetime.datetime.now().astimezone()
                 ctx = handler.HandlerContext(self.resource, logger=self.logger)
 
                 ctx.debug(
@@ -291,7 +291,7 @@ class ResourceAction(object):
                     deploy_id=self.gid,
                 )
 
-                end = datetime.datetime.now()
+                end = datetime.datetime.now().astimezone()
                 changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
                     self.resource.id.resource_version_str(): ctx.changes
                 }
@@ -676,7 +676,7 @@ class AgentInstance(object):
 
     def _enable_time_triggers(self) -> None:
         async def deploy_action() -> None:
-            now = datetime.datetime.now()
+            now = datetime.datetime.now().astimezone()
             await self.get_latest_version_for_agent(
                 reason="Periodic deploy started at %s" % (now.strftime(const.TIME_LOGFMT)),
                 incremental_deploy=True,
@@ -684,14 +684,14 @@ class AgentInstance(object):
             )
 
         async def repair_action() -> None:
-            now = datetime.datetime.now()
+            now = datetime.datetime.now().astimezone()
             await self.get_latest_version_for_agent(
                 reason="Repair run started at %s" % (now.strftime(const.TIME_LOGFMT)),
                 incremental_deploy=False,
                 is_repair_run=True,
             )
 
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().astimezone()
         if self._deploy_interval > 0:
             self.logger.info(
                 "Scheduling periodic deploy with interval %d and splay %d (first run at %s)",
@@ -816,7 +816,7 @@ class AgentInstance(object):
                 self._cache.open_version(version)
                 for resource in resources:
                     ctx = handler.HandlerContext(resource, True)
-                    started = datetime.datetime.now()
+                    started = datetime.datetime.now().astimezone()
                     provider = None
 
                     resource_id = resource.id.resource_version_str()
@@ -885,7 +885,7 @@ class AgentInstance(object):
                         if provider is not None:
                             provider.close()
 
-                        finished = datetime.datetime.now()
+                        finished = datetime.datetime.now().astimezone()
                         await self.get_client().resource_action_update(
                             tid=self._env_id,
                             resource_ids=[resource_id],
@@ -909,7 +909,7 @@ class AgentInstance(object):
                 )
                 return 500
 
-            started = datetime.datetime.now()
+            started = datetime.datetime.now().astimezone()
             provider = None
             try:
                 resource_obj = resources[0]
@@ -936,7 +936,7 @@ class AgentInstance(object):
                     parameters.extend(ctx.facts)
 
                     await self.get_client().set_parameters(tid=self._env_id, parameters=parameters)
-                    finished = datetime.datetime.now()
+                    finished = datetime.datetime.now().astimezone()
                     await self.get_client().resource_action_update(
                         tid=self._env_id,
                         resource_ids=[resource_obj.id.resource_version_str()],
@@ -966,7 +966,7 @@ class AgentInstance(object):
         """Deserialize all resources and load all handler code. When the code for this type fails to load, the resource
         is marked as failed
         """
-        started = datetime.datetime.now()
+        started = datetime.datetime.now().astimezone()
         failed_resource_types = await self.process.ensure_code(
             self._env_id, version, [res["resource_type"] for res in resources]
         )
@@ -1007,7 +1007,7 @@ class AgentInstance(object):
                 action_id=uuid.uuid4(),
                 action=action,
                 started=started,
-                finished=datetime.datetime.now(),
+                finished=datetime.datetime.now().astimezone(),
                 messages=[log],
                 status=const.ResourceState.unavailable,
             )

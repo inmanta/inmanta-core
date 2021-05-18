@@ -1763,7 +1763,7 @@ class LogLine(DataDocument):
     @classmethod
     def log(cls, level, msg, timestamp=None, **kwargs):
         if timestamp is None:
-            timestamp = datetime.datetime.now()
+            timestamp = datetime.datetime.now().astimezone()
 
         log_line = msg % kwargs
         return cls(level=const.LogLevel(level), msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
@@ -1908,7 +1908,7 @@ class ResourceAction(BaseDocument):
         environments = await Environment.get_list()
         for env in environments:
             time_to_retain_logs = await env.get(RESOURCE_ACTION_LOGS_RETENTION)
-            keep_logs_until = datetime.datetime.now() - datetime.timedelta(days=time_to_retain_logs)
+            keep_logs_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
             query = "DELETE FROM " + cls.table_name() + " WHERE started < $1"
             value = cls._get_value(keep_logs_until)
             await cls._execute_query(query, value)
@@ -2904,7 +2904,7 @@ class DryRun(BaseDocument):
 
     @classmethod
     async def create(cls, environment, model, total, todo):
-        obj = cls(environment=environment, model=model, date=datetime.datetime.now(), resources={}, total=total, todo=todo)
+        obj = cls(environment=environment, model=model, date=datetime.datetime.now().astimezone(), resources={}, total=total, todo=todo)
         await obj.insert()
         return obj
 
