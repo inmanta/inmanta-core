@@ -499,7 +499,7 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql
         """
         result = await postgresql_client.fetch(query, env2.id, "proc2")
         assert len(result) == 1
-        assert result[0]["expired"] == datetime.datetime(2020, 1, 1, 3, 0)
+        assert result[0]["expired"] == datetime.datetime(2020, 1, 1, 3, 0).astimezone()
 
 
 @pytest.mark.asyncio
@@ -911,7 +911,7 @@ async def test_model_serialization(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = int(time.time())
-    now = datetime.datetime.now()
+    now = datetime.datetime.now().astimezone()
     cm = data.ConfigurationModel(environment=env.id, version=version, date=now, total=1, version_info={})
     await cm.insert()
 
@@ -1737,13 +1737,13 @@ async def test_resources_report(init_dataclasses_and_load_schema):
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["resource_type"] == "std::File"
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["deployed_version"] == 1
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["latest_version"] == 2
-    assert report_as_map["std::File[agent1,path=/etc/file1]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 12, 30)
+    assert report_as_map["std::File[agent1,path=/etc/file1]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 12, 30).astimezone()
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["agent"] == "agent1"
 
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["resource_type"] == "std::File"
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["deployed_version"] == 3
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["latest_version"] == 3
-    assert report_as_map["std::File[agent1,path=/etc/file2]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 14, 30)
+    assert report_as_map["std::File[agent1,path=/etc/file2]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 14, 30).astimezone()
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["agent"] == "agent1"
 
     assert report_as_map["std::File[agent1,path=/etc/file3]"]["resource_type"] == "std::File"
@@ -1777,7 +1777,7 @@ async def test_resource_action(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
-    now = datetime.datetime.now()
+    now = datetime.datetime.now().astimezone()
     action_id = uuid.uuid4()
     resource_version_ids = ["std::File[agent1,path=/etc/file1],v=1", "std::File[agent1,path=/etc/file2],v=1"]
     resource_action = data.ResourceAction(
@@ -2214,8 +2214,8 @@ async def test_compile_get_report(init_dataclasses_and_load_schema):
     await env.insert()
 
     # Compile 1
-    started = datetime.datetime(2018, 7, 15, 12, 30)
-    completed = datetime.datetime(2018, 7, 15, 13, 00)
+    started = datetime.datetime(2018, 7, 15, 12, 30).astimezone()
+    completed = datetime.datetime(2018, 7, 15, 13, 00).astimezone()
     compile1 = data.Compile(environment=env.id, started=started, completed=completed)
     await compile1.insert()
 

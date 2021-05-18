@@ -79,7 +79,7 @@ async def test_timestamp_timezones(
     project_id: uuid.UUID = uuid.uuid4()
     env_id: uuid.UUID = uuid.uuid4()
     compile_id: uuid.UUID = uuid.uuid4()
-    compile_started: datetime = datetime.now()
+    compile_started: datetime = datetime.now().astimezone()
     await postgresql_client.execute(
         f"""
         INSERT INTO public.project
@@ -106,5 +106,5 @@ async def test_timestamp_timezones(
     assert compile is not None
     assert compile.started is not None
     assert compile.started.tzinfo is not None
-    assert compile.started.astimezone(timezone.utc) == compile_started.astimezone(timezone.utc)
+    assert compile.started == compile_started
     assert compile.completed is None
