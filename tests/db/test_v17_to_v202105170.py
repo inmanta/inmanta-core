@@ -15,14 +15,16 @@
 
     Contact: code@inmanta.com
 """
+import uuid
 import os
 from datetime import datetime, timezone
-from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional
+from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional
 
 import pytest
 from asyncpg import Connection
 
 from db.common import PGRestore
+from inmanta.data import Compile
 from inmanta.db.versions.v202105170 import TIMESTAMP_COLUMNS
 from inmanta.server.bootloader import InmantaBootloader
 
@@ -46,11 +48,13 @@ async def migrate_v17_to_v202105170(
 
 
 @pytest.mark.asyncio(timeout=20)
-async def test_timestamp_timezones(migrate_v17_to_v202105170: None, postgresql_client: Connection) -> None:
+async def test_timestamp_timezones(
+    migrate_v17_to_v202105170: Callable[[], Awaitable[None]], postgresql_client: Connection
+) -> None:
     """
     All timestamps should be timezone-aware.
     """
-    async def fetch_timestamps() -> Dict[str, Dict[str, Optional[datetime]]]:
+    async def fetch_timestamps() -> Dict[str, List[Dict[str, Optional[datetime]]]]:
         return {
             table: [
                 {**record}
@@ -61,25 +65,46 @@ async def test_timestamp_timezones(migrate_v17_to_v202105170: None, postgresql_c
             for table, columns in TIMESTAMP_COLUMNS.items()
         }
 
-    naive_timestamps: Dict[str, List[Dict[str, Optional[datetime]]]] = await fetch_timestamps()
-    utc_timestamps: Dict[str, List[Dict[str, Optional[datetime]]]] = {
-        table: [
-            {
-                column: (naive.astimezone(timezone.utc) if naive is not None else None)
-                for column, naive in row.items()
-            }
+    def timezone_aware(timestamps: Dict[str, List[Dict[str, Optional[datetime]]]]) -> Iterator[bool]:
+        return (
+            timestamp.tzinfo is not None
+            for table, rows in timestamps.items()
             for row in rows
-        ]
-        for table, rows in naive_timestamps.items()
-    }
-    # TODO: remove debug prints
-    import devtools
-    devtools.debug(naive_timestamps)
+            for column, timestamp in row.items()
+            if timestamp is not None
+        )
+
+    # Can't test value conversion on all values because the server might change some values at startup.
+    # Add a timestamp and a NULL value to test value conversion.
+    project_id: uuid.UUID = uuid.uuid4()
+    env_id: uuid.UUID = uuid.uuid4()
+    compile_id: uuid.UUID = uuid.uuid4()
+    compile_started: datetime = datetime.now()
+    await postgresql_client.execute(
+        f"""
+        INSERT INTO public.project
+        VALUES ('{project_id}', 'v202105170-test-project')
+        ;
+        INSERT INTO public.environment
+        VALUES ('{env_id}', 'v202105170-test-env', '{project_id}', '', '', '{{}}')
+        ;
+        INSERT INTO public.compile
+        VALUES ('{compile_id}', '{env_id}', '{compile_started.isoformat()}', NULL)
+        ;
+        """
+    )
+
+    naive_timestamps: Dict[str, List[Dict[str, Optional[datetime]]]] = await fetch_timestamps()
+    assert not any(timezone_aware(naive_timestamps))
 
     await migrate_v17_to_v202105170()
 
-    devtools.debug(await fetch_timestamps())
-    assert await fetch_timestamps() == utc_timestamps
+    migrated_timestamps: Dict[str, List[Dict[str, Optional[datetime]]]] = await fetch_timestamps()
+    assert all(timezone_aware(migrated_timestamps))
 
-
-# TODO: add a test for new versioning schema tables
+    compile: Optional[Compile] = await Compile.get_by_id(compile_id)
+    assert compile is not None
+    assert compile.started is not None
+    assert compile.started.tzinfo is not None
+    assert compile.started.astimezone(timezone.utc) == compile_started.astimezone(timezone.utc)
+    assert compile.completed is None
