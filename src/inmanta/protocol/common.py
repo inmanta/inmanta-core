@@ -343,11 +343,7 @@ class MethodArgumentsBaseModel(pydantic.BaseModel):
         Make sure all instances of datetime are timezone-aware. Any naive inputs are interpreted as UTC.
         """
         return {
-            key: (
-                value.replace(tzinfo=timezone.utc)
-                if isinstance(value, datetime) and value.tzinfo is None
-                else value
-            )
+            key: (value.replace(tzinfo=timezone.utc) if isinstance(value, datetime) and value.tzinfo is None else value)
             for key, value in values.items()
         }
 

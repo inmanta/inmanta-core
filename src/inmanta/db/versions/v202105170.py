@@ -45,10 +45,8 @@ async def update(connection: Connection) -> None:
     # update all timestamp types
     await connection.execute(
         "\n".join(
-            f"ALTER TABLE public.{table} %s;" % ", ".join(
-                f"ALTER COLUMN {column} TYPE TIMESTAMP WITH TIME ZONE"
-                for column in columns
-            )
+            f"ALTER TABLE public.{table} %s;"
+            % ", ".join(f"ALTER COLUMN {column} TYPE TIMESTAMP WITH TIME ZONE" for column in columns)
             for table, columns in TIMESTAMP_COLUMNS.items()
         )
     )
@@ -57,7 +55,9 @@ async def update(connection: Connection) -> None:
     def transform_message(message: str) -> str:
         obj: Dict[str, object] = json.loads(message)
         if "timestamp" in obj:
-            obj["timestamp"] = datetime.strptime(obj["timestamp"], const.TIME_ISOFMT).astimezone().isoformat(timespec="microseconds")
+            obj["timestamp"] = (
+                datetime.strptime(obj["timestamp"], const.TIME_ISOFMT).astimezone().isoformat(timespec="microseconds")
+            )
         return json.dumps(obj)
 
     cursor: Cursor = connection.cursor("SELECT action_id, messages FROM public.resourceaction")
@@ -67,8 +67,5 @@ async def update(connection: Connection) -> None:
         SET messages = $1
         WHERE action_id = $2
         """,
-        [
-            ([transform_message(msg) for msg in record["messages"]], record["action_id"])
-            async for record in cursor
-        ],
+        [([transform_message(msg) for msg in record["messages"]], record["action_id"]) async for record in cursor],
     )

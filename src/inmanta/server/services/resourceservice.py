@@ -481,12 +481,15 @@ class ResourceService(protocol.ServerSlice):
                         )
 
                 if len(messages) > 0:
+
                     def parse_timestamp(timestamp: str) -> datetime.datetime:
                         try:
                             return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
                         except ValueError:
                             # interpret naive datetimes as UTC
-                            return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc)
+                            return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(
+                                tzinfo=datetime.timezone.utc
+                            )
 
                     resource_action.add_logs(
                         [

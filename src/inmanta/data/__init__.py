@@ -2904,7 +2904,14 @@ class DryRun(BaseDocument):
 
     @classmethod
     async def create(cls, environment, model, total, todo):
-        obj = cls(environment=environment, model=model, date=datetime.datetime.now().astimezone(), resources={}, total=total, todo=todo)
+        obj = cls(
+            environment=environment,
+            model=model,
+            date=datetime.datetime.now().astimezone(),
+            resources={},
+            total=total,
+            todo=todo,
+        )
         await obj.insert()
         return obj
 

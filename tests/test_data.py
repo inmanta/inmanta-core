@@ -1737,13 +1737,17 @@ async def test_resources_report(init_dataclasses_and_load_schema):
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["resource_type"] == "std::File"
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["deployed_version"] == 1
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["latest_version"] == 2
-    assert report_as_map["std::File[agent1,path=/etc/file1]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 12, 30).astimezone()
+    assert (
+        report_as_map["std::File[agent1,path=/etc/file1]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 12, 30).astimezone()
+    )
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["agent"] == "agent1"
 
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["resource_type"] == "std::File"
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["deployed_version"] == 3
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["latest_version"] == 3
-    assert report_as_map["std::File[agent1,path=/etc/file2]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 14, 30).astimezone()
+    assert (
+        report_as_map["std::File[agent1,path=/etc/file2]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 14, 30).astimezone()
+    )
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["agent"] == "agent1"
 
     assert report_as_map["std::File[agent1,path=/etc/file3]"]["resource_type"] == "std::File"

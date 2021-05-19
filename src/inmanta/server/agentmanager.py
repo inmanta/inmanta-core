@@ -235,7 +235,9 @@ class AgentManager(ServerSlice, SessionListener):
                     del self.tid_endpoint_to_session[key]
                     await live_session.get_client().set_state(agent_name, enabled=False)
                     endpoints_with_new_primary.append((agent_name, None))
-            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection)
+            await data.Agent.update_primary(
+                env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
+            )
 
     async def _unpause_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
@@ -253,7 +255,9 @@ class AgentManager(ServerSlice, SessionListener):
                         self.tid_endpoint_to_session[key] = session
                         await session.get_client().set_state(agent_name, enabled=True)
                         endpoints_with_new_primary.append((agent_name, session.id))
-            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection)
+            await data.Agent.update_primary(
+                env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
+            )
 
     async def _process_session_listener_actions(self) -> None:
         """
@@ -729,7 +733,10 @@ class AgentManager(ServerSlice, SessionListener):
             **query,
         )
 
-        return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().astimezone(timezone.utc).replace(tzinfo=None).isoformat(timespec="microseconds")}
+        return 200, {
+            "agents": [a.to_dict() for a in ags],
+            "servertime": datetime.now().astimezone(timezone.utc).replace(tzinfo=None).isoformat(timespec="microseconds"),
+        }
 
     @protocol.handle(methods.get_state, env="tid")
     async def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str) -> Apireturn:

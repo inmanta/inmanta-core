@@ -15,9 +15,9 @@
 
     Contact: code@inmanta.com
 """
-import uuid
 import os
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime
 from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional
 
 import pytest
@@ -54,13 +54,11 @@ async def test_timestamp_timezones(
     """
     All timestamps should be timezone-aware.
     """
+
     async def fetch_timestamps() -> Dict[str, List[Dict[str, Optional[datetime]]]]:
         return {
             table: [
-                {**record}
-                for record in await postgresql_client.fetch(
-                    f"SELECT %s FROM public.{table};" % ", ".join(columns)
-                )
+                {**record} for record in await postgresql_client.fetch(f"SELECT %s FROM public.{table};" % ", ".join(columns))
             ]
             for table, columns in TIMESTAMP_COLUMNS.items()
         }
