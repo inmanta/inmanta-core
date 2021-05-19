@@ -481,15 +481,26 @@ class ResourceService(protocol.ServerSlice):
                         )
 
                 if len(messages) > 0:
-                    resource_action.add_logs(messages)
+                    def parse_timestamp(timestamp: str) -> datetime.datetime:
+                        try:
+                            return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
+                        except ValueError:
+                            # interpret naive datetimes as UTC
+                            return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc)
+
+                    resource_action.add_logs(
+                        [
+                            {**msg, "timestamp": parse_timestamp(msg["timestamp"]).isoformat(timespec="microseconds")}
+                            for msg in messages
+                        ]
+                    )
                     for msg in messages:
                         # All other data is stored in the database. The msg was already formatted at the client side.
                         self.log_resource_action(
                             env.id,
                             resource_ids,
                             const.LogLevel[msg["level"]].value,
-                            # interpret datetimes as UTC
-                            datetime.datetime.strptime(msg["timestamp"], const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc),
+                            parse_timestamp(msg["timestamp"]),
                             msg["msg"],
                         )
 
