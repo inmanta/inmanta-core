@@ -15,11 +15,13 @@
 
     Contact: code@inmanta.com
 """
+import json
 import os
 import uuid
 from datetime import datetime
 from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional
 
+import pydantic
 import pytest
 from asyncpg import Connection
 
@@ -63,6 +65,13 @@ async def test_timestamp_timezones(
             for table, columns in TIMESTAMP_COLUMNS.items()
         }
 
+    async def fetch_action_log_timestamps() -> List[datetime]:
+        return [
+            pydantic.parse_obj_as(datetime, json.loads(msg)["timestamp"])
+            for record in await postgresql_client.fetch(f"SELECT messages FROM public.resourceaction ORDER BY action_id;")
+            for msg in record["messages"]
+        ]
+
     def timezone_aware(timestamps: Dict[str, List[Dict[str, Optional[datetime]]]]) -> Iterator[bool]:
         return (
             timestamp.tzinfo is not None
@@ -77,7 +86,7 @@ async def test_timestamp_timezones(
     project_id: uuid.UUID = uuid.uuid4()
     env_id: uuid.UUID = uuid.uuid4()
     compile_id: uuid.UUID = uuid.uuid4()
-    compile_started: datetime = datetime.now().astimezone()
+    compile_started: datetime = datetime.now()
     await postgresql_client.execute(
         f"""
         INSERT INTO public.project
@@ -94,6 +103,9 @@ async def test_timestamp_timezones(
 
     naive_timestamps: Dict[str, List[Dict[str, Optional[datetime]]]] = await fetch_timestamps()
     assert not any(timezone_aware(naive_timestamps))
+    naive_action_log_timestamps: List[datetime] = await fetch_action_log_timestamps()
+    assert len(naive_action_log_timestamps) > 0
+    assert all(timestamp.tzinfo is None for timestamp in naive_action_log_timestamps)
 
     await migrate_v17_to_v202105170()
 
@@ -104,8 +116,7 @@ async def test_timestamp_timezones(
     assert compile is not None
     assert compile.started is not None
     assert compile.started.tzinfo is not None
-    assert compile.started == compile_started
+    assert compile.started == compile_started.astimezone()
     assert compile.completed is None
 
-    # TODO: test resourceaction.messages[i]["timestamp"], then test dryrun
-    assert False
+    assert await fetch_action_log_timestamps() == [naive.astimezone() for naive in naive_action_log_timestamps]
