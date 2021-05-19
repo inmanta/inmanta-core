@@ -2101,7 +2101,10 @@ async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, asy
 
     async def request(timestamp: datetime.datetime) -> tornado.httpclient.HTTPResponse:
         request = HTTPRequest(
-            url=f"http://localhost:{port}/api/v1/test?timestamp={urllib.parse.quote(timestamp.isoformat(timespec='microseconds'))}",
+            url=(
+                f"http://localhost:{port}/api/v1/test?timestamp="
+                f"{urllib.parse.quote(timestamp.isoformat(timespec='microseconds'))}"
+            ),
             method="GET",
         )
         return await client.fetch(request)
