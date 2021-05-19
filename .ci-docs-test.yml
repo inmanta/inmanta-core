@@ -1,0 +1,1 @@
+pipeline_template: ci/inmanta-core/Jenkinsfile-docs-test
