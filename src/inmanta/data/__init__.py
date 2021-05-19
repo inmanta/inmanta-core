@@ -29,6 +29,7 @@ from configparser import RawConfigParser
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type, TypeVar, Union, cast
 
 import asyncpg
+import pydantic
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
@@ -1823,7 +1824,10 @@ class ResourceAction(BaseDocument):
             for message in result["messages"]:
                 message = json.loads(message)
                 if "timestamp" in message:
-                    message["timestamp"] = datetime.datetime.strptime(message["timestamp"], "%Y-%m-%dT%H:%M:%S.%f%z")
+                    # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
+                    message["timestamp"] = pydantic.parse_obj_as(datetime.datetime, message["timestamp"])
+                    if message["timestamp"].tzinfo is None:
+                        raise Exception("Found naive timestamp in the database, this should not be possible")
                 new_messages.append(message)
             result["messages"] = new_messages
         if "changes" in result and result["changes"] == {}:

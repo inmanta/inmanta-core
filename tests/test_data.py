@@ -1837,7 +1837,7 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now().astimezone(), total=1, version_info={})
     await cm.insert()
 
     for i in range(1, 11):
@@ -1848,7 +1848,7 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
             resource_version_ids=["std::File[agent1,path=/etc/motd],v=%1"],
             action_id=action_id,
             action=const.ResourceAction.deploy,
-            started=datetime.datetime.now(),
+            started=datetime.datetime.now().astimezone(),
         )
         await resource_action.insert()
         resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=i)])
@@ -1862,7 +1862,7 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
         resource_version_ids=["std::File[agent1,path=/etc/motd],v=%1"],
         action_id=action_id,
         action=const.ResourceAction.dryrun,
-        started=datetime.datetime.now(),
+        started=datetime.datetime.now().astimezone(),
     )
     await resource_action.insert()
     times = datetime.datetime.now().astimezone()
