@@ -1861,7 +1861,7 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
         started=datetime.datetime.now(),
     )
     await resource_action.insert()
-    times = datetime.datetime.now()
+    times = datetime.datetime.now().astimezone()
     resource_action.add_logs([data.LogLine.log(logging.WARNING, "warning version %(version)d", version=100, timestamp=times)])
     await resource_action.save()
 
