@@ -17,10 +17,9 @@
 """
 import json
 from datetime import datetime
-from typing import Dict, List
+from typing import AsyncIterator, Dict, List
 
-from asyncpg import Connection
-from asyncpg.cursor import Cursor
+from asyncpg import Connection, Record
 
 from inmanta import const
 
@@ -53,14 +52,14 @@ async def update(connection: Connection) -> None:
 
     # update timestamps embedded in jsonb types
     def transform_message(message: str) -> str:
-        obj: Dict[str, object] = json.loads(message)
+        obj: Dict = json.loads(message)
         if "timestamp" in obj:
             obj["timestamp"] = (
                 datetime.strptime(obj["timestamp"], const.TIME_ISOFMT).astimezone().isoformat(timespec="microseconds")
             )
         return json.dumps(obj)
 
-    cursor: Cursor = connection.cursor("SELECT action_id, messages FROM public.resourceaction")
+    cursor: AsyncIterator[Record] = connection.cursor("SELECT action_id, messages FROM public.resourceaction")
     await connection.executemany(
         """
         UPDATE public.resourceaction
