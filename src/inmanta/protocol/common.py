@@ -26,7 +26,7 @@ import re
 import time
 import uuid
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from inspect import Parameter
 from typing import (
@@ -335,6 +335,23 @@ VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
 VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNonIntBool, datetime, bytes)
 
 
+class MethodArgumentsBaseModel(pydantic.BaseModel):
+    @pydantic.root_validator
+    @classmethod
+    def datetime_timezone_aware(cls, values: Dict[str, object]) -> Dict[str, object]:
+        """
+        Make sure all instances of datetime are timezone-aware. Any naive inputs are interpreted as UTC.
+        """
+        return {
+            key: (
+                value.replace(tzinfo=timezone.utc)
+                if isinstance(value, datetime) and value.tzinfo is None
+                else value
+            )
+            for key, value in values.items()
+        }
+
+
 class MethodProperties(object):
     """
     This class stores the information from a method definition
@@ -458,7 +475,9 @@ class MethodProperties(object):
                 return (param.annotation, None)
 
         return create_model(
-            f"{self.function.__name__}_arguments", **{param.name: to_tuple(param) for param in sig.parameters.values()}
+            f"{self.function.__name__}_arguments",
+            **{param.name: to_tuple(param) for param in sig.parameters.values()},
+            __base__=MethodArgumentsBaseModel,
         )
 
     def arguments_in_url(self) -> bool:

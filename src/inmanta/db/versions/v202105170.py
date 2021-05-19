@@ -15,9 +15,14 @@
 
     Contact: code@inmanta.com
 """
+import json
+from datetime import datetime
 from typing import Dict, List
 
 from asyncpg import Connection
+from asyncpg.cursor import Cursor
+
+from inmanta import const
 
 DISABLED = False
 
@@ -37,6 +42,7 @@ TIMESTAMP_COLUMNS: Dict[str, List[str]] = {
 
 
 async def update(connection: Connection) -> None:
+    # update all timestamp types
     await connection.execute(
         "\n".join(
             f"ALTER TABLE public.{table} %s;" % ", ".join(
@@ -46,4 +52,23 @@ async def update(connection: Connection) -> None:
             for table, columns in TIMESTAMP_COLUMNS.items()
         )
     )
-    # TODO: make sure to update resourceaction.messages[i]["timestamp"], then test dryrun
+
+    # update timestamps embedded in jsonb types
+    def transform_message(message: str) -> str:
+        obj: Dict[str, object] = json.loads(message)
+        if "timestamp" in obj:
+            obj["timestamp"] = datetime.strptime(obj["timestamp"], const.TIME_ISOFMT).astimezone().isoformat(timespec="microseconds")
+        return json.dumps(obj)
+
+    cursor: Cursor = connection.cursor("SELECT action_id, messages FROM public.resourceaction")
+    await connection.executemany(
+        """
+        UPDATE public.resourceaction
+        SET messages = $1
+        WHERE action_id = $2
+        """,
+        [
+            ([transform_message(msg) for msg in record["messages"]], record["action_id"])
+            async for record in cursor
+        ],
+    )
