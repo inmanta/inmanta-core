@@ -1837,7 +1837,9 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now().astimezone(), total=1, version_info={})
+    cm = data.ConfigurationModel(
+        environment=env.id, version=version, date=datetime.datetime.now().astimezone(), total=1, version_info={}
+    )
     await cm.insert()
 
     for i in range(1, 11):

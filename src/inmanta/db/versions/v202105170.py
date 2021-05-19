@@ -67,5 +67,11 @@ async def update(connection: Connection) -> None:
         SET messages = $1
         WHERE action_id = $2
         """,
-        [(None if record["messages"] is None else [transform_message(msg) for msg in record["messages"]], record["action_id"]) async for record in cursor],
+        [
+            (
+                None if record["messages"] is None else [transform_message(msg) for msg in record["messages"]],
+                record["action_id"],
+            )
+            async for record in cursor
+        ],
     )

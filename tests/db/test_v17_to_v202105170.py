@@ -68,7 +68,7 @@ async def test_timestamp_timezones(
     async def fetch_action_log_timestamps() -> List[datetime]:
         return [
             pydantic.parse_obj_as(datetime, json.loads(msg)["timestamp"])
-            for record in await postgresql_client.fetch(f"SELECT messages FROM public.resourceaction ORDER BY action_id;")
+            for record in await postgresql_client.fetch("SELECT messages FROM public.resourceaction ORDER BY action_id;")
             for msg in record["messages"]
         ]
 
