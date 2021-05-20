@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
 
 from tornado.httputil import url_concat
 
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
 from inmanta.data import APILIMIT
 from inmanta.data.model import Resource, ResourceAction, ResourceType, ResourceVersionIdStr
@@ -309,7 +309,7 @@ class ResourceService(protocol.ServerSlice):
         logline = {
             "level": "INFO",
             "msg": "Setting deployed due to known good status",
-            "timestamp": now.astimezone(datetime.timezone.utc).replace(tzinfo=None).isoformat(timespec="microseconds"),
+            "timestamp": util.datetime_utc_isoformat(now),
             "args": [],
         }
         self.add_background_task(
