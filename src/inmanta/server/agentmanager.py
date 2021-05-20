@@ -735,7 +735,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         return 200, {
             "agents": [a.to_dict() for a in ags],
-            "servertime": datetime.now().astimezone(timezone.utc).replace(tzinfo=None).isoformat(timespec="microseconds"),
+            "servertime": util.datetime_utc_isoformat(datetime.now())
         }
 
     @protocol.handle(methods.get_state, env="tid")
