@@ -191,7 +191,7 @@ async def test_resource_evolution(server, client, environment, no_agent_backoff,
 
     implement Resource using std::none
 
-    Resource(key="a", value="b", agent="agent1")
+    Resource(key="a", value="b", agent="agent1", purge_on_delete=true)
     """
     )
 
@@ -222,7 +222,7 @@ async def test_resource_evolution(server, client, environment, no_agent_backoff,
 
     implement Resource using std::none
 
-    Resource(key="a", value="b", agent="agent1", uid="alpha")
+    Resource(key="a", value="b", agent="agent1", uid="alpha", purge_on_delete=true)
     """
     )
 
