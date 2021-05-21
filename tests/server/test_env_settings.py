@@ -279,3 +279,21 @@ async def test_decommission_protected_environment(server, client):
     result = await client.environment_settings_set(env_id, data.PROTECTED_ENVIRONMENT, False)
     assert result.code == 200
     await assert_decomission_env(env_id, decommission_succeeds=True)
+
+
+@pytest.mark.asyncio
+async def test_default_value_purge_on_delete_setting(server, client):
+    """
+    Ensure that the purge_on_delete setting of an environment is set to false by default.
+    """
+    result = await client.create_project("env-test")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    result = await client.create_environment(project_id=project_id, name="dev")
+    assert result.code == 200
+    env_id = result.result["environment"]["id"]
+
+    result = await client.get_setting(tid=env_id, id=data.PURGE_ON_DELETE)
+    assert result.code == 200
+    assert result.result["value"] is False
