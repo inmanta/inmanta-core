@@ -2,6 +2,6 @@ description: Add changelog section to the documentation
 issue-nr: 417
 issue-repo: irt
 change-type: patch
-destination-branches: [master, iso3, iso4]
+destination-branches: [master, iso4]
 sections:
   feature: "{{description}}"
