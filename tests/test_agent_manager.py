@@ -288,7 +288,7 @@ async def test_api(init_dataclasses_and_load_schema):
     assert len(all_agents_processes["processes"]) == 5
 
     # Making fifth session expire
-    expiration = datetime.datetime.now()
+    expiration = datetime.datetime.now().astimezone()
     await am._expire_session(ts5, set(ts5.endpoint_names), expiration)
 
     await futures.proccess()

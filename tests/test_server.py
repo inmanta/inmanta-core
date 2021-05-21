@@ -762,7 +762,7 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
 
     # Start the deploy
     action_id = uuid.uuid4()
-    now = datetime.now()
+    now = datetime.now().astimezone()
     result = await aclient.resource_action_update(
         environment, resource_ids, action_id, "deploy", now, status=const.ResourceState.deploying
     )

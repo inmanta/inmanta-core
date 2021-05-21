@@ -29,6 +29,7 @@ from configparser import RawConfigParser
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type, TypeVar, Union, cast
 
 import asyncpg
+import pydantic
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
@@ -53,7 +54,7 @@ APILIMIT = 1000
 
 def json_encode(value: Any) -> str:
     # see json_encode in tornado.escape
-    return json.dumps(value, default=util.custom_json_encoder)
+    return json.dumps(value, default=util.internal_json_encoder)
 
 
 class Field(object):
@@ -1727,7 +1728,7 @@ class Compile(BaseDocument):
     async def delete_older_than(
         cls, oldest_retained_date: datetime.datetime, connection: Optional[asyncpg.Connection] = None
     ) -> None:
-        query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::timestamp"
+        query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::timestamp with time zone"
         await cls._execute_query(query, oldest_retained_date, connection=connection)
 
     def to_dto(self) -> m.CompileRun:
@@ -1763,7 +1764,7 @@ class LogLine(DataDocument):
     @classmethod
     def log(cls, level, msg, timestamp=None, **kwargs):
         if timestamp is None:
-            timestamp = datetime.datetime.now()
+            timestamp = datetime.datetime.now().astimezone()
 
         log_line = msg % kwargs
         return cls(level=const.LogLevel(level), msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
@@ -1823,7 +1824,10 @@ class ResourceAction(BaseDocument):
             for message in result["messages"]:
                 message = json.loads(message)
                 if "timestamp" in message:
-                    message["timestamp"] = datetime.datetime.strptime(message["timestamp"], "%Y-%m-%dT%H:%M:%S.%f")
+                    # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
+                    message["timestamp"] = pydantic.parse_obj_as(datetime.datetime, message["timestamp"])
+                    if message["timestamp"].tzinfo is None:
+                        raise Exception("Found naive timestamp in the database, this should not be possible")
                 new_messages.append(message)
             result["messages"] = new_messages
         if "changes" in result and result["changes"] == {}:
@@ -1908,7 +1912,7 @@ class ResourceAction(BaseDocument):
         environments = await Environment.get_list()
         for env in environments:
             time_to_retain_logs = await env.get(RESOURCE_ACTION_LOGS_RETENTION)
-            keep_logs_until = datetime.datetime.now() - datetime.timedelta(days=time_to_retain_logs)
+            keep_logs_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
             query = "DELETE FROM " + cls.table_name() + " WHERE started < $1"
             value = cls._get_value(keep_logs_until)
             await cls._execute_query(query, value)
@@ -2904,7 +2908,14 @@ class DryRun(BaseDocument):
 
     @classmethod
     async def create(cls, environment, model, total, todo):
-        obj = cls(environment=environment, model=model, date=datetime.datetime.now(), resources={}, total=total, todo=todo)
+        obj = cls(
+            environment=environment,
+            model=model,
+            date=datetime.datetime.now().astimezone(),
+            resources={},
+            total=total,
+            todo=todo,
+        )
         await obj.insert()
         return obj
 
