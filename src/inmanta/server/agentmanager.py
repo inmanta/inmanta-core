@@ -29,7 +29,7 @@ from uuid import UUID
 
 import asyncpg
 
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.data import APILIMIT
