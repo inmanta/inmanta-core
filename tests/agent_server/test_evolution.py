@@ -20,7 +20,7 @@ from collections import defaultdict
 import pytest
 
 from agent_server.conftest import get_agent, stop_agent
-from inmanta import const, resources, data
+from inmanta import const, data, resources
 from inmanta.agent import handler
 from inmanta.agent.handler import CRUDHandler, HandlerContext, provider
 from inmanta.export import unknown_parameters
