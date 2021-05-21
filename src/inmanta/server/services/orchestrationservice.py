@@ -213,7 +213,7 @@ class OrchestrationService(protocol.ServerSlice):
         if version <= 0:
             raise BadRequest(f"The version number used ({version}) is not positive")
 
-        started = datetime.datetime.now()
+        started = datetime.datetime.now().astimezone()
 
         agents = set()
         # lookup for all RV's, lookup by resource id
@@ -331,7 +331,7 @@ class OrchestrationService(protocol.ServerSlice):
             cm = data.ConfigurationModel(
                 environment=env.id,
                 version=version,
-                date=datetime.datetime.now(),
+                date=datetime.datetime.now().astimezone(),
                 total=len(resources),
                 version_info=version_info,
                 undeployable=undeployable_ids,
@@ -367,7 +367,7 @@ class OrchestrationService(protocol.ServerSlice):
         # Don't log ResourceActions without resource_version_ids, because
         # no API call exists to retrieve them.
         if resource_version_ids:
-            now = datetime.datetime.now()
+            now = datetime.datetime.now().astimezone()
             log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
             self.resource_service.log_resource_action(env.id, resource_version_ids, logging.INFO, now, log_line.msg)
             ra = data.ResourceAction(
@@ -418,7 +418,7 @@ class OrchestrationService(protocol.ServerSlice):
         undep = await model.get_undeployable()
         undep = [rid + ",v=%s" % version_id for rid in undep]
 
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().astimezone()
 
         # not checking error conditions
         await self.resource_service.resource_action_update(

@@ -55,7 +55,7 @@ from inmanta.types import ReturnTypes
 def openapi_json_encoder(o) -> Union[ReturnTypes, util.JSONSerializable]:
     if isinstance(o, BaseModel):
         return o.dict(by_alias=True, exclude_none=True)
-    return util.custom_json_encoder(o)
+    return util.api_boundary_json_encoder(o)
 
 
 class OpenApiConverter:

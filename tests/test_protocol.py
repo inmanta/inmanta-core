@@ -17,16 +17,19 @@
 """
 import asyncio
 import base64
+import datetime
 import json
 import os
 import random
 import threading
 import time
+import urllib.parse
 import uuid
 from enum import Enum
 from itertools import chain
 from typing import Any, Dict, Iterator, List, Optional, Union
 
+import pydantic
 import pytest
 import tornado
 from pydantic.types import StrictBool
@@ -2042,3 +2045,75 @@ async def test_dict_list_get_by_url(unused_tcp_port, postgres_db, database_name,
         raise_error=False,
     )
     assert response.code == 200
+
+
+@pytest.mark.asyncio
+async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    """
+    Test API input and output conversion for timestamps. Objects should be either timezone-aware or implicit UTC.
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    timezone: datetime.timezone = datetime.timezone(datetime.timedelta(hours=2))
+    now: datetime.datetime = datetime.datetime.now().astimezone(timezone)
+    naive_utc: datetime.datetime = now.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
+        def test_method(timestamp: datetime.datetime) -> List[datetime.datetime]:
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, timestamp: datetime.datetime) -> List[datetime.datetime]:
+            assert timestamp.tzinfo is not None
+            assert timestamp == now
+            return [
+                now,
+                now.astimezone(datetime.timezone.utc),
+                now.astimezone(datetime.timezone.utc).replace(tzinfo=None),
+            ]
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    client: protocol.Client = protocol.Client("client")
+
+    response: Result = await client.test_method(timestamp=now)
+    assert response.code == 200
+    assert all(pydantic.parse_obj_as(datetime.datetime, timestamp) == naive_utc for timestamp in response.result["data"])
+
+    response: Result = await client.test_method(timestamp=now.astimezone(datetime.timezone.utc))
+    assert response.code == 200
+
+    response: Result = await client.test_method(timestamp=now.astimezone(datetime.timezone.utc).replace(tzinfo=None))
+    assert response.code == 200
+
+    response: Result = await client.test_method(timestamp=now.replace(tzinfo=None))
+    assert response.code == 500
+
+    # Test REST API without going through Python client
+    port = opt.get_bind_port()
+    client = AsyncHTTPClient()
+
+    async def request(timestamp: datetime.datetime) -> tornado.httpclient.HTTPResponse:
+        request = HTTPRequest(
+            url=(
+                f"http://localhost:{port}/api/v1/test?timestamp="
+                f"{urllib.parse.quote(timestamp.isoformat(timespec='microseconds'))}"
+            ),
+            method="GET",
+        )
+        return await client.fetch(request)
+
+    response = await request(now)
+    assert response.code == 200
+
+    response = await request(now.astimezone(datetime.timezone.utc).replace(tzinfo=None))
+    assert response.code == 200
+
+    with pytest.raises(tornado.httpclient.HTTPClientError):
+        response = await request(now.replace(tzinfo=None))
