@@ -22,7 +22,7 @@ import sys
 import time
 import uuid
 from asyncio import queues, subprocess
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from uuid import UUID
@@ -733,10 +733,7 @@ class AgentManager(ServerSlice, SessionListener):
             **query,
         )
 
-        return 200, {
-            "agents": [a.to_dict() for a in ags],
-            "servertime": util.datetime_utc_isoformat(datetime.now())
-        }
+        return 200, {"agents": [a.to_dict() for a in ags], "servertime": util.datetime_utc_isoformat(datetime.now())}
 
     @protocol.handle(methods.get_state, env="tid")
     async def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str) -> Apireturn:
