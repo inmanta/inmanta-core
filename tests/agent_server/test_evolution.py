@@ -20,7 +20,7 @@ from collections import defaultdict
 import pytest
 
 from agent_server.conftest import get_agent, stop_agent
-from inmanta import const, resources
+from inmanta import const, data, resources
 from inmanta.agent import handler
 from inmanta.agent.handler import CRUDHandler, HandlerContext, provider
 from inmanta.export import unknown_parameters
@@ -172,6 +172,10 @@ async def test_resource_evolution(server, client, environment, no_agent_backoff,
     agent = await get_agent(server, environment, "agent1")
     async_finalizer(agent.stop)
 
+    # Enable purge_on_delete at the environment level
+    result = await client.set_setting(tid=environment, id=data.PURGE_ON_DELETE, value=True)
+    assert result.code == 200
+
     # override origin check
     monkeypatch.setattr(SourceInfo, "_get_module_name", lambda s: s.module_name)
     monkeypatch.setattr(SourceInfo, "get_siblings", lambda s: iter([s]))
@@ -187,7 +191,7 @@ async def test_resource_evolution(server, client, environment, no_agent_backoff,
 
     implement Resource using std::none
 
-    Resource(key="a", value="b", agent="agent1")
+    Resource(key="a", value="b", agent="agent1", purge_on_delete=true)
     """
     )
 
@@ -218,14 +222,14 @@ async def test_resource_evolution(server, client, environment, no_agent_backoff,
 
     implement Resource using std::none
 
-    Resource(key="a", value="b", agent="agent1", uid="alpha")
+    Resource(key="a", value="b", agent="agent1", uid="alpha", purge_on_delete=true)
     """
     )
 
     version, _ = await snippetcompiler.do_export_and_deploy()
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-    assert result.result["model"]["total"] == 2
+    assert result.result["model"]["total"] == 2  # purge_on_delete
 
     await _wait_until_deployment_finishes(client, environment, version)
     assert provider.isset("agent1", "a")
