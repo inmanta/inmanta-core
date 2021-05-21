@@ -19,7 +19,7 @@ import datetime
 import logging
 from typing import Any, Dict, List, Optional, cast
 
-from inmanta import data
+from inmanta import data, util
 from inmanta.const import ParameterSource
 from inmanta.protocol import methods
 from inmanta.protocol.common import attach_warnings
@@ -66,7 +66,7 @@ class ParameterService(protocol.ServerSlice):
         """
         LOGGER.info("Renewing expired parameters")
 
-        updated_before = datetime.datetime.now() - datetime.timedelta(0, (self._fact_expire - self._fact_renew))
+        updated_before = datetime.datetime.now().astimezone() - datetime.timedelta(0, (self._fact_expire - self._fact_renew))
         expired_params = await data.Parameter.get_updated_before(updated_before)
 
         LOGGER.debug("Renewing %d expired parameters" % len(expired_params))
@@ -115,7 +115,7 @@ class ParameterService(protocol.ServerSlice):
         param = params[0]
 
         # check if it was expired
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().astimezone()
         if resource_id is None or (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
             return 200, {"parameter": params[0]}
 
@@ -157,14 +157,14 @@ class ParameterService(protocol.ServerSlice):
                 resource_id=resource_id,
                 value=value,
                 source=source,
-                updated=datetime.datetime.now(),
+                updated=datetime.datetime.now().astimezone(),
                 metadata=metadata,
             )
             await param.insert()
         else:
             param = params[0]
             value_updated = param.value != value
-            await param.update(source=source, value=value, updated=datetime.datetime.now(), metadata=metadata)
+            await param.update(source=source, value=value, updated=datetime.datetime.now().astimezone(), metadata=metadata)
 
         # check if the parameter is an unknown
         unknown_params = await data.UnknownParameter.get_list(
@@ -264,6 +264,7 @@ class ParameterService(protocol.ServerSlice):
             {
                 "parameters": params,
                 "expire": self._fact_expire,
-                "now": datetime.datetime.now().isoformat(timespec="microseconds"),
+                # Return datetime in UTC without explicit timezone offset
+                "now": util.datetime_utc_isoformat(datetime.datetime.now()),
             },
         )

@@ -218,7 +218,7 @@ EXIT_START_FAILED = 4
 
 
 TIME_ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
-TIME_LOGFMT = "%Y-%m-%d %H:%M:%S"
+TIME_LOGFMT = "%Y-%m-%d %H:%M:%S%z"
 
 PLUGINS_PACKAGE = "inmanta_plugins"
 

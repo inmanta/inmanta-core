@@ -480,7 +480,7 @@ ba796948-99a6-4da2-a504-266284c6ba8c	deploy	2020-12-22 09:44:07.320151	2020-12-2
 --
 
 COPY public.schemamanager (name, current_version) FROM stdin;
-core	8
+core	17
 \.
 
 
