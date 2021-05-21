@@ -30,6 +30,18 @@ from inmanta.util import get_compiler_version
 LOGGER = logging.getLogger(__name__)
 
 
+@pytest.fixture(scope="function")
+async def environment(environment, client):
+    """
+    Override the environment fixture, defined in conftest.py, to make sure that the
+    purge_on_delete environment setting is enabled for all tests defined in this file.
+    """
+    result = await client.set_setting(tid=environment, id=data.PURGE_ON_DELETE, value=True)
+    assert result.code == 200
+
+    yield environment
+
+
 @pytest.mark.asyncio
 async def test_purge_on_delete_requires(client, server, environment, clienthelper):
     """
