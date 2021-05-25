@@ -140,6 +140,42 @@ Procedure
 
 8. If this model uses LSM, perform initial tests of all services via the API.
 
+Gradual ramp-up procedure A
+++++++++++++++++++++++++++++
+For models that are very sensitive, it is possible to make the ramp-up more gradual.
+
+1. Take note of the following settings
+
+    * autostart_agent_deploy_interval
+    * autostart_agent_repair_interval
+
+2. Disable spontaneous deployment
+
+    * autostart_agent_deploy_interval = 0
+    * autostart_agent_repair_interval = 0
+    * auto_deploy = True
+    * push_on_auto_deploy = False
+
+3. Click ‘recompile’ to install the project.
+
+    * A new version will appear
+    * It will go to the deploying state
+    * But no resources will be deployed
+
+4. In the agent tab, click `deploy on agent` on the 'internal' agent
+
+    * All agent will come online
+
+5. Perform a dryrun, to verify there are no undesirable effects.
+6. Click `deploy on agent` on each agent. Verify results.
+7. Ensure all environment setting are set correctly
+
+   * agent_trigger_method_on_auto_deploy = push_incremental_deploy
+   * auto_deploy = true
+   * push_on_auto_deploy = true
+   * server_compile = true
+   * autostart_agent_deploy_interval
+   * autostart_agent_repair_interval
 
 
 Issue templates
