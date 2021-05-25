@@ -278,7 +278,8 @@ def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
         return str(o)
 
     from inmanta.data.model import BaseModel
-    if isinstance(o, model.BaseModel):
+
+    if isinstance(o, BaseModel):
         return o.dict(by_alias=True)
 
     LOGGER.error("Unable to serialize %s", o)
