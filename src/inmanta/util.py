@@ -237,9 +237,9 @@ def internal_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     if isinstance(o, datetime.datetime):
         # Internally, all naive datetime instances are assumed local. Returns ISO timestamp with explicit timezone offset.
-        return _custom_json_encoder(o if o.tzinfo is not None else o.astimezone())
+        return custom_json_encoder(o if o.tzinfo is not None else o.astimezone())
 
-    return _custom_json_encoder(o)
+    return custom_json_encoder(o)
 
 
 @stable_api
@@ -252,10 +252,12 @@ def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable
         # Accross API boundaries, all naive datetime instances are assumed UTC. Returns ISO timestamp implicitly in UTC.
         return datetime_utc_isoformat(o, naive_utc=True)
 
-    return _custom_json_encoder(o)
+    return custom_json_encoder(o)
 
 
-def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
+# deprecated as part of stable API: dropped in iso5
+@stable_api
+def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries
     """
