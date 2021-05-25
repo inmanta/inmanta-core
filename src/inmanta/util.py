@@ -38,7 +38,6 @@ from tornado import gen
 from tornado.ioloop import IOLoop
 
 from inmanta import COMPILER_VERSION
-from inmanta.data.model import BaseModel
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 
@@ -278,7 +277,8 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
         # Logs can push exceptions through RPC. Return a string representation.
         return str(o)
 
-    if isinstance(o, BaseModel):
+    from inmanta.data.model import BaseModel
+    if isinstance(o, model.BaseModel):
         return o.dict(by_alias=True)
 
     LOGGER.error("Unable to serialize %s", o)
