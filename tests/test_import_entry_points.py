@@ -98,3 +98,7 @@ def test_import_protocol(import_entry_point) -> None:
 
 def test_import_const(import_entry_point) -> None:
     assert import_entry_point("inmanta.const") == 0
+
+
+def test_import_util(import_entry_point: Callable[[str], Optional[int]]) -> None:
+    assert import_entry_point("inmanta.util") == 0
