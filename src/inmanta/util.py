@@ -255,8 +255,6 @@ def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable
     return custom_json_encoder(o)
 
 
-# deprecated as part of stable API: dropped in iso5
-@stable_api
 def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries
