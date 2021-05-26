@@ -1,7 +1,7 @@
 Operational Procedures
 ----------------------
 
-This document describes the best practices for various operation procedures.
+This document describes the best practices for various operational procedures.
 
 .. note::
     issue templates are available for all procedures at the bottom of this page
