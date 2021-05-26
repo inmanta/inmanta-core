@@ -23,6 +23,7 @@ import uuid
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
 
+from asyncpg.exceptions import UniqueViolationError
 from tornado.httputil import url_concat
 
 from inmanta import const, data, util
@@ -31,7 +32,7 @@ from inmanta.data import APILIMIT
 from inmanta.data.model import Resource, ResourceAction, ResourceType, ResourceVersionIdStr
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import ReturnValue
-from inmanta.protocol.exceptions import BadRequest
+from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
 from inmanta.server import config as opt
@@ -566,6 +567,40 @@ class ResourceService(protocol.ServerSlice):
                     await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
 
         return 200
+
+    @protocol.handle(methods_v2.resource_deploy_start, env="tid")
+    async def resource_deploy_start(
+        self,
+        env: data.Environment,
+        resource_id: str,
+        action_id: uuid.UUID,
+    ) -> Dict[str, const.ResourceState]:
+        parsed_resource_id = Id.parse_id(resource_id)
+        if not parsed_resource_id.is_resource_version_id_obj():
+            raise BadRequest(message=f"Version is missing from argument resource_id: {resource_id}")
+
+        result = await data.Resource.get_one(environment=env.id, resource_version_id=resource_id)
+        if result is None:
+            raise NotFound(message=f"Environment {env.id} doesn't contain a resource with id {resource_id}")
+
+        resource_action = data.ResourceAction(
+            environment=env.id,
+            version=parsed_resource_id.version,
+            resource_version_ids=[resource_id],
+            action_id=action_id,
+            action=const.ResourceAction.deploy,
+            started=datetime.datetime.now().astimezone(),
+            status=const.ResourceState.deploying,
+            send_event=False,
+        )
+        try:
+            await resource_action.insert()
+        except UniqueViolationError:
+            raise Conflict(message=f"A resource action with id {action_id} already exists.")
+
+        return await data.Resource.get_resource_state_for_dependencies(
+            environment=env.id, resource_version_id=parsed_resource_id
+        )
 
     @protocol.handle(methods_v2.get_resource_actions, env="tid")
     async def get_resource_actions(

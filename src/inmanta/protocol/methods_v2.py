@@ -21,7 +21,7 @@ import datetime
 import uuid
 from typing import Dict, List, Optional, Union
 
-from inmanta.const import AgentAction, ApiDocsFormat, ClientType
+from inmanta.const import AgentAction, ApiDocsFormat, ClientType, ResourceState
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
 
@@ -404,4 +404,28 @@ def get_resource_actions(
 
     :raises BadRequest: When the supplied parameters are not valid.
 
+    """
+
+
+@typedmethod(
+    path="/resource/<resource_id>/deploy/start",
+    operation="POST",
+    agent_server=True,
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def resource_deploy_start(
+    tid: uuid.UUID,
+    resource_id: str,
+    action_id: uuid.UUID,
+) -> Dict[str, ResourceState]:
+    """
+    Report to the server that the server will start the deployment of the given resource.
+
+    :param tid: The id of the environment the resource belongs to
+    :param resource_id: The resource version id of the resource for which the deployment will start
+    :param action_id: A unique id used to track the action of this deployment
+    :return: A dict mapping the resource version id of each dependency of resource_id to
+             the last deployment status of that resource.
     """
