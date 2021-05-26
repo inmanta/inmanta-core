@@ -931,7 +931,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
 async def test_resource_deploy_start(server, client, environment, agent, endpoint_to_use: str):
     """
     Ensure that API endpoint `resource_deploy_start()` does the same as the `resource_action_update()`
-    API endpoint when a new deployment is requested.
+    API endpoint when a new deployment is reported.
     """
     env_id = uuid.UUID(environment)
 
@@ -1009,6 +1009,9 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
 
 @pytest.mark.asyncio
 async def test_resource_deploy_start_error_handling(server, client, environment, agent):
+    """
+    Test the error handling of the `resource_deploy_start` API endpoint.
+    """
     env_id = uuid.UUID(environment)
 
     # Version part missing from resource_version_id
