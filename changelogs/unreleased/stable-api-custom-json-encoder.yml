@@ -1,0 +1,4 @@
+description: Added custom json encoders to stable API definition.
+change-type: patch
+destination-branches:
+  - master
