@@ -572,9 +572,9 @@ class ResourceService(protocol.ServerSlice):
     async def resource_deploy_start(
         self,
         env: data.Environment,
-        resource_id: str,
+        resource_id: ResourceVersionIdStr,
         action_id: uuid.UUID,
-    ) -> Dict[str, const.ResourceState]:
+    ) -> Dict[ResourceVersionIdStr, const.ResourceState]:
         parsed_resource_id = Id.parse_id(resource_id)
         if not parsed_resource_id.is_resource_version_id_obj():
             raise BadRequest(message=f"Version is missing from argument resource_id: {resource_id}")
