@@ -38,7 +38,7 @@ from tornado import gen
 from tornado.ioloop import IOLoop
 
 from inmanta import COMPILER_VERSION
-from inmanta.data.model import BaseModel
+from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -228,6 +228,7 @@ class JSONSerializable(ABC):
         raise NotImplementedError()
 
 
+@stable_api
 def internal_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries. This
@@ -235,11 +236,12 @@ def internal_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     if isinstance(o, datetime.datetime):
         # Internally, all naive datetime instances are assumed local. Returns ISO timestamp with explicit timezone offset.
-        return _custom_json_encoder(o if o.tzinfo is not None else o.astimezone())
+        return custom_json_encoder(o if o.tzinfo is not None else o.astimezone())
 
-    return _custom_json_encoder(o)
+    return custom_json_encoder(o)
 
 
+@stable_api
 def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries. This
@@ -249,10 +251,10 @@ def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable
         # Accross API boundaries, all naive datetime instances are assumed UTC. Returns ISO timestamp implicitly in UTC.
         return datetime_utc_isoformat(o, naive_utc=True)
 
-    return _custom_json_encoder(o)
+    return custom_json_encoder(o)
 
 
-def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
+def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries
     """
@@ -274,6 +276,8 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     if isinstance(o, Exception):
         # Logs can push exceptions through RPC. Return a string representation.
         return str(o)
+
+    from inmanta.data.model import BaseModel
 
     if isinstance(o, BaseModel):
         return o.dict(by_alias=True)
