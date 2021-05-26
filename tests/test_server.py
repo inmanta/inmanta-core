@@ -935,7 +935,6 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     """
     env_id = uuid.UUID(environment)
 
-    # Add multiple versions of model
     model_version = 1
     cm = data.ConfigurationModel(
         environment=env_id,
@@ -1024,3 +1023,44 @@ async def test_resource_deploy_start_error_handling(server, client, environment,
     result = await agent._client.resource_deploy_start(tid=env_id, resource_id=resource_id, action_id=uuid.uuid4())
     assert result.code == 404
     assert f"Environment {environment} doesn't contain a resource with id {resource_id}" in result.result["message"]
+
+
+@pytest.mark.asyncio
+async def test_resource_deploy_start_action_id_conflict(server, client, environment, agent):
+    """
+    Ensure proper error handling when the same action_id is provided twice to the `resource_deploy_start` API endpoint.
+    """
+    env_id = uuid.UUID(environment)
+
+    model_version = 1
+    cm = data.ConfigurationModel(
+        environment=env_id,
+        version=model_version,
+        date=datetime.now().astimezone(),
+        total=1,
+        version_info={},
+    )
+    await cm.insert()
+
+    model_version = 1
+    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
+
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.skipped,
+        resource_version_id=rvid_r1_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+
+    action_id = uuid.uuid4()
+
+    async def execute_resource_deploy_start(expected_return_code: int, resulting_nr_resource_actions: int) -> None:
+        result = await agent._client.resource_deploy_start(tid=env_id, resource_id=rvid_r1_v1, action_id=action_id)
+        assert result.code == expected_return_code
+
+        result = await client.get_resource_actions(tid=env_id)
+        assert result.code == 200
+        assert len(result.result["data"]) == resulting_nr_resource_actions
+
+    await execute_resource_deploy_start(expected_return_code=200, resulting_nr_resource_actions=1)
+    await execute_resource_deploy_start(expected_return_code=409, resulting_nr_resource_actions=1)
