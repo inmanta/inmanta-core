@@ -21,14 +21,14 @@ import logging
 import os
 import uuid
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, cast
 
 from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
 from inmanta.data import APILIMIT
-from inmanta.data.model import Resource, ResourceAction, ResourceType, ResourceVersionIdStr
+from inmanta.data.model import Resource, ResourceAction, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest
@@ -650,3 +650,62 @@ class ResourceService(protocol.ServerSlice):
             links["prev"] = url_concat(base_url, previous_params)
         return_value = ReturnValue(response=resource_action_dtos, links=links if links else None)
         return return_value
+
+
+    @protocol.handle(methods_v2.get_resource_events, env="tid", resource_id="id")
+    async def get_resource_events(
+        self,
+        env: data.Environment,
+        resource_id: ResourceVersionIdStr,
+    ) -> Dict[ResourceIdStr, List[ResourceAction]]:
+        id: Id = Id.parse_id(resource_id)
+        if id.version is None:
+            raise BadRequest(message=f"Version is missing from argument id: {resource_id}")
+        actions: List[ResourceAction] = await data.ResourceAction.query_resource_actions(
+            environment=env.id,
+            resource_type=id.get_entity_type(),
+            agent=id.get_agent_name(),
+            attribute=id.get_attribute(),
+            attribute_value=id.get_attribute_value(),
+        )
+
+        current_deploy_start: datetime.datetime
+        # TODO: think about making optional instead of using datetime.datetime.min
+        last_deploy_start: datetime.datetime
+
+        deploy_actions: Iterator[data.ResourceAction] = (
+            action for action in actions if action.action == const.ResourceAction.deploy
+        )
+        try:
+            current_deploy: data.ResourceAction = next(deploy_actions)
+            if current_deploy.status != const.ResourceState.deploying:
+                raise BadRequest(
+                    "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
+                    f" for resource {resource_id} is {current_deploy.status}."
+                )
+            current_deploy_start = current_deploy.started
+        except StopIteration:
+            raise BadRequest(
+                "Fetching resource events only makes sense when the resource is currently deploying. Resource"
+                f" {resource_id} has not started deploying yet."
+            )
+        try:
+            last_deploy: data.ResourceAction = next(
+                action for action in deploy_actions if action.status == const.ResourceState.deploying
+            )
+            last_deploy_start = last_deploy.started
+        except StopIteration:
+            # This resource hasn't been deployed before: fetch all events
+            last_deploy_start = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+
+        # TODO: continue
+
+
+    @protocol.handle(methods_v2.resource_should_deploy, env="tid", resource_id="id")
+    async def resource_should_deploy(
+        self,
+        env: data.Environment,
+        resource_id: ResourceVersionIdStr,
+    ) -> bool:
+        # TODO: return true iff resource has never deployed before or if get_resource_events returns changes
+        return True
