@@ -657,25 +657,34 @@ class ResourceService(protocol.ServerSlice):
         self,
         env: data.Environment,
         resource_id: ResourceVersionIdStr,
+    # TODO: return type Dict[str, List[object]] is not valid => update inmanta.types?
     ) -> Dict[ResourceIdStr, List[ResourceAction]]:
         id: Id = Id.parse_id(resource_id)
         if id.version is None:
             raise BadRequest(message=f"Version is missing from argument id: {resource_id}")
-        actions: List[ResourceAction] = await data.ResourceAction.query_resource_actions(
-            environment=env.id,
-            resource_type=id.get_entity_type(),
-            agent=id.get_agent_name(),
-            attribute=id.get_attribute(),
-            attribute_value=id.get_attribute_value(),
-        )
+
+        async def get_deploy_actions(
+            resource_id: Id,
+            first_timestamp: Optional[datetime.datetime] = None,
+            last_timestamp: Optional[datetime.datetime] = None,
+        ) -> List[data.ResourceAction]:
+            actions: List[data.ResourceAction] = await data.ResourceAction.query_resource_actions(
+                environment=env.id,
+                resource_type=resource_id.get_entity_type(),
+                agent=resource_id.get_agent_name(),
+                attribute=resource_id.get_attribute(),
+                attribute_value=resource_id.get_attribute_value(),
+                first_timestamp=first_timestamp,
+                last_timestamp=last_timestamp,
+            )
+            return [
+                action for action in actions if action.action == const.ResourceAction.deploy
+            ]
 
         current_deploy_start: datetime.datetime
-        # TODO: think about making optional instead of using datetime.datetime.min
-        last_deploy_start: datetime.datetime
+        last_deploy_start: Optional[datetime.datetime]
 
-        deploy_actions: Iterator[data.ResourceAction] = (
-            action for action in actions if action.action == const.ResourceAction.deploy
-        )
+        deploy_actions: Iterator[data.ResourceAction] = iter(await get_deploy_actions(id))
         try:
             current_deploy: data.ResourceAction = next(deploy_actions)
             if current_deploy.status != const.ResourceState.deploying:
@@ -696,9 +705,19 @@ class ResourceService(protocol.ServerSlice):
             last_deploy_start = last_deploy.started
         except StopIteration:
             # This resource hasn't been deployed before: fetch all events
-            last_deploy_start = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+            last_deploy_start = None
 
-        # TODO: continue
+        resource: data.Resource = (await data.Resource.get_resources(env.id, [resource_id]))[0]
+        return {
+            dependency.resource_str(): [
+                action.to_dto() for action in await get_deploy_actions(
+                    dependency,
+                    first_timestamp=last_deploy_start,
+                    last_timestamp=current_deploy_start,
+                )
+            ]
+            for dependency in (Id.parse_id(req) for req in resource.attributes["requires"])
+        }
 
 
     @protocol.handle(methods_v2.resource_should_deploy, env="tid", resource_id="id")
@@ -707,5 +726,9 @@ class ResourceService(protocol.ServerSlice):
         env: data.Environment,
         resource_id: ResourceVersionIdStr,
     ) -> bool:
-        # TODO: return true iff resource has never deployed before or if get_resource_events returns changes
-        return True
+        # TODO: return true if resource has never deployed before
+        return any(
+            action.change != const.Change.nochange
+            for dependency, actions in (await self.get_resource_events(env, resource_id)).items()
+            for action in actions
+        )
