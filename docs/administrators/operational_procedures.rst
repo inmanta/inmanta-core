@@ -4,7 +4,7 @@ Operational Procedures
 This document describes the best practices for various operational procedures.
 
 .. note::
-    issue templates are available for all procedures at the bottom of this page
+    issue templates for all procedures are available at the bottom of this page
 
 
 TODO: process flowchart
@@ -33,10 +33,17 @@ Procedure
 
     inmanta -vv -X project freeze --recursive --operator "=="
 
-3. Verify that all modules are frozen to the correct version
-4. Commit this change (`git commit -a`)
-5. (Optional) Tag this commit (`git tag -a $version`)
-6. Push to the release branch (`git push`)
+
+    This will cause the `project.yml` file to be updated with constraints that only allow this project to work with this exact set of module versions.
+    This ensures that no unwanted updates can 'leak' into the production environment.
+
+4. Verify that all modules are frozen to the correct version.
+
+    * Open `project.yml` and verify that all module versions are frozen to the expected versions
+
+5. Commit this change (`git commit -a`)
+6. (Optional) Tag this commit (`git tag -a $version`)
+7. Push to the release branch (`git push`)
 
 Upgrade of service model on the orchestrator
 #############################################
@@ -52,18 +59,18 @@ Pre-Upgrade steps
 ++++++++++++++++++
 1. Verify that environment safety setting are on (this should always be the case)
 
-    * purge_on_delete = False
-    * protected_environment = True
+    * `purge_on_delete = False`
+    * `protected_environment = True`
 
 2. Temporarily disable auto_deploy
 
-   * auto_deploy = False
+   * `auto_deploy = False`
 
 3. Click ‘recompile’ to verify that no new deploy would start.
 
     * A new version will appear but it will not start to deploy
 
-4. Inspect the current state of the latest active version, verify no failures are happening and the deploy looks healthy
+4. Inspect the current state of the latest deployed version, verify no failures are happening and the deploy looks healthy
 5. (Optional) Perform a dryrun. Wait for the dryrun to complete and take note of all changes detected by the dryrun. Ideally there should be none.
 
 Upgrade procedure
@@ -84,7 +91,7 @@ Post Upgrade procedure
 
 1. Re-enable auto_deploy
 
-    * Auto_deploy = True
+    * `auto_deploy = True`
 
 Upgrade abort/revert
 +++++++++++++++++++++++
@@ -98,8 +105,7 @@ Deployment of a new service model to the orchestrator
 ########################################################
 
 This process describes how to safely deploy a new model to the orchestrator.
-This process doesn't describe in details the good-weather flow.
-For material on common issues during first deploys and how to resolve them, we refer to the training material.
+We don't go into resolving issues encountered during first deploys here,for this we refer to the training material.
 
 Context
 ++++++++
@@ -109,15 +115,15 @@ Context
 Procedure
 ++++++++++
 
-1. Cross check all environment setting with development team
+1. Cross check all settings in the environment settings tab with the development team.
 2. Verify that environment safety setting are on (should always be the case)
 
-   * purge_on_delete = False
-   * protected_environment = True
+   * `purge_on_delete = False`
+   * `protected_environment = True`
 
 3. Temporarily disable auto_deploy
 
-    * auto_deploy = False
+    * `auto_deploy = False`
 
 4. Click ‘recompile’ to install the project.
 
@@ -132,10 +138,10 @@ Procedure
   * In case of trouble, hit the emergency stop. Resuming after a stop is very easy and stopping gives you the time to investigate.
 7. Verify that automation setting are on
 
-    * agent_trigger_method_on_auto_deploy = push_incremental_deploy
-    * auto_deploy = true
-    * push_on_auto_deploy = true
-    * server_compile = true
+    * `agent_trigger_method_on_auto_deploy = push_incremental_deploy`
+    * `auto_deploy = true`
+    * `push_on_auto_deploy = true`
+    * `server_compile = true`
 
 8. If this model uses LSM, perform initial tests of all services via the API.
 
@@ -168,12 +174,12 @@ Upgrade of service model on the orchestrator
 
    1. Verify that environment safety setting are on (this should always be the case)
 
-       * [ ] purge_on_delete = False
-       * [ ] protected_environment = True
+       * [ ] `purge_on_delete = False`
+       * [ ] `protected_environment = True`
 
    2. Temporarily disable auto_deploy
 
-      * [ ] auto_deploy = False
+      * [ ] `auto_deploy = False`
 
    3. [ ] Click ‘recompile’ to verify that no new deploy would start.
 
@@ -199,7 +205,7 @@ Upgrade of service model on the orchestrator
 
    1. Re-enable auto_deploy
 
-       * [ ] auto_deploy = True
+       * [ ] `auto_deploy = True`
 
    * Upgrade abort/revert
 
