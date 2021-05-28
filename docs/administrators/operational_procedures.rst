@@ -7,8 +7,6 @@ This document describes the best practices for various operational procedures.
     issue templates for all procedures are available at the bottom of this page
 
 
-TODO: process flowchart
-
 Project Release for Production
 ###############################
 
@@ -26,8 +24,7 @@ Procedure
 ++++++++++
 
 1. Verify in `project.yml` that `install_mode` is set to `release`.
-2. (Optional) set the `version` attribute in `project.yml` to the version of this release.
-3. Freeze all modules with
+2. Freeze all modules with
 
 .. code-block:: bash
 
@@ -42,8 +39,7 @@ Procedure
     * Open `project.yml` and verify that all module versions are frozen to the expected versions
 
 5. Commit this change (`git commit -a`)
-6. (Optional) Tag this commit (`git tag -a $version`)
-7. Push to the release branch and the tag (`git push && git push origin $version`)
+6. Push to the release branch (`git push`)
 
 Upgrade of service model on the orchestrator
 #############################################
