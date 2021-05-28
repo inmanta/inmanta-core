@@ -407,7 +407,7 @@ def get_resource_actions(
     """
 
 
-# TODO: better name?
+# TODO: better name? -> update service and tests as well
 @typedmethod(
     path="/resource/<id>/events", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -427,7 +427,7 @@ def get_resource_events(
     """
 
 
-# TODO: name should indicate this is related to responding to change
+# TODO: name should indicate this is related to responding to change -> update service and tests as well
 @typedmethod(
     path="/resource/<id>/should_deploy", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )

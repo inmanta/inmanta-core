@@ -556,7 +556,6 @@ class MethodProperties(object):
                 raise InvalidMethodDefinition(f"Invalid type for argument {arg}: Any type is not allowed in strict mode")
             return
 
-        print(arg, arg_type, strict, allow_none_type, in_url)
         if typing_inspect.is_union_type(arg_type):
             # Make sure there is only one list and one dict in the union, otherwise we cannot process the arguments
             cnt: Dict[str, int] = defaultdict(lambda: 0)
