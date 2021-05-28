@@ -59,7 +59,7 @@ from pydantic.main import create_model
 from tornado import web
 
 from inmanta import config as inmanta_config
-from inmanta import const, execute, util
+from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.stable_api import stable_api
@@ -519,12 +519,12 @@ class MethodProperties(object):
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
 
-        if typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
+        if typing_inspect.is_generic_type(arg_type) and types.issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
             self._validate_type_arg(
                 arg, typing_inspect.get_args(arg_type, evaluate=True)[0], strict=strict, allow_none_type=True
             )
 
-        elif not typing_inspect.is_generic_type(arg_type) and isinstance(arg_type, type) and issubclass(arg_type, ReturnValue):
+        elif not typing_inspect.is_generic_type(arg_type) and isinstance(arg_type, type) and types.issubclass(arg_type, ReturnValue):
             raise InvalidMethodDefinition("ReturnValue should have a type specified.")
 
         else:
@@ -542,11 +542,21 @@ class MethodProperties(object):
         :param in_url: This argument is passed in the URL
         """
 
+        if typing_inspect.is_new_type(arg_type):
+            return self._validate_type_arg(
+                arg,
+                arg_type.__supertype__,
+                strict=strict,
+                allow_none_type=allow_none_type,
+                in_url=in_url,
+            )
+
         if arg_type is Any:
             if strict:
                 raise InvalidMethodDefinition(f"Invalid type for argument {arg}: Any type is not allowed in strict mode")
             return
 
+        print(arg, arg_type, strict, allow_none_type, in_url)
         if typing_inspect.is_union_type(arg_type):
             # Make sure there is only one list and one dict in the union, otherwise we cannot process the arguments
             cnt: Dict[str, int] = defaultdict(lambda: 0)
@@ -566,7 +576,7 @@ class MethodProperties(object):
 
         elif typing_inspect.is_generic_type(arg_type):
             orig = typing_inspect.get_origin(arg_type)
-            if not issubclass(orig, (list, dict)):
+            if not types.issubclass(orig, (list, dict)):
                 raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} can only be generic List or Dict")
 
             args = typing_inspect.get_args(arg_type, evaluate=True)
@@ -577,7 +587,7 @@ class MethodProperties(object):
 
             elif len(args) == 1:  # A generic list
                 unsubscripted_arg = typing_inspect.get_origin(args[0]) if typing_inspect.get_origin(args[0]) else args[0]
-                if in_url and (issubclass(unsubscripted_arg, dict) or issubclass(unsubscripted_arg, list)):
+                if in_url and (types.issubclass(unsubscripted_arg, dict) or types.issubclass(unsubscripted_arg, list)):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
                         f"lists of dictionaries and lists of lists are not supported for GET requests"
@@ -585,14 +595,14 @@ class MethodProperties(object):
                 self._validate_type_arg(arg, args[0], strict=strict, allow_none_type=allow_none_type, in_url=in_url)
 
             elif len(args) == 2:  # Generic Dict
-                if not issubclass(args[0], str):
+                if not types.issubclass(args[0], str):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} must be a Dict with str keys and not {args[0].__name__}"
                     )
                 unsubscripted_dict_value_arg = (
                     typing_inspect.get_origin(args[1]) if typing_inspect.get_origin(args[1]) else args[1]
                 )
-                if in_url and (typing_inspect.is_union_type(args[1]) or issubclass(unsubscripted_dict_value_arg, dict)):
+                if in_url and (typing_inspect.is_union_type(args[1]) or types.issubclass(unsubscripted_dict_value_arg, dict)):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
                         f"nested dictionaries and union types for dictionary values are not supported for GET requests"
@@ -603,11 +613,11 @@ class MethodProperties(object):
             elif len(args) > 2:
                 raise InvalidMethodDefinition(f"Failed to validate type {arg_type} of argument {arg}.")
 
-        elif not in_url and issubclass(arg_type, VALID_SIMPLE_ARG_TYPES):
+        elif not in_url and types.issubclass(arg_type, VALID_SIMPLE_ARG_TYPES):
             pass
-        elif in_url and issubclass(arg_type, VALID_URL_ARG_TYPES):
+        elif in_url and types.issubclass(arg_type, VALID_URL_ARG_TYPES):
             pass
-        elif allow_none_type and issubclass(arg_type, type(None)):
+        elif allow_none_type and types.issubclass(arg_type, type(None)):
             # A check for optional arguments
             pass
         else:
