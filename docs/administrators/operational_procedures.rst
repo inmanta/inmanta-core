@@ -43,7 +43,7 @@ Procedure
 
 5. Commit this change (`git commit -a`)
 6. (Optional) Tag this commit (`git tag -a $version`)
-7. Push to the release branch (`git push`)
+7. Push to the release branch and the tag (`git push && git push origin $version`)
 
 Upgrade of service model on the orchestrator
 #############################################
@@ -75,11 +75,11 @@ Pre-Upgrade steps
 
 Upgrade procedure
 ++++++++++++++++++
-1. Click `Update and recompile`
+1. Click `Update project & recompile`
 
    * A new version will appear but it will not start to deploy
 
-2. Click dryrun on the new version
+2. Click `Perform dry run` on the new version
 
    * The dryrun report will open
    * Wait for the dryrun to finish
@@ -97,7 +97,7 @@ Upgrade abort/revert
 +++++++++++++++++++++++
 
 1. Delete the bad (latest) version
-2. Push a revert commit onto the release branch (`git commit revert HEAD; git push`)
+2. Push a revert commit onto the release branch (`git revert HEAD; git push`)
 3. Go through the Upgrade procedure again to make this revert effective
 
 
@@ -116,7 +116,7 @@ Procedure
 ++++++++++
 
 1. Cross check all settings in the environment settings tab with the development team.
-2. Verify that environment safety setting are on (should always be the case)
+2. Verify that environment safety settings are on (should always be the case)
 
    * `purge_on_delete = False`
    * `protected_environment = True`
@@ -129,7 +129,7 @@ Procedure
 
   * A new version will appear but it will not start to deploy
   * This may take a while as the project has to be installed.
-  * In case of problems, consult the Compiler Reports
+  * In case of problems, consult the Compile Reports
 
 5. Verify that the resources in this first version are as expected.
 6. Click deploy to make the changes effective
