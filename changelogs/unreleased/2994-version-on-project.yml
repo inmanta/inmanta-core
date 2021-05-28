@@ -1,0 +1,10 @@
+description: Add an optional version attribute to projects
+issue-nr: 2994
+change-type: minor
+destination-branches: [master, iso4]
+sections:
+    feature: "{{description}}"
+    upgrade-note: |
+        Validation has been added to the version attribute in project.yml.
+        If it is present, it must be a valid version as defined by PEP440.
+        Projects with an invalid version will no longer work

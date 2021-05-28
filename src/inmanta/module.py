@@ -430,6 +430,7 @@ class ProjectMetadata(Metadata):
       project.yml.
     :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
       Valid values are [==, ~=, >=]. *Default is '~='*
+    :param version: (Optional) The version of the inmanta project.
     """
 
     author: Optional[str] = None
@@ -440,11 +441,21 @@ class ProjectMetadata(Metadata):
     repo: List[str] = []
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
+    version: Optional[str] = None
 
     @validator("repo", "modulepath", pre=True)
     @classmethod
     def repo_and_modulepath_to_list(cls, v: object) -> object:
         return cls.to_list(v)
+
+    @validator("version")
+    @classmethod
+    def is_pep440_version(cls, v: str) -> str:
+        try:
+            version.Version(v)
+        except version.InvalidVersion as e:
+            raise ValueError(f"Version {v} is not PEP440 compliant") from e
+        return v
 
 
 T = TypeVar("T", bound=Metadata)

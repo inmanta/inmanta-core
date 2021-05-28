@@ -142,7 +142,8 @@ def modules_repo(modules_dir):
     baddep = makemodule(reporoot, "baddep", [("badmod", None), ("mod2", ">2016")], True)
     commitmodule(baddep, "first commit")
 
-    devproject = makeproject(reporoot, "devproject", imports=["mod8"], install_mode=InstallMode.prerelease)
+    # also test if a project can have a version
+    devproject = makeproject(reporoot, "devproject", imports=["mod8"], install_mode=InstallMode.prerelease, versioned=True)
     commitmodule(devproject, "first commit")
 
     masterproject = makeproject(reporoot, "masterproject", imports=["mod8"], install_mode=InstallMode.master)

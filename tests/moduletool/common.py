@@ -28,11 +28,13 @@ from inmanta.module import InstallMode
 from inmanta.moduletool import ModuleTool
 
 
-def makeproject(reporoot, name, deps=[], imports=None, install_mode: Optional[InstallMode] = None):
-    return makemodule(reporoot, name, deps, project=True, imports=imports, install_mode=install_mode)
+def makeproject(reporoot, name, deps=[], imports=None, install_mode: Optional[InstallMode] = None, versioned: bool = False):
+    return makemodule(reporoot, name, deps, project=True, imports=imports, install_mode=install_mode, versioned=versioned)
 
 
-def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode: Optional[InstallMode] = None):
+def makemodule(
+    reporoot, name, deps=[], project=False, imports=None, install_mode: Optional[InstallMode] = None, versioned: bool = True
+):
     path = os.path.join(reporoot, name)
     os.makedirs(path)
     mainfile = "module.yml"
@@ -46,7 +48,8 @@ def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mod
     with open(os.path.join(path, mainfile), "w", encoding="utf-8") as projectfile:
         projectfile.write("name: " + name)
         projectfile.write("\nlicense: Apache 2.0")
-        projectfile.write("\nversion: '0.0.1'")
+        if versioned:
+            projectfile.write("\nversion: '0.0.1'")
 
         if project:
             projectfile.write(
