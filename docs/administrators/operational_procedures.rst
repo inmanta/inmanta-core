@@ -148,18 +148,17 @@ The general idea is to disengage all features on the orchestrator that make the 
 Then the agents can be activated by hand, one-by-one.
 
 
-
 1. Take note of the following settings
 
-    * autostart_agent_deploy_interval
-    * autostart_agent_repair_interval
+    * `autostart_agent_deploy_interval`
+    * `autostart_agent_repair_interval`
 
 2. Disable spontaneous deployment
 
-    * autostart_agent_deploy_interval = 0
-    * autostart_agent_repair_interval = 0
-    * auto_deploy = True
-    * push_on_auto_deploy = False
+    * `autostart_agent_deploy_interval = 0`
+    * `autostart_agent_repair_interval = 0`
+    * `auto_deploy = True`
+    * `push_on_auto_deploy = False`
 
 3. Click ‘recompile’ to install the project.
 
@@ -175,12 +174,12 @@ Then the agents can be activated by hand, one-by-one.
 6. Click `deploy on agent` on each agent. Verify results.
 7. Ensure all environment setting are set correctly
 
-   * agent_trigger_method_on_auto_deploy = push_incremental_deploy
-   * auto_deploy = true
-   * push_on_auto_deploy = true
-   * server_compile = true
-   * autostart_agent_deploy_interval
-   * autostart_agent_repair_interval
+   * `agent_trigger_method_on_auto_deploy = push_incremental_deploy`
+   * `auto_deploy = true`
+   * `push_on_auto_deploy = true`
+   * `server_compile = true`
+   * `autostart_agent_deploy_interval`
+   * `autostart_agent_repair_interval`
 
 
 Issue templates
