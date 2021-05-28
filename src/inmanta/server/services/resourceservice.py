@@ -726,7 +726,24 @@ class ResourceService(protocol.ServerSlice):
         env: data.Environment,
         resource_id: ResourceVersionIdStr,
     ) -> bool:
-        # TODO: return true if resource has never deployed before
+        id: Id = Id.parse_id(resource_id)
+        actions: List[data.ResourceAction] = await data.ResourceAction.query_resource_actions(
+            environment=env.id,
+            resource_type=id.get_entity_type(),
+            agent=id.get_agent_name(),
+            attribute=id.get_attribute(),
+            attribute_value=id.get_attribute_value(),
+        )
+        try:
+            next(
+                action for action in actions
+                if action.action == const.ResourceAction.deploy and action.status == const.ResourceState.deployed
+            )
+        except StopIteration:
+            # This resource has never been deployed => it should be deployed regardless of events
+            return True
+
+        # This resource has been deployed before => determine whether it should be redeployed based on events
         return any(
             action.change != const.Change.nochange
             for dependency, actions in (await self.get_resource_events(env, resource_id)).items()
