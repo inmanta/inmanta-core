@@ -168,7 +168,7 @@ Then the agents can be activated by hand, one-by-one.
 
 4. In the agent tab, click `deploy on agent` on the 'internal' agent
 
-    * All agent will come online
+    * All agents will come online
 
 5. Perform a dryrun, to verify there are no undesirable effects.
 6. Click `deploy on agent` on each agent. Verify results.
