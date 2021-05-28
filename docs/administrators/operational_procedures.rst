@@ -140,9 +140,14 @@ Procedure
 
 8. If this model uses LSM, perform initial tests of all services via the API.
 
-Gradual ramp-up procedure A
-++++++++++++++++++++++++++++
-For models that are very sensitive, it is possible to make the ramp-up more gradual.
+Extra careful deploy procedure
++++++++++++++++++++++++++++++++
+
+For models that are considered risky, it is possible to enable the model in a more gradual way.
+The general idea is to disengage all features on the orchestrator that make the agents perform unsupervised deployments.
+Then the agents can be activated by hand, one-by-one.
+
+
 
 1. Take note of the following settings
 
