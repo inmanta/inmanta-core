@@ -101,7 +101,6 @@ Deployment of a new service model to the orchestrator
 ########################################################
 
 This process describes how to safely deploy a new model to the orchestrator.
-We don't go into resolving issues encountered during first deploys here,for this we refer to the training material.
 
 Context
 ++++++++
@@ -154,11 +153,9 @@ Project Release for Production
 .. code-block:: markdown
 
    * [ ] Verify in `project.yml` that `install_mode` is set to `release`.
-   * [ ] Set the `version` attribute in `project.yml` to the version of this release.
    * [ ] Freeze all modules with `inmanta -vv -X project freeze --recursive --operator "=="`
    * [ ] Verify that all modules are frozen to the correct version
    * [ ] Commit this change (`git commit -a`)
-   * [ ] Tag this commit (`git tag -a $version`)
    * [ ] Push to the release branch (`git push`)
 
 Upgrade of service model on the orchestrator
