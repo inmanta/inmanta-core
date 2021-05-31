@@ -2051,7 +2051,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resource_state_for_dependencies(
-        cls, environment: uuid.UUID, resource_version_id: resources.Id
+        cls, environment: uuid.UUID, resource_version_id: "resources.Id"
     ) -> Dict[m.ResourceVersionIdStr, ResourceState]:
         """
         Return the ResourceState for each dependency of the given resource.
