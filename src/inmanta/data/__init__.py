@@ -2049,6 +2049,32 @@ class Resource(BaseDocument):
     # the list contains full rv id's
     provides: List[m.ResourceVersionIdStr] = Field(field_type=list, default=[])  # List of resource versions
 
+    @classmethod
+    async def get_resource_state_for_dependencies(
+        cls, environment: uuid.UUID, resource_version_id: "resources.Id"
+    ) -> Dict[m.ResourceVersionIdStr, ResourceState]:
+        """
+        Return the ResourceState for each dependency of the given resource.
+        """
+        if not resource_version_id.is_resource_version_id_obj():
+            raise Exception("Argument resource_version_id is not a resource_version_id")
+        query = f"""
+            SELECT r1.resource_version_id, r1.status
+            FROM {cls.table_name()} AS r1
+            WHERE r1.environment=$1 AND r1.model=$2 AND (
+                                                            SELECT (r2.attributes->'requires')::jsonb
+                                                            FROM {cls.table_name()} AS r2
+                                                            WHERE r2.environment=$1 AND r2.resource_version_id=$3
+                                                         ) ? r1.resource_version_id
+        """
+        values = [
+            cls._get_value(environment),
+            cls._get_value(resource_version_id.version),
+            resource_version_id.resource_version_str(),
+        ]
+        result = await cls._fetch_query(query, *values)
+        return {r["resource_version_id"]: const.ResourceState(r["status"]) for r in result}
+
     def make_hash(self):
         character = "|".join(
             sorted([str(k) + "||" + str(v) for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]])
