@@ -12,7 +12,7 @@ requires = [
     "email-validator",
     "execnet",
     "importlib_metadata",
-    "jinja2<=3.0",
+    "jinja2<3.0",
     "more-itertools",
     "netifaces",
     "packaging",
