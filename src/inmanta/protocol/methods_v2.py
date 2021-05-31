@@ -421,7 +421,7 @@ def resource_deploy_start(
     action_id: uuid.UUID,
 ) -> Dict[str, ResourceState]:
     """
-    Report to the server that the server will start the deployment of the given resource.
+    Report to the server that the agent will start the deployment of the given resource.
 
     :param tid: The id of the environment the resource belongs to
     :param resource_id: The resource version id of the resource for which the deployment will start
