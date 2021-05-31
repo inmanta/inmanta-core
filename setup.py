@@ -8,11 +8,11 @@ requires = [
     "colorlog",
     "cookiecutter",
     "cryptography",
-    "docstring-parser",
+    "docstring-parser>=0.8",
     "email-validator",
     "execnet",
     "importlib_metadata",
-    "jinja2",
+    "jinja2<3.0",
     "more-itertools",
     "netifaces",
     "packaging",
@@ -23,7 +23,7 @@ requires = [
     "python-dateutil",
     "pyyaml",
     "texttable",
-    "tornado",
+    "tornado>=6.0",
     "typing_inspect",
 ]
 
