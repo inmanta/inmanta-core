@@ -259,3 +259,11 @@ class ResourceAction(BaseModel):
     changes: Optional[JsonType]
     change: Optional[const.Change]
     send_event: Optional[bool]
+
+
+class LogLine(BaseModel):
+    level: const.LogLevel
+    msg: str
+    args: List[ArgumentTypes] = []
+    kwargs: Dict[str, ArgumentTypes] = {}
+    timestamp: datetime.datetime

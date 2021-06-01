@@ -28,6 +28,7 @@ from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import config, const, data, loader, resources
+from inmanta.data.model import LogLine, AttributeStateChange
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
@@ -924,3 +925,50 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     response = json.loads(response.body.decode("utf-8"))
     action_ids = [uuid.UUID(resource_action["action_id"]) for resource_action in response["data"]]
     assert action_ids == third_page_action_ids
+
+
+@pytest.mark.asyncio
+async def test_resource_deploy_done(server, client, environment, agent):
+    env_id = uuid.UUID(environment)
+
+    model_version = 1
+    cm = data.ConfigurationModel(
+        environment=env_id,
+        version=model_version,
+        date=datetime.now().astimezone(),
+        total=1,
+        version_info={},
+    )
+    await cm.insert()
+
+    model_version = 1
+    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.skipped,
+        resource_version_id=rvid_r1_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+
+    action_id = uuid.uuid4()
+    result = await agent._client.resource_deploy_start(tid=env_id, resource_id=rvid_r1_v1, action_id=action_id)
+    assert result.code == 200
+
+    result = await agent._client.resource_deploy_done(
+        tid=env_id,
+        resource_id=rvid_r1_v1,
+        action_id=action_id,
+        status=const.ResourceState.deployed,
+        messages = [
+            LogLine(
+                level=const.LogLevel.DEBUG,
+                msg="A message",
+                kwargs={"keyword": 123},
+                timestamp=datetime.now().astimezone()
+            )
+        ],
+        changes={"attr1": AttributeStateChange(current=None, desired="test")},
+        change=const.Change.created,
+        send_events=False,
+    )
+    assert result.code == 200

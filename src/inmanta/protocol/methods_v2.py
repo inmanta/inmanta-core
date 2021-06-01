@@ -21,8 +21,8 @@ import datetime
 import uuid
 from typing import Dict, List, Optional, Union
 
-from inmanta.const import AgentAction, ApiDocsFormat, ClientType
-from inmanta.data import model
+from inmanta.const import AgentAction, ApiDocsFormat, ClientType, Change, ResourceState, ResourceAction
+from inmanta.data import model, LogLine
 from inmanta.protocol.common import ReturnValue
 
 from . import methods
@@ -404,4 +404,39 @@ def get_resource_actions(
 
     :raises BadRequest: When the supplied parameters are not valid.
 
+    """
+
+
+@typedmethod(
+    path="/resource/<resource_id>/deploy/done",
+    operation="POST",
+    agent_server=True,
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.agent], api_version=2
+)
+def resource_deploy_done(
+    tid: uuid.UUID,
+    resource_id: str,
+    action_id: uuid.UUID,
+    status: ResourceState,
+    messages: List[model.LogLine] = [],
+    changes: Dict[str, model.AttributeStateChange] = {},
+    change: Optional[Change] = None,
+    send_events: bool = False,
+    keep_increment_cache: bool = False,
+) -> None:
+    """
+        Report to the server that an agent has finished the deployment of a certain resource.
+
+        :param tid: The id of the environment the resource belongs to
+        :param resource_id: The resource version id of the resource for which the deployment is finished.
+        :param action_id: A unique ID associated with this resource deployment action. This should be the same ID that was
+                          passed to the `/resource/<resource_id>/deploy/start` API call.
+        :param status: The current status of the resource (if known)
+        :param messages: A list of log entries produced by the deployment action.
+        :param changes: A dict of changes to this resource. The key of this dict indicates the attributes/fields that
+                       have been changed. The value contains the new value and/or the original value.
+        :param change: The type of change that was done the given resource.
+        :param send_events: Send events to the dependents of this resource.
+        :param keep_increment_cache: The increment cache will be cleared iff this value is set to false.
     """
