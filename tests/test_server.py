@@ -927,6 +927,149 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     assert action_ids == third_page_action_ids
 
 
+@pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_start", "resource_action_update"])
+@pytest.mark.asyncio
+async def test_resource_deploy_start(server, client, environment, agent, endpoint_to_use: str):
+    """
+    Ensure that API endpoint `resource_deploy_start()` does the same as the `resource_action_update()`
+    API endpoint when a new deployment is reported.
+    """
+    env_id = uuid.UUID(environment)
+
+    model_version = 1
+    cm = data.ConfigurationModel(
+        environment=env_id,
+        version=model_version,
+        date=datetime.now().astimezone(),
+        total=1,
+        version_info={},
+    )
+    await cm.insert()
+
+    model_version = 1
+    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
+    rvid_r2_v1 = f"std::File[agent1,path=/etc/file2],v={model_version}"
+    rvid_r3_v1 = f"std::File[agent1,path=/etc/file3],v={model_version}"
+
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.skipped,
+        resource_version_id=rvid_r1_v1,
+        attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1]},
+    ).insert()
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.deployed,
+        resource_version_id=rvid_r2_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.failed,
+        resource_version_id=rvid_r3_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+
+    action_id = uuid.uuid4()
+
+    if endpoint_to_use == "resource_deploy_start":
+        result = await agent._client.resource_deploy_start(tid=env_id, resource_id=rvid_r1_v1, action_id=action_id)
+        assert result.code == 200
+        resource_states_dependencies = result.result["data"]
+        assert len(resource_states_dependencies) == 2
+        assert resource_states_dependencies[rvid_r2_v1] == const.ResourceState.deployed
+        assert resource_states_dependencies[rvid_r3_v1] == const.ResourceState.failed
+    else:
+        await agent._client.resource_action_update(
+            tid=env_id,
+            resource_ids=[rvid_r1_v1],
+            action_id=action_id,
+            action=const.ResourceAction.deploy,
+            started=datetime.now().astimezone(),
+            status=const.ResourceState.deploying,
+        )
+
+    # Ensure that both API calls result in the same behavior
+    result = await client.get_resource_actions(tid=env_id)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    resource_action = result.result["data"][0]
+    assert resource_action["environment"] == str(env_id)
+    assert resource_action["version"] == model_version
+    assert resource_action["resource_version_ids"] == [rvid_r1_v1]
+    assert resource_action["action_id"] == str(action_id)
+    assert resource_action["action"] == const.ResourceAction.deploy
+    assert resource_action["started"] is not None
+    assert resource_action["finished"] is None
+    assert resource_action["messages"] is None
+    assert resource_action["status"] == const.ResourceState.deploying
+    assert resource_action["changes"] is None
+    assert resource_action["change"] is None
+    assert resource_action["send_event"] is False
+
+
+@pytest.mark.asyncio
+async def test_resource_deploy_start_error_handling(server, client, environment, agent):
+    """
+    Test the error handling of the `resource_deploy_start` API endpoint.
+    """
+    env_id = uuid.UUID(environment)
+
+    # Version part missing from resource_version_id
+    result = await agent._client.resource_deploy_start(
+        tid=env_id, resource_id="std::File[agent1,path=/etc/file1]", action_id=uuid.uuid4()
+    )
+    assert result.code == 400
+    assert "Version is missing from argument resource_id" in result.result["message"]
+
+    # Execute resource_deploy_start call for resource that doesn't exist
+    resource_id = "std::File[agent1,path=/etc/file1],v=1"
+    result = await agent._client.resource_deploy_start(tid=env_id, resource_id=resource_id, action_id=uuid.uuid4())
+    assert result.code == 404
+    assert f"Environment {environment} doesn't contain a resource with id {resource_id}" in result.result["message"]
+
+
+@pytest.mark.asyncio
+async def test_resource_deploy_start_action_id_conflict(server, client, environment, agent):
+    """
+    Ensure proper error handling when the same action_id is provided twice to the `resource_deploy_start` API endpoint.
+    """
+    env_id = uuid.UUID(environment)
+
+    model_version = 1
+    cm = data.ConfigurationModel(
+        environment=env_id,
+        version=model_version,
+        date=datetime.now().astimezone(),
+        total=1,
+        version_info={},
+    )
+    await cm.insert()
+
+    model_version = 1
+    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
+
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.skipped,
+        resource_version_id=rvid_r1_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+
+    action_id = uuid.uuid4()
+
+    async def execute_resource_deploy_start(expected_return_code: int, resulting_nr_resource_actions: int) -> None:
+        result = await agent._client.resource_deploy_start(tid=env_id, resource_id=rvid_r1_v1, action_id=action_id)
+        assert result.code == expected_return_code
+
+        result = await client.get_resource_actions(tid=env_id)
+        assert result.code == 200
+        assert len(result.result["data"]) == resulting_nr_resource_actions
+
+    await execute_resource_deploy_start(expected_return_code=200, resulting_nr_resource_actions=1)
+    await execute_resource_deploy_start(expected_return_code=409, resulting_nr_resource_actions=1)
+
+
 @pytest.mark.asyncio
 async def test_resource_deploy_done(server, client, environment, agent):
     env_id = uuid.UUID(environment)

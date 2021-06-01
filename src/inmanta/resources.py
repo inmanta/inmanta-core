@@ -612,6 +612,12 @@ class Id(object):
         result = PARSE_RVID_REGEX.search(value)
         return result is not None
 
+    def is_resource_version_id_obj(self) -> bool:
+        """
+        Check whether this object represents a resource version id
+        """
+        return self.version != 0
+
     entity_type = property(get_entity_type)
     agent_name = property(get_agent_name)
     attribute = property(get_attribute)
