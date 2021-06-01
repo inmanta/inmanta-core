@@ -29,7 +29,15 @@ from tornado.httputil import url_concat
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change
 from inmanta.data import APILIMIT
-from inmanta.data.model import Resource, ResourceAction, ResourceType, ResourceVersionIdStr, ResourceState, AttributeStateChange, LogLine
+from inmanta.data.model import (
+    AttributeStateChange,
+    LogLine,
+    Resource,
+    ResourceAction,
+    ResourceState,
+    ResourceType,
+    ResourceVersionIdStr,
+)
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
@@ -388,9 +396,7 @@ class ResourceService(protocol.ServerSlice):
             return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
         except ValueError:
             # interpret naive datetimes as UTC
-            return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(
-                tzinfo=datetime.timezone.utc
-            )
+            return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc)
 
     @protocol.handle(methods_v2.resource_deploy_done, env="tid")
     async def resource_deploy_done(
@@ -439,22 +445,25 @@ class ResourceService(protocol.ServerSlice):
 
                 resource_action = await data.ResourceAction.get(action_id=action_id, connection=connection)
                 if resource_action is None:
-                    raise BadRequest(f"No resource action exists for action_id {action_id}. Ensure "
-                                     f"`/resource/<resource_id>/deploy/start` is called first. ")
+                    raise BadRequest(
+                        f"No resource action exists for action_id {action_id}. Ensure "
+                        f"`/resource/<resource_id>/deploy/start` is called first. "
+                    )
                 if resource_action.finished is not None:
                     raise Conflict(
                         f"Resource action with id {resource_id} was already marked as done at {resource_action.finished}."
                     )
 
-                self.log_messages_to_resource_action_log(
-                    env_id=env.id, resource_ids=[resource_id], messages=messages
-                )
+                self.log_messages_to_resource_action_log(env_id=env.id, resource_ids=[resource_id], messages=messages)
 
                 await resource_action.set_and_save(
                     messages=[
-                        {**msg,
-                         "timestamp": self._parse_log_timestamp_from_resource_log(msg["timestamp"]).isoformat(timespec="microseconds")
-                         }
+                        {
+                            **msg,
+                            "timestamp": self._parse_log_timestamp_from_resource_log(msg["timestamp"]).isoformat(
+                                timespec="microseconds"
+                            ),
+                        }
                         for msg in messages
                     ],
                     changes=changes,
@@ -471,20 +480,12 @@ class ResourceService(protocol.ServerSlice):
 
                 await resource.update_fields(last_deploy=finished, status=status, connection=connection)
 
-                if (
-                    "purged" in resource.attributes
-                    and resource.attributes["purged"]
-                    and status == const.ResourceState.deployed
-                ):
-                    await data.Parameter.delete_all(
-                        environment=env.id, resource_id=resource.resource_id, connection=connection
-                    )
+                if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
+                    await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
 
                 await data.ConfigurationModel.mark_done_if_done(env.id, resource.model, connection=connection)
 
-        waiting_agents = set(
-            [(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides]
-        )
+        waiting_agents = set([(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides])
         for agent, resource_id in waiting_agents:
             aclient = self.agentmanager_service.get_agent_client(env.id, agent)
             if aclient is not None:
@@ -604,15 +605,16 @@ class ResourceService(protocol.ServerSlice):
                             },
                         )
 
-                self.log_messages_to_resource_action_log(
-                    env_id=env.id, resource_ids=resource_ids, messages=messages
-                )
+                self.log_messages_to_resource_action_log(env_id=env.id, resource_ids=resource_ids, messages=messages)
 
                 await resource_action.set_and_save(
                     messages=[
-                        {**msg,
-                         "timestamp": self._parse_log_timestamp_from_resource_log(msg["timestamp"]).isoformat(timespec="microseconds")
-                         }
+                        {
+                            **msg,
+                            "timestamp": self._parse_log_timestamp_from_resource_log(msg["timestamp"]).isoformat(
+                                timespec="microseconds"
+                            ),
+                        }
                         for msg in messages
                     ],
                     changes=changes,

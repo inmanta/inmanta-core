@@ -28,10 +28,10 @@ from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import config, const, data, loader, resources
-from inmanta.data.model import LogLine, AttributeStateChange
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
+from inmanta.data.model import AttributeStateChange, LogLine
 from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import (
@@ -1102,13 +1102,8 @@ async def test_resource_deploy_done(server, client, environment, agent):
         resource_id=rvid_r1_v1,
         action_id=action_id,
         status=const.ResourceState.deployed,
-        messages = [
-            LogLine(
-                level=const.LogLevel.DEBUG,
-                msg="A message",
-                kwargs={"keyword": 123},
-                timestamp=datetime.now().astimezone()
-            )
+        messages=[
+            LogLine(level=const.LogLevel.DEBUG, msg="A message", kwargs={"keyword": 123}, timestamp=datetime.now().astimezone())
         ],
         changes={"attr1": AttributeStateChange(current=None, desired="test")},
         change=const.Change.created,
