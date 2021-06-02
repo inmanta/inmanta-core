@@ -424,7 +424,6 @@ def resource_deploy_done(
     changes: Dict[str, model.AttributeStateChange] = {},
     change: Optional[Change] = None,
     send_events: bool = False,
-    keep_increment_cache: bool = False,
 ) -> None:
     """
     Report to the server that an agent has finished the deployment of a certain resource.
@@ -439,7 +438,6 @@ def resource_deploy_done(
                    have been changed. The value contains the new value and/or the original value.
     :param change: The type of change that was done the given resource.
     :param send_events: Send events to the dependents of this resource.
-    :param keep_increment_cache: The increment cache will be cleared iff this value is set to false.
     """
 
 
