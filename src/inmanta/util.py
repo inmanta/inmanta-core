@@ -38,7 +38,7 @@ from tornado import gen
 from tornado.ioloop import IOLoop
 
 from inmanta import COMPILER_VERSION
-from inmanta.data.model import BaseModel
+from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -228,6 +228,7 @@ class JSONSerializable(ABC):
         raise NotImplementedError()
 
 
+@stable_api
 def internal_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries. This
@@ -240,6 +241,7 @@ def internal_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     return _custom_json_encoder(o)
 
 
+@stable_api
 def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries. This
@@ -274,6 +276,8 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     if isinstance(o, Exception):
         # Logs can push exceptions through RPC. Return a string representation.
         return str(o)
+
+    from inmanta.data.model import BaseModel
 
     if isinstance(o, BaseModel):
         return o.dict(by_alias=True)

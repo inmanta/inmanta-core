@@ -29,6 +29,7 @@ from asyncpg.pool import Pool
 
 from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
+from inmanta.resources import Id, ResourceVersionIdStr
 
 
 @pytest.mark.asyncio
@@ -2750,3 +2751,117 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     #  First three of the increasing ones and the first of the ones that share a timestamp
     expected_ids_on_page = action_ids_with_increasing_timestamps[2:] + [action_ids_with_the_same_timestamp[0]]
     assert [resource_action.action_id for resource_action in resource_actions] == expected_ids_on_page
+
+
+@pytest.mark.asyncio
+async def test_get_resource_state_for_dependencies(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    async def assert_state_dependencies(
+        environment: uuid.UUID,
+        resource_version_id: ResourceVersionIdStr,
+        expected_states: Dict[ResourceVersionIdStr, const.ResourceState],
+    ) -> None:
+        rvid_to_resource_state = await data.Resource.get_resource_state_for_dependencies(
+            environment=environment, resource_version_id=Id.parse_id(resource_version_id)
+        )
+        assert expected_states == rvid_to_resource_state
+
+    # V1
+    cm = data.ConfigurationModel(version=1, environment=env.id)
+    await cm.insert()
+
+    rvid_r1_v1 = "std::File[agent1,path=/etc/file1],v=1"
+    rvid_r2_v1 = "std::File[agent1,path=/etc/file2],v=1"
+    rvid_r3_v1 = "std::File[agent1,path=/etc/file3],v=1"
+    rvid_r4_v1 = "std::File[agent1,path=/etc/file4],v=1"
+
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.available,
+        resource_version_id=rvid_r1_v1,
+        attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1, rvid_r4_v1]},
+    ).insert()
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.deployed,
+        resource_version_id=rvid_r2_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.failed,
+        resource_version_id=rvid_r3_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.available,
+        resource_version_id=rvid_r4_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+
+    expected_states = {
+        rvid_r2_v1: const.ResourceState.deployed,
+        rvid_r3_v1: const.ResourceState.failed,
+        rvid_r4_v1: const.ResourceState.available,
+    }
+    await assert_state_dependencies(env.id, rvid_r1_v1, expected_states=expected_states)
+    await assert_state_dependencies(env.id, rvid_r2_v1, expected_states={})
+    await assert_state_dependencies(env.id, rvid_r3_v1, expected_states={})
+    await assert_state_dependencies(env.id, rvid_r4_v1, expected_states={})
+
+    # V2
+    cm = data.ConfigurationModel(version=2, environment=env.id)
+    await cm.insert()
+
+    rvid_r1_v2 = "std::File[agent1,path=/etc/file1],v=2"
+    rvid_r2_v2 = "std::File[agent1,path=/etc/file2],v=2"
+    rvid_r3_v2 = "std::File[agent1,path=/etc/file3],v=2"
+    rvid_r4_v2 = "std::File[agent1,path=/etc/file4],v=2"
+    rvid_r5_v2 = "std::File[agent1,path=/etc/file5],v=2"
+
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.skipped,
+        resource_version_id=rvid_r1_v2,
+        attributes={"purge_on_delete": False, "requires": [rvid_r2_v2, rvid_r3_v2]},
+    ).insert()
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.failed,
+        resource_version_id=rvid_r2_v2,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.deployed,
+        resource_version_id=rvid_r3_v2,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.deployed,
+        resource_version_id=rvid_r4_v2,
+        attributes={"purge_on_delete": False, "requires": [rvid_r3_v2]},
+    ).insert()
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.deployed,
+        resource_version_id=rvid_r5_v2,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+
+    expected_states = {
+        rvid_r2_v2: const.ResourceState.failed,
+        rvid_r3_v2: const.ResourceState.deployed,
+    }
+    await assert_state_dependencies(env.id, rvid_r1_v2, expected_states=expected_states)
+    await assert_state_dependencies(env.id, rvid_r2_v2, expected_states={})
+    await assert_state_dependencies(env.id, rvid_r3_v2, expected_states={})
+    await assert_state_dependencies(env.id, rvid_r4_v2, expected_states={rvid_r3_v2: const.ResourceState.deployed})
+    await assert_state_dependencies(env.id, rvid_r5_v2, expected_states={})
