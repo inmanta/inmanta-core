@@ -17,7 +17,7 @@
 """
 import datetime
 import uuid
-from typing import Any, Dict, List, NewType, Optional, Union
+from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 
@@ -44,7 +44,9 @@ class BaseModel(pydantic.BaseModel):
     Base class for all data objects in Inmanta
     """
 
-    _normalize_timestamps = pydantic.validator("*", allow_reuse=True)(validator_timezone_aware_timestamps)
+    _normalize_timestamps: ClassVar[classmethod] = pydantic.validator("*", allow_reuse=True)(
+        validator_timezone_aware_timestamps
+    )
 
     class Config:
         """
