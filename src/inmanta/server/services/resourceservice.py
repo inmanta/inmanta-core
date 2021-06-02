@@ -191,19 +191,6 @@ class ResourceService(protocol.ServerSlice):
         log_record = ResourceActionLogLine(logger.name, log_level, message, ts)
         logger.handle(log_record)
 
-    def log_messages_to_resource_action_log(
-        self, env_id: uuid.UUID, resource_ids: List[ResourceVersionIdStr], messages: List[Dict[str, Any]]
-    ) -> None:
-        for msg in messages:
-            # All other data is stored in the database. The msg was already formatted at the client side.
-            self.log_resource_action(
-                env_id,
-                resource_ids,
-                const.LogLevel[msg["level"]].value,
-                self._parse_log_timestamp_from_resource_log(msg["timestamp"]),
-                msg["msg"],
-            )
-
     @protocol.handle(methods.get_resource, resource_id="id", env="tid")
     async def get_resource(
         self,
@@ -390,14 +377,6 @@ class ResourceService(protocol.ServerSlice):
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
-    @classmethod
-    def _parse_log_timestamp_from_resource_log(cls, timestamp: str) -> datetime.datetime:
-        try:
-            return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
-        except ValueError:
-            # interpret naive datetimes as UTC
-            return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc)
-
     @protocol.handle(methods_v2.resource_deploy_done, env="tid")
     async def resource_deploy_done(
         self,
@@ -411,8 +390,8 @@ class ResourceService(protocol.ServerSlice):
         send_events: bool = False,
         keep_increment_cache: bool = False,
     ) -> None:
-
         finished = datetime.datetime.now().astimezone()
+        changes_with_rvid = {resource_id: {attr_name: attr_change.dict()} for attr_name, attr_change in changes.items()}
 
         if status not in VALID_STATES_ON_STATE_UPDATE:
             error_and_log(
@@ -445,7 +424,7 @@ class ResourceService(protocol.ServerSlice):
 
                 resource_action = await data.ResourceAction.get(action_id=action_id, connection=connection)
                 if resource_action is None:
-                    raise BadRequest(
+                    raise NotFound(
                         f"No resource action exists for action_id {action_id}. Ensure "
                         f"`/resource/<resource_id>/deploy/start` is called first. "
                     )
@@ -454,19 +433,22 @@ class ResourceService(protocol.ServerSlice):
                         f"Resource action with id {resource_id} was already marked as done at {resource_action.finished}."
                     )
 
-                self.log_messages_to_resource_action_log(env_id=env.id, resource_ids=[resource_id], messages=messages)
+                for log in messages:
+                    # All other data is stored in the database. The msg was already formatted at the client side.
+                    self.log_resource_action(
+                        env.id,
+                        [resource_id],
+                        log.level,
+                        log.timestamp,
+                        log.msg,
+                    )
 
                 await resource_action.set_and_save(
                     messages=[
-                        {
-                            **msg,
-                            "timestamp": self._parse_log_timestamp_from_resource_log(msg["timestamp"]).isoformat(
-                                timespec="microseconds"
-                            ),
-                        }
-                        for msg in messages
+                        {**log.dict(), "timestamp": log.timestamp.astimezone().isoformat(timespec="microseconds")}
+                        for log in messages
                     ],
-                    changes=changes,
+                    changes=changes_with_rvid,
                     status=status,
                     change=change,
                     send_events=send_events,
@@ -491,7 +473,7 @@ class ResourceService(protocol.ServerSlice):
             if aclient is not None:
                 if change is None:
                     change = const.Change.nochange
-                await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
+                await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes_with_rvid)
 
     @protocol.handle(methods.resource_action_update, env="tid")
     async def resource_action_update(
@@ -605,15 +587,27 @@ class ResourceService(protocol.ServerSlice):
                             },
                         )
 
-                self.log_messages_to_resource_action_log(env_id=env.id, resource_ids=resource_ids, messages=messages)
+                def parse_timestamp(timestamp: str) -> datetime.datetime:
+                    try:
+                        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
+                    except ValueError:
+                        # interpret naive datetimes as UTC
+                        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc)
 
+                for msg in messages:
+                    # All other data is stored in the database. The msg was already formatted at the client side.
+                    self.log_resource_action(
+                        env.id,
+                        resource_ids,
+                        const.LogLevel[msg["level"]].value,
+                        parse_timestamp(msg["timestamp"]),
+                        msg["msg"],
+                    )
                 await resource_action.set_and_save(
                     messages=[
                         {
                             **msg,
-                            "timestamp": self._parse_log_timestamp_from_resource_log(msg["timestamp"]).isoformat(
-                                timespec="microseconds"
-                            ),
+                            "timestamp": parse_timestamp(msg["timestamp"]).isoformat(timespec="microseconds"),
                         }
                         for msg in messages
                     ],

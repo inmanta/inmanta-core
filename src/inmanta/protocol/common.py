@@ -26,7 +26,7 @@ import re
 import time
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from inspect import Parameter
 from typing import (
@@ -60,7 +60,7 @@ from tornado import web
 
 from inmanta import config as inmanta_config
 from inmanta import const, execute, util
-from inmanta.data.model import BaseModel
+from inmanta.data.model import BaseModel, validator_timezone_aware_timestamps
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes, StrictNonIntBool
@@ -336,16 +336,8 @@ VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNon
 
 
 class MethodArgumentsBaseModel(pydantic.BaseModel):
-    @pydantic.root_validator
-    @classmethod
-    def datetime_timezone_aware(cls, values: Dict[str, object]) -> Dict[str, object]:
-        """
-        Make sure all instances of datetime are timezone-aware. Any naive inputs are interpreted as UTC.
-        """
-        return {
-            key: (value.replace(tzinfo=timezone.utc) if isinstance(value, datetime) and value.tzinfo is None else value)
-            for key, value in values.items()
-        }
+
+    _normalize_timestamps = pydantic.validator('*', allow_reuse=True)(validator_timezone_aware_timestamps)
 
 
 class MethodProperties(object):
