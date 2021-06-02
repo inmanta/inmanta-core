@@ -692,7 +692,6 @@ class ResourceService(protocol.ServerSlice):
         self,
         env: data.Environment,
         resource_id: ResourceVersionIdStr,
-    # TODO: return type Dict[str, List[object]] is not valid => update inmanta.types?
     ) -> Dict[ResourceIdStr, List[ResourceAction]]:
         id: Id = Id.parse_id(resource_id)
         if id.version is None:
