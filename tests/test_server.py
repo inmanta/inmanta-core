@@ -1073,6 +1073,10 @@ async def test_resource_deploy_start_action_id_conflict(server, client, environm
 @pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_done", "resource_action_update"])
 @pytest.mark.asyncio
 async def test_resource_deploy_done(server, client, environment, agent, caplog, endpoint_to_use):
+    """
+    Ensure that the `resource_deploy_done` endpoint behaves in the same way as the `resource_action_update` endpoint
+    when the finished field is not None.
+    """
     env_id = uuid.UUID(environment)
 
     model_version = 1
