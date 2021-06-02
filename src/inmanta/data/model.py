@@ -44,7 +44,7 @@ class BaseModel(pydantic.BaseModel):
     Base class for all data objects in Inmanta
     """
 
-    _normalize_timestamps = pydantic.validator('*', allow_reuse=True)(validator_timezone_aware_timestamps)
+    _normalize_timestamps = pydantic.validator("*", allow_reuse=True)(validator_timezone_aware_timestamps)
 
     class Config:
         """

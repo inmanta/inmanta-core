@@ -21,7 +21,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import pytest
 from dateutil import parser
@@ -1070,8 +1070,9 @@ async def test_resource_deploy_start_action_id_conflict(server, client, environm
     await execute_resource_deploy_start(expected_return_code=409, resulting_nr_resource_actions=1)
 
 
+@pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_done", "resource_action_update"])
 @pytest.mark.asyncio
-async def test_resource_deploy_done(server, client, environment, agent, caplog):
+async def test_resource_deploy_done(server, client, environment, agent, caplog, endpoint_to_use):
     env_id = uuid.UUID(environment)
 
     model_version = 1
@@ -1089,8 +1090,19 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog):
         environment=env_id,
         status=const.ResourceState.available,
         resource_version_id=rvid_r1_v1,
-        attributes={"purge_on_delete": False, "requires": []},
+        attributes={"purge_on_delete": False, "purged": True, "requires": []},
     ).insert()
+
+    # Add parameter for resource
+    parameter_id = "test_param"
+    result = await client.set_param(
+        tid=env_id,
+        id=parameter_id,
+        source=const.ParameterSource.user,
+        value="val",
+        resource_id="std::File[agent1,path=/etc/file1]",
+    )
+    assert result.code == 200
 
     action_id = uuid.uuid4()
     result = await agent._client.resource_deploy_start(tid=env_id, resource_id=rvid_r1_v1, action_id=action_id)
@@ -1127,20 +1139,39 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog):
     with caplog.at_level(logging.DEBUG):
         # Mark deployment as done
         now = datetime.now()
-        result = await agent._client.resource_deploy_done(
-            tid=env_id,
-            resource_id=rvid_r1_v1,
-            action_id=action_id,
-            status=const.ResourceState.deployed,
-            messages=[
-                LogLine(level=const.LogLevel.DEBUG, msg="message", kwargs={"keyword": 123}, timestamp=now),
-                LogLine(level=const.LogLevel.INFO, msg="test", kwargs={}, timestamp=now),
-            ],
-            changes={"attr1": AttributeStateChange(current=None, desired="test")},
-            change=const.Change.created,
-            send_events=True,
-        )
-        assert result.code == 200, result.result
+        if endpoint_to_use == "resource_deploy_done":
+            result = await agent._client.resource_deploy_done(
+                tid=env_id,
+                resource_id=rvid_r1_v1,
+                action_id=action_id,
+                status=const.ResourceState.deployed,
+                messages=[
+                    LogLine(level=const.LogLevel.DEBUG, msg="message", kwargs={"keyword": 123}, timestamp=now),
+                    LogLine(level=const.LogLevel.INFO, msg="test", kwargs={}, timestamp=now),
+                ],
+                changes={"attr1": AttributeStateChange(current=None, desired="test")},
+                change=const.Change.purged,
+                send_events=True,
+            )
+            assert result.code == 200, result.result
+        else:
+            result = await agent._client.resource_action_update(
+                tid=env_id,
+                resource_ids=[rvid_r1_v1],
+                action_id=action_id,
+                action=const.ResourceAction.deploy,
+                started=None,
+                finished=now,
+                status=const.ResourceState.deployed,
+                messages=[
+                    data.LogLine.log(level=const.LogLevel.DEBUG, msg="message", timestamp=now, keyword=123),
+                    data.LogLine.log(level=const.LogLevel.INFO, msg="test", timestamp=now),
+                ],
+                changes={rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test")}},
+                change=const.Change.purged,
+                send_events=True,
+            )
+            assert result.code == 200, result.result
 
     # Assert effect of resource_deploy_done call
     assert f"{rvid_r1_v1}: message" in caplog.messages
@@ -1159,14 +1190,14 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog):
     assert resource_action["finished"] is not None
     assert resource_action["messages"] == [
         {
-            "level": const.LogLevel.DEBUG.value,
+            "level": const.LogLevel.DEBUG.value if endpoint_to_use == "resource_deploy_done" else const.LogLevel.DEBUG.name,
             "msg": "message",
             "args": [],
             "kwargs": {"keyword": 123},
             "timestamp": now.isoformat(timespec="microseconds"),
         },
         {
-            "level": const.LogLevel.INFO.value,
+            "level": const.LogLevel.INFO.value if endpoint_to_use == "resource_deploy_done" else const.LogLevel.INFO.name,
             "msg": "test",
             "args": [],
             "kwargs": {},
@@ -1175,7 +1206,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog):
     ]
     assert resource_action["status"] == const.ResourceState.deployed
     assert resource_action["changes"] == {rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test").dict()}}
-    assert resource_action["change"] == const.Change.created.value
+    assert resource_action["change"] == const.Change.purged.value
     assert resource_action["send_event"] is True
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
@@ -1187,6 +1218,11 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog):
     assert result.code == 200, result.result
     assert result.result["model"]["deployed"]
 
+    # parameter was deleted due to purge operation
+    result = await client.list_params(tid=env_id)
+    assert result.code == 200
+    assert len(result.result["parameters"]) == 0
+
     # A new resource_deploy_done call for the same action_id should result in a Conflict
     result = await agent._client.resource_deploy_done(
         tid=env_id,
@@ -1195,7 +1231,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog):
         status=const.ResourceState.deployed,
         messages=[],
         changes={"attr1": AttributeStateChange(current="test", desired="test2")},
-        change=const.Change.updated,
+        change=const.Change.created,
         send_events=True,
     )
     assert result.code == 409, result.result

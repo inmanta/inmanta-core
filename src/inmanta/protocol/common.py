@@ -337,7 +337,7 @@ VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNon
 
 class MethodArgumentsBaseModel(pydantic.BaseModel):
 
-    _normalize_timestamps = pydantic.validator('*', allow_reuse=True)(validator_timezone_aware_timestamps)
+    _normalize_timestamps = pydantic.validator("*", allow_reuse=True)(validator_timezone_aware_timestamps)
 
 
 class MethodProperties(object):

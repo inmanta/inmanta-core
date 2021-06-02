@@ -415,7 +415,7 @@ class ResourceService(protocol.ServerSlice):
                     connection=connection, environment=env.id, resource_version_id=resource_id
                 )
                 if resource is None:
-                    raise NotFound(f"The resource with the given id does not exist in the given environment.")
+                    raise NotFound("The resource with the given id does not exist in the given environment.")
 
                 # no escape from terminal
                 if resource.status != status and resource.status in TERMINAL_STATES:
