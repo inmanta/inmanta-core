@@ -414,10 +414,8 @@ def get_resource_actions(
 def get_resource_events(
     tid: uuid.UUID,
     id: model.ResourceVersionIdStr,
-    # TODO: some kind of paging
+    # TODO: is some kind of paging required?
 ) -> Dict[model.ResourceIdStr, List[model.ResourceAction]]:
-    # TODO: verify docstring
-    # TODO: last deploy or last succesfull deploy? Configurable?
     """
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
     deploy or all deploy actions if this resources hasn't been deployed before.
@@ -435,15 +433,10 @@ def resource_should_deploy(
     tid: uuid.UUID,
     id: model.ResourceVersionIdStr,
 ) -> bool:
-    # TODO: last deploy or last succesfull deploy? Configurable?
-    # TODO: verify docstring
     """
     Returns True iff this resources' events indicate a change in its dependencies since the resource's last deploy or if the
     resource has never been deployed before.
 
     :param tid: The id of the environment this resource belongs to
-    :param resource_type: The resource entity type that should be queried
-    :param agent: Agent name that is used to filter the results
-    :param attribute: Attribute name used for filtering
-    :param attribute_value: Attribute value used for filtering. Attribute and attribute value should be supplied together.
+    :param id: The id of the resource.
     """
