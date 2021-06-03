@@ -298,7 +298,7 @@ class LogLine(BaseModel):
             try:
                 return const.LogLevel[v]
             except KeyError:
-                return v
+                raise ValueError(f"Invalid enum value {v}. Valid values: { ','.join([x.name for x in const.LogLevel]) }")
         return v
 
     level: const.LogLevel
