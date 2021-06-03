@@ -115,7 +115,7 @@ class DataDocument(object):
     A baseclass for objects that represent data in inmanta. The main purpose of this baseclass is to group dict creation
     logic. These documents are not stored in the database
     (use BaseDocument for this purpose). It provides a to_dict method that the inmanta rpc can serialize. You can store
-    DataDocument childeren in BaseDocument fields, they will be serialized to dict. However, on retrieval this is not
+    DataDocument children in BaseDocument fields, they will be serialized to dict. However, on retrieval this is not
     performed.
     """
 
@@ -1897,6 +1897,35 @@ class ResourceAction(BaseDocument):
                 if resource not in self._updates["changes"]:
                     self._updates["changes"][resource] = {}
                 self._updates["changes"][resource][field] = change
+
+    async def set_and_save(
+        self,
+        messages: List[Dict[str, Any]],
+        changes: Dict[str, Any],
+        status: Optional[const.ResourceState],
+        change: Optional[const.Change],
+        send_events: bool,
+        finished: Optional[datetime.datetime],
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ):
+        if len(messages) > 0:
+            self.add_logs(messages)
+
+        if len(changes) > 0:
+            self.add_changes(changes)
+
+        if status is not None:
+            self.set_field("status", status)
+
+        if change is not None:
+            self.set_field("change", change)
+
+        self.set_field("send_event", send_events)
+
+        if finished is not None:
+            self.set_field("finished", finished)
+
+        await self.save(connection=connection)
 
     async def save(self, connection: Optional[asyncpg.connection.Connection] = None):
         """

@@ -27,9 +27,17 @@ from asyncpg.exceptions import UniqueViolationError
 from tornado.httputil import url_concat
 
 from inmanta import const, data, util
-from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
+from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change
 from inmanta.data import APILIMIT
-from inmanta.data.model import Resource, ResourceAction, ResourceType, ResourceVersionIdStr
+from inmanta.data.model import (
+    AttributeStateChange,
+    LogLine,
+    Resource,
+    ResourceAction,
+    ResourceState,
+    ResourceType,
+    ResourceVersionIdStr,
+)
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
@@ -369,6 +377,104 @@ class ResourceService(protocol.ServerSlice):
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
+    @protocol.handle(methods_v2.resource_deploy_done, env="tid")
+    async def resource_deploy_done(
+        self,
+        env: data.Environment,
+        resource_id: ResourceVersionIdStr,
+        action_id: uuid.UUID,
+        status: ResourceState,
+        messages: List[LogLine] = [],
+        changes: Dict[str, AttributeStateChange] = {},
+        change: Optional[Change] = None,
+        send_events: bool = False,
+        keep_increment_cache: bool = False,
+    ) -> None:
+        finished = datetime.datetime.now().astimezone()
+        changes_with_rvid = {resource_id: {attr_name: attr_change.dict()} for attr_name, attr_change in changes.items()}
+
+        if status not in VALID_STATES_ON_STATE_UPDATE:
+            error_and_log(
+                f"Status {status} is not a valid status at the end of a deployment.",
+                resource_ids=[resource_id],
+                action=const.ResourceAction.deploy,
+                action_id=action_id,
+            )
+        if status in TRANSIENT_STATES:
+            error_and_log(
+                "No transient state can be used to mark a deployment as done.",
+                status=status,
+                resource_ids=[resource_id],
+                action=const.ResourceAction.deploy,
+                action_id=action_id,
+            )
+
+        async with data.Resource.get_connection() as connection:
+            async with connection.transaction():
+                resource = await data.Resource.get_one(
+                    connection=connection, environment=env.id, resource_version_id=resource_id
+                )
+                if resource is None:
+                    raise NotFound("The resource with the given id does not exist in the given environment.")
+
+                # no escape from terminal
+                if resource.status != status and resource.status in TERMINAL_STATES:
+                    LOGGER.error("Attempting to set undeployable resource to deployable state")
+                    raise AssertionError("Attempting to set undeployable resource to deployable state")
+
+                resource_action = await data.ResourceAction.get(action_id=action_id, connection=connection)
+                if resource_action is None:
+                    raise NotFound(
+                        f"No resource action exists for action_id {action_id}. Ensure "
+                        f"`/resource/<resource_id>/deploy/start` is called first. "
+                    )
+                if resource_action.finished is not None:
+                    raise Conflict(
+                        f"Resource action with id {resource_id} was already marked as done at {resource_action.finished}."
+                    )
+
+                for log in messages:
+                    # All other data is stored in the database. The msg was already formatted at the client side.
+                    self.log_resource_action(
+                        env.id,
+                        [resource_id],
+                        log.level.value,
+                        log.timestamp,
+                        log.msg,
+                    )
+
+                await resource_action.set_and_save(
+                    messages=[
+                        {**log.dict(), "timestamp": log.timestamp.astimezone().isoformat(timespec="microseconds")}
+                        for log in messages
+                    ],
+                    changes=changes_with_rvid,
+                    status=status,
+                    change=change,
+                    send_events=send_events,
+                    finished=finished,
+                    connection=connection,
+                )
+
+                # final resource update
+                if not keep_increment_cache:
+                    self.clear_env_cache(env)
+
+                await resource.update_fields(last_deploy=finished, status=status, connection=connection)
+
+                if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
+                    await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
+
+                await data.ConfigurationModel.mark_done_if_done(env.id, resource.model, connection=connection)
+
+        waiting_agents = set([(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides])
+        for agent, resource_id in waiting_agents:
+            aclient = self.agentmanager_service.get_agent_client(env.id, agent)
+            if aclient is not None:
+                if change is None:
+                    change = const.Change.nochange
+                await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes_with_rvid)
+
     @protocol.handle(methods.resource_action_update, env="tid")
     async def resource_action_update(
         self,
@@ -481,48 +587,37 @@ class ResourceService(protocol.ServerSlice):
                             },
                         )
 
-                if len(messages) > 0:
+                def parse_timestamp(timestamp: str) -> datetime.datetime:
+                    try:
+                        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
+                    except ValueError:
+                        # interpret naive datetimes as UTC
+                        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc)
 
-                    def parse_timestamp(timestamp: str) -> datetime.datetime:
-                        try:
-                            return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
-                        except ValueError:
-                            # interpret naive datetimes as UTC
-                            return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(
-                                tzinfo=datetime.timezone.utc
-                            )
-
-                    resource_action.add_logs(
-                        [
-                            {**msg, "timestamp": parse_timestamp(msg["timestamp"]).isoformat(timespec="microseconds")}
-                            for msg in messages
-                        ]
+                for msg in messages:
+                    # All other data is stored in the database. The msg was already formatted at the client side.
+                    self.log_resource_action(
+                        env.id,
+                        resource_ids,
+                        const.LogLevel[msg["level"]].value,
+                        parse_timestamp(msg["timestamp"]),
+                        msg["msg"],
                     )
-                    for msg in messages:
-                        # All other data is stored in the database. The msg was already formatted at the client side.
-                        self.log_resource_action(
-                            env.id,
-                            resource_ids,
-                            const.LogLevel[msg["level"]].value,
-                            parse_timestamp(msg["timestamp"]),
-                            msg["msg"],
-                        )
-
-                if len(changes) > 0:
-                    resource_action.add_changes(changes)
-
-                if status is not None:
-                    resource_action.set_field("status", status)
-
-                if change is not None:
-                    resource_action.set_field("change", change)
-
-                resource_action.set_field("send_event", send_events)
-
-                if finished is not None:
-                    resource_action.set_field("finished", finished)
-
-                await resource_action.save(connection=connection)
+                await resource_action.set_and_save(
+                    messages=[
+                        {
+                            **msg,
+                            "timestamp": parse_timestamp(msg["timestamp"]).isoformat(timespec="microseconds"),
+                        }
+                        for msg in messages
+                    ],
+                    changes=changes,
+                    status=status,
+                    change=change,
+                    send_events=send_events,
+                    finished=finished,
+                    connection=connection,
+                )
 
                 if is_resource_state_update:
                     # transient resource update
