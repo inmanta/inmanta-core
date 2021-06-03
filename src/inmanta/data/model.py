@@ -288,7 +288,7 @@ class LogLine(BaseModel):
         use_enum_values = False
 
     @pydantic.validator("level", pre=True)
-    def level_from_enum_attribute(cls, v):
+    def level_from_enum_attribute(cls, v: object) -> object:
         """
         Ensure that a LogLine object can be instantiated using pydantic when the level field
         is represented using the name of the enum instead of its value. This is required to
