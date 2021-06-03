@@ -280,13 +280,14 @@ class LogLine(BaseModel):
         """
         Pydantic config.
         """
+
         # Override the setting from the BaseModel class as such that the level field is
         # serialises using the name of the enum instead of its value. This is required
         # to make sure that data sent to the API endpoints resource_action_update
         # and resource_deploy_done are serialized consistently using the name of the enum.
         use_enum_values = False
 
-    @pydantic.validator('level', pre=True)
+    @pydantic.validator("level", pre=True)
     def level_from_enum_attribute(cls, v):
         """
         Ensure that a LogLine object can be instantiated using pydantic when the level field

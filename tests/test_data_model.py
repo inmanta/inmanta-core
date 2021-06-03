@@ -16,17 +16,17 @@
     Contact: code@inmanta.com
 """
 import datetime
+import json
 import sys
 import typing
-import pytest
 from enum import Enum
-import json
 
 import pydantic
+import pytest
 
-from inmanta import types, const
-from inmanta.protocol.common import json_encode
+from inmanta import const, types
 from inmanta.data.model import BaseModel, LogLine
+from inmanta.protocol.common import json_encode
 
 
 def test_model_inheritance():
@@ -76,13 +76,7 @@ def test_log_line_serialization():
     Ensure that the level field of a LogLine serializes and deserializes correctly
     using the name of the enum instead of the value.
     """
-    log_line = LogLine(
-        level=const.LogLevel.DEBUG,
-        msg="test",
-        args=[],
-        kwargs={},
-        timestamp=datetime.datetime.now()
-    )
+    log_line = LogLine(level=const.LogLevel.DEBUG, msg="test", args=[], kwargs={}, timestamp=datetime.datetime.now())
     serializes_log_line = json_encode(log_line)
     deserialized_log_line_dct = json.loads(serializes_log_line)
     assert deserialized_log_line_dct["level"] == const.LogLevel.DEBUG.name
@@ -98,11 +92,5 @@ def test_log_line_deserialization():
     Ensure that a proper error is raised when an invalid log level is used.
     """
     with pytest.raises(ValueError) as excinfo:
-        LogLine(
-            level=11,
-            msg="test",
-            args=[],
-            kwargs={},
-            timestamp=datetime.datetime.now()
-        )
+        LogLine(level=11, msg="test", args=[], kwargs={}, timestamp=datetime.datetime.now())
     assert "value is not a valid enumeration member" in str(excinfo.value)
