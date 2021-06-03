@@ -449,11 +449,14 @@ def get_resource_events(
     """
 
 
-# TODO: name should indicate this is related to responding to change -> update service and tests as well
 @typedmethod(
-    path="/resource/<id>/should_deploy", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+    path="/resource/<id>/did_dependency_change",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
 )
-def resource_should_deploy(
+def resource_did_dependency_change(
     tid: uuid.UUID,
     id: model.ResourceVersionIdStr,
 ) -> bool:

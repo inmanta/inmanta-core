@@ -686,7 +686,6 @@ class ResourceService(protocol.ServerSlice):
         return_value = ReturnValue(response=resource_action_dtos, links=links if links else None)
         return return_value
 
-
     @protocol.handle(methods_v2.get_resource_events, env="tid", resource_id="id")
     async def get_resource_events(
         self,
@@ -695,7 +694,7 @@ class ResourceService(protocol.ServerSlice):
     # TODO: return type Dict[str, List[object]] is not valid => update inmanta.types?
     ) -> Dict[ResourceIdStr, List[ResourceAction]]:
         id: Id = Id.parse_id(resource_id)
-        if id.version is None:
+        if id.version == 0:
             raise BadRequest(message=f"Version is missing from argument id: {resource_id}")
 
         async def get_deploy_actions(
@@ -713,6 +712,7 @@ class ResourceService(protocol.ServerSlice):
                 last_timestamp=last_timestamp,
             )
             return [
+                # TODO: Why not filter this in the database?
                 action for action in actions if action.action == const.ResourceAction.deploy
             ]
 
@@ -754,14 +754,16 @@ class ResourceService(protocol.ServerSlice):
             for dependency in (Id.parse_id(req) for req in resource.attributes["requires"])
         }
 
-
-    @protocol.handle(methods_v2.resource_should_deploy, env="tid", resource_id="id")
-    async def resource_should_deploy(
+    @protocol.handle(methods_v2.resource_did_dependency_change, env="tid", resource_id="id")
+    async def resource_resource_did_dependency_change(
         self,
         env: data.Environment,
         resource_id: ResourceVersionIdStr,
     ) -> bool:
         id: Id = Id.parse_id(resource_id)
+        if id.version == 0:
+            raise BadRequest(message=f"Version is missing from argument id: {resource_id}")
+
         actions: List[data.ResourceAction] = await data.ResourceAction.query_resource_actions(
             environment=env.id,
             resource_type=id.get_entity_type(),
@@ -772,6 +774,7 @@ class ResourceService(protocol.ServerSlice):
         try:
             next(
                 action for action in actions
+                # TODO: Why not filter in the database
                 if action.action == const.ResourceAction.deploy and action.status == const.ResourceState.deployed
             )
         except StopIteration:
