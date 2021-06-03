@@ -438,7 +438,7 @@ class ResourceService(protocol.ServerSlice):
                     self.log_resource_action(
                         env.id,
                         [resource_id],
-                        log.level,
+                        log.level.value,
                         log.timestamp,
                         log.msg,
                     )

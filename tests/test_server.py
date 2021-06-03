@@ -1157,7 +1157,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
                 change=const.Change.purged,
                 send_events=True,
             )
-            assert result.code == 200, result.result
+            assert result.code == 200, result.resul
         else:
             result = await agent._client.resource_action_update(
                 tid=env_id,
@@ -1194,14 +1194,14 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert resource_action["finished"] is not None
     assert resource_action["messages"] == [
         {
-            "level": const.LogLevel.DEBUG.value if endpoint_to_use == "resource_deploy_done" else const.LogLevel.DEBUG.name,
+            "level": const.LogLevel.DEBUG.name,
             "msg": "message",
             "args": [],
             "kwargs": {"keyword": 123},
             "timestamp": now.isoformat(timespec="microseconds"),
         },
         {
-            "level": const.LogLevel.INFO.value if endpoint_to_use == "resource_deploy_done" else const.LogLevel.INFO.name,
+            "level": const.LogLevel.INFO.name,
             "msg": "test",
             "args": [],
             "kwargs": {},
