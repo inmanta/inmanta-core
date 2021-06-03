@@ -1157,7 +1157,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
                 change=const.Change.purged,
                 send_events=True,
             )
-            assert result.code == 200, result.resul
+            assert result.code == 200, result.result
         else:
             result = await agent._client.resource_action_update(
                 tid=env_id,
