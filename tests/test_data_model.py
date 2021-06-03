@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import datetime
 import sys
 import typing
 from enum import Enum
@@ -65,3 +66,18 @@ def test_union_bool_json():
     assert x.attr2 is True
     assert x.attr3 is True
     assert x.attr4 is True
+
+
+def test_timezone_aware_fields_in_pydantic_object():
+    """
+    Verify that timestamp fields in pydantic object that extends from the inmanta
+    BaseModel class, are made timezone aware.
+    """
+
+    class Test(BaseModel):
+        timestamp: datetime.datetime
+
+    timestamp = datetime.datetime.now()
+    assert timestamp.tzinfo is None
+    test = Test(timestamp=timestamp)
+    assert test.timestamp.tzinfo is not None
