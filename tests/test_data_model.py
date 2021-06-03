@@ -94,3 +94,18 @@ def test_log_line_deserialization():
     with pytest.raises(ValueError) as excinfo:
         LogLine(level=11, msg="test", args=[], kwargs={}, timestamp=datetime.datetime.now())
     assert "value is not a valid enumeration member" in str(excinfo.value)
+
+
+def test_timezone_aware_fields_in_pydantic_object():
+    """
+    Verify that timestamp fields in pydantic object that extends from the inmanta
+    BaseModel class, are made timezone aware.
+    """
+
+    class Test(BaseModel):
+        timestamp: datetime.datetime
+
+    timestamp = datetime.datetime.now()
+    assert timestamp.tzinfo is None
+    test = Test(timestamp=timestamp)
+    assert test.timestamp.tzinfo is not None
