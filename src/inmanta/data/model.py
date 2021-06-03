@@ -17,7 +17,7 @@
 """
 import datetime
 import uuid
-from typing import Any, Dict, List, NewType, Optional, Union
+from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 
@@ -28,11 +28,25 @@ from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
 
+def validator_timezone_aware_timestamps(value: object) -> object:
+    """
+    A Pydantic validator to ensure that all datetime times are timezone aware.
+    """
+    if isinstance(value, datetime.datetime) and value.tzinfo is None:
+        return value.replace(tzinfo=datetime.timezone.utc)
+    else:
+        return value
+
+
 @stable_api
 class BaseModel(pydantic.BaseModel):
     """
     Base class for all data objects in Inmanta
     """
+
+    _normalize_timestamps: ClassVar[classmethod] = pydantic.validator("*", allow_reuse=True)(
+        validator_timezone_aware_timestamps
+    )
 
     class Config:
         """
