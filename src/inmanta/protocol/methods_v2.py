@@ -465,6 +465,7 @@ def resource_deploy_start(
     """
 
 
+# No pagination support is provided for this endpoint because there is no elegant way to page the output of this endpoint.
 @typedmethod(
     path="/resource/<id>/events", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
