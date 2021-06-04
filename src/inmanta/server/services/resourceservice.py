@@ -787,7 +787,6 @@ class ResourceService(protocol.ServerSlice):
         self,
         env: data.Environment,
         resource_id: ResourceVersionIdStr,
-        # TODO: return type Dict[str, List[object]] is not valid => update inmanta.types?
     ) -> Dict[ResourceIdStr, List[ResourceAction]]:
         id: Id = Id.parse_id(resource_id)
         if id.version == 0:
@@ -798,7 +797,7 @@ class ResourceService(protocol.ServerSlice):
             first_timestamp: Optional[datetime.datetime] = None,
             last_timestamp: Optional[datetime.datetime] = None,
         ) -> List[data.ResourceAction]:
-            actions: List[data.ResourceAction] = await data.ResourceAction.query_resource_actions(
+            return await data.ResourceAction.query_resource_actions(
                 environment=env.id,
                 resource_type=resource_id.get_entity_type(),
                 agent=resource_id.get_agent_name(),
@@ -806,8 +805,8 @@ class ResourceService(protocol.ServerSlice):
                 attribute_value=resource_id.get_attribute_value(),
                 first_timestamp=first_timestamp,
                 last_timestamp=last_timestamp,
+                action=const.ResourceAction.deploy,
             )
-            return [action for action in actions if action.action == const.ResourceAction.deploy]
 
         current_deploy_start: datetime.datetime
         last_deploy_start: Optional[datetime.datetime]
@@ -866,14 +865,11 @@ class ResourceService(protocol.ServerSlice):
             agent=id.get_agent_name(),
             attribute=id.get_attribute(),
             attribute_value=id.get_attribute_value(),
+            action=const.ResourceAction.deploy,
+            status=const.ResourceState.deployed,
+            limit=1,
         )
-        try:
-            next(
-                action
-                for action in actions
-                if action.action == const.ResourceAction.deploy and action.status == const.ResourceState.deployed
-            )
-        except StopIteration:
+        if not actions:
             # This resource has never been deployed => it should be deployed regardless of events
             return True
 

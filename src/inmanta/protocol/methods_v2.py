@@ -465,14 +465,12 @@ def resource_deploy_start(
     """
 
 
-# TODO: better name? -> update service and tests as well
 @typedmethod(
     path="/resource/<id>/events", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
 def get_resource_events(
     tid: uuid.UUID,
     id: model.ResourceVersionIdStr,
-    # TODO: is some kind of paging required?
 ) -> Dict[model.ResourceIdStr, List[model.ResourceAction]]:
     """
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
