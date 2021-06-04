@@ -476,7 +476,8 @@ def get_resource_events(
 ) -> Dict[model.ResourceIdStr, List[model.ResourceAction]]:
     """
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
-    deploy or all deploy actions if this resources hasn't been deployed before.
+    deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in descending
+    order according to their started timestamp.
 
     :param tid: The id of the environment this resource belongs to
     :param id: The id of the resource to get events for.
@@ -490,7 +491,7 @@ def get_resource_events(
     client_types=[ClientType.api],
     api_version=2,
 )
-def resource_did_dependency_change(
+def resource_should_deploy(
     tid: uuid.UUID,
     id: model.ResourceVersionIdStr,
 ) -> bool:

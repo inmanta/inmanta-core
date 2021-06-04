@@ -830,7 +830,7 @@ class ResourceService(protocol.ServerSlice):
             )
         try:
             last_deploy: data.ResourceAction = next(
-                action for action in deploy_actions if action.status == const.ResourceState.deploying
+                action for action in deploy_actions if action.status == const.ResourceState.deployed
             )
             last_deploy_start = last_deploy.started
         except StopIteration:
@@ -851,8 +851,8 @@ class ResourceService(protocol.ServerSlice):
             for dependency in (Id.parse_id(req) for req in resource.attributes["requires"])
         }
 
-    @protocol.handle(methods_v2.resource_did_dependency_change, env="tid", resource_id="id")
-    async def resource_did_dependency_change(
+    @protocol.handle(methods_v2.resource_should_deploy, env="tid", resource_id="id")
+    async def resource_should_deploy(
         self,
         env: data.Environment,
         resource_id: ResourceVersionIdStr,
