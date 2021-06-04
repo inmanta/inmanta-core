@@ -7,7 +7,7 @@ cryptography==3.4.7
 docstring-parser==0.8.1
 email-validator==1.1.2
 execnet==1.8.1
-importlib_metadata==4.4.0
+importlib_metadata==4.5.0
 jinja2==2.11.3
 more-itertools==8.8.0
 netifaces==0.11.0
