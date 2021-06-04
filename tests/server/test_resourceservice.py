@@ -237,3 +237,30 @@ async def test_events_api_endpoints_events_across_versions(server, client, envir
     result = await client.resource_should_deploy(tid=environment, id=rvid_r1_v3)
     assert result.code == 200
     assert not result.result["data"]
+
+
+@pytest.mark.asyncio
+async def test_events_resource_without_dependencies(server, client, environment, clienthelper, agent, resource_deployer):
+    """
+    Ensure that events are captured across versions.
+    """
+    result = await client.environment_settings_set(tid=environment, id=data.AUTO_DEPLOY, value=False)
+    assert result.code == 200
+
+    # Version 1
+    version = await clienthelper.get_version()
+    rvid_r1_v1 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file1],v={version}")
+    resources = [
+        {"path": "/etc/file1", "id": rvid_r1_v1, "requires": [], "purged": False, "send_event": False},
+    ]
+    await clienthelper.put_version_simple(resources, version)
+
+    # Start new deployment for r1
+    await resource_deployer.start_deployment(rvid=rvid_r1_v1)
+
+    result = await client.get_resource_events(tid=environment, id=rvid_r1_v1)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
+    result = await client.resource_should_deploy(tid=environment, id=rvid_r1_v1)
+    assert result.code == 200
+    assert result.result["data"]
