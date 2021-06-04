@@ -278,12 +278,12 @@ class ClientHelper(object):
         self.client = client
         self.environment = environment
 
-    async def get_version(self):
+    async def get_version(self) -> int:
         res = await self.client.reserve_version(self.environment)
         assert res.code == 200
         return res.result["data"]
 
-    async def put_version_simple(self, resources, version):
+    async def put_version_simple(self, resources: Dict[str, Any], version: int) -> None:
         res = await self.client.put_version(
             tid=self.environment,
             version=version,

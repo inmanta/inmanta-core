@@ -712,7 +712,6 @@ class ResourceService(protocol.ServerSlice):
                 last_timestamp=last_timestamp,
             )
             return [
-                # TODO: Why not filter this in the database?
                 action for action in actions if action.action == const.ResourceAction.deploy
             ]
 
@@ -742,7 +741,9 @@ class ResourceService(protocol.ServerSlice):
             # This resource hasn't been deployed before: fetch all events
             last_deploy_start = None
 
-        resource: data.Resource = (await data.Resource.get_resources(env.id, [resource_id]))[0]
+        resource: Optional[data.Resource] = await data.Resource.get_one(environment=env.id, resource_version_id=resource_id)
+        if resource is None:
+            raise NotFound(f"Resource with id {resource_id} was not found in environment {env.id}")
         return {
             dependency.resource_str(): [
                 action.to_dto() for action in await get_deploy_actions(
@@ -755,7 +756,7 @@ class ResourceService(protocol.ServerSlice):
         }
 
     @protocol.handle(methods_v2.resource_did_dependency_change, env="tid", resource_id="id")
-    async def resource_resource_did_dependency_change(
+    async def resource_did_dependency_change(
         self,
         env: data.Environment,
         resource_id: ResourceVersionIdStr,
@@ -774,7 +775,6 @@ class ResourceService(protocol.ServerSlice):
         try:
             next(
                 action for action in actions
-                # TODO: Why not filter in the database
                 if action.action == const.ResourceAction.deploy and action.status == const.ResourceState.deployed
             )
         except StopIteration:
