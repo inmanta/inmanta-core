@@ -17,7 +17,7 @@
 """
 import datetime
 import uuid
-from typing import Any, Dict, List, NewType, Optional, Union
+from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 
@@ -28,11 +28,25 @@ from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
 
+def validator_timezone_aware_timestamps(value: object) -> object:
+    """
+    A Pydantic validator to ensure that all datetime times are timezone aware.
+    """
+    if isinstance(value, datetime.datetime) and value.tzinfo is None:
+        return value.replace(tzinfo=datetime.timezone.utc)
+    else:
+        return value
+
+
 @stable_api
 class BaseModel(pydantic.BaseModel):
     """
     Base class for all data objects in Inmanta
     """
+
+    _normalize_timestamps: ClassVar[classmethod] = pydantic.validator("*", allow_reuse=True)(
+        validator_timezone_aware_timestamps
+    )
 
     class Config:
         """
@@ -259,3 +273,36 @@ class ResourceAction(BaseModel):
     changes: Optional[JsonType]
     change: Optional[const.Change]
     send_event: Optional[bool]
+
+
+class LogLine(BaseModel):
+    class Config:
+        """
+        Pydantic config.
+        """
+
+        # Override the setting from the BaseModel class as such that the level field is
+        # serialises using the name of the enum instead of its value. This is required
+        # to make sure that data sent to the API endpoints resource_action_update
+        # and resource_deploy_done are serialized consistently using the name of the enum.
+        use_enum_values = False
+
+    @pydantic.validator("level", pre=True)
+    def level_from_enum_attribute(cls, v: object) -> object:
+        """
+        Ensure that a LogLine object can be instantiated using pydantic when the level field
+        is represented using the name of the enum instead of its value. This is required to
+        make sure that a serialized version of this object passes pydantic validation.
+        """
+        if isinstance(v, str):
+            try:
+                return const.LogLevel[v]
+            except KeyError:
+                raise ValueError(f"Invalid enum value {v}. Valid values: { ','.join([x.name for x in const.LogLevel]) }")
+        return v
+
+    level: const.LogLevel
+    msg: str
+    args: List[ArgumentTypes] = []
+    kwargs: Dict[str, ArgumentTypes] = {}
+    timestamp: datetime.datetime
