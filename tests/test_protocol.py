@@ -2130,7 +2130,6 @@ async def test_dict_of_list(unused_tcp_port, postgres_db, database_name, async_f
         attr: int
 
     class ProjectServer(ServerSlice):
-
         @protocol.typedmethod(path="/test", operation="GET", client_types=[const.ClientType.api])
         def test_method(id: str) -> Dict[str, List[APydanticType]]:
             pass

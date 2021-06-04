@@ -18,12 +18,12 @@
 # This file defines named type definition for the Inmanta code base
 
 import builtins
-import typing_inspect
 import uuid
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
+import typing_inspect
 from pydantic import errors, types
 
 if TYPE_CHECKING:

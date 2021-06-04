@@ -15,18 +15,17 @@
 
     Contact: code@inmanta.com
 """
-import pytest
 import uuid
-from inmanta.data.model import ResourceVersionIdStr, ResourceIdStr
-from inmanta import data
-from inmanta import const
+
+import pytest
+
+from inmanta import const, data
+from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 
 
 @pytest.fixture
 def resource_deployer(environment, agent):
-
     class ResourceDeploymentHelperFunction:
-
         @classmethod
         async def start_deployment(cls, rvid: ResourceVersionIdStr) -> uuid.UUID:
             action_id = uuid.uuid4()
@@ -40,7 +39,7 @@ def resource_deployer(environment, agent):
             rvid: ResourceVersionIdStr,
             action_id: uuid.UUID,
             change: const.Change = const.Change.created,
-            status: const.ResourceState = const.ResourceState.deployed
+            status: const.ResourceState = const.ResourceState.deployed,
         ) -> None:
             result = await agent._client.resource_deploy_done(
                 tid=environment,
@@ -56,7 +55,7 @@ def resource_deployer(environment, agent):
             cls,
             rvid: ResourceVersionIdStr,
             change: const.Change = const.Change.created,
-            status: const.ResourceState = const.ResourceState.deployed
+            status: const.ResourceState = const.ResourceState.deployed,
         ) -> None:
             action_id = await cls.start_deployment(rvid)
             await cls.deployment_finished(rvid, action_id, change, status)

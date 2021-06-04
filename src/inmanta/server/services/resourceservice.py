@@ -34,10 +34,10 @@ from inmanta.data.model import (
     LogLine,
     Resource,
     ResourceAction,
+    ResourceIdStr,
     ResourceState,
     ResourceType,
     ResourceVersionIdStr,
-    ResourceIdStr,
 )
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import ReturnValue
@@ -787,7 +787,7 @@ class ResourceService(protocol.ServerSlice):
         self,
         env: data.Environment,
         resource_id: ResourceVersionIdStr,
-    # TODO: return type Dict[str, List[object]] is not valid => update inmanta.types?
+        # TODO: return type Dict[str, List[object]] is not valid => update inmanta.types?
     ) -> Dict[ResourceIdStr, List[ResourceAction]]:
         id: Id = Id.parse_id(resource_id)
         if id.version == 0:
@@ -807,9 +807,7 @@ class ResourceService(protocol.ServerSlice):
                 first_timestamp=first_timestamp,
                 last_timestamp=last_timestamp,
             )
-            return [
-                action for action in actions if action.action == const.ResourceAction.deploy
-            ]
+            return [action for action in actions if action.action == const.ResourceAction.deploy]
 
         current_deploy_start: datetime.datetime
         last_deploy_start: Optional[datetime.datetime]
@@ -842,7 +840,8 @@ class ResourceService(protocol.ServerSlice):
             raise NotFound(f"Resource with id {resource_id} was not found in environment {env.id}")
         return {
             dependency.resource_str(): [
-                action.to_dto() for action in await get_deploy_actions(
+                action.to_dto()
+                for action in await get_deploy_actions(
                     dependency,
                     first_timestamp=last_deploy_start,
                     last_timestamp=current_deploy_start,
@@ -870,7 +869,8 @@ class ResourceService(protocol.ServerSlice):
         )
         try:
             next(
-                action for action in actions
+                action
+                for action in actions
                 if action.action == const.ResourceAction.deploy and action.status == const.ResourceState.deployed
             )
         except StopIteration:
