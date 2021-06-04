@@ -417,7 +417,7 @@ def get_resource_actions(
 )
 def resource_deploy_done(
     tid: uuid.UUID,
-    resource_id: str,
+    resource_id: model.ResourceVersionIdStr,
     action_id: uuid.UUID,
     status: ResourceState,
     messages: List[model.LogLine] = [],
