@@ -15,19 +15,12 @@
 
     Contact: code@inmanta.com
 """
-import json
-from datetime import datetime
-from typing import AsyncIterator, Dict, List
-
-from asyncpg import Connection, Record
-
-from inmanta import const
+from asyncpg import Connection
 
 DISABLED = False
 
 
 async def update(connection: Connection) -> None:
-    # update all timestamp types
     await connection.execute(
         "CREATE INDEX resourceaction_environment_action_status_index ON resourceaction(environment,action, status);"
     )

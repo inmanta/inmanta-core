@@ -17,7 +17,7 @@
 """
 import json
 from datetime import datetime
-from typing import AsyncIterator, Dict, List
+from typing import Dict, List
 
 from asyncpg import Connection, Record
 
