@@ -28,5 +28,6 @@ ALTER TABLE public.compile
     ADD CONSTRAINT compile_substitute_compile_id_fkey
     FOREIGN KEY (substitute_compile_id) REFERENCES public.compile (id)
     ON DELETE CASCADE;
+
         """
     )

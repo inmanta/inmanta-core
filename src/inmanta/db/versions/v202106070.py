@@ -21,6 +21,7 @@ DISABLED = False
 
 
 async def update(connection: Connection) -> None:
+    # Required by ResourceAction.query_resource_actions()
     await connection.execute(
         "CREATE INDEX resourceaction_environment_action_status_index ON resourceaction(environment,action, status);"
     )

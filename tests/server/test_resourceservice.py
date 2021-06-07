@@ -25,7 +25,7 @@ from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 
 @pytest.fixture
 def resource_deployer(environment, agent):
-    class ResourceDeploymentHelperFunction:
+    class ResourceDeploymentHelperFunctions:
         @classmethod
         async def start_deployment(cls, rvid: ResourceVersionIdStr) -> uuid.UUID:
             action_id = uuid.uuid4()
@@ -60,7 +60,7 @@ def resource_deployer(environment, agent):
             action_id = await cls.start_deployment(rvid)
             await cls.deployment_finished(rvid, action_id, change, status)
 
-    yield ResourceDeploymentHelperFunction
+    yield ResourceDeploymentHelperFunctions
 
 
 @pytest.mark.asyncio
