@@ -514,7 +514,15 @@ class MethodProperties(object):
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
 
-        if typing_inspect.is_generic_type(arg_type) and types.issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
+        def is_return_value_type(arg_type: Type) -> bool:
+            if typing_inspect.is_generic_type(arg_type):
+                origin = typing_inspect.get_origin(arg_type)
+                assert origin is not None  # Make mypy happy
+                return types.issubclass(origin, ReturnValue)
+            else:
+                return False
+
+        if is_return_value_type(arg_type):
             self._validate_type_arg(
                 arg, typing_inspect.get_args(arg_type, evaluate=True)[0], strict=strict, allow_none_type=True
             )
@@ -574,6 +582,7 @@ class MethodProperties(object):
 
         elif typing_inspect.is_generic_type(arg_type):
             orig = typing_inspect.get_origin(arg_type)
+            assert orig is not None  # Make mypy happy
             if not types.issubclass(orig, (list, dict)):
                 raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} can only be generic List or Dict")
 
@@ -585,6 +594,7 @@ class MethodProperties(object):
 
             elif len(args) == 1:  # A generic list
                 unsubscripted_arg = typing_inspect.get_origin(args[0]) if typing_inspect.get_origin(args[0]) else args[0]
+                assert unsubscripted_arg is not None  # Make mypy happy
                 if in_url and (types.issubclass(unsubscripted_arg, dict) or types.issubclass(unsubscripted_arg, list)):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
@@ -600,6 +610,7 @@ class MethodProperties(object):
                 unsubscripted_dict_value_arg = (
                     typing_inspect.get_origin(args[1]) if typing_inspect.get_origin(args[1]) else args[1]
                 )
+                assert unsubscripted_dict_value_arg is not None  # Make mypy happy
                 if in_url and (typing_inspect.is_union_type(args[1]) or types.issubclass(unsubscripted_dict_value_arg, dict)):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
