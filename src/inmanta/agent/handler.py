@@ -32,7 +32,7 @@ from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange
+from inmanta.data.model import AttributeStateChange, ResourceIdStr
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
@@ -654,6 +654,47 @@ class ResourceHandler(object):
                         :func:`~inmanta.agent.handler.ResourceHandler.list_changes`
         """
         raise NotImplementedError()
+
+    def deploy(
+        self,
+        ctx: HandlerContext,
+        resource: resources.Resource,
+        requires: Dict[ResourceIdStr, ResourceState],
+        dry_run: bool = False,
+    ) -> None:
+        """
+        This method is always be called by the agent, even when one of the requires of the given resource
+        failed to deploy. The default implementation of this method will deploy the given resource when all its
+        requires were deployed successfully. Override this method if a different condition determines whether the
+        resource should deploy.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to deploy
+        :param requires: The dependencies of the resource `resource`
+        :param dry_run: True will only determine the required changes but will not execute them.
+        """
+        def _should_reload() -> bool:
+            if dry_run or not self.can_reload():
+                return False
+            env_id = self._agent.environment
+            result = self.get_client().resource_should_deploy(tid=env_id, id=resource.id.resource_version_str())
+            if result.code != 200:
+                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
+                raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
+            return result.result["data"]
+
+        failed_dependencies = [req for req, status in requires.items() if status != ResourceState.deployed]
+        if not any(failed_dependencies):
+            self.execute(ctx, resource, dry_run)
+            if _should_reload():
+                self.do_reload(ctx, resource)
+        else:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.info(
+                "Resource %(resource)s skipped due to failed dependency %(failed)s",
+                resource=self.resource.id.resource_version_str(),
+                failed=failed_dependencies,
+            )
 
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
         """

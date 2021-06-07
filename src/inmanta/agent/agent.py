@@ -122,26 +122,17 @@ class ResourceAction(object):
     async def _execute(
         self,
         ctx: handler.HandlerContext,
-        events: Dict[Id, Event],
-        cache: AgentCache,
         start: datetime.datetime,
-        event_only: bool = False,
-    ) -> Tuple[bool, bool]:
+    ) -> bool:
         """
         :param ctx: The context to use during execution of this deploy
-        :param events: Possible events that are available for this resource
-        :param cache: The cache instance to use
-        :param event_only: don't execute, only do event propagation
-        :param state: start time
-        :return (success, send_event) Return whether the execution was successful and whether a change event should be sent
-                                      to provides of this resource.
+        :param start: start time
+        :return: True iff the execution was successful
         """
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
 
-        if not event_only:
-            await self.send_in_progress(ctx.action_id, start)
-        else:
-            await self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
+        # TODO: Update endpoint
+        requires = await self.send_in_progress(ctx.action_id, start)
 
         # setup provider
         provider: Optional[ResourceHandler] = None
@@ -150,33 +141,25 @@ class ResourceAction(object):
         except ChannelClosedException as e:
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception(str(e))
-            return False, False
-
+            return False
         except Exception:
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=self.resource.id.resource_version_str())
-            return False, False
-
-        # Assert to make mypy happy
-        assert provider is not None
-
-        success = True
-        # no events by default, i.e. don't send events if you are not executed
-        send_event = False
-
-        # main execution
-        if not event_only:
-            send_event = hasattr(self.resource, "send_event") and self.resource.send_event
-
+            return False
+        else:
+            # main execution
             try:
                 await asyncio.get_event_loop().run_in_executor(
-                    self.scheduler.agent.thread_pool, provider.execute, ctx, self.resource
+                    self.scheduler.agent.thread_pool,
+                    provider.deploy,
+                    ctx,
+                    self.resource,
+                    requires,
+                    False,
                 )
-
             except ChannelClosedException as e:
                 ctx.set_status(const.ResourceState.failed)
                 ctx.exception(str(e))
-
             except Exception as e:
                 ctx.set_status(const.ResourceState.failed)
                 ctx.exception(
@@ -184,41 +167,10 @@ class ResourceAction(object):
                     resource_id=self.resource.id,
                     exception=repr(e),
                 )
-
-            if ctx.status is not const.ResourceState.deployed:
-                success = False
-
-        # event processing
-        if len(events) > 0 and provider.can_process_events():
-            # The handler still expects a dict instead of Event. Therefore Event.dict()
-            events_dict = {k: v.dict() for k, v in events.items()}
-            if not event_only:
-                await self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
-            try:
-                ctx.info(
-                    "Sending events to %(resource_id)s because of modified dependencies", resource_id=str(self.resource.id)
-                )
-
-                await asyncio.get_event_loop().run_in_executor(
-                    self.scheduler.agent.thread_pool, provider.process_events, ctx, self.resource, events_dict
-                )
-            except Exception:
-                ctx.exception(
-                    "Could not send events for %(resource_id)s", resource_id=str(self.resource.id), events=str(events_dict)
-                )
-
-        # Prevent that status set by execute() is overridden in process_events()
-        if success and ctx.status is not const.ResourceState.deployed:
-            success = False
-
-        provider.close()
-
-        return success, send_event
-
-    def skipped_because(self, results: List[ResourceActionResult]) -> List[ResourceIdStr]:
-        return [
-            resource.resource_id.resource_str() for resource, result in zip(self.dependencies, results) if not result.success
-        ]
+            return ctx.status is const.ResourceState.deployed
+        finally:
+            if provider is not None:
+                provider.close()
 
     async def execute(
         self, dummy: "ResourceAction", generation: "Dict[ResourceIdStr, ResourceAction]", cache: AgentCache
@@ -257,33 +209,12 @@ class ResourceAction(object):
                     # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
                     return
 
-                received_events: Dict[Id, Event]
-                if result.receive_events:
-                    received_events = {
-                        x.resource_id: Event(
-                            status=x.status, change=x.change, changes=x.changes.get(x.resource_id.resource_version_str(), {})
-                        )
-                        for x in self.dependencies
-                    }
-                else:
-                    received_events = {}
-
                 if self.undeployable is not None:
                     ctx.set_status(self.undeployable)
                     success = False
                     send_event = False
-                elif not result.success:
-                    ctx.set_status(const.ResourceState.skipped)
-                    ctx.info(
-                        "Resource %(resource)s skipped due to failed dependency %(failed)s",
-                        resource=self.resource.id.resource_version_str(),
-                        failed=self.skipped_because(results),
-                    )
-                    success = False
-                    send_event = False
-                    await self._execute(ctx=ctx, events=received_events, cache=cache, event_only=True, start=start)
                 else:
-                    success, send_event = await self._execute(ctx=ctx, events=received_events, cache=cache, start=start)
+                    success = await self._execute(ctx=ctx, start=start)
 
                 ctx.debug(
                     "End run for resource %(resource)s in deploy %(deploy_id)s",
@@ -304,6 +235,8 @@ class ResourceAction(object):
                     if set_fact_response.code != 200:
                         ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
+                # TODO: Use new API endpoint
+                # TODO: Remove send_events
                 response = await self.scheduler.get_client().resource_action_update(
                     tid=self.scheduler._env_id,
                     resource_ids=[self.resource.id.resource_version_str()],
