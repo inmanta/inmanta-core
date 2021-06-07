@@ -849,8 +849,8 @@ class ResourceService(protocol.ServerSlice):
             for dependency in (Id.parse_id(req) for req in resource.attributes["requires"])
         }
 
-    @protocol.handle(methods_v2.resource_should_deploy, env="tid", resource_id="id")
-    async def resource_should_deploy(
+    @protocol.handle(methods_v2.resource_did_dependency_change, env="tid", resource_id="id")
+    async def resource_did_dependency_change(
         self,
         env: data.Environment,
         resource_id: ResourceVersionIdStr,

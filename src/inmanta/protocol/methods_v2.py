@@ -490,7 +490,7 @@ def get_resource_events(
     client_types=[ClientType.api],
     api_version=2,
 )
-def resource_should_deploy(
+def resource_did_dependency_change(
     tid: uuid.UUID,
     id: model.ResourceVersionIdStr,
 ) -> bool:
