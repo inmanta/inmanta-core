@@ -146,14 +146,6 @@ def resource_container():
 
         fields = ("key", "value", "purged")
 
-    @resource("test::WaitEvent", agent="agent", id_attribute="key")
-    class WaitER(Resource):
-        """
-        A file on a filesystem
-        """
-
-        fields = ("key", "value", "purged")
-
     @resource("test::Noprov", agent="agent", id_attribute="key")
     class NoProv(Resource):
         """
@@ -166,22 +158,6 @@ def resource_container():
     class FailFastR(Resource):
         """
         A file on a filesystem
-        """
-
-        fields = ("key", "value", "purged")
-
-    @resource("test::BadEvents", agent="agent", id_attribute="key")
-    class BadeEventR(Resource):
-        """
-        A file on a filesystem
-        """
-
-        fields = ("key", "value", "purged")
-
-    @resource("test::BadEventsStatus", agent="agent", id_attribute="key")
-    class BadEventS(Resource):
-        """
-        Set `ctx.set_status(const.ResourceState.failed)` in process_events().
         """
 
         fields = ("key", "value", "purged")
@@ -414,36 +390,6 @@ def resource_container():
         def _do_set_fact(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
             ctx.set_fact(fact_id=resource.key, value=resource.value)
 
-    @provider("test::BadEvents", name="test_bad_events")
-    class BadEvents(ResourceHandler):
-        def check_resource(self, ctx, resource):
-            current = resource.clone()
-            return current
-
-        def do_changes(self, ctx, resource, changes):
-            pass
-
-        def can_process_events(self) -> bool:
-            return True
-
-        def process_events(self, ctx, resource, events):
-            raise Exception()
-
-    @provider("test::BadEventsStatus", name="test_bad_events_status")
-    class BadEventStatus(ResourceHandler):
-        def check_resource(self, ctx, resource):
-            current = resource.clone()
-            return current
-
-        def do_changes(self, ctx, resource, changes):
-            pass
-
-        def can_process_events(self) -> bool:
-            return True
-
-        def process_events(self, ctx, resource, events):
-            ctx.set_status(const.ResourceState.failed)
-
     @provider("test::BadPost", name="test_bad_posts")
     class BadPost(Provider):
         def post(self, ctx, resource) -> None:
@@ -595,32 +541,6 @@ def resource_container():
             elif "value" in changes:
                 Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
                 ctx.set_updated()
-
-    @provider("test::WaitEvent", name="test_wait_Event")
-    class WaitE(Provider):
-        def __init__(self, agent, io=None):
-            super().__init__(agent, io)
-            self.traceid = uuid.uuid4()
-
-        def check_resource(self, ctx, resource):
-            current = resource.clone()
-            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
-
-            if not current.purged:
-                current.value = Provider.get(resource.id.get_agent_name(), resource.key)
-            else:
-                current.value = None
-
-            return current
-
-        def process_events(self, ctx, resource, events):
-            logger.info("Hanging Event waiter %s", self.traceid)
-            waiter.acquire()
-            notified_before_timeout = waiter.wait(timeout=10)
-            waiter.release()
-            if not notified_before_timeout:
-                raise Exception("Timeout")
-            logger.info("Releasing Event waiter %s", self.traceid)
 
     yield ResourceContainer(
         Provider=Provider,

@@ -1939,67 +1939,6 @@ async def test_deploy_and_events(
         assert len(events) == 1
         assert len(events[0]) == expected_events
 
-
-@pytest.mark.asyncio
-async def test_deploy_and_events_failed(server, client, clienthelper, environment, resource_container, no_agent_backoff):
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    resource_container.Provider.reset()
-    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    await agent.add_end_point_name("agent1")
-    await agent.start()
-    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
-
-    version = await clienthelper.get_version()
-
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version,
-            "send_event": True,
-            "purged": False,
-            "requires": [],
-        },
-        {
-            "key": "key2",
-            "value": "value1",
-            "id": "test::BadEvents[agent1,key=key2],v=%d" % version,
-            "send_event": True,
-            "purged": False,
-            "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
-        },
-    ]
-
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        resource_state={},
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-    )
-    assert result.code == 200
-
-    # do a deploy
-    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
-    assert result.code == 200
-    assert not result.result["model"]["deployed"]
-    assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 2
-    assert result.result["model"]["result"] == "deploying"
-
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-
-    await _wait_until_deployment_finishes(client, environment, version)
-
-    result = await client.get_version(environment, version)
-    assert result.result["model"]["done"] == len(resources)
-    await agent.stop()
-
-
 dep_states_reload = [
     ResourceProvider(0, "skip", lambda p, a, k: p.set_skip(a, k, 1)),
     ResourceProvider(0, "fail", lambda p, a, k: p.set_fail(a, k, 1)),
@@ -2734,56 +2673,6 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
     await resource_container.wait_for_done_with_waiters(client, environment, version)
 
     await agent.stop()
-
-
-@pytest.mark.asyncio
-async def test_eventprocessing(resource_container, server, client, clienthelper, environment, agent, no_agent_backoff):
-    """
-    Test retrieving facts from the agent
-    """
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
-
-    resource_container.Provider.set("agent1", "key", "value")
-
-    version = await clienthelper.get_version()
-
-    resource_id_wov = "test::WaitEvent[agent1,key=key]"
-    resource_id = "%s,v=%d" % (resource_id_wov, version)
-
-    resources = [
-        {
-            "key": "key",
-            "value": "value",
-            "id": resource_id,
-            "purged": False,
-            "send_event": False,
-            "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
-        },
-        {
-            "key": "key2",
-            "value": "value2",
-            "id": "test::Resource[agent1,key=key2],v=%d" % version,
-            "send_event": True,
-            "requires": [],
-            "purged": False,
-        },
-    ]
-
-    await clienthelper.put_version_simple(resources, version)
-
-    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
-    assert result.code == 200
-
-    async def in_progress():
-        result = await client.get_version(environment, version)
-        assert result.code == 200
-        status = sorted([res["status"] for res in result.result["resources"]])
-        return status == ["deployed", "processing_events"]
-
-    await retry_limited(in_progress, 1)
-
-    await resource_container.wait_for_done_with_waiters(client, environment, version)
 
 
 @pytest.mark.parametrize("use_agent_trigger_method_setting", [(True,), (False)])

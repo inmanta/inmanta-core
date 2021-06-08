@@ -673,11 +673,15 @@ class ResourceHandler(object):
         :param requires: The dependencies of the resource `resource`
         :param dry_run: True will only determine the required changes but will not execute them.
         """
+        def _call_resource_did_dependency_change() -> Result:
+            return self.get_client().resource_did_dependency_change(
+                tid=self._agent.environment, id=resource.id.resource_version_str()
+            )
+
         def _should_reload() -> bool:
             if dry_run or not self.can_reload():
                 return False
-            env_id = self._agent.environment
-            result = self.get_client().resource_should_deploy(tid=env_id, id=resource.id.resource_version_str())
+            result = self.run_sync(_call_resource_did_dependency_change)
             if result.code != 200:
                 error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
                 raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
