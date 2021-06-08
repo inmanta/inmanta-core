@@ -1902,7 +1902,7 @@ class ResourceAction(BaseDocument):
         messages: List[Dict[str, Any]],
         changes: Dict[str, Any],
         status: Optional[const.ResourceState],
-        change: Optional[const.Change],\
+        change: Optional[const.Change],
         finished: Optional[datetime.datetime],
         connection: Optional[asyncpg.connection.Connection] = None,
     ):

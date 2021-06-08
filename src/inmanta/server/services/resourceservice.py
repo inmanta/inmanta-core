@@ -472,8 +472,15 @@ class ResourceService(protocol.ServerSlice):
             if aclient is not None:
                 if change is None:
                     change = const.Change.nochange
-                send_events = False
-                await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes_with_rvid)
+                await aclient.resource_event(
+                    tid=env.id,
+                    id=agent,
+                    resource=resource_id,
+                    send_events=False,
+                    state=status,
+                    change=change,
+                    changes=changes_with_rvid
+                )
 
     @protocol.handle(methods.resource_action_update, env="tid")
     async def resource_action_update(
@@ -685,7 +692,6 @@ class ResourceService(protocol.ServerSlice):
             action=const.ResourceAction.deploy,
             started=datetime.datetime.now().astimezone(),
             status=const.ResourceState.deploying,
-            send_event=False,
         )
         try:
             await resource_action.insert()

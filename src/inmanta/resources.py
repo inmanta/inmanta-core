@@ -200,7 +200,7 @@ class Resource(metaclass=ResourceMeta):
     """
 
     fields: Sequence[str] = ("send_event",)
-    send_event: bool
+    send_event: bool  # Deprecated field
     model: "proxy.DynamicProxy"
     map: Dict[str, Callable[[Optional["export.Exporter"], "proxy.DynamicProxy"], Any]]
 

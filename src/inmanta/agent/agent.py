@@ -106,32 +106,30 @@ class ResourceAction(object):
             LOGGER.info("Cancelled deploy of %s %s", self.gid, self.resource)
             self.future.set_result(ResourceActionResult(success=False, cancel=True))
 
-    async def send_in_progress(
-        self, action_id: uuid.UUID, start: datetime.datetime, status: const.ResourceState = const.ResourceState.deploying
-    ) -> None:
-        await self.scheduler.get_client().resource_action_update(
+    async def send_in_progress(self, action_id: uuid.UUID) -> Dict[ResourceVersionIdStr, const.ResourceState]:
+        result = await self.scheduler.get_client().resource_deploy_start(
             tid=self.scheduler._env_id,
-            resource_ids=[self.resource.id.resource_version_str()],
+            resource_id=self.resource.id.resource_version_str(),
             action_id=action_id,
-            action=const.ResourceAction.deploy,
-            started=start,
-            status=status,
         )
+        if result.code != 200:
+            raise Exception("Failed to report the start of the deployment to the server")
+        return {key: const.ResourceState[value] for key, value in result.result["data"].items()}
 
-    async def _execute(
-        self,
-        ctx: handler.HandlerContext,
-        start: datetime.datetime,
-    ) -> bool:
+    async def _execute(self, ctx: handler.HandlerContext) -> bool:
         """
         :param ctx: The context to use during execution of this deploy
-        :param start: start time
         :return: True iff the execution was successful
         """
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
 
-        # TODO: Update endpoint
-        requires = await self.send_in_progress(ctx.action_id, start)
+        requires: Dict[ResourceVersionIdStr, const.ResourceState]
+        try:
+            requires = await self.send_in_progress(ctx.action_id)
+        except Exception:
+            ctx.set_status(const.ResourceState.failed)
+            ctx.exception("Failed to report the start of the deployment to the server")
+            return False
 
         # setup provider
         provider: Optional[ResourceHandler] = None
@@ -183,7 +181,6 @@ class ResourceAction(object):
             results: List[ResourceActionResult] = cast(List[ResourceActionResult], await asyncio.gather(*waiters))
 
             async with self.scheduler.ratelimiter:
-                start = datetime.datetime.now().astimezone()
                 ctx = handler.HandlerContext(self.resource, logger=self.logger)
 
                 ctx.debug(
@@ -212,7 +209,7 @@ class ResourceAction(object):
                     ctx.set_status(self.undeployable)
                     success = False
                 else:
-                    success = await self._execute(ctx=ctx, start=start)
+                    success = await self._execute(ctx=ctx)
 
                 ctx.debug(
                     "End run for resource %(resource)s in deploy %(deploy_id)s",
@@ -220,7 +217,6 @@ class ResourceAction(object):
                     deploy_id=self.gid,
                 )
 
-                end = datetime.datetime.now().astimezone()
                 changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
                     self.resource.id.resource_version_str(): ctx.changes
                 }
@@ -233,19 +229,14 @@ class ResourceAction(object):
                     if set_fact_response.code != 200:
                         ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-                # TODO: Use new API endpoint
-                response = await self.scheduler.get_client().resource_action_update(
+                response = await self.scheduler.get_client().resource_deploy_done(
                     tid=self.scheduler._env_id,
-                    resource_ids=[self.resource.id.resource_version_str()],
+                    resource_id=self.resource.id.resource_version_str(),
                     action_id=ctx.action_id,
-                    action=const.ResourceAction.deploy,
-                    started=start,
-                    finished=end,
                     status=ctx.status,
-                    changes=changes,
                     messages=ctx.logs,
+                    changes=changes,
                     change=ctx.change,
-                    send_events=False,
                 )
                 if response.code != 200:
                     LOGGER.error("Resource status update failed %s", response.result)
