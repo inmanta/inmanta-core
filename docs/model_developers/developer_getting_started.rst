@@ -63,9 +63,10 @@ At the time of this writing, linting and code navigation in IDEs work only if yo
 
 There are two scenarios:
 
-1. Working on a new project :ref:`Working on a New Project`.
-2. Working on an existing project :ref:`Working on an Existing Project`.
+1. :ref:`Working on a New Project <dgs-new-project>`.
+2. :ref:`Working on an Existing Project <dgs-existing-project>`.
 
+.. _dgs-new-project:
 
 Working on a New Project
 ========================
@@ -98,6 +99,7 @@ Once you are done with creating a project, you can ``cd`` into that directory an
 
 Upon opening your vs code, and the ``main.cf`` file, you should see modules downloading in ``libs`` directory.
 
+.. _dgs-existing-project:
 
 Working on an Existing Project
 ==============================
@@ -106,7 +108,7 @@ When working on an existing project, you need to ``clone`` them first:
 
 .. code-block:: bash
 
-    git clone project_name
+    git clone project_url
 
 
 They also come with ``requirements.txt`` or ``requirements.dev.txt`` to install the required modules:
@@ -145,7 +147,7 @@ Becomes:
     repo:
         - git@code.inmanta.com:example/{}.git
 
-* Now, in your ``main.cf`` file, if you import a module like, ``import <my_module>`` and save the file, you can get code completion. If you are working on an exisitng project with a populated ``main.``cf file, code completion will work as expected.
+* Now, in your ``main.cf`` file, if you import a module like, ``import <my_module>`` and save the file, you can get code completion. If you are working on an exisitng project with a populated ``main.cf`` file, code completion will work as expected.
 
 **Please note, code completion and navigation work on modules that are imported in the ``main.cf`` file**.
 
@@ -155,9 +157,10 @@ Setting up a module
 
 Like projects, there are also two scenarios:
 
-1. Working on a new module :ref:`Working on a New Module`.
-2. Working on an existing module :ref:`Working on an Existing Module`.
+1. :ref:`Working on a New Module <dgs-new-module>`.
+2. :ref:`Working on an Existing Module <dgs-existing-module>`.
 
+.. _dgs-new-module:
 
 Working on a New Module
 =======================
@@ -173,24 +176,25 @@ Same as :ref:`Working on a New Project` part, modules can also be created like:
 
 There are also guides :ref:`here <moddev-module>` and `here <https://github.com/inmanta/inmanta-module-template>`_ that help you get up and running.
 
+.. _dgs-existing-module:
 
 Working on an Existing Module
 =============================
 
-Modules that you want to work on, have to be ``import``ed in the ``main.cf`` file that is located in your main project directory. For instance:
+Modules that you want to work on, have to be imported in the ``main.cf`` file that is located in your main project directory. For instance:
 
-::
+.. code-block:: inmanta
+
     import vyos
 
-To download the ``import``ed modules in your ``main.cf`` file run:
+To download the imported modules in your ``main.cf`` file run:
 
 .. code-block:: bash
 
     inmanta compile
 
 
-When starting to work on an existing module, it is recommended to check the ``readme.md`` file that comes with the module to see the instructions on how to install and use them. There is also a guide `here <https://docs.inmanta.com/community/latest/model_developers/modules.html>`_ that is useful in case you skipped the previous part.
-
+When starting to work on an existing module, it is recommended to check the ``readme.md`` file that comes with the module to see the instructions on how to install and use them.
 
 Running Test
 ##############################
