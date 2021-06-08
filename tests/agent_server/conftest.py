@@ -528,7 +528,7 @@ def resource_container():
             notified_before_timeout = waiter.wait(timeout=10)
             waiter.release()
             if not notified_before_timeout:
-                raise Exception("Timeout occured")
+                raise Exception("Timeout occurred")
             logger.info("Releasing waiter %s", self.traceid)
             if "purged" in changes:
                 if changes["purged"]["desired"]:

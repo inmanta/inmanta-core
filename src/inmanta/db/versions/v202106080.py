@@ -21,6 +21,8 @@ DISABLED = False
 
 
 async def update(connection: Connection) -> None:
+    # TODO: REVIEW indexes
+    # TODO: Remove processing events from database schema???
     await connection.execute(
         """
         -- Drop the send_event column from the resourceaction table

@@ -92,8 +92,8 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     assert result.code == 400
     assert "Fetching resource events only makes sense when the resource is currently deploying" in result.result["message"]
     result = await agent._client.resource_did_dependency_change(tid=environment, id=rvid_r1_v1)
-    assert result.code == 200
-    assert result.result["data"]
+    assert result.code == 400
+    assert "Fetching resource events only makes sense when the resource is currently deploying" in result.result["message"]
 
     # Perform deployment
     await resource_deployer.deploy_resource(rvid=rvid_r2_v1)
@@ -263,4 +263,4 @@ async def test_events_resource_without_dependencies(server, client, environment,
     assert len(result.result["data"]) == 0
     result = await agent._client.resource_did_dependency_change(tid=environment, id=rvid_r1_v1)
     assert result.code == 200
-    assert result.result["data"]
+    assert not result.result["data"]

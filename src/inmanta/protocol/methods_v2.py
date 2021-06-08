@@ -501,8 +501,7 @@ def resource_did_dependency_change(
     id: model.ResourceVersionIdStr,
 ) -> bool:
     """
-    Returns True iff this resources' events indicate a change in its dependencies since the resource's last deploy or if the
-    resource has never been deployed before.
+    Returns True iff this resources' events indicate a change in its dependencies since the resource's last deployment.
 
     :param tid: The id of the environment this resource belongs to
     :param id: The id of the resource.

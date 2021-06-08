@@ -2829,7 +2829,6 @@ class ConfigurationModel(BaseDocument):
                     ResourceState.failed.name,
                     ResourceState.cancelled.name,
                     ResourceState.deploying.name,
-                    ResourceState.processing_events.name,
                     ResourceState.skipped_for_undefined.name,
                     ResourceState.undefined.name,
                     ResourceState.skipped.name,

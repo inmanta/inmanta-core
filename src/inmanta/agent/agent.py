@@ -38,7 +38,7 @@ from inmanta.agent.handler import ResourceHandler
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, Event, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.resources import Id, Resource
@@ -55,9 +55,7 @@ class ResourceActionResult(object):
         self.cancel = cancel
 
     def __add__(self, other: "ResourceActionResult") -> "ResourceActionResult":
-        return ResourceActionResult(
-            self.success and other.success, self.cancel or other.cancel
-        )
+        return ResourceActionResult(self.success and other.success, self.cancel or other.cancel)
 
     def __str__(self) -> str:
         return "%r %r" % (self.success, self.cancel)
@@ -116,20 +114,12 @@ class ResourceAction(object):
             raise Exception("Failed to report the start of the deployment to the server")
         return {key: const.ResourceState[value] for key, value in result.result["data"].items()}
 
-    async def _execute(self, ctx: handler.HandlerContext) -> bool:
+    async def _execute(self, ctx: handler.HandlerContext, requires: Dict[ResourceVersionIdStr, const.ResourceState]) -> bool:
         """
         :param ctx: The context to use during execution of this deploy
         :return: True iff the execution was successful
         """
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
-
-        requires: Dict[ResourceVersionIdStr, const.ResourceState]
-        try:
-            requires = await self.send_in_progress(ctx.action_id)
-        except Exception:
-            ctx.set_status(const.ResourceState.failed)
-            ctx.exception("Failed to report the start of the deployment to the server")
-            return False
 
         # setup provider
         provider: Optional[ResourceHandler] = None
@@ -205,11 +195,19 @@ class ResourceAction(object):
                     # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
                     return
 
-                if self.undeployable is not None:
-                    ctx.set_status(self.undeployable)
+                requires: Optional[Dict[ResourceVersionIdStr, const.ResourceState]] = None
+                try:
+                    requires = await self.send_in_progress(ctx.action_id)
+                except Exception:
                     success = False
+                    ctx.set_status(const.ResourceState.failed)
+                    ctx.exception("Failed to report the start of the deployment to the server")
                 else:
-                    success = await self._execute(ctx=ctx)
+                    if self.undeployable is not None:
+                        ctx.set_status(self.undeployable)
+                        success = False
+                    else:
+                        success = await self._execute(ctx=ctx, requires=requires)
 
                 ctx.debug(
                     "End run for resource %(resource)s in deploy %(deploy_id)s",
@@ -238,6 +236,7 @@ class ResourceAction(object):
                     changes=changes,
                     change=ctx.change,
                 )
+
                 if response.code != 200:
                     LOGGER.error("Resource status update failed %s", response.result)
 

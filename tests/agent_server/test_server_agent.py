@@ -1856,16 +1856,6 @@ succ    n    n    y    n
     lambda x: x == "y",
 )
 
-doevents = make_matrix(
-    """
-        skip    fail    success    undef
-skip    2    2    2    0
-fail    2    2    2    0
-succ    2    2    2    0
-""",
-    lambda x: int(x),
-)
-
 
 @pytest.mark.parametrize("self_state", self_states, ids=lambda x: x.name)
 @pytest.mark.parametrize("dep_state", dep_states, ids=lambda x: x.name)
@@ -1931,13 +1921,6 @@ async def test_deploy_and_events(
     assert dorun[dep_state.index][self_state.index] == (resource_container.Provider.readcount("agent1", "key3") > 0)
     assert dochange[dep_state.index][self_state.index] == (resource_container.Provider.changecount("agent1", "key3") > 0)
 
-    events = resource_container.Provider.getevents("agent1", "key3")
-    expected_events = doevents[dep_state.index][self_state.index]
-    if expected_events == 0:
-        assert len(events) == 0
-    else:
-        assert len(events) == 1
-        assert len(events[0]) == expected_events
 
 dep_states_reload = [
     ResourceProvider(0, "skip", lambda p, a, k: p.set_skip(a, k, 1)),
@@ -2583,58 +2566,6 @@ async def test_bad_post_get_facts(
     assert "An error occurred after getting facts about test::BadPost" in caplog.text
 
     await agent.stop()
-
-
-@pytest.mark.asyncio
-async def test_bad_post_events(resource_container, environment, server, agent, client, clienthelper, caplog, no_agent_backoff):
-    """
-    Send and receive events within one agent
-    """
-    caplog.set_level(logging.ERROR)
-
-    version = await clienthelper.get_version()
-
-    res_id_1 = "test::BadPost[agent1,key=key1],v=%d" % version
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": res_id_1,
-            "send_event": False,
-            "purged": False,
-            "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
-        },
-        {
-            "key": "key2",
-            "value": "value2",
-            "id": "test::Resource[agent1,key=key2],v=%d" % version,
-            "send_event": True,
-            "requires": [],
-            "purged": False,
-        },
-    ]
-
-    await clienthelper.put_version_simple(resources, version)
-
-    caplog.clear()
-    # do a deploy
-    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
-    assert result.code == 200
-
-    await _wait_until_deployment_finishes(client, environment, version)
-
-    events = resource_container.Provider.getevents("agent1", "key1")
-    assert len(events) == 1
-    for res_id, res in events[0].items():
-        assert res_id.agent_name == "agent1"
-        assert res_id.attribute_value == "key2"
-        assert res["status"] == const.ResourceState.deployed
-        assert res["change"] == const.Change.created
-
-    assert "An error occurred after deployment of test::BadPost[agent1,key=key1]" in caplog.text
-    caplog.clear()
-
-    # Nothing is reported as events don't have pre and post
 
 
 @pytest.mark.asyncio

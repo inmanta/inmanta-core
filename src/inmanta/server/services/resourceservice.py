@@ -479,7 +479,7 @@ class ResourceService(protocol.ServerSlice):
                     send_events=False,
                     state=status,
                     change=change,
-                    changes=changes_with_rvid
+                    changes=changes_with_rvid,
                 )
 
     @protocol.handle(methods.resource_action_update, env="tid")
@@ -680,23 +680,31 @@ class ResourceService(protocol.ServerSlice):
         if not parsed_resource_id.is_resource_version_id_obj():
             raise BadRequest(message=f"Version is missing from argument resource_id: {resource_id}")
 
-        result = await data.Resource.get_one(environment=env.id, resource_version_id=resource_id)
-        if result is None:
-            raise NotFound(message=f"Environment {env.id} doesn't contain a resource with id {resource_id}")
+        async with data.Resource.get_connection() as connection:
+            async with connection.transaction():
+                resource = await data.Resource.get_one(
+                    connection=connection, environment=env.id, resource_version_id=resource_id
+                )
+                if resource is None:
+                    raise NotFound(message=f"Environment {env.id} doesn't contain a resource with id {resource_id}")
 
-        resource_action = data.ResourceAction(
-            environment=env.id,
-            version=parsed_resource_id.version,
-            resource_version_ids=[resource_id],
-            action_id=action_id,
-            action=const.ResourceAction.deploy,
-            started=datetime.datetime.now().astimezone(),
-            status=const.ResourceState.deploying,
-        )
-        try:
-            await resource_action.insert()
-        except UniqueViolationError:
-            raise Conflict(message=f"A resource action with id {action_id} already exists.")
+                resource_action = data.ResourceAction(
+                    environment=env.id,
+                    version=parsed_resource_id.version,
+                    resource_version_ids=[resource_id],
+                    action_id=action_id,
+                    action=const.ResourceAction.deploy,
+                    started=datetime.datetime.now().astimezone(),
+                    status=const.ResourceState.deploying,
+                )
+                try:
+                    await resource_action.insert(connection=connection)
+                except UniqueViolationError:
+                    raise Conflict(message=f"A resource action with id {action_id} already exists.")
+
+                await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
+
+        self.clear_env_cache(env)
 
         return await data.Resource.get_resource_state_for_dependencies(
             environment=env.id, resource_version_id=parsed_resource_id
@@ -864,20 +872,6 @@ class ResourceService(protocol.ServerSlice):
         id: Id = Id.parse_id(resource_id)
         if id.version == 0:
             raise BadRequest(message=f"Version is missing from argument id: {resource_id}")
-
-        actions: List[data.ResourceAction] = await data.ResourceAction.query_resource_actions(
-            environment=env.id,
-            resource_type=id.get_entity_type(),
-            agent=id.get_agent_name(),
-            attribute=id.get_attribute(),
-            attribute_value=id.get_attribute_value(),
-            action=const.ResourceAction.deploy,
-            status=const.ResourceState.deployed,
-            limit=1,
-        )
-        if not actions:
-            # This resource has never been deployed => it should be deployed regardless of events
-            return True
 
         # This resource has been deployed before => determine whether it should be redeployed based on events
         return any(

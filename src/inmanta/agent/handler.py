@@ -673,6 +673,7 @@ class ResourceHandler(object):
         :param requires: The dependencies of the resource `resource`
         :param dry_run: True will only determine the required changes but will not execute them.
         """
+
         def _call_resource_did_dependency_change() -> Result:
             return self.get_client().resource_did_dependency_change(
                 tid=self._agent.environment, id=resource.id.resource_version_str()
@@ -696,7 +697,7 @@ class ResourceHandler(object):
             ctx.set_status(const.ResourceState.skipped)
             ctx.info(
                 "Resource %(resource)s skipped due to failed dependency %(failed)s",
-                resource=self.resource.id.resource_version_str(),
+                resource=resource.id.resource_version_str(),
                 failed=failed_dependencies,
             )
 

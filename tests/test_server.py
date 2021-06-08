@@ -1005,7 +1005,6 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     assert resource_action["status"] == const.ResourceState.deploying
     assert resource_action["changes"] is None
     assert resource_action["change"] is None
-    assert resource_action["send_event"] is False
 
 
 @pytest.mark.asyncio
@@ -1128,12 +1127,11 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert resource_action["status"] == const.ResourceState.deploying
     assert resource_action["changes"] is None
     assert resource_action["change"] is None
-    assert resource_action["send_event"] is False
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
     assert result.code == 200, result.result
     assert "last_deploy" not in result.result["resource"]
-    assert result.result["resource"]["status"] == const.ResourceState.available
+    assert result.result["resource"]["status"] == const.ResourceState.deploying
 
     result = await client.get_version(tid=env_id, id=1)
     assert result.code == 200, result.result
@@ -1210,7 +1208,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert resource_action["status"] == const.ResourceState.deployed
     assert resource_action["changes"] == {rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test").dict()}}
     assert resource_action["change"] == const.Change.purged.value
-    assert resource_action["send_event"] is True
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
     assert result.code == 200, result.result
@@ -1275,7 +1272,7 @@ async def test_resource_deploy_done_invalid_state(server, client, environment, a
         status=const.ResourceState.deploying,
         messages=[],
         changes={"attr1": AttributeStateChange(current=None, desired="test")},
-        change=const.Change.created
+        change=const.Change.created,
     )
     assert result.code == 400, result.result
     assert "No transient state can be used to mark a deployment as done" in result.result["message"]
