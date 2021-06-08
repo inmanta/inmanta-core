@@ -472,7 +472,7 @@ def resource_deploy_start(
     arg_options=methods.ENV_OPTS,
     agent_server=True,
     client_types=[ClientType.agent],
-    api_version=2
+    api_version=2,
 )
 def get_resource_events(
     tid: uuid.UUID,

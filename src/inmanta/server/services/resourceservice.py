@@ -807,7 +807,7 @@ class ResourceService(protocol.ServerSlice):
                 first_timestamp=first_timestamp,
                 last_timestamp=last_timestamp,
                 action=const.ResourceAction.deploy,
-                limit=limit
+                limit=limit,
             )
 
         current_deploy_start: datetime.datetime
