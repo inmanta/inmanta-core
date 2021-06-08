@@ -467,7 +467,12 @@ def resource_deploy_start(
 
 # No pagination support is provided for this endpoint because there is no elegant way to page the output of this endpoint.
 @typedmethod(
-    path="/resource/<id>/events", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+    path="/resource/<id>/events",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    agent_server=True,
+    client_types=[ClientType.agent],
+    api_version=2
 )
 def get_resource_events(
     tid: uuid.UUID,
@@ -480,6 +485,8 @@ def get_resource_events(
 
     :param tid: The id of the environment this resource belongs to
     :param id: The id of the resource to get events for.
+    :raises BadRequest: When this endpoint in called while the resource with the given resource version is not
+                        in the deploying state.
     """
 
 
@@ -487,7 +494,8 @@ def get_resource_events(
     path="/resource/<id>/did_dependency_change",
     operation="GET",
     arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
+    agent_server=True,
+    client_types=[ClientType.agent],
     api_version=2,
 )
 def resource_did_dependency_change(
@@ -500,4 +508,6 @@ def resource_did_dependency_change(
 
     :param tid: The id of the environment this resource belongs to
     :param id: The id of the resource.
+    :raises BadRequest: When this endpoint in called while the resource with the given resource version is not
+                        in the deploying state.
     """
