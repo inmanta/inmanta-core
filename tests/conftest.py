@@ -34,7 +34,7 @@ import tempfile
 import time
 import traceback
 import uuid
-from typing import Dict, List, Optional, Tuple
+from typing import AsyncIterator, Dict, List, Optional, Tuple
 
 import asyncpg
 import pkg_resources
@@ -644,7 +644,7 @@ def capture_warnings():
 
 
 @pytest.fixture(scope="function")
-async def environment(client, server, environment_default):
+async def environment(client, server, environment_default) -> AsyncIterator[str]:
     """
     Create a project and environment, with auto_deploy turned off. This fixture returns the uuid of the environment
     """

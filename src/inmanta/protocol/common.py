@@ -60,7 +60,7 @@ from pydantic.main import create_model
 from tornado import web
 
 from inmanta import config as inmanta_config
-from inmanta import const, execute, util
+from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, validator_timezone_aware_timestamps
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.stable_api import stable_api
@@ -514,12 +514,24 @@ class MethodProperties(object):
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
 
-        if typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), ReturnValue):
+        def is_return_value_type(arg_type: Type) -> bool:
+            if typing_inspect.is_generic_type(arg_type):
+                origin = typing_inspect.get_origin(arg_type)
+                assert origin is not None  # Make mypy happy
+                return types.issubclass(origin, ReturnValue)
+            else:
+                return False
+
+        if is_return_value_type(arg_type):
             self._validate_type_arg(
                 arg, typing_inspect.get_args(arg_type, evaluate=True)[0], strict=strict, allow_none_type=True
             )
 
-        elif not typing_inspect.is_generic_type(arg_type) and isinstance(arg_type, type) and issubclass(arg_type, ReturnValue):
+        elif (
+            not typing_inspect.is_generic_type(arg_type)
+            and isinstance(arg_type, type)
+            and types.issubclass(arg_type, ReturnValue)
+        ):
             raise InvalidMethodDefinition("ReturnValue should have a type specified.")
 
         else:
@@ -536,6 +548,15 @@ class MethodProperties(object):
         :param allow_none_type: If true, allow `None` as the type for this argument
         :param in_url: This argument is passed in the URL
         """
+
+        if typing_inspect.is_new_type(arg_type):
+            return self._validate_type_arg(
+                arg,
+                arg_type.__supertype__,
+                strict=strict,
+                allow_none_type=allow_none_type,
+                in_url=in_url,
+            )
 
         if arg_type is Any:
             if strict:
@@ -561,7 +582,8 @@ class MethodProperties(object):
 
         elif typing_inspect.is_generic_type(arg_type):
             orig = typing_inspect.get_origin(arg_type)
-            if not issubclass(orig, (list, dict)):
+            assert orig is not None  # Make mypy happy
+            if not types.issubclass(orig, (list, dict)):
                 raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} can only be generic List or Dict")
 
             args = typing_inspect.get_args(arg_type, evaluate=True)
@@ -572,7 +594,8 @@ class MethodProperties(object):
 
             elif len(args) == 1:  # A generic list
                 unsubscripted_arg = typing_inspect.get_origin(args[0]) if typing_inspect.get_origin(args[0]) else args[0]
-                if in_url and (issubclass(unsubscripted_arg, dict) or issubclass(unsubscripted_arg, list)):
+                assert unsubscripted_arg is not None  # Make mypy happy
+                if in_url and (types.issubclass(unsubscripted_arg, dict) or types.issubclass(unsubscripted_arg, list)):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
                         f"lists of dictionaries and lists of lists are not supported for GET requests"
@@ -580,14 +603,15 @@ class MethodProperties(object):
                 self._validate_type_arg(arg, args[0], strict=strict, allow_none_type=allow_none_type, in_url=in_url)
 
             elif len(args) == 2:  # Generic Dict
-                if not issubclass(args[0], str):
+                if not types.issubclass(args[0], str):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} must be a Dict with str keys and not {args[0].__name__}"
                     )
                 unsubscripted_dict_value_arg = (
                     typing_inspect.get_origin(args[1]) if typing_inspect.get_origin(args[1]) else args[1]
                 )
-                if in_url and (typing_inspect.is_union_type(args[1]) or issubclass(unsubscripted_dict_value_arg, dict)):
+                assert unsubscripted_dict_value_arg is not None  # Make mypy happy
+                if in_url and (typing_inspect.is_union_type(args[1]) or types.issubclass(unsubscripted_dict_value_arg, dict)):
                     raise InvalidMethodDefinition(
                         f"Type {arg_type} of argument {arg} is not allowed for {self.operation}, "
                         f"nested dictionaries and union types for dictionary values are not supported for GET requests"
@@ -598,11 +622,11 @@ class MethodProperties(object):
             elif len(args) > 2:
                 raise InvalidMethodDefinition(f"Failed to validate type {arg_type} of argument {arg}.")
 
-        elif not in_url and issubclass(arg_type, VALID_SIMPLE_ARG_TYPES):
+        elif not in_url and types.issubclass(arg_type, VALID_SIMPLE_ARG_TYPES):
             pass
-        elif in_url and issubclass(arg_type, VALID_URL_ARG_TYPES):
+        elif in_url and types.issubclass(arg_type, VALID_URL_ARG_TYPES):
             pass
-        elif allow_none_type and issubclass(arg_type, type(None)):
+        elif allow_none_type and types.issubclass(arg_type, type(None)):
             # A check for optional arguments
             pass
         else:

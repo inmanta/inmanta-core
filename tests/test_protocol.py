@@ -2117,3 +2117,36 @@ async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, asy
 
     with pytest.raises(tornado.httpclient.HTTPClientError):
         response = await request(now.replace(tzinfo=None))
+
+
+@pytest.mark.asyncio
+async def test_dict_of_list(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    """
+    Test API input and output conversion for timestamps. Objects should be either timezone-aware or implicit UTC.
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class APydanticType(BaseModel):
+        attr: int
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="GET", client_types=[const.ClientType.api])
+        def test_method(id: str) -> Dict[str, List[APydanticType]]:
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, id: str) -> Dict[str, List[APydanticType]]:
+            return {id: [APydanticType(attr=1), APydanticType(attr=5)]}
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    client: protocol.Client = protocol.Client("client")
+
+    result = await client.test_method(id="test")
+    assert result.code == 200, result.result["message"]
+    assert result.result["data"] == {"test": [{"attr": 1}, {"attr": 5}]}
