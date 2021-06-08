@@ -147,6 +147,7 @@ For models that are considered risky, it is possible to enable the model in a mo
 The general idea is to disengage all features on the orchestrator that make the agents perform unsupervised deployments.
 Then the agents can be activated by hand, one-by-one.
 
+This procedure only works when all agents are autostarted by the server.
 
 1. Take note of the following settings
 
@@ -166,12 +167,13 @@ Then the agents can be activated by hand, one-by-one.
     * It will go to the deploying state
     * But no resources will be deployed
 
-4. In the agent tab, click `deploy on agent` on the 'internal' agent
+4. In the agent tab, click `deploy on agent` on the 'internal' agent.
+   Press `force repair` in the dropdown menu.
 
     * All agents will come online
 
 5. Perform a dryrun, to verify there are no undesirable effects.
-6. Click `deploy on agent` on each agent. Verify results.
+6. Click `deploy on agent\force repair` on each agent. Verify results.
 7. Ensure all environment setting are set correctly
 
    * `agent_trigger_method_on_auto_deploy = push_incremental_deploy`
