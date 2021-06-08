@@ -17,7 +17,7 @@
 """
 import json
 from datetime import datetime
-from typing import AsyncIterator, Dict, List
+from typing import Dict, List
 
 from asyncpg import Connection, Record
 
@@ -59,7 +59,7 @@ async def update(connection: Connection) -> None:
             )
         return json.dumps(obj)
 
-    cursor: AsyncIterator[Record] = connection.cursor("SELECT action_id, messages FROM public.resourceaction")
+    records: List[Record] = await connection.fetch("SELECT action_id, messages FROM public.resourceaction")
     await connection.executemany(
         """
         UPDATE public.resourceaction
@@ -71,6 +71,6 @@ async def update(connection: Connection) -> None:
                 None if record["messages"] is None else [transform_message(msg) for msg in record["messages"]],
                 record["action_id"],
             )
-            async for record in cursor
+            for record in records
         ],
     )

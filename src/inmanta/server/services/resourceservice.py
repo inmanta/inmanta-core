@@ -21,7 +21,7 @@ import logging
 import os
 import uuid
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, cast
 
 from asyncpg.exceptions import UniqueViolationError
 from tornado.httputil import url_concat
@@ -34,6 +34,7 @@ from inmanta.data.model import (
     LogLine,
     Resource,
     ResourceAction,
+    ResourceIdStr,
     ResourceState,
     ResourceType,
     ResourceVersionIdStr,
@@ -780,3 +781,103 @@ class ResourceService(protocol.ServerSlice):
             links["prev"] = url_concat(base_url, previous_params)
         return_value = ReturnValue(response=resource_action_dtos, links=links if links else None)
         return return_value
+
+    @protocol.handle(methods_v2.get_resource_events, env="tid", resource_id="id")
+    async def get_resource_events(
+        self,
+        env: data.Environment,
+        resource_id: ResourceVersionIdStr,
+    ) -> Dict[ResourceIdStr, List[ResourceAction]]:
+        id: Id = Id.parse_id(resource_id)
+        if id.version == 0:
+            raise BadRequest(message=f"Version is missing from argument id: {resource_id}")
+
+        async def get_deploy_actions(
+            resource_id: Id,
+            first_timestamp: Optional[datetime.datetime] = None,
+            last_timestamp: Optional[datetime.datetime] = None,
+            limit: int = 1000,
+        ) -> List[data.ResourceAction]:
+            return await data.ResourceAction.query_resource_actions(
+                environment=env.id,
+                resource_type=resource_id.get_entity_type(),
+                agent=resource_id.get_agent_name(),
+                attribute=resource_id.get_attribute(),
+                attribute_value=resource_id.get_attribute_value(),
+                first_timestamp=first_timestamp,
+                last_timestamp=last_timestamp,
+                action=const.ResourceAction.deploy,
+                limit=limit,
+            )
+
+        current_deploy_start: datetime.datetime
+        last_deploy_start: Optional[datetime.datetime]
+
+        deploy_actions: Iterator[data.ResourceAction] = iter(await get_deploy_actions(id))
+        try:
+            current_deploy: data.ResourceAction = next(deploy_actions)
+            if current_deploy.status != const.ResourceState.deploying:
+                raise BadRequest(
+                    "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
+                    f" for resource {resource_id} is {current_deploy.status}."
+                )
+            current_deploy_start = current_deploy.started
+        except StopIteration:
+            raise BadRequest(
+                "Fetching resource events only makes sense when the resource is currently deploying. Resource"
+                f" {resource_id} has not started deploying yet."
+            )
+        try:
+            last_deploy: data.ResourceAction = next(
+                action for action in deploy_actions if action.status == const.ResourceState.deployed
+            )
+            last_deploy_start = last_deploy.started
+        except StopIteration:
+            # This resource hasn't been deployed before: fetch all events
+            last_deploy_start = None
+
+        resource: Optional[data.Resource] = await data.Resource.get_one(environment=env.id, resource_version_id=resource_id)
+        if resource is None:
+            raise NotFound(f"Resource with id {resource_id} was not found in environment {env.id}")
+        return {
+            dependency.resource_str(): [
+                action.to_dto()
+                for action in await get_deploy_actions(
+                    dependency,
+                    first_timestamp=last_deploy_start,
+                    last_timestamp=current_deploy_start,
+                )
+            ]
+            for dependency in (Id.parse_id(req) for req in resource.attributes["requires"])
+        }
+
+    @protocol.handle(methods_v2.resource_did_dependency_change, env="tid", resource_id="id")
+    async def resource_did_dependency_change(
+        self,
+        env: data.Environment,
+        resource_id: ResourceVersionIdStr,
+    ) -> bool:
+        id: Id = Id.parse_id(resource_id)
+        if id.version == 0:
+            raise BadRequest(message=f"Version is missing from argument id: {resource_id}")
+
+        actions: List[data.ResourceAction] = await data.ResourceAction.query_resource_actions(
+            environment=env.id,
+            resource_type=id.get_entity_type(),
+            agent=id.get_agent_name(),
+            attribute=id.get_attribute(),
+            attribute_value=id.get_attribute_value(),
+            action=const.ResourceAction.deploy,
+            status=const.ResourceState.deployed,
+            limit=1,
+        )
+        if not actions:
+            # This resource has never been deployed => it should be deployed regardless of events
+            return True
+
+        # This resource has been deployed before => determine whether it should be redeployed based on events
+        return any(
+            action.change != const.Change.nochange
+            for dependency, actions in (await self.get_resource_events(env, resource_id)).items()
+            for action in actions
+        )

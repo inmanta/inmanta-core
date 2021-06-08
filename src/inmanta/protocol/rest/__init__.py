@@ -323,6 +323,8 @@ class CallArguments(object):
 
                 if typing_inspect.is_union_type(el_type):
                     self._validate_union_return(el_type, v)
+                if typing_inspect.is_generic_type(el_type):
+                    self._validate_generic_return(el_type, v)
                 elif not isinstance(v, el_type):
                     raise exceptions.ServerError(f"Element {v} of returned list is not of type {el_type}.")
 
