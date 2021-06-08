@@ -1,4 +1,4 @@
-Developing South Bound Integration
+Developing South Bound Integrations
 **********************************************
 
 The inmanta orchestrator comes with a set of integrations with different platforms (see: :ref:`ref-modules`).

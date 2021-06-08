@@ -1,6 +1,6 @@
 .. _moddev-module:
 
-Understandin Modules
+Understanding Modules
 ========================
 In inmanta all orchestration model code and related files, templates, plugins and resource handlers
 are packaged in a module.
