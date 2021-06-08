@@ -796,6 +796,7 @@ class ResourceService(protocol.ServerSlice):
             resource_id: Id,
             first_timestamp: Optional[datetime.datetime] = None,
             last_timestamp: Optional[datetime.datetime] = None,
+            limit: int = 1000,
         ) -> List[data.ResourceAction]:
             return await data.ResourceAction.query_resource_actions(
                 environment=env.id,
@@ -806,6 +807,7 @@ class ResourceService(protocol.ServerSlice):
                 first_timestamp=first_timestamp,
                 last_timestamp=last_timestamp,
                 action=const.ResourceAction.deploy,
+                limit=limit
             )
 
         current_deploy_start: datetime.datetime
