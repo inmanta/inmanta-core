@@ -272,7 +272,7 @@ class ResourceAction(BaseModel):
     status: Optional[const.ResourceState]
     changes: Optional[JsonType]
     change: Optional[const.Change]
-    send_event: Optional[bool]
+    send_event: Optional[bool] = None  # Deprecated field
 
 
 class LogLine(BaseModel):

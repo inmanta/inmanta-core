@@ -423,7 +423,6 @@ def resource_deploy_done(
     messages: List[model.LogLine] = [],
     changes: Dict[str, model.AttributeStateChange] = {},
     change: Optional[Change] = None,
-    send_events: bool = False,
 ) -> None:
     """
     Report to the server that an agent has finished the deployment of a certain resource.
@@ -437,7 +436,6 @@ def resource_deploy_done(
     :param changes: A dict of changes to this resource. The key of this dict indicates the attributes/fields that
                    have been changed. The value contains the new value and/or the original value.
     :param change: The type of change that was done the given resource.
-    :param send_events: Send events to the dependents of this resource.
     """
 
 

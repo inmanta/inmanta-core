@@ -463,7 +463,7 @@ def resource_action_update(
     :param change:s A dict of changes to this resource. The key of this dict indicates the attributes/fields that
                    have been changed. The value contains the new value and/or the original value.
     :param change: The result of the changes
-    :param send_events: Send events to the dependents of this resource
+    :param send_events: [DEPRECATED] The value of this field is not used anymore.
     """
 
 
@@ -961,7 +961,7 @@ def resource_event(
     :param tid: The environment this agent is defined in
     :param id: The name of the agent
     :param resource: The resource ID of the resource being updated
-    :param send_events: Does the resource have send_events enabled?
+    :param send_events: [DEPRECATED] The value of this field is not used anymore.
     :param state: State the resource acquired (deployed, skipped, canceled)
     :param change: The change that was made to the resource
     :param changes: The changes made to the resource

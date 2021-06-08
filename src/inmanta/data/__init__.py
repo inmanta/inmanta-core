@@ -1806,7 +1806,6 @@ class ResourceAction(BaseDocument):
     status = Field(field_type=const.ResourceState)
     changes = Field(field_type=dict)
     change = Field(field_type=const.Change)
-    send_event = Field(field_type=bool)
 
     def __init__(self, from_postgres=False, **kwargs):
         super().__init__(from_postgres, **kwargs)
@@ -1903,8 +1902,7 @@ class ResourceAction(BaseDocument):
         messages: List[Dict[str, Any]],
         changes: Dict[str, Any],
         status: Optional[const.ResourceState],
-        change: Optional[const.Change],
-        send_events: bool,
+        change: Optional[const.Change],\
         finished: Optional[datetime.datetime],
         connection: Optional[asyncpg.connection.Connection] = None,
     ):
@@ -1919,8 +1917,6 @@ class ResourceAction(BaseDocument):
 
         if change is not None:
             self.set_field("change", change)
-
-        self.set_field("send_event", send_events)
 
         if finished is not None:
             self.set_field("finished", finished)
@@ -2035,7 +2031,6 @@ class ResourceAction(BaseDocument):
             status=self.status,
             changes=self.changes,
             change=self.change,
-            send_event=self.send_event,
         )
 
 

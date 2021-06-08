@@ -1155,7 +1155,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
                 ],
                 changes={"attr1": AttributeStateChange(current=None, desired="test")},
                 change=const.Change.purged,
-                send_events=True,
             )
             assert result.code == 200, result.result
         else:
@@ -1236,7 +1235,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
         messages=[],
         changes={"attr1": AttributeStateChange(current="test", desired="test2")},
         change=const.Change.created,
-        send_events=True,
     )
     assert result.code == 409, result.result
 
@@ -1277,8 +1275,7 @@ async def test_resource_deploy_done_invalid_state(server, client, environment, a
         status=const.ResourceState.deploying,
         messages=[],
         changes={"attr1": AttributeStateChange(current=None, desired="test")},
-        change=const.Change.created,
-        send_events=True,
+        change=const.Change.created
     )
     assert result.code == 400, result.result
     assert "No transient state can be used to mark a deployment as done" in result.result["message"]
@@ -1309,7 +1306,6 @@ async def test_resource_deploy_done_error_handling(server, client, environment, 
         messages=[],
         changes={},
         change=const.Change.nochange,
-        send_events=False,
     )
     assert result.code == 404, result.result
 
@@ -1330,6 +1326,5 @@ async def test_resource_deploy_done_error_handling(server, client, environment, 
         messages=[],
         changes={},
         change=const.Change.nochange,
-        send_events=False,
     )
     assert result.code == 404, result.result

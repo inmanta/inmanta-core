@@ -387,7 +387,6 @@ class ResourceService(protocol.ServerSlice):
         messages: List[LogLine] = [],
         changes: Dict[str, AttributeStateChange] = {},
         change: Optional[Change] = None,
-        send_events: bool = False,
         keep_increment_cache: bool = False,
     ) -> None:
         finished = datetime.datetime.now().astimezone()
@@ -451,7 +450,6 @@ class ResourceService(protocol.ServerSlice):
                     changes=changes_with_rvid,
                     status=status,
                     change=change,
-                    send_events=send_events,
                     finished=finished,
                     connection=connection,
                 )
@@ -473,6 +471,7 @@ class ResourceService(protocol.ServerSlice):
             if aclient is not None:
                 if change is None:
                     change = const.Change.nochange
+                send_events = False
                 await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes_with_rvid)
 
     @protocol.handle(methods.resource_action_update, env="tid")
@@ -614,7 +613,6 @@ class ResourceService(protocol.ServerSlice):
                     changes=changes,
                     status=status,
                     change=change,
-                    send_events=send_events,
                     finished=finished,
                     connection=connection,
                 )
