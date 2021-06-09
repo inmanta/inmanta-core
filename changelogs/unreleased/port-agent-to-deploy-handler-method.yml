@@ -1,0 +1,7 @@
+---
+description: Port the agent to the new `deploy` handler method.
+issue-nr: 2940
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}"
