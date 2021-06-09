@@ -463,7 +463,7 @@ class ResourceHandler(object):
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
 
-    def run_sync(self, func: typing.Callable[[], T]) -> T:
+    def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
         """
         Run a the given async function on the ioloop of the agent. It will block the current thread until the future
         resolves.
@@ -613,7 +613,7 @@ class ResourceHandler(object):
         :param dry_run: True will only determine the required changes but will not execute them.
         """
 
-        def _call_resource_did_dependency_change() -> typing.Awaitable:
+        def _call_resource_did_dependency_change() -> typing.Awaitable[Result]:
             return self.get_client().resource_did_dependency_change(
                 tid=self._agent.environment, id=resource.id.resource_version_str()
             )
@@ -741,7 +741,7 @@ class ResourceHandler(object):
         :return: The content in the form of a bytestring or none is the content does not exist.
         """
 
-        def call() -> Result:
+        def call() -> typing.Awaitable[Result]:
             return self.get_client().get_file(hash_id)
 
         result = self.run_sync(call)
@@ -764,7 +764,7 @@ class ResourceHandler(object):
         :return: True if the file is available on the server.
         """
 
-        def call() -> Result:
+        def call() -> typing.Awaitable[Result]:
             return self.get_client().stat_file(hash_id)
 
         result = self.run_sync(call)
@@ -778,7 +778,7 @@ class ResourceHandler(object):
         :param content: A byte string with the content
         """
 
-        def call() -> Result:
+        def call() -> typing.Awaitable[Result]:
             return self.get_client().upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
         try:
