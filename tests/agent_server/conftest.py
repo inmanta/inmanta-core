@@ -220,13 +220,6 @@ def resource_container():
         def facts(self, ctx, resource):
             return {"length": len(self.get(resource.id.get_agent_name(), resource.key)), "key1": "value1", "key2": "value2"}
 
-        def can_process_events(self) -> bool:
-            return True
-
-        def process_events(self, ctx, resource, events):
-            self.__class__._EVENTS[resource.id.get_agent_name()][resource.key].append(events)
-            super(Provider, self).process_events(ctx, resource, events)
-
         def can_reload(self) -> bool:
             return True
 
@@ -239,8 +232,6 @@ def resource_container():
         _READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
         _TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
         _TO_FAIL = defaultdict(lambda: defaultdict(lambda: 0))
-
-        _EVENTS = defaultdict(lambda: defaultdict(lambda: []))
 
         @classmethod
         def set_skip(cls, agent, key, skip):
@@ -302,17 +293,12 @@ def resource_container():
             return cls._READ_COUNT[agent][key]
 
         @classmethod
-        def getevents(cls, agent, key):
-            return cls._EVENTS[agent][key]
-
-        @classmethod
         def reloadcount(cls, agent, key):
             return cls._RELOAD_COUNT[agent][key]
 
         @classmethod
         def reset(cls):
             cls._STATE = defaultdict(dict)
-            cls._EVENTS = defaultdict(lambda: defaultdict(lambda: []))
             cls._WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
             cls._READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
             cls._TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
