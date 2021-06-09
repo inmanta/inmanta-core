@@ -678,6 +678,13 @@ class ResourceHandler(object):
                 )
 
     def execute_dry_run(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Execute a dry-run on the given resource. This method calculates the diff between
+        the current state without performing applying any changes.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        """
         try:
             self.pre(ctx, resource)
 
