@@ -89,7 +89,7 @@ You need to install some essential packages as follows:
     pip install inmanta-core pytest-inmanta
 
 
-Once you are done with creating a project, you can ``cd`` into that directory and open vs code by running:
+Once you are done with creating a project, you can ``cd`` into that directory and open VS Code by running:
 
 .. code-block:: bash
 
@@ -213,7 +213,7 @@ To run test on modules, it is *recommended* to set the ``INMANTA_TEST_ENV`` envi
 
 .. code-block:: bash
 
-    pip install -r requirements.txt requirements.dev.txt
+    pip install -r requirements.txt -r requirements.dev.txt
 
 3. Run the test
 
