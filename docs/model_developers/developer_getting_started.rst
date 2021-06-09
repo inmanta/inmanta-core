@@ -108,7 +108,7 @@ When working on an existing project, you need to ``clone`` them first:
 
 .. code-block:: bash
 
-    git clone project_url
+    git clone <project_url>
 
 
 They also come with ``requirements.txt`` or ``requirements.dev.txt`` to install the required modules:
