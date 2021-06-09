@@ -608,7 +608,7 @@ class ResourceHandler(object):
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to deploy
-        :param requires: The dependencies of the resource `resource`
+        :param requires: A dictionary mapping the resource id of each dependency of the given resource to its resource state.
         """
 
         def _call_resource_did_dependency_change() -> typing.Awaitable[Result]:
