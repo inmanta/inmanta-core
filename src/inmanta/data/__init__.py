@@ -1956,7 +1956,6 @@ class ResourceAction(BaseDocument):
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
-        status: Optional[const.ResourceState] = None,
     ) -> List["ResourceAction"]:
 
         query = f"""SELECT DISTINCT ra.*
@@ -1989,10 +1988,6 @@ class ResourceAction(BaseDocument):
         if action is not None:
             query += f" AND ra.action=${parameter_index}"
             values.append(cls._get_value(action))
-            parameter_index += 1
-        if status is not None:
-            query += f" AND ra.status=${parameter_index}"
-            values.append(cls._get_value(status))
             parameter_index += 1
         if first_timestamp and action_id:
             query += f" AND (started, action_id) > (${parameter_index}, ${parameter_index+1})"
