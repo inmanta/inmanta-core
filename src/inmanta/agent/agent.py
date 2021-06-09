@@ -50,15 +50,14 @@ GET_RESOURCE_BACKOFF = 5
 
 
 class ResourceActionResult(object):
-    def __init__(self, success: bool, cancel: bool) -> None:
-        self.success = success
+    def __init__(self, cancel: bool) -> None:
         self.cancel = cancel
 
     def __add__(self, other: "ResourceActionResult") -> "ResourceActionResult":
-        return ResourceActionResult(self.success and other.success, self.cancel or other.cancel)
+        return ResourceActionResult(self.cancel or other.cancel)
 
     def __str__(self) -> str:
-        return "%r %r" % (self.success, self.cancel)
+        return "%r" % self.cancel
 
 
 # https://mypy.readthedocs.io/en/latest/common_issues.html#using-classes-that-are-generic-in-stubs-but-not-at-runtime
@@ -102,7 +101,7 @@ class ResourceAction(object):
     def cancel(self) -> None:
         if not self.is_running() and not self.is_done():
             LOGGER.info("Cancelled deploy of %s %s", self.gid, self.resource)
-            self.future.set_result(ResourceActionResult(success=False, cancel=True))
+            self.future.set_result(ResourceActionResult(cancel=True))
 
     async def send_in_progress(self, action_id: uuid.UUID) -> Dict[ResourceVersionIdStr, const.ResourceState]:
         result = await self.scheduler.get_client().resource_deploy_start(
@@ -114,7 +113,7 @@ class ResourceAction(object):
             raise Exception("Failed to report the start of the deployment to the server")
         return {key: const.ResourceState[value] for key, value in result.result["data"].items()}
 
-    async def _execute(self, ctx: handler.HandlerContext, requires: Dict[ResourceVersionIdStr, const.ResourceState]) -> bool:
+    async def _execute(self, ctx: handler.HandlerContext, requires: Dict[ResourceVersionIdStr, const.ResourceState]) -> None:
         """
         :param ctx: The context to use during execution of this deploy
         :return: True iff the execution was successful
@@ -128,11 +127,11 @@ class ResourceAction(object):
         except ChannelClosedException as e:
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception(str(e))
-            return False
+            return
         except Exception:
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=self.resource.id.resource_version_str())
-            return False
+            return
         else:
             # main execution
             try:
@@ -154,7 +153,6 @@ class ResourceAction(object):
                     resource_id=self.resource.id,
                     exception=repr(e),
                 )
-            return ctx.status is const.ResourceState.deployed
         finally:
             if provider is not None:
                 provider.close()
@@ -188,7 +186,7 @@ class ResourceAction(object):
                     self.running = False
                     return
 
-                result = sum(results, ResourceActionResult(success=True, cancel=False))
+                result = sum(results, ResourceActionResult(cancel=False))
 
                 if result.cancel:
                     # self.running will be set to false when self.cancel is called
@@ -199,15 +197,13 @@ class ResourceAction(object):
                 try:
                     requires = await self.send_in_progress(ctx.action_id)
                 except Exception:
-                    success = False
                     ctx.set_status(const.ResourceState.failed)
                     ctx.exception("Failed to report the start of the deployment to the server")
                 else:
                     if self.undeployable is not None:
                         ctx.set_status(self.undeployable)
-                        success = False
                     else:
-                        success = await self._execute(ctx=ctx, requires=requires)
+                        await self._execute(ctx=ctx, requires=requires)
 
                 ctx.debug(
                     "End run for resource %(resource)s in deploy %(deploy_id)s",
@@ -243,7 +239,7 @@ class ResourceAction(object):
                 self.status = ctx.status
                 self.change = ctx.change
                 self.changes = changes
-                self.future.set_result(ResourceActionResult(success, cancel=False))
+                self.future.set_result(ResourceActionResult(cancel=False))
                 self.running = False
 
     def __str__(self) -> str:
@@ -287,11 +283,6 @@ class RemoteResourceAction(ResourceAction):
                 # wait for event
                 pass
             else:
-                if status == const.ResourceState.deployed:
-                    success = True
-                else:
-                    success = False
-
                 if "logs" in result.result and len(result.result["logs"]) > 0:
                     log = result.result["logs"][0]
 
@@ -306,7 +297,7 @@ class RemoteResourceAction(ResourceAction):
                         self.changes = {}
                     self.status = status
 
-                self.future.set_result(ResourceActionResult(success, cancel=False))
+                self.future.set_result(ResourceActionResult(cancel=False))
 
             self.running = False
         except Exception:
@@ -322,7 +313,7 @@ class RemoteResourceAction(ResourceAction):
             self.status = status
             self.change = change
             self.changes = changes
-            self.future.set_result(ResourceActionResult(status == const.ResourceState.deployed, cancel=False))
+            self.future.set_result(ResourceActionResult(cancel=False))
 
 
 class ResourceScheduler(object):
@@ -451,7 +442,7 @@ class ResourceScheduler(object):
         self.agent.process.add_background_task(self.mark_deployment_as_finished(self.generation.values()))
 
         # Start running
-        dummy.future.set_result(ResourceActionResult(success=True, cancel=False))
+        dummy.future.set_result(ResourceActionResult(cancel=False))
 
     async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceAction]) -> None:
         await asyncio.gather(*[resource_action.future for resource_action in resource_actions])

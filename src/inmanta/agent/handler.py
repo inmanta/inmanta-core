@@ -613,7 +613,7 @@ class ResourceHandler(object):
         :param dry_run: True will only determine the required changes but will not execute them.
         """
 
-        def _call_resource_did_dependency_change() -> Result:
+        def _call_resource_did_dependency_change() -> typing.Awaitable:
             return self.get_client().resource_did_dependency_change(
                 tid=self._agent.environment, id=resource.id.resource_version_str()
             )

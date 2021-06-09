@@ -27,7 +27,7 @@ from asyncpg.exceptions import UniqueViolationError
 from tornado.httputil import url_concat
 
 from inmanta import const, data, util
-from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change
+from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT
 from inmanta.data.model import (
     AttributeStateChange,
@@ -35,7 +35,6 @@ from inmanta.data.model import (
     Resource,
     ResourceAction,
     ResourceIdStr,
-    ResourceState,
     ResourceType,
     ResourceVersionIdStr,
 )
