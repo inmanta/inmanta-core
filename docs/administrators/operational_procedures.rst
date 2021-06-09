@@ -140,6 +140,48 @@ Procedure
 
 8. If this model uses LSM, perform initial tests of all services via the API.
 
+Extra careful deploy procedure
++++++++++++++++++++++++++++++++
+
+For models that are considered risky, it is possible to enable the model in a more gradual way.
+The general idea is to disengage all features on the orchestrator that make the agents perform unsupervised deployments.
+Then the agents can be activated by hand, one-by-one.
+
+This procedure only works when all agents are autostarted by the server.
+
+1. Take note of the following settings
+
+    * `autostart_agent_deploy_interval`
+    * `autostart_agent_repair_interval`
+
+2. Disable spontaneous deployment
+
+    * `autostart_agent_deploy_interval = 0`
+    * `autostart_agent_repair_interval = 0`
+    * `auto_deploy = True`
+    * `push_on_auto_deploy = False`
+
+3. Click ‘recompile’ to install the project.
+
+    * A new version will appear
+    * It will go to the deploying state
+    * But no resources will be deployed
+
+4. In the agent tab, click `deploy on agent` on the 'internal' agent.
+   Press `force repair` in the dropdown menu.
+
+    * All agents will come online
+
+5. Perform a dryrun, to verify there are no undesirable effects.
+6. Click `deploy on agent/force repair` on each agent. Verify results.
+7. Ensure all environment setting are set correctly
+
+   * `agent_trigger_method_on_auto_deploy = push_incremental_deploy`
+   * `auto_deploy = true`
+   * `push_on_auto_deploy = true`
+   * `server_compile = true`
+   * `autostart_agent_deploy_interval`
+   * `autostart_agent_repair_interval`
 
 
 Issue templates
