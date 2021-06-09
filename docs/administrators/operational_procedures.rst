@@ -173,7 +173,7 @@ This procedure only works when all agents are autostarted by the server.
     * All agents will come online
 
 5. Perform a dryrun, to verify there are no undesirable effects.
-6. Click `deploy on agent\force repair` on each agent. Verify results.
+6. Click `deploy on agent/force repair` on each agent. Verify results.
 7. Ensure all environment setting are set correctly
 
    * `agent_trigger_method_on_auto_deploy = push_incremental_deploy`
