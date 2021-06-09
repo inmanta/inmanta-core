@@ -577,6 +577,13 @@ class Id(object):
         return obj
 
     @classmethod
+    def parse_resource_version_id(cls, resource_id: ResourceVersionIdStr) -> "Id":
+        id: Id = Id.parse_id(resource_id)
+        if id.version == 0:
+            raise Exception(f"Version is missing from resource id: {resource_id}")
+        return id
+
+    @classmethod
     def parse_id(cls, resource_id: Union[ResourceVersionIdStr, ResourceIdStr]) -> "Id":
         """
         Parse the resource id and return the type, the hostname and the

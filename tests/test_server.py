@@ -973,7 +973,7 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     action_id = uuid.uuid4()
 
     if endpoint_to_use == "resource_deploy_start":
-        result = await agent._client.resource_deploy_start(tid=env_id, resource_id=rvid_r1_v1, action_id=action_id)
+        result = await agent._client.resource_deploy_start(tid=env_id, rvid=rvid_r1_v1, action_id=action_id)
         assert result.code == 200
         resource_states_dependencies = result.result["data"]
         assert len(resource_states_dependencies) == 2
@@ -1016,14 +1016,14 @@ async def test_resource_deploy_start_error_handling(server, client, environment,
 
     # Version part missing from resource_version_id
     result = await agent._client.resource_deploy_start(
-        tid=env_id, resource_id="std::File[agent1,path=/etc/file1]", action_id=uuid.uuid4()
+        tid=env_id, rvid="std::File[agent1,path=/etc/file1]", action_id=uuid.uuid4()
     )
     assert result.code == 400
-    assert "Version is missing from argument resource_id" in result.result["message"]
+    assert "Invalid resource version id" in result.result["message"]
 
     # Execute resource_deploy_start call for resource that doesn't exist
     resource_id = "std::File[agent1,path=/etc/file1],v=1"
-    result = await agent._client.resource_deploy_start(tid=env_id, resource_id=resource_id, action_id=uuid.uuid4())
+    result = await agent._client.resource_deploy_start(tid=env_id, rvid=resource_id, action_id=uuid.uuid4())
     assert result.code == 404
     assert f"Environment {environment} doesn't contain a resource with id {resource_id}" in result.result["message"]
 
@@ -1058,7 +1058,7 @@ async def test_resource_deploy_start_action_id_conflict(server, client, environm
     action_id = uuid.uuid4()
 
     async def execute_resource_deploy_start(expected_return_code: int, resulting_nr_resource_actions: int) -> None:
-        result = await agent._client.resource_deploy_start(tid=env_id, resource_id=rvid_r1_v1, action_id=action_id)
+        result = await agent._client.resource_deploy_start(tid=env_id, rvid=rvid_r1_v1, action_id=action_id)
         assert result.code == expected_return_code
 
         result = await client.get_resource_actions(tid=env_id)
@@ -1108,7 +1108,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert result.code == 200
 
     action_id = uuid.uuid4()
-    result = await agent._client.resource_deploy_start(tid=env_id, resource_id=rvid_r1_v1, action_id=action_id)
+    result = await agent._client.resource_deploy_start(tid=env_id, rvid=rvid_r1_v1, action_id=action_id)
     assert result.code == 200, result.result
 
     # Assert initial state
@@ -1144,7 +1144,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
         if endpoint_to_use == "resource_deploy_done":
             result = await agent._client.resource_deploy_done(
                 tid=env_id,
-                resource_id=rvid_r1_v1,
+                rvid=rvid_r1_v1,
                 action_id=action_id,
                 status=const.ResourceState.deployed,
                 messages=[
@@ -1226,7 +1226,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     # A new resource_deploy_done call for the same action_id should result in a Conflict
     result = await agent._client.resource_deploy_done(
         tid=env_id,
-        resource_id=rvid_r1_v1,
+        rvid=rvid_r1_v1,
         action_id=action_id,
         status=const.ResourceState.deployed,
         messages=[],
@@ -1262,12 +1262,12 @@ async def test_resource_deploy_done_invalid_state(server, client, environment, a
     ).insert()
 
     action_id = uuid.uuid4()
-    result = await agent._client.resource_deploy_start(tid=env_id, resource_id=rvid_r1_v1, action_id=action_id)
+    result = await agent._client.resource_deploy_start(tid=env_id, rvid=rvid_r1_v1, action_id=action_id)
     assert result.code == 200, result.result
 
     result = await agent._client.resource_deploy_done(
         tid=env_id,
-        resource_id=rvid_r1_v1,
+        rvid=rvid_r1_v1,
         action_id=action_id,
         status=const.ResourceState.deploying,
         messages=[],
@@ -1297,7 +1297,7 @@ async def test_resource_deploy_done_error_handling(server, client, environment, 
     # Resource doesn't exist
     result = await agent._client.resource_deploy_done(
         tid=env_id,
-        resource_id=rvid_r1_v1,
+        rvid=rvid_r1_v1,
         action_id=uuid.uuid4(),
         status=const.ResourceState.deployed,
         messages=[],
@@ -1317,7 +1317,7 @@ async def test_resource_deploy_done_error_handling(server, client, environment, 
     # Resource action doesn't exist
     result = await agent._client.resource_deploy_done(
         tid=env_id,
-        resource_id=rvid_r1_v1,
+        rvid=rvid_r1_v1,
         action_id=uuid.uuid4(),
         status=const.ResourceState.deployed,
         messages=[],

@@ -599,7 +599,6 @@ class ResourceHandler(object):
         ctx: HandlerContext,
         resource: resources.Resource,
         requires: Dict[ResourceIdStr, ResourceState],
-        dry_run: bool = False,
     ) -> None:
         """
         This method is always be called by the agent, even when one of the requires of the given resource
@@ -610,16 +609,15 @@ class ResourceHandler(object):
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to deploy
         :param requires: The dependencies of the resource `resource`
-        :param dry_run: True will only determine the required changes but will not execute them.
         """
 
         def _call_resource_did_dependency_change() -> typing.Awaitable[Result]:
             return self.get_client().resource_did_dependency_change(
-                tid=self._agent.environment, id=resource.id.resource_version_str()
+                tid=self._agent.environment, rvid=resource.id.resource_version_str()
             )
 
         def _should_reload() -> bool:
-            if dry_run or not self.can_reload():
+            if not self.can_reload():
                 return False
             result = self.run_sync(_call_resource_did_dependency_change)
             if result.code != 200:
@@ -629,7 +627,7 @@ class ResourceHandler(object):
 
         failed_dependencies = [req for req, status in requires.items() if status != ResourceState.deployed]
         if not any(failed_dependencies):
-            self.execute(ctx, resource, dry_run)
+            self.execute(ctx, resource)
             if _should_reload():
                 self.do_reload(ctx, resource)
         else:
@@ -640,16 +638,15 @@ class ResourceHandler(object):
                 failed=failed_dependencies,
             )
 
-    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
+    def execute(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
-        Update the given resource. This method is called by the agent. Most handlers will not override this method
+        Deploy the given resource. This method is called by the agent. Most handlers will not override this method
         and will only override :func:`~inmanta.agent.handler.ResourceHandler.check_resource`, optionally
         :func:`~inmanta.agent.handler.ResourceHandler.list_changes` and
         :func:`~inmanta.agent.handler.ResourceHandler.do_changes`
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to check the current state of.
-        :param dry_run: True will only determine the required changes but will not execute them.
         """
         try:
             self.pre(ctx, resource)
@@ -657,13 +654,36 @@ class ResourceHandler(object):
             changes = self.list_changes(ctx, resource)
             ctx.update_changes(changes)
 
-            if not dry_run:
-                self.do_changes(ctx, resource, changes)
-                ctx.set_status(const.ResourceState.deployed)
+            self.do_changes(ctx, resource, changes)
+            ctx.set_status(const.ResourceState.deployed)
+        except SkipResource as e:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
 
-            else:
-                ctx.set_status(const.ResourceState.dry)
+        except Exception as e:
+            ctx.set_status(const.ResourceState.failed)
+            ctx.exception(
+                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
+                resource_id=resource.id,
+                exception=repr(e),
+            )
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception(
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=repr(e),
+                )
 
+    def execute_dry_run(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        try:
+            self.pre(ctx, resource)
+
+            changes = self.list_changes(ctx, resource)
+            ctx.update_changes(changes)
+            ctx.set_status(const.ResourceState.dry)
         except SkipResource as e:
             ctx.set_status(const.ResourceState.skipped)
             ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)

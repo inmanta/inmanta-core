@@ -106,7 +106,7 @@ class ResourceAction(object):
     async def send_in_progress(self, action_id: uuid.UUID) -> Dict[ResourceVersionIdStr, const.ResourceState]:
         result = await self.scheduler.get_client().resource_deploy_start(
             tid=self.scheduler._env_id,
-            resource_id=self.resource.id.resource_version_str(),
+            rvid=self.resource.id.resource_version_str(),
             action_id=action_id,
         )
         if result.code != 200:
@@ -141,7 +141,6 @@ class ResourceAction(object):
                     ctx,
                     self.resource,
                     requires,
-                    False,
                 )
             except ChannelClosedException as e:
                 ctx.set_status(const.ResourceState.failed)
@@ -225,7 +224,7 @@ class ResourceAction(object):
 
                 response = await self.scheduler.get_client().resource_deploy_done(
                     tid=self.scheduler._env_id,
-                    resource_id=self.resource.id.resource_version_str(),
+                    rvid=self.resource.id.resource_version_str(),
                     action_id=ctx.action_id,
                     status=ctx.status,
                     messages=ctx.logs,
@@ -755,7 +754,7 @@ class AgentInstance(object):
                         else:
                             try:
                                 await asyncio.get_event_loop().run_in_executor(
-                                    self.thread_pool, provider.execute, ctx, resource, True
+                                    self.thread_pool, provider.execute_dry_run, ctx, resource
                                 )
 
                                 changes = ctx.changes

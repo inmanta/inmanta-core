@@ -24,6 +24,7 @@ from typing import Any, List, Union
 
 from inmanta import const, data
 from inmanta.data import model
+from inmanta.resources import Id
 from inmanta.types import JsonType, PrimitiveTypes
 
 from . import exceptions
@@ -52,8 +53,16 @@ async def ignore_env(obj: Any, metadata: dict) -> Any:
     return obj
 
 
+async def convert_resource_version_id(rvid: model.ResourceVersionIdStr, metadata: dict) -> Id:
+    try:
+        return Id.parse_resource_version_id(rvid)
+    except Exception:
+        raise exceptions.BadRequest(f"Invalid resource version id: {rvid}")
+
+
 ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=convert_environment)}
 AGENT_ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=add_env)}
+RVID_OPTS = {"rvid": ArgOption(getter=convert_resource_version_id)}
 
 
 # Method for working with projects
