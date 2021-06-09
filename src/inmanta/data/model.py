@@ -23,7 +23,6 @@ import pydantic
 
 import inmanta.ast.export as ast_export
 from inmanta import const
-from inmanta.const import Change, ResourceState
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
