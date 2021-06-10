@@ -123,7 +123,7 @@ They also come with ``requirements.txt`` or ``requirements.dev.txt`` to install 
 Set project sources
 #####################
 
-When starting a new project, the next step is to set the sources of your project so that it knows, where to get its required modules from.
+When starting a new project, the next step is to set the sources of your project so that it knows where to get its required modules from.
 
 If you only use opensource modules as provided by Inmanta, you can skip below step.
 
@@ -205,8 +205,7 @@ To run test on modules, it is *recommended* to set the ``INMANTA_TEST_ENV`` envi
 
 .. code-block:: bash
 
-    export INMANTA_TEST_ENV="/tmp/env"
-    mkdir -p $INMANTA_TEST_ENV
+    export INMANTA_TEST_ENV=$(mktemp -d)
 
 
 2. Install required dependencies
