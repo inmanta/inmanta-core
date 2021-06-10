@@ -755,7 +755,7 @@ class AgentInstance(object):
                         else:
                             try:
                                 await asyncio.get_event_loop().run_in_executor(
-                                    self.thread_pool, provider.execute_dry_run, ctx, resource
+                                    self.thread_pool, provider.execute, ctx, resource, True
                                 )
 
                                 changes = ctx.changes
