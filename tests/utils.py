@@ -264,11 +264,11 @@ async def wait_for_version(client, environment, cnt):
     return versions.result
 
 
-async def _wait_until_deployment_finishes(client, environment, version, timeout=10):
-    async def is_deployment_finished():
+async def _wait_until_deployment_finishes(client: Client, environment: str, version: int, timeout: int = 10) -> None:
+    async def is_deployment_finished() -> bool:
         result = await client.get_version(environment, version)
         print(version, result.result)
-        return result.result["model"]["total"] - result.result["model"]["done"] <= 0
+        return result.result["model"]["deployed"]
 
     await retry_limited(is_deployment_finished, timeout)
 
