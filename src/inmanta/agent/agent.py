@@ -38,7 +38,7 @@ from inmanta.agent.handler import ResourceHandler
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, Event, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.resources import Id, Resource
@@ -50,18 +50,14 @@ GET_RESOURCE_BACKOFF = 5
 
 
 class ResourceActionResult(object):
-    def __init__(self, success: bool, receive_events: bool, cancel: bool) -> None:
-        self.success = success
-        self.receive_events = receive_events
+    def __init__(self, cancel: bool) -> None:
         self.cancel = cancel
 
     def __add__(self, other: "ResourceActionResult") -> "ResourceActionResult":
-        return ResourceActionResult(
-            self.success and other.success, self.receive_events or other.receive_events, self.cancel or other.cancel
-        )
+        return ResourceActionResult(self.cancel or other.cancel)
 
     def __str__(self) -> str:
-        return "%r %r %r" % (self.success, self.receive_events, self.cancel)
+        return "%r" % self.cancel
 
 
 # https://mypy.readthedocs.io/en/latest/common_issues.html#using-classes-that-are-generic-in-stubs-but-not-at-runtime
@@ -105,43 +101,24 @@ class ResourceAction(object):
     def cancel(self) -> None:
         if not self.is_running() and not self.is_done():
             LOGGER.info("Cancelled deploy of %s %s", self.gid, self.resource)
-            self.future.set_result(ResourceActionResult(False, False, True))
+            self.future.set_result(ResourceActionResult(cancel=True))
 
-    async def send_in_progress(
-        self, action_id: uuid.UUID, start: datetime.datetime, status: const.ResourceState = const.ResourceState.deploying
-    ) -> None:
-        await self.scheduler.get_client().resource_action_update(
+    async def send_in_progress(self, action_id: uuid.UUID) -> Dict[ResourceVersionIdStr, const.ResourceState]:
+        result = await self.scheduler.get_client().resource_deploy_start(
             tid=self.scheduler._env_id,
-            resource_ids=[self.resource.id.resource_version_str()],
+            rvid=self.resource.id.resource_version_str(),
             action_id=action_id,
-            action=const.ResourceAction.deploy,
-            started=start,
-            status=status,
         )
+        if result.code != 200:
+            raise Exception("Failed to report the start of the deployment to the server")
+        return {key: const.ResourceState[value] for key, value in result.result["data"].items()}
 
-    async def _execute(
-        self,
-        ctx: handler.HandlerContext,
-        events: Dict[Id, Event],
-        cache: AgentCache,
-        start: datetime.datetime,
-        event_only: bool = False,
-    ) -> Tuple[bool, bool]:
+    async def _execute(self, ctx: handler.HandlerContext, requires: Dict[ResourceVersionIdStr, const.ResourceState]) -> None:
         """
         :param ctx: The context to use during execution of this deploy
-        :param events: Possible events that are available for this resource
-        :param cache: The cache instance to use
-        :param event_only: don't execute, only do event propagation
-        :param state: start time
-        :return (success, send_event) Return whether the execution was successful and whether a change event should be sent
-                                      to provides of this resource.
+        :param requires: A dictionary that maps each dependency of the resource to be deployed, to its resource state.
         """
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
-
-        if not event_only:
-            await self.send_in_progress(ctx.action_id, start)
-        else:
-            await self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
 
         # setup provider
         provider: Optional[ResourceHandler] = None
@@ -150,33 +127,24 @@ class ResourceAction(object):
         except ChannelClosedException as e:
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception(str(e))
-            return False, False
-
+            return
         except Exception:
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=self.resource.id.resource_version_str())
-            return False, False
-
-        # Assert to make mypy happy
-        assert provider is not None
-
-        success = True
-        # no events by default, i.e. don't send events if you are not executed
-        send_event = False
-
-        # main execution
-        if not event_only:
-            send_event = hasattr(self.resource, "send_event") and self.resource.send_event
-
+            return
+        else:
+            # main execution
             try:
                 await asyncio.get_event_loop().run_in_executor(
-                    self.scheduler.agent.thread_pool, provider.execute, ctx, self.resource
+                    self.scheduler.agent.thread_pool,
+                    provider.deploy,
+                    ctx,
+                    self.resource,
+                    requires,
                 )
-
             except ChannelClosedException as e:
                 ctx.set_status(const.ResourceState.failed)
                 ctx.exception(str(e))
-
             except Exception as e:
                 ctx.set_status(const.ResourceState.failed)
                 ctx.exception(
@@ -184,41 +152,9 @@ class ResourceAction(object):
                     resource_id=self.resource.id,
                     exception=repr(e),
                 )
-
-            if ctx.status is not const.ResourceState.deployed:
-                success = False
-
-        # event processing
-        if len(events) > 0 and provider.can_process_events():
-            # The handler still expects a dict instead of Event. Therefore Event.dict()
-            events_dict = {k: v.dict() for k, v in events.items()}
-            if not event_only:
-                await self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
-            try:
-                ctx.info(
-                    "Sending events to %(resource_id)s because of modified dependencies", resource_id=str(self.resource.id)
-                )
-
-                await asyncio.get_event_loop().run_in_executor(
-                    self.scheduler.agent.thread_pool, provider.process_events, ctx, self.resource, events_dict
-                )
-            except Exception:
-                ctx.exception(
-                    "Could not send events for %(resource_id)s", resource_id=str(self.resource.id), events=str(events_dict)
-                )
-
-        # Prevent that status set by execute() is overridden in process_events()
-        if success and ctx.status is not const.ResourceState.deployed:
-            success = False
-
-        provider.close()
-
-        return success, send_event
-
-    def skipped_because(self, results: List[ResourceActionResult]) -> List[ResourceIdStr]:
-        return [
-            resource.resource_id.resource_str() for resource, result in zip(self.dependencies, results) if not result.success
-        ]
+        finally:
+            if provider is not None:
+                provider.close()
 
     async def execute(
         self, dummy: "ResourceAction", generation: "Dict[ResourceIdStr, ResourceAction]", cache: AgentCache
@@ -232,7 +168,6 @@ class ResourceAction(object):
             results: List[ResourceActionResult] = cast(List[ResourceActionResult], await asyncio.gather(*waiters))
 
             async with self.scheduler.ratelimiter:
-                start = datetime.datetime.now().astimezone()
                 ctx = handler.HandlerContext(self.resource, logger=self.logger)
 
                 ctx.debug(
@@ -250,40 +185,24 @@ class ResourceAction(object):
                     self.running = False
                     return
 
-                result = sum(results, ResourceActionResult(True, False, False))
+                result = sum(results, ResourceActionResult(cancel=False))
 
                 if result.cancel:
                     # self.running will be set to false when self.cancel is called
                     # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
                     return
 
-                received_events: Dict[Id, Event]
-                if result.receive_events:
-                    received_events = {
-                        x.resource_id: Event(
-                            status=x.status, change=x.change, changes=x.changes.get(x.resource_id.resource_version_str(), {})
-                        )
-                        for x in self.dependencies
-                    }
+                requires: Optional[Dict[ResourceVersionIdStr, const.ResourceState]] = None
+                try:
+                    requires = await self.send_in_progress(ctx.action_id)
+                except Exception:
+                    ctx.set_status(const.ResourceState.failed)
+                    ctx.exception("Failed to report the start of the deployment to the server")
                 else:
-                    received_events = {}
-
-                if self.undeployable is not None:
-                    ctx.set_status(self.undeployable)
-                    success = False
-                    send_event = False
-                elif not result.success:
-                    ctx.set_status(const.ResourceState.skipped)
-                    ctx.info(
-                        "Resource %(resource)s skipped due to failed dependency %(failed)s",
-                        resource=self.resource.id.resource_version_str(),
-                        failed=self.skipped_because(results),
-                    )
-                    success = False
-                    send_event = False
-                    await self._execute(ctx=ctx, events=received_events, cache=cache, event_only=True, start=start)
-                else:
-                    success, send_event = await self._execute(ctx=ctx, events=received_events, cache=cache, start=start)
+                    if self.undeployable is not None:
+                        ctx.set_status(self.undeployable)
+                    else:
+                        await self._execute(ctx=ctx, requires=requires)
 
                 ctx.debug(
                     "End run for resource %(resource)s in deploy %(deploy_id)s",
@@ -291,7 +210,6 @@ class ResourceAction(object):
                     deploy_id=self.gid,
                 )
 
-                end = datetime.datetime.now().astimezone()
                 changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
                     self.resource.id.resource_version_str(): ctx.changes
                 }
@@ -304,26 +222,23 @@ class ResourceAction(object):
                     if set_fact_response.code != 200:
                         ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-                response = await self.scheduler.get_client().resource_action_update(
+                response = await self.scheduler.get_client().resource_deploy_done(
                     tid=self.scheduler._env_id,
-                    resource_ids=[self.resource.id.resource_version_str()],
+                    rvid=self.resource.id.resource_version_str(),
                     action_id=ctx.action_id,
-                    action=const.ResourceAction.deploy,
-                    started=start,
-                    finished=end,
                     status=ctx.status,
-                    changes=changes,
                     messages=ctx.logs,
+                    changes=changes,
                     change=ctx.change,
-                    send_events=send_event,
                 )
+
                 if response.code != 200:
                     LOGGER.error("Resource status update failed %s", response.result)
 
                 self.status = ctx.status
                 self.change = ctx.change
                 self.changes = changes
-                self.future.set_result(ResourceActionResult(success, send_event, False))
+                self.future.set_result(ResourceActionResult(cancel=False))
                 self.running = False
 
     def __str__(self) -> str:
@@ -367,12 +282,6 @@ class RemoteResourceAction(ResourceAction):
                 # wait for event
                 pass
             else:
-                if status == const.ResourceState.deployed:
-                    success = True
-                else:
-                    success = False
-
-                send_event = False
                 if "logs" in result.result and len(result.result["logs"]) > 0:
                     log = result.result["logs"][0]
 
@@ -386,9 +295,8 @@ class RemoteResourceAction(ResourceAction):
                     else:
                         self.changes = {}
                     self.status = status
-                    send_event = log["send_event"]
 
-                self.future.set_result(ResourceActionResult(success, send_event, False))
+                self.future.set_result(ResourceActionResult(cancel=False))
 
             self.running = False
         except Exception:
@@ -396,7 +304,6 @@ class RemoteResourceAction(ResourceAction):
 
     def notify(
         self,
-        send_events: bool,
         status: const.ResourceState,
         change: const.Change,
         changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]],
@@ -405,7 +312,7 @@ class RemoteResourceAction(ResourceAction):
             self.status = status
             self.change = change
             self.changes = changes
-            self.future.set_result(ResourceActionResult(status == const.ResourceState.deployed, send_events, False))
+            self.future.set_result(ResourceActionResult(cancel=False))
 
 
 class ResourceScheduler(object):
@@ -534,7 +441,7 @@ class ResourceScheduler(object):
         self.agent.process.add_background_task(self.mark_deployment_as_finished(self.generation.values()))
 
         # Start running
-        dummy.future.set_result(ResourceActionResult(True, False, False))
+        dummy.future.set_result(ResourceActionResult(cancel=False))
 
     async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceAction]) -> None:
         await asyncio.gather(*[resource_action.future for resource_action in resource_actions])
@@ -553,7 +460,6 @@ class ResourceScheduler(object):
     def notify_ready(
         self,
         resourceid: ResourceVersionIdStr,
-        send_events: bool,
         state: const.ResourceState,
         change: const.Change,
         changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]],
@@ -561,7 +467,7 @@ class ResourceScheduler(object):
         if resourceid not in self.cad:
             # received CAD notification for which no resource are waiting, so return
             return
-        self.cad[resourceid].notify(send_events, state, change, changes)
+        self.cad[resourceid].notify(state, change, changes)
 
     def dump(self) -> None:
         print("Waiting:")
@@ -721,12 +627,11 @@ class AgentInstance(object):
     def notify_ready(
         self,
         resourceid: ResourceVersionIdStr,
-        send_events: bool,
         state: const.ResourceState,
         change: const.Change,
         changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]],
     ) -> None:
-        self._nq.notify_ready(resourceid, send_events, state, change, changes)
+        self._nq.notify_ready(resourceid, state, change, changes)
 
     def _can_get_resources(self) -> bool:
         if self._getting_resources:
@@ -1338,7 +1243,7 @@ class Agent(SessionEndpoint):
         LOGGER.debug(
             "Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s", agent, env, agent, resource, state
         )
-        instance.notify_ready(resource, send_events, state, change, changes)
+        instance.notify_ready(resource, state, change, changes)
 
         return 200
 

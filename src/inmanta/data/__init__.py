@@ -1806,7 +1806,6 @@ class ResourceAction(BaseDocument):
     status = Field(field_type=const.ResourceState)
     changes = Field(field_type=dict)
     change = Field(field_type=const.Change)
-    send_event = Field(field_type=bool)
 
     def __init__(self, from_postgres=False, **kwargs):
         super().__init__(from_postgres, **kwargs)
@@ -1904,7 +1903,6 @@ class ResourceAction(BaseDocument):
         changes: Dict[str, Any],
         status: Optional[const.ResourceState],
         change: Optional[const.Change],
-        send_events: bool,
         finished: Optional[datetime.datetime],
         connection: Optional[asyncpg.connection.Connection] = None,
     ):
@@ -1919,8 +1917,6 @@ class ResourceAction(BaseDocument):
 
         if change is not None:
             self.set_field("change", change)
-
-        self.set_field("send_event", send_events)
 
         if finished is not None:
             self.set_field("finished", finished)
@@ -1960,7 +1956,6 @@ class ResourceAction(BaseDocument):
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
-        status: Optional[const.ResourceState] = None,
     ) -> List["ResourceAction"]:
 
         query = f"""SELECT DISTINCT ra.*
@@ -1993,10 +1988,6 @@ class ResourceAction(BaseDocument):
         if action is not None:
             query += f" AND ra.action=${parameter_index}"
             values.append(cls._get_value(action))
-            parameter_index += 1
-        if status is not None:
-            query += f" AND ra.status=${parameter_index}"
-            values.append(cls._get_value(status))
             parameter_index += 1
         if first_timestamp and action_id:
             query += f" AND (started, action_id) > (${parameter_index}, ${parameter_index+1})"
@@ -2045,7 +2036,6 @@ class ResourceAction(BaseDocument):
             status=self.status,
             changes=self.changes,
             change=self.change,
-            send_event=self.send_event,
         )
 
 
@@ -2834,7 +2824,6 @@ class ConfigurationModel(BaseDocument):
                     ResourceState.failed.name,
                     ResourceState.cancelled.name,
                     ResourceState.deploying.name,
-                    ResourceState.processing_events.name,
                     ResourceState.skipped_for_undefined.name,
                     ResourceState.undefined.name,
                     ResourceState.skipped.name,

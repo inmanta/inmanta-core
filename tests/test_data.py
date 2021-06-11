@@ -818,7 +818,6 @@ async def test_model_set_ready(init_dataclasses_and_load_schema):
         (const.ResourceState.cancelled, True),
         (const.ResourceState.undefined, True),
         (const.ResourceState.skipped_for_undefined, True),
-        (const.ResourceState.processing_events, False),
     ],
 )
 @pytest.mark.asyncio
