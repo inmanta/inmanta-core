@@ -117,7 +117,6 @@ class ResourceAction(object):
         """
         :param ctx: The context to use during execution of this deploy
         :param requires: A dictionary that maps each dependency of the resource to be deployed, to its resource state.
-        :return: True iff the execution was successful
         """
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
 
