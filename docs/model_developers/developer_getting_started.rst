@@ -12,7 +12,7 @@ Other development setups are possible, but this one provides a good starting poi
 * Module developers guide
 * Required environment variables
 
-**The examples below are using ``pip`` your system might require you to use ``pip3``**.
+**The examples below are using** ``pip`` **your system might require you to use** ``pip3``.
 
 
 Install VS Code and Inmanta extension
@@ -30,7 +30,7 @@ Further information about Inmanta VS Code extension is available on `this <https
 Setting up Python virtual environments
 ########################################
 
-For every project that you work on, we recommend using a new virtual environment using ``venv``s. If you need a refresher, you can check out `this <https://docs.python.org/3/tutorial/venv.html>`_ page.
+For every project that you work on, we recommend using a new virtual environment using ``venv``. If you need a refresher, you can check out `this <https://docs.python.org/3/tutorial/venv.html>`_ page.
 
 To create a virtual environment:
 
@@ -44,7 +44,7 @@ Then activate it by running:
     
     source ~/.virtualenvs/my_project/bin/activate
 
-**Upgrading your ``pip`` will save you a lot of time and troubleshooting (due to changes in the pip resolver in version 20 and 21).** 
+**Upgrading your** ``pip`` **will save you a lot of time and troubleshooting (due to changes in the pip resolver in version 20 and 21).**
 
 You can do so by running:
 
@@ -147,9 +147,9 @@ Becomes:
     repo:
         - git@code.inmanta.com:example/{}.git
 
-* Now, in your ``main.cf`` file, if you import a module like, ``import <my_module>`` and save the file, you can get code completion. If you are working on an exisitng project with a populated ``main.``cf file, code completion will work as expected.
+* Now, in your ``main.cf`` file, if you import a module like, ``import <my_module>`` and save the file, you can get code completion. If you are working on an existing project with a populated ``main.cf`` file, code completion will work as expected.
 
-**Please note, code completion and navigation work on modules that are imported in the ``main.cf`` file**.
+**Please note, code completion and navigation work on modules that are imported in the** ``main.cf`` **file**.
 
 
 Module developers guide
@@ -179,12 +179,13 @@ There are also guides `here <https://docs.inmanta.com/community/latest/model_dev
 Working on an Existing Module
 =============================
 
-Modules that you want to work on, have to be ``import``ed in the ``main.cf`` file that is located in your main project directory. For instance:
+Modules that you want to work on, have to be imported in the ``main.cf`` file that is located in your main project directory. For instance:
 
-::
+.. code-block:: inmanta
+
     import vyos
 
-To download the ``import``ed modules in your ``main.cf`` file run:
+To download the imported modules in your ``main.cf`` file run:
 
 .. code-block:: bash
 

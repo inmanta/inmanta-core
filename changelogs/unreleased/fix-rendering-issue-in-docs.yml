@@ -1,0 +1,4 @@
+---
+description: Fix rendering issue in the Developer Getting Started Guide
+change-type: patch
+destination-branches: [master, iso3, iso4]
