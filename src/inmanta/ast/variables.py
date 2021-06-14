@@ -188,15 +188,18 @@ class IsDefinedReferenceHelper(AbstractAttributeReferenceHelper[bool], ResultCol
     def receive_result(self, value: T, location: Location) -> None:
         self.target.set_value(True, self.location)
 
-    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
-        if self.target.hasValue:
-            # target has already gotten a value from receive_result
-            return
-        super().resume(requires, resolver, queue_scheduler)
-
     def target_value(self) -> bool:
-        # This is only reachable if no results have been received. In other words if the variable is not defined.
-        return False
+        assert self.is_ready()
+        assert self.variable
+        try:
+            value = self.variable.get_value()
+            if isinstance(value, list):
+                return len(value) != 0
+            elif isinstance(value, NoneValue):
+                return False
+            return True
+        except OptionalValueException:
+            return False
 
 
 class AttributeReferenceHelper(AbstractAttributeReferenceHelper[object]):
