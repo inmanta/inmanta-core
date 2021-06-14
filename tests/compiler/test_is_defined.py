@@ -372,7 +372,7 @@ y = A()
 
 def test_3026_is_defined_gradual(snippetcompiler, capsys):
     snippetcompiler.setup_for_snippet(
-        f"""
+        """
 entity A:
 end
 
