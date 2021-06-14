@@ -22,13 +22,13 @@ import uuid
 from collections import defaultdict, namedtuple
 from threading import Condition
 from typing import Dict
-from inmanta.data.model import ResourceIdStr
 
 from pytest import fixture
 
 from inmanta import const, data
 from inmanta.agent.agent import Agent
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
+from inmanta.data.model import ResourceIdStr
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version
@@ -181,7 +181,7 @@ def resource_container():
         fields = ("key", "value", "purged")
 
     @resource("test::Deploy", agent="agent", id_attribute="key")
-    class Deploy(Resource):
+    class DeployR(Resource):
         """
         Raise a SkipResource exception in the deploy() handler method.
         """
@@ -540,7 +540,6 @@ def resource_container():
 
     @provider("test::Deploy", name="test_wait")
     class Deploy(Provider):
-
         def deploy(
             self,
             ctx: HandlerContext,
@@ -553,7 +552,6 @@ def resource_container():
                 raise Exception()
             elif resource.set_state_to_deployed:
                 ctx.set_status(const.ResourceState.deployed)
-
 
     yield ResourceContainer(
         Provider=Provider,

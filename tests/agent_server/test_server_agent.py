@@ -3376,12 +3376,11 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
 
 
 @pytest.mark.asyncio
-async def test_deploy_handler_method(
-    server, client, environment, agent, clienthelper, resource_container, no_agent_backoff
-):
+async def test_deploy_handler_method(server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):
     """
     Test whether the resource states are set correctly when the deploy() method is overridden.
     """
+
     async def deploy_resource(set_state_to_deployed_in_handler: bool = False) -> const.ResourceState:
         version = await clienthelper.get_version()
         rvid = f"test::Deploy[agent1,key=key1],v={version}"
