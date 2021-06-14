@@ -142,6 +142,8 @@ class ResourceAction(object):
                     self.resource,
                     requires,
                 )
+                if ctx.status is None:
+                    ctx.set_status(const.ResourceState.deployed)
             except ChannelClosedException as e:
                 ctx.set_status(const.ResourceState.failed)
                 ctx.exception(str(e))

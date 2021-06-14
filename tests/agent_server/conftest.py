@@ -21,6 +21,8 @@ import time
 import uuid
 from collections import defaultdict, namedtuple
 from threading import Condition
+from typing import Dict
+from inmanta.data.model import ResourceIdStr
 
 from pytest import fixture
 
@@ -177,6 +179,14 @@ def resource_container():
         """
 
         fields = ("key", "value", "purged")
+
+    @resource("test::Deploy", agent="agent", id_attribute="key")
+    class Deploy(Resource):
+        """
+        Raise a SkipResource exception in the deploy() handler method.
+        """
+
+        fields = ("key", "value", "set_state_to_deployed", "purged")
 
     @provider("test::Resource", name="test_resource")
     class Provider(ResourceHandler):
@@ -527,6 +537,23 @@ def resource_container():
             elif "value" in changes:
                 Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
                 ctx.set_updated()
+
+    @provider("test::Deploy", name="test_wait")
+    class Deploy(Provider):
+
+        def deploy(
+            self,
+            ctx: HandlerContext,
+            resource: Resource,
+            requires: Dict[ResourceIdStr, const.ResourceState],
+        ) -> None:
+            if self.skip(resource.id.agent_name, resource.key):
+                raise SkipResource()
+            elif self.fail(resource.id.agent_name, resource.key):
+                raise Exception()
+            elif resource.set_state_to_deployed:
+                ctx.set_status(const.ResourceState.deployed)
+
 
     yield ResourceContainer(
         Provider=Provider,
