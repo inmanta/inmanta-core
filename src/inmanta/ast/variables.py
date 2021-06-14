@@ -21,7 +21,7 @@ from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Locatable, LocatableString, Location, NotFoundException, OptionalValueException, RuntimeException
-from inmanta.ast.statements import AssignStatement, ExpressionStatement, Resumer
+from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import Instance, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
@@ -94,8 +94,7 @@ class Reference(ExpressionStatement):
 T = TypeVar("T")
 
 
-# TODO: inherit from Resumer
-class AbstractAttributeReferenceHelper(Locatable, Generic[T]):
+class AbstractAttributeReferenceHelper(RawResumer, Generic[T]):
     """
     Generic helper class for setting a target variable based on a Reference. Reschedules itself
     """
