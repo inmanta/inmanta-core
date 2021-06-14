@@ -34,7 +34,7 @@ from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
-from inmanta.agent.handler import ResourceHandler
+from inmanta.agent.handler import ResourceHandler, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
@@ -103,7 +103,7 @@ class ResourceAction(object):
             LOGGER.info("Cancelled deploy of %s %s", self.gid, self.resource)
             self.future.set_result(ResourceActionResult(cancel=True))
 
-    async def send_in_progress(self, action_id: uuid.UUID) -> Dict[ResourceVersionIdStr, const.ResourceState]:
+    async def send_in_progress(self, action_id: uuid.UUID) -> Dict[ResourceIdStr, const.ResourceState]:
         result = await self.scheduler.get_client().resource_deploy_start(
             tid=self.scheduler._env_id,
             rvid=self.resource.id.resource_version_str(),
@@ -111,7 +111,7 @@ class ResourceAction(object):
         )
         if result.code != 200:
             raise Exception("Failed to report the start of the deployment to the server")
-        return {key: const.ResourceState[value] for key, value in result.result["data"].items()}
+        return {Id.parse_id(key).resource_str(): const.ResourceState[value] for key, value in result.result["data"].items()}
 
     async def _execute(self, ctx: handler.HandlerContext, requires: Dict[ResourceVersionIdStr, const.ResourceState]) -> None:
         """
@@ -145,6 +145,9 @@ class ResourceAction(object):
             except ChannelClosedException as e:
                 ctx.set_status(const.ResourceState.failed)
                 ctx.exception(str(e))
+            except SkipResource as e:
+                ctx.set_status(const.ResourceState.skipped)
+                ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=self.resource.id, reason=e.args)
             except Exception as e:
                 ctx.set_status(const.ResourceState.failed)
                 ctx.exception(
@@ -192,7 +195,7 @@ class ResourceAction(object):
                     # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
                     return
 
-                requires: Optional[Dict[ResourceVersionIdStr, const.ResourceState]] = None
+                requires: Optional[Dict[ResourceIdStr, const.ResourceState]] = None
                 try:
                     requires = await self.send_in_progress(ctx.action_id)
                 except Exception:
