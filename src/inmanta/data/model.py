@@ -292,6 +292,6 @@ class LogLine(BaseModel):
 
     level: const.LogLevel
     msg: str
-    args: List[ArgumentTypes] = []
-    kwargs: Dict[str, ArgumentTypes] = {}
+    args: List[Optional[ArgumentTypes]] = []
+    kwargs: Dict[str, Optional[ArgumentTypes]] = {}
     timestamp: datetime.datetime
