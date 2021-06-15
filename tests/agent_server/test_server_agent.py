@@ -3373,3 +3373,50 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
 
     params = await data.Parameter.get_list()
     compare_params(params, [param1, param2, param3, param4])
+
+
+@pytest.mark.asyncio
+async def test_deploy_handler_method(server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):
+    """
+    Test whether the resource states are set correctly when the deploy() method is overridden.
+    """
+
+    async def deploy_resource(set_state_to_deployed_in_handler: bool = False) -> const.ResourceState:
+        version = await clienthelper.get_version()
+        rvid = f"test::Deploy[agent1,key=key1],v={version}"
+        resources = [
+            {
+                "key": "key1",
+                "value": "value1",
+                "set_state_to_deployed": set_state_to_deployed_in_handler,
+                "id": rvid,
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+        ]
+
+        await _deploy_resources(client, environment, resources, version, push=True)
+        await _wait_until_deployment_finishes(client, environment, version=version)
+
+        result = await client.get_resource(
+            tid=environment,
+            id=rvid,
+            status=True,
+        )
+        assert result.code == 200
+        return result.result["status"]
+
+    # No exception raise + no state set explicitly via Handler Context -> deployed state
+    assert const.ResourceState.deployed == await deploy_resource(set_state_to_deployed_in_handler=False)
+
+    # State is set explicitly via HandlerContext to deployed
+    assert const.ResourceState.deployed == await deploy_resource(set_state_to_deployed_in_handler=True)
+
+    # SkipResource exception is raised by handler
+    resource_container.Provider.set_skip("agent1", "key1", 1)
+    assert const.ResourceState.skipped == await deploy_resource()
+
+    # Exception is raised by handler
+    resource_container.Provider.set_fail("agent1", "key1", 1)
+    assert const.ResourceState.failed == await deploy_resource()
