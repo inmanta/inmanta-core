@@ -880,7 +880,7 @@ async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_
     """Test dict which may have None as a value"""
     configure(unused_tcp_port, database_name, postgres_db.port)
 
-    types = Union[int, str]
+    types = Union[pydantic.StrictInt, pydantic.StrictStr]
 
     class Result(BaseModel):
         val: Optional[types]
