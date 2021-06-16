@@ -1,5 +1,5 @@
-South Bound Integration
-***********************
+Developing South Bound Integrations
+**********************************************
 
 The inmanta orchestrator comes with a set of integrations with different platforms (see: :ref:`ref-modules`).
 But it is also possible to develop your own south bound integrations.
@@ -104,8 +104,8 @@ Logging
 """""""
 
 The agent has a built-in logging facility, similar to the standard python logger. All logs written
-to this logger will be sent to the server and are available via the dashboard and the API. 
-Additionally, the logs go into the agent's logfile and into the resource-action log on the server. 
+to this logger will be sent to the server and are available via the dashboard and the API.
+Additionally, the logs go into the agent's logfile and into the resource-action log on the server.
 
 To use this logger, use one of the methods: :py:meth:`ctx.debug<inmanta.agent.handler.HandlerContext.debug>`,
 :py:meth:`ctx.info<inmanta.agent.handler.HandlerContext.info>`,
