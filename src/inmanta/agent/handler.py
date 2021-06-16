@@ -625,6 +625,29 @@ class ResourceHandler(object):
                 raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
             return result.result["data"]
 
+        def filter_resources_in_unexpected_state(
+            reqs: Dict[ResourceIdStr, ResourceState]
+        ) -> Dict[ResourceIdStr, ResourceState]:
+            """
+            Return a sub-dictionary of reqs with only those resources that are in an unexpected state.
+            """
+            unexpected_states = {
+                const.ResourceState.available,
+                const.ResourceState.dry,
+                const.ResourceState.undefined,
+                const.ResourceState.skipped_for_undefined,
+            }
+            return {rid: state for rid, state in reqs.items() if state in unexpected_states}
+
+        resources_in_unexpected_state = filter_resources_in_unexpected_state(requires)
+        if resources_in_unexpected_state:
+            ctx.warning(
+                "Resource %(resource)s skipped because a dependency is in an unexpected state: %(unexpected_states)s",
+                resource=resource.id.resource_version_str(),
+                unexpected_states=str({rid: state.value for rid, state in resources_in_unexpected_state.items()}),
+            )
+            return
+
         failed_dependencies = [req for req, status in requires.items() if status != ResourceState.deployed]
         if not any(failed_dependencies):
             self.execute(ctx, resource)
@@ -633,9 +656,9 @@ class ResourceHandler(object):
         else:
             ctx.set_status(const.ResourceState.skipped)
             ctx.info(
-                "Resource %(resource)s skipped due to failed dependency %(failed)s",
+                "Resource %(resource)s skipped due to failed dependencies: %(failed)s",
                 resource=resource.id.resource_version_str(),
-                failed=failed_dependencies,
+                failed=str(failed_dependencies),
             )
 
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:

@@ -321,22 +321,20 @@ class ResourceService(protocol.ServerSlice):
             "timestamp": util.datetime_utc_isoformat(now),
             "args": [],
         }
-        self.add_background_task(
-            self.resource_action_update(
-                env,
-                neg_increment,
-                action_id=uuid.uuid4(),
-                started=now,
-                finished=now,
-                status=const.ResourceState.deployed,
-                # does this require a different ResourceAction?
-                action=const.ResourceAction.deploy,
-                changes={},
-                messages=[logline],
-                change=const.Change.nochange,
-                send_events=False,
-                keep_increment_cache=True,
-            )
+        await self.resource_action_update(
+            env,
+            neg_increment,
+            action_id=uuid.uuid4(),
+            started=now,
+            finished=now,
+            status=const.ResourceState.deployed,
+            # does this require a different ResourceAction?
+            action=const.ResourceAction.deploy,
+            changes={},
+            messages=[logline],
+            change=const.Change.nochange,
+            send_events=False,
+            keep_increment_cache=True,
         )
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
