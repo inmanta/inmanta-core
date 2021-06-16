@@ -3,4 +3,4 @@ description: Bump the Jinja3 dependency to version 3.0.1
 issue-nr: 143
 issue-repo: infra-tickets
 change-type: patch
-destination-branches: [master, iso4]
+destination-branches: [iso4]
