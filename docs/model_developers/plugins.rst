@@ -1,7 +1,7 @@
 .. _module-plugins:
 
-Plugins
-*******
+Developing Plugins
+*********************
 Plugins provide :ref:`functions<lang-plugins>` that can be called from the :term:`DSL`. This is the
 primary mechanism to interface Python code with the orchestration model at compile time. For Example,
 this mechanism is also used for std::template and std::file. In addition to this, Inmanta also registers all
