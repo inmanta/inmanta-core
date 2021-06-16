@@ -77,9 +77,6 @@ class MultiVersionSetup(object):
         if code == "d":
             return ResourceState.deploying
 
-        if code == "p":
-            return ResourceState.processing_events
-
         if code == "S":
             return ResourceState.skipped
 
@@ -350,19 +347,18 @@ async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
         setup.add_resource("R10", "A1 A1 D1", False)
         setup.add_resource("R13", "A1 A1 A1 A1 A1", True)
         setup.add_resource("R14", "A1 A1 d1 D1", True)
-        setup.add_resource("R15", "A1 A1 p1 D1", True)
-        setup.add_resource("R16", "SU1 A1", False)
-        setup.add_resource("R17", "A1 SU1 A1", True)
-        setup.add_resource("R18", "D1 SU1 A1", False)
-        setup.add_resource("R19", "UD1 A1", False)
-        setup.add_resource("R20", "UD1 D1", False)
-        setup.add_resource("R21", "A1 UD1", True)
-        setup.add_resource("R22", "S1", True)
-        setup.add_resource("R23", "S1 D1", True)
-        setup.add_resource("R24", "A1 S1 D1", True)
-        setup.add_resource("R25", "UA1", True)
-        setup.add_resource("R26", "UA1 D1", True)
-        setup.add_resource("R27", "A1 UA1 D1", True)
+        setup.add_resource("R15", "SU1 A1", False)
+        setup.add_resource("R16", "A1 SU1 A1", True)
+        setup.add_resource("R17", "D1 SU1 A1", False)
+        setup.add_resource("R18", "UD1 A1", False)
+        setup.add_resource("R19", "UD1 D1", False)
+        setup.add_resource("R20", "A1 UD1", True)
+        setup.add_resource("R21", "S1", True)
+        setup.add_resource("R22", "S1 D1", True)
+        setup.add_resource("R23", "A1 S1 D1", True)
+        setup.add_resource("R24", "UA1", True)
+        setup.add_resource("R25", "UA1 D1", True)
+        setup.add_resource("R26", "A1 UA1 D1", True)
 
         await setup.setup(orchestration_service, resource_service, env, sid)
 

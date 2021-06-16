@@ -408,28 +408,27 @@ def get_resource_actions(
 
 
 @typedmethod(
-    path="/resource/<resource_id>/deploy/done",
+    path="/resource/<rvid>/deploy/done",
     operation="POST",
     agent_server=True,
-    arg_options=methods.ENV_OPTS,
+    arg_options={**methods.ENV_OPTS, **methods.RVID_OPTS},
     client_types=[ClientType.agent],
     api_version=2,
 )
 def resource_deploy_done(
     tid: uuid.UUID,
-    resource_id: model.ResourceVersionIdStr,
+    rvid: model.ResourceVersionIdStr,
     action_id: uuid.UUID,
     status: ResourceState,
     messages: List[model.LogLine] = [],
     changes: Dict[str, model.AttributeStateChange] = {},
     change: Optional[Change] = None,
-    send_events: bool = False,
 ) -> None:
     """
     Report to the server that an agent has finished the deployment of a certain resource.
 
     :param tid: The id of the environment the resource belongs to
-    :param resource_id: The resource version id of the resource for which the deployment is finished.
+    :param rvid: The resource version id of the resource for which the deployment is finished.
     :param action_id: A unique ID associated with this resource deployment action. This should be the same ID that was
                       passed to the `/resource/<resource_id>/deploy/start` API call.
     :param status: The current status of the resource (if known)
@@ -437,28 +436,27 @@ def resource_deploy_done(
     :param changes: A dict of changes to this resource. The key of this dict indicates the attributes/fields that
                    have been changed. The value contains the new value and/or the original value.
     :param change: The type of change that was done the given resource.
-    :param send_events: Send events to the dependents of this resource.
     """
 
 
 @typedmethod(
-    path="/resource/<resource_id>/deploy/start",
+    path="/resource/<rvid>/deploy/start",
     operation="POST",
     agent_server=True,
-    arg_options=methods.ENV_OPTS,
+    arg_options={**methods.ENV_OPTS, **methods.RVID_OPTS},
     client_types=[ClientType.agent],
     api_version=2,
 )
 def resource_deploy_start(
     tid: uuid.UUID,
-    resource_id: model.ResourceVersionIdStr,
+    rvid: model.ResourceVersionIdStr,
     action_id: uuid.UUID,
 ) -> Dict[model.ResourceVersionIdStr, ResourceState]:
     """
     Report to the server that the agent will start the deployment of the given resource.
 
     :param tid: The id of the environment the resource belongs to
-    :param resource_id: The resource version id of the resource for which the deployment will start
+    :param rvid: The resource version id of the resource for which the deployment will start
     :param action_id: A unique id used to track the action of this deployment
     :return: A dict mapping the resource version id of each dependency of resource_id to
              the last deployment status of that resource.
@@ -467,16 +465,16 @@ def resource_deploy_start(
 
 # No pagination support is provided for this endpoint because there is no elegant way to page the output of this endpoint.
 @typedmethod(
-    path="/resource/<id>/events",
+    path="/resource/<rvid>/events",
     operation="GET",
-    arg_options=methods.ENV_OPTS,
+    arg_options={**methods.ENV_OPTS, **methods.RVID_OPTS},
     agent_server=True,
     client_types=[ClientType.agent],
     api_version=2,
 )
 def get_resource_events(
     tid: uuid.UUID,
-    id: model.ResourceVersionIdStr,
+    rvid: model.ResourceVersionIdStr,
 ) -> Dict[model.ResourceIdStr, List[model.ResourceAction]]:
     """
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
@@ -484,30 +482,29 @@ def get_resource_events(
     order according to their started timestamp.
 
     :param tid: The id of the environment this resource belongs to
-    :param id: The id of the resource to get events for.
+    :param rvid: The id of the resource to get events for.
     :raises BadRequest: When this endpoint in called while the resource with the given resource version is not
                         in the deploying state.
     """
 
 
 @typedmethod(
-    path="/resource/<id>/did_dependency_change",
+    path="/resource/<rvid>/did_dependency_change",
     operation="GET",
-    arg_options=methods.ENV_OPTS,
+    arg_options={**methods.ENV_OPTS, **methods.RVID_OPTS},
     agent_server=True,
     client_types=[ClientType.agent],
     api_version=2,
 )
 def resource_did_dependency_change(
     tid: uuid.UUID,
-    id: model.ResourceVersionIdStr,
+    rvid: model.ResourceVersionIdStr,
 ) -> bool:
     """
-    Returns True iff this resources' events indicate a change in its dependencies since the resource's last deploy or if the
-    resource has never been deployed before.
+    Returns True iff this resources' events indicate a change in its dependencies since the resource's last deployment.
 
     :param tid: The id of the environment this resource belongs to
-    :param id: The id of the resource.
+    :param rvid: The id of the resource.
     :raises BadRequest: When this endpoint in called while the resource with the given resource version is not
                         in the deploying state.
     """

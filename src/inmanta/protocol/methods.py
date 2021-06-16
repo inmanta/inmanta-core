@@ -24,6 +24,7 @@ from typing import Any, List, Union
 
 from inmanta import const, data
 from inmanta.data import model
+from inmanta.resources import Id
 from inmanta.types import JsonType, PrimitiveTypes
 
 from . import exceptions
@@ -52,8 +53,16 @@ async def ignore_env(obj: Any, metadata: dict) -> Any:
     return obj
 
 
+async def convert_resource_version_id(rvid: model.ResourceVersionIdStr, metadata: dict) -> Id:
+    try:
+        return Id.parse_resource_version_id(rvid)
+    except Exception:
+        raise exceptions.BadRequest(f"Invalid resource version id: {rvid}")
+
+
 ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=convert_environment)}
 AGENT_ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=add_env)}
+RVID_OPTS = {"rvid": ArgOption(getter=convert_resource_version_id)}
 
 
 # Method for working with projects
@@ -463,7 +472,7 @@ def resource_action_update(
     :param change:s A dict of changes to this resource. The key of this dict indicates the attributes/fields that
                    have been changed. The value contains the new value and/or the original value.
     :param change: The result of the changes
-    :param send_events: Send events to the dependents of this resource
+    :param send_events: [DEPRECATED] The value of this field is not used anymore.
     """
 
 
@@ -961,7 +970,7 @@ def resource_event(
     :param tid: The environment this agent is defined in
     :param id: The name of the agent
     :param resource: The resource ID of the resource being updated
-    :param send_events: Does the resource have send_events enabled?
+    :param send_events: [DEPRECATED] The value of this field is not used anymore.
     :param state: State the resource acquired (deployed, skipped, canceled)
     :param change: The change that was made to the resource
     :param changes: The changes made to the resource

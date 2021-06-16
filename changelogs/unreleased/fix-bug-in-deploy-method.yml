@@ -1,0 +1,4 @@
+---
+description: Fix bug in the way that the agent handles the deploy() handler method.
+change-type: patch
+destination-branches: [master]

@@ -32,14 +32,13 @@ class ResourceState(str, Enum):
     cancelled = "cancelled"  # When a new version is pushed, in progress deploys are cancelled
     undefined = "undefined"  # The state of this resource is unknown at this moment in the orchestration process
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
-    processing_events = "processing_events"
 
 
 # undeployable
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
 UNDEPLOYABLE_NAMES = [s.name for s in UNDEPLOYABLE_STATES]
 # this resource action is not complete, resource is in transient state
-TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying, ResourceState.processing_events]
+TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying]
 # not counting as done
 NOT_DONE_STATES = TRANSIENT_STATES
 # counts as done
@@ -65,7 +64,6 @@ VALID_STATES_ON_STATE_UPDATE = [
     ResourceState.cancelled,
     ResourceState.undefined,
     ResourceState.skipped_for_undefined,
-    ResourceState.processing_events,
 ]
 
 UNKNOWN_STRING = "<<undefined>>"
@@ -84,7 +82,6 @@ States set by agent
 4. unavailable
 5. cancelled
 6. deploying
-7. processing_events
 
 Each deploy sets the agent state again, all agent states can transition to all agent states
 
@@ -94,8 +91,6 @@ States that are in the action log, but not actual states
 
 
                                            +-----> deploying        -<--------+
-                                           |                                  |
-                                           +-----> processing_events-<--------+
                                            |                                  |
                                            +-----> skipped          -<--------+
                                            |                                  |

@@ -243,7 +243,7 @@ async def clean_db(postgresql_pool, create_db, postgres_db):
 
 @pytest.fixture(scope="function")
 def get_columns_in_db_table(postgresql_client):
-    async def _get_columns_in_db_table(table_name):
+    async def _get_columns_in_db_table(table_name: str) -> List[str]:
         result = await postgresql_client.fetch(
             "SELECT column_name "
             "FROM information_schema.columns "

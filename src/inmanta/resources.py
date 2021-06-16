@@ -200,7 +200,7 @@ class Resource(metaclass=ResourceMeta):
     """
 
     fields: Sequence[str] = ("send_event",)
-    send_event: bool
+    send_event: bool  # Deprecated field
     model: "proxy.DynamicProxy"
     map: Dict[str, Callable[[Optional["export.Exporter"], "proxy.DynamicProxy"], Any]]
 
@@ -575,6 +575,13 @@ class Id(object):
 
         setattr(obj, self.attribute, self.attribute_value)
         return obj
+
+    @classmethod
+    def parse_resource_version_id(cls, resource_id: ResourceVersionIdStr) -> "Id":
+        id: Id = Id.parse_id(resource_id)
+        if id.version == 0:
+            raise Exception(f"Version is missing from resource id: {resource_id}")
+        return id
 
     @classmethod
     def parse_id(cls, resource_id: Union[ResourceVersionIdStr, ResourceIdStr]) -> "Id":
