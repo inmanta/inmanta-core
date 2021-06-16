@@ -641,6 +641,7 @@ class ResourceHandler(object):
 
         resources_in_unexpected_state = filter_resources_in_unexpected_state(requires)
         if resources_in_unexpected_state:
+            ctx.set_status(const.ResourceState.skipped)
             ctx.warning(
                 "Resource %(resource)s skipped because a dependency is in an unexpected state: %(unexpected_states)s",
                 resource=resource.id.resource_version_str(),
