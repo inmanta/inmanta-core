@@ -188,6 +188,13 @@ class IsDefinedReferenceHelper(AbstractAttributeReferenceHelper[bool], ResultCol
         self.target.set_value(True, self.location)
 
     def target_value(self) -> bool:
+        """
+        Returns the target value based on self.variable.
+
+        We don't override `resume` so this method is always called when `variable` gets frozen, even if the target variable has
+        been set already. This shouldn't affect performance but the potential double set acts as a guard against inconsistent
+        internal state (if `receive_result` receives a result the eventual result of this method must be True).
+        """
         assert self.is_ready()
         assert self.variable
         try:
