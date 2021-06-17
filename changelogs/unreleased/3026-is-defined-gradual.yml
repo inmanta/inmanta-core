@@ -1,4 +1,4 @@
-description: Compiler improvement: made `is defined` gradually executable
+description: "Compiler improvement: made `is defined` gradually executable"
 change-type: patch
 sections:
   feature: "{{description}}"
