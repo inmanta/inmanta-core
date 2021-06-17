@@ -368,3 +368,31 @@ y = A()
     out, err = capsys.readouterr()
     result = "true" if condition_block_with_self.shadows_b else "false"
     assert result in out
+
+
+def test_3026_is_defined_gradual(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+end
+
+A.list [0:] -- A
+A.optional [0:1] -- A
+
+implementation a for A:
+    self.optional = A()
+end
+
+implement A using std::none
+implement A using a when self.list is defined
+
+a = A(list=A())
+test = a.optional
+"""
+    )
+    # assert this does not fail:
+    # A.list's upper arity is unbounded, therefore without gradual execution it needs to be frozen.
+    # A.optional is a candidate for freezing as well. It has the same potential to be selected as A.list
+    # (until #2793 has been implemented).
+    # As a result this snippet is likely to fail without gradual execution for `is defined`.
+    compiler.do_compile()
