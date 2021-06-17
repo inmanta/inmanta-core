@@ -4,4 +4,4 @@ sections:
   feature: "{{description}}"
 destination-branches:
   - iso4
-  - iso5
+  - master
