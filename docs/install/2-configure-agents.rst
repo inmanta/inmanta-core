@@ -24,7 +24,7 @@ with respect to the Inmanta server and the agent has to execute I/O operations o
 * The remote machine should have a Python 2 or 3 interpreter installed. The binary executed by default is ``python``.
 * The remote user should either be ``root`` or have the ability to do a passwordless sudo.
   To enable passwordless sudo for the user ``username``, add a file to ``/etc/sudoers.d/`` containing ``username ALL=(ALL) NOPASSWD: ALL``.
-  It is advisable to use a safe editor such as ``visudo`` or ``sudoedit`` for this. For more details, go `here <https://www.sudo.ws/man/1.8.3/sudoers.man.html#NOPASSWD-and-PASSWD>`_.
+  It is advisable to use a safe editor such as ``visudo`` or ``sudoedit`` for this. For more details, go `here <https://www.sudo.ws/man/sudoers.man.html#NOPASSWD-and-PASSWD>`_.
 
 
 Configuring auto-started agents via environment settings
