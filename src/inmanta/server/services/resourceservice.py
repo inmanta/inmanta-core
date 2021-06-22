@@ -28,12 +28,14 @@ from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data import APILIMIT
+from inmanta.data import APILIMIT, InvalidSort, ResourceOrder
 from inmanta.data.model import (
     AttributeStateChange,
     LogLine,
     Resource,
     ResourceAction,
+    ResourceDto,
+    ResourceIdDetails,
     ResourceIdStr,
     ResourceType,
     ResourceVersionIdStr,
@@ -866,3 +868,40 @@ class ResourceService(protocol.ServerSlice):
             for dependency, actions in (await self.get_resource_events(env, resource_id)).items()
             for action in actions
         )
+
+    @protocol.handle(methods_v2.resource_list, env="tid")
+    async def resource_list(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        first_id: Optional[str] = None,
+        last_id: Optional[str] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "resource_type.desc",
+    ) -> List[ResourceDto]:
+        def from_resource_id(resource_id: ResourceIdStr) -> "ResourceIdDetails":
+            parsed_id = Id.parse_id(resource_id)
+            return ResourceIdDetails(
+                resource_type=parsed_id.entity_type,
+                agent=parsed_id.agent_name,
+                attribute=parsed_id.attribute,
+                attribute_value=parsed_id.attribute_value,
+            )
+
+        try:
+            resources = await data.Resource.get_released_resources(
+                environment=env.id, database_order=ResourceOrder.parse_from_string(sort)
+            )
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+
+        dtos = [
+            ResourceDto(
+                resource_id=resource.resource_id,
+                id_details=from_resource_id(resource.resource_id),
+                status=resource.status,
+                requires=resource.attributes.get("requires", []),
+            )
+            for resource in resources
+        ]
+        return dtos

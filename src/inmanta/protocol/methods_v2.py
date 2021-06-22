@@ -508,3 +508,19 @@ def resource_did_dependency_change(
     :raises BadRequest: When this endpoint in called while the resource with the given resource version is not
                         in the deploying state.
     """
+
+
+@typedmethod(path="/resource", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+def resource_list(
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    first_id: Optional[str] = None,
+    last_id: Optional[str] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "resource_type.desc",
+) -> List[model.ResourceDto]:
+    """
+
+    :param tid: The id of the environment this resource belongs to
+    :return:
+    """

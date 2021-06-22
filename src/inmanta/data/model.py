@@ -243,6 +243,7 @@ class Resource(BaseModel):
     resource_id: ResourceVersionIdStr
     resource_type: ResourceType
     resource_version_id: ResourceVersionIdStr
+    value: str
     agent: str
     last_deploy: Optional[datetime.datetime]
     attributes: JsonType
@@ -295,3 +296,17 @@ class LogLine(BaseModel):
     args: List[Optional[ArgumentTypes]] = []
     kwargs: Dict[str, Optional[ArgumentTypes]] = {}
     timestamp: datetime.datetime
+
+
+class ResourceIdDetails(BaseModel):
+    resource_type: ResourceType
+    agent: str
+    attribute: str
+    attribute_value: str
+
+
+class ResourceDto(BaseModel):
+    resource_id: ResourceVersionIdStr
+    id_details: ResourceIdDetails
+    requires: List[ResourceVersionIdStr]
+    status: const.ResourceState

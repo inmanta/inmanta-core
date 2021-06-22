@@ -22,13 +22,16 @@ import enum
 import hashlib
 import json
 import logging
+import re
 import uuid
 import warnings
+from abc import ABCMeta
 from collections import defaultdict
 from configparser import RawConfigParser
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type, TypeVar, Union, cast
+from typing import Any, Callable, Dict, Iterable, List, NewType, Optional, Sequence, Set, Tuple, Type, TypeVar, Union, cast
 
 import asyncpg
+import dateutil
 import pydantic
 from asyncpg.protocol import Record
 
@@ -41,6 +44,7 @@ from inmanta.data.model import ResourceIdStr
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
+from regex.regex import Pattern
 
 LOGGER = logging.getLogger(__name__)
 
@@ -50,6 +54,88 @@ APILIMIT = 1000
 
 # TODO: disconnect
 # TODO: difference between None and not set
+
+
+class InvalidFieldNameException(Exception):
+    def __init__(self, message, *args) -> None:
+        super().__init__(message, *args)
+        self.message = message
+
+
+ColumnNameStr = NewType("ColumnNameStr", str)
+"""
+    A valid database column name
+"""
+
+OrderStr = NewType("OrderStr", str)
+"""
+    A valid database ordering
+"""
+
+
+class InvalidSort(Exception):
+    def __init__(self, message: str, *args) -> None:
+        super(InvalidSort, self).__init__(message, *args)
+        self.message = message
+
+
+class DatabaseOrder(metaclass=ABCMeta):
+    """Represents an ordering for database queries"""
+
+    def __init__(
+        self,
+        order_by_column: ColumnNameStr,
+        order: OrderStr,
+        order_by_column_type: Union[Type[datetime.datetime], Type[int], Type[str]],
+    ) -> None:
+        """The order_by_column and order parameters should be validated"""
+        self.order_by_column = order_by_column
+        self.order = order
+        self.order_by_column_type = order_by_column_type
+
+    def get_order_by_db_column_name(self) -> ColumnNameStr:
+        """The validated column name string as it should be used in the database queries"""
+        return self.order_by_column
+
+    def get_order(self) -> OrderStr:
+        """ The order string representing the direction the results should be sorted by"""
+        return self.order
+
+    def __str__(self) -> str:
+        return f"{self.order_by_column}.{self.order}"
+
+    def get_order_by_column_type(self) -> Union[Type[datetime.datetime], Type[int], Type[str]]:
+        """ The type of the order by column"""
+        return self.order_by_column_type
+
+    def get_order_by_column_attribute(self) -> str:
+        """ The name of the column that the results should be ordered by """
+        return self.order_by_column
+
+    def get_min_time(self) -> Optional[datetime.datetime]:
+        if self.get_order_by_column_type() == datetime.datetime:
+            return datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+        else:
+            return None
+
+    def get_max_time(self) -> Optional[datetime.datetime]:
+        if self.get_order_by_column_type() == datetime.datetime:
+            return datetime.datetime.max.replace(tzinfo=datetime.timezone.utc)
+        else:
+            return None
+
+    def ensure_boundary_type(
+        self, order_by_column_value: Union[datetime.datetime, int, str]
+    ) -> Union[datetime.datetime, int, str]:
+        """Converts a value to the type of the order by column,
+        can be used to make sure a boundary (start or end) is the correct type"""
+        column_type = self.get_order_by_column_type()
+        if column_type == datetime.datetime and isinstance(order_by_column_value, str):
+            return dateutil.parser.isoparse(order_by_column_value)
+        elif column_type == int and isinstance(order_by_column_value, str):
+            return int(order_by_column_value)
+        else:
+            return order_by_column_value
 
 
 def json_encode(value: Any) -> str:
@@ -452,7 +538,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return None
 
     @classmethod
-    def _validate_order(cls, order_by_column: Optional[str], order: str) -> None:
+    def _validate_order(cls, order_by_column: str, order: str) -> Tuple[ColumnNameStr, OrderStr]:
         """Validate the correct values for order and if the order column is an existing column name
         :param order_by_column: The name of the column to order by
         :param order: The sorting order.
@@ -463,8 +549,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
             if o not in possible:
                 raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
 
-        if order_by_column is not None and order_by_column not in cls._fields:
+        if order_by_column not in cls._fields:
             raise RuntimeError(f"{order_by_column} is not a valid field name.")
+
+        return ColumnNameStr(order_by_column), OrderStr(order)
 
     @classmethod
     async def get_list(
@@ -480,7 +568,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         Get a list of documents matching the filter args
         """
-        cls._validate_order(order_by_column, order)
+        if order_by_column:
+            cls._validate_order(order_by_column, order)
 
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
@@ -524,7 +613,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         :param connection: An optional connection
         :param **query: Any additional filter to apply
         """
-        cls._validate_order(order_by_column, order)
+        if order_by_column:
+            cls._validate_order(order_by_column, order)
 
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
@@ -2039,6 +2129,28 @@ class ResourceAction(BaseDocument):
         )
 
 
+class ResourceOrder(DatabaseOrder):
+    """ Represents the ordering by which events should be sorted"""
+
+    valid_sort_pattern: Pattern = re.compile("^(resource_type|agent|status|value)\\.(asc|desc)$", re.IGNORECASE)
+
+    @classmethod
+    def parse_from_string(
+        cls,
+        sort: str,
+    ) -> "ResourceOrder":
+        match = cls.valid_sort_pattern.match(sort)
+        if match and len(match.groups()) == 2:
+            order_by_column = match.groups()[0].lower()
+            validated_order_by_column, validated_order = Resource._validate_order(
+                order_by_column=order_by_column, order=match.groups()[1].upper()
+            )
+            return ResourceOrder(
+                order_by_column=validated_order_by_column, order=validated_order, order_by_column_type=datetime.datetime
+            )
+        raise InvalidSort(f"Sort parameter invalid: {sort}")
+
+
 @stable_api
 class Resource(BaseDocument):
     """
@@ -2062,6 +2174,7 @@ class Resource(BaseDocument):
     resource_id: m.ResourceVersionIdStr = Field(field_type=str, required=True)
     resource_type: m.ResourceType = Field(field_type=str, required=True)
     resource_version_id: m.ResourceVersionIdStr = Field(field_type=str, required=True, part_of_primary_key=True)
+    value: str = Field(field_type=str)
 
     agent: str = Field(field_type=str, required=True)
 
@@ -2306,6 +2419,36 @@ class Resource(BaseDocument):
             return resources[0]
 
     @classmethod
+    async def get_released_resources(
+        cls,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> List["Resource"]:
+        """
+        Get all resources that are in a released version, sorted, paged and filtered
+        """
+        order_by_column = database_order.get_order_by_db_column_name()
+        order = database_order.get_order()
+
+        (filter_statement, values) = cls._get_composed_filter(environment=environment)
+        query = (
+            f"SELECT res.model, res.resource_id, res.attributes, res.resource_version_id, res.status, "
+            f"res.resource_type, res.agent, res.environment "
+            f"FROM ( "
+            f"SELECT r.*, row_number() OVER (PARTITION BY r.resource_id ORDER BY r.model DESC) as row_number "
+            f"FROM {cls.table_name()} as r  "
+            f"JOIN public.configurationmodel as cm ON r.model=cm.version "
+            f"WHERE r.environment=$1 AND cm.released=TRUE ) as res "
+            f"WHERE row_number = 1 "
+        )
+        if order_by_column:
+            query += f"ORDER BY {order_by_column} {order} "
+
+        resources = await cls.select_query(query, values, connection=connection)
+        return resources
+
+    @classmethod
     async def get(
         cls,
         environment: uuid.UUID,
@@ -2329,6 +2472,7 @@ class Resource(BaseDocument):
             resource_type=vid.entity_type,
             resource_version_id=resource_version_id,
             agent=vid.agent_name,
+            value=vid.attribute_value,
         )
 
         attr.update(kwargs)
@@ -2459,6 +2603,7 @@ class Resource(BaseDocument):
             last_deploy=self.last_deploy,
             attributes=self.attributes,
             status=self.status,
+            value=self.value,
         )
 
 
@@ -2531,7 +2676,8 @@ class ConfigurationModel(BaseDocument):
         **query: Any,
     ) -> List["ConfigurationModel"]:
         # sanitize and validate order parameters
-        cls._validate_order(order_by_column, order)
+        if order_by_column:
+            cls._validate_order(order_by_column, order)
 
         # ensure limit and offset is an integer
         if limit is not None:
