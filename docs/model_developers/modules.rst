@@ -3,7 +3,18 @@
 Understanding Modules
 ========================
 In inmanta all orchestration model code and related files, templates, plugins and resource handlers
-are packaged in a module.
+are packaged in a module. Modules can be defined in two different formats, V1 and V2. New modules should use the V2 format.
+
+# TODO: Add note about different between both formats
+
+V2 module format
+----------------
+
+
+
+
+V1 module format
+----------------
 
 Module layout
 -------------
