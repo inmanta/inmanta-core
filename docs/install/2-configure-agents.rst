@@ -22,6 +22,8 @@ with respect to the Inmanta server and the agent has to execute I/O operations o
 * The Inmanta server should have passphraseless SSH access on the machine it maps to. More information on how to set up SSH
   connectivity can be found at :ref:`configure_server_step_6`
 * The remote machine should have a Python 2 or 3 interpreter installed. The binary executed by default is ``python``.
+* The remote user should either be ``root`` or have the ability to do a passwordless sudo.
+  To enable passwordless sudo, add a file to ``/etc/sudoers.d/`` containing ``username ALL=(ALL) NOPASSWD: ALL``.
 
 
 Configuring auto-started agents via environment settings
