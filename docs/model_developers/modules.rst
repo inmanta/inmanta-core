@@ -122,3 +122,56 @@ The format for requires in requirements.txt is the folllowing:
  * Or a repository location such as  git+https://github.com/project/python-foo The correct syntax
    to use is then: eggname@git+https://../repository#branch with branch being optional.
 
+
+Working on modules
+==================
+An inmanta project is required to make use of a module. In most cases you'll want to develop a
+project and some of its modules simultaneously, since modules are most often developed/extended
+specifically to offer functionality to a project under development. This section will explain how
+to make changes to both a project and its modules so that they are all taken into account by the
+compiler.
+
+Setting up the dev environment
+------------------------------
+v1 modules
+^^^^^^^^^^
+A v1 module is a module that is not packaged and published to a pip index but is solely distributed
+via git. V1 modules are installed on the fly by the compiler and can be found in the `libs`
+directory. Any changes you make to the module source in the `libs` dir will be reflected in the next
+compile. To set up your development environment simply clone the project repo and run a compile.
+
+v2 modules
+^^^^^^^^^^
+A v2 module in development form has mostly the same structure as a v1 module. The main difference is
+that it is meant to be published as a Python package. The project then lists all required v2 modules
+as dependencies in its `pyproject.toml`. The compiler does not install v2 modules on the fly. In
+line with how Python depdencies work in general they are expected to be installed in advance.
+As a result they will not be placed in the `libs` directory.
+
+To set up your development environment, first clone all modules you wish to develop against and
+install them in editable mode with `poetry install`. Then clone the project repo and install its
+depdencies with `poetry install`. This will fetch all its other modules from the Python package
+index and install them in the active Python environment. Any modules you pre-installed should
+remain as is, provided they meet the project's version constraints. You can double-check the
+desired modules are installed in editable mode by checking the output of `pip list --editable`.
+If you want to add another module to the set under development, you can always run `poetry install`
+on it in a later stage, overwriting the published package that was installed previously.
+
+Working on the dev environment
+------------------------------
+After setting up, you should be left with a dev environment where all required v2 modules have been
+installed (either in editable or in packaged form) and all required v1 modules are present in the
+`libs` directory. When you run a compile from that Python environment context, the compiler will
+find both the v1 and v2 modules and use them for both their model and their plugins.
+
+TODO: talk about unit tests => investigate how pytest-inmanta works now -> loads current module into libs, lets compiler take care of the rest (for single module tests)
+
+Stand-alone module development
+------------------------------
+TODO: work on module in stand-alone manner, without a project. Make changes and use unit tests to
+test behavior. Focus of this subsection is on how the tests find the required files.
+
+
+Distributing modules
+====================
+TODO: package + publish + freeze project + checkout on the orchestrator
