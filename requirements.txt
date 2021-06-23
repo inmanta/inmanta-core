@@ -23,7 +23,7 @@ tornado==6.1
 typing_inspect==0.6.0
 
 # The module set tests install the pytest-inmanta-extensions package.
-# This version constraint ensure that the dependencies of the
+# This version constraint ensures that the dependencies of the
 # pytest-inmanta-extensions package remain compatible with inmanta-core.
 inmanta-dev-dependencies==1.23.0
 
