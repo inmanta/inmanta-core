@@ -138,10 +138,9 @@ v1 modules
 A v1 module is a module that is not packaged and published to a pip index but is solely distributed
 via git. V1 modules are installed on the fly by the compiler and can be found in the project's
 `libs` directory. Any changes you make to the module source in the `libs` dir will be reflected in
-the next compile. To set up your development environment simply run a compile against a project
-that imports the desired modules.
-
-TODO: above section is not fully clear: it assumes a project is used, make sure to update this in line with sections below
+the next compile. If you need to be able to make changes to multiple modules simultaneously, the
+simplest way to set up your development environment is to create a project that imports the desired
+modules, then run a compile against it. Alternatively, you can manually clone the module repos.
 
 v2 modules
 ^^^^^^^^^^
@@ -158,7 +157,7 @@ previously installed in editable mode should remain as is, provided they meet th
 constraints. Then optionally clone the project repo and install its other dependencies with
 `poetry install`. You can double-check the desired modules are installed in editable mode by
 checking the output of `pip list --editable`. If you want to add another module to the set under
-development, you can always run `poetry install` on it in a later stage, overwriting the published
+development, you can always run `poetry install` on it at a later stage, overwriting the published
 package that was installed previously.
 
 Working on the dev environment
