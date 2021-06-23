@@ -516,11 +516,43 @@ def resource_list(
     limit: Optional[int] = None,
     first_id: Optional[str] = None,
     last_id: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
     filter: Optional[Dict[str, List[str]]] = None,
     sort: str = "resource_type.desc",
-) -> List[model.ResourceDto]:
+) -> List[model.ResourceListElement]:
     """
-
     :param tid: The id of the environment this resource belongs to
-    :return:
+    :param limit: Limit the number of instances that are returned
+    :param first_id: The resource_version_id to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The resource_version_id to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned resources.
+                Filters should be specified with the syntax `?filter.<filter_key>=value`, for example `?filter.status=deployed`
+                It's also possible to provide multiple values for the same filter, in this case resources are returned,
+                if they match any of these filter values.
+                For example: `?filter.status=deployed&filter.status=available` returns instances with either of the statuses
+                deployed or available.
+                Multiple different filters narrow the results however (they are treated as an 'AND' operator).
+                For example `filter.status=deployed&filter.agent=internal_agent` returns resources
+                with 'deployed' status, where the 'agent' is set to 'internal_agent'.
+                The following options are available:
+                agent: filter by the agent of the resource
+                resource_type: filter by the type of the resource
+                value: filter by the attribute values of the resource
+                status: filter by the current status of the resource
+                The values for the 'agent', 'resource_type' and 'value' filters are matched partially.
+    :param sort: Return the results sorted according to the parameter value.
+                It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `resource_type.desc`
+                (case insensitive).
+                The following sorting attributes are supported: 'resource_type', 'agent', 'value', 'status'.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching released resources
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """

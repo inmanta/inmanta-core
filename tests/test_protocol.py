@@ -55,6 +55,7 @@ from inmanta.protocol.common import (
 )
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.protocol.rest import CallArguments
+from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.server import config as opt
 from inmanta.server.config import server_bind_port
 from inmanta.server.protocol import Server, ServerSlice
@@ -2150,3 +2151,41 @@ async def test_dict_of_list(unused_tcp_port, postgres_db, database_name, async_f
     result = await client.test_method(id="test")
     assert result.code == 200, result.result["message"]
     assert result.result["data"] == {"test": [{"attr": 1}, {"attr": 5}]}
+
+
+@pytest.mark.asyncio
+async def test_return_value_with_meta(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
+        def test_method(with_warning: bool) -> ReturnValueWithMeta[str]:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, with_warning: bool) -> ReturnValueWithMeta:  # NOQA
+            metadata = {"additionalInfo": f"Today's bitcoin exchange rate is: {(random.random() * 100000):.2f}$"}
+            result = ReturnValueWithMeta(response="abcd", metadata=metadata)
+            if with_warning:
+                result.add_warnings(["Warning message"])
+            return result
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+    client: protocol.Client = protocol.Client("client")
+
+    response = await client.test_method(False)
+    assert response.code == 200
+    assert response.result["data"] == "abcd"
+    assert response.result["metadata"].get("additionalInfo") is not None
+    assert response.result["metadata"].get("warnings") is None
+
+    response = await client.test_method(True)
+    assert response.code == 200
+    assert response.result["data"] == "abcd"
+    assert response.result["metadata"].get("additionalInfo") is not None
+    assert response.result["metadata"].get("warnings") is not None

@@ -132,12 +132,10 @@ ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stabl
     The resource id with the version included.
 """
 
-
 ResourceIdStr = NewType("ResourceIdStr", str)  # Part of the stable API
 """
     The resource id without the version
 """
-
 
 ResourceType = NewType("ResourceType", str)
 """
@@ -209,7 +207,6 @@ class EnvironmentSetting(BaseModel):
 
 
 class EnvironmentSettingsReponse(BaseModel):
-
     settings: Dict[str, EnvSettingType]
     definition: Dict[str, EnvironmentSetting]
 
@@ -288,7 +285,7 @@ class LogLine(BaseModel):
             try:
                 return const.LogLevel[v]
             except KeyError:
-                raise ValueError(f"Invalid enum value {v}. Valid values: { ','.join([x.name for x in const.LogLevel]) }")
+                raise ValueError(f"Invalid enum value {v}. Valid values: {','.join([x.name for x in const.LogLevel])}")
         return v
 
     level: const.LogLevel
@@ -302,11 +299,33 @@ class ResourceIdDetails(BaseModel):
     resource_type: ResourceType
     agent: str
     attribute: str
-    attribute_value: str
+    value: str
 
 
-class ResourceDto(BaseModel):
-    resource_id: ResourceVersionIdStr
+class ResourceListElement(BaseModel):
+    resource_id: ResourceIdStr
+    resource_version_id: ResourceVersionIdStr
     id_details: ResourceIdDetails
     requires: List[ResourceVersionIdStr]
     status: const.ResourceState
+
+    @property
+    def all_fields(self) -> Dict[str, Any]:
+        return {**self.dict(), **self.id_details.dict()}
+
+
+class PagingBoundaries:
+    """Represents the lower and upper bounds that should be used for the next and previous pages
+    when listing domain entities"""
+
+    def __init__(
+        self,
+        start: Union[datetime.datetime, int, str],
+        end: Union[datetime.datetime, int, str],
+        first_id: Union[uuid.UUID, str],
+        last_id: Union[uuid.UUID, str],
+    ) -> None:
+        self.start = start
+        self.end = end
+        self.first_id = first_id
+        self.last_id = last_id

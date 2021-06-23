@@ -1,0 +1,258 @@
+"""
+    Copyright 2021 Inmanta
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
+import datetime
+import uuid
+from abc import ABC, abstractmethod
+from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, TypeVar, Union
+from urllib import parse
+
+from inmanta.data import DatabaseOrder, InvalidFieldNameException, PagingMetadataProvider
+from inmanta.data.model import BaseModel, PagingBoundaries, ResourceListElement
+from inmanta.protocol import exceptions
+from inmanta.types import SimpleTypes
+
+T = TypeVar("T", bound=BaseModel, covariant=True)
+
+
+class PagingMetadata:
+    def __init__(self, total: int, before: int, after: int, page_size: int) -> None:
+        self.total = total
+        self.before = before
+        self.after = after
+        self.page_size = page_size
+
+
+class PagingHandler(ABC, Generic[T]):
+    def __init__(self, metadata_provider: PagingMetadataProvider) -> None:
+        self.metadata_provider = metadata_provider
+
+    async def prepare_paging_metadata(
+        self,
+        dtos: List[T],
+        db_query: Mapping[str, Tuple[str, Any]],
+        limit: int,
+        database_order: DatabaseOrder,
+    ) -> PagingMetadata:
+        items_on_next_pages = 0
+        items_on_prev_pages = 0
+        total = 0
+        if dtos:
+            paging_borders = self._get_paging_boundaries(dtos, database_order)
+            start = paging_borders.start
+            first_id = paging_borders.first_id
+            end = paging_borders.end
+            last_id = paging_borders.last_id
+            try:
+                paging_counts = await self.metadata_provider.count_items_for_paging(
+                    database_order=database_order,
+                    start=start,
+                    first_id=first_id,
+                    end=end,
+                    last_id=last_id,
+                    **db_query,
+                )
+            except InvalidFieldNameException as e:
+                raise exceptions.BadRequest(f"Invalid query specified: {e.message}")
+            total = paging_counts.total
+            items_on_prev_pages = paging_counts.before
+            items_on_next_pages = paging_counts.after
+        metadata = PagingMetadata(
+            total=total,
+            before=items_on_prev_pages,
+            after=items_on_next_pages,
+            page_size=limit,
+        )
+        return metadata
+
+    def _get_paging_boundaries(self, dtos: List[T], sort_order: DatabaseOrder) -> PagingBoundaries:
+        if sort_order.get_order() == "DESC":
+            return PagingBoundaries(
+                start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_attribute()]),
+                first_id=dtos[0].id,
+                end=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_attribute()]),
+                last_id=dtos[-1].id,
+            )
+        else:
+            return PagingBoundaries(
+                start=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_attribute()]),
+                first_id=dtos[-1].id,
+                end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_attribute()]),
+                last_id=dtos[0].id,
+            )
+
+    def _encode_filter_dict(self, filter: Optional[Dict[str, List[str]]]) -> Dict[str, List[str]]:
+        url_query_params = {}
+        if filter:
+            for key in filter.keys():
+                url_query_params[f"filter.{key}"] = filter[key]
+        return url_query_params
+
+    @abstractmethod
+    def get_base_url(self) -> str:
+        """ The base url for the method, with the path parameters already specified (if applicable)"""
+        pass
+
+    @abstractmethod
+    def get_first_id_name(self) -> str:
+        """ The name of the first id parameter in the api, used when creating links """
+        pass
+
+    @abstractmethod
+    def get_last_id_name(self) -> str:
+        """ The name of the last id parameter in the api, used when creating links """
+        pass
+
+    async def prepare_paging_links(
+        self,
+        dtos: List[T],
+        filter: Optional[Dict[str, List[str]]],
+        database_order: DatabaseOrder,
+        limit: Optional[int] = None,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[Union[datetime.datetime, str]] = None,
+        end: Optional[Union[datetime.datetime, str]] = None,
+        has_next: Optional[bool] = False,
+        has_prev: Optional[bool] = False,
+        **additional_url_params: Optional[Union[SimpleTypes, List[str]]],
+    ) -> Dict[str, str]:
+        links = {}
+
+        url_query_params: Dict[str, Optional[Union[SimpleTypes, List[str]]]] = {
+            "limit": limit,
+            "sort": str(database_order),
+            **additional_url_params,
+            **self._encode_filter_dict(filter),
+        }
+
+        url_query_params_without_paging_position = self._param_dict_without_none_values(url_query_params)
+
+        if limit and dtos:
+            base_url = self.get_base_url()
+            paging_boundaries = self._get_paging_boundaries(dtos, database_order)
+            link_with_end = await self.prepare_link_with_end(
+                base_url,
+                url_query_params_without_paging_position,
+                end=paging_boundaries.end,
+                last_id=paging_boundaries.last_id,
+            )
+            link_with_start = await self.prepare_link_with_start(
+                base_url,
+                url_query_params_without_paging_position,
+                start=paging_boundaries.start,
+                first_id=paging_boundaries.first_id,
+            )
+            if has_next:
+                if database_order.get_order() == "DESC":
+                    links["next"] = link_with_end
+                    # Last page
+                    last_page_params = url_query_params_without_paging_position.copy()
+                    last_page_start = database_order.get_min_time()
+                    # Don't add last page link if we don't have a minimum and the order is descending
+                    if last_page_start:
+                        last_page_params["start"] = last_page_start
+                        links["last"] = self._encode_paging_url(base_url, last_page_params)
+                else:
+                    links["next"] = link_with_start
+                    last_page_params = url_query_params_without_paging_position.copy()
+                    last_page_end = database_order.get_max_time()
+                    # Don't add last page link if we don't have a maximum and the order is ascending
+                    if last_page_end:
+                        last_page_params["end"] = last_page_end
+                        links["last"] = self._encode_paging_url(base_url, last_page_params)
+
+            if has_prev:
+                if database_order.get_order() == "DESC":
+                    links["prev"] = link_with_start
+                else:
+                    links["prev"] = link_with_end
+                # First page
+                first_page_params = url_query_params_without_paging_position.copy()
+                links["first"] = self._encode_paging_url(base_url, first_page_params)
+
+            # Same page
+            original_url_query_params = url_query_params_without_paging_position.copy()
+            original_url_query_params.update(
+                {self.get_first_id_name(): first_id, self.get_last_id_name(): last_id, "start": start, "end": end}
+            )
+            original_url_query_params = self._param_dict_without_none_values(original_url_query_params)
+            links["self"] = self._encode_paging_url(base_url, original_url_query_params)
+        return links
+
+    def _param_dict_without_none_values(self, param_dict: Dict[str, Any]) -> Dict[str, Any]:
+        return {param_key: param_value for param_key, param_value in param_dict.items() if param_value is not None}
+
+    async def prepare_link_with_start(
+        self,
+        base_url: str,
+        url_query_params_without_paging_params: Dict[str, SimpleTypes],
+        first_id: uuid.UUID,
+        start: Union[datetime.datetime, int, str],
+    ) -> str:
+        previous_params = url_query_params_without_paging_params.copy()
+        previous_params["start"] = start
+        previous_params[self.get_first_id_name()] = first_id
+        return self._encode_paging_url(base_url, previous_params)
+
+    async def prepare_link_with_end(
+        self,
+        base_url: str,
+        url_query_params_without_paging_params: Dict[str, SimpleTypes],
+        last_id: uuid.UUID,
+        end: Union[datetime.datetime, int, str],
+    ) -> str:
+        next_params = url_query_params_without_paging_params.copy()
+        next_params["end"] = end
+        next_params[self.get_last_id_name()] = last_id
+        return self._encode_paging_url(base_url, next_params)
+
+    def _encode_paging_url(self, base_url: str, params: Mapping[str, Union[SimpleTypes, List[str]]]) -> str:
+        return f"{base_url}?{parse.urlencode(params, doseq=True)}"
+
+
+class ResourcePagingHandler(PagingHandler[ResourceListElement]):
+    def __init__(
+        self,
+        metadata_provider: PagingMetadataProvider,
+    ) -> None:
+        super().__init__(metadata_provider)
+
+    def get_base_url(self) -> str:
+        return "/api/v2/resource"
+
+    def get_first_id_name(self) -> str:
+        return "first_id"
+
+    def get_last_id_name(self) -> str:
+        return "last_id"
+
+    def _get_paging_boundaries(self, dtos: List[ResourceListElement], sort_order: DatabaseOrder) -> PagingBoundaries:
+        if sort_order.get_order() == "DESC":
+            return PagingBoundaries(
+                start=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_attribute()]),
+                first_id=dtos[0].resource_version_id,
+                end=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_attribute()]),
+                last_id=dtos[-1].resource_version_id,
+            )
+        else:
+            return PagingBoundaries(
+                start=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_attribute()]),
+                first_id=dtos[-1].resource_version_id,
+                end=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_attribute()]),
+                last_id=dtos[0].resource_version_id,
+            )

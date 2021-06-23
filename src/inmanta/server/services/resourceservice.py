@@ -28,26 +28,28 @@ from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data import APILIMIT, InvalidSort, ResourceOrder
+from inmanta.data import APILIMIT, InvalidSort, QueryType, ResourceOrder, ResourcePagingMetadataProvider
 from inmanta.data.model import (
     AttributeStateChange,
     LogLine,
     Resource,
     ResourceAction,
-    ResourceDto,
-    ResourceIdDetails,
     ResourceIdStr,
+    ResourceListElement,
     ResourceType,
     ResourceVersionIdStr,
 )
+from inmanta.data.paging_handler import ResourcePagingHandler
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
+from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
+from inmanta.server.validate_filter import InvalidFilter, ResourceFilterValidator
 from inmanta.types import Apireturn, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -876,32 +878,44 @@ class ResourceService(protocol.ServerSlice):
         limit: Optional[int] = None,
         first_id: Optional[str] = None,
         last_id: Optional[str] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "resource_type.desc",
-    ) -> List[ResourceDto]:
-        def from_resource_id(resource_id: ResourceIdStr) -> "ResourceIdDetails":
-            parsed_id = Id.parse_id(resource_id)
-            return ResourceIdDetails(
-                resource_type=parsed_id.entity_type,
-                agent=parsed_id.agent_name,
-                attribute=parsed_id.attribute,
-                attribute_value=parsed_id.attribute_value,
-            )
+    ) -> ReturnValue[List[ResourceListElement]]:
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
+        query = {"environment": (QueryType.EQUALS, env.id)}
+        if filter:
+            try:
+                query.update(ResourceFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
         try:
-            resources = await data.Resource.get_released_resources(
-                environment=env.id, database_order=ResourceOrder.parse_from_string(sort)
-            )
+            resource_order = ResourceOrder.parse_from_string(sort)
         except InvalidSort as e:
             raise BadRequest(e.message) from e
 
-        dtos = [
-            ResourceDto(
-                resource_id=resource.resource_id,
-                id_details=from_resource_id(resource.resource_id),
-                status=resource.status,
-                requires=resource.attributes.get("requires", []),
-            )
-            for resource in resources
-        ]
-        return dtos
+        dtos = await data.Resource.get_released_resources(
+            database_order=resource_order, limit=limit, first_id=first_id, last_id=last_id, start=start, end=end, **query
+        )
+
+        paging_handler = ResourcePagingHandler(ResourcePagingMetadataProvider(data.Resource))
+        metadata = await paging_handler.prepare_paging_metadata(dtos, query, limit, resource_order)
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            filter,
+            resource_order,
+            limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
