@@ -147,7 +147,7 @@ v2 modules
 A v2 module in development form has mostly the same structure as a v1 module. The main difference is
 that it is meant to be published as a Python package. A project or another v2 module then lists all
 required v2 modules as dependencies in its `pyproject.toml`. The compiler does not install v2
-modules on the fly. In line with how Python depdencies work in general they are expected to be
+modules on the fly. In line with how Python dependencies work in general they are expected to be
 installed in advance. As a result they will not be placed in the project's `libs` directory.
 
 To set up your development environment, first clone all modules you wish to develop against and
