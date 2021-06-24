@@ -845,7 +845,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     def _join_filter_statements(cls, filter_statements: List[str]) -> str:
-        return " AND ".join(filter_statements)
+        return "WHERE " + " AND ".join(filter_statements)
 
     @classmethod
     def _get_list_query_pagination_parameters(
@@ -2649,11 +2649,13 @@ class Resource(BaseDocument):
         according to the model version number."""
         return f"""
             FROM (
-                SELECT r.*, row_number() OVER (PARTITION BY r.resource_id ORDER BY r.model DESC) as row_number
+                SELECT DISTINCT ON (r.resource_id) r.*
                 FROM {cls.table_name()} as r
                     JOIN public.configurationmodel as cm ON r.model=cm.version
-                    WHERE cm.released=TRUE ) as res
-            WHERE row_number = 1 """
+                    WHERE cm.released=TRUE
+                    ORDER BY r.resource_id, r.model DESC)
+            as res
+            """
 
     @classmethod
     async def get_released_resources(
@@ -2688,7 +2690,7 @@ class Resource(BaseDocument):
             f"{cls._get_released_resources_partial_base_query()}"
         )
         if len(filter_statements) > 0:
-            db_query += f"AND {cls._join_filter_statements(filter_statements)}"
+            db_query += cls._join_filter_statements(filter_statements)
         backward_paging = ("ASC" in order and end) or ("DESC" in order and start)
         if backward_paging:
             if "ASC" in order:
@@ -2773,12 +2775,12 @@ class Resource(BaseDocument):
 
         sql_query = (
             f"SELECT COUNT({id_column_name}) as count_total, "
-            f"COUNT({id_column_name}) filter (WHERE {before_filter}) as count_before, "
-            f"COUNT({id_column_name}) filter (WHERE {after_filter}) as count_after "
+            f"COUNT({id_column_name}) filter ({before_filter}) as count_before, "
+            f"COUNT({id_column_name}) filter ({after_filter}) as count_after "
             f"{cls._get_released_resources_partial_base_query()} "
         )
         if len(common_filter_statements) > 0:
-            sql_query += f"AND {cls._join_filter_statements(common_filter_statements)}"
+            sql_query += cls._join_filter_statements(common_filter_statements)
 
         return sql_query, values
 
