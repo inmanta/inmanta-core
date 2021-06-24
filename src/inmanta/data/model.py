@@ -299,10 +299,10 @@ class ResourceIdDetails(BaseModel):
     resource_type: ResourceType
     agent: str
     attribute: str
-    value: str
+    resource_id_value: str
 
 
-class ResourceListElement(BaseModel):
+class LatestReleasedResource(BaseModel):
     resource_id: ResourceIdStr
     resource_version_id: ResourceVersionIdStr
     id_details: ResourceIdDetails

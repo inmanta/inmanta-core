@@ -69,7 +69,7 @@ class FilterValidator(ABC, Generic[T]):
 class ResourceFilterModel(FilterModel):
     resource_type: Optional[List[str]]
     agent: Optional[List[str]]
-    value: Optional[List[str]]
+    resource_id_value: Optional[List[str]]
     status: Optional[List[ResourceState]]
 
 
@@ -85,8 +85,8 @@ class ResourceFilterValidator(FilterValidator):
             query["resource_type"] = (QueryType.CONTAINS_PARTIAL, validated_filter.resource_type)
         if validated_filter.agent:
             query["agent"] = (QueryType.CONTAINS_PARTIAL, validated_filter.agent)
-        if validated_filter.value:
-            query["value"] = (QueryType.CONTAINS_PARTIAL, validated_filter.value)
+        if validated_filter.resource_id_value:
+            query["resource_id_value"] = (QueryType.CONTAINS_PARTIAL, validated_filter.resource_id_value)
         if validated_filter.status:
             query["status"] = (QueryType.CONTAINS, validated_filter.status)
 

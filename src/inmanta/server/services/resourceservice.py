@@ -31,11 +31,11 @@ from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID
 from inmanta.data import APILIMIT, InvalidSort, QueryType, ResourceOrder
 from inmanta.data.model import (
     AttributeStateChange,
+    LatestReleasedResource,
     LogLine,
     Resource,
     ResourceAction,
     ResourceIdStr,
-    ResourceListElement,
     ResourceType,
     ResourceVersionIdStr,
 )
@@ -882,7 +882,7 @@ class ResourceService(protocol.ServerSlice):
         end: Optional[str] = None,
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "resource_type.desc",
-    ) -> ReturnValue[List[ResourceListElement]]:
+    ) -> ReturnValue[List[LatestReleasedResource]]:
         if limit is None:
             limit = APILIMIT
         elif limit > APILIMIT:
@@ -898,17 +898,19 @@ class ResourceService(protocol.ServerSlice):
             resource_order = ResourceOrder.parse_from_string(sort)
         except InvalidSort as e:
             raise BadRequest(e.message) from e
-
-        dtos = await data.Resource.get_released_resources(
-            database_order=resource_order,
-            limit=limit,
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-            connection=None,
-            **query,
-        )
+        try:
+            dtos = await data.Resource.get_released_resources(
+                database_order=resource_order,
+                limit=limit,
+                first_id=first_id,
+                last_id=last_id,
+                start=start,
+                end=end,
+                connection=None,
+                **query,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
 
         paging_handler = ResourcePagingHandler(ResourcePagingCountsProvider(data.Resource))
         metadata = await paging_handler.prepare_paging_metadata(dtos, query, limit, resource_order)

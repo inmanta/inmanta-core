@@ -57,8 +57,8 @@ async def test_add_value_to_resource_table(
     # Migrate DB schema
     await migrate_v202106080_to_v202106210()
 
-    results = await postgresql_client.fetch("SELECT resource_id, value FROM public.Resource")
+    results = await postgresql_client.fetch("SELECT resource_id, resource_id_value FROM public.Resource")
     for r in results:
-        assert r["value"] is not None
+        assert r["resource_id_value"] is not None
         parsed_id = Id.parse_id(r["resource_id"])
-        assert r["value"] == parsed_id.attribute_value
+        assert r["resource_id_value"] == parsed_id.attribute_value

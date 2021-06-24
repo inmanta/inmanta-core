@@ -25,7 +25,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
 from inmanta.const import ResourceState
-from inmanta.data.model import ResourceListElement, ResourceVersionIdStr
+from inmanta.data.model import LatestReleasedResource, ResourceVersionIdStr
 from inmanta.server.config import get_bind_port
 
 
@@ -178,20 +178,20 @@ async def test_filter_resources(server, client, env_with_resources):
     assert result.code == 200
     assert len(result.result["data"]) == 2
 
-    result = await client.resource_list(env.id, filter={"value": ["/etc/file1"]})
+    result = await client.resource_list(env.id, filter={"resource_id_value": ["/etc/file1"]})
     assert result.code == 200
     assert len(result.result["data"]) == 1
 
     # Partial match
-    result = await client.resource_list(env.id, filter={"value": ["/etc/file"]})
+    result = await client.resource_list(env.id, filter={"resource_id_value": ["/etc/file"]})
     assert result.code == 200
     assert len(result.result["data"]) == 3
 
-    result = await client.resource_list(env.id, filter={"value": ["2"]})
+    result = await client.resource_list(env.id, filter={"resource_id_value": ["2"]})
     assert result.code == 200
     assert len(result.result["data"]) == 1
 
-    result = await client.resource_list(env.id, filter={"value": ["/etc/file", "/tmp/file"]})
+    result = await client.resource_list(env.id, filter={"resource_id_value": ["/etc/file", "/tmp/file"]})
     assert result.code == 200
     assert len(result.result["data"]) == 4
 
@@ -199,11 +199,11 @@ async def test_filter_resources(server, client, env_with_resources):
     assert result.code == 200
     assert len(result.result["data"]) == 2
 
-    result = await client.resource_list(env.id, filter={"resource_type": ["Directory"], "value": "1"})
+    result = await client.resource_list(env.id, filter={"resource_type": ["Directory"], "resource_id_value": "1"})
     assert result.code == 200
     assert len(result.result["data"]) == 0
 
-    result = await client.resource_list(env.id, filter={"resource_type": ["Directory"], "value": "5"})
+    result = await client.resource_list(env.id, filter={"resource_type": ["Directory"], "resource_id_value": "5"})
     assert result.code == 200
     assert len(result.result["data"]) == 1
 
@@ -221,8 +221,8 @@ def resource_ids(resource_objects):
         ("resource_type", "ASC"),
         ("status", "DESC"),
         ("status", "ASC"),
-        ("value", "DESC"),
-        ("value", "ASC"),
+        ("resource_id_value", "DESC"),
+        ("resource_id_value", "ASC"),
     ],
 )
 @pytest.mark.asyncio
@@ -236,7 +236,7 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     )
     assert result.code == 200
     assert len(result.result["data"]) == 5
-    flattened_resources = [ResourceListElement(**res).all_fields for res in result.result["data"]]
+    flattened_resources = [LatestReleasedResource(**res).all_fields for res in result.result["data"]]
     all_resources_in_expected_order = sorted(
         flattened_resources, key=itemgetter(order_by_column, "resource_version_id"), reverse=order == "DESC"
     )
@@ -319,8 +319,8 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
         ("resource_type", 400),
         ("state.DESC", 400),
         ("status.ASC", 200),
-        ("values.desc", 400),
-        ("value.desc", 200),
+        ("resource_id_values.desc", 400),
+        ("resource_id_value.desc", 200),
     ],
 )
 @pytest.mark.asyncio
@@ -335,8 +335,8 @@ async def test_sorting_validation(server, client, sort, expected_status, env_wit
         ("agents.Desc", 400),
         ({"agent": "internal"}, 200),
         ({"agents": ["internal", "remote"]}, 400),
-        ({"value": ["123", "456"]}, 200),
-        ({"values": ["123", "456"]}, 400),
+        ({"resource_id_value": ["123", "456"]}, 200),
+        ({"resource_id_values": ["123", "456"]}, 400),
         ({"resourceType": ["file"]}, 400),
         ({"state": ["deployed"]}, 400),
     ],
@@ -345,3 +345,18 @@ async def test_sorting_validation(server, client, sort, expected_status, env_wit
 async def test_filter_validation(server, client, filter, expected_status, env_with_resources):
     result = await client.resource_list(env_with_resources.id, limit=2, filter=filter)
     assert result.code == expected_status
+
+
+@pytest.mark.asyncio
+async def test_paging_param_validation(server, client, env_with_resources):
+    result = await client.resource_list(env_with_resources.id, limit=2, start="1", end="10")
+    assert result.code == 400
+
+    result = await client.resource_list(env_with_resources.id, limit=2, start="1", last_id="1234")
+    assert result.code == 400
+
+    result = await client.resource_list(env_with_resources.id, limit=2, first_id="1234", end="10")
+    assert result.code == 400
+
+    result = await client.resource_list(env_with_resources.id, limit=2, first_id="1234", last_id="5678")
+    assert result.code == 400

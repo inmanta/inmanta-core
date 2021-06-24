@@ -22,7 +22,7 @@ from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, Type, Typ
 from urllib import parse
 
 from inmanta.data import ColumnNameStr, DatabaseOrder, InvalidFieldNameException, PagingCounts, Resource
-from inmanta.data.model import BaseModel, PagingBoundaries, ResourceListElement
+from inmanta.data.model import BaseModel, LatestReleasedResource, PagingBoundaries
 from inmanta.protocol import exceptions
 from inmanta.types import SimpleTypes
 
@@ -250,7 +250,7 @@ class PagingHandler(ABC, Generic[T]):
         return f"{base_url}?{parse.urlencode(params, doseq=True)}"
 
 
-class ResourcePagingHandler(PagingHandler[ResourceListElement]):
+class ResourcePagingHandler(PagingHandler[LatestReleasedResource]):
     def __init__(
         self,
         counts_provider: PagingCountsProvider,
@@ -266,7 +266,7 @@ class ResourcePagingHandler(PagingHandler[ResourceListElement]):
     def get_last_id_name(self) -> str:
         return "last_id"
 
-    def _get_paging_boundaries(self, dtos: List[ResourceListElement], sort_order: DatabaseOrder) -> PagingBoundaries:
+    def _get_paging_boundaries(self, dtos: List[LatestReleasedResource], sort_order: DatabaseOrder) -> PagingBoundaries:
         if sort_order.get_order() == "DESC":
             return PagingBoundaries(
                 start=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_attribute()]),

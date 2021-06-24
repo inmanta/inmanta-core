@@ -520,7 +520,7 @@ def resource_list(
     end: Optional[str] = None,
     filter: Optional[Dict[str, List[str]]] = None,
     sort: str = "resource_type.desc",
-) -> List[model.ResourceListElement]:
+) -> List[model.LatestReleasedResource]:
     """
     :param tid: The id of the environment this resource belongs to
     :param limit: Limit the number of instances that are returned
@@ -539,18 +539,18 @@ def resource_list(
                 For example: `?filter.status=deployed&filter.status=available` returns instances with either of the statuses
                 deployed or available.
                 Multiple different filters narrow the results however (they are treated as an 'AND' operator).
-                For example `filter.status=deployed&filter.agent=internal_agent` returns resources
+                For example `filter.status=deployed&filter.agent=internal` returns resources
                 with 'deployed' status, where the 'agent' is set to 'internal_agent'.
                 The following options are available:
                 agent: filter by the agent of the resource
                 resource_type: filter by the type of the resource
-                value: filter by the attribute values of the resource
+                resource_id_value: filter by the attribute values of the resource
                 status: filter by the current status of the resource
                 The values for the 'agent', 'resource_type' and 'value' filters are matched partially.
     :param sort: Return the results sorted according to the parameter value.
                 It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `resource_type.desc`
                 (case insensitive).
-                The following sorting attributes are supported: 'resource_type', 'agent', 'value', 'status'.
+                The following sorting attributes are supported: 'resource_type', 'agent', 'resource_id_value', 'status'.
                 The following orders are supported: 'asc', 'desc'
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found

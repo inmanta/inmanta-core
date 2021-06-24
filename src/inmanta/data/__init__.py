@@ -79,14 +79,14 @@ class PagingCounts:
         self.after = after
 
 
-class InvalidQueryParameters(Exception):
-    def __init__(self, message, *args) -> None:
-        super(InvalidQueryParameters, self).__init__(message, *args)
+class InvalidQueryParameter(Exception):
+    def __init__(self, message: str, *args) -> None:
+        super(InvalidQueryParameter, self).__init__(message, *args)
         self.message = message
 
 
 class InvalidFieldNameException(Exception):
-    def __init__(self, message, *args) -> None:
+    def __init__(self, message: str, *args) -> None:
         super().__init__(message, *args)
         self.message = message
 
@@ -694,7 +694,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return (filter_as_string, values)
 
     @classmethod
-    def _get_filter(cls, name: str, value: Any, index: int, col_name_prefix: str = None) -> Tuple[str, Any]:
+    def _get_filter(cls, name: str, value: Any, index: int, col_name_prefix: str = None) -> Tuple[str, List[object]]:
         if value is None:
             return (name + " IS NULL", [])
         filter_statement = name + "=$" + str(index)
@@ -892,21 +892,21 @@ class BaseDocument(object, metaclass=DocumentMeta):
         last_id: Optional[Union[uuid.UUID, str]],
     ) -> None:
         if start and end:
-            raise InvalidQueryParameters(
+            raise InvalidQueryParameter(
                 f"Only one of start and end parameters is allowed at the same time. Received start: {start}, end: {end}"
             )
         if first_id and last_id:
-            raise InvalidQueryParameters(
+            raise InvalidQueryParameter(
                 f"Only one of first_id and last_id parameters is allowed at the same time. "
                 f"Received first_id: {first_id}, last_id: {last_id}"
             )
         if (first_id and not start) or (first_id and end):
-            raise InvalidQueryParameters(
+            raise InvalidQueryParameter(
                 f"The first_id parameter should be used in combination with the start parameter. "
                 f"Received first_id: {first_id}, start: {start}, end: {end}"
             )
         if (last_id and not end) or (last_id and start):
-            raise InvalidQueryParameters(
+            raise InvalidQueryParameter(
                 f"The last_id parameter should be used in combination with the end parameter. "
                 f"Received last_id: {last_id}, start: {start}, end: {end}"
             )
@@ -2349,7 +2349,7 @@ class ResourceAction(BaseDocument):
 class ResourceOrder(DatabaseOrder):
     """ Represents the ordering by which events should be sorted"""
 
-    valid_sort_pattern: Pattern = re.compile("^(resource_type|agent|status|value)\\.(asc|desc)$", re.IGNORECASE)
+    valid_sort_pattern: Pattern = re.compile("^(resource_type|agent|status|resource_id_value)\\.(asc|desc)$", re.IGNORECASE)
 
     @classmethod
     def parse_from_string(
@@ -2366,7 +2366,9 @@ class ResourceOrder(DatabaseOrder):
         raise InvalidSort(f"Sort parameter invalid: {sort}")
 
     def get_order_by_db_column_name(self) -> ColumnNameStr:
-        return ColumnNameStr(f"{self.order_by_column}{'::text' if self._should_be_treated_as_string() else ''}")
+        return ColumnNameStr(
+            f"{super().get_order_by_db_column_name()}{'::text' if self._should_be_treated_as_string() else ''}"
+        )
 
     def _should_be_treated_as_string(self) -> bool:
         """Ensure that records are sorted alphabetically by status instead of the enum order"""
@@ -2387,6 +2389,7 @@ class Resource(BaseDocument):
     :param attributes: The state of this version of the resource
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
+    :param resource_id_value: The attribute value from the resource id
     """
 
     environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -2396,7 +2399,7 @@ class Resource(BaseDocument):
     resource_id: m.ResourceVersionIdStr = Field(field_type=str, required=True)
     resource_type: m.ResourceType = Field(field_type=str, required=True)
     resource_version_id: m.ResourceVersionIdStr = Field(field_type=str, required=True, part_of_primary_key=True)
-    value: str = Field(field_type=str)
+    resource_id_value: str = Field(field_type=str)
 
     agent: str = Field(field_type=str, required=True)
 
@@ -2641,15 +2644,16 @@ class Resource(BaseDocument):
             return resources[0]
 
     @classmethod
-    def _get_released_resources_base_query(cls):
-        return (
-            f"FROM ( "
-            f"SELECT r.*, row_number() OVER (PARTITION BY r.resource_id ORDER BY r.model DESC) as row_number "
-            f"FROM {cls.table_name()} as r  "
-            f"JOIN public.configurationmodel as cm ON r.model=cm.version "
-            f"WHERE cm.released=TRUE ) as res "
-            f"WHERE row_number = 1 "
-        )
+    def _get_released_resources_partial_base_query(cls):
+        """A partial query describing the conditions for selecting the latest released resources,
+        according to the model version number."""
+        return f"""
+            FROM (
+                SELECT r.*, row_number() OVER (PARTITION BY r.resource_id ORDER BY r.model DESC) as row_number
+                FROM {cls.table_name()} as r
+                    JOIN public.configurationmodel as cm ON r.model=cm.version
+                    WHERE cm.released=TRUE ) as res
+            WHERE row_number = 1 """
 
     @classmethod
     async def get_released_resources(
@@ -2662,7 +2666,7 @@ class Resource(BaseDocument):
         end: Optional[Any] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query,
-    ) -> List[m.ResourceListElement]:
+    ) -> List[m.LatestReleasedResource]:
         """
         Get all resources that are in a released version, sorted, paged and filtered
         """
@@ -2680,8 +2684,8 @@ class Resource(BaseDocument):
 
         db_query = (
             f"SELECT res.resource_id, res.attributes, res.resource_version_id, res.status, "
-            f"res.resource_type, res.agent, res.value "
-            f"{cls._get_released_resources_base_query()}"
+            f"res.resource_type, res.agent, res.resource_id_value "
+            f"{cls._get_released_resources_partial_base_query()}"
         )
         if len(filter_statements) > 0:
             db_query += f"AND {cls._join_filter_statements(filter_statements)}"
@@ -2695,8 +2699,11 @@ class Resource(BaseDocument):
             db_query += f" ORDER BY {order_by_column} {backward_paging_order}, resource_version_id {backward_paging_order}"
         else:
             db_query += f" ORDER BY {order_by_column} {order}, resource_version_id {order}"
-        if limit is not None and limit > 0:
-            db_query += " LIMIT " + str(limit)
+        if limit is not None:
+            if limit > DBLIMIT:
+                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
+            elif limit > 0:
+                db_query += " LIMIT " + str(limit)
 
         if backward_paging:
             db_query = f"""SELECT * FROM ({db_query}) AS matching_records
@@ -2706,7 +2713,7 @@ class Resource(BaseDocument):
         resource_records = cast(Iterable[Record], resource_records)
 
         dtos = [
-            m.ResourceListElement(
+            m.LatestReleasedResource(
                 resource_id=resource["resource_id"],
                 resource_version_id=resource["resource_version_id"],
                 id_details=cls.get_details_from_resource_id(resource["resource_id"]),
@@ -2724,7 +2731,7 @@ class Resource(BaseDocument):
             resource_type=parsed_id.entity_type,
             agent=parsed_id.agent_name,
             attribute=parsed_id.attribute,
-            value=parsed_id.attribute_value,
+            resource_id_value=parsed_id.attribute_value,
         )
 
     @classmethod
@@ -2768,7 +2775,7 @@ class Resource(BaseDocument):
             f"SELECT COUNT({id_column_name}) as count_total, "
             f"COUNT({id_column_name}) filter (WHERE {before_filter}) as count_before, "
             f"COUNT({id_column_name}) filter (WHERE {after_filter}) as count_after "
-            f"{cls._get_released_resources_base_query()} "
+            f"{cls._get_released_resources_partial_base_query()} "
         )
         if len(common_filter_statements) > 0:
             sql_query += f"AND {cls._join_filter_statements(common_filter_statements)}"
@@ -2799,7 +2806,7 @@ class Resource(BaseDocument):
             resource_type=vid.entity_type,
             resource_version_id=resource_version_id,
             agent=vid.agent_name,
-            value=vid.attribute_value,
+            resource_id_value=vid.attribute_value,
         )
 
         attr.update(kwargs)

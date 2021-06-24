@@ -24,16 +24,16 @@ async def update(connection: Connection) -> None:
     schema = """
 
 ALTER TABLE public.resource
-    ADD COLUMN value varchar;
+    ADD COLUMN resource_id_value varchar;
 
 UPDATE public.resource
-SET value=substring(resource_id from '=(.*)\\]');
+SET resource_id_value=substring(resource_id from '\\[(?:.*),(?:.*)=(.*)\\]');
 
 -- Set NOT NULL constraint after column is populated
 ALTER TABLE public.resource
-    ALTER COLUMN value SET NOT NULL;
+    ALTER COLUMN resource_id_value SET NOT NULL;
 
-CREATE INDEX resource_environment_resource_value_index ON public.resource (environment, value);
+CREATE INDEX resource_environment_resource_id_value_index ON public.resource (environment, resource_id_value);
 """
     async with connection.transaction():
         await connection.execute(schema)
