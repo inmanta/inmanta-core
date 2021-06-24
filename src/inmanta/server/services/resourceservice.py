@@ -28,7 +28,7 @@ from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data import APILIMIT, InvalidSort, QueryType, ResourceOrder, ResourcePagingMetadataProvider
+from inmanta.data import APILIMIT, InvalidSort, QueryType, ResourceOrder
 from inmanta.data.model import (
     AttributeStateChange,
     LogLine,
@@ -39,7 +39,7 @@ from inmanta.data.model import (
     ResourceType,
     ResourceVersionIdStr,
 )
-from inmanta.data.paging_handler import ResourcePagingHandler
+from inmanta.data.paging import ResourcePagingCountsProvider, ResourcePagingHandler
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
@@ -903,7 +903,7 @@ class ResourceService(protocol.ServerSlice):
             database_order=resource_order, limit=limit, first_id=first_id, last_id=last_id, start=start, end=end, **query
         )
 
-        paging_handler = ResourcePagingHandler(ResourcePagingMetadataProvider(data.Resource))
+        paging_handler = ResourcePagingHandler(ResourcePagingCountsProvider(data.Resource))
         metadata = await paging_handler.prepare_paging_metadata(dtos, query, limit, resource_order)
         links = await paging_handler.prepare_paging_links(
             dtos,

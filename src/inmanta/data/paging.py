@@ -18,10 +18,10 @@
 import datetime
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, TypeVar, Union
+from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, Type, TypeVar, Union
 from urllib import parse
 
-from inmanta.data import DatabaseOrder, InvalidFieldNameException, PagingMetadataProvider
+from inmanta.data import BaseDocument, ColumnNameStr, DatabaseOrder, InvalidFieldNameException, PagingCounts
 from inmanta.data.model import BaseModel, PagingBoundaries, ResourceListElement
 from inmanta.protocol import exceptions
 from inmanta.types import SimpleTypes
@@ -37,9 +37,46 @@ class PagingMetadata:
         self.page_size = page_size
 
 
+class PagingCountsProvider(ABC):
+    @abstractmethod
+    async def count_items_for_paging(
+        self,
+        database_order: DatabaseOrder,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[Any] = None,
+        end: Optional[Any] = None,
+        **query: Any,
+    ) -> PagingCounts:
+        """
+        Count the records in the ranges required for the paging links
+        """
+        pass
+
+
+class ResourcePagingCountsProvider(PagingCountsProvider):
+    def __init__(self, data_class: Type[BaseDocument]) -> None:
+        self.data_class = data_class
+
+    async def count_items_for_paging(
+        self,
+        database_order: DatabaseOrder,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[Any] = None,
+        end: Optional[Any] = None,
+        **query: Any,
+    ) -> PagingCounts:
+        sql_query, values = self.data_class._get_paging_item_count_query(
+            database_order, ColumnNameStr("resource_version_id"), first_id, last_id, start, end, **query
+        )
+        result = await self.data_class.select_query(sql_query, values, no_obj=True)
+        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
+
+
 class PagingHandler(ABC, Generic[T]):
-    def __init__(self, metadata_provider: PagingMetadataProvider) -> None:
-        self.metadata_provider = metadata_provider
+    def __init__(self, counts_provider: PagingCountsProvider) -> None:
+        self.counts_provider = counts_provider
 
     async def prepare_paging_metadata(
         self,
@@ -58,7 +95,7 @@ class PagingHandler(ABC, Generic[T]):
             end = paging_borders.end
             last_id = paging_borders.last_id
             try:
-                paging_counts = await self.metadata_provider.count_items_for_paging(
+                paging_counts = await self.counts_provider.count_items_for_paging(
                     database_order=database_order,
                     start=start,
                     first_id=first_id,
@@ -228,9 +265,9 @@ class PagingHandler(ABC, Generic[T]):
 class ResourcePagingHandler(PagingHandler[ResourceListElement]):
     def __init__(
         self,
-        metadata_provider: PagingMetadataProvider,
+        counts_provider: PagingCountsProvider,
     ) -> None:
-        super().__init__(metadata_provider)
+        super().__init__(counts_provider)
 
     def get_base_url(self) -> str:
         return "/api/v2/resource"

@@ -25,7 +25,7 @@ import logging
 import re
 import uuid
 import warnings
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABCMeta
 from collections import defaultdict
 from configparser import RawConfigParser
 from typing import Any, Callable, Dict, Iterable, List, NewType, Optional, Sequence, Set, Tuple, Type, TypeVar, Union, cast
@@ -2703,27 +2703,29 @@ class Resource(BaseDocument):
                         ORDER BY matching_records.{order_by_column} {order}, matching_records.resource_version_id {order}"""
 
         resource_records = await cls.select_query(db_query, values, no_obj=True, connection=connection)
-
-        def from_resource_id(resource_id: m.ResourceIdStr) -> m.ResourceIdDetails:
-            parsed_id = resources.Id.parse_id(resource_id)
-            return m.ResourceIdDetails(
-                resource_type=parsed_id.entity_type,
-                agent=parsed_id.agent_name,
-                attribute=parsed_id.attribute,
-                value=parsed_id.attribute_value,
-            )
+        resource_records = cast(Iterable[Record], resource_records)
 
         dtos = [
             m.ResourceListElement(
                 resource_id=resource["resource_id"],
                 resource_version_id=resource["resource_version_id"],
-                id_details=from_resource_id(resource["resource_id"]),
+                id_details=cls.get_details_from_resource_id(resource["resource_id"]),
                 status=resource["status"],
                 requires=json.loads(resource["attributes"]).get("requires", []),
             )
             for resource in resource_records
         ]
         return dtos
+
+    @staticmethod
+    def get_details_from_resource_id(resource_id: m.ResourceIdStr) -> m.ResourceIdDetails:
+        parsed_id = resources.Id.parse_id(resource_id)
+        return m.ResourceIdDetails(
+            resource_type=parsed_id.entity_type,
+            agent=parsed_id.agent_name,
+            attribute=parsed_id.attribute,
+            value=parsed_id.attribute_value,
+        )
 
     @classmethod
     def _get_paging_item_count_query(
@@ -2735,7 +2737,7 @@ class Resource(BaseDocument):
         start: Optional[Any] = None,
         end: Optional[Any] = None,
         **query: Any,
-    ) -> Tuple[str, List[Any]]:
+    ) -> Tuple[str, List[object]]:
         order_by_column = database_order.get_order_by_db_column_name()
         order = database_order.get_order()
         (filter_statement, values) = cls.get_composed_filter_with_query_types(**query)
@@ -2930,43 +2932,6 @@ class Resource(BaseDocument):
             status=self.status,
             value=self.value,
         )
-
-
-class PagingMetadataProvider(ABC):
-    @abstractmethod
-    async def count_items_for_paging(
-        self,
-        database_order: DatabaseOrder,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Any,
-    ) -> PagingCounts:
-        """
-        Count the records in the ranges required for the paging links
-        """
-        pass
-
-
-class ResourcePagingMetadataProvider(PagingMetadataProvider):
-    def __init__(self, data_class: Type[BaseDocument]):
-        self.data_class = data_class
-
-    async def count_items_for_paging(
-        self,
-        database_order: DatabaseOrder,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Any,
-    ) -> PagingCounts:
-        sql_query, values = self.data_class._get_paging_item_count_query(
-            database_order, ColumnNameStr("resource_version_id"), first_id, last_id, start, end, **query
-        )
-        result = await self.data_class.select_query(sql_query, values, no_obj=True)
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
 
 
 @stable_api

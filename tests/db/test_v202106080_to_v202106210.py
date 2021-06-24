@@ -51,7 +51,7 @@ async def test_add_value_to_resource_table(
     get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],
 ) -> None:
     """
-    Test whether the send_event column was removed from the resourceaction table.
+    Test whether the value column was added to the resource table.
     """
 
     # Migrate DB schema
