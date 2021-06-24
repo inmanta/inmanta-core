@@ -129,7 +129,7 @@ Since modules often have dependencies on other modules, it is common to develop 
 modules (or a project and one or more modules) simultaneously. One might for example need to
 extend a dependent module to add support for some new feature. Because this use case is so common,
 this section will describe how to work on multiple modules simultaneously so that any changes are
-visible the compiler. This procedure is of course applicable for working on a single module as well.
+visible to the compiler. This procedure is of course applicable for working on a single module as well.
 
 Setting up the dev environment
 ------------------------------
