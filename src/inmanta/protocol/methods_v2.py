@@ -514,8 +514,8 @@ def resource_did_dependency_change(
 def resource_list(
     tid: uuid.UUID,
     limit: Optional[int] = None,
-    first_id: Optional[str] = None,
-    last_id: Optional[str] = None,
+    first_id: Optional[model.ResourceVersionIdStr] = None,
+    last_id: Optional[model.ResourceVersionIdStr] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
     filter: Optional[Dict[str, List[str]]] = None,
