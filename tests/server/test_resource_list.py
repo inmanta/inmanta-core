@@ -126,23 +126,6 @@ async def test_has_only_one_version_from_resource(server, client):
     assert result.result["data"][0]["status"] == "deployed"
     assert result.result["data"][1]["status"] == "deploying"
 
-    # Test sorting
-    # TODO: move to different test case, refactor
-    result = await client.resource_list(env.id, sort="status.desc")
-    assert result.code == 200
-    assert len(result.result["data"]) == 2
-    assert result.result["data"][0]["status"] == "deploying"
-    assert result.result["data"][1]["status"] == "deployed"
-
-    result = await client.resource_list(env.id, sort="value.desc")
-    assert result.code == 200
-    assert len(result.result["data"]) == 2
-    assert result.result["data"][0]["id_details"]["value"] == "/etc/file2"
-    assert result.result["data"][1]["id_details"]["value"] == "/etc/file1"
-
-    result = await client.resource_list(env.id, sort="state.desc")
-    assert result.code == 400
-
 
 @pytest.fixture
 async def env_with_resources(server, client):
