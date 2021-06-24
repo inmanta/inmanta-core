@@ -810,7 +810,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         order_by_column: ColumnNameStr,
         id_column: ColumnNameStr,
         start: Optional[Any] = None,
-        first_id: Optional[uuid.UUID] = None,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
     ) -> Tuple[List[str], List[object]]:
         filter_statements = []
         values: List[object] = []
@@ -830,7 +830,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         order_by_column: ColumnNameStr,
         id_column: ColumnNameStr,
         end: Optional[Any] = None,
-        last_id: Optional[uuid.UUID] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
     ) -> Tuple[List[str], List[object]]:
         filter_statements = []
         values: List[object] = []
@@ -852,8 +852,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         cls,
         database_order: DatabaseOrder,
         id_column: ColumnNameStr,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
         start: Optional[Any] = None,
         end: Optional[Any] = None,
         **query: QueryFilter,
@@ -888,8 +888,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         cls,
         start: Optional[Any],
         end: Optional[Any],
-        first_id: Optional[uuid.UUID],
-        last_id: Optional[uuid.UUID],
+        first_id: Optional[Union[uuid.UUID, str]],
+        last_id: Optional[Union[uuid.UUID, str]],
     ) -> None:
         if start and end:
             raise InvalidQueryParameters(
@@ -2656,8 +2656,8 @@ class Resource(BaseDocument):
         cls,
         database_order: DatabaseOrder,
         limit: int,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
+        first_id: Optional[str] = None,
+        last_id: Optional[str] = None,
         start: Optional[Any] = None,
         end: Optional[Any] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
@@ -2732,8 +2732,8 @@ class Resource(BaseDocument):
         cls,
         database_order: DatabaseOrder,
         id_column_name: ColumnNameStr,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
         start: Optional[Any] = None,
         end: Optional[Any] = None,
         **query: Any,

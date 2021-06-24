@@ -21,7 +21,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, Type, TypeVar, Union
 from urllib import parse
 
-from inmanta.data import BaseDocument, ColumnNameStr, DatabaseOrder, InvalidFieldNameException, PagingCounts
+from inmanta.data import ColumnNameStr, DatabaseOrder, InvalidFieldNameException, PagingCounts, Resource
 from inmanta.data.model import BaseModel, PagingBoundaries, ResourceListElement
 from inmanta.protocol import exceptions
 from inmanta.types import SimpleTypes
@@ -42,8 +42,8 @@ class PagingCountsProvider(ABC):
     async def count_items_for_paging(
         self,
         database_order: DatabaseOrder,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
         start: Optional[Any] = None,
         end: Optional[Any] = None,
         **query: Any,
@@ -55,14 +55,14 @@ class PagingCountsProvider(ABC):
 
 
 class ResourcePagingCountsProvider(PagingCountsProvider):
-    def __init__(self, data_class: Type[BaseDocument]) -> None:
+    def __init__(self, data_class: Type[Resource]) -> None:
         self.data_class = data_class
 
     async def count_items_for_paging(
         self,
         database_order: DatabaseOrder,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
         start: Optional[Any] = None,
         end: Optional[Any] = None,
         **query: Any,
@@ -116,21 +116,9 @@ class PagingHandler(ABC, Generic[T]):
         )
         return metadata
 
+    @abstractmethod
     def _get_paging_boundaries(self, dtos: List[T], sort_order: DatabaseOrder) -> PagingBoundaries:
-        if sort_order.get_order() == "DESC":
-            return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_attribute()]),
-                first_id=dtos[0].id,
-                end=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_attribute()]),
-                last_id=dtos[-1].id,
-            )
-        else:
-            return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_attribute()]),
-                first_id=dtos[-1].id,
-                end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_attribute()]),
-                last_id=dtos[0].id,
-            )
+        pass
 
     def _encode_filter_dict(self, filter: Optional[Dict[str, List[str]]]) -> Dict[str, List[str]]:
         url_query_params = {}
@@ -160,8 +148,8 @@ class PagingHandler(ABC, Generic[T]):
         filter: Optional[Dict[str, List[str]]],
         database_order: DatabaseOrder,
         limit: Optional[int] = None,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
         start: Optional[Union[datetime.datetime, str]] = None,
         end: Optional[Union[datetime.datetime, str]] = None,
         has_next: Optional[bool] = False,
@@ -238,7 +226,7 @@ class PagingHandler(ABC, Generic[T]):
         self,
         base_url: str,
         url_query_params_without_paging_params: Dict[str, SimpleTypes],
-        first_id: uuid.UUID,
+        first_id: Union[uuid.UUID, str],
         start: Union[datetime.datetime, int, str],
     ) -> str:
         previous_params = url_query_params_without_paging_params.copy()
@@ -250,7 +238,7 @@ class PagingHandler(ABC, Generic[T]):
         self,
         base_url: str,
         url_query_params_without_paging_params: Dict[str, SimpleTypes],
-        last_id: uuid.UUID,
+        last_id: Union[uuid.UUID, str],
         end: Union[datetime.datetime, int, str],
     ) -> str:
         next_params = url_query_params_without_paging_params.copy()

@@ -888,7 +888,7 @@ class ResourceService(protocol.ServerSlice):
         elif limit > APILIMIT:
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
-        query = {"environment": (QueryType.EQUALS, env.id)}
+        query: Dict[str, Tuple[QueryType, object]] = {"environment": (QueryType.EQUALS, env.id)}
         if filter:
             try:
                 query.update(ResourceFilterValidator().process_filters(filter))
@@ -900,7 +900,14 @@ class ResourceService(protocol.ServerSlice):
             raise BadRequest(e.message) from e
 
         dtos = await data.Resource.get_released_resources(
-            database_order=resource_order, limit=limit, first_id=first_id, last_id=last_id, start=start, end=end, **query
+            database_order=resource_order,
+            limit=limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            connection=None,
+            **query,
         )
 
         paging_handler = ResourcePagingHandler(ResourcePagingCountsProvider(data.Resource))
