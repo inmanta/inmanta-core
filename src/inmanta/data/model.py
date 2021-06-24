@@ -240,7 +240,7 @@ class Resource(BaseModel):
     resource_id: ResourceVersionIdStr
     resource_type: ResourceType
     resource_version_id: ResourceVersionIdStr
-    value: str
+    resource_id_value: str
     agent: str
     last_deploy: Optional[datetime.datetime]
     attributes: JsonType

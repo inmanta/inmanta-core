@@ -2937,7 +2937,7 @@ class Resource(BaseDocument):
             last_deploy=self.last_deploy,
             attributes=self.attributes,
             status=self.status,
-            value=self.value,
+            resource_id_value=self.resource_id_value,
         )
 
 
