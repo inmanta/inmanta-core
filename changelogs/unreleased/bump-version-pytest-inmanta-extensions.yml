@@ -1,0 +1,4 @@
+---
+description: Version bump on pytest-inmanta-extensions
+change-type: patch
+destination-branches: [iso3]

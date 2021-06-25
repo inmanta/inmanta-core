@@ -73,7 +73,7 @@ setup(
     install_requires=requires,
     extras_require={
         # option to install a matched pair of inmanta-core and pytest-inmanta-extensions
-        "pytest-inmanta-extensions": [f"pytest-inmanta-extensions~=3.0.2.0.dev"],
+        "pytest-inmanta-extensions": [f"pytest-inmanta-extensions~=3.0.3.0.dev"],
         "datatrace": ["graphviz"],
     },
     entry_points={
