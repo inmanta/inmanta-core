@@ -2399,7 +2399,7 @@ class Resource(BaseDocument):
     resource_id: m.ResourceVersionIdStr = Field(field_type=str, required=True)
     resource_type: m.ResourceType = Field(field_type=str, required=True)
     resource_version_id: m.ResourceVersionIdStr = Field(field_type=str, required=True, part_of_primary_key=True)
-    resource_id_value: str = Field(field_type=str)
+    resource_id_value: str = Field(field_type=str, required=True)
 
     agent: str = Field(field_type=str, required=True)
 
