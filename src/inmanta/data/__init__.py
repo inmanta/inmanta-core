@@ -2644,7 +2644,7 @@ class Resource(BaseDocument):
             return resources[0]
 
     @classmethod
-    def _get_released_resources_partial_base_query(cls):
+    def _get_released_resources_partial_base_query(cls) -> str:
         """A partial query describing the conditions for selecting the latest released resources,
         according to the model version number."""
         return f"""
