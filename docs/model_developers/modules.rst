@@ -147,7 +147,7 @@ v2 modules
 ^^^^^^^^^^
 A v2 module in development form has mostly the same structure as a v1 module. The main difference is
 that it is meant to be published as a Python package. A project or another v2 module then lists all
-required v2 modules as dependencies in its ``setup.py``. The compiler does not install v2
+required v2 modules as dependencies in its ``pyproject.toml``. The compiler does not install v2
 modules on the fly. In line with how Python depdencies work in general they are expected to be
 installed in advance. As a result they will not be placed in the project's ``modulepath`` directory.
 
@@ -208,7 +208,7 @@ versions specified. You can achieve this with
 depdencies to their exact version as they currently exist in the Python environment. The recursive
 option makes sure all module depdencies are frozen, not just the direct dependencies. In other
 words, if the project depdends on module ``a`` which in turn depends on module ``b``, both modules
-will be pinned to their current version in ``setup.py``.
+will be pinned to their current version in ``pyproject.toml``.
 
 Manual export
 ^^^^^^^^^^^^^
