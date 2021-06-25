@@ -1,4 +1,0 @@
----
-description: Constrain the version of inmanta-dev-dependencies in the requirements.txt file
-change-type: patch
-destination-branches: [iso4]
