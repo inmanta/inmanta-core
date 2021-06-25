@@ -2649,7 +2649,15 @@ class Resource(BaseDocument):
         according to the model version number."""
         return f"""
             FROM (
-                SELECT DISTINCT ON (r.resource_id) r.*
+                SELECT DISTINCT ON (r.resource_id) r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
+                    r.agent, r.resource_id_value, r.environment,
+                    (CASE WHEN
+                            (SELECT r.model < MAX(public.configurationmodel.version)
+                            FROM public.configurationmodel
+                            WHERE public.configurationmodel.released=TRUE
+                            GROUP BY environment)
+                        THEN 'orphaned'
+                    ELSE r.status::text END) as status
                 FROM {cls.table_name()} as r
                     JOIN public.configurationmodel as cm ON r.model=cm.version
                     WHERE cm.released=TRUE
@@ -2684,11 +2692,7 @@ class Resource(BaseDocument):
             **query,
         )
 
-        db_query = (
-            f"SELECT res.resource_id, res.attributes, res.resource_version_id, res.status, "
-            f"res.resource_type, res.agent, res.resource_id_value "
-            f"{cls._get_released_resources_partial_base_query()}"
-        )
+        db_query = f"SELECT * " f"{cls._get_released_resources_partial_base_query()}"
         if len(filter_statements) > 0:
             db_query += cls._join_filter_statements(filter_statements)
         backward_paging = ("ASC" in order and end) or ("DESC" in order and start)

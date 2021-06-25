@@ -20,8 +20,8 @@ from typing import Dict, Generic, List, Optional, Type, TypeVar
 
 from pydantic import BaseModel, Extra, ValidationError
 
-from inmanta.const import ResourceState
 from inmanta.data import QueryFilter, QueryType
+from inmanta.data.model import ReleasedResourceState
 
 
 class InvalidFilter(Exception):
@@ -70,7 +70,7 @@ class ResourceFilterModel(FilterModel):
     resource_type: Optional[List[str]]
     agent: Optional[List[str]]
     resource_id_value: Optional[List[str]]
-    status: Optional[List[ResourceState]]
+    status: Optional[List[ReleasedResourceState]]
 
 
 class ResourceFilterValidator(FilterValidator):

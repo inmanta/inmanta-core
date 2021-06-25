@@ -124,7 +124,8 @@ async def test_has_only_one_version_from_resource(server, client):
     assert result.code == 200
     assert len(result.result["data"]) == 2
     assert result.result["data"][0]["status"] == "deployed"
-    assert result.result["data"][1]["status"] == "deploying"
+    # Orphaned, since there is already a version 3 released
+    assert result.result["data"][1]["status"] == "orphaned"
 
 
 @pytest.fixture
@@ -159,8 +160,8 @@ async def env_with_resources(server, client):
             await res.insert()
 
     await create_resource("agent1", "/etc/file1", "std::File", ResourceState.available, [1, 2, 3])
-    await create_resource("agent1", "/etc/file2", "std::File", ResourceState.deploying, [1, 2])
-    await create_resource("agent2", "/etc/file3", "std::File", ResourceState.deployed, [2])
+    await create_resource("agent1", "/etc/file2", "std::File", ResourceState.deploying, [1, 2])  # Orphaned
+    await create_resource("agent2", "/etc/file3", "std::File", ResourceState.deployed, [2])  # Orphaned
     await create_resource("agent2", "/tmp/file4", "std::File", ResourceState.unavailable, [3])
     await create_resource("agent2", "/tmp/dir5", "std::Directory", ResourceState.skipped, [3])
     await create_resource("agent3", "/tmp/dir6", "std::Directory", ResourceState.deployed, [3])
@@ -206,6 +207,20 @@ async def test_filter_resources(server, client, env_with_resources):
     result = await client.resource_list(env.id, filter={"resource_type": ["Directory"], "resource_id_value": "5"})
     assert result.code == 200
     assert len(result.result["data"]) == 1
+
+    result = await client.resource_list(env.id, filter={"status": ["orphaned"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 2
+    assert [resource["status"] for resource in result.result["data"]] == ["orphaned", "orphaned"]
+    result = await client.resource_list(env.id, filter={"status": ["orphaned", "deployed"]}, sort="status.asc")
+    assert result.code == 200
+    assert len(result.result["data"]) == 3
+    assert [resource["status"] for resource in result.result["data"]] == ["deployed", "orphaned", "orphaned"]
+
+    result = await client.resource_list(env.id, filter={"status": ["deployed"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert result.result["data"][0]["status"] == "deployed"
 
 
 def resource_ids(resource_objects):

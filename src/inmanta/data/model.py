@@ -17,6 +17,8 @@
 """
 import datetime
 import uuid
+from enum import Enum
+from itertools import chain
 from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
@@ -302,12 +304,19 @@ class ResourceIdDetails(BaseModel):
     resource_id_value: str
 
 
+class OrphanedResource(Enum):
+    orphaned = "orphaned"
+
+
+ReleasedResourceState = Enum("ReleasedResourceState", [(i.name, i.value) for i in chain(const.ResourceState, OrphanedResource)])
+
+
 class LatestReleasedResource(BaseModel):
     resource_id: ResourceIdStr
     resource_version_id: ResourceVersionIdStr
     id_details: ResourceIdDetails
     requires: List[ResourceVersionIdStr]
-    status: const.ResourceState
+    status: ReleasedResourceState
 
     @property
     def all_fields(self) -> Dict[str, Any]:
