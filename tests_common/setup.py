@@ -27,6 +27,7 @@ requires = [
     "pytest-asyncio",
     "pytest-env",
     "pytest-postgresql",
+    "psycopg2",  # Only required due to a loading bug in pytest-postgresql 3.0.0
     "tornado",
 ]
 
