@@ -19,6 +19,7 @@ import json
 from datetime import datetime
 from operator import itemgetter
 from typing import List
+from uuid import UUID
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -148,11 +149,13 @@ async def env_with_resources(server, client):
         )
         await cm.insert()
 
-    async def create_resource(agent: str, path: str, resource_type: str, status: ResourceState, versions: List[int]):
+    async def create_resource(
+        agent: str, path: str, resource_type: str, status: ResourceState, versions: List[int], environment: UUID = env.id
+    ):
         for version in versions:
             key = f"{resource_type}[{agent},path={path}]"
             res = data.Resource.new(
-                environment=env.id,
+                environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
                 attributes={"path": path},
                 status=status,
@@ -165,6 +168,19 @@ async def env_with_resources(server, client):
     await create_resource("agent2", "/tmp/file4", "std::File", ResourceState.unavailable, [3])
     await create_resource("agent2", "/tmp/dir5", "std::Directory", ResourceState.skipped, [3])
     await create_resource("agent3", "/tmp/dir6", "std::Directory", ResourceState.deployed, [3])
+
+    env2 = data.Environment(name="dev-test2", project=project.id, repo_url="", repo_branch="")
+    await env2.insert()
+    cm = data.ConfigurationModel(
+        environment=env2.id,
+        version=3,
+        date=datetime.now(),
+        total=1,
+        released=True,
+        version_info={},
+    )
+    await cm.insert()
+    await create_resource("agent1", "/tmp/file7", "std::File", ResourceState.deployed, [3], environment=env2.id)
 
     yield env
 

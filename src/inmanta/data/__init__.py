@@ -2655,7 +2655,7 @@ class Resource(BaseDocument):
                             (SELECT r.model < MAX(public.configurationmodel.version)
                             FROM public.configurationmodel
                             WHERE public.configurationmodel.released=TRUE
-                            GROUP BY environment)
+                            AND environment = $1)
                         THEN 'orphaned'
                     ELSE r.status::text END) as status
                 FROM {cls.table_name()} as r
