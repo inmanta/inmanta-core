@@ -2644,10 +2644,17 @@ class Resource(BaseDocument):
             return resources[0]
 
     @classmethod
-    def _get_released_resources_partial_base_query(cls) -> str:
+    def _get_released_resources_base_query(
+        cls, select_clause: str, environment_filter: Tuple[QueryType, object], offset: int
+    ) -> Tuple[str, List[object]]:
         """A partial query describing the conditions for selecting the latest released resources,
         according to the model version number."""
-        return f"""
+        subquery_filter_statement, subquery_values = cls.get_composed_filter_with_query_types(
+            offset=offset, col_name_prefix=None, environment=environment_filter
+        )
+        return (
+            f"""
+            {select_clause}
             FROM (
                 SELECT DISTINCT ON (r.resource_id) r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
                     r.agent, r.resource_id_value, r.environment,
@@ -2655,7 +2662,7 @@ class Resource(BaseDocument):
                             (SELECT r.model < MAX(public.configurationmodel.version)
                             FROM public.configurationmodel
                             WHERE public.configurationmodel.released=TRUE
-                            AND environment = $1)
+                            AND {subquery_filter_statement})
                         THEN 'orphaned'
                     ELSE r.status::text END) as status
                 FROM {cls.table_name()} as r
@@ -2663,7 +2670,9 @@ class Resource(BaseDocument):
                     WHERE cm.released=TRUE
                     ORDER BY r.resource_id, r.model DESC)
             as res
-            """
+            """,
+            subquery_values,
+        )
 
     @classmethod
     async def get_released_resources(
@@ -2675,7 +2684,7 @@ class Resource(BaseDocument):
         start: Optional[Any] = None,
         end: Optional[Any] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
-        **query,
+        **query: Tuple[QueryType, object],
     ) -> List[m.LatestReleasedResource]:
         """
         Get all resources that are in a released version, sorted, paged and filtered
@@ -2691,8 +2700,10 @@ class Resource(BaseDocument):
             end=end,
             **query,
         )
-
-        db_query = f"SELECT * " f"{cls._get_released_resources_partial_base_query()}"
+        db_query, base_query_values = cls._get_released_resources_base_query(
+            select_clause="SELECT * ", environment_filter=query["environment"], offset=len(values) + 1
+        )
+        values.extend(base_query_values)
         if len(filter_statements) > 0:
             db_query += cls._join_filter_statements(filter_statements)
         backward_paging = ("ASC" in order and end) or ("DESC" in order and start)
@@ -2749,11 +2760,11 @@ class Resource(BaseDocument):
         last_id: Optional[Union[uuid.UUID, str]] = None,
         start: Optional[Any] = None,
         end: Optional[Any] = None,
-        **query: Any,
+        **query: Tuple[QueryType, object],
     ) -> Tuple[str, List[object]]:
         order_by_column = database_order.get_order_by_db_column_name()
         order = database_order.get_order()
-        (filter_statement, values) = cls.get_composed_filter_with_query_types(**query)
+        (filter_statement, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
         common_filter_statements = filter_statement.split(" AND ") if filter_statement != "" else []
 
         if "ASC" in order:
@@ -2777,12 +2788,15 @@ class Resource(BaseDocument):
         before_filter = cls._join_filter_statements(before_filter_statements)
         after_filter = cls._join_filter_statements(after_filter_statements)
 
-        sql_query = (
-            f"SELECT COUNT({id_column_name}) as count_total, "
+        sql_query, base_query_values = cls._get_released_resources_base_query(
+            select_clause=f"SELECT COUNT({id_column_name}) as count_total, "
             f"COUNT({id_column_name}) filter ({before_filter}) as count_before, "
-            f"COUNT({id_column_name}) filter ({after_filter}) as count_after "
-            f"{cls._get_released_resources_partial_base_query()} "
+            f"COUNT({id_column_name}) filter ({after_filter}) as count_after ",
+            environment_filter=query["environment"],
+            offset=len(values) + 1,
         )
+        values.extend(base_query_values)
+
         if len(common_filter_statements) > 0:
             sql_query += cls._join_filter_statements(common_filter_statements)
 
