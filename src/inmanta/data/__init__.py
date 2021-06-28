@@ -2645,12 +2645,12 @@ class Resource(BaseDocument):
 
     @classmethod
     def _get_released_resources_base_query(
-        cls, select_clause: str, environment_filter: Tuple[QueryType, object], offset: int
+        cls, select_clause: str, environment: uuid.UUID, offset: int
     ) -> Tuple[str, List[object]]:
         """A partial query describing the conditions for selecting the latest released resources,
         according to the model version number."""
         subquery_filter_statement, subquery_values = cls.get_composed_filter_with_query_types(
-            offset=offset, col_name_prefix=None, environment=environment_filter
+            offset=offset, col_name_prefix=None, environment=(QueryType.EQUALS, cls._get_value(environment))
         )
         return (
             f"""
@@ -2666,8 +2666,8 @@ class Resource(BaseDocument):
                         THEN 'orphaned'
                     ELSE r.status::text END) as status
                 FROM {cls.table_name()} as r
-                    JOIN public.configurationmodel as cm ON r.model=cm.version
-                    WHERE cm.released=TRUE
+                    JOIN public.configurationmodel as cm ON r.model=cm.version AND r.environment=cm.environment
+                    WHERE cm.released=TRUE AND r.{subquery_filter_statement}
                     ORDER BY r.resource_id, r.model DESC)
             as res
             """,
@@ -2679,6 +2679,7 @@ class Resource(BaseDocument):
         cls,
         database_order: DatabaseOrder,
         limit: int,
+        environment: uuid.UUID,
         first_id: Optional[str] = None,
         last_id: Optional[str] = None,
         start: Optional[Any] = None,
@@ -2701,7 +2702,7 @@ class Resource(BaseDocument):
             **query,
         )
         db_query, base_query_values = cls._get_released_resources_base_query(
-            select_clause="SELECT * ", environment_filter=query["environment"], offset=len(values) + 1
+            select_clause="SELECT * ", environment=environment, offset=len(values) + 1
         )
         values.extend(base_query_values)
         if len(filter_statements) > 0:
@@ -2754,6 +2755,7 @@ class Resource(BaseDocument):
     @classmethod
     def _get_paging_item_count_query(
         cls,
+        environment: uuid.UUID,
         database_order: DatabaseOrder,
         id_column_name: ColumnNameStr,
         first_id: Optional[Union[uuid.UUID, str]] = None,
@@ -2792,7 +2794,7 @@ class Resource(BaseDocument):
             select_clause=f"SELECT COUNT({id_column_name}) as count_total, "
             f"COUNT({id_column_name}) filter ({before_filter}) as count_before, "
             f"COUNT({id_column_name}) filter ({after_filter}) as count_after ",
-            environment_filter=query["environment"],
+            environment=environment,
             offset=len(values) + 1,
         )
         values.extend(base_query_values)

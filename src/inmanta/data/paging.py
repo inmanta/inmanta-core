@@ -41,6 +41,7 @@ class PagingCountsProvider(ABC):
     @abstractmethod
     async def count_items_for_paging(
         self,
+        environment: uuid.UUID,
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
@@ -60,6 +61,7 @@ class ResourcePagingCountsProvider(PagingCountsProvider):
 
     async def count_items_for_paging(
         self,
+        environment: uuid.UUID,
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
@@ -68,7 +70,7 @@ class ResourcePagingCountsProvider(PagingCountsProvider):
         **query: Any,
     ) -> PagingCounts:
         sql_query, values = self.data_class._get_paging_item_count_query(
-            database_order, ColumnNameStr("resource_version_id"), first_id, last_id, start, end, **query
+            environment, database_order, ColumnNameStr("resource_version_id"), first_id, last_id, start, end, **query
         )
         result = await self.data_class.select_query(sql_query, values, no_obj=True)
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
@@ -80,6 +82,7 @@ class PagingHandler(ABC, Generic[T]):
 
     async def prepare_paging_metadata(
         self,
+        environment: uuid.UUID,
         dtos: List[T],
         db_query: Mapping[str, Tuple[str, Any]],
         limit: int,
@@ -96,6 +99,7 @@ class PagingHandler(ABC, Generic[T]):
             last_id = paging_borders.last_id
             try:
                 paging_counts = await self.counts_provider.count_items_for_paging(
+                    environment=environment,
                     database_order=database_order,
                     start=start,
                     first_id=first_id,

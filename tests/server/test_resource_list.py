@@ -181,6 +181,21 @@ async def env_with_resources(server, client):
     )
     await cm.insert()
     await create_resource("agent1", "/tmp/file7", "std::File", ResourceState.deployed, [3], environment=env2.id)
+    await create_resource("agent1", "/tmp/file2", "std::File", ResourceState.deployed, [3], environment=env2.id)
+    await create_resource("agent2", "/tmp/dir5", "std::Directory", ResourceState.skipped, [3], environment=env2.id)
+
+    env3 = data.Environment(name="dev-test3", project=project.id, repo_url="", repo_branch="")
+    await env3.insert()
+    cm = data.ConfigurationModel(
+        environment=env3.id,
+        version=6,
+        date=datetime.now(),
+        total=1,
+        released=True,
+        version_info={},
+    )
+    await cm.insert()
+    await create_resource("agent2", "/etc/file3", "std::File", ResourceState.deployed, [6], environment=env3.id)
 
     yield env
 
