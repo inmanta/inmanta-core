@@ -495,7 +495,7 @@ class ProjectMetadata(Metadata):
         for elem in v_as_list:
             if isinstance(elem, str):
                 # Ensure backward compatibility with the version of Inmanta that didn't have support for the type field.
-                result.append({"url": elem, "type": ModuleRepoInfo.git})
+                result.append({"url": elem, "type": ModuleRepoType.git})
             elif isinstance(elem, dict):
                 result.append(elem)
             else:
