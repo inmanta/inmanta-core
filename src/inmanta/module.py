@@ -31,7 +31,23 @@ from io import BytesIO, TextIOBase
 from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
-from typing import Dict, Generic, Iterable, Iterator, List, Mapping, NewType, Optional, Set, TextIO, Tuple, Type, TypeVar, Union
+from typing import (
+    Any,
+    Dict,
+    Generic,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    NewType,
+    Optional,
+    Set,
+    TextIO,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 
 import yaml
 from pkg_resources import parse_requirements, parse_version
@@ -404,6 +420,24 @@ class ModuleMetadata(Metadata):
         return v
 
 
+class ModuleRepoType(enum.Enum):
+    git = "git"
+    package = "package"
+
+
+class ModuleRepo(BaseModel):
+
+    url: str
+    type: ModuleRepoType
+
+    @validator("type")
+    @classmethod
+    def validate_type(cls, v: object) -> object:
+        if v == ModuleRepoType.package:
+            raise ValidationError("Repository type `package` is not yet supported.")
+        return v
+
+
 class ProjectMetadata(Metadata):
     """
     :param name: The name of the project.
@@ -418,9 +452,14 @@ class ProjectMetadata(Metadata):
       repositories. This path is not automatically included in in modulepath!
     :param install_mode: (Optional) This key determines what version of a module should be selected when a module
       is downloaded. For more information see :class:`InstallMode`.
-    :param repo: (Optional) This key requires a list (a yaml list) of repositories where Inmanta can find
-      modules. Inmanta creates the git repo url by formatting {} or {0} with the name of the repo. If no formatter is present it
-      appends the name of the module. Inmanta tries to clone a module in the order in which it is defined in this value.
+    :param repo: (Optional) A list (a yaml list) of repositories where Inmanta can find modules. Inmanta tries each repository
+      in the order they appear in the list. Each element of this list requires a `type` and a `url` field. The type field can
+      have the values `git` and `pypi`.
+      * git: When the type is set to git, the url field should contain a template of the Git repo URL. Inmanta creates the
+             git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
+             of the module to the URL.
+      * package: When the type is set to package, the URL field should contains the index URL of the Python package repository.
+              The repository should be PEP 503 (the simple repository API) compliant.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
       project. Similar to the module, version constraints are defined using
       `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
@@ -437,14 +476,29 @@ class ProjectMetadata(Metadata):
     license: Optional[str] = None
     copyright: Optional[str] = None
     modulepath: List[str] = []
-    repo: List[str] = []
+    repo: List[ModuleRepo] = []
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
 
-    @validator("repo", "modulepath", pre=True)
+    @validator("modulepath", pre=True)
     @classmethod
-    def repo_and_modulepath_to_list(cls, v: object) -> object:
+    def modulepath_to_list(cls, v: object) -> object:
         return cls.to_list(v)
+
+    @validator("repo", pre=True)
+    @classmethod
+    def validate_repo_field(cls, v: object) -> List[Dict[Any, Any]]:
+        v_as_list = cls.to_list(v)
+        result = []
+        for elem in v_as_list:
+            if isinstance(elem, str):
+                # Ensure backward compatibility with the version of Inmanta that didn't have support for the type field.
+                result.append({"url": elem, "type": ModuleRepoType.git})
+            elif isinstance(elem, dict):
+                result.append(elem)
+            else:
+                raise ValidationError(f"Value should be either a string of a dict, got {elem}")
+        return result
 
 
 T = TypeVar("T", bound=Metadata)
@@ -617,7 +671,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
         self.resolver = CompositeModuleRepo([make_repo(x) for x in self.modulepath])
-        self.repolist = [x for x in self._metadata.repo]
+        self.repolist = [x.url for x in self._metadata.repo]
         self.externalResolver = CompositeModuleRepo([make_repo(x, root=path) for x in self.repolist])
 
         if self._metadata.downloadpath is not None:
