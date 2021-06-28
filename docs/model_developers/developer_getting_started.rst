@@ -140,14 +140,16 @@ If you only use opensource modules as provided by Inmanta, you can skip below st
 .. code-block:: yaml
 
     repo:
-        - git@code.inmanta.com:example/my_module.git
+        - url: git@code.inmanta.com:example/my_module.git
+          type: git
 
 Becomes:
 
 .. code-block:: yaml
 
     repo:
-        - git@code.inmanta.com:example/{}.git
+        - url: git@code.inmanta.com:example/{}.git
+          type: git
 
 * Now, in your ``main.cf`` file, if you import a module like, ``import <my_module>`` and save the file, you can get code completion. If you are working on an existing project with a populated ``main.cf`` file, code completion will work as expected.
 
