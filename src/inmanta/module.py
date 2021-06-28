@@ -446,20 +446,22 @@ class ProjectMetadata(Metadata):
     :param author_email: (Optional) The contact email address of author
     :param license: (Optional) License the project is released under
     :param copyright: (Optional) Copyright holder name and date.
-    :param modulepath: (Optional) This value is a list of paths where Inmanta should search for modules. Paths
-      are separated with ``:``
+    :param modulepath: (Optional) This value is a list of paths where Inmanta should search for modules.
     :param downloadpath: (Optional) This value determines the path where Inmanta should download modules from
-      repositories. This path is not automatically included in in modulepath!
+      repositories. This path is not automatically included in the modulepath!
     :param install_mode: (Optional) This key determines what version of a module should be selected when a module
       is downloaded. For more information see :class:`InstallMode`.
     :param repo: (Optional) A list (a yaml list) of repositories where Inmanta can find modules. Inmanta tries each repository
-      in the order they appear in the list. Each element of this list requires a `type` and a `url` field. The type field can
-      have the values `git` and `pypi`.
+      in the order they appear in the list. Each element of this list requires a ``type`` and a ``url`` field. The type field
+      can have the following values:
+
       * git: When the type is set to git, the url field should contain a template of the Git repo URL. Inmanta creates the
-             git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
-             of the module to the URL.
-      * package: When the type is set to package, the URL field should contains the index URL of the Python package repository.
-              The repository should be PEP 503 (the simple repository API) compliant.
+        git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
+        of the module to the URL.
+      * package: When the type is set to package, the URL field should contains the URL of the Python package repository.
+        The repository should be `PEP 503 <https://www.python.org/dev/peps/pep-0503/>`_ (the simple repository API) compliant.
+
+      The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
       project. Similar to the module, version constraints are defined using
       `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.

@@ -14,13 +14,14 @@ V2 module format
 
    The V2 module format is currently under development.
 
+
 A complete V2 module might contain the following files:
 
 .. code-block:: sh
 
     module
     |
-    |-- setup.cfg
+    |__ setup.cfg
     |__ pyproject.toml
     |
     |__ model
@@ -39,9 +40,9 @@ A complete V2 module might contain the following files:
 
 
 * The root of the module directory contains a ``setup.cfg`` file. This is the metadata file of the module. It contains
-  information, such as the name of the module. More details about the ``setup.cfg`` file are defined in the next section.
+  information, such as the version of the module. More details about the ``setup.cfg`` file are defined in the next section.
 * The ``pyproject.toml`` file defines the build system that should be used to package the module and install the module into a
-  venv from source.
+  virtual environment from source.
 * The only mandatory subdirectory is the ``model`` directory containing a file called ``_init.cf``.
   What is defined in the ``_init.cf`` file is available in the namespace linked with the name of the
   module. Other files in the model directory create subnamespaces.
@@ -56,8 +57,8 @@ The template, file and source plugins from the std module expect the following d
 
 The setup.cfg metadata file
 ---------------------------
-The ``setup.cfg`` file defines metadata about the module. The code snippet provides an example about what this ``setup.cfg``
-file looks like:
+The ``setup.cfg`` file defines metadata about the module. The following code snippet provides an example about what this
+``setup.cfg`` file looks like:
 
 .. code-block:: ini
 
@@ -76,15 +77,16 @@ file looks like:
 
 
 * The ``metadata`` section defines the following fields:
-  ** ``name``: The name of the resulting Python package when this module is packaged. This name should follow the
-     naming schema: ``inmanta-module-<module-name>``.
-  ** ``version``: The version of the module. Modules must use semantic versioning.
-  ** ``license``: The license under which the module is distributed.
+
+  * ``name``: The name of the resulting Python package when this module is packaged. This name should follow the naming schema: ``inmanta-module-<module-name>``.
+  * ``version``: The version of the module. Modules must use semantic versioning.
+  * ``license``: The license under which the module is distributed.
+
 * Dependencies to other Inmanta modules and dependencies to external Python libraries can be defined using the
   ``install_requires`` config option in the ``options`` section of the ``setup.cfg`` file. These version specs use `PEP440
   syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
 
-A full list of all available options can be found in :ref:`here<modules_v2_pyproject_toml>`.
+A full list of all available options can be found in :ref:`here<modules_v2_setup_cfg>`.
 
 The pyproject.toml file
 -----------------------
@@ -135,7 +137,7 @@ The directory layout of the V1 module is similar to that of a V2 module. The fol
 * The ``requirements.txt`` file defines the dependencies of this module to other V2 modules and the dependencies to external
   libraries used by the code in the ``plugins`` directory. This file is not present in the V2 module format, since V2 modules
   defined their dependencies in the ``setup.cfg`` file.
-
+* The ``pyproject.toml`` file doesn't exist in a V1 module, because V1 modules cannot be packaged into a Python package.
 
 Module metadata
 ---------------
@@ -160,7 +162,7 @@ have a specific version identifier. The version of a module import can be constr
 module.yml file. The *requires* key expects a list of version specs. These version specs use `PEP440
 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
 
-To specify specific version are required, constraints can be added to the requires list::
+To specify specific version are required, constraints can be added to the requires list:
 
 .. code-block:: yaml
 
@@ -196,10 +198,9 @@ The Inmanta Python SDK offers several extension mechanism:
 * Resource handlers
 * Dependency managers
 
-Only the compiler and agents load code included in modules (See :doc:`/architecture`). A module can
-include a requirements.txt file with all external dependencies. Both the compiler and the agent will
-install this dependencies with ``pip install`` in an virtual environment dedicated to the compiler
-or agent. By default this is in `.env` of the project for the compiler and in
+Only the compiler and agents load code included in modules (See :doc:`/architecture`). A module can include external
+dependencies. Both the compiler and the agent will install this dependencies with ``pip install`` in an virtual
+environment dedicated to the compiler or agent. By default this is in `.env` of the project for the compiler and in
 `/var/lib/inmanta/agent/env` for the agent.
 
 Inmanta uses a special format of requirements that was defined in python PEP440 but never fully

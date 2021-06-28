@@ -4,7 +4,7 @@ Compiler Configuration Reference
 .. _project_yml:
 
 project.yml
-------------
+###########
 
 Inside any project the compiler expects a ``project.yml`` file that defines metadata about the project,
 the location to store modules, repositories where to find modules and possibly specific versions of
@@ -31,11 +31,10 @@ The code snippet below provides an example of a complete ``project.yml`` file:
     downloadpath: libs
     install_mode: release
     repo:
-      - git@github.com:inmanta/
-      - url: https://github.com/something/
+      - url: https://github.com/inmanta/
         type: git
       - url: https://pypi.org/simple/
-        type: pypi
+        type: package
     requires:
       - apache ~= 0.5.2
       - drupal ~= 0.7.3
@@ -52,13 +51,18 @@ The code snippet below provides an example of a complete ``project.yml`` file:
     freeze_operator: ~=
 
 
+Module metadata files
+#####################
+
+The metadata of a V1 module is present in the module.yml file. V2 modules keep their metadata in the setup.cfg file. Below
+sections describe each of these metadata files.
 
 .. _module_yml:
 
 module.yml
 ----------
 
-Inside any module the compiler expects a ``module.yml`` file that defines metadata about the module.
+Inside any V1 module the compiler expects a ``module.yml`` file that defines metadata about the module.
 
 The ``module.yml`` file defines the following settings:
 
@@ -68,16 +72,45 @@ The code snippet below provides an example of a complete ``module.yml`` file:
 
 .. code-block:: yaml
 
-        name: openstack:
-        description:
-        version: 3.7.1
-        license: Apache 2.0
-        compiler_version: 2020.2
-        requires:
-          - ip
-          - net
-          - platform
-          - ssh
-          - std
-        freeze_recursive: false
-        freeze_operator: ~=
+    name: openstack
+    description: A module to manage networks, routers, virtual machine, etc. on an Openstack cluster.
+    version: 3.7.1
+    license: Apache 2.0
+    compiler_version: 2020.2
+    requires:
+      - ip
+      - net
+      - platform
+      - ssh
+      - std
+    freeze_recursive: false
+    freeze_operator: ~=
+
+
+.. _modules_v2_setup_cfg:
+
+setup.cfg
+---------
+
+Inside any V2 module the compiler expects a ``setup.cfg`` file that defines metadata about the module.
+
+The code snippet below provides an example of a complete ``setup.cfg`` file:
+
+.. code-block:: ini
+
+    [metadata]
+    name = inmanta-module-openstack
+    description = A module to manage networks, routers, virtual machine, etc. on an Openstack cluster.
+    version = 3.7.1
+    license = Apache 2.0
+    compiler_version = 2020.2
+    freeze_recursive = false
+    freeze_operator = ~=
+
+    [options]
+    install_requires =
+      ip
+      net
+      platform
+      ssh
+      std
