@@ -425,7 +425,7 @@ class ModuleRepoType(enum.Enum):
     package = "package"
 
 
-class ModuleRepo(BaseModel):
+class ModuleRepoInfo(BaseModel):
 
     url: str
     type: ModuleRepoType
@@ -478,7 +478,7 @@ class ProjectMetadata(Metadata):
     license: Optional[str] = None
     copyright: Optional[str] = None
     modulepath: List[str] = []
-    repo: List[ModuleRepo] = []
+    repo: List[ModuleRepoInfo] = []
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
 
@@ -495,7 +495,7 @@ class ProjectMetadata(Metadata):
         for elem in v_as_list:
             if isinstance(elem, str):
                 # Ensure backward compatibility with the version of Inmanta that didn't have support for the type field.
-                result.append({"url": elem, "type": ModuleRepoType.git})
+                result.append({"url": elem, "type": ModuleRepoInfo.git})
             elif isinstance(elem, dict):
                 result.append(elem)
             else:
