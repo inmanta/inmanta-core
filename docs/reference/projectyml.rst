@@ -109,8 +109,8 @@ The code snippet below provides an example of a complete ``setup.cfg`` file:
 
     [options]
     install_requires =
-      ip
-      net
-      platform
-      ssh
-      std
+      inmanta-modules-ip
+      inmanta-modules-net
+      inmanta-modules-platform
+      inmanta-modules-ssh
+      inmanta-modules-std

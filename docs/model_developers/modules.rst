@@ -4,8 +4,9 @@ Understanding Modules
 ========================
 In Inmanta all orchestration model code and related files, templates, plugins and resource handlers are packaged in a module.
 Modules can be defined in two different formats, the V1 format and the V2 format. The biggest difference between both formats is
-that V2 modules can be packaged into a Python package, while V1 modules cannot. New modules should use the V2 module
-format. The following sections describe the directory layout of the V1 and the V2 module formats and their metadata files.
+that all Python tools can run on V2 modules, because V2 modules are essentially Python packages. New modules should use the V2
+module format. The following sections describe the directory layout of the V1 and the V2 module formats and their metadata
+files.
 
 V2 module format
 ################
@@ -69,8 +70,8 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
 
     [options]
     install_requires =
-      net ~=0.2.4
-      std >1.0,<2.5
+      inmanta-modules-net ~=0.2.4
+      inmanta-modules-std >1.0,<2.5
 
       cookiecutter~=1.7.0
       cryptography>1.0,<3.5

@@ -428,7 +428,7 @@ class ModuleRepoType(enum.Enum):
 class ModuleRepoInfo(BaseModel):
 
     url: str
-    type: ModuleRepoType = "git"
+    type: ModuleRepoType = ModuleRepoType.git
 
     @validator("type")
     @classmethod
