@@ -127,9 +127,9 @@ Working on modules
 ==================
 Since modules often have dependencies on other modules, it is common to develop against multiple
 modules (or a project and one or more modules) simultaneously. One might for example need to
-extend a dependency module to add support for some new feature. Because this use case is so common,
+extend a dependent module to add support for some new feature. Because this use case is so common,
 this section will describe how to work on multiple modules simultaneously so that any changes are
-visible the compiler. This procedure is of course applicable for working on a single module as well.
+visible to the compiler. This procedure is of course applicable for working on a single module as well.
 
 Setting up the dev environment
 ------------------------------
@@ -148,7 +148,7 @@ v2 modules
 A v2 module in development form has mostly the same structure as a v1 module. The main difference is
 that it is meant to be published as a Python package. A project or another v2 module then lists all
 required v2 modules as dependencies in its ``pyproject.toml``. The compiler does not install v2
-modules on the fly. In line with how Python depdencies work in general they are expected to be
+modules on the fly. In line with how Python dependencies work in general they are expected to be
 installed in advance. As a result they will not be placed in the project's ``modulepath`` directory.
 
 To set up your development environment, first clone all modules you wish to develop against and
