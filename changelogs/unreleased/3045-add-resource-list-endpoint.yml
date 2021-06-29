@@ -2,6 +2,6 @@
 description: Added `resource_list` endpoint
 issue-nr: 3045
 change-type: minor
-destination-branches: [master, iso4]
+destination-branches: [iso4]
 sections:
   feature: "{{description}}"
