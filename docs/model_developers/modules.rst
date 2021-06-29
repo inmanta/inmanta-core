@@ -133,42 +133,40 @@ visible to the compiler. This procedure is of course applicable for working on a
 
 Setting up the dev environment
 ------------------------------
+To set up the development environment for a project, activate your development Python environment and
+install the project with ``inmanta project install``. To set up the environment for a single module,
+run ``inmanta module install`` instead.
+
+The following subsections explain any additional steps you need to take if you want to make changes
+to one of the dependency modules as well.
+
 v1 modules
 ^^^^^^^^^^
-A v1 module is a module that is not packaged and published to a Python package repository but is
-solely distributed via git. V1 modules are installed on the fly by the compiler and can be found in
-the project's ``modulepath`` directory (see :ref:`project_yml`). Any changes you make to the module
-source in the ``modulepath`` directory will be reflected in
-the next compile. If you need to be able to make changes to multiple modules simultaneously, the
-simplest way to set up your development environment is to create a project that imports the desired
-modules, then run a compile against it. Alternatively, you can manually clone the module repos.
+Any modules you find in the project's ``modulepath`` after starting from a clean project and setting
+up the development environment are v1 modules. You can make changes to these modules and they will
+be reflected in the next compile. No additional steps are required.
 
 v2 modules
 ^^^^^^^^^^
-A v2 module in development form has mostly the same structure as a v1 module. The main difference is
-that it is meant to be published as a Python package. A project or another v2 module then lists all
-required v2 modules as dependencies in its ``pyproject.toml``. The compiler does not install v2
-modules on the fly. In line with how Python dependencies work in general they are expected to be
-installed in advance. As a result they will not be placed in the project's ``modulepath`` directory.
+All other modules are v2 and have been installed by ``inmanta project install`` into the active Python
+environment. If you want to be able to make changes to one of these modules, the easiest way is to
+check out the module repo separately and run ``inmanta module install`` on it, overwriting the published
+package that was installed previously This will install the module in editable form: any changes you make
+to the checked out files will be picked up by the compiler. You can also do this prior to installing the
+project, in which case the pre-installed module will remain installed in editable form when you install
+the project, provided it matches the version constraints. Since these modules are essentially
+Python packages, you can double check the desired modules are installed in editable mode by checking
+the output of ``pip list --editable``.
 
-To set up your development environment, first clone all modules you wish to develop against and
-install them in editable mode with ``inmanta module install``. This will fetch all its module v2 dependencies
-from the Python package repository and install them in the active Python environment. Any modules you
-previously installed in editable mode should remain as is, provided they meet the version
-constraints. Then optionally clone the project repo and install its other dependencies with
-``inmanta module install``. You can double-check the desired modules are installed in editable mode by
-checking the output of ``pip list --editable``. If you want to add another module to the set under
-development, you can always run ``inmanta module install`` on it at a later stage, overwriting the published
-package that was installed previously.
 
 Working on the dev environment
 ------------------------------
 After setting up, you should be left with a dev environment where all required v2 modules have been
-installed (either in editable or in packaged form).
+installed (either in editable or in packaged form). If you're working on a project, all required v1
+modules should be checked out in the ``modulepath`` directory.
 
-If you're working on a project, all required v1 modules should be checked out in the ``modulepath``
-directory. When you run a compile from the active Python environment context, the compiler will
-find both the v1 and v2 modules and use them for both their model and their plugins.
+When you run a compile from the active Python environment context, the compiler will find both the
+v1 and v2 modules and use them for both their model and their plugins.
 
 Similarly, when you run a module's unit tests, the installed v2 modules will automatically be used
 by the compiler. As for v1 modules, by default, the ``pytest-inmanta`` extension makes sure the
@@ -180,7 +178,8 @@ compile-time. If you want to compile against local versions of v1 modules, have 
 Distributing modules
 ====================
 This section is about v2 modules. V1 modules only require a version tag to be recognized as a
-released version.
+released version. While a version tag is still good practice for v2 modules, it isn't sufficient
+to consider it released.
 
 You can package a v2 module with ``inmanta module build`` which will create an sdist and a bdist
 of the Python package. You can then publish this to the Python package repository of your choice,
@@ -189,7 +188,7 @@ substitute ``module`` with ``project``.
 
 The orchestrator server generally (see
 :ref:`Advanced concepts<modules-distribution-advanced-concepts`) installs both project and modules
-from the configured Python package repository, respecting the environemnt's version constraints on
+from the configured Python package repository, respecting the environment's version constraints on
 the project package, the project's constraints on its modules and all inter-module constraints. The
 server is then responsible for supplying the agents with the appropriate ``inmanta_plugins``
 modules.
@@ -202,7 +201,7 @@ Advanced concepts
 Freezing a project
 ^^^^^^^^^^^^^^^^^^
 Prior to releasing a new stable version of an inmanta project, you might wish to freeze its module
-depdendencies. This will ensure that the orchestrator server will always work with the exact
+dependencies. This will ensure that the orchestrator server will always work with the exact
 versions specified. You can achieve this with
 ``inmanta project freeze --recursive --operator "=="``. This command will freeze all module
 depdencies to their exact version as they currently exist in the Python environment. The recursive
@@ -216,6 +215,3 @@ The `inmanta export` command exports a project and all its modules to the orches
 When this method is used, the orchestrator does not install any modules from the Python package
 repository but instead contains all code (both model and plugins) as present in the local Python
 environment.
-
-
-TODO: pytest-inmanta-lsm is another exception: it currently rsyncs the project dir
