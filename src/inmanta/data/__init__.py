@@ -2649,9 +2649,7 @@ class Resource(BaseDocument):
     ) -> Tuple[str, List[object]]:
         """A partial query describing the conditions for selecting the latest released resources,
         according to the model version number."""
-        subquery_filter_statement, subquery_values = cls.get_composed_filter_with_query_types(
-            offset=offset, col_name_prefix=None, environment=(QueryType.EQUALS, cls._get_value(environment))
-        )
+        environment_db_value = cls._get_value(environment)
         return (
             f"""
             {select_clause}
@@ -2662,16 +2660,16 @@ class Resource(BaseDocument):
                             (SELECT r.model < MAX(public.configurationmodel.version)
                             FROM public.configurationmodel
                             WHERE public.configurationmodel.released=TRUE
-                            AND {subquery_filter_statement})
+                            AND environment=${offset})
                         THEN 'orphaned'
                     ELSE r.status::text END) as status
                 FROM {cls.table_name()} as r
                     JOIN public.configurationmodel as cm ON r.model=cm.version AND r.environment=cm.environment
-                    WHERE cm.released=TRUE AND r.{subquery_filter_statement}
+                    WHERE cm.released=TRUE AND r.environment=${offset}
                     ORDER BY r.resource_id, r.model DESC)
             as res
             """,
-            subquery_values,
+            environment_db_value,
         )
 
     @classmethod
@@ -2704,7 +2702,7 @@ class Resource(BaseDocument):
         db_query, base_query_values = cls._get_released_resources_base_query(
             select_clause="SELECT * ", environment=environment, offset=len(values) + 1
         )
-        values.extend(base_query_values)
+        values.append(base_query_values)
         if len(filter_statements) > 0:
             db_query += cls._join_filter_statements(filter_statements)
         backward_paging = ("ASC" in order and end) or ("DESC" in order and start)
@@ -2797,7 +2795,7 @@ class Resource(BaseDocument):
             environment=environment,
             offset=len(values) + 1,
         )
-        values.extend(base_query_values)
+        values.append(base_query_values)
 
         if len(common_filter_statements) > 0:
             sql_query += cls._join_filter_statements(common_filter_statements)
