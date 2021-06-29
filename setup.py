@@ -22,7 +22,6 @@ requires = [
     "PyJWT",
     "python-dateutil",
     "pyyaml",
-    "regex",
     "texttable",
     "tornado>=6.0",
     "typing_inspect",
