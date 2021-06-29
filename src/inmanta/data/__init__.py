@@ -28,7 +28,23 @@ import warnings
 from abc import ABCMeta
 from collections import defaultdict
 from configparser import RawConfigParser
-from typing import Any, Callable, Dict, Iterable, List, NewType, Optional, Sequence, Set, Tuple, Type, TypeVar, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    NewType,
+    Optional,
+    Pattern,
+    Sequence,
+    Set,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import asyncpg
 import dateutil
@@ -43,7 +59,6 @@ from inmanta.data import schema
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
-from regex.regex import Pattern
 
 LOGGER = logging.getLogger(__name__)
 
