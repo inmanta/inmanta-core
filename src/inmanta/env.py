@@ -17,6 +17,7 @@
 """
 
 import hashlib
+import importlib
 import json
 import logging
 import os
@@ -60,6 +61,10 @@ class VirtualEnv(object):
         self.__using_venv: bool = False
         self._parent_python: Optional[str] = None
         self._packages_installed_in_parent_env: Optional[Dict[str, str]] = None
+
+    def get_installation_dir(self, module_name) -> str:
+        mod = importlib.import_module(f"inmanta_plugins.{module_name}")
+        return os.path.abspath(os.path.dirname(mod.__file__))
 
     def get_package_installed_in_parent_env(self) -> Optional[Dict[str, str]]:
         if self._packages_installed_in_parent_env is None:
@@ -249,7 +254,7 @@ python -m pip $@
 
         return requirements_file
 
-    def _install(self, requirements_list: List[str]) -> None:
+    def _install(self, requirements_list: List[str], pip_pre: bool = False, pip_index_urls: Optional[List[str]] = None) -> None:
         """
         Install requirements in the given requirements file
         """
@@ -264,6 +269,12 @@ python -m pip $@
 
             assert self.virtual_python is not None
             cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-r", path]
+            if pip_pre:
+                cmd.append("--pre")
+            if pip_index_urls:
+                cmd.extend(["--index-url", pip_index_urls[0]])
+                for index_url in pip_index_urls[1:]:
+                    cmd.extend(["--extra-index-url", index_url])
             output: bytes = b""  # Make sure the var is always defined in the except bodies
             try:
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
@@ -303,7 +314,14 @@ python -m pip $@
         with open(path, "w+", encoding="utf-8") as fd:
             fd.write(new_hash)
 
-    def install_from_list(self, requirements_list: List[str], detailed_cache: bool = False, cache: bool = True) -> None:
+    def install_from_list(
+        self,
+        requirements_list: List[str],
+        detailed_cache: bool = False,
+        cache: bool = True,
+        pip_pre: bool = False,
+        pip_index_urls: Optional[List[str]] = None
+    ) -> None:
         """
         Install requirements from a list of requirement strings
         """
@@ -327,7 +345,7 @@ python -m pip $@
         if new_req_hash == current_hash and cache:
             return
 
-        self._install(requirements_list)
+        self._install(requirements_list, pip_pre=pip_pre, pip_index_urls=pip_index_urls)
         self._set_current_requirements_hash(new_req_hash)
         for x in requirements_list:
             self.__cache_done.add(x)
@@ -353,3 +371,15 @@ python -m pip $@
             LOGGER.debug("%s: %s", cmd, output.decode())
 
         return {r["name"]: r["version"] for r in json.loads(output.decode())}
+
+    def check(self):
+        """
+        Verify installed packages have compatible dependencies.
+        """
+        cmd = [self.virtual_python, "-m", "pip", "check"]
+        try:
+            subprocess.check_call(cmd, stderr=subprocess.DEVNULL)
+        except CalledProcessError:
+            return False
+        else:
+            return True

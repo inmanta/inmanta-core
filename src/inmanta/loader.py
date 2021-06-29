@@ -327,10 +327,9 @@ class PluginModuleLoader(FileLoader):
         """
         Returns the fully qualified module name given a path, relative to the module directory.
         For example
-            convert_relative_path_to_module("my_mod/plugins/my_submod")
-            == convert_relative_path_to_module("my_mod/plugins/my_submod.py")
-            == convert_relative_path_to_module("my_mod/plugins/my_submod/__init__.py")
-            == "inmanta_plugins.my_mod.my_submod".
+            convert_relative_path_to_module("inmanta_plugins/my_mod")
+            == convert_relative_path_to_module("inmanta_plugins/my_mod/__init__.py")
+            == "inmanta_plugins.my_mod".
         """
         if path.startswith("/"):
             raise Exception("Error parsing module path: expected relative path, got %s" % path)
@@ -346,14 +345,6 @@ class PluginModuleLoader(FileLoader):
             if last != "":
                 yield last
 
-        parts: List[str] = list(split(path))
-
-        if parts == []:
-            return const.PLUGINS_PACKAGE
-
-        if len(parts) == 1 or parts[1] != PLUGIN_DIR:
-            raise Exception("Error parsing module path: expected 'some_module/%s/some_submodule', got %s" % (PLUGIN_DIR, path))
-
         def strip_py(module: List[str]) -> List[str]:
             """
             Strip __init__.py or .py file extension from module parts.
@@ -367,11 +358,52 @@ class PluginModuleLoader(FileLoader):
                 return list(chain(init, [last[:-3]]))
             return module
 
-        top_level_inmanta_module: str = parts[0]
-        inmanta_submodule: List[str] = parts[2:]
+        parts: List[str] = list(split(path))
+        stripped_parts = [strip_py(p) for p in parts]
+        # Convert to module name
+        stripped_parts[1] = stripped_parts[1][len("inmanta-module-"):]
+        return ".".join(stripped_parts)
 
-        # my_mod/plugins/tail -> inmanta_plugins.my_mod.tail
-        return ".".join(chain([const.PLUGINS_PACKAGE, top_level_inmanta_module], strip_py(inmanta_submodule)))
+        # if path.startswith("/"):
+        #     raise Exception("Error parsing module path: expected relative path, got %s" % path)
+        #
+        # def split(path: str) -> Iterator[str]:
+        #     """
+        #     Returns an iterator over path's parts.
+        #     """
+        #     if path == "":
+        #         return iter(())
+        #     init, last = os.path.split(path)
+        #     yield from split(init)
+        #     if last != "":
+        #         yield last
+        #
+        # parts: List[str] = list(split(path))
+        #
+        # if parts == []:
+        #     return const.PLUGINS_PACKAGE
+        #
+        # if len(parts) == 1 or parts[1] != PLUGIN_DIR:
+        #     raise Exception("Error parsing module path: expected 'some_module/%s/some_submodule', got %s" % (PLUGIN_DIR, path))
+        #
+        # def strip_py(module: List[str]) -> List[str]:
+        #     """
+        #     Strip __init__.py or .py file extension from module parts.
+        #     """
+        #     if module == []:
+        #         return []
+        #     init, last = module[:-1], module[-1]
+        #     if last == "__init__.py":
+        #         return init
+        #     if last.endswith(".py"):
+        #         return list(chain(init, [last[:-3]]))
+        #     return module
+        #
+        # top_level_inmanta_module: str = parts[0]
+        # inmanta_submodule: List[str] = parts[2:]
+        #
+        # # my_mod/plugins/tail -> inmanta_plugins.my_mod.tail
+        # return ".".join(chain([const.PLUGINS_PACKAGE, top_level_inmanta_module], strip_py(inmanta_submodule)))
 
     @classmethod
     def convert_module_to_relative_path(cls, full_mod_name: str) -> str:
