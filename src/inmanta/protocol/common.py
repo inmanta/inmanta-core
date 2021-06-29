@@ -537,6 +537,15 @@ class MethodProperties(object):
         :param in_url: This argument is passed in the URL
         """
 
+        if typing_inspect.is_new_type(arg_type):
+            return self._validate_type_arg(
+                arg,
+                arg_type.__supertype__,
+                strict=strict,
+                allow_none_type=allow_none_type,
+                in_url=in_url,
+            )
+
         if arg_type is Any:
             if strict:
                 raise InvalidMethodDefinition(f"Invalid type for argument {arg}: Any type is not allowed in strict mode")

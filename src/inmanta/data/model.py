@@ -17,6 +17,8 @@
 """
 import datetime
 import uuid
+from enum import Enum
+from itertools import chain
 from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
@@ -133,12 +135,10 @@ ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stabl
     The resource id with the version included.
 """
 
-
 ResourceIdStr = NewType("ResourceIdStr", str)  # Part of the stable API
 """
     The resource id without the version
 """
-
 
 ResourceType = NewType("ResourceType", str)
 """
@@ -220,7 +220,6 @@ class EnvironmentSetting(BaseModel):
 
 
 class EnvironmentSettingsReponse(BaseModel):
-
     settings: Dict[str, EnvSettingType]
     definition: Dict[str, EnvironmentSetting]
 
@@ -254,6 +253,7 @@ class Resource(BaseModel):
     resource_id: ResourceVersionIdStr
     resource_type: ResourceType
     resource_version_id: ResourceVersionIdStr
+    resource_id_value: str
     agent: str
     last_deploy: Optional[datetime.datetime]
     attributes: JsonType
@@ -273,3 +273,46 @@ class ResourceAction(BaseModel):
     changes: Optional[JsonType]
     change: Optional[const.Change]
     send_event: Optional[bool]
+
+
+class ResourceIdDetails(BaseModel):
+    resource_type: ResourceType
+    agent: str
+    attribute: str
+    resource_id_value: str
+
+
+class OrphanedResource(Enum):
+    orphaned = "orphaned"
+
+
+ReleasedResourceState = Enum("ReleasedResourceState", [(i.name, i.value) for i in chain(const.ResourceState, OrphanedResource)])
+
+
+class LatestReleasedResource(BaseModel):
+    resource_id: ResourceIdStr
+    resource_version_id: ResourceVersionIdStr
+    id_details: ResourceIdDetails
+    requires: List[ResourceVersionIdStr]
+    status: ReleasedResourceState
+
+    @property
+    def all_fields(self) -> Dict[str, Any]:
+        return {**self.dict(), **self.id_details.dict()}
+
+
+class PagingBoundaries:
+    """Represents the lower and upper bounds that should be used for the next and previous pages
+    when listing domain entities"""
+
+    def __init__(
+        self,
+        start: Union[datetime.datetime, int, str],
+        end: Union[datetime.datetime, int, str],
+        first_id: Union[uuid.UUID, str],
+        last_id: Union[uuid.UUID, str],
+    ) -> None:
+        self.start = start
+        self.end = end
+        self.first_id = first_id
+        self.last_id = last_id
