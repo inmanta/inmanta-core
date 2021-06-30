@@ -204,9 +204,9 @@ Prior to releasing a new stable version of an inmanta project, you might wish to
 dependencies. This will ensure that the orchestrator server will always work with the exact
 versions specified. You can achieve this with
 ``inmanta project freeze --recursive --operator "=="``. This command will freeze all module
-depdencies to their exact version as they currently exist in the Python environment. The recursive
-option makes sure all module depdencies are frozen, not just the direct dependencies. In other
-words, if the project depdends on module ``a`` which in turn depends on module ``b``, both modules
+dependencies to their exact version as they currently exist in the Python environment. The recursive
+option makes sure all module dependencies are frozen, not just the direct dependencies. In other
+words, if the project depends on module ``a`` which in turn depends on module ``b``, both modules
 will be pinned to their current version in ``pyproject.toml``.
 
 Manual export
