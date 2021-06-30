@@ -191,7 +191,7 @@ The orchestrator server generally (see
 from the configured Python package repository, respecting the environment's version constraints on
 the project package, the project's constraints on its modules and all inter-module constraints. The
 server is then responsible for supplying the agents with the appropriate ``inmanta_plugins``
-modules.
+packages.
 
 .. _modules-distribution-advanced-concepts
 
