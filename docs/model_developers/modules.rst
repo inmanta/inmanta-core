@@ -207,7 +207,7 @@ versions specified. You can achieve this with
 dependencies to their exact version as they currently exist in the Python environment. The recursive
 option makes sure all module dependencies are frozen, not just the direct dependencies. In other
 words, if the project depends on module ``a`` which in turn depends on module ``b``, both modules
-will be pinned to their current version in ``pyproject.toml``.
+will be pinned to their current version in ``setup.cfg``.
 
 Manual export
 ^^^^^^^^^^^^^
