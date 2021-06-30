@@ -1,12 +1,17 @@
 Releasing Modules
 =================
 
-Inmanta modules are versioned based on git tags. The current version is reflected in the ``module.yml`` file and in the
-commit is should be tagged in the git repository as well. To ease the use inmanta provides a command (``inmanta modules
-commit``) to modify module versions, commit to git and place the correct tag.
+.. warning::
+
+   The V2 module format is currently under development.
+
+Inmanta modules are versioned based on git tags. The current version is reflected in the ``module.yml`` file for V1 modules or
+in the ``setup.cfg`` file for V2 modules. The commit should be tagged with the version in the git repository as well. To
+ease the use inmanta provides a command (``inmanta modules commit``) to modify module versions, commit to git and place the
+correct tag.
 
 Development Versions
-----------------------
+####################
 To make changes to a module, first create a new git branch:
 
 .. code-block:: bash
@@ -33,8 +38,7 @@ Use one of ``--major``, ``--minor`` or ``--patch`` to update version numbers: <m
 For the dev releases, no tags are created.
 
 Release Versions
-----------------
-
+################
 
 To make an actual release (without `.dev` at the end):
 
@@ -57,6 +61,23 @@ Or for the current project
 
 	inmanta project freeze --recursive --operator ==
 
+Distributing Inmanta modules
+############################
 
-For more information about the ``module.yml`` file see :ref:`module_yml`.
+Inmanta modules can be distributed in two different way: using a Git repository or using a Python package. The Python package
+distribution format is supported by V2 modules only.
 
+Git repository distribution format
+----------------------------------
+
+Distributing an Inmanta module using a Git repository happens by storing the source code of that module on a Git repository
+that is accessible by the Inmanta orchestrator. The orchestrator will clone the source code of the module and install it in the
+Inmanta project.
+
+Python package distribution format
+----------------------------------
+
+Modules defined in the V2 module format can be distributed as a Python package. Run the ``inmanta module build`` command in
+the source directory of a module to build a Python Wheel from that module. The resulting package is stored in the dist directory
+of the module. The Python packages should be stored on a Python package repository, reachable by the orchestrator.
+Uploading packages to the package repository should be done with the appropriate tool for the specific repository at hand.

@@ -260,6 +260,8 @@ class CallArguments(object):
         if typing_inspect.is_optional_type(arg_type):
             arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
         arg_type = typing_inspect.get_origin(arg_type) if typing_inspect.get_origin(arg_type) else arg_type
+        if typing_inspect.is_new_type(arg_type):
+            arg_type = type(arg_type)
         return issubclass(arg_type, dict)
 
     def _validate_union_return(self, arg_type: Type, value: Any) -> None:
