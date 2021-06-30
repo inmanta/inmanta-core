@@ -187,7 +187,7 @@ for example the public PyPi repository. For an inmanta project, follow the same 
 substitute ``module`` with ``project``.
 
 The orchestrator server generally (see
-:ref:`Advanced concepts<modules-distribution-advanced-concepts`) installs both project and modules
+:ref:`Advanced concepts<modules-distribution-advanced-concepts>`) installs both project and modules
 from the configured Python package repository, respecting the project's constraints on its modules
 and all inter-module constraints. The
 server is then responsible for supplying the agents with the appropriate ``inmanta_plugins``
