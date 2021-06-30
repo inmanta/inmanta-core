@@ -181,19 +181,19 @@ This section is about v2 modules. V1 modules only require a version tag to be re
 released version. While a version tag is still good practice for v2 modules, it isn't sufficient
 to consider it released.
 
-You can package a v2 module with ``inmanta module build`` which will create an sdist and a bdist
-of the Python package. You can then publish this to the Python package repository of your choice,
+You can package a v2 module with ``inmanta module build`` which will create a Python wheel.
+You can then publish this to the Python package repository of your choice,
 for example the public PyPi repository. For an inmanta project, follow the same procedure but
 substitute ``module`` with ``project``.
 
 The orchestrator server generally (see
 :ref:`Advanced concepts<modules-distribution-advanced-concepts`) installs both project and modules
-from the configured Python package repository, respecting the environment's version constraints on
-the project package, the project's constraints on its modules and all inter-module constraints. The
+from the configured Python package repository, respecting the project's constraints on its modules
+and all inter-module constraints. The
 server is then responsible for supplying the agents with the appropriate ``inmanta_plugins``
 packages.
 
-.. _modules-distribution-advanced-concepts
+.. _modules-distribution-advanced-concepts:
 
 Advanced concepts
 -----------------
@@ -211,7 +211,7 @@ will be pinned to their current version in ``setup.cfg``.
 
 Manual export
 ^^^^^^^^^^^^^
-The ``inmanta export`` command exports a project and all its modules to the orchestrator server.
-When this method is used, the orchestrator does not install any modules from the Python package
-repository but instead contains all code (both model and plugins) as present in the local Python
-environment.
+The ``inmanta export`` command exports a project and all its modules' ``inmanta_plugins`` packages
+to the orchestrator server. When this method is used, the orchestrator does not install any modules
+from the Python package repository but instead contains all Python code as present in the local
+Python environment.
