@@ -211,7 +211,7 @@ will be pinned to their current version in ``pyproject.toml``.
 
 Manual export
 ^^^^^^^^^^^^^
-The `inmanta export` command exports a project and all its modules to the orchestrator server.
+The ``inmanta export`` command exports a project and all its modules to the orchestrator server.
 When this method is used, the orchestrator does not install any modules from the Python package
 repository but instead contains all code (both model and plugins) as present in the local Python
 environment.
