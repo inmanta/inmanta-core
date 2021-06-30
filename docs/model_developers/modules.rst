@@ -151,7 +151,7 @@ v2 modules
 All other modules are v2 and have been installed by ``inmanta project install`` into the active Python
 environment. If you want to be able to make changes to one of these modules, the easiest way is to
 check out the module repo separately and run ``inmanta module install`` on it, overwriting the published
-package that was installed previously This will install the module in editable form: any changes you make
+package that was installed previously. This will install the module in editable form: any changes you make
 to the checked out files will be picked up by the compiler. You can also do this prior to installing the
 project, in which case the pre-installed module will remain installed in editable form when you install
 the project, provided it matches the version constraints. Since these modules are essentially
