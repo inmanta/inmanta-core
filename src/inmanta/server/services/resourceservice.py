@@ -28,9 +28,10 @@ from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data import APILIMIT
+from inmanta.data import APILIMIT, InvalidSort, QueryType, ResourceOrder
 from inmanta.data.model import (
     AttributeStateChange,
+    LatestReleasedResource,
     LogLine,
     Resource,
     ResourceAction,
@@ -38,14 +39,17 @@ from inmanta.data.model import (
     ResourceType,
     ResourceVersionIdStr,
 )
+from inmanta.data.paging import ResourcePagingCountsProvider, ResourcePagingHandler
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
+from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
+from inmanta.server.validate_filter import InvalidFilter, ResourceFilterValidator
 from inmanta.types import Apireturn, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -866,3 +870,62 @@ class ResourceService(protocol.ServerSlice):
             for dependency, actions in (await self.get_resource_events(env, resource_id)).items()
             for action in actions
         )
+
+    @protocol.handle(methods_v2.resource_list, env="tid")
+    async def resource_list(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        first_id: Optional[ResourceVersionIdStr] = None,
+        last_id: Optional[ResourceVersionIdStr] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "resource_type.desc",
+    ) -> ReturnValue[List[LatestReleasedResource]]:
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(ResourceFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+        try:
+            resource_order = ResourceOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+        try:
+            dtos = await data.Resource.get_released_resources(
+                database_order=resource_order,
+                limit=limit,
+                environment=env.id,
+                first_id=first_id,
+                last_id=last_id,
+                start=start,
+                end=end,
+                connection=None,
+                **query,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = ResourcePagingHandler(ResourcePagingCountsProvider(data.Resource))
+        metadata = await paging_handler.prepare_paging_metadata(env.id, dtos, query, limit, resource_order)
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            filter,
+            resource_order,
+            limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))

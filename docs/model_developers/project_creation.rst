@@ -42,7 +42,8 @@ An example ``project.yml`` could be:
   modulepath: libs
   downloadpath: libs
   repo:
-      - https://github.com/inmanta/
+      - url: https://github.com/inmanta/
+        type: git
   install_mode: release
   requires:
 

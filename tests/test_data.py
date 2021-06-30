@@ -1271,7 +1271,7 @@ async def test_order_by_validation(init_dataclasses_and_load_schema):
         await data.Resource.get_list(order_by_column="; DROP DATABASE")
 
     with pytest.raises(RuntimeError):
-        await data.Resource.get_list(order="BAD")
+        await data.Resource.get_list(order_by_column="resource_id", order="BAD")
 
 
 @pytest.mark.asyncio

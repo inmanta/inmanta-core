@@ -1,0 +1,5 @@
+description: added instructions about passwordless sudo to remote agent setup
+change-type: patch
+destination-branches: [master, iso4]
+sections:
+    feature: "{{description}}"
