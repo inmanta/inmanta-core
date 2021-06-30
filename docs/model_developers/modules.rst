@@ -138,7 +138,7 @@ install the project with ``inmanta project install``. To set up the environment 
 run ``inmanta module install`` instead.
 
 The following subsections explain any additional steps you need to take if you want to make changes
-to one of the dependency modules as well.
+to one of the dependent modules as well.
 
 v1 modules
 ^^^^^^^^^^
