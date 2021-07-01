@@ -432,6 +432,24 @@ class ModuleRepoInfo(BaseModel):
     url: str
     type: ModuleRepoType = ModuleRepoType.git
 
+    @validator("type")
+    @classmethod
+    def validate_type(cls, v: object) -> object:
+        if v == ModuleRepoType.package:
+            raise ValidationError("Repository type `package` is not yet supported.")
+        return v
+
+
+class ModuleRepoType(enum.Enum):
+    git = "git"
+    package = "package"
+
+
+class ModuleRepoInfo(BaseModel):
+
+    url: str
+    type: ModuleRepoType = ModuleRepoType.git
+
 
 class ProjectMetadata(Metadata):
     """

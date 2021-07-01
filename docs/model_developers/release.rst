@@ -77,7 +77,7 @@ Inmanta project.
 Python package distribution format
 ----------------------------------
 
-Modules defined in the V2 module format can be distributed as a Python package. Run the ``inmanta module package`` command in
+Modules defined in the V2 module format can be distributed as a Python package. Run the ``inmanta module build`` command in
 the source directory of a module to build a Python Wheel from that module. The resulting package is stored in the dist directory
 of the module. The Python packages should be stored on a Python package repository, reachable by the orchestrator.
 Uploading packages to the package repository should be done with the appropriate tool for the specific repository at hand.
