@@ -15,9 +15,8 @@
 
     Contact: code@inmanta.com
 """
-
-import hashlib
 import importlib
+import hashlib
 import json
 import logging
 import os
@@ -378,7 +377,7 @@ python -m pip $@
         """
         cmd = [self.virtual_python, "-m", "pip", "check"]
         try:
-            subprocess.check_call(cmd, stderr=subprocess.DEVNULL)
+            subprocess.check_call(cmd, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
         except CalledProcessError:
             return False
         else:

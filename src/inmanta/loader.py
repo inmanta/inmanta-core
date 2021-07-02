@@ -186,7 +186,7 @@ class CodeLoader(object):
         self.__check_dir()
 
         mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
-        configure_module_finder([mod_dir])
+        # configure_module_finder([mod_dir])
 
     def __check_dir(self) -> None:
         """
@@ -359,10 +359,7 @@ class PluginModuleLoader(FileLoader):
             return module
 
         parts: List[str] = list(split(path))
-        stripped_parts = [strip_py(p) for p in parts]
-        # Convert to module name
-        stripped_parts[1] = stripped_parts[1][len("inmanta-module-"):]
-        return ".".join(stripped_parts)
+        return ".".join(strip_py(parts))
 
         # if path.startswith("/"):
         #     raise Exception("Error parsing module path: expected relative path, got %s" % path)

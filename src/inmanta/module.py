@@ -303,7 +303,7 @@ def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, Rem
 def merge_specs(mainspec: "Dict[str, List[Requirement]]", new: "List[Requirement]") -> None:
     """Merge two maps str->[T] by concatting their lists."""
     for req in new:
-        key = req.project_name
+        key = req.project_name[len("inmanta-module-"):]
         if key not in mainspec:
             mainspec[key] = [req]
         else:
@@ -757,7 +757,7 @@ class Project(ModuleLike[ProjectMetadata]):
     def load(self) -> None:
         if not self.loaded:
             self.use_virtual_env()
-            self.load_module_recursive()
+            self.get_complete_ast()
             self.loaded = True
             self.verify()
             self.load_plugins()
@@ -770,11 +770,11 @@ class Project(ModuleLike[ProjectMetadata]):
     def get_imports(self) -> List[DefineImport]:
         (statements, _) = self.get_ast()
         imports = [x for x in statements if isinstance(x, DefineImport)]
-        # if self.autostd:
-        #     std_locatable = LocatableString("std", Range("__internal__", 1, 1, 1, 1), -1, self.root_ns)
-        #     imp = DefineImport(std_locatable, std_locatable)
-        #     imp.location = std_locatable.location
-        #     imports.insert(0, imp)
+        if self.autostd:
+            std_locatable = LocatableString("std", Range("__internal__", 1, 1, 1, 1), -1, self.root_ns)
+            imp = DefineImport(std_locatable, std_locatable)
+            imp.location = std_locatable.location
+            imports.insert(0, imp)
         return imports
 
     @lru_cache()
@@ -810,34 +810,55 @@ class Project(ModuleLike[ProjectMetadata]):
             return self.modules[module_name]
         return self.load_module(module_name)
 
-    def load_module_recursive(self) -> None:
+    def load_module_recursive(self) -> List[Tuple[str, List[Statement], BasicBlock]]:
         """
         Load all submodules into this project
         """
-        index_urls = [repo.url for repo in self.metadata.repo]
-        self.virtualenv.install_from_list(
-            self.metadata.requires, pip_pre=self._install_mode == InstallMode.prerelease, pip_index_urls=index_urls
-        )
-        installed_modules = [
-            pkg_name[len("inmanta-module-"):]
-            for pkg_name in self.virtualenv._get_installed_packages(self.virtualenv.virtual_python).keys()
-            if pkg_name.startswith("inmanta-module-")
-        ]
+        imports = [x for x in self.get_imports()]
 
-        for mod_name in installed_modules:
-            self.modules[mod_name] = Module(self, self.virtualenv.get_installation_dir(mod_name))
+        out = []
+        done = set()  # type: Set[str]
+        while len(imports) > 0:
+            imp = imports.pop()
+            ns = imp.name
+            if ns in done:
+                continue
+
+            parts = ns.split("::")
+            module_name = parts[0]
+
+            try:
+                # get module
+                module = self.get_module(module_name)
+                # get NS
+                for i in range(1, len(parts) + 1):
+                    subs = "::".join(parts[0:i])
+                    if subs in done:
+                        continue
+                    (nstmt, nb) = module.get_ast(subs)
+
+                    done.add(subs)
+                    out.append((subs, nstmt, nb))
+
+                    # get imports and add to list
+                    imports.extend(module.get_imports(subs))
+            except InvalidModuleException as e:
+                raise ModuleNotFoundException(ns, imp, e)
+
+        return out
 
     def load_module(self, module_name: str) -> "Module":
         try:
             reqs = self.collect_requirements()
             use_pip_pre = self._install_mode == InstallMode.prerelease
             index_urls = [repo.url for repo in self.metadata.repo]
+            pkg_name = f"inmanta-module-{module_name}"
             if module_name in reqs:
                 module_reqs = [str(r) for r in reqs[module_name]]
-                self.virtualenv.install_from_list([module_name] + module_reqs, pip_pre=use_pip_pre, pip_index_urls=index_urls)
+                self.virtualenv.install_from_list([pkg_name] + module_reqs, pip_pre=use_pip_pre, pip_index_urls=index_urls)
             else:
-                self.virtualenv.install_from_list([module_name], pip_pre=use_pip_pre, pip_index_urls=index_urls)
-            module = Module(self, self.virtualenv.get_installation_dir(f"inmanta-module-{module_name}"))
+                self.virtualenv.install_from_list([pkg_name], pip_pre=use_pip_pre, pip_index_urls=index_urls)
+            module = Module(self, self.virtualenv.get_installation_dir(module_name))
             self.modules[module_name] = module
             return module
         except Exception as e:
@@ -850,7 +871,7 @@ class Project(ModuleLike[ProjectMetadata]):
         if not self.loaded:
             LOGGER.warning("loading plugins on project that has not been loaded completely")
 
-        loader.configure_module_finder(self.modulepath)
+        # loader.configure_module_finder(self.modulepath)
 
         for module in self.modules.values():
             module.load_plugins()
@@ -891,7 +912,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
     def collect_imported_requirements(self) -> "Mapping[str, Iterable[Requirement]]":
         imports = set([x.name.split("::")[0] for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
-        # imports.add("std")
+        imports.add("std")
         specs = self.collect_requirements()
 
         def get_spec(name: str) -> "Iterable[Requirement]":
@@ -1019,43 +1040,6 @@ class Module(ModuleLike[ModuleMetadata]):
         """
         return str(self._metadata.compiler_version)
 
-    # @classmethod
-    # def install(
-    #     cls,
-    #     project: Project,
-    #     modulename: str,
-    #     requirements: "Iterable[Requirement]",
-    #     install: bool = True,
-    #     install_mode: InstallMode = InstallMode.release,
-    # ) -> "Module":
-    #     """
-    #     Install a module, return module object
-    #     """
-    #     return cls.update(project, modulename, requirements, install_mode=install_mode)
-    #
-    # @classmethod
-    # def update(
-    #     cls,
-    #     project: Project,
-    #     modulename: str,
-    #     requirements: "Iterable[Requirement]",
-    #     install_mode: InstallMode = InstallMode.release,
-    # ) -> "Module":
-    #     """
-    #     Update a module, return module object
-    #     """
-    #     release_only = install_mode == InstallMode.release
-    #     version = cls.get_suitable_version_for(modulename, requirements, mypath, release_only=release_only)
-    #
-    #     if version is None:
-    #         print("no suitable version found for module %s" % modulename)
-    #         raise Exception(f"Cannot install module {modulename}")
-    #     else:
-    #         LOGGER.info("Installing module version %s", str(version))
-    #
-    #         project.virtualenv.install_from_list([f"inmanta-module-{modulename}=={version}"])`
-    #         return Module(project, project.virtualenv.get_installation_dir(modulename))
-
     def get_metadata_file_schema_type(self) -> Type[ModuleMetadata]:
         return ModuleMetadata
 
@@ -1115,9 +1099,9 @@ class Module(ModuleLike[ModuleMetadata]):
     def get_imports(self, name: str) -> List[DefineImport]:
         (statements, block) = self.get_ast(name)
         imports = [x for x in statements if isinstance(x, DefineImport)]
-        # if self._project.autostd:
-        #     std_locatable = LocatableString("std", Range("internal", 0, 0, 0, 0), 0, block.namespace)
-        #     imports.insert(0, DefineImport(std_locatable, std_locatable))
+        if self._project.autostd:
+            std_locatable = LocatableString("std", Range("internal", 0, 0, 0, 0), 0, block.namespace)
+            imports.insert(0, DefineImport(std_locatable, std_locatable))
         return imports
 
     def _get_model_files(self, curdir: str) -> List[str]:
@@ -1165,9 +1149,10 @@ class Module(ModuleLike[ModuleMetadata]):
             raise CompilerException(
                 "The directory %s should be a valid python package with a __init__.py file" % self._path
             )
+        inmanta_plugins_pkg_dir = os.path.normpath(os.path.join(self._path, os.pardir, os.pardir))
         return (
             (
-                Path(file_name), ModuleName(self._get_fq_mod_name_for_py_file(file_name, self._path))
+                Path(file_name), ModuleName(self._get_fq_mod_name_for_py_file(file_name, inmanta_plugins_pkg_dir))
             )
             for file_name in glob.iglob(os.path.join(self._path, "**", "*.py"), recursive=True)
         )
