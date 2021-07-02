@@ -225,7 +225,7 @@ this section will describe how to work on multiple modules simultaneously so tha
 visible to the compiler. This procedure is of course applicable for working on a single module as well.
 
 Setting up the dev environment
-------------------------------
+##############################
 To set up the development environment for a project, activate your development Python environment and
 install the project with ``inmanta project install``. To set up the environment for a single module,
 run ``inmanta module install`` instead.
@@ -234,13 +234,13 @@ The following subsections explain any additional steps you need to take if you w
 to one of the dependent modules as well.
 
 v1 modules
-^^^^^^^^^^
+----------
 Any modules you find in the project's ``modulepath`` after starting from a clean project and setting
 up the development environment are v1 modules. You can make changes to these modules and they will
 be reflected in the next compile. No additional steps are required.
 
 v2 modules
-^^^^^^^^^^
+----------
 All other modules are v2 and have been installed by ``inmanta project install`` into the active Python
 environment. If you want to be able to make changes to one of these modules, the easiest way is to
 check out the module repo separately and run ``inmanta module install`` on it, overwriting the published
@@ -253,7 +253,7 @@ the output of ``pip list --editable``.
 
 
 Working on the dev environment
-------------------------------
+##############################
 After setting up, you should be left with a dev environment where all required v2 modules have been
 installed (either in editable or in packaged form). If you're working on a project, all required v1
 modules should be checked out in the ``modulepath`` directory.
@@ -286,13 +286,14 @@ and all inter-module constraints. The
 server is then responsible for supplying the agents with the appropriate ``inmanta_plugins``
 packages.
 
+
 .. _modules-distribution-advanced-concepts:
 
 Advanced concepts
------------------
+#################
 
 Freezing a project
-^^^^^^^^^^^^^^^^^^
+------------------
 Prior to releasing a new stable version of an inmanta project, you might wish to freeze its module
 dependencies. This will ensure that the orchestrator server will always work with the exact
 versions specified. You can achieve this with
@@ -303,7 +304,7 @@ words, if the project depends on module ``a`` which in turn depends on module ``
 will be pinned to their current version in ``setup.cfg``.
 
 Manual export
-^^^^^^^^^^^^^
+-------------
 The ``inmanta export`` command exports a project and all its modules' ``inmanta_plugins`` packages
 to the orchestrator server. When this method is used, the orchestrator does not install any modules
 from the Python package repository but instead contains all Python code as present in the local
