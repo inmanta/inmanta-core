@@ -25,7 +25,7 @@ import tempfile
 import time
 from argparse import ArgumentParser
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Iterable, List, Mapping
+from typing import TYPE_CHECKING, Iterable, List, Optional, Mapping
 
 import texttable
 import yaml
@@ -271,7 +271,7 @@ class ModuleTool(ModuleLikeTool):
 
         install: ArgumentParser = subparser.add_parser("install", help="Install a module.")
         install.add_argument("-e", "--editable", action="store_true", help="Install in editable mode.")
-        install.add_argument("path", default=".", "The path to the module.")
+        install.add_argument("path", default=".", help="The path to the module.")
 
         subparser.add_parser("status", help="Run a git status on all modules and report")
 
@@ -499,13 +499,13 @@ version: 0.0.1dev0"""
         if last_failure is not None and not done:
             raise last_failure
 
-    def install(self, editable: bool = False, path: str = None):
+    def install(self, editable: bool, path: str):
         """
         Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the
         context of a project.
         """
         def install(install_path: str) -> None:
-            env.ProcessEnv.install_from_source([LocalPackagePath(path=install_path, editable=editable)])
+            env.ProcessEnv.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
 
         # TODO: verify path is a v2 module
 

@@ -27,8 +27,9 @@ import sys
 import tempfile
 import venv
 from dataclasses import dataclass
+from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 import pkg_resources
 
@@ -55,23 +56,23 @@ class ProcessEnv:
     """
     Class to represent the Python environment this process is running in.
     """
-    def __init__(self) -> None:
-        self.env_path: str = sys.executable
+    env_path: str = sys.executable
 
-    def install_from_source(self, paths: List[LocalPackagePath]) -> None:
+    @classmethod
+    def install_from_source(cls, paths: List[LocalPackagePath]) -> None:
         """
         Install one or more packages from source. Any path arguments should be local paths to a package directory.
         """
         if len(paths) == 0:
             raise Exception("install_from_source requires at least one package to install")
         # make sure we only try to install from a local source
-        explicit_paths: Iterator[Path] = (
+        explicit_paths: Iterator[LocalPackagePath] = (
             LocalPackagePath(path=os.path.join(".", path.path), editable=path.editable)
             for path in paths
         )
         subprocess.check_call(
             [
-                self.env_path,
+                cls.env_path,
                 "-m",
                 "pip",
                 "install",
