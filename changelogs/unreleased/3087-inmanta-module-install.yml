@@ -1,0 +1,7 @@
+description: "Updated `inmanta module install` to install v2 modules from source."
+change-type: major
+sections:
+  feature: "{{description}}"
+  deprecation-note: "`inmanta module install` no longer installs all modules for a project. This has moved to `inmanta project install`."
+destination-branches:
+  - master
