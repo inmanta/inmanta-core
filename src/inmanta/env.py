@@ -26,6 +26,7 @@ import subprocess
 import sys
 import tempfile
 import venv
+from dataclasses import dataclass
 from subprocess import CalledProcessError
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -42,6 +43,44 @@ else:
     from pkg_resources.extern.packaging.requirements import InvalidRequirement
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass
+class LocalPackagePath:
+    path: str
+    editable: bool = False
+
+
+class ProcessEnv:
+    """
+    Class to represent the Python environment this process is running in.
+    """
+    def __init__(self) -> None:
+        self.env_path: str = sys.executable
+
+    def install_from_source(self, paths: List[LocalPackagePath]) -> None:
+        """
+        Install one or more packages from source. Any path arguments should be local paths to a package directory.
+        """
+        if len(paths) == 0:
+            raise Exception("install_from_source requires at least one package to install")
+        # make sure we only try to install from a local source
+        explicit_paths: Iterator[Path] = (
+            LocalPackagePath(path=os.path.join(".", path.path), editable=path.editable)
+            for path in paths
+        )
+        subprocess.check_call(
+            [
+                self.env_path,
+                "-m",
+                "pip",
+                "install",
+                *chain.from_iterable(
+                    ["-e", path.path] if path.editable else [path.path]
+                    for path in explicit_paths
+                )
+            ]
+        )
 
 
 class VirtualEnv(object):

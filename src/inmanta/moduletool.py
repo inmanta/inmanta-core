@@ -15,11 +15,13 @@
 
     Contact: code@inmanta.com
 """
+import argparse
 import inspect
 import logging
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from argparse import ArgumentParser
 from collections import OrderedDict
@@ -30,6 +32,7 @@ import yaml
 from cookiecutter.main import cookiecutter
 from pkg_resources import parse_version
 
+from inmanta import env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
@@ -66,7 +69,7 @@ def set_yaml_order_preserving():
 class ModuleLikeTool(object):
     """Shared code for modules and projects """
 
-    def execute(self, cmd, args):
+    def execute(self, cmd: Optional[str], args: argparse.Namespace):
         """
         Execute the given subcommand
         """
@@ -177,6 +180,7 @@ class ProjectTool(ModuleLikeTool):
         init.add_argument(
             "--default", help="Use default parameters for the project generation", action="store_true", default=False
         )
+        install: ArgumentParser = subparser.add_parser("install", help="Install all modules required for this project")
 
     def freeze(self, outfile, recursive, operator):
         """
@@ -232,6 +236,14 @@ class ProjectTool(ModuleLikeTool):
             no_input=default,
         )
 
+    def install(self):
+        """
+        Install all modules the project requires.
+        """
+        #TODO: add this explicitly to the ticket
+        # This currently only installs v1 modules. #3083 will add the v2 install
+        project = self.get_project(load=True)
+
 
 class ModuleTool(ModuleLikeTool):
     """
@@ -257,7 +269,9 @@ class ModuleTool(ModuleLikeTool):
 
         subparser.add_parser("update", help="Update all modules used in this project")
 
-        subparser.add_parser("install", help="Install all modules required for this this project")
+        install: ArgumentParser = subparser.add_parser("install", help="Install a module.")
+        install.add_argument("-e", "--editable", action="store_true", help="Install in editable mode.")
+        install.add_argument("path", default=".", "The path to the module.")
 
         subparser.add_parser("status", help="Run a git status on all modules and report")
 
@@ -485,17 +499,22 @@ version: 0.0.1dev0"""
         if last_failure is not None and not done:
             raise last_failure
 
-    def install(self, module=None, project=None):
+    def install(self, editable: bool = False, path: str = None):
         """
-        Install all modules the project requires or a single module without its dependencies
+        Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the
+        context of a project.
         """
-        if project is None:
-            project = self.get_project(False)
+        def install(install_path: str) -> None:
+            env.ProcessEnv.install_from_source([LocalPackagePath(path=install_path, editable=editable)])
 
-        if module is None:
-            project.load()
+        # TODO: verify path is a v2 module
+
+        if editable:
+            install(path)
         else:
-            project.load_module(module)
+            with tempfile.TemporaryDirectory() as build_dir:
+                # TODO: build
+                install(build_dir)
 
     def status(self, module=None):
         """
