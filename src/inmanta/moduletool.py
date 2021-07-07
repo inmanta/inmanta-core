@@ -18,12 +18,15 @@
 import inspect
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import time
 from argparse import ArgumentParser
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Iterable, List, Mapping
+from typing import TYPE_CHECKING, Iterable, List, Mapping, Optional
+import build
+import tempfile
 
 import texttable
 import yaml
@@ -33,7 +36,7 @@ from pkg_resources import parse_version
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
-from inmanta.module import FreezeOperator, InstallMode, Module, Project, gitprovider
+from inmanta.module import FreezeOperator, InstallMode, Module, Project, gitprovider, InvalidModuleException
 
 if TYPE_CHECKING:
     from pkg_resources import Requirement  # noqa: F401
@@ -310,6 +313,30 @@ class ModuleTool(ModuleLikeTool):
             choices=[o.value for o in FreezeOperator],
             default=None,
         )
+
+        build = subparser.add_parser("build", help="Build an Python package from an inmanta module.")
+        build.add_argument(
+            "module-path",
+            help="The path to the module that should be updated",
+            default=None,
+            dest="module_path",
+        )
+
+    def build(self, module_path: Optional[str] = None) -> None:
+        if module_path is not None:
+            if not os.path.isdir(module_path):
+                # TODO: Could be replaced by V2 check
+                LOGGER.error("The module-path argument is not referencing a directory: %s", module_path)
+                return
+            module_path = os.path.abspath(module_path)
+        else:
+            module_path = os.getcwd()
+        try:
+            V2ModuleBuilder(module_path).build()
+        except InvalidModuleException as e:
+            LOGGER.exception(e.get_message())
+        except Exception:
+            LOGGER.exception("Module build failed")
 
     def get_project_for_module(self, module):
         try:
@@ -599,3 +626,58 @@ version: 0.0.1dev0"""
         finally:
             if close:
                 outfile.close()
+
+
+class V2ModuleBuilder:
+
+    def __init__(self, module_path: str) -> None:
+        self._module_path = module_path
+
+    def build(self) -> None:
+        # TODO: Check whether module_path references a valid V2 module
+        # TODO: Check if output directory already exists
+        output_directory = os.path.join(self._module_path, "dist")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Copy module to tmp directory
+            module_copy_path = os.path.join(tmpdir, "module")
+            shutil.copytree(self._module_path, module_copy_path)
+            self._prepare_v2_module_for_build(module_copy_path)
+            self._build_v2_module(module_copy_path, output_directory)
+
+    def _prepare_v2_module_for_build(self, module_path: str) -> None:
+        """
+        Copy all files that have to be packaged into the Python package of the module
+        """
+        self._move_data_files_to_package_directory(module_path)
+        self._add_requirement_compiler_version_constraint(module_path)
+
+    def _move_data_files_to_package_directory(self, module_path: str) -> None:
+        # TODO: Obtain module name from metadata
+        python_pkg_dir = os.path.join(module_path, "inmanta_plugins", module_name)
+        for dir_name in ["model", "files", "templates"]:
+            fq_dir_name = os.path.join(module_path, dir_name)
+            if os.path.exists(fq_dir_name):
+                shutil.move(fq_dir_name, python_pkg_dir)
+        metadata_file = os.path.join(module_path, "setup.cfg")
+        shutil.copy(metadata_file, python_pkg_dir)
+
+    def _add_install_requires_based_on_compiler_version(self, module_path: str) -> None:
+        """
+            The compiler_version constraint on a module will get translated to an
+            install_requirements on the inmanta-core package.
+        """
+        # TODO: Implement
+        pass
+
+    def _build_v2_module(self, module_path: str, output_directory: str) -> None:
+        """
+        Build v2 module using PEP517 package builder.
+        """
+        with build.env.IsolatedEnvBuilder() as env:
+            distribution = "wheel"
+            builder = build.ProjectBuilder(
+                srcdir=module_path, python_executable=env.executable, scripts_dir=env.scripts_dir
+            )
+            env.install(builder.build_system_requires)
+            env.install(builder.get_requires_for_build(distribution=distribution))
+            builder.build(distribution=distribution, output_directory=output_directory)
