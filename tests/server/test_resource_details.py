@@ -57,7 +57,7 @@ async def env_with_resources(server, client):
 
     cm = data.ConfigurationModel(
         environment=env2.id,
-        version=2,
+        version=4,
         date=datetime.datetime.now(tz=datetime.timezone.utc),
         total=1,
         released=True,
@@ -128,19 +128,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=2", "std::File[internal,path=/tmp/dir1/file2],v=2"],
-            },
-        )
-    )
-    resources[env.id]["std::File[internal,path=/tmp/dir1/file1]"].append(
-        await create_resource(
-            "/tmp/dir1/file1",
-            ResourceState.deploying,
-            4,
-            {
-                "key1": "modified_value",
-                "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=2", "std::File[internal,path=/tmp/dir1/file2],v=2"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1],v=3", "std::File[internal,path=/tmp/dir1/file2],v=3"],
             },
         )
     )
@@ -148,11 +136,23 @@ async def env_with_resources(server, client):
         await create_resource(
             "/tmp/dir1/file1",
             ResourceState.deployed,
+            4,
+            {
+                "key1": "modified_value",
+                "another_key": "val",
+                "requires": ["std::Directory[internal,path=/tmp/dir1],v=4", "std::File[internal,path=/tmp/dir1/file2],v=4"],
+            },
+        )
+    )
+    resources[env.id]["std::File[internal,path=/tmp/dir1/file1]"].append(
+        await create_resource(
+            "/tmp/dir1/file1",
+            ResourceState.undefined,
             5,
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=2", "std::File[internal,path=/tmp/dir1/file2],v=2"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1],v=5", "std::File[internal,path=/tmp/dir1/file2],v=5"],
             },
         )
     )
@@ -160,7 +160,7 @@ async def env_with_resources(server, client):
     # A resource that didn't change its attributes, but was only released with the second version and has no requirements
     resources[env.id]["std::Directory[internal,path=/tmp/dir1]"].append(
         await create_resource(
-            "/tmp/dir1", ResourceState.skipped, 1, {"key2": "val2", "requires": []}, resource_type="std::Directory"
+            "/tmp/dir1", ResourceState.undefined, 1, {"key2": "val2", "requires": []}, resource_type="std::Directory"
         )
     )
     resources[env.id]["std::Directory[internal,path=/tmp/dir1]"].append(
@@ -173,12 +173,17 @@ async def env_with_resources(server, client):
             "/tmp/dir1", ResourceState.deployed, 3, {"key2": "val2", "requires": []}, resource_type="std::Directory"
         )
     )
+    resources[env.id]["std::Directory[internal,path=/tmp/dir1]"].append(
+        await create_resource(
+            "/tmp/dir1", ResourceState.deployed, 4, {"key2": "val2", "requires": []}, resource_type="std::Directory"
+        )
+    )
 
     # A resource that changed the attributes in the last released version,
     # so the last and the first time the attributes are the same, is the same as well;
     # And it also has a single requirement
     resources[env.id]["std::File[internal,path=/tmp/dir1/file2]"].append(
-        await create_resource("/tmp/dir1/file2", ResourceState.skipped_for_undefined, 1, {"key3": "val3", "requires": []})
+        await create_resource("/tmp/dir1/file2", ResourceState.undefined, 1, {"key3": "val3", "requires": []})
     )
     resources[env.id]["std::File[internal,path=/tmp/dir1/file2]"].append(
         await create_resource(
@@ -193,7 +198,15 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file2",
             ResourceState.deployed,
             3,
-            {"key3": "val3updated", "requires": ["std::Directory[internal,path=/tmp/dir1],v=2"]},
+            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1],v=3"]},
+        )
+    )
+    resources[env.id]["std::File[internal,path=/tmp/dir1/file2]"].append(
+        await create_resource(
+            "/tmp/dir1/file2",
+            ResourceState.deploying,
+            4,
+            {"key3": "val3updated", "requires": ["std::Directory[internal,path=/tmp/dir1],v=4"]},
         )
     )
 
@@ -201,7 +214,7 @@ async def env_with_resources(server, client):
     resources[env.id]["std::File[internal,path=/etc/filexyz]"].append(
         await create_resource(
             "/etc/filexyz",
-            ResourceState.deployed,
+            ResourceState.undefined,
             5,
             {"key4": "val4", "requires": []},
         )
@@ -212,8 +225,8 @@ async def env_with_resources(server, client):
         await create_resource(
             "/tmp/dir1/file2",
             ResourceState.unavailable,
-            2,
-            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1],v=2"]},
+            4,
+            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1],v=4"]},
             environment=env2.id,
         )
     )
@@ -222,7 +235,7 @@ async def env_with_resources(server, client):
         await create_resource(
             "/tmp/dir1",
             ResourceState.available,
-            2,
+            4,
             {"key2": "val2", "requires": []},
             resource_type="std::Directory",
             environment=env2.id,
@@ -238,7 +251,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=2", "std::File[internal,path=/tmp/dir1/file2],v=2"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1],v=6", "std::File[internal,path=/tmp/dir1/file2],v=6"],
             },
             environment=env3.id,
         )
@@ -268,10 +281,10 @@ async def test_resource_details(server, client, env_with_resources):
         tzinfo=datetime.timezone.utc
     )
     assert deploy_time == resources[env.id][multiple_requires][3].last_deploy.astimezone(datetime.timezone.utc)
-    assert result.result["data"]["attributes"] == resources[env.id][multiple_requires][2].attributes
+    assert result.result["data"]["attributes"] == resources[env.id][multiple_requires][3].attributes
     assert result.result["data"]["requires_status"] == {
-        "std::Directory[internal,path=/tmp/dir1],v=2": "deploying",
-        "std::File[internal,path=/tmp/dir1/file2],v=2": "deployed",
+        "std::Directory[internal,path=/tmp/dir1],v=4": "deployed",
+        "std::File[internal,path=/tmp/dir1/file2],v=4": "deploying",
     }
     no_requires = ids["no_requires"]
     result = await client.resource_details(env.id, no_requires)
@@ -284,24 +297,24 @@ async def test_resource_details(server, client, env_with_resources):
     deploy_time = datetime.datetime.strptime(result.result["data"]["last_deploy"], "%Y-%m-%dT%H:%M:%S.%f").replace(
         tzinfo=datetime.timezone.utc
     )
-    assert deploy_time == resources[env.id][no_requires][2].last_deploy.astimezone(datetime.timezone.utc)
-    assert result.result["data"]["attributes"] == resources[env.id][no_requires][2].attributes
+    assert deploy_time == resources[env.id][no_requires][3].last_deploy.astimezone(datetime.timezone.utc)
+    assert result.result["data"]["attributes"] == resources[env.id][no_requires][3].attributes
     assert result.result["data"]["requires_status"] == {}
 
     single_requires = ids["single_requires"]
     result = await client.resource_details(env.id, single_requires)
     assert result.code == 200
-    assert result.result["data"]["first_generated_version"] == 3
+    assert result.result["data"]["first_generated_version"] == 4
     generated_time = datetime.datetime.strptime(result.result["data"]["first_generated_time"], "%Y-%m-%dT%H:%M:%S.%f").replace(
         tzinfo=datetime.timezone.utc
     )
-    assert generated_time == cm_times[2].astimezone(datetime.timezone.utc)
+    assert generated_time == cm_times[3].astimezone(datetime.timezone.utc)
     deploy_time = datetime.datetime.strptime(result.result["data"]["last_deploy"], "%Y-%m-%dT%H:%M:%S.%f").replace(
         tzinfo=datetime.timezone.utc
     )
-    assert deploy_time == resources[env.id][single_requires][2].last_deploy.astimezone(datetime.timezone.utc)
-    assert result.result["data"]["attributes"] == resources[env.id][single_requires][2].attributes
-    assert result.result["data"]["requires_status"] == {"std::Directory[internal,path=/tmp/dir1],v=2": "deploying"}
+    assert deploy_time == resources[env.id][single_requires][3].last_deploy.astimezone(datetime.timezone.utc)
+    assert result.result["data"]["attributes"] == resources[env.id][single_requires][3].attributes
+    assert result.result["data"]["requires_status"] == {"std::Directory[internal,path=/tmp/dir1],v=4": "deployed"}
 
     result = await client.resource_details(env.id, "non_existing_id")
     assert result.code == 404
