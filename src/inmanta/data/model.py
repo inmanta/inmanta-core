@@ -338,3 +338,16 @@ class PagingBoundaries:
         self.end = end
         self.first_id = first_id
         self.last_id = last_id
+
+
+class ResourceDetails(BaseModel):
+    resource_id: ResourceIdStr
+    resource_type: ResourceType
+    agent: str
+    attribute: str
+    resource_id_value: str
+    last_deploy: datetime.datetime
+    first_generated_time: datetime.datetime
+    first_generated_version: int
+    attributes: JsonType
+    requires_status: Dict[ResourceVersionIdStr, const.ResourceState]
