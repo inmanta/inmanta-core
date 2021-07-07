@@ -277,7 +277,7 @@ async def test_resource_details(server, client, env_with_resources):
         tzinfo=datetime.timezone.utc
     )
     assert generated_time == cm_times[1].astimezone(datetime.timezone.utc)
-    deploy_time = datetime.datetime.strptime(result.result["data"]["last_deploy"], "%Y-%m-%dT%H:%M:%S.%f").replace(
+    deploy_time = datetime.datetime.strptime(result.result["data"]["last_deploy_finished"], "%Y-%m-%dT%H:%M:%S.%f").replace(
         tzinfo=datetime.timezone.utc
     )
     assert deploy_time == resources[env.id][multiple_requires][3].last_deploy.astimezone(datetime.timezone.utc)
@@ -296,7 +296,7 @@ async def test_resource_details(server, client, env_with_resources):
         tzinfo=datetime.timezone.utc
     )
     assert generated_time == cm_times[1].astimezone(datetime.timezone.utc)
-    deploy_time = datetime.datetime.strptime(result.result["data"]["last_deploy"], "%Y-%m-%dT%H:%M:%S.%f").replace(
+    deploy_time = datetime.datetime.strptime(result.result["data"]["last_deploy_finished"], "%Y-%m-%dT%H:%M:%S.%f").replace(
         tzinfo=datetime.timezone.utc
     )
     assert deploy_time == resources[env.id][no_requires][3].last_deploy.astimezone(datetime.timezone.utc)
@@ -312,7 +312,7 @@ async def test_resource_details(server, client, env_with_resources):
         tzinfo=datetime.timezone.utc
     )
     assert generated_time == cm_times[3].astimezone(datetime.timezone.utc)
-    deploy_time = datetime.datetime.strptime(result.result["data"]["last_deploy"], "%Y-%m-%dT%H:%M:%S.%f").replace(
+    deploy_time = datetime.datetime.strptime(result.result["data"]["last_deploy_finished"], "%Y-%m-%dT%H:%M:%S.%f").replace(
         tzinfo=datetime.timezone.utc
     )
     assert deploy_time == resources[env.id][single_requires][3].last_deploy.astimezone(datetime.timezone.utc)

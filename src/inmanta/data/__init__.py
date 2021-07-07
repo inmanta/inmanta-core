@@ -2951,8 +2951,6 @@ class Resource(BaseDocument):
                 as req
                 INNER JOIN resource as s
                 ON req.requires = s.resource_version_id AND s.environment = $1
-                JOIN configurationmodel cm ON s.model = cm.version AND s.environment = cm.environment
-                WHERE RELEASED = TRUE AND s.environment = $1
               )
         FROM resource first
         INNER JOIN
@@ -2982,7 +2980,7 @@ class Resource(BaseDocument):
             agent=record["agent"],
             attribute=parsed_id.attribute,
             resource_id_value=record["resource_id_value"],
-            last_deploy=record["latest_deploy"],
+            last_deploy_finished=record["latest_deploy"],
             first_generated_time=record["first_generated_time"],
             first_generated_version=record["first_model"],
             attributes=json.loads(record["attributes"]),
