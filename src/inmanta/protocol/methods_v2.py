@@ -563,5 +563,6 @@ def resource_list(
 )
 def resource_details(tid: uuid.UUID, rid: model.ResourceIdStr) -> model.ResourceDetails:
     """
-    Return the details of a resource
+    :return: The details of the latest released version of a resource
+    :raise NotFound: This exception is raised when the referenced environment or resource is not found
     """
