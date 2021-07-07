@@ -342,10 +342,15 @@ class PagingBoundaries:
 
 class ResourceDetails(BaseModel):
     """The details of a released resource
-    :param last_deploy_finished: the time the last deploy of the resource was finished
-    :param first_generated_time: the first time this resource was generated
-    :param first_generated_version: the first model version this resource was in
-    :param status: the current status of the resource
+    :param resource_id: The id of the resource
+    :param resource_type: The type of the resource
+    :param agent: The agent associated with this resource
+    :param attribute: The name of the identifying attribute of the resource
+    :param resource_id_value: The value of the identifying attribute of the resource
+    :param last_deploy_finished: The time the last deploy of the resource was finished
+    :param first_generated_time: The first time this resource was generated
+    :param first_generated_version: The first model version this resource was in
+    :param status: The current status of the resource
     :param requires_status: The id and status of the resources this resource requires
     """
 
