@@ -286,6 +286,8 @@ async def test_resource_details(server, client, env_with_resources):
         "std::Directory[internal,path=/tmp/dir1],v=4": "deployed",
         "std::File[internal,path=/tmp/dir1/file2],v=4": "deploying",
     }
+    assert result.result["data"]["status"] == "deployed"
+
     no_requires = ids["no_requires"]
     result = await client.resource_details(env.id, no_requires)
     assert result.code == 200
@@ -300,6 +302,7 @@ async def test_resource_details(server, client, env_with_resources):
     assert deploy_time == resources[env.id][no_requires][3].last_deploy.astimezone(datetime.timezone.utc)
     assert result.result["data"]["attributes"] == resources[env.id][no_requires][3].attributes
     assert result.result["data"]["requires_status"] == {}
+    assert result.result["data"]["status"] == "deployed"
 
     single_requires = ids["single_requires"]
     result = await client.resource_details(env.id, single_requires)
@@ -315,6 +318,7 @@ async def test_resource_details(server, client, env_with_resources):
     assert deploy_time == resources[env.id][single_requires][3].last_deploy.astimezone(datetime.timezone.utc)
     assert result.result["data"]["attributes"] == resources[env.id][single_requires][3].attributes
     assert result.result["data"]["requires_status"] == {"std::Directory[internal,path=/tmp/dir1],v=4": "deployed"}
+    assert result.result["data"]["status"] == "deploying"
 
     result = await client.resource_details(env.id, "non_existing_id")
     assert result.code == 404

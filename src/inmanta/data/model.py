@@ -350,4 +350,5 @@ class ResourceDetails(BaseModel):
     first_generated_time: datetime.datetime
     first_generated_version: int
     attributes: JsonType
+    status: const.ResourceState
     requires_status: Dict[ResourceVersionIdStr, const.ResourceState]

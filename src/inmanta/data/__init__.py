@@ -2942,7 +2942,7 @@ class Resource(BaseDocument):
         query = """
         SELECT DISTINCT ON (resource_id) first.resource_id, cm.date as first_generated_time,
         first.model as first_model, latest.resource_id as latest_resource_id, latest.resource_type,
-        latest.agent, latest.resource_id_value, latest.last_deploy as latest_deploy, latest.attributes,
+        latest.agent, latest.resource_id_value, latest.last_deploy as latest_deploy, latest.attributes, latest.status,
         (SELECT JSON_OBJECT_AGG(req.requires, s.status) as requires_status
             FROM
               (SELECT JSONB_ARRAY_ELEMENTS_TEXT(resource.attributes->'requires') as requires
@@ -2957,7 +2957,7 @@ class Resource(BaseDocument):
         FROM resource first
         INNER JOIN
             (SELECT distinct on (resource_id) resource_id, attribute_hash, model, last_deploy, attributes,
-                resource_type, agent, resource_id_value
+                resource_type, agent, resource_id_value, status
                 FROM resource
                 JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
                 WHERE resource.environment = $1 AND resource_id = $2 AND cm.released = TRUE
@@ -2986,6 +2986,7 @@ class Resource(BaseDocument):
             first_generated_time=record["first_generated_time"],
             first_generated_version=record["first_model"],
             attributes=json.loads(record["attributes"]),
+            status=record["status"],
             requires_status=json.loads(record["requires_status"]) if record["requires_status"] else {},
         )
 
