@@ -1129,7 +1129,6 @@ class ModuleGeneration(enum.Enum):
 TModule = TypeVar("TModule", bound="Module")
 
 
-# TODO: check if any other methods need to be moved
 @stable_api
 class Module(ModuleLike[TModuleMetadata], ABC):
     """
@@ -1140,7 +1139,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
     MODULE_FILE: str
     GENERATION: ModuleGeneration
 
-    def __init__(self, project: Project, path: str) -> None:
+    def __init__(self, project: Optional[Project], path: str) -> None:
         """
         Create a new configuration module
 
@@ -1158,7 +1157,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
                 os.path.basename(self._path),
             )
 
-        self._project = project
+        self._project: Optional[Project] = project
         self.is_versioned()
 
     def rewrite_version(self, new_version: str) -> None:
@@ -1196,6 +1195,9 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
     @lru_cache()
     def get_ast(self, name: str) -> Tuple[List[Statement], BasicBlock]:
+        if self._project is None:
+            raise ValueError("Can only get module's AST in the context of a project.")
+
         if name == self.name:
             file = os.path.join(self._path, self.MODEL_DIR, "_init.cf")
         else:
@@ -1215,6 +1217,9 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             raise InvalidModuleException("could not locate module with name: %s" % name) from e
 
     def get_freeze(self, submodule: str, recursive: bool = False, mode: str = ">=") -> Dict[str, str]:
+        if self._project is None:
+            raise ValueError("Can only get module's freeze in the context of a project.")
+
         imports = [statement.name for statement in self.get_imports(submodule)]
 
         out: Dict[str, str] = {}
@@ -1235,6 +1240,9 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
     @lru_cache()
     def get_imports(self, name: str) -> List[DefineImport]:
+        if self._project is None:
+            raise ValueError("Can only get module's imports in the context of a project.")
+
         (statements, block) = self.get_ast(name)
         imports = [x for x in statements if isinstance(x, DefineImport)]
         if self._project.autostd:
@@ -1409,7 +1417,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         print("=" * 10)
 
 
-# TODO: port usage of Module's class methods to ModuleV1
 @stable_api
 class ModuleV1(Module[ModuleV1Metadata]):
     MODULE_FILE = "module.yml"
