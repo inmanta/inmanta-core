@@ -86,7 +86,7 @@ def postgres_proc(unused_tcp_port_factory):
     proc.stop()
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def postgres_db(postgresql_proc):
     yield postgresql_proc
 
