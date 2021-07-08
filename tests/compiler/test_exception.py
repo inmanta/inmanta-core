@@ -64,7 +64,7 @@ def test_module_error(snippetcompiler):
 caused by:
   Could not load module badmodule
   caused by:
-    inmanta.module.InvalidModuleException: Metadata file {path_modules_yml_file} does not exist
+    inmanta.module.ModuleMetadataFileNotFound: Metadata file {path_modules_yml_file} does not exist
 """,
     )
 
