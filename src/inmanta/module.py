@@ -103,6 +103,10 @@ class InvalidModuleException(CompilerException):
         return out
 
 
+class ModuleMetadataFileNotFound(InvalidModuleException):
+    pass
+
+
 @stable_api
 class InvalidMetadata(CompilerException):
     """
@@ -368,7 +372,7 @@ class YamlParser(RawParser):
             return yaml.safe_load(source)
         except yaml.YAMLError as e:
             if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid") from e
+                raise InvalidMetadata(msg=f"Invalid yaml syntax in {source.name}:\n{str(e)}") from e
             else:
                 raise InvalidMetadata(msg=str(e)) from e
 
@@ -382,7 +386,7 @@ class CfgParser(RawParser):
             return config["metadata"]
         except configparser.Error as e:
             if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid") from e
+                raise InvalidMetadata(msg=f"Invalid syntax in {source.name}:\n{str(e)}") from e
             else:
                 raise InvalidMetadata(msg=str(e)) from e
         except KeyError as e:
@@ -660,7 +664,7 @@ class ModuleLike(ABC, Generic[T]):
         metadata_file_path = self.get_metadata_file_path()
 
         if not os.path.exists(metadata_file_path):
-            raise InvalidModuleException(f"Metadata file {metadata_file_path} does not exist")
+            raise ModuleMetadataFileNotFound(f"Metadata file {metadata_file_path} does not exist")
 
         with open(metadata_file_path, "r", encoding="utf-8") as fd:
             return self.get_metadata_from_source(source=fd)
