@@ -342,6 +342,7 @@ List of possible module install modes, kept for backwards compatibility. New cod
 """
 
 
+@stable_api
 class FreezeOperator(str, enum.Enum):
     eq = "=="
     compatible = "~="
@@ -356,6 +357,7 @@ class FreezeOperator(str, enum.Enum):
 T = TypeVar("T", bound="Metadata")
 
 
+@stable_api
 class Metadata(BaseModel):
     name: str
     description: Optional[str] = None
@@ -448,6 +450,7 @@ class CfgParser(RawParser):
 TModuleMetadata = TypeVar("TModuleMetadata", bound="ModuleMetadata")
 
 
+@stable_api
 class ModuleMetadata(ABC, Metadata):
     version: str
     license: str
@@ -491,6 +494,7 @@ class ModuleMetadata(ABC, Metadata):
         raise NotImplementedError()
 
 
+@stable_api
 class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
     """
     :param name: The name of the module.
@@ -526,6 +530,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
         )
 
 
+@stable_api
 class ModuleV2Metadata(ModuleMetadata):
     """
     :param name: The name of the module.
@@ -549,11 +554,13 @@ class ModuleV2Metadata(ModuleMetadata):
         )
 
 
+@stable_api
 class ModuleRepoType(enum.Enum):
     git = "git"
     package = "package"
 
 
+@stable_api
 class ModuleRepoInfo(BaseModel):
 
     url: str
@@ -567,6 +574,7 @@ class ModuleRepoInfo(BaseModel):
         return v
 
 
+@stable_api
 class ProjectMetadata(Metadata, MetadataFieldRequires):
     """
     :param name: The name of the project.
@@ -1412,6 +1420,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
 
 # TODO: port usage of Module's class methods to ModuleV1
+@stable_api
 class ModuleV1(Module[ModuleV1Metadata]):
     MODULE_FILE = "module.yml"
     GENERATION = ModuleGeneration.V1
@@ -1560,6 +1569,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
         return ModuleV1Metadata
 
 
+@stable_api
 class ModuleV2(Module[ModuleV2Metadata]):
     MODULE_FILE = "setup.cfg"
     GENERATION = ModuleGeneration.V2
