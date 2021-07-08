@@ -353,23 +353,39 @@ class FreezeOperator(str, enum.Enum):
         return f"^({'|'.join(all_values)})$"
 
 
+T = TypeVar("T", bound="Metadata")
+
+
 class Metadata(BaseModel):
     name: str
     description: Optional[str] = None
     freeze_recursive: bool = False
     freeze_operator: str = Field(default="~=", regex=FreezeOperator.get_regex_for_validation())
 
+    _raw_parser: Type[RawParser]
+
     @classmethod
-    def to_list(cls, v: object) -> object:
+    def parse(cls: Type[T], source: Union[str, TextIO]) -> T:
+        raw: Mapping[str, object] = cls._raw_parser.parse(source)
+        try:
+            return cls(**raw)
+        except ValidationError as e:
+            if isinstance(source, TextIOBase):
+                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid", validation_error=e) from e
+            else:
+                raise InvalidMetadata(msg=str(e), validation_error=e) from e
+
+
+class MetadataFieldRequires(BaseModel):
+    requires: List[str] = []
+
+    @classmethod
+    def to_list(cls, v: object) -> List[object]:
         if v is None:
             return []
         if not isinstance(v, list):
             return [v]
         return v
-
-
-class MetadataFieldRequires(BaseModel):
-    requires: List[str] = []
 
     @validator("requires", pre=True)
     @classmethod
@@ -391,7 +407,7 @@ class MetadataFieldRequires(BaseModel):
         return cls.to_list(v)
 
 
-def RawParser(ABC):
+class RawParser(ABC):
     @classmethod
     @abstractmethod
     def parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
@@ -405,9 +421,9 @@ class YamlParser(RawParser):
             return yaml.safe_load(source)
         except yaml.YAMLError as e:
             if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid", validation_error=e) from e
+                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid") from e
             else:
-                raise InvalidMetadata(msg=str(e), validation_error=e) from e
+                raise InvalidMetadata(msg=str(e)) from e
 
 
 class CfgParser(RawParser):
@@ -419,21 +435,22 @@ class CfgParser(RawParser):
             return config["metadata"]
         except configparser.Error as e:
             if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid", validation_error=e) from e
+                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid") from e
             else:
-                raise InvalidMetadata(msg=str(e), validation_error=e) from e
-        except KeyError:
+                raise InvalidMetadata(msg=str(e)) from e
+        except KeyError as e:
             if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Metadata defined in {source.name} doesn't have a metadata section.", validation_error=e) from e
+                raise InvalidMetadata(msg=f"Metadata defined in {source.name} doesn't have a metadata section.") from e
             else:
-                raise InvalidMetadata(msg=f"Metadata doesn't have a metadata section.", validation_error=e) from e
+                raise InvalidMetadata(msg=f"Metadata doesn't have a metadata section.") from e
+
+
+TModuleMetadata = TypeVar("TModuleMetadata", bound="ModuleMetadata")
 
 
 class ModuleMetadata(ABC, Metadata):
     version: str
     license: str
-
-    _raw_parser: Type[RawParser]
 
     @validator("version")
     @classmethod
@@ -445,16 +462,16 @@ class ModuleMetadata(ABC, Metadata):
         return v
 
     @classmethod
-    def rewrite_version(cls: Type[T], source: str, new_version: str) -> Tuple[str, ModuleMetadata]:
+    def rewrite_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> Tuple[str, TModuleMetadata]:
         """
         Returns the source text with the version replaced by the new version.
         """
-        metadata: T = cls.parse(source)
+        metadata: TModuleMetadata = cls.parse(source)
         current_version = metadata.version
         if current_version == new_version:
             LOGGER.debug("Current version is the same as the new version: %s", current_version)
 
-        result: str = self._rewrite_version(source, new_version
+        result: str = cls._substitute_version(source, new_version)
 
         try:
             new_metadata = cls.parse(result)
@@ -470,22 +487,11 @@ class ModuleMetadata(ABC, Metadata):
 
     @classmethod
     @abstractmethod
-    def _substitute_version(cls: Type[T], source: str, new_version: str) -> str:
+    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
         raise NotImplementedError()
 
-    @classmethod
-    def parse(cls: Type[T], source: Union[str, TextIO]) -> T:
-        raw: Mapping[str, object] = cls._raw_parser.parse(source)
-        try:
-            return cls(**raw)
-        except ValidationError as e:
-            if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid", validation_error=e) from e
-            else:
-                raise InvalidMetadata(msg=str(e), validation_error=e) from e
 
-
-class ModuleV1Metadata(ModuleMetadata, MetadataRequires):
+class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
     """
     :param name: The name of the module.
     :param description: (Optional) The description of the module
@@ -506,7 +512,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataRequires):
 
     compiler_version: Optional[str] = None
 
-    _raw_parser = YamlParser
+    _raw_parser: Type[YamlParser] = YamlParser
 
     @validator("compiler_version")
     @classmethod
@@ -514,7 +520,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataRequires):
         return cls.is_pep440_version(v)
 
     @classmethod
-    def _substitute_version(cls: Type[T], source: str, new_version: str) -> str:
+    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
         return re.sub(
             r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", r"\g<1>" + new_version + r"\g<2>", source
         )
@@ -534,10 +540,10 @@ class ModuleV2Metadata(ModuleMetadata):
       Valid values are [==, ~=, >=]. *Default is '~='*
     """
 
-    _raw_parser = CfgParser
+    _raw_parser: Type[CfgParser] = CfgParser
 
     @classmethod
-    def _substitute_version(cls: Type[T], source: str, new_version: str) -> str:
+    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
         return re.sub(
             r"(\[metadata\][^\[]*\s*version\s*=\s*)[^\"'}\s\[]+", r"\g<1>" + new_version, source
         )
@@ -557,11 +563,11 @@ class ModuleRepoInfo(BaseModel):
     @classmethod
     def validate_type(cls, v: object) -> object:
         if v == ModuleRepoType.package:
-            raise ValidationError("Repository type `package` is not yet supported.")
+            raise ValueError("Repository type `package` is not yet supported.")
         return v
 
 
-class ProjectMetadata(Metadata, MetadataRequires):
+class ProjectMetadata(Metadata, MetadataFieldRequires):
     """
     :param name: The name of the project.
     :param description: (Optional) An optional description of the project
@@ -606,7 +612,7 @@ class ProjectMetadata(Metadata, MetadataRequires):
     install_mode: InstallMode = InstallMode.release
     requires: List[str] = []
 
-    _raw_parser = YamlParser
+    _raw_parser: Type[YamlParser] = YamlParser
 
     @validator("modulepath", pre=True)
     @classmethod
@@ -625,11 +631,9 @@ class ProjectMetadata(Metadata, MetadataRequires):
             elif isinstance(elem, dict):
                 result.append(elem)
             else:
-                raise ValidationError(f"Value should be either a string of a dict, got {elem}")
+                raise ValueError(f"Value should be either a string of a dict, got {elem}")
         return result
 
-
-T = TypeVar("T", bound=Metadata)
 
 @stable_api
 class ModuleLike(ABC, Generic[T]):
@@ -681,8 +685,9 @@ class ModuleLike(ABC, Generic[T]):
     def get_metadata_file_path(self) -> str:
         raise NotImplementedError()
 
+    @classmethod
     @abstractmethod
-    def get_metadata_file_schema_type(self) -> Type[T]:
+    def get_metadata_file_schema_type(cls) -> Type[T]:
         raise NotImplementedError()
 
     def _load_file(self, ns: Namespace, file: str) -> Tuple[List[Statement], BasicBlock]:
@@ -704,6 +709,7 @@ class ModuleLike(ABC, Generic[T]):
                 block.add(s)
         return (statements, block)
 
+    # TODO: this doesn't belong in ModuleLike since only V1 and Project have requires
     def requires(self) -> "List[Requirement]":
         """
         Get the requires for this module
@@ -822,7 +828,8 @@ class Project(ModuleLike[ProjectMetadata]):
     def get_metadata_file_path(self) -> str:
         return os.path.join(self._path, Project.PROJECT_FILE)
 
-    def get_metadata_file_schema_type(self) -> Type[ProjectMetadata]:
+    @classmethod
+    def get_metadata_file_schema_type(cls) -> Type[ProjectMetadata]:
         return ProjectMetadata
 
     @classmethod
@@ -977,7 +984,7 @@ class Project(ModuleLike[ProjectMetadata]):
         try:
             path = self.resolver.path_for(module_name)
             if path is not None:
-                module = Module(self, path)
+                module = ModuleV1(self, path)
             else:
                 reqs = self.collect_requirements()
                 if module_name in reqs:
@@ -1111,12 +1118,12 @@ class ModuleGeneration(enum.Enum):
     V2: int = 2
 
 
-TModuleMetadata = TypeVar("TModuleMetadata", bound=ModuleMetadata)
+TModule = TypeVar("TModule", bound="Module")
 
 
 # TODO: check if any other methods need to be moved
 @stable_api
-class Module(ABC, ModuleLike[TModuleMetadata]):
+class Module(ModuleLike[TModuleMetadata], ABC):
     """
     This class models an inmanta configuration module
     """
@@ -1450,14 +1457,14 @@ class ModuleV1(Module[ModuleV1Metadata]):
 
     @classmethod
     def update(
-        cls,
+        cls: Type[ModuleV1],
         project: Project,
         modulename: str,
         requirements: "Iterable[Requirement]",
         path: str = None,
         fetch: bool = True,
         install_mode: InstallMode = InstallMode.release,
-    ) -> "Module":
+    ) -> ModuleV1:
         """
         Update a module, return module object
         """
@@ -1487,7 +1494,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
                 LOGGER.info("Checking out %s on %s", str(version), mypath)
                 gitprovider.checkout_tag(mypath, str(version))
 
-        return Module(project, mypath)
+        return cls(project, mypath)
 
     @classmethod
     def get_suitable_version_for(
@@ -1517,7 +1524,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
     ) -> "Optional[Version]":
         def get_cv_for(best: "Version") -> "Optional[Version]":
             cfg_text: str = gitprovider.get_file_for_version(path, str(best), cls.MODULE_FILE)
-            metadata: ModuleV1Metadata = self.get_metadata_file_schema_type().parse(cfg_text)
+            metadata: ModuleV1Metadata = cls.get_metadata_file_schema_type().parse(cfg_text)
             if metadata.compiler_version is None:
                 return None
             v = metadata.compiler_version
@@ -1548,7 +1555,8 @@ class ModuleV1(Module[ModuleV1Metadata]):
             return None
         return versions[lo]
 
-    def get_metadata_file_schema_type(self) -> Type[ModuleV1Metadata]:
+    @classmethod
+    def get_metadata_file_schema_type(cls) -> Type[ModuleV1Metadata]:
         return ModuleV1Metadata
 
 
@@ -1556,5 +1564,6 @@ class ModuleV2(Module[ModuleV2Metadata]):
     MODULE_FILE = "setup.cfg"
     GENERATION = ModuleGeneration.V2
 
-    def get_metadata_file_schema_type(self) -> Type[ModuleV2Metadata]:
+    @classmethod
+    def get_metadata_file_schema_type(cls) -> Type[ModuleV2Metadata]:
         return ModuleV2Metadata
