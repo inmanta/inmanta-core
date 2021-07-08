@@ -1,0 +1,4 @@
+---
+description: Remove the black config from the setup.cfg file since it's read from the pyproject.toml file
+change-type: patch
+destination-branches: [master, iso3, iso4]
