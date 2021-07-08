@@ -345,8 +345,8 @@ class ResourceDetails(BaseModel):
     :param resource_id: The id of the resource
     :param resource_type: The type of the resource
     :param agent: The agent associated with this resource
-    :param attribute: The name of the identifying attribute of the resource
-    :param resource_id_value: The value of the identifying attribute of the resource
+    :param id_attribute: The name of the identifying attribute of the resource
+    :param id_attribute_value: The value of the identifying attribute of the resource
     :param last_deploy: The value of the last_deploy on the latest released version of the resource
     :param first_generated_time: The first time this resource was generated
     :param first_generated_version: The first model version this resource was in
@@ -357,8 +357,8 @@ class ResourceDetails(BaseModel):
     resource_id: ResourceIdStr
     resource_type: ResourceType
     agent: str
-    attribute: str
-    resource_id_value: str
+    id_attribute: str
+    id_attribute_value: str
     last_deploy: Optional[datetime.datetime]
     first_generated_time: datetime.datetime
     first_generated_version: int

@@ -936,5 +936,5 @@ class ResourceService(protocol.ServerSlice):
 
         details = await data.Resource.get_resource_details(env.id, rid)
         if not details:
-            raise NotFound("The resource with the given id does not exist in the given environment.")
+            raise NotFound("The resource with the given id does not exist, or was not released yet in the given environment.")
         return details
