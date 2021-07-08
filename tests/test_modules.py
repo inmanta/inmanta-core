@@ -34,7 +34,7 @@ def test_module():
 
 def test_bad_module():
     bad_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "mod2")
-    with pytest.raises(module.InvalidModuleException):
+    with pytest.raises(module.ModuleMetadataFileNotFound):
         module.ModuleV1(project=mock.Mock(), path=bad_mod_dir)
 
 
