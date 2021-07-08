@@ -347,7 +347,7 @@ class ResourceDetails(BaseModel):
     :param agent: The agent associated with this resource
     :param attribute: The name of the identifying attribute of the resource
     :param resource_id_value: The value of the identifying attribute of the resource
-    :param last_deploy_finished: The time the last deploy of the resource was finished
+    :param last_deploy: The value of the last_deploy on the latest released version of the resource
     :param first_generated_time: The first time this resource was generated
     :param first_generated_version: The first model version this resource was in
     :param status: The current status of the resource
@@ -359,9 +359,9 @@ class ResourceDetails(BaseModel):
     agent: str
     attribute: str
     resource_id_value: str
-    last_deploy_finished: Optional[datetime.datetime]
+    last_deploy: Optional[datetime.datetime]
     first_generated_time: datetime.datetime
     first_generated_version: int
     attributes: JsonType
-    status: const.ResourceState
-    requires_status: Dict[ResourceVersionIdStr, const.ResourceState]
+    status: ReleasedResourceState
+    requires_status: Dict[ResourceIdStr, ReleasedResourceState]
