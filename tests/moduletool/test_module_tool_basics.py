@@ -88,7 +88,7 @@ compiler_version: 2017.2
     """
     )
 
-    mod = module.Module(None, module_path.strpath)
+    mod = module.ModuleV1(None, module_path.strpath)
 
     assert mod.version == "1.2"
     assert mod.compiler_version == "2017.2"
@@ -198,7 +198,7 @@ async def test_version_argument(modules_repo):
     make_module_simple(modules_repo, "mod-version", [], "1.2")
     module_path = os.path.join(modules_repo, "mod-version")
 
-    mod = module.Module(None, module_path)
+    mod = module.ModuleV1(None, module_path)
     assert mod.version == "1.2"
 
     args = [sys.executable, "-m", "inmanta.app", "module", "commit", "-m", "msg", "-v", "1.3.1", "-r"]
@@ -251,7 +251,7 @@ compiler_version: 2017.2
     """
     )
     with pytest.raises(InvalidMetadata, match="Version non_pep440_value is not PEP440 compliant"):
-        module.Module(None, inmanta_module.get_root_dir_of_module())
+        module.ModuleV1(None, inmanta_module.get_root_dir_of_module())
 
 
 @pytest.mark.asyncio
@@ -264,7 +264,7 @@ test:
 """
     )
     with pytest.raises(InvalidMetadata, match=f"Invalid yaml syntax in {inmanta_module.get_path_module_yml_file()}"):
-        module.Module(None, inmanta_module.get_root_dir_of_module())
+        module.ModuleV1(None, inmanta_module.get_root_dir_of_module())
 
 
 @pytest.mark.asyncio
@@ -279,7 +279,7 @@ requires:
     - ip > 1.0.0
         """
     )
-    mod: module.Module = module.Module(None, inmanta_module.get_root_dir_of_module())
+    mod: module.Module = module.ModuleV1(None, inmanta_module.get_root_dir_of_module())
     assert mod.requires() == [Requirement.parse("std"), Requirement.parse("ip > 1.0.0")]
 
 
@@ -293,7 +293,7 @@ version: 1.0.0
 requires: std > 1.0.0
         """
     )
-    mod: module.Module = module.Module(None, inmanta_module.get_root_dir_of_module())
+    mod: module.Module = module.ModuleV1(None, inmanta_module.get_root_dir_of_module())
     assert mod.requires() == [Requirement.parse("std > 1.0.0")]
 
 
@@ -311,7 +311,7 @@ requires:
     )
     mod: module.Module
     with warnings.catch_warnings(record=True) as w:
-        mod = module.Module(None, inmanta_module.get_root_dir_of_module())
+        mod = module.ModuleV1(None, inmanta_module.get_root_dir_of_module())
         assert len(w) == 1
         warning = w[0]
         assert issubclass(warning.category, MetadataDeprecationWarning)
@@ -331,4 +331,4 @@ requires:
         """
     )
     with pytest.raises(InvalidMetadata, match="Invalid legacy requires"):
-        module.Module(None, inmanta_module.get_root_dir_of_module())
+        module.ModuleV1(None, inmanta_module.get_root_dir_of_module())
