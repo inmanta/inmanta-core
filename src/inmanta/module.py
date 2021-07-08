@@ -354,6 +354,44 @@ class FreezeOperator(str, enum.Enum):
         return f"^({'|'.join(all_values)})$"
 
 
+class RawParser(ABC):
+    @classmethod
+    @abstractmethod
+    def parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
+        raise NotImplementedError()
+
+
+class YamlParser(RawParser):
+    @classmethod
+    def parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
+        try:
+            return yaml.safe_load(source)
+        except yaml.YAMLError as e:
+            if isinstance(source, TextIOBase):
+                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid") from e
+            else:
+                raise InvalidMetadata(msg=str(e)) from e
+
+
+class CfgParser(RawParser):
+    @classmethod
+    def parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
+        try:
+            config: configparser.ConfigParser = configparser.ConfigParser()
+            config.read_string(source if isinstance(source, str) else source.read())
+            return config["metadata"]
+        except configparser.Error as e:
+            if isinstance(source, TextIOBase):
+                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid") from e
+            else:
+                raise InvalidMetadata(msg=str(e)) from e
+        except KeyError as e:
+            if isinstance(source, TextIOBase):
+                raise InvalidMetadata(msg=f"Metadata defined in {source.name} doesn't have a metadata section.") from e
+            else:
+                raise InvalidMetadata(msg=f"Metadata doesn't have a metadata section.") from e
+
+
 T = TypeVar("T", bound="Metadata")
 
 
@@ -407,44 +445,6 @@ class MetadataFieldRequires(BaseModel):
                 result.append(value)
             return result
         return cls.to_list(v)
-
-
-class RawParser(ABC):
-    @classmethod
-    @abstractmethod
-    def parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
-        raise NotImplementedError()
-
-
-class YamlParser(RawParser):
-    @classmethod
-    def parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
-        try:
-            return yaml.safe_load(source)
-        except yaml.YAMLError as e:
-            if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid") from e
-            else:
-                raise InvalidMetadata(msg=str(e)) from e
-
-
-class CfgParser(RawParser):
-    @classmethod
-    def parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
-        try:
-            config: configparser.ConfigParser = configparser.ConfigParser()
-            config.read_string(source if isinstance(source, str) else source.read())
-            return config["metadata"]
-        except configparser.Error as e:
-            if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid") from e
-            else:
-                raise InvalidMetadata(msg=str(e)) from e
-        except KeyError as e:
-            if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Metadata defined in {source.name} doesn't have a metadata section.") from e
-            else:
-                raise InvalidMetadata(msg=f"Metadata doesn't have a metadata section.") from e
 
 
 TModuleMetadata = TypeVar("TModuleMetadata", bound="ModuleMetadata")
@@ -996,9 +996,9 @@ class Project(ModuleLike[ProjectMetadata]):
             else:
                 reqs = self.collect_requirements()
                 if module_name in reqs:
-                    module = self.install(self, module_name, reqs[module_name], install_mode=self._install_mode)
+                    module = ModuleV1.install(self, module_name, reqs[module_name], install_mode=self._install_mode)
                 else:
-                    module = self.install(
+                    module = ModuleV1.install(
                         self, module_name, list(parse_requirements(module_name)), install_mode=self._install_mode
                     )
             self.modules[module_name] = module
@@ -1193,16 +1193,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
     def get_metadata_file_path(self) -> str:
         return os.path.join(self._path, self.MODULE_FILE)
-
-    def get_module_files(self) -> List[str]:
-        """
-        Returns the path of all model files in this module, relative to the module root
-        """
-        files = []
-        for model_file in glob.glob(os.path.join(self._path, "model", "*.cf")):
-            files.append(model_file)
-
-        return files
 
     @lru_cache()
     def get_ast(self, name: str) -> Tuple[List[Statement], BasicBlock]:
@@ -1441,7 +1431,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
         requirements: "Iterable[Requirement]",
         install: bool = True,
         install_mode: InstallMode = InstallMode.release,
-    ) -> "Module":
+    ) -> "ModuleV1":
         """
         Install a module, return module object
         """
@@ -1466,14 +1456,14 @@ class ModuleV1(Module[ModuleV1Metadata]):
 
     @classmethod
     def update(
-        cls: Type[ModuleV1],
+        cls,
         project: Project,
         modulename: str,
         requirements: "Iterable[Requirement]",
         path: str = None,
         fetch: bool = True,
         install_mode: InstallMode = InstallMode.release,
-    ) -> ModuleV1:
+    ) -> "ModuleV1":
         """
         Update a module, return module object
         """
