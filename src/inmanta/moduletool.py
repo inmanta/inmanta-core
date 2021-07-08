@@ -321,7 +321,7 @@ class ModuleTool(ModuleLikeTool):
     def get_module(self, module: str = None, project=None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
-            project: Optional[Project] = self.get_project_for_module(module)
+            project = self.get_project_for_module(module)
             path: str = os.path.realpath(os.curdir)
             try:
                 return ModuleV2(project, path)
