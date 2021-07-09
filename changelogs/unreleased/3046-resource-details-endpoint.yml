@@ -1,0 +1,7 @@
+---
+description: Added `resource_details` endpoint
+issue-nr: 3046
+change-type: minor
+destination-branches: [master, iso4]
+sections:
+  feature: "{{description}}"
