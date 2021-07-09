@@ -28,11 +28,19 @@ from tornado.httputil import url_concat
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
 from inmanta.data import APILIMIT, InvalidSort, QueryType, ResourceOrder
-from inmanta.data.model import LatestReleasedResource, Resource, ResourceAction, ResourceType, ResourceVersionIdStr
+from inmanta.data.model import (
+    LatestReleasedResource,
+    Resource,
+    ResourceAction,
+    ResourceDetails,
+    ResourceIdStr,
+    ResourceType,
+    ResourceVersionIdStr,
+)
 from inmanta.data.paging import ResourcePagingCountsProvider, ResourcePagingHandler
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import ReturnValue
-from inmanta.protocol.exceptions import BadRequest
+from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
@@ -712,3 +720,11 @@ class ResourceService(protocol.ServerSlice):
         )
 
         return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+
+    @protocol.handle(methods_v2.resource_details, env="tid")
+    async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ResourceDetails:
+
+        details = await data.Resource.get_resource_details(env.id, rid)
+        if not details:
+            raise NotFound("The resource with the given id does not exist, or was not released yet in the given environment.")
+        return details
