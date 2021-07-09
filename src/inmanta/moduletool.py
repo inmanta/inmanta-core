@@ -33,7 +33,16 @@ from pkg_resources import parse_version
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
-from inmanta.module import FreezeOperator, InstallMode, InvalidModuleException, Module, ModuleMetadataFileNotFound, ModuleV1, ModuleV2, Project, gitprovider
+from inmanta.module import (
+    FreezeOperator,
+    InstallMode,
+    Module,
+    ModuleMetadataFileNotFound,
+    ModuleV1,
+    ModuleV2,
+    Project,
+    gitprovider,
+)
 
 if TYPE_CHECKING:
     from pkg_resources import Requirement  # noqa: F401

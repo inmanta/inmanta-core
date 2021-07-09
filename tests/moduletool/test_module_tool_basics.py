@@ -17,7 +17,6 @@
 """
 import asyncio
 import os
-import py
 import re
 import shutil
 import subprocess
@@ -25,6 +24,7 @@ import sys
 import warnings
 from typing import Type
 
+import py
 import pytest
 import yaml
 from pkg_resources import Requirement, parse_version
@@ -82,23 +82,18 @@ def test_rewrite(tmpdir, module_type: Type[module.Module]):
     model = module_path.join("model").mkdir()
     model.join("_init.cf").write("\n")
 
-    metadata_file: str = module_path.join(
-        "module.yml" if v1 else "setup.cfg"
-    )
+    metadata_file: str = module_path.join("module.yml" if v1 else "setup.cfg")
 
     def metadata_contents(version: str) -> str:
         if v1:
-            return (
-                f"""
+            return f"""
 name: mod
 license: ASL
 version: {version}
 compiler_version: 2017.2
-                """.strip()
-            )
+            """.strip()
         else:
-            return (
-                f"""
+            return f"""
 [metadata]
 name = mod
 version = {version}
@@ -111,8 +106,7 @@ install_requires =
 
   cookiecutter~=1.7.0
   cryptography>1.0,<3.5
-                """.strip()
-            )
+            """.strip()
 
     metadata_file.write(metadata_contents("1.2"))
     mod = module_type(None, module_path.strpath)

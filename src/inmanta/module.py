@@ -393,7 +393,7 @@ class CfgParser(RawParser):
             if isinstance(source, TextIOBase):
                 raise InvalidMetadata(msg=f"Metadata defined in {source.name} doesn't have a metadata section.") from e
             else:
-                raise InvalidMetadata(msg=f"Metadata doesn't have a metadata section.") from e
+                raise InvalidMetadata(msg="Metadata doesn't have a metadata section.") from e
 
 
 T = TypeVar("T", bound="Metadata")
@@ -483,12 +483,10 @@ class ModuleMetadata(ABC, Metadata):
         try:
             new_metadata = cls.parse(result)
         except Exception:
-            raise Exception(f"Unable to rewrite module definition.")
+            raise Exception("Unable to rewrite module definition.")
 
         if new_metadata.version != new_version:
-            raise Exception(
-                f"Unable to write module definition, should be {new_version} got {new_metadata.version} instead."
-            )
+            raise Exception(f"Unable to write module definition, should be {new_version} got {new_metadata.version} instead.")
 
         return result, new_metadata
 
@@ -529,9 +527,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
 
     @classmethod
     def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
-        return re.sub(
-            r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", r"\g<1>" + new_version + r"\g<2>", source
-        )
+        return re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", r"\g<1>" + new_version + r"\g<2>", source)
 
 
 @stable_api
@@ -553,9 +549,7 @@ class ModuleV2Metadata(ModuleMetadata):
 
     @classmethod
     def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
-        return re.sub(
-            r"(\[metadata\][^\[]*\s*version\s*=\s*)[^\"'}\s\[]+", r"\g<1>" + new_version, source
-        )
+        return re.sub(r"(\[metadata\][^\[]*\s*version\s*=\s*)[^\"'}\s\[]+", r"\g<1>" + new_version, source)
 
 
 @stable_api
@@ -1126,6 +1120,7 @@ class ModuleGeneration(enum.Enum):
     """
     The generation of a module. This might affect the on-disk structure of a module as well as how it's distributed.
     """
+
     V1: int = 1
     V2: int = 2
 
