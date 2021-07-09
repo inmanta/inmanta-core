@@ -715,21 +715,6 @@ class ModuleLike(ABC, Generic[T]):
                 block.add(s)
         return (statements, block)
 
-    # TODO: this doesn't belong in ModuleLike since only V1 and Project have requires
-    def requires(self) -> "List[Requirement]":
-        """
-        Get the requires for this module
-        """
-        # filter on import stmt
-        reqs = []
-        for spec in self._metadata.requires:
-            req = [x for x in parse_requirements(spec)]
-            if len(req) > 1:
-                print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
-            reqe = req[0]
-            reqs.append(reqe)
-        return reqs
-
     def _remove_comments(self, lines: List[str]) -> List[str]:
         """
         Remove comments from lines in requirements.txt file.
@@ -815,7 +800,7 @@ class Project(ModuleLike[ProjectMetadata]):
             venv_path = os.path.abspath(venv_path)
         self.virtualenv = env.VirtualEnv(venv_path)
         self.loaded = False
-        self.modules: Dict[str, Module] = {}
+        self.modules: Dict[str, ModuleV1] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
 
@@ -933,11 +918,11 @@ class Project(ModuleLike[ProjectMetadata]):
         main_ns = Namespace("__config__", self.root_ns)
         return self._load_file(main_ns, os.path.join(self.project_path, self.main_file))
 
-    def get_modules(self) -> Dict[str, "Module"]:
+    def get_modules(self) -> Dict[str, "ModuleV1"]:
         self.load()
         return self.modules
 
-    def get_module(self, full_module_name: str) -> "Module":
+    def get_module(self, full_module_name: str) -> "ModuleV1":
         parts = full_module_name.split("::")
         module_name = parts[0]
 
@@ -986,7 +971,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return out
 
-    def load_module(self, module_name: str) -> "Module":
+    def load_module(self, module_name: str) -> "ModuleV1":
         try:
             path = self.resolver.path_for(module_name)
             if path is not None:
@@ -1041,6 +1026,20 @@ class Project(ModuleLike[ProjectMetadata]):
             mod_list.append(self.modules[name])
 
         return mod_list
+
+    def requires(self) -> "List[Requirement]":
+        """
+        Get the requires for this module
+        """
+        # filter on import stmt
+        reqs = []
+        for spec in self._metadata.requires:
+            req = [x for x in parse_requirements(spec)]
+            if len(req) > 1:
+                print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
+            reqe = req[0]
+            reqs.append(reqe)
+        return reqs
 
     def collect_requirements(self) -> "Mapping[str, Iterable[Requirement]]":
         """
@@ -1428,6 +1427,20 @@ class ModuleV1(Module[ModuleV1Metadata]):
         constrained.
         """
         return str(self._metadata.compiler_version)
+
+    def requires(self) -> "List[Requirement]":
+        """
+        Get the requires for this module
+        """
+        # filter on import stmt
+        reqs = []
+        for spec in self._metadata.requires:
+            req = [x for x in parse_requirements(spec)]
+            if len(req) > 1:
+                print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
+            reqe = req[0]
+            reqs.append(reqe)
+        return reqs
 
     @classmethod
     def install(
