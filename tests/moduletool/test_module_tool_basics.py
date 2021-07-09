@@ -23,12 +23,12 @@ import subprocess
 import sys
 import warnings
 from typing import Iterator, Type
+from unittest.mock import patch
 
 import py
 import pytest
 import yaml
 from pkg_resources import Requirement, parse_version
-from unittest.mock import patch
 
 from inmanta import module
 from inmanta.module import InvalidMetadata, MetadataDeprecationWarning, Project
