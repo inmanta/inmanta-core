@@ -22,7 +22,10 @@ import shutil
 import subprocess
 import sys
 import warnings
+from typing import Iterator, Type
+from unittest.mock import patch
 
+import py
 import pytest
 import yaml
 from pkg_resources import Requirement, parse_version
@@ -33,6 +36,15 @@ from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
 from test_app_cli import app
+
+
+@pytest.fixture
+def tmp_working_dir(tmpdir: py.path.local) -> Iterator[py.path.local]:
+    cwd = os.getcwd()
+    os.chdir(str(tmpdir))
+    with patch("os.curdir", new=str(tmpdir)):
+        yield tmpdir
+    os.chdir(cwd)
 
 
 def test_versioning():
@@ -73,29 +85,97 @@ def test_versioning():
     assert re.search("1.2.3.dev[0-9]+", str(newversion))
 
 
-def test_rewrite(tmpdir):
+def test_get_module_v1(tmp_working_dir: py.path.local):
+    metadata_file: str = tmp_working_dir.join("module.yml")
+    metadata_file.write(
+        """
+name: mod
+license: ASL
+version: 1.2.3
+compiler_version: 2017.2
+        """.strip()
+    )
+
+    mt = ModuleTool()
+    mod: module.Module = mt.get_module()
+    assert mod.GENERATION == module.ModuleGeneration.V1
+
+
+def test_get_module_v2(tmp_working_dir: py.path.local):
+    metadata_file: str = tmp_working_dir.join("setup.cfg")
+    metadata_file.write(
+        """
+[metadata]
+name = inmanta-modules-mod
+version = 1.2.3
+license = ASL
+
+[options]
+install_requires =
+  inmanta-modules-net ~=0.2.4
+  inmanta-modules-std >1.0,<2.5
+
+  cookiecutter~=1.7.0
+  cryptography>1.0,<3.5
+        """.strip()
+    )
+
+    mt = ModuleTool()
+    mod: module.Module = mt.get_module()
+    assert mod.GENERATION == module.ModuleGeneration.V2
+
+
+def test_get_module_metadata_file_not_found(tmp_working_dir: py.path.local):
+    mt = ModuleTool()
+    with pytest.raises(module.ModuleMetadataFileNotFound, match="setup.cfg does not exist"):
+        mt.get_module()
+
+
+@pytest.mark.parametrize("module_type", [module.ModuleV1, module.ModuleV2])
+def test_rewrite(tmpdir, module_type: Type[module.Module]):
+    v1: bool = module_type.GENERATION == module.ModuleGeneration.V1
     module_path = tmpdir.join("mod").mkdir()
     model = module_path.join("model").mkdir()
     model.join("_init.cf").write("\n")
 
-    module_yml = module_path.join("module.yml")
-    module_yml.write(
-        """
+    metadata_file: str = module_path.join("module.yml" if v1 else "setup.cfg")
+
+    def metadata_contents(version: str) -> str:
+        if v1:
+            return f"""
 name: mod
 license: ASL
-version: 1.2
+version: {version}
 compiler_version: 2017.2
-    """
-    )
+            """.strip()
+        else:
+            return f"""
+[metadata]
+name = mod
+version = {version}
+license = ASL
 
-    mod = module.Module(None, module_path.strpath)
+[options]
+install_requires =
+  inmanta-modules-net ~=0.2.4
+  inmanta-modules-std >1.0,<2.5
+
+  cookiecutter~=1.7.0
+  cryptography>1.0,<3.5
+            """.strip()
+
+    metadata_file.write(metadata_contents("1.2"))
+    mod = module_type(None, module_path.strpath)
 
     assert mod.version == "1.2"
-    assert mod.compiler_version == "2017.2"
+    if v1:
+        assert mod.compiler_version == "2017.2"
 
     mod.rewrite_version("1.3.1")
     assert mod.version == "1.3.1"
-    assert mod.compiler_version == "2017.2"
+    if v1:
+        assert mod.compiler_version == "2017.2"
+    assert metadata_file.read().strip() == metadata_contents("1.3.1")
 
 
 def test_module_corruption(modules_dir, modules_repo):
@@ -198,7 +278,7 @@ async def test_version_argument(modules_repo):
     make_module_simple(modules_repo, "mod-version", [], "1.2")
     module_path = os.path.join(modules_repo, "mod-version")
 
-    mod = module.Module(None, module_path)
+    mod = module.ModuleV1(None, module_path)
     assert mod.version == "1.2"
 
     args = [sys.executable, "-m", "inmanta.app", "module", "commit", "-m", "msg", "-v", "1.3.1", "-r"]
@@ -219,30 +299,36 @@ async def test_version_argument(modules_repo):
     assert mod._get_metadata_from_disk().version == "1.3.1"
 
 
+class InmantaModule:
+    def __init__(self, module_dir: py.path.local, metadata_file: str) -> None:
+        self._module_path = module_dir.join("mod").mkdir()
+        model = self._module_path.join("model").mkdir()
+        model.join("_init.cf").write("\n")
+        self._metadata_file = self._module_path.join(metadata_file)
+
+    def write_metadata_file(self, content: str) -> None:
+        self._metadata_file.write(content)
+
+    def get_root_dir_of_module(self) -> str:
+        return self._module_path.strpath
+
+    def get_metadata_file_path(self) -> str:
+        return self._metadata_file.strpath
+
+
 @pytest.fixture
-def inmanta_module(tmpdir):
-    class InmantaModule:
-        def __init__(self) -> None:
-            self._module_path = tmpdir.join("mod").mkdir()
-            model = self._module_path.join("model").mkdir()
-            model.join("_init.cf").write("\n")
-            self._module_yml = self._module_path.join("module.yml")
+def inmanta_module_v1(tmpdir):
+    yield InmantaModule(tmpdir, "module.yml")
 
-        def write_module_yml_file(self, content: str) -> None:
-            self._module_yml.write(content)
 
-        def get_root_dir_of_module(self) -> str:
-            return self._module_path.strpath
-
-        def get_path_module_yml_file(self) -> str:
-            return self._module_yml.strpath
-
-    yield InmantaModule()
+@pytest.fixture
+def inmanta_module_v2(tmpdir):
+    yield InmantaModule(tmpdir, "setup.cfg")
 
 
 @pytest.mark.asyncio
-async def test_module_version_non_pep440_complient(inmanta_module):
-    inmanta_module.write_module_yml_file(
+async def test_module_version_non_pep440_complient(inmanta_module_v1):
+    inmanta_module_v1.write_metadata_file(
         """
 name: mod
 license: ASL
@@ -251,25 +337,25 @@ compiler_version: 2017.2
     """
     )
     with pytest.raises(InvalidMetadata, match="Version non_pep440_value is not PEP440 compliant"):
-        module.Module(None, inmanta_module.get_root_dir_of_module())
+        module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
 
 
 @pytest.mark.asyncio
-async def test_invalid_yaml_syntax_in_module_yml(inmanta_module):
-    inmanta_module.write_module_yml_file(
+async def test_invalid_yaml_syntax_in_module_yml(inmanta_module_v1):
+    inmanta_module_v1.write_metadata_file(
         """
 test:
  - first
  second
 """
     )
-    with pytest.raises(InvalidMetadata, match=f"Invalid yaml syntax in {inmanta_module.get_path_module_yml_file()}"):
-        module.Module(None, inmanta_module.get_root_dir_of_module())
+    with pytest.raises(InvalidMetadata, match=f"Invalid yaml syntax in {inmanta_module_v1.get_metadata_file_path()}"):
+        module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
 
 
 @pytest.mark.asyncio
-async def test_module_requires(inmanta_module):
-    inmanta_module.write_module_yml_file(
+async def test_module_requires(inmanta_module_v1):
+    inmanta_module_v1.write_metadata_file(
         """
 name: mod
 license: ASL
@@ -279,13 +365,13 @@ requires:
     - ip > 1.0.0
         """
     )
-    mod: module.Module = module.Module(None, inmanta_module.get_root_dir_of_module())
+    mod: module.Module = module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
     assert mod.requires() == [Requirement.parse("std"), Requirement.parse("ip > 1.0.0")]
 
 
 @pytest.mark.asyncio
-async def test_module_requires_single(inmanta_module):
-    inmanta_module.write_module_yml_file(
+async def test_module_requires_single(inmanta_module_v1):
+    inmanta_module_v1.write_metadata_file(
         """
 name: mod
 license: ASL
@@ -293,13 +379,13 @@ version: 1.0.0
 requires: std > 1.0.0
         """
     )
-    mod: module.Module = module.Module(None, inmanta_module.get_root_dir_of_module())
+    mod: module.Module = module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
     assert mod.requires() == [Requirement.parse("std > 1.0.0")]
 
 
 @pytest.mark.asyncio
-async def test_module_requires_legacy(inmanta_module):
-    inmanta_module.write_module_yml_file(
+async def test_module_requires_legacy(inmanta_module_v1):
+    inmanta_module_v1.write_metadata_file(
         """
 name: mod
 license: ASL
@@ -311,7 +397,7 @@ requires:
     )
     mod: module.Module
     with warnings.catch_warnings(record=True) as w:
-        mod = module.Module(None, inmanta_module.get_root_dir_of_module())
+        mod = module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
         assert len(w) == 1
         warning = w[0]
         assert issubclass(warning.category, MetadataDeprecationWarning)
@@ -320,8 +406,8 @@ requires:
 
 
 @pytest.mark.asyncio
-async def test_module_requires_legacy_invalid(inmanta_module):
-    inmanta_module.write_module_yml_file(
+async def test_module_requires_legacy_invalid(inmanta_module_v1):
+    inmanta_module_v1.write_metadata_file(
         """
 name: mod
 license: ASL
@@ -331,4 +417,28 @@ requires:
         """
     )
     with pytest.raises(InvalidMetadata, match="Invalid legacy requires"):
-        module.Module(None, inmanta_module.get_root_dir_of_module())
+        module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
+
+
+@pytest.mark.asyncio
+async def test_module_v2_metadata(inmanta_module_v2):
+    inmanta_module_v2.write_metadata_file(
+        """
+[metadata]
+name = inmanta-module-mod1
+version = 1.2.3
+license = Apache 2.0
+
+[options]
+install_requires =
+  inmanta-modules-net ~=0.2.4
+  inmanta-modules-std >1.0,<2.5
+
+  cookiecutter~=1.7.0
+  cryptography>1.0,<3.5
+        """
+    )
+    mod: module.ModuleV2 = module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
+    assert mod.metadata.name == "inmanta-module-mod1"
+    assert mod.metadata.version == "1.2.3"
+    assert mod.metadata.license == "Apache 2.0"

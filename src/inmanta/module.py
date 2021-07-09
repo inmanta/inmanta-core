@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import configparser
 import enum
 import glob
 import importlib
@@ -100,6 +101,10 @@ class InvalidModuleException(CompilerException):
                 out += indent * (indent_level + 1) + line
 
         return out
+
+
+class ModuleMetadataFileNotFound(InvalidModuleException):
+    pass
 
 
 @stable_api
@@ -317,7 +322,7 @@ class InstallMode(str, enum.Enum):
     release = "release"
     """
     Only use a released version that is compatible with the current compiler and any version constraints defined in the
-    ``requires`` lists for the project or any other modules (see :class:`ProjectMetadata` and :class:`ModuleMetadata`).
+    ``requires`` lists for the project or any other modules (see :class:`ProjectMetadata` and :class:`ModuleV2Metadata`).
 
     A version is released when there is a tag on a commit. This tag should be a valid version identifier (PEP440) and should
     not be a prerelease version. Inmanta selects the latest available version (version sort based on PEP440) that is compatible
@@ -341,6 +346,7 @@ List of possible module install modes, kept for backwards compatibility. New cod
 """
 
 
+@stable_api
 class FreezeOperator(str, enum.Enum):
     eq = "=="
     compatible = "~="
@@ -352,15 +358,73 @@ class FreezeOperator(str, enum.Enum):
         return f"^({'|'.join(all_values)})$"
 
 
+class RawParser(ABC):
+    @classmethod
+    @abstractmethod
+    def parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
+        raise NotImplementedError()
+
+
+class YamlParser(RawParser):
+    @classmethod
+    def parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
+        try:
+            return yaml.safe_load(source)
+        except yaml.YAMLError as e:
+            if isinstance(source, TextIOBase):
+                raise InvalidMetadata(msg=f"Invalid yaml syntax in {source.name}:\n{str(e)}") from e
+            else:
+                raise InvalidMetadata(msg=str(e)) from e
+
+
+class CfgParser(RawParser):
+    @classmethod
+    def parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
+        try:
+            config: configparser.ConfigParser = configparser.ConfigParser()
+            config.read_string(source if isinstance(source, str) else source.read())
+            return config["metadata"]
+        except configparser.Error as e:
+            if isinstance(source, TextIOBase):
+                raise InvalidMetadata(msg=f"Invalid syntax in {source.name}:\n{str(e)}") from e
+            else:
+                raise InvalidMetadata(msg=str(e)) from e
+        except KeyError as e:
+            if isinstance(source, TextIOBase):
+                raise InvalidMetadata(msg=f"Metadata defined in {source.name} doesn't have a metadata section.") from e
+            else:
+                raise InvalidMetadata(msg="Metadata doesn't have a metadata section.") from e
+
+
+T = TypeVar("T", bound="Metadata")
+
+
+@stable_api
 class Metadata(BaseModel):
     name: str
     description: Optional[str] = None
-    requires: List[str] = []
     freeze_recursive: bool = False
     freeze_operator: str = Field(default="~=", regex=FreezeOperator.get_regex_for_validation())
 
+    _raw_parser: Type[RawParser]
+
     @classmethod
-    def to_list(cls, v: object) -> object:
+    def parse(cls: Type[T], source: Union[str, TextIO]) -> T:
+        raw: Mapping[str, object] = cls._raw_parser.parse(source)
+        try:
+            return cls(**raw)
+        except ValidationError as e:
+            if isinstance(source, TextIOBase):
+                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid", validation_error=e) from e
+            else:
+                raise InvalidMetadata(msg=str(e), validation_error=e) from e
+
+
+class MetadataFieldRequires(BaseModel):
+    requires: List[str] = []
+
+    @classmethod
+    def to_list(cls, v: object) -> List[object]:
         if v is None:
             return []
         if not isinstance(v, list):
@@ -387,7 +451,53 @@ class Metadata(BaseModel):
         return cls.to_list(v)
 
 
-class ModuleMetadata(Metadata):
+TModuleMetadata = TypeVar("TModuleMetadata", bound="ModuleMetadata")
+
+
+@stable_api
+class ModuleMetadata(ABC, Metadata):
+    version: str
+    license: str
+
+    @validator("version")
+    @classmethod
+    def is_pep440_version(cls, v: str) -> str:
+        try:
+            version.Version(v)
+        except version.InvalidVersion as e:
+            raise ValueError(f"Version {v} is not PEP440 compliant") from e
+        return v
+
+    @classmethod
+    def rewrite_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> Tuple[str, TModuleMetadata]:
+        """
+        Returns the source text with the version replaced by the new version.
+        """
+        metadata: TModuleMetadata = cls.parse(source)
+        current_version = metadata.version
+        if current_version == new_version:
+            LOGGER.debug("Current version is the same as the new version: %s", current_version)
+
+        result: str = cls._substitute_version(source, new_version)
+
+        try:
+            new_metadata = cls.parse(result)
+        except Exception:
+            raise Exception("Unable to rewrite module definition.")
+
+        if new_metadata.version != new_version:
+            raise Exception(f"Unable to write module definition, should be {new_version} got {new_metadata.version} instead.")
+
+        return result, new_metadata
+
+    @classmethod
+    @abstractmethod
+    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
+        raise NotImplementedError()
+
+
+@stable_api
+class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
     """
     :param name: The name of the module.
     :param description: (Optional) The description of the module
@@ -395,7 +505,7 @@ class ModuleMetadata(Metadata):
     :param license: The license for this module
     :param compiler_version: (Optional) The minimal compiler version required to compile this module.
     :param requires: (Optional) Model files import other modules. These imports do not determine a version, this
-      is based on the install_model setting of the project. Modules and projects can constrain a version in the
+      is based on the install_mode setting of the project. Modules and projects can constrain a version in the
       requires setting. Similar to the module, version constraints are defined using
       `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
     :param freeze_recursive: (Optional) This key determined if the freeze command will behave recursively or not. If
@@ -406,25 +516,49 @@ class ModuleMetadata(Metadata):
       Valid values are [==, ~=, >=]. *Default is '~='*
     """
 
-    version: str
-    license: str
     compiler_version: Optional[str] = None
 
-    @validator("version", "compiler_version")
+    _raw_parser: Type[YamlParser] = YamlParser
+
+    @validator("compiler_version")
     @classmethod
-    def is_pep440_version(cls, v: str) -> str:
-        try:
-            version.Version(v)
-        except version.InvalidVersion as e:
-            raise ValueError(f"Version {v} is not PEP440 compliant") from e
-        return v
+    def is_pep440_version_v1(cls, v: str) -> str:
+        return cls.is_pep440_version(v)
+
+    @classmethod
+    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
+        return re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", r"\g<1>" + new_version + r"\g<2>", source)
 
 
+@stable_api
+class ModuleV2Metadata(ModuleMetadata):
+    """
+    :param name: The name of the module.
+    :param description: (Optional) The description of the module
+    :param version: The version of the inmanta module.
+    :param license: The license for this module
+    :param freeze_recursive: (Optional) This key determined if the freeze command will behave recursively or not. If
+      freeze_recursive is set to false or not set, the current version of all modules imported directly in any submodule of
+      this module will be set in setup.cfg. If it is set to true, all modules imported in any of those modules will also be
+      set.
+    :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
+      Valid values are [==, ~=, >=]. *Default is '~='*
+    """
+
+    _raw_parser: Type[CfgParser] = CfgParser
+
+    @classmethod
+    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
+        return re.sub(r"(\[metadata\][^\[]*\s*version\s*=\s*)[^\"'}\s\[]+", r"\g<1>" + new_version, source)
+
+
+@stable_api
 class ModuleRepoType(enum.Enum):
     git = "git"
     package = "package"
 
 
+@stable_api
 class ModuleRepoInfo(BaseModel):
 
     url: str
@@ -434,11 +568,12 @@ class ModuleRepoInfo(BaseModel):
     @classmethod
     def validate_type(cls, v: object) -> object:
         if v == ModuleRepoType.package:
-            raise ValidationError("Repository type `package` is not yet supported.")
+            raise ValueError("Repository type `package` is not yet supported.")
         return v
 
 
-class ProjectMetadata(Metadata):
+@stable_api
+class ProjectMetadata(Metadata, MetadataFieldRequires):
     """
     :param name: The name of the project.
     :param description: (Optional) An optional description of the project
@@ -481,6 +616,9 @@ class ProjectMetadata(Metadata):
     repo: List[ModuleRepoInfo] = []
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
+    requires: List[str] = []
+
+    _raw_parser: Type[YamlParser] = YamlParser
 
     @validator("modulepath", pre=True)
     @classmethod
@@ -499,11 +637,8 @@ class ProjectMetadata(Metadata):
             elif isinstance(elem, dict):
                 result.append(elem)
             else:
-                raise ValidationError(f"Value should be either a string of a dict, got {elem}")
+                raise ValueError(f"Value should be either a string of a dict, got {elem}")
         return result
-
-
-T = TypeVar("T", bound=Metadata)
 
 
 @stable_api
@@ -523,7 +658,7 @@ class ModuleLike(ABC, Generic[T]):
         metadata_file_path = self.get_metadata_file_path()
 
         if not os.path.exists(metadata_file_path):
-            raise InvalidModuleException(f"Metadata file {metadata_file_path} does not exist")
+            raise ModuleMetadataFileNotFound(f"Metadata file {metadata_file_path} does not exist")
 
         with open(metadata_file_path, "r", encoding="utf-8") as fd:
             return self.get_metadata_from_source(source=fd)
@@ -532,20 +667,8 @@ class ModuleLike(ABC, Generic[T]):
         """
         :param source: Either the yaml content as a string or an input stream from the yaml file
         """
-        schema_type = self.get_metadata_file_schema_type()
-        try:
-            metadata_obj = yaml.safe_load(source)
-            return schema_type(**dict(metadata_obj))
-        except ValidationError as e:
-            if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid", validation_error=e) from e
-            else:
-                raise InvalidMetadata(msg=str(e), validation_error=e) from e
-        except yaml.YAMLError as e:
-            if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Invalid yaml syntax in {source.name}:\n{str(e)}") from e
-            else:
-                raise InvalidMetadata(msg=str(e)) from e
+        metadata_type: Type[T] = self.get_metadata_file_schema_type()
+        return metadata_type.parse(source)
 
     def get_name(self) -> str:
         return self._metadata.name
@@ -568,8 +691,9 @@ class ModuleLike(ABC, Generic[T]):
     def get_metadata_file_path(self) -> str:
         raise NotImplementedError()
 
+    @classmethod
     @abstractmethod
-    def get_metadata_file_schema_type(self) -> Type[T]:
+    def get_metadata_file_schema_type(cls) -> Type[T]:
         raise NotImplementedError()
 
     def _load_file(self, ns: Namespace, file: str) -> Tuple[List[Statement], BasicBlock]:
@@ -590,20 +714,6 @@ class ModuleLike(ABC, Generic[T]):
                 assert isinstance(s, DynamicStatement)
                 block.add(s)
         return (statements, block)
-
-    def requires(self) -> "List[Requirement]":
-        """
-        Get the requires for this module
-        """
-        # filter on import stmt
-        reqs = []
-        for spec in self._metadata.requires:
-            req = [x for x in parse_requirements(spec)]
-            if len(req) > 1:
-                print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
-            reqe = req[0]
-            reqs.append(reqe)
-        return reqs
 
     def _remove_comments(self, lines: List[str]) -> List[str]:
         """
@@ -690,7 +800,7 @@ class Project(ModuleLike[ProjectMetadata]):
             venv_path = os.path.abspath(venv_path)
         self.virtualenv = env.VirtualEnv(venv_path)
         self.loaded = False
-        self.modules: Dict[str, Module] = {}
+        self.modules: Dict[str, ModuleV1] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
 
@@ -709,7 +819,8 @@ class Project(ModuleLike[ProjectMetadata]):
     def get_metadata_file_path(self) -> str:
         return os.path.join(self._path, Project.PROJECT_FILE)
 
-    def get_metadata_file_schema_type(self) -> Type[ProjectMetadata]:
+    @classmethod
+    def get_metadata_file_schema_type(cls) -> Type[ProjectMetadata]:
         return ProjectMetadata
 
     @classmethod
@@ -807,11 +918,11 @@ class Project(ModuleLike[ProjectMetadata]):
         main_ns = Namespace("__config__", self.root_ns)
         return self._load_file(main_ns, os.path.join(self.project_path, self.main_file))
 
-    def get_modules(self) -> Dict[str, "Module"]:
+    def get_modules(self) -> Dict[str, "ModuleV1"]:
         self.load()
         return self.modules
 
-    def get_module(self, full_module_name: str) -> "Module":
+    def get_module(self, full_module_name: str) -> "ModuleV1":
         parts = full_module_name.split("::")
         module_name = parts[0]
 
@@ -860,17 +971,17 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return out
 
-    def load_module(self, module_name: str) -> "Module":
+    def load_module(self, module_name: str) -> "ModuleV1":
         try:
             path = self.resolver.path_for(module_name)
             if path is not None:
-                module = Module(self, path)
+                module = ModuleV1(self, path)
             else:
                 reqs = self.collect_requirements()
                 if module_name in reqs:
-                    module = Module.install(self, module_name, reqs[module_name], install_mode=self._install_mode)
+                    module = ModuleV1.install(self, module_name, reqs[module_name], install_mode=self._install_mode)
                 else:
-                    module = Module.install(
+                    module = ModuleV1.install(
                         self, module_name, list(parse_requirements(module_name)), install_mode=self._install_mode
                     )
             self.modules[module_name] = module
@@ -915,6 +1026,20 @@ class Project(ModuleLike[ProjectMetadata]):
             mod_list.append(self.modules[name])
 
         return mod_list
+
+    def requires(self) -> "List[Requirement]":
+        """
+        Get the requires for this module
+        """
+        # filter on import stmt
+        reqs = []
+        for spec in self._metadata.requires:
+            req = [x for x in parse_requirements(spec)]
+            if len(req) > 1:
+                print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
+            reqe = req[0]
+            reqs.append(reqe)
+        return reqs
 
     def collect_requirements(self) -> "Mapping[str, Iterable[Requirement]]":
         """
@@ -990,15 +1115,29 @@ class Project(ModuleLike[ProjectMetadata]):
 
 
 @stable_api
-class Module(ModuleLike[ModuleMetadata]):
+class ModuleGeneration(enum.Enum):
+    """
+    The generation of a module. This might affect the on-disk structure of a module as well as how it's distributed.
+    """
+
+    V1: int = 1
+    V2: int = 2
+
+
+TModule = TypeVar("TModule", bound="Module")
+
+
+@stable_api
+class Module(ModuleLike[TModuleMetadata], ABC):
     """
     This class models an inmanta configuration module
     """
 
     MODEL_DIR = "model"
-    MODULE_FILE = "module.yml"
+    MODULE_FILE: str
+    GENERATION: ModuleGeneration
 
-    def __init__(self, project: Project, path: str) -> None:
+    def __init__(self, project: Optional[Project], path: str) -> None:
         """
         Create a new configuration module
 
@@ -1016,38 +1155,17 @@ class Module(ModuleLike[ModuleMetadata]):
                 os.path.basename(self._path),
             )
 
-        self._project = project
+        self._project: Optional[Project] = project
         self.is_versioned()
 
     def rewrite_version(self, new_version: str) -> None:
         new_version = str(new_version)  # make sure it is a string!
         with open(self.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             module_def = fd.read()
-
-        module_metadata = self.get_metadata_from_source(module_def)
-
-        current_version = module_metadata.version
-        if current_version == new_version:
-            LOGGER.debug("Current version is the same as the new version: %s", current_version)
-
-        new_module_def = re.sub(
-            r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", r"\g<1>" + new_version + r"\g<2>", module_def
-        )
-
-        try:
-            module_metadata = self.get_metadata_from_source(new_module_def)
-        except Exception:
-            raise Exception(f"Unable to rewrite module definition {self.get_metadata_file_path()}")
-
-        if module_metadata.version != new_version:
-            raise Exception(
-                f"Unable to write module definition, should be {new_version} got {module_metadata.version} instead."
-            )
-
+        new_module_def, new_metadata = self.get_metadata_file_schema_type().rewrite_version(module_def, new_version)
         with open(self.get_metadata_file_path(), "w+", encoding="utf-8") as fd:
             fd.write(new_module_def)
-
-        self._metadata = module_metadata
+        self._metadata = new_metadata
 
     def get_version(self) -> str:
         """
@@ -1056,145 +1174,6 @@ class Module(ModuleLike[ModuleMetadata]):
         return str(self._metadata.version)
 
     version = property(get_version)
-
-    @property
-    def compiler_version(self) -> Optional[str]:
-        """
-        Get the minimal compiler version required for this module version. Returns none is the compiler version is not
-        constrained.
-        """
-        return str(self._metadata.compiler_version)
-
-    @classmethod
-    def install(
-        cls,
-        project: Project,
-        modulename: str,
-        requirements: "Iterable[Requirement]",
-        install: bool = True,
-        install_mode: InstallMode = InstallMode.release,
-    ) -> "Module":
-        """
-        Install a module, return module object
-        """
-        # verify presence in module path
-        path = project.resolver.path_for(modulename)
-        if path is not None:
-            # if exists, report
-            LOGGER.info("module %s already found at %s", modulename, path)
-            gitprovider.fetch(path)
-        else:
-            # otherwise install
-            if project.downloadpath is None:
-                raise CompilerException(
-                    f"Can not install module {modulename} because 'downloadpath' is not set in {project.PROJECT_FILE}"
-                )
-            path = os.path.join(project.downloadpath, modulename)
-            result = project.externalResolver.clone(modulename, project.downloadpath)
-            if not result:
-                raise InvalidModuleException("could not locate module with name: %s" % modulename)
-
-        return cls.update(project, modulename, requirements, path, False, install_mode=install_mode)
-
-    @classmethod
-    def update(
-        cls,
-        project: Project,
-        modulename: str,
-        requirements: "Iterable[Requirement]",
-        path: str = None,
-        fetch: bool = True,
-        install_mode: InstallMode = InstallMode.release,
-    ) -> "Module":
-        """
-        Update a module, return module object
-        """
-        if path is None:
-            mypath = project.resolver.path_for(modulename)
-            assert mypath is not None, f"trying to update module {modulename} not found on disk "
-        else:
-            mypath = path
-
-        if fetch:
-            LOGGER.info("Performing fetch on %s", mypath)
-            gitprovider.fetch(mypath)
-
-        if install_mode == InstallMode.master:
-            LOGGER.info("Checking out master on %s", mypath)
-            gitprovider.checkout_tag(mypath, "master")
-            if fetch:
-                LOGGER.info("Pulling master on %s", mypath)
-                gitprovider.pull(mypath)
-        else:
-            release_only = install_mode == InstallMode.release
-            version = cls.get_suitable_version_for(modulename, requirements, mypath, release_only=release_only)
-
-            if version is None:
-                print("no suitable version found for module %s" % modulename)
-            else:
-                LOGGER.info("Checking out %s on %s", str(version), mypath)
-                gitprovider.checkout_tag(mypath, str(version))
-
-        return Module(project, mypath)
-
-    @classmethod
-    def get_suitable_version_for(
-        cls, modulename: str, requirements: "Iterable[Requirement]", path: str, release_only: bool = True
-    ) -> "Optional[Version]":
-        versions = gitprovider.get_all_tags(path)
-
-        def try_parse(x: str) -> "Version":
-            try:
-                return parse_version(x)
-            except Exception:
-                return None
-
-        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
-        versions = sorted(versions, reverse=True)
-
-        for r in requirements:
-            versions = [x for x in r.specifier.filter(versions, not release_only)]
-
-        comp_version_raw = get_compiler_version()
-        comp_version = parse_version(comp_version_raw)
-        return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
-
-    @classmethod
-    def __best_for_compiler_version(
-        cls, modulename: str, versions: "List[Version]", path: str, comp_version: "Version"
-    ) -> "Optional[Version]":
-        def get_cv_for(best: "Version") -> "Optional[Version]":
-            cfg_raw = gitprovider.get_file_for_version(path, str(best), cls.MODULE_FILE)
-            cfg = yaml.safe_load(cfg_raw)
-            if "compiler_version" not in cfg:
-                return None
-            v = cfg["compiler_version"]
-            if isinstance(v, (int, float)):
-                v = str(v)
-            return parse_version(v)
-
-        if not versions:
-            return None
-
-        best = versions[0]
-        atleast = get_cv_for(best)
-        if atleast is None or comp_version >= atleast:
-            return best
-
-        # binary search
-        hi = len(versions)
-        lo = 1
-        while lo < hi:
-            mid = (lo + hi) // 2
-            atleast = get_cv_for(versions[mid])
-            if atleast is not None and atleast > comp_version:
-                lo = mid + 1
-            else:
-                hi = mid
-        if hi == len(versions):
-            LOGGER.warning("Could not find version of module %s suitable for this compiler, try a newer compiler" % modulename)
-            return None
-        return versions[lo]
 
     def is_versioned(self) -> bool:
         """
@@ -1209,33 +1188,23 @@ class Module(ModuleLike[ModuleMetadata]):
             return False
         return True
 
-    def get_metadata_file_schema_type(self) -> Type[ModuleMetadata]:
-        return ModuleMetadata
-
     def get_metadata_file_path(self) -> str:
         return os.path.join(self._path, self.MODULE_FILE)
 
-    def get_module_files(self) -> List[str]:
-        """
-        Returns the path of all model files in this module, relative to the module root
-        """
-        files = []
-        for model_file in glob.glob(os.path.join(self._path, "model", "*.cf")):
-            files.append(model_file)
-
-        return files
-
     @lru_cache()
     def get_ast(self, name: str) -> Tuple[List[Statement], BasicBlock]:
+        if self._project is None:
+            raise ValueError("Can only get module's AST in the context of a project.")
+
         if name == self.name:
-            file = os.path.join(self._path, Module.MODEL_DIR, "_init.cf")
+            file = os.path.join(self._path, self.MODEL_DIR, "_init.cf")
         else:
             parts = name.split("::")
             parts = parts[1:]
-            if os.path.isdir(os.path.join(self._path, Module.MODEL_DIR, *parts)):
-                path_elements = [self._path, Module.MODEL_DIR] + parts + ["_init.cf"]
+            if os.path.isdir(os.path.join(self._path, self.MODEL_DIR, *parts)):
+                path_elements = [self._path, self.MODEL_DIR] + parts + ["_init.cf"]
             else:
-                path_elements = [self._path, Module.MODEL_DIR] + parts[:-1] + [parts[-1] + ".cf"]
+                path_elements = [self._path, self.MODEL_DIR] + parts[:-1] + [parts[-1] + ".cf"]
             file = os.path.join(*path_elements)
 
         ns = self._project.get_root_namespace().get_ns_or_create(name)
@@ -1246,6 +1215,9 @@ class Module(ModuleLike[ModuleMetadata]):
             raise InvalidModuleException("could not locate module with name: %s" % name) from e
 
     def get_freeze(self, submodule: str, recursive: bool = False, mode: str = ">=") -> Dict[str, str]:
+        if self._project is None:
+            raise ValueError("Can only get module's freeze in the context of a project.")
+
         imports = [statement.name for statement in self.get_imports(submodule)]
 
         out: Dict[str, str] = {}
@@ -1266,6 +1238,9 @@ class Module(ModuleLike[ModuleMetadata]):
 
     @lru_cache()
     def get_imports(self, name: str) -> List[DefineImport]:
+        if self._project is None:
+            raise ValueError("Can only get module's imports in the context of a project.")
+
         (statements, block) = self.get_ast(name)
         imports = [x for x in statements if isinstance(x, DefineImport)]
         if self._project.autostd:
@@ -1294,7 +1269,7 @@ class Module(ModuleLike[ModuleMetadata]):
         Get all submodules of this module
         """
         modules = []
-        cur_dir = os.path.join(self._path, Module.MODEL_DIR)
+        cur_dir = os.path.join(self._path, self.MODEL_DIR)
         files = self._get_model_files(cur_dir)
 
         for f in files:
@@ -1438,3 +1413,176 @@ class Module(ModuleLike[ModuleMetadata]):
         print("=" * 10)
         subprocess.call(cmd, shell=True, cwd=self._path)
         print("=" * 10)
+
+
+@stable_api
+class ModuleV1(Module[ModuleV1Metadata]):
+    MODULE_FILE = "module.yml"
+    GENERATION = ModuleGeneration.V1
+
+    @property
+    def compiler_version(self) -> Optional[str]:
+        """
+        Get the minimal compiler version required for this module version. Returns none is the compiler version is not
+        constrained.
+        """
+        return str(self._metadata.compiler_version)
+
+    def requires(self) -> "List[Requirement]":
+        """
+        Get the requires for this module
+        """
+        # filter on import stmt
+        reqs = []
+        for spec in self._metadata.requires:
+            req = [x for x in parse_requirements(spec)]
+            if len(req) > 1:
+                print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
+            reqe = req[0]
+            reqs.append(reqe)
+        return reqs
+
+    @classmethod
+    def install(
+        cls,
+        project: Project,
+        modulename: str,
+        requirements: "Iterable[Requirement]",
+        install: bool = True,
+        install_mode: InstallMode = InstallMode.release,
+    ) -> "ModuleV1":
+        """
+        Install a module, return module object
+        """
+        # verify presence in module path
+        path = project.resolver.path_for(modulename)
+        if path is not None:
+            # if exists, report
+            LOGGER.info("module %s already found at %s", modulename, path)
+            gitprovider.fetch(path)
+        else:
+            # otherwise install
+            if project.downloadpath is None:
+                raise CompilerException(
+                    f"Can not install module {modulename} because 'downloadpath' is not set in {project.PROJECT_FILE}"
+                )
+            path = os.path.join(project.downloadpath, modulename)
+            result = project.externalResolver.clone(modulename, project.downloadpath)
+            if not result:
+                raise InvalidModuleException("could not locate module with name: %s" % modulename)
+
+        return cls.update(project, modulename, requirements, path, False, install_mode=install_mode)
+
+    @classmethod
+    def update(
+        cls,
+        project: Project,
+        modulename: str,
+        requirements: "Iterable[Requirement]",
+        path: str = None,
+        fetch: bool = True,
+        install_mode: InstallMode = InstallMode.release,
+    ) -> "ModuleV1":
+        """
+        Update a module, return module object
+        """
+        if path is None:
+            mypath = project.resolver.path_for(modulename)
+            assert mypath is not None, f"trying to update module {modulename} not found on disk "
+        else:
+            mypath = path
+
+        if fetch:
+            LOGGER.info("Performing fetch on %s", mypath)
+            gitprovider.fetch(mypath)
+
+        if install_mode == InstallMode.master:
+            LOGGER.info("Checking out master on %s", mypath)
+            gitprovider.checkout_tag(mypath, "master")
+            if fetch:
+                LOGGER.info("Pulling master on %s", mypath)
+                gitprovider.pull(mypath)
+        else:
+            release_only = install_mode == InstallMode.release
+            version = cls.get_suitable_version_for(modulename, requirements, mypath, release_only=release_only)
+
+            if version is None:
+                print("no suitable version found for module %s" % modulename)
+            else:
+                LOGGER.info("Checking out %s on %s", str(version), mypath)
+                gitprovider.checkout_tag(mypath, str(version))
+
+        return cls(project, mypath)
+
+    @classmethod
+    def get_suitable_version_for(
+        cls, modulename: str, requirements: "Iterable[Requirement]", path: str, release_only: bool = True
+    ) -> "Optional[Version]":
+        versions = gitprovider.get_all_tags(path)
+
+        def try_parse(x: str) -> "Version":
+            try:
+                return parse_version(x)
+            except Exception:
+                return None
+
+        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
+        versions = sorted(versions, reverse=True)
+
+        for r in requirements:
+            versions = [x for x in r.specifier.filter(versions, not release_only)]
+
+        comp_version_raw = get_compiler_version()
+        comp_version = parse_version(comp_version_raw)
+        return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
+
+    @classmethod
+    def __best_for_compiler_version(
+        cls, modulename: str, versions: "List[Version]", path: str, comp_version: "Version"
+    ) -> "Optional[Version]":
+        def get_cv_for(best: "Version") -> "Optional[Version]":
+            cfg_text: str = gitprovider.get_file_for_version(path, str(best), cls.MODULE_FILE)
+            metadata: ModuleV1Metadata = cls.get_metadata_file_schema_type().parse(cfg_text)
+            if metadata.compiler_version is None:
+                return None
+            v = metadata.compiler_version
+            if isinstance(v, (int, float)):
+                v = str(v)
+            return parse_version(v)
+
+        if not versions:
+            return None
+
+        best = versions[0]
+        atleast = get_cv_for(best)
+        if atleast is None or comp_version >= atleast:
+            return best
+
+        # binary search
+        hi = len(versions)
+        lo = 1
+        while lo < hi:
+            mid = (lo + hi) // 2
+            atleast = get_cv_for(versions[mid])
+            if atleast is not None and atleast > comp_version:
+                lo = mid + 1
+            else:
+                hi = mid
+        if hi == len(versions):
+            LOGGER.warning("Could not find version of module %s suitable for this compiler, try a newer compiler" % modulename)
+            return None
+        return versions[lo]
+
+    @classmethod
+    def get_metadata_file_schema_type(cls) -> Type[ModuleV1Metadata]:
+        return ModuleV1Metadata
+
+
+@stable_api
+class ModuleV2(Module[ModuleV2Metadata]):
+    MODULE_FILE = "setup.cfg"
+    GENERATION = ModuleGeneration.V2
+
+    @classmethod
+    def get_metadata_file_schema_type(cls) -> Type[ModuleV2Metadata]:
+        return ModuleV2Metadata

@@ -33,7 +33,16 @@ from pkg_resources import parse_version
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
-from inmanta.module import FreezeOperator, InstallMode, Module, Project, gitprovider
+from inmanta.module import (
+    FreezeOperator,
+    InstallMode,
+    Module,
+    ModuleMetadataFileNotFound,
+    ModuleV1,
+    ModuleV2,
+    Project,
+    gitprovider,
+)
 
 if TYPE_CHECKING:
     from pkg_resources import Requirement  # noqa: F401
@@ -321,7 +330,17 @@ class ModuleTool(ModuleLikeTool):
     def get_module(self, module: str = None, project=None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
-            return Module(self.get_project_for_module(module), os.path.realpath(os.curdir))
+            project = self.get_project_for_module(module)
+            path: str = os.path.realpath(os.curdir)
+            try:
+                return ModuleV2(project, path)
+            except ModuleMetadataFileNotFound as e:
+                try:
+                    return ModuleV1(project, path)
+                except ModuleMetadataFileNotFound:
+                    # ignore this exception in favor of the v2 one
+                    pass
+                raise e
         else:
             project = self.get_project(load=True)
             return project.get_module(module)
@@ -403,7 +422,7 @@ version: 0.0.1dev0"""
                     reqv = "master"
                 else:
                     release_only = project._install_mode == InstallMode.release
-                    versions = Module.get_suitable_version_for(name, specs[name], mod._path, release_only=release_only)
+                    versions = ModuleV1.get_suitable_version_for(name, specs[name], mod._path, release_only=release_only)
                     if versions is None:
                         reqv = "None"
                     else:
@@ -443,7 +462,7 @@ version: 0.0.1dev0"""
             for module in modules:
                 spec = specs.get(module, [])
                 try:
-                    Module.update(my_project, module, spec, install_mode=my_project._install_mode)
+                    ModuleV1.update(my_project, module, spec, install_mode=my_project._install_mode)
                 except Exception:
                     LOGGER.exception("Failed to update module %s", module)
 
@@ -516,11 +535,6 @@ version: 0.0.1dev0"""
         Verify dependencies and frozen module versions
         """
         Project.get().verify()
-
-    def _find_module(self):
-        module = Module(None, os.path.realpath(os.curdir))
-        LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
-        return module
 
     def commit(
         self,
