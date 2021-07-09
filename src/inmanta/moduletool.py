@@ -314,9 +314,9 @@ class ModuleTool(ModuleLikeTool):
             default=None,
         )
 
-        build = subparser.add_parser("build", help="Build an Python package from an inmanta module.")
+        build = subparser.add_parser("build", help="Build an Python package from an V2 module.")
         build.add_argument(
-            "module-path",
+            "--module-path",
             help="The path to the module that should be updated",
             default=None,
             dest="module_path",
@@ -631,27 +631,28 @@ version: 0.0.1dev0"""
 class V2ModuleBuilder:
 
     def __init__(self, module_path: str) -> None:
-        self._module_path = module_path
+        self._module_path = os.path.abspath(module_path)
 
     def build(self) -> None:
         # TODO: Check whether module_path references a valid V2 module
-        # TODO: Check if output directory already exists
         output_directory = os.path.join(self._module_path, "dist")
+        if os.path.exists(output_directory):
+            raise Exception(f"Output directory {output_directory} already exists")
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Copy module to tmp directory
+            # Copy module to temporary directory to perform the build
             module_copy_path = os.path.join(tmpdir, "module")
             shutil.copytree(self._module_path, module_copy_path)
             self._prepare_v2_module_for_build(module_copy_path)
             self._build_v2_module(module_copy_path, output_directory)
 
     def _prepare_v2_module_for_build(self, module_path: str) -> None:
+        self._move_data_files_to_package_directory(module_path)
+        self._add_install_requires_based_on_compiler_version(module_path)
+
+    def _move_data_files_to_package_directory(self, module_path: str) -> None:
         """
         Copy all files that have to be packaged into the Python package of the module
         """
-        self._move_data_files_to_package_directory(module_path)
-        self._add_requirement_compiler_version_constraint(module_path)
-
-    def _move_data_files_to_package_directory(self, module_path: str) -> None:
         # TODO: Obtain module name from metadata
         python_pkg_dir = os.path.join(module_path, "inmanta_plugins", module_name)
         for dir_name in ["model", "files", "templates"]:
@@ -663,8 +664,8 @@ class V2ModuleBuilder:
 
     def _add_install_requires_based_on_compiler_version(self, module_path: str) -> None:
         """
-            The compiler_version constraint on a module will get translated to an
-            install_requirements on the inmanta-core package.
+        The compiler_version constraint on a module will get translated to an
+        install_requirements on the inmanta-core package.
         """
         # TODO: Implement
         pass

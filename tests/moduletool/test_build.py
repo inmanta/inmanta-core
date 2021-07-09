@@ -31,7 +31,7 @@ def test_build_v2_module(tmpdir, monkeypatch, set_module_path: bool) -> None:
     assert os.path.isdir(module_copy_dir)
 
     if set_module_path:
-        cmd = [sys.executable, "-m", "inmanta.app", "module", "build", module_copy_dir]
+        cmd = [sys.executable, "-m", "inmanta.app", "module", "build", "--module-path", module_copy_dir]
     else:
         monkeypatch.chdir(module_copy_dir)
         cmd = [sys.executable, "-m", "inmanta.app", "module", "build"]

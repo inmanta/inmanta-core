@@ -25,6 +25,7 @@ requires = [
     "texttable",
     "tornado>=6.0",
     "typing_inspect",
+    "build",
 ]
 
 # Package a dummy extensions so that the namespace package for extensions is not empty
