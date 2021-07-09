@@ -17,6 +17,7 @@
 """
 import inspect
 import logging
+import zipfile
 import os
 import shutil
 import subprocess
@@ -24,7 +25,7 @@ import sys
 import time
 from argparse import ArgumentParser
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Iterable, List, Mapping, Optional
+from typing import TYPE_CHECKING, Iterable, List, Mapping, Optional, Set
 import build
 import tempfile
 
@@ -643,7 +644,40 @@ class V2ModuleBuilder:
             module_copy_path = os.path.join(tmpdir, "module")
             shutil.copytree(self._module_path, module_copy_path)
             self._prepare_v2_module_for_build(module_copy_path)
-            self._build_v2_module(module_copy_path, output_directory)
+            path_to_wheel = self._build_v2_module(module_copy_path, output_directory)
+            self._verify_wheel(module_copy_path, path_to_wheel)
+
+    def _verify_wheel(self, module_path: str, path_to_wheel: str) -> None:
+        """
+        Verify whether there were files in the python package on disk that were not packaged
+        in the given wheel and log a warning if such a file exists.
+        """
+        # TODO: extract module_name from metadata
+        files_in_python_package_dir = self._get_files_in_directory(os.path.join(module_path, "inmanta_plugins", module_name))
+        with zipfile.ZipFile(path_to_wheel) as z:
+            dir_prefix = f"inmanta_plugins/{module_name}/"
+            files_in_wheel = set(
+                info.filename[len(dir_prefix):] for info in z.infolist()
+                if not info.is_dir() and info.filename.startswith(dir_prefix)
+            )
+        unpackaged_files = files_in_python_package_dir - files_in_wheel
+        if unpackaged_files:
+            LOGGER.warning(
+                f"The following files are present in the inmanta_plugins/{module_name} directory on disk, but were not "
+                f"packaged: {list(unpackaged_files)}. Update you setup.cfg file if they need to be packaged."
+            )
+
+    def _get_files_in_directory(self, directory: str) -> Set[str]:
+        """
+        Return the relative paths to all the files in all subdirectories of the given directory.
+        """
+        if not os.path.isdir(directory):
+            raise Exception(f"Directory {directory} is not a directory")
+        result = set()
+        for (dirpath, dirnames, filenames) in os.walk(directory):
+            relative_paths_to_filenames = set(os.path.relpath(os.path.join(dirpath, f), directory) for f in filenames)
+            result = result | relative_paths_to_filenames
+        return result
 
     def _prepare_v2_module_for_build(self, module_path: str) -> None:
         self._move_data_files_to_package_directory(module_path)
@@ -667,10 +701,10 @@ class V2ModuleBuilder:
         The compiler_version constraint on a module will get translated to an
         install_requirements on the inmanta-core package.
         """
-        # TODO: Implement
+        # TODO: get compiler_version from metadata
         pass
 
-    def _build_v2_module(self, module_path: str, output_directory: str) -> None:
+    def _build_v2_module(self, module_path: str, output_directory: str) -> str:
         """
         Build v2 module using PEP517 package builder.
         """
@@ -681,4 +715,4 @@ class V2ModuleBuilder:
             )
             env.install(builder.build_system_requires)
             env.install(builder.get_requires_for_build(distribution=distribution))
-            builder.build(distribution=distribution, output_directory=output_directory)
+            return builder.build(distribution=distribution, output_directory=output_directory)

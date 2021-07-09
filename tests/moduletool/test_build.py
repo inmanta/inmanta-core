@@ -54,3 +54,4 @@ def test_build_v2_module(tmpdir, monkeypatch, set_module_path: bool) -> None:
     assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", "v2module", "files", "test.txt"))
     assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", "v2module", "templates", "template.txt.j2"))
 
+    # TODO: Update config minimalv2module and elaboratev2module in tests/data/modules/ and update the test case.
