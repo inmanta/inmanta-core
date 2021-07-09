@@ -240,7 +240,6 @@ class ProjectTool(ModuleLikeTool):
         """
         Install all modules the project requires.
         """
-        #TODO: add this explicitly to the ticket
         # This currently only installs v1 modules. #3083 will add the v2 install
         project = self.get_project(load=True)
 
@@ -507,7 +506,10 @@ version: 0.0.1dev0"""
         def install(install_path: str) -> None:
             env.ProcessEnv.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
 
-        # TODO: verify path is a v2 module
+        try:
+            ModuleV2(project=None, path=path)
+        except ModuleMetadataFileNotFound:
+            raise CLIException(1, f"Can only install v2 modules. {path} does not contain a v2 module.")
 
         if editable:
             install(path)
