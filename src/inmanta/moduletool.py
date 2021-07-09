@@ -643,7 +643,7 @@ class V2ModuleBuilder:
             # Copy module to temporary directory to perform the build
             module_copy_path = os.path.join(tmpdir, "module")
             shutil.copytree(self._module_path, module_copy_path)
-            self._prepare_v2_module_for_build(module_copy_path)
+            self._move_data_files_to_package_directory(module_copy_path)
             path_to_wheel = self._build_v2_module(module_copy_path, output_directory)
             self._verify_wheel(module_copy_path, path_to_wheel)
 
@@ -679,10 +679,6 @@ class V2ModuleBuilder:
             result = result | relative_paths_to_filenames
         return result
 
-    def _prepare_v2_module_for_build(self, module_path: str) -> None:
-        self._move_data_files_to_package_directory(module_path)
-        self._add_install_requires_based_on_compiler_version(module_path)
-
     def _move_data_files_to_package_directory(self, module_path: str) -> None:
         """
         Copy all files that have to be packaged into the Python package of the module
@@ -695,14 +691,6 @@ class V2ModuleBuilder:
                 shutil.move(fq_dir_name, python_pkg_dir)
         metadata_file = os.path.join(module_path, "setup.cfg")
         shutil.copy(metadata_file, python_pkg_dir)
-
-    def _add_install_requires_based_on_compiler_version(self, module_path: str) -> None:
-        """
-        The compiler_version constraint on a module will get translated to an
-        install_requirements on the inmanta-core package.
-        """
-        # TODO: get compiler_version from metadata
-        pass
 
     def _build_v2_module(self, module_path: str, output_directory: str) -> str:
         """
