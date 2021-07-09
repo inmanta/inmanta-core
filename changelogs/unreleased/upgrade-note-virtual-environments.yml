@@ -1,0 +1,11 @@
+---
+description: Update note regarding virtual environments.
+change-type: patch
+destination-branches: [master, iso4, iso3]
+sections:
+  upgrade-note: |
+    After upgrading the Inmanta server, all virtual environments used by the compiler and the agents have to be removed. Use the following procedure to achive this:
+      * Stop the Inmanta server
+      * Remove all `/var/lib/inmanta/server/environments/<environment-id>/.env` directories
+      * Remove all `/var/lib/inmanta/<environment-id>` directories
+      * Start the Inmanta server again
