@@ -106,7 +106,7 @@ def test_get_module_v2(tmp_working_dir: py.path.local):
     metadata_file.write(
         """
 [metadata]
-name = mod
+name = inmanta-modules-mod
 version = 1.2.3
 license = ASL
 
