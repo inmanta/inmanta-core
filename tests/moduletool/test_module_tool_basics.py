@@ -22,7 +22,7 @@ import shutil
 import subprocess
 import sys
 import warnings
-from typing import Type
+from typing import Iterator, Type
 
 import py
 import pytest
@@ -35,6 +35,14 @@ from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
 from test_app_cli import app
+
+
+@pytest.fixture
+def tmp_working_dir(tmpdir: py.path.local) -> Iterator[py.path.local]:
+    cwd = os.getcwd()
+    os.chdir(str(tmpdir))
+    yield tmpdir
+    os.chdir(cwd)
 
 
 def test_versioning():
@@ -73,6 +81,52 @@ def test_versioning():
     assert re.search("1.2.3.dev[0-9]+", str(newversion))
     newversion = mt.determine_new_version(parse_version("1.2.3.dev025"), None, False, False, False, True)
     assert re.search("1.2.3.dev[0-9]+", str(newversion))
+
+
+def test_get_module_v1(tmp_working_dir: py.path.local):
+    metadata_file: str = tmp_working_dir.join("module.yml")
+    metadata_file.write(
+        """
+name: mod
+license: ASL
+version: 1.2.3
+compiler_version: 2017.2
+        """.strip()
+    )
+
+    mt = ModuleTool()
+    mod: module.Module = mt.get_module()
+    assert mod.GENERATION == module.ModuleGeneration.V1
+
+
+def test_get_module_v2(tmp_working_dir: py.path.local):
+    metadata_file: str = tmp_working_dir.join("setup.cfg")
+    metadata_file.write(
+        """
+[metadata]
+name = mod
+version = 1.2.3
+license = ASL
+
+[options]
+install_requires =
+  inmanta-modules-net ~=0.2.4
+  inmanta-modules-std >1.0,<2.5
+
+  cookiecutter~=1.7.0
+  cryptography>1.0,<3.5
+        """.strip()
+    )
+
+    mt = ModuleTool()
+    mod: module.Module = mt.get_module()
+    assert mod.GENERATION == module.ModuleGeneration.V2
+
+
+def test_get_module_metadata_file_not_found(tmp_working_dir: py.path.local):
+    mt = ModuleTool()
+    with pytest.raises(module.ModuleMetadataFileNotFound, match="setup.cfg does not exist"):
+        mt.get_module()
 
 
 @pytest.mark.parametrize("module_type", [module.ModuleV1, module.ModuleV2])
