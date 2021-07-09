@@ -2937,6 +2937,80 @@ class Resource(BaseDocument):
 
         return should_purge
 
+    @classmethod
+    async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ResourceDetails]:
+        status_subquery = """
+        (CASE WHEN
+            (SELECT resource.model < MAX(configurationmodel.version)
+            FROM configurationmodel
+            WHERE configurationmodel.released=TRUE
+            AND environment = $1)
+        THEN 'orphaned'
+        ELSE resource.status::text END
+        ) as status
+        """
+
+        query = f"""
+        SELECT DISTINCT ON (resource_id) first.resource_id, cm.date as first_generated_time,
+        first.model as first_model, latest.resource_id as latest_resource_id, latest.resource_type,
+        latest.agent, latest.resource_id_value, latest.last_deploy as latest_deploy, latest.attributes, latest.status,
+        /* Split up the requires array to its elements and find the latest released version of
+            the resources to get their status, and build a single json object from them */
+        (SELECT JSON_OBJECT_AGG(substring(req.requires from '(.*),v='), s.status) as requires_status
+            FROM
+                (SELECT JSONB_ARRAY_ELEMENTS_TEXT(resource.attributes->'requires') as requires
+                    FROM resource
+                    WHERE resource_id = latest.resource_id and model = latest.model)
+                    as req
+                    INNER JOIN
+                        (SELECT DISTINCT ON (resource_id) resource_id, resource.environment, {status_subquery}
+                        FROM resource
+                        INNER JOIN configurationmodel cm
+                        ON resource.model = cm.version AND resource.environment = cm.environment
+                        WHERE resource.environment = $1 AND cm.released = TRUE
+                        ORDER BY resource_id, model desc
+                        ) as s
+                    ON substring(req.requires from '(.*),v=') = s.resource_id AND s.environment = $1
+                )
+        FROM resource first
+        INNER JOIN
+            /* 'latest' is the latest released version of the resource */
+            (SELECT distinct on (resource_id) resource_id, attribute_hash, model, last_deploy, attributes,
+                resource_type, agent, resource_id_value, {status_subquery}
+                FROM resource
+                JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
+                WHERE resource.environment = $1 AND resource_id = $2 AND cm.released = TRUE
+                ORDER BY resource_id, model desc
+            ) as latest
+        /* The 'first' values correspond to the first time the attribute hash was the same as in
+            the 'latest' released version */
+        ON first.resource_id = latest.resource_id AND first.attribute_hash = latest.attribute_hash
+        INNER JOIN configurationmodel cm ON first.model = cm.version AND first.environment = cm.environment
+        WHERE first.environment = $1 AND first.resource_id = $2 AND cm.released = TRUE
+        ORDER BY first.resource_id, first.model asc;
+        """
+        values = [cls._get_value(env), cls._get_value(resource_id)]
+        result = await cls.select_query(query, values, no_obj=True)
+        result = cast(List[Record], result)
+
+        if not result:
+            return None
+        record = result[0]
+        parsed_id = resources.Id.parse_id(record["latest_resource_id"])
+        return m.ResourceDetails(
+            resource_id=record["latest_resource_id"],
+            resource_type=record["resource_type"],
+            agent=record["agent"],
+            id_attribute=parsed_id.attribute,
+            id_attribute_value=record["resource_id_value"],
+            last_deploy=record["latest_deploy"],
+            first_generated_time=record["first_generated_time"],
+            first_generated_version=record["first_model"],
+            attributes=json.loads(record["attributes"]),
+            status=record["status"],
+            requires_status=json.loads(record["requires_status"]) if record["requires_status"] else {},
+        )
+
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
         await super(Resource, self).insert(connection=connection)
