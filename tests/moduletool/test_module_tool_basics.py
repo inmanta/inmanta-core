@@ -28,6 +28,7 @@ import py
 import pytest
 import yaml
 from pkg_resources import Requirement, parse_version
+from unittest.mock import patch
 
 from inmanta import module
 from inmanta.module import InvalidMetadata, MetadataDeprecationWarning, Project
@@ -41,7 +42,8 @@ from test_app_cli import app
 def tmp_working_dir(tmpdir: py.path.local) -> Iterator[py.path.local]:
     cwd = os.getcwd()
     os.chdir(str(tmpdir))
-    yield tmpdir
+    with patch("os.curdir", new=str(tmpdir)):
+        yield tmpdir
     os.chdir(cwd)
 
 
