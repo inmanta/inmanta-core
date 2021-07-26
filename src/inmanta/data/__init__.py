@@ -740,7 +740,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     def get_composed_filter_with_query_types(
         cls, offset: int = 1, col_name_prefix: str = None, **query: QueryFilter
-    ) -> Tuple[str, List[object]]:
+    ) -> Tuple[List[str], List[object]]:
         filter_statements = []
         values: List[object] = []
         index_count = max(1, offset)
@@ -764,9 +764,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
             filter_statements.append(filter_statement)
             values.extend(filter_values)
             index_count += len(filter_values)
-        filter_as_string = " AND ".join(filter_statements)
 
-        return (filter_as_string, values)
+        return (filter_statements, values)
 
     @classmethod
     def validate_field_name(cls, name: str) -> ColumnNameStr:
@@ -874,8 +873,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         **query: QueryFilter,
     ) -> Tuple[List[str], List[object]]:
         cls._validate_paging_parameters(start, end, first_id, last_id)
-        (filter_statement, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
-        filter_statements = filter_statement.split(" AND ") if filter_statement != "" else []
+        (filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
 
         start_filter_statements, start_values = cls._add_start_filter(
             len(values),
@@ -2333,7 +2331,7 @@ class ResourceAction(BaseDocument):
 
 
 class ResourceOrder(DatabaseOrder):
-    """ Represents the ordering by which events should be sorted"""
+    """ Represents the ordering by which resources should be sorted"""
 
     valid_sort_pattern: Pattern = re.compile("^(resource_type|agent|status|resource_id_value)\\.(asc|desc)$", re.IGNORECASE)
 
@@ -2359,6 +2357,29 @@ class ResourceOrder(DatabaseOrder):
     def _should_be_treated_as_string(self) -> bool:
         """Ensure that records are sorted alphabetically by status instead of the enum order"""
         return self.order_by_column == "status"
+
+
+class ResourceHistoryOrder(DatabaseOrder):
+    """ Represents the ordering by which resource history should be sorted"""
+
+    valid_sort_pattern: Pattern = re.compile("^(date)\\.(asc|desc)$", re.IGNORECASE)
+
+    @classmethod
+    def parse_from_string(
+        cls,
+        sort: str,
+    ) -> "ResourceHistoryOrder":
+        match = cls.valid_sort_pattern.match(sort)
+        if match and len(match.groups()) == 2:
+            order_by_column = match.groups()[0].lower()
+            # Sorting based on the date of the configuration model
+            validated_order_by_column, validated_order = ConfigurationModel._validate_order(
+                order_by_column=order_by_column, order=match.groups()[1].upper()
+            )
+            return ResourceHistoryOrder(
+                order_by_column=validated_order_by_column, order=validated_order, order_by_column_type=str
+            )
+        raise InvalidSort(f"Sort parameter invalid: {sort}")
 
 
 @stable_api
@@ -2722,36 +2743,12 @@ class Resource(BaseDocument):
         end: Optional[Any] = None,
         **query: Tuple[QueryType, object],
     ) -> Tuple[str, List[object]]:
-        order_by_column = database_order.get_order_by_db_column_name()
-        order = database_order.get_order()
-        (filter_statement, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
-        common_filter_statements = filter_statement.split(" AND ") if filter_statement != "" else []
-
-        if "ASC" in order:
-            before_filter_statements, before_values = cls._add_end_filter(
-                len(values), order_by_column, id_column_name, end, last_id
-            )
-            values.extend(before_values)
-            after_filter_statements, after_values = cls._add_start_filter(
-                len(values), order_by_column, id_column_name, start, first_id
-            )
-            values.extend(after_values)
-        else:
-            before_filter_statements, before_values = cls._add_start_filter(
-                len(values), order_by_column, id_column_name, start, first_id
-            )
-            values.extend(before_values)
-            after_filter_statements, after_values = cls._add_end_filter(
-                len(values), order_by_column, id_column_name, end, last_id
-            )
-            values.extend(after_values)
-        before_filter = cls._join_filter_statements(before_filter_statements)
-        after_filter = cls._join_filter_statements(after_filter_statements)
+        select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
+            database_order, id_column_name, first_id, last_id, start, end, **query
+        )
 
         sql_query, base_query_values = cls._get_released_resources_base_query(
-            select_clause=f"SELECT COUNT({id_column_name}) as count_total, "
-            f"COUNT({id_column_name}) filter ({before_filter}) as count_before, "
-            f"COUNT({id_column_name}) filter ({after_filter}) as count_after ",
+            select_clause=select_clause,
             environment=environment,
             offset=len(values) + 1,
         )
@@ -2955,6 +2952,194 @@ class Resource(BaseDocument):
             status=record["status"],
             requires_status=json.loads(record["requires_status"]) if record["requires_status"] else {},
         )
+
+    @classmethod
+    def get_history_base_query(
+        cls,
+        select_clause: str,
+        environment: uuid.UUID,
+        resource_id: m.ResourceIdStr,
+        offset: int,
+    ) -> Tuple[str, List[object]]:
+        query = f"""
+                /* Assign a sequence id to the rows, which is used for grouping consecutive ones with the same hash */
+                WITH resourcewithsequenceids AS (
+                  SELECT
+                    attribute_hash,
+                    model,
+                    attributes,
+                    date,
+                    model - ROW_NUMBER() OVER (
+                      PARTITION BY attribute_hash
+                      ORDER BY date
+                    ) AS seqid
+                  FROM resource JOIN configurationmodel cm
+                    ON resource.model = cm.version AND resource.environment = cm.environment
+                  WHERE resource.environment = ${offset} AND resource_id = ${offset + 1} AND cm.released = TRUE
+                )
+                   {select_clause}
+                    FROM
+                    (SELECT
+                        attribute_hash,
+                        min(date) as date,
+                        (SELECT distinct on (attribute_hash) attributes
+                            FROM resourcewithsequenceids
+                            WHERE resourcewithsequenceids.attribute_hash = rs.attribute_hash
+                            AND resourcewithsequenceids.seqid = rs.seqid
+                            ORDER BY attribute_hash, model
+                        ) as attributes
+                    FROM resourcewithsequenceids rs
+                    GROUP BY attribute_hash,  seqID) as sub
+                    """
+        values = [cls._get_value(environment), cls._get_value(resource_id)]
+        return query, values
+
+    @classmethod
+    async def get_resource_history(
+        cls,
+        env: uuid.UUID,
+        resource_id: m.ResourceIdStr,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+        limit: Optional[int] = None,
+    ) -> List[m.ResourceHistory]:
+        order_by_column = database_order.get_order_by_db_column_name()
+        order = database_order.get_order()
+
+        select_clause = """
+        SELECT
+        attribute_hash,
+        date,
+        attributes """
+
+        filter_statements, values = cls._get_list_query_pagination_parameters(
+            database_order=database_order,
+            id_column=ColumnNameStr("attribute_hash"),
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+        )
+        query, base_query_values = cls.get_history_base_query(
+            select_clause=select_clause, environment=env, resource_id=resource_id, offset=len(values) + 1
+        )
+        if len(filter_statements) > 0:
+            query += cls._join_filter_statements(filter_statements)
+        values.extend(base_query_values)
+        backward_paging = ("ASC" in order and end) or ("DESC" in order and start)
+
+        if backward_paging:
+            if "ASC" in order:
+                backward_paging_order = order.replace("ASC", "DESC")
+            else:
+                backward_paging_order = order.replace("DESC", "ASC")
+
+            query += f" ORDER BY {order_by_column} {backward_paging_order}, attribute_hash {backward_paging_order}"
+        else:
+            query += f" ORDER BY {order_by_column} {order}, attribute_hash {order}"
+        if limit is not None:
+            if limit > DBLIMIT:
+                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
+            elif limit > 0:
+                query += " LIMIT " + str(limit)
+        else:
+            query += f" LIMIT {DBLIMIT} "
+
+        if backward_paging:
+            query = f"""SELECT * FROM ({query}) AS matching_records
+                        ORDER BY matching_records.{order_by_column} {order}, matching_records.attribute_hash {order}"""
+        result = await cls.select_query(query, values, no_obj=True)
+        result = cast(List[Record], result)
+
+        return [
+            m.ResourceHistory(
+                resource_id=resource_id,
+                attribute_hash=record["attribute_hash"],
+                attributes=json.loads(record["attributes"]),
+                date=record["date"],
+                requires=[
+                    resources.Id.parse_id(rvid).resource_str() for rvid in json.loads(record["attributes"]).get("requires", [])
+                ],
+            )
+            for record in result
+        ]
+
+    @classmethod
+    def _get_item_count_query_conditions(
+        cls,
+        database_order: DatabaseOrder,
+        id_column_name: ColumnNameStr,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[Any] = None,
+        end: Optional[Any] = None,
+        **query: Tuple[QueryType, object],
+    ) -> Tuple[str, List[object], List[str]]:
+        order_by_column = database_order.get_order_by_db_column_name()
+        order = database_order.get_order()
+        (common_filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
+
+        if "ASC" in order:
+            before_filter_statements, before_values = cls._add_end_filter(
+                len(values), order_by_column, id_column_name, end, last_id
+            )
+            values.extend(before_values)
+            after_filter_statements, after_values = cls._add_start_filter(
+                len(values), order_by_column, id_column_name, start, first_id
+            )
+            values.extend(after_values)
+        else:
+            before_filter_statements, before_values = cls._add_start_filter(
+                len(values), order_by_column, id_column_name, start, first_id
+            )
+            values.extend(before_values)
+            after_filter_statements, after_values = cls._add_end_filter(
+                len(values), order_by_column, id_column_name, end, last_id
+            )
+            values.extend(after_values)
+        before_filter = cls._join_filter_statements(before_filter_statements)
+        after_filter = cls._join_filter_statements(after_filter_statements)
+
+        select_clause = (
+            f"SELECT COUNT({id_column_name}) as count_total, "
+            f"COUNT({id_column_name}) filter ({before_filter}) as count_before, "
+            f"COUNT({id_column_name}) filter ({after_filter}) as count_after "
+        )
+
+        return select_clause, values, common_filter_statements
+
+    @classmethod
+    def _get_paging_history_item_count_query(
+        cls,
+        environment: uuid.UUID,
+        resource_id: m.ResourceIdStr,
+        database_order: DatabaseOrder,
+        id_column_name: ColumnNameStr,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[Any] = None,
+        end: Optional[Any] = None,
+        **query: Tuple[QueryType, object],
+    ) -> Tuple[str, List[object]]:
+        select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
+            database_order, id_column_name, first_id, last_id, start, end, **query
+        )
+
+        sql_query, base_query_values = cls.get_history_base_query(
+            select_clause=select_clause,
+            environment=environment,
+            resource_id=resource_id,
+            offset=len(values) + 1,
+        )
+        values.extend(base_query_values)
+
+        if len(common_filter_statements) > 0:
+            sql_query += cls._join_filter_statements(common_filter_statements)
+
+        return sql_query, values
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
