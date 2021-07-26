@@ -3061,8 +3061,7 @@ class Resource(BaseDocument):
                 attributes=json.loads(record["attributes"]),
                 date=record["date"],
                 requires=[
-                    resources.Id.parse_id(rvid).resource_str()
-                    for rvid in json.loads(record["attributes"]).get("requires", [])
+                    resources.Id.parse_id(rvid).resource_str() for rvid in json.loads(record["attributes"]).get("requires", [])
                 ],
             )
             for record in result
