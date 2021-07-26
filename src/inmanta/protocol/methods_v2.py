@@ -566,3 +566,39 @@ def resource_details(tid: uuid.UUID, rid: model.ResourceIdStr) -> model.Resource
     :return: The details of the latest released version of a resource
     :raise NotFound: This exception is raised when the referenced environment or resource is not found
     """
+
+
+@typedmethod(
+    path="/resource/<rid>/history", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def resource_history(
+    tid: uuid.UUID,
+    rid: model.ResourceIdStr,
+    limit: Optional[int] = None,
+    first_id: Optional[str] = None,
+    last_id: Optional[str] = None,
+    start: Optional[datetime.datetime] = None,
+    end: Optional[datetime.datetime] = None,
+    sort: str = "date.desc",
+) -> List[model.ResourceHistory]:
+    """
+    :param tid: The id of the environment this resource belongs to
+    :param rid: The id of the resource
+    :param limit: Limit the number of instances that are returned
+    :param first_id: The attribute_hash to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The attribute_hash to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param sort: Return the results sorted according to the parameter value.
+                It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `date.desc`
+                (case insensitive).
+                Sorting by `date` is supported.
+                The following orders are supported: 'asc', 'desc'
+    :return: The history of a resource, according to its attributes
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for sorting or paging are not valid
+    """
