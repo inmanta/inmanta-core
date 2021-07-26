@@ -23,7 +23,7 @@ import pytest
 from inmanta import module
 from inmanta.ast import CompilerException, ModuleNotFoundException
 from inmanta.config import Config
-from inmanta.moduletool import ModuleTool
+from inmanta.moduletool import ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 
 
@@ -37,7 +37,7 @@ def test_bad_checkout(modules_dir, modules_repo):
     Config.load_config()
 
     with pytest.raises(ModuleNotFoundException):
-        ModuleTool().execute("install", [])
+        ProjectTool().execute("install", [])
 
 
 def test_bad_setup(modules_dir, modules_repo):
@@ -68,7 +68,7 @@ def test_complex_checkout(modules_dir, modules_repo):
     os.curdir = coroot
     Config.load_config()
 
-    ModuleTool().execute("install", [])
+    ProjectTool().execute("install", [])
     expected = ["mod1", "mod2", "mod3", "mod6", "mod7"]
     for i in expected:
         dirname = os.path.join(coroot, "libs", i)
@@ -95,13 +95,13 @@ def test_for_git_failures(modules_dir, modules_repo):
     os.curdir = coroot
     Config.load_config()
 
-    ModuleTool().execute("install", [])
+    ProjectTool().execute("install", [])
 
     gp = module.gitprovider
     module.gitprovider = BadModProvider(gp, os.path.join(coroot, "libs", "mod6"))
     try:
         # test all tools, perhaps isolate to other test case
-        ModuleTool().execute("install", [])
+        ProjectTool().execute("install", [])
         ModuleTool().execute("list", [])
         ModuleTool().execute("update", [])
         ModuleTool().execute("status", [])
@@ -125,7 +125,7 @@ def test_install_for_git_failures(modules_dir, modules_repo):
     module.gitprovider = BadModProvider(gp, os.path.join(coroot, "libs", "mod6"))
     try:
         with pytest.raises(ModuleNotFoundException):
-            ModuleTool().execute("install", [])
+            ProjectTool().execute("install", [])
     finally:
         module.gitprovider = gp
 
@@ -139,7 +139,7 @@ def test_for_repo_without_versions(modules_dir, modules_repo):
     os.curdir = coroot
     Config.load_config()
 
-    ModuleTool().execute("install", [])
+    ProjectTool().execute("install", [])
 
 
 def test_bad_dep_checkout(modules_dir, modules_repo):
@@ -152,13 +152,13 @@ def test_bad_dep_checkout(modules_dir, modules_repo):
     Config.load_config()
 
     with pytest.raises(CompilerException):
-        ModuleTool().execute("install", [])
+        ProjectTool().execute("install", [])
 
 
 def test_master_checkout(modules_dir, modules_repo):
     coroot = install_project(modules_dir, "masterproject")
 
-    ModuleTool().execute("install", [])
+    ProjectTool().execute("install", [])
 
     dirname = os.path.join(coroot, "libs", "mod8")
     assert os.path.exists(os.path.join(dirname, "devsignal"))
@@ -174,7 +174,7 @@ def test_dev_checkout(modules_dir, modules_repo):
     os.curdir = coroot
     Config.load_config()
 
-    ModuleTool().execute("install", [])
+    ProjectTool().execute("install", [])
 
     dirname = os.path.join(coroot, "libs", "mod8")
     assert os.path.exists(os.path.join(dirname, "devsignal"))

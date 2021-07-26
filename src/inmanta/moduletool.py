@@ -279,7 +279,7 @@ class ModuleTool(ModuleLikeTool):
 
         install: ArgumentParser = subparser.add_parser("install", help="Install a module.")
         install.add_argument("-e", "--editable", action="store_true", help="Install in editable mode.")
-        install.add_argument("path", default=".", help="The path to the module.")
+        install.add_argument("path", nargs="?", default=".", help="The path to the module.")
 
         subparser.add_parser("status", help="Run a git status on all modules and report")
 

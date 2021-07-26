@@ -22,7 +22,7 @@ import sys
 import pytest
 
 from inmanta.command import CLIException
-from inmanta.moduletool import ModuleTool
+from inmanta.moduletool import ModuleTool, ProjectTool
 from moduletool.common import install_project
 from test_app_cli import app
 
@@ -264,7 +264,7 @@ requires:
             )
 
     modp = os.path.join(coroot, "libs/modC")
-    app(["module", "install"])
+    app(["project", "install"])
     os.chdir(modp)
     os.curdir = modp
     app(["module", "freeze"])

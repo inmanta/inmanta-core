@@ -197,7 +197,7 @@ def test_module_corruption(modules_dir, modules_repo):
 
     # setup project
     proj = install_project(modules_dir, "proj9")
-    app(["modules", "install"])
+    app(["project", "install"])
     print(os.listdir(proj))
 
     # unfreeze deps to allow update
