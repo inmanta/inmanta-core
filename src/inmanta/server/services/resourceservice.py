@@ -33,11 +33,17 @@ from inmanta.data.model import (
     Resource,
     ResourceAction,
     ResourceDetails,
+    ResourceHistory,
     ResourceIdStr,
     ResourceType,
     ResourceVersionIdStr,
 )
-from inmanta.data.paging import ResourcePagingCountsProvider, ResourcePagingHandler
+from inmanta.data.paging import (
+    ResourceHistoryPagingCountsProvider,
+    ResourceHistoryPagingHandler,
+    ResourcePagingCountsProvider,
+    ResourcePagingHandler,
+)
 from inmanta.protocol import methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -728,3 +734,56 @@ class ResourceService(protocol.ServerSlice):
         if not details:
             raise NotFound("The resource with the given id does not exist, or was not released yet in the given environment.")
         return details
+
+    @protocol.handle(methods_v2.resource_history, env="tid")
+    async def resource_history(
+        self,
+        env: data.Environment,
+        rid: ResourceIdStr,
+        limit: Optional[int] = None,
+        first_id: Optional[str] = None,
+        last_id: Optional[str] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+        sort: str = "date.desc",
+    ) -> ReturnValue[List[ResourceHistory]]:
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        try:
+            resource_order = data.ResourceHistoryOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+        try:
+            history = await data.Resource.get_resource_history(
+                env.id,
+                rid,
+                database_order=resource_order,
+                first_id=first_id,
+                last_id=last_id,
+                start=start,
+                end=end,
+                limit=limit,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = ResourceHistoryPagingHandler(ResourceHistoryPagingCountsProvider(data.Resource, rid), rid)
+        metadata = await paging_handler.prepare_paging_metadata(
+            env.id, history, limit=limit, database_order=resource_order, db_query={}
+        )
+        links = await paging_handler.prepare_paging_links(
+            history,
+            database_order=resource_order,
+            limit=limit,
+            filter=None,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+        return ReturnValueWithMeta(response=history, links=links if links else {}, metadata=vars(metadata))

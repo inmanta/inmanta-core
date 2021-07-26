@@ -343,3 +343,11 @@ class ResourceDetails(BaseModel):
     attributes: JsonType
     status: ReleasedResourceState
     requires_status: Dict[ResourceIdStr, ReleasedResourceState]
+
+
+class ResourceHistory(BaseModel):
+    resource_id: ResourceIdStr
+    date: datetime.datetime
+    attributes: JsonType
+    attribute_hash: str
+    requires: List[ResourceIdStr]
