@@ -740,7 +740,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     def get_composed_filter_with_query_types(
         cls, offset: int = 1, col_name_prefix: str = None, **query: QueryFilter
-    ) -> Tuple[str, List[object]]:
+    ) -> Tuple[List[str], List[object]]:
         filter_statements = []
         values: List[object] = []
         index_count = max(1, offset)
@@ -764,9 +764,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
             filter_statements.append(filter_statement)
             values.extend(filter_values)
             index_count += len(filter_values)
-        filter_as_string = " AND ".join(filter_statements)
 
-        return (filter_as_string, values)
+        return (filter_statements, values)
 
     @classmethod
     def validate_field_name(cls, name: str) -> ColumnNameStr:
@@ -874,8 +873,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         **query: QueryFilter,
     ) -> Tuple[List[str], List[object]]:
         cls._validate_paging_parameters(start, end, first_id, last_id)
-        (filter_statement, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
-        filter_statements = filter_statement.split(" AND ") if filter_statement != "" else []
+        (filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
 
         start_filter_statements, start_values = cls._add_start_filter(
             len(values),
@@ -3102,6 +3100,8 @@ class Resource(BaseDocument):
                 raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
             elif limit > 0:
                 query += " LIMIT " + str(limit)
+        else:
+            query += f" LIMIT {DBLIMIT} "
 
         if backward_paging:
             query = f"""SELECT * FROM ({query}) AS matching_records
@@ -3136,8 +3136,7 @@ class Resource(BaseDocument):
     ) -> Tuple[str, List[object], List[str]]:
         order_by_column = database_order.get_order_by_db_column_name()
         order = database_order.get_order()
-        (filter_statement, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
-        common_filter_statements = filter_statement.split(" AND ") if filter_statement != "" else []
+        (common_filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
 
         if "ASC" in order:
             before_filter_statements, before_values = cls._add_end_filter(
