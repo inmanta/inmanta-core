@@ -29,13 +29,13 @@ from inmanta import module
 
 def test_module():
     good_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "mod1")
-    module.Module(project=mock.Mock(), path=good_mod_dir)
+    module.ModuleV1(project=mock.Mock(), path=good_mod_dir)
 
 
 def test_bad_module():
     bad_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "mod2")
-    with pytest.raises(module.InvalidModuleException):
-        module.Module(project=mock.Mock(), path=bad_mod_dir)
+    with pytest.raises(module.ModuleMetadataFileNotFound):
+        module.ModuleV1(project=mock.Mock(), path=bad_mod_dir)
 
 
 class TestModuleName(unittest.TestCase):
@@ -58,7 +58,7 @@ class TestModuleName(unittest.TestCase):
 
     def test_wrong_name(self):
         mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "mod3")
-        module.Module(project=mock.Mock(), path=mod_dir)
+        module.ModuleV1(project=mock.Mock(), path=mod_dir)
 
         self.handler.flush()
         assert "The name in the module file (mod1) does not match the directory name (mod3)" in self.stream.getvalue().strip()

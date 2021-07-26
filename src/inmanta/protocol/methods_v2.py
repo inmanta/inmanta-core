@@ -556,3 +556,13 @@ def resource_list(
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """
+
+
+@typedmethod(
+    path="/resource/<rid>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def resource_details(tid: uuid.UUID, rid: model.ResourceIdStr) -> model.ResourceDetails:
+    """
+    :return: The details of the latest released version of a resource
+    :raise NotFound: This exception is raised when the referenced environment or resource is not found
+    """

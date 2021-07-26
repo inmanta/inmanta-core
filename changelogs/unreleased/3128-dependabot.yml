@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump graphviz from 0.16 to 0.17
+destination-branches:
+- master
+sections: {}
