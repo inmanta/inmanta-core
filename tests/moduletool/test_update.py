@@ -39,7 +39,6 @@ def test_module_update_with_install_mode_master(
 
     # Set masterproject_multi_mod as current project
     os.chdir(masterproject_multi_mod)
-    os.curdir = masterproject_multi_mod
     Config.load_config()
 
     # Dependencies masterproject_multi_mod
