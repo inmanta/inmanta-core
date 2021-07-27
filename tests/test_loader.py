@@ -29,7 +29,6 @@ from pytest import fixture
 from inmanta import loader
 from inmanta.loader import ModuleSource, SourceInfo
 from inmanta.module import Project
-from inmanta.moduletool import ProjectTool
 
 
 def test_code_manager():

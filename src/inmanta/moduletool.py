@@ -25,7 +25,7 @@ import tempfile
 import time
 from argparse import ArgumentParser
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Iterable, List, Optional, Mapping
+from typing import TYPE_CHECKING, Iterable, List, Mapping, Optional
 
 import texttable
 import yaml
@@ -189,7 +189,7 @@ class ProjectTool(ModuleLikeTool):
         init.add_argument(
             "--default", help="Use default parameters for the project generation", action="store_true", default=False
         )
-        install: ArgumentParser = subparser.add_parser("install", help="Install all modules required for this project")
+        subparser.add_parser("install", help="Install all modules required for this project")
 
     def freeze(self, outfile, recursive, operator):
         """
@@ -250,7 +250,7 @@ class ProjectTool(ModuleLikeTool):
         Install all modules the project requires.
         """
         # This currently only installs v1 modules. #3083 will add the v2 install
-        project = self.get_project(load=True)
+        self.get_project(load=True)
 
 
 class ModuleTool(ModuleLikeTool):
@@ -522,6 +522,7 @@ version: 0.0.1dev0"""
         Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the
         context of a project.
         """
+
         def install(install_path: str) -> None:
             env.ProcessEnv.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
 

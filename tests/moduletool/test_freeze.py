@@ -22,7 +22,7 @@ import sys
 import pytest
 
 from inmanta.command import CLIException
-from inmanta.moduletool import ModuleTool, ProjectTool
+from inmanta.moduletool import ModuleTool
 from moduletool.common import install_project
 from test_app_cli import app
 

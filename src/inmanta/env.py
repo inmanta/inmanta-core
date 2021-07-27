@@ -56,6 +56,7 @@ class ProcessEnv:
     """
     Class to represent the Python environment this process is running in.
     """
+
     env_path: str = sys.executable
 
     @classmethod
@@ -67,8 +68,7 @@ class ProcessEnv:
             raise Exception("install_from_source requires at least one package to install")
         # make sure we only try to install from a local source
         explicit_paths: Iterator[LocalPackagePath] = (
-            LocalPackagePath(path=os.path.join(".", path.path), editable=path.editable)
-            for path in paths
+            LocalPackagePath(path=os.path.join(".", path.path), editable=path.editable) for path in paths
         )
         subprocess.check_call(
             [
@@ -76,10 +76,7 @@ class ProcessEnv:
                 "-m",
                 "pip",
                 "install",
-                *chain.from_iterable(
-                    ["-e", path.path] if path.editable else [path.path]
-                    for path in explicit_paths
-                )
+                *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in explicit_paths),
             ]
         )
 
