@@ -1,0 +1,6 @@
+description: Fixed docstring-parser compatibility after non-backwards compatible changes and constrained dependency to semi-safe range.
+change-type: patch
+sections:
+  bugfix: "{{description}}"
+destination-branches:
+  - master
