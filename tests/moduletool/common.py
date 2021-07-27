@@ -93,11 +93,11 @@ def add_file(modpath, file, content, msg, version=None, dev=False, tag=True):
     if version is None:
         return commitmodule(modpath, msg)
     else:
-        ocd = os.curdir
-        os.curdir = modpath
+        old_cwd = os.getcwd()
+        os.chdir(modpath)
         subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
         ModuleTool().commit(msg, version=version, dev=dev, commit_all=True, tag=tag)
-        os.curdir = ocd
+        os.chdir(old_cwd)
 
 
 def add_file_and_compiler_constraint(modpath, file, content, msg, version, compiler_version):
@@ -145,7 +145,6 @@ def install_project(modules_dir, name, config=True):
     coroot = os.path.join(subroot, name)
     subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", name)], cwd=subroot, stderr=subprocess.STDOUT)
     os.chdir(coroot)
-    os.curdir = coroot
     if config:
         Config.load_config()
     return coroot
