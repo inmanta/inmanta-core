@@ -33,7 +33,6 @@ def test_bad_checkout(modules_dir, modules_repo):
         ["git", "clone", os.path.join(modules_dir, "repos", "badproject")], cwd=modules_dir, stderr=subprocess.STDOUT
     )
     os.chdir(coroot)
-    os.curdir = coroot
     Config.load_config()
 
     with pytest.raises(ModuleNotFoundException):
@@ -46,7 +45,6 @@ def test_bad_setup(modules_dir, modules_repo):
         ["git", "clone", os.path.join(modules_dir, "repos", "badproject"), coroot], cwd=modules_dir, stderr=subprocess.STDOUT
     )
     os.chdir(coroot)
-    os.curdir = coroot
     Config.load_config()
 
     mod1 = os.path.join(coroot, "libs", "mod1")
@@ -65,7 +63,6 @@ def test_complex_checkout(modules_dir, modules_repo):
         ["git", "clone", os.path.join(modules_dir, "repos", "testproject")], cwd=modules_dir, stderr=subprocess.STDOUT
     )
     os.chdir(coroot)
-    os.curdir = coroot
     Config.load_config()
 
     ModuleTool().execute("install", [])
@@ -92,7 +89,6 @@ def test_for_git_failures(modules_dir, modules_repo):
         stderr=subprocess.STDOUT,
     )
     os.chdir(coroot)
-    os.curdir = coroot
     Config.load_config()
 
     ModuleTool().execute("install", [])
@@ -118,7 +114,6 @@ def test_install_for_git_failures(modules_dir, modules_repo):
         stderr=subprocess.STDOUT,
     )
     os.chdir(coroot)
-    os.curdir = coroot
     Config.load_config()
 
     gp = module.gitprovider
@@ -136,7 +131,6 @@ def test_for_repo_without_versions(modules_dir, modules_repo):
         ["git", "clone", os.path.join(modules_dir, "repos", "noverproject")], cwd=modules_dir, stderr=subprocess.STDOUT
     )
     os.chdir(coroot)
-    os.curdir = coroot
     Config.load_config()
 
     ModuleTool().execute("install", [])
@@ -148,7 +142,6 @@ def test_bad_dep_checkout(modules_dir, modules_repo):
         ["git", "clone", os.path.join(modules_dir, "repos", "baddep")], cwd=modules_dir, stderr=subprocess.STDOUT
     )
     os.chdir(coroot)
-    os.curdir = coroot
     Config.load_config()
 
     with pytest.raises(CompilerException):
@@ -171,7 +164,6 @@ def test_dev_checkout(modules_dir, modules_repo):
         ["git", "clone", os.path.join(modules_dir, "repos", "devproject")], cwd=modules_dir, stderr=subprocess.STDOUT
     )
     os.chdir(coroot)
-    os.curdir = coroot
     Config.load_config()
 
     ModuleTool().execute("install", [])
