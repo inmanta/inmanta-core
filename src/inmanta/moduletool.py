@@ -17,24 +17,24 @@
 """
 import inspect
 import logging
-import zipfile
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
+import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Iterable, List, Mapping, Optional, Set
-import build
-import build.env
-import tempfile
 
 import texttable
 import yaml
 from cookiecutter.main import cookiecutter
 from pkg_resources import parse_version
 
+import build
+import build.env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
@@ -637,7 +637,6 @@ version: 0.0.1dev0"""
 
 
 class ModuleBuildFailedError(Exception):
-
     def __init__(self, msg: str, *args, **kwargs) -> None:
         self.msg = msg
         super(ModuleBuildFailedError, self).__init__(*args, **kwargs)
@@ -647,7 +646,6 @@ class ModuleBuildFailedError(Exception):
 
 
 class V2ModuleBuilder:
-
     def __init__(self, module_path: str) -> None:
         """
         :raises InvalidModuleException: The given module_path doesn't reference a valid module.
@@ -678,7 +676,8 @@ class V2ModuleBuilder:
         with zipfile.ZipFile(path_to_wheel) as z:
             dir_prefix = f"{rel_path_namespace_package}/"
             files_in_wheel = set(
-                info.filename[len(dir_prefix):] for info in z.infolist()
+                info.filename[len(dir_prefix) :]
+                for info in z.infolist()
                 if not info.is_dir() and info.filename.startswith(dir_prefix)
             )
         unpackaged_files = files_in_python_package_dir - files_in_wheel
@@ -719,9 +718,7 @@ class V2ModuleBuilder:
         try:
             with build.env.IsolatedEnvBuilder() as env:
                 distribution = "wheel"
-                builder = build.ProjectBuilder(
-                    srcdir=build_path, python_executable=env.executable, scripts_dir=env.scripts_dir
-                )
+                builder = build.ProjectBuilder(srcdir=build_path, python_executable=env.executable, scripts_dir=env.scripts_dir)
                 env.install(builder.build_system_requires)
                 env.install(builder.get_requires_for_build(distribution=distribution))
                 return builder.build(distribution=distribution, output_directory=output_directory)

@@ -15,17 +15,18 @@
 
     Contact: code@inmanta.com
 """
+import configparser
 import logging
-import shutil
 import os
+import shutil
+import subprocess
 import sys
+import zipfile
 
 import pytest
-import zipfile
-from inmanta.moduletool import V2ModuleBuilder
+
 from inmanta.module import ModuleMetadataFileNotFound
-import configparser
-import subprocess
+from inmanta.moduletool import V2ModuleBuilder
 
 
 @pytest.mark.parametrize(
@@ -35,7 +36,7 @@ import subprocess
         ("minimalv2module", False),
         ("elaboratev2module", True),
         ("elaboratev2module", False),
-    ]
+    ],
 )
 def test_build_v2_module(tmpdir, module_name: str, set_module_path_option: bool) -> None:
     """
@@ -104,8 +105,10 @@ def test_build_v2_module_incomplete_package_data(tmpdir, caplog) -> None:
 
     with caplog.at_level(logging.WARNING):
         V2ModuleBuilder(module_copy_dir).build()
-        assert ("The following files are present in the inmanta_plugins/minimalv2module directory on disk, but were not "
-               "packaged: ['model/_init.cf']. Update you setup.cfg file if they need to be packaged.") in caplog.messages
+        assert (
+            "The following files are present in the inmanta_plugins/minimalv2module directory on disk, but were not "
+            "packaged: ['model/_init.cf']. Update you setup.cfg file if they need to be packaged."
+        ) in caplog.messages
 
 
 def test_build_invalid_module(tmpdir):
@@ -123,4 +126,3 @@ def test_build_invalid_module(tmpdir):
 
     with pytest.raises(ModuleMetadataFileNotFound, match=f"Metadata file {setup_cfg_file} does not exist"):
         V2ModuleBuilder(module_copy_dir).build()
-

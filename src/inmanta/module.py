@@ -1616,4 +1616,4 @@ class ModuleV2(Module[ModuleV2Metadata]):
         Return the name of the namespace package of this module
         present in the inmanta_plugins package.
         """
-        return self.name[len("inmanta-module-"):]
+        return self.name[len("inmanta-module-") :]
