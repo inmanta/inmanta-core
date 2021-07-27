@@ -30,7 +30,7 @@ from inmanta.moduletool import V2ModuleBuilder
 
 
 @pytest.mark.parametrize(
-    "module_name,set_module_path_option",
+    "module_name,set_path_argument",
     [
         ("minimalv2module", True),
         ("minimalv2module", False),
@@ -38,7 +38,7 @@ from inmanta.moduletool import V2ModuleBuilder
         ("elaboratev2module", False),
     ],
 )
-def test_build_v2_module(tmpdir, module_name: str, set_module_path_option: bool) -> None:
+def test_build_v2_module(tmpdir, module_name: str, set_path_argument: bool) -> None:
     """
     Build a V2 package and verify that the required files are present in the resulting wheel.
     """
@@ -49,8 +49,8 @@ def test_build_v2_module(tmpdir, module_name: str, set_module_path_option: bool)
 
     def run_module_build() -> None:
         cmd = [sys.executable, "-m", "inmanta.app", "module", "build"]
-        if set_module_path_option:
-            cmd += ["--module-path", module_copy_dir]
+        if set_path_argument:
+            cmd.append(module_copy_dir)
             subprocess.check_output(cmd, stderr=subprocess.STDOUT)
         else:
             subprocess.check_output(cmd, cwd=module_copy_dir, stderr=subprocess.STDOUT)

@@ -327,18 +327,17 @@ class ModuleTool(ModuleLikeTool):
 
         build = subparser.add_parser("build", help="Build an Python package from an V2 module.")
         build.add_argument(
-            "--module-path",
+            "path",
             help="The path to the module that should be updated",
-            default=None,
-            dest="module_path",
+            nargs="?",
         )
 
-    def build(self, module_path: Optional[str] = None) -> None:
-        if module_path is not None:
-            module_path = os.path.abspath(module_path)
+    def build(self, path: Optional[str] = None) -> None:
+        if path is not None:
+            path = os.path.abspath(path)
         else:
-            module_path = os.getcwd()
-        module_path_root = ModuleV2.get_module_dir(module_path)
+            path = os.getcwd()
+        module_path_root = ModuleV2.get_module_dir(path)
         V2ModuleBuilder(module_path_root).build()
 
     def get_project_for_module(self, module):
