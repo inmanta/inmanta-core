@@ -654,6 +654,22 @@ class ModuleLike(ABC, Generic[T]):
         self._path = path
         self._metadata = self._get_metadata_from_disk()
 
+    @classmethod
+    def get_top_level_directory_containing_file(cls, cur_dir: str, filename: str) -> str:
+        """
+        Travel up in the directory structure until a file with the given name if found.
+        """
+        fq_path_to_filename = os.path.join(cur_dir, filename)
+
+        if os.path.exists(fq_path_to_filename):
+            return cur_dir
+
+        parent_dir = os.path.abspath(os.path.join(cur_dir, os.pardir))
+        if parent_dir == cur_dir:
+            raise FileNotFoundError(f"No file with name {filename} exists in any of the parent directories")
+
+        return cls.get_top_level_directory_containing_file(parent_dir, filename)
+
     def _get_metadata_from_disk(self) -> T:
         metadata_file_path = self.get_metadata_file_path()
 
@@ -674,6 +690,10 @@ class ModuleLike(ABC, Generic[T]):
         return self._metadata.name
 
     name = property(get_name)
+
+    @property
+    def path(self) -> str:
+        return self._path
 
     @property
     def metadata(self) -> T:
@@ -828,16 +848,10 @@ class Project(ModuleLike[ProjectMetadata]):
         """
         Find the project directory where we are working in. Traverse up until we find Project.PROJECT_FILE or reach /
         """
-        project_file = os.path.join(cur_dir, Project.PROJECT_FILE)
-
-        if os.path.exists(project_file):
-            return cur_dir
-
-        parent_dir = os.path.abspath(os.path.join(cur_dir, os.pardir))
-        if parent_dir == cur_dir:
+        try:
+            return cls.get_top_level_directory_containing_file(cur_dir, Project.PROJECT_FILE)
+        except FileNotFoundError:
             raise ProjectNotFoundException("Unable to find an inmanta project (project.yml expected)")
-
-        return cls.get_project_dir(parent_dir)
 
     @classmethod
     def get(cls, main_file: str = "main.cf") -> "Project":
@@ -1157,6 +1171,16 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         self._project: Optional[Project] = project
         self.is_versioned()
+
+    @classmethod
+    def get_module_dir(cls, module_subdirectory: str) -> str:
+        """
+        Find the top level module from the given subdirectory of a module.
+        """
+        try:
+            return cls.get_top_level_directory_containing_file(module_subdirectory, cls.MODULE_FILE)
+        except FileNotFoundError:
+            raise InvalidModuleException(f"Directory {module_subdirectory} is not part of a valid module")
 
     def rewrite_version(self, new_version: str) -> None:
         new_version = str(new_version)  # make sure it is a string!
@@ -1586,3 +1610,10 @@ class ModuleV2(Module[ModuleV2Metadata]):
     @classmethod
     def get_metadata_file_schema_type(cls) -> Type[ModuleV2Metadata]:
         return ModuleV2Metadata
+
+    def get_name_namespace_package(self) -> str:
+        """
+        Return the name of the namespace package of this module
+        present in the inmanta_plugins package.
+        """
+        return self.name[len("inmanta-module-"):]
