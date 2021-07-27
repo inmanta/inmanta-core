@@ -1,0 +1,5 @@
+description: Bump docstring-parser dependency and account for non-backwards compatible changes.
+change-type: patch
+destination-branches:
+  - iso4
+  - master
