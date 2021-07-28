@@ -29,7 +29,7 @@ from moduletool.common import add_file, clone_repo
     [({}, True, True), ({"module": "mod2"}, True, False), ({"module": "mod8"}, False, True)],
 )
 def test_module_update_with_install_mode_master(
-    tmpdir, modules_dir, modules_repo, kwargs_update_method, mod2_should_be_updated, mod8_should_be_updated
+    tmpdir, modules_repo, kwargs_update_method, mod2_should_be_updated, mod8_should_be_updated
 ):
     # Make a copy of masterproject_multi_mod
     masterproject_multi_mod = tmpdir.join("masterproject_multi_mod")
