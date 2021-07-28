@@ -1180,7 +1180,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         try:
             return cls.get_top_level_directory_containing_file(module_subdirectory, cls.MODULE_FILE)
         except FileNotFoundError:
-            raise InvalidModuleException(f"Directory {module_subdirectory} is not part of a valid module")
+            raise InvalidModuleException(f"Directory {module_subdirectory} is not part of a valid {cls.GENERATION.name} module")
 
     def rewrite_version(self, new_version: str) -> None:
         new_version = str(new_version)  # make sure it is a string!
