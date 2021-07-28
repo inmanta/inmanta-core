@@ -533,7 +533,8 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
 @stable_api
 class ModuleV2Metadata(ModuleMetadata):
     """
-    :param name: The name of the module.
+    :param name: The name of the python package that is generated when packaging this module.
+                 This name should follow the format "inmanta-module-<module-name>"
     :param description: (Optional) The description of the module
     :param version: The version of the inmanta module.
     :param license: The license for this module
@@ -546,6 +547,16 @@ class ModuleV2Metadata(ModuleMetadata):
     """
 
     _raw_parser: Type[CfgParser] = CfgParser
+
+    @validator("name")
+    @classmethod
+    def validate_name_field(cls, v: str) -> str:
+        """
+        The name field of a V2 module should follow the format "inmanta-module-<module-name>"
+        """
+        if not v.startswith(ModuleV2.PKG_NAME_PREFIX) or not len(v) > len(ModuleV2.PKG_NAME_PREFIX):
+            raise ValueError(f'The name field should follow the format "{ModuleV2.PKG_NAME_PREFIX}<module-name>"')
+        return v
 
     @classmethod
     def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
@@ -653,6 +664,23 @@ class ModuleLike(ABC, Generic[T]):
         """
         self._path = path
         self._metadata = self._get_metadata_from_disk()
+        self.name = self.get_name_from_metadata(self._metadata)
+
+    @classmethod
+    def get_first_directory_containing_file(cls, cur_dir: str, filename: str) -> str:
+        """
+        Travel up in the directory structure until a file with the given name if found.
+        """
+        fq_path_to_filename = os.path.join(cur_dir, filename)
+
+        if os.path.exists(fq_path_to_filename):
+            return cur_dir
+
+        parent_dir = os.path.abspath(os.path.join(cur_dir, os.pardir))
+        if parent_dir == cur_dir:
+            raise FileNotFoundError(f"No file with name {filename} exists in any of the parent directories")
+
+        return cls.get_first_directory_containing_file(parent_dir, filename)
 
     def _get_metadata_from_disk(self) -> T:
         metadata_file_path = self.get_metadata_file_path()
@@ -670,10 +698,9 @@ class ModuleLike(ABC, Generic[T]):
         metadata_type: Type[T] = self.get_metadata_file_schema_type()
         return metadata_type.parse(source)
 
-    def get_name(self) -> str:
-        return self._metadata.name
-
-    name = property(get_name)
+    @property
+    def path(self) -> str:
+        return self._path
 
     @property
     def metadata(self) -> T:
@@ -694,6 +721,11 @@ class ModuleLike(ABC, Generic[T]):
     @classmethod
     @abstractmethod
     def get_metadata_file_schema_type(cls) -> Type[T]:
+        raise NotImplementedError()
+
+    @classmethod
+    @abstractmethod
+    def get_name_from_metadata(cls, metadata: T) -> str:
         raise NotImplementedError()
 
     def _load_file(self, ns: Namespace, file: str) -> Tuple[List[Statement], BasicBlock]:
@@ -804,6 +836,10 @@ class Project(ModuleLike[ProjectMetadata]):
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
 
+    @classmethod
+    def get_name_from_metadata(cls, metadata: ProjectMetadata) -> str:
+        return metadata.name
+
     @property
     def _install_mode(self) -> InstallMode:
         return self._metadata.install_mode
@@ -828,16 +864,10 @@ class Project(ModuleLike[ProjectMetadata]):
         """
         Find the project directory where we are working in. Traverse up until we find Project.PROJECT_FILE or reach /
         """
-        project_file = os.path.join(cur_dir, Project.PROJECT_FILE)
-
-        if os.path.exists(project_file):
-            return cur_dir
-
-        parent_dir = os.path.abspath(os.path.join(cur_dir, os.pardir))
-        if parent_dir == cur_dir:
+        try:
+            return cls.get_first_directory_containing_file(cur_dir, Project.PROJECT_FILE)
+        except FileNotFoundError:
             raise ProjectNotFoundException("Unable to find an inmanta project (project.yml expected)")
-
-        return cls.get_project_dir(parent_dir)
 
     @classmethod
     def get(cls, main_file: str = "main.cf") -> "Project":
@@ -1158,6 +1188,16 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         self._project: Optional[Project] = project
         self.is_versioned()
 
+    @classmethod
+    def get_module_dir(cls, module_subdirectory: str) -> str:
+        """
+        Find the top level module from the given subdirectory of a module.
+        """
+        try:
+            return cls.get_first_directory_containing_file(module_subdirectory, cls.MODULE_FILE)
+        except FileNotFoundError:
+            raise InvalidModuleException(f"Directory {module_subdirectory} is not part of a valid {cls.GENERATION.name} module")
+
     def rewrite_version(self, new_version: str) -> None:
         new_version = str(new_version)  # make sure it is a string!
         with open(self.get_metadata_file_path(), "r", encoding="utf-8") as fd:
@@ -1278,7 +1318,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             if parts[-1] == "_init":
                 parts = parts[:-1]
 
-            parts.insert(0, self.get_name())
+            parts.insert(0, self.name)
             name = "::".join(parts)
 
             modules.append(name)
@@ -1376,12 +1416,12 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         Run a git status on this module
         """
-        sys.stdout.write("%s (%s) " % (self.get_name(), self._path))
+        sys.stdout.write("%s (%s) " % (self.name, self._path))
         sys.stdout.flush()
         try:
             print(gitprovider.push(self._path))
         except CalledProcessError:
-            print("Cloud not push module %s" % self.get_name())
+            print("Cloud not push module %s" % self.name)
         else:
             print("done")
         print()
@@ -1409,7 +1449,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             return requirements_lines
 
     def execute_command(self, cmd: str) -> None:
-        print("executing %s on %s in %s" % (cmd, self.get_name(), self._path))
+        print("executing %s on %s in %s" % (cmd, self.name, self._path))
         print("=" * 10)
         subprocess.call(cmd, shell=True, cwd=self._path)
         print("=" * 10)
@@ -1419,6 +1459,13 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 class ModuleV1(Module[ModuleV1Metadata]):
     MODULE_FILE = "module.yml"
     GENERATION = ModuleGeneration.V1
+
+    def __init__(self, project: Optional[Project], path: str):
+        super(ModuleV1, self).__init__(project, path)
+
+    @classmethod
+    def get_name_from_metadata(cls, metadata: ModuleV1Metadata) -> str:
+        return metadata.name
 
     @property
     def compiler_version(self) -> Optional[str]:
@@ -1582,6 +1629,14 @@ class ModuleV1(Module[ModuleV1Metadata]):
 class ModuleV2(Module[ModuleV2Metadata]):
     MODULE_FILE = "setup.cfg"
     GENERATION = ModuleGeneration.V2
+    PKG_NAME_PREFIX = "inmanta-module-"
+
+    def __init__(self, project: Optional[Project], path: str):
+        super(ModuleV2, self).__init__(project, path)
+
+    @classmethod
+    def get_name_from_metadata(cls, metadata: ModuleV2Metadata) -> str:
+        return metadata.name[len(cls.PKG_NAME_PREFIX) :]
 
     @classmethod
     def get_metadata_file_schema_type(cls) -> Type[ModuleV2Metadata]:
