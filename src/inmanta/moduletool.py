@@ -325,10 +325,10 @@ class ModuleTool(ModuleLikeTool):
             default=None,
         )
 
-        build = subparser.add_parser("build", help="Build an Python package from an V2 module.")
+        build = subparser.add_parser("build", help="Build a Python package from a V2 module.")
         build.add_argument(
             "path",
-            help="The path to the module that should be updated",
+            help="The path to the module that should be built",
             nargs="?",
         )
 
@@ -638,7 +638,7 @@ version: 0.0.1dev0"""
 class ModuleBuildFailedError(Exception):
     def __init__(self, msg: str, *args, **kwargs) -> None:
         self.msg = msg
-        super(ModuleBuildFailedError, self).__init__(*args, **kwargs)
+        super(ModuleBuildFailedError, self).__init__(msg, *args, **kwargs)
 
     def __str__(self) -> str:
         return self.msg
@@ -654,8 +654,8 @@ class V2ModuleBuilder:
 
     def build(self) -> None:
         output_directory = os.path.join(self._module.path, "dist")
-        if os.path.exists(output_directory):
-            raise ModuleBuildFailedError(msg=f"Output directory {output_directory} already exists")
+        if os.path.exists(output_directory) and os.listdir(output_directory):
+            raise ModuleBuildFailedError(msg=f"Non-empty output directory {output_directory} already exists")
         with tempfile.TemporaryDirectory() as tmpdir:
             # Copy module to temporary directory to perform the build
             build_path = os.path.join(tmpdir, "module")
