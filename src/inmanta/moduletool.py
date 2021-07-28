@@ -279,7 +279,7 @@ class ModuleTool(ModuleLikeTool):
 
         install: ArgumentParser = subparser.add_parser("install", help="Install a module.")
         install.add_argument("-e", "--editable", action="store_true", help="Install in editable mode.")
-        install.add_argument("path", nargs="?", default=".", help="The path to the module.")
+        install.add_argument("path", nargs="?", help="The path to the module.")
 
         subparser.add_parser("status", help="Run a git status on all modules and report")
 
@@ -517,7 +517,7 @@ version: 0.0.1dev0"""
         if last_failure is not None and not done:
             raise last_failure
 
-    def install(self, editable: bool, path: str):
+    def install(self, editable: bool = False, path: Optional[str] = None):
         """
         Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the
         context of a project.
@@ -526,16 +526,12 @@ version: 0.0.1dev0"""
         def install(install_path: str) -> None:
             env.ProcessEnv.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
 
-        try:
-            ModuleV2(project=None, path=path)
-        except ModuleMetadataFileNotFound:
-            raise CLIException(1, f"Can only install v2 modules. {path} does not contain a v2 module.")
-
+        module_path: str = ModuleV2.get_module_dir(os.path.abspath(path) if path is not None else os.getcwd())
         if editable:
-            install(path)
+            install(module_path)
         else:
             with tempfile.TemporaryDirectory() as build_dir:
-                # TODO: build
+                self.build(module_path, build_dir)
                 install(build_dir)
 
     def status(self, module=None):
