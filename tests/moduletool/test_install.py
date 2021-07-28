@@ -203,6 +203,8 @@ def test_module_install(tmpdir: py.path.local, modules_dir: str, editable: bool,
     python_module_name: str = "inmanta-module-minimalv2module"
     venv.create(tmpdir, with_pip=True)
     pip: str = os.path.join(tmpdir, "bin", "pip")
+    # default pip version is not compatible with module install flow
+    subprocess.check_output([pip, "install", "-U", "pip"])
 
     def is_installed(name: str, only_editable: bool = False) -> None:
         out: str = subprocess.check_output(
