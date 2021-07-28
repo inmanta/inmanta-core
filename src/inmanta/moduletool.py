@@ -331,14 +331,17 @@ class ModuleTool(ModuleLikeTool):
             help="The path to the module that should be built",
             nargs="?",
         )
+        build.add_argument(
+            "-o", "--output-dir", help="The directory where the Python package will be stored.", default=None, dest="output_dir"
+        )
 
-    def build(self, path: Optional[str] = None) -> None:
+    def build(self, path: Optional[str] = None, output_dir: Optional[str] = None) -> None:
         if path is not None:
             path = os.path.abspath(path)
         else:
             path = os.getcwd()
         module_path_root = ModuleV2.get_module_dir(path)
-        V2ModuleBuilder(module_path_root).build()
+        V2ModuleBuilder(module_path_root).build(output_dir)
 
     def get_project_for_module(self, module):
         try:
@@ -652,10 +655,14 @@ class V2ModuleBuilder:
         """
         self._module = ModuleV2(project=None, path=os.path.abspath(module_path))
 
-    def build(self) -> None:
-        output_directory = os.path.join(self._module.path, "dist")
-        if os.path.exists(output_directory) and os.listdir(output_directory):
-            raise ModuleBuildFailedError(msg=f"Non-empty output directory {output_directory} already exists")
+    def build(self, output_directory: Optional[str] = None) -> None:
+        if output_directory is None:
+            output_directory = os.path.join(self._module.path, "dist")
+        if os.path.exists(output_directory):
+            if not os.path.isdir(output_directory):
+                raise ModuleBuildFailedError(msg=f"Given output directory is not a directory: {output_directory}")
+            if os.listdir(output_directory):
+                raise ModuleBuildFailedError(msg=f"Non-empty output directory {output_directory}")
         with tempfile.TemporaryDirectory() as tmpdir:
             # Copy module to temporary directory to perform the build
             build_path = os.path.join(tmpdir, "module")

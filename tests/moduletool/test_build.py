@@ -22,11 +22,30 @@ import shutil
 import subprocess
 import sys
 import zipfile
+from typing import Optional
 
 import pytest
 
 from inmanta.module import ModuleMetadataFileNotFound
 from inmanta.moduletool import V2ModuleBuilder
+
+
+def run_module_build(module_path: str, set_path_argument: bool, output_dir: Optional[str] = None) -> None:
+    """
+    Build the Inmanta module using the `inmanta module build` command.
+
+    :param module_path: Path to the inmanta module
+    :param set_path_argument: If true provide the module_path via the path argument, otherwise the module path is set via cwd.
+    :param output_dir: The output directory where the resulting Python package will be stored.
+    """
+    cmd = [sys.executable, "-m", "inmanta.app", "module", "build"]
+    if output_dir:
+        cmd.extend(["-o", output_dir])
+    if set_path_argument:
+        cmd.append(module_path)
+        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+    else:
+        subprocess.check_output(cmd, cwd=module_path, stderr=subprocess.STDOUT)
 
 
 @pytest.mark.parametrize(
@@ -47,15 +66,7 @@ def test_build_v2_module(tmpdir, module_name: str, set_path_argument: bool) -> N
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)
 
-    def run_module_build() -> None:
-        cmd = [sys.executable, "-m", "inmanta.app", "module", "build"]
-        if set_path_argument:
-            cmd.append(module_copy_dir)
-            subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-        else:
-            subprocess.check_output(cmd, cwd=module_copy_dir, stderr=subprocess.STDOUT)
-
-    run_module_build()
+    run_module_build(module_copy_dir, set_path_argument)
 
     dist_dir = os.path.join(module_copy_dir, "dist")
     dist_dir_content = os.listdir(dist_dir)
@@ -81,8 +92,25 @@ def test_build_v2_module(tmpdir, module_name: str, set_path_argument: bool) -> N
     # A second invocation of the build command should raise an exception
     # because the dist directory already exists
     with pytest.raises(subprocess.CalledProcessError) as excinfo:
-        run_module_build()
-    assert f"Output directory {dist_dir} already exists" in excinfo.value.stdout.decode()
+        run_module_build(module_copy_dir, set_path_argument)
+    assert f"Non-empty output directory {dist_dir}" in excinfo.value.stdout.decode()
+
+
+def test_build_v2_module_set_output_directory(tmpdir) -> None:
+    """
+    Verify that the output_dir argument of the `inmanta module build` command works correctly.
+    """
+    module_dir = os.path.normpath(os.path.join(__file__, os.pardir, os.pardir, "data", "modules", "minimalv2module"))
+    module_copy_dir = os.path.join(tmpdir, "module")
+    shutil.copytree(module_dir, module_copy_dir)
+    assert os.path.isdir(module_copy_dir)
+
+    output_dir = os.path.join(tmpdir, "output")
+    run_module_build(module_copy_dir, set_path_argument=True, output_dir=output_dir)
+
+    assert os.path.exists(output_dir)
+    assert len(os.listdir(output_dir)) == 1
+    assert not os.path.exists(os.path.join(module_copy_dir, "dist"))
 
 
 def test_build_v2_module_incomplete_package_data(tmpdir, caplog) -> None:
