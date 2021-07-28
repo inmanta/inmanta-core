@@ -676,7 +676,7 @@ class V2ModuleBuilder:
         Verify whether there were files in the python package on disk that were not packaged
         in the given wheel and log a warning if such a file exists.
         """
-        rel_path_namespace_package = os.path.join("inmanta_plugins", self._module.get_name_namespace_package())
+        rel_path_namespace_package = os.path.join("inmanta_plugins", self._module.name)
         abs_path_namespace_package = os.path.join(build_path, rel_path_namespace_package)
         files_in_python_package_dir = self._get_files_in_directory(abs_path_namespace_package)
         with zipfile.ZipFile(path_to_wheel) as z:
@@ -709,7 +709,7 @@ class V2ModuleBuilder:
         """
         Copy all files that have to be packaged into the Python package of the module
         """
-        python_pkg_dir = os.path.join(build_path, "inmanta_plugins", self._module.get_name_namespace_package())
+        python_pkg_dir = os.path.join(build_path, "inmanta_plugins", self._module.name)
         for dir_name in ["model", "files", "templates"]:
             fq_dir_name = os.path.join(build_path, dir_name)
             if os.path.exists(fq_dir_name):
