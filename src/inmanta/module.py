@@ -655,7 +655,7 @@ class ModuleLike(ABC, Generic[T]):
         self._metadata = self._get_metadata_from_disk()
 
     @classmethod
-    def get_top_level_directory_containing_file(cls, cur_dir: str, filename: str) -> str:
+    def get_first_directory_containing_file(cls, cur_dir: str, filename: str) -> str:
         """
         Travel up in the directory structure until a file with the given name if found.
         """
@@ -668,7 +668,7 @@ class ModuleLike(ABC, Generic[T]):
         if parent_dir == cur_dir:
             raise FileNotFoundError(f"No file with name {filename} exists in any of the parent directories")
 
-        return cls.get_top_level_directory_containing_file(parent_dir, filename)
+        return cls.get_first_directory_containing_file(parent_dir, filename)
 
     def _get_metadata_from_disk(self) -> T:
         metadata_file_path = self.get_metadata_file_path()
@@ -849,7 +849,7 @@ class Project(ModuleLike[ProjectMetadata]):
         Find the project directory where we are working in. Traverse up until we find Project.PROJECT_FILE or reach /
         """
         try:
-            return cls.get_top_level_directory_containing_file(cur_dir, Project.PROJECT_FILE)
+            return cls.get_first_directory_containing_file(cur_dir, Project.PROJECT_FILE)
         except FileNotFoundError:
             raise ProjectNotFoundException("Unable to find an inmanta project (project.yml expected)")
 
@@ -1178,7 +1178,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         Find the top level module from the given subdirectory of a module.
         """
         try:
-            return cls.get_top_level_directory_containing_file(module_subdirectory, cls.MODULE_FILE)
+            return cls.get_first_directory_containing_file(module_subdirectory, cls.MODULE_FILE)
         except FileNotFoundError:
             raise InvalidModuleException(f"Directory {module_subdirectory} is not part of a valid module")
 
