@@ -347,13 +347,16 @@ class ModuleTool(ModuleLikeTool):
             "-o", "--output-dir", help="The directory where the Python package will be stored.", default=None, dest="output_dir"
         )
 
-    def build(self, path: Optional[str] = None, output_dir: Optional[str] = None) -> None:
+    def build(self, path: Optional[str] = None, output_dir: Optional[str] = None) -> str:
+        """
+        Build a v2 module and return the path to the build artifact.
+        """
         if path is not None:
             path = os.path.abspath(path)
         else:
             path = os.getcwd()
         module_path_root = ModuleV2.get_module_dir(path)
-        V2ModuleBuilder(module_path_root).build(output_dir)
+        return V2ModuleBuilder(module_path_root).build(output_dir)
 
     def get_project_for_module(self, module):
         try:
@@ -553,8 +556,8 @@ version: 0.0.1dev0"""
             install(module_path)
         else:
             with tempfile.TemporaryDirectory() as build_dir:
-                self.build(module_path, build_dir)
-                install(build_dir)
+                build_artifact: str = self.build(module_path, build_dir)
+                install(build_artifact)
 
     def status(self, module=None):
         """
@@ -672,7 +675,10 @@ class V2ModuleBuilder:
         """
         self._module = ModuleV2(project=None, path=os.path.abspath(module_path))
 
-    def build(self, output_directory: Optional[str] = None) -> None:
+    def build(self, output_directory: Optional[str] = None) -> str:
+        """
+        Build the module and return the path to the build artifact.
+        """
         if output_directory is None:
             output_directory = os.path.join(self._module.path, "dist")
         if os.path.exists(output_directory):
@@ -687,6 +693,7 @@ class V2ModuleBuilder:
             self._move_data_files_into_namespace_package_dir(build_path)
             path_to_wheel = self._build_v2_module(build_path, output_directory)
             self._verify_wheel(build_path, path_to_wheel)
+            return path_to_wheel
 
     def _verify_wheel(self, build_path: str, path_to_wheel: str) -> None:
         """

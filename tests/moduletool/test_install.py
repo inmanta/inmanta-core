@@ -15,10 +15,12 @@
 
     Contact: code@inmanta.com
 """
+import argparse
 import os
 import subprocess
 import venv
 from typing import Dict, List, Optional
+from unittest.mock import patch
 
 import py
 import pydantic
@@ -40,14 +42,10 @@ def run_module_install(python_path: str, module_path: str, editable: bool, set_p
     :param editable: Install the module in editable mode (pip install -e).
     :param set_path_argument: If true provide the module_path via the path argument, otherwise the module path is set via cwd.
     """
-    cmd = [python_path, "-m", "inmanta.app", "module", "install"]
-    if editable:
-        cmd.extend(["-e"])
-    if set_path_argument:
-        cmd.append(module_path)
-        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-    else:
-        subprocess.check_output(cmd, cwd=module_path, stderr=subprocess.STDOUT)
+    if not set_path_argument:
+        os.chdir(module_path)
+    with patch("inmanta.env.ProcessEnv.env_path", new=python_path):
+        ModuleTool().execute("install", argparse.Namespace(editable=editable, path=module_path if set_path_argument else None))
 
 
 def test_bad_checkout(git_modules_dir, modules_repo):
@@ -210,6 +208,7 @@ def test_module_install(tmpdir: py.path.local, modules_dir: str, editable: bool,
         out: str = subprocess.check_output(
             [
                 pip,
+                "list",
                 "--format",
                 "json",
                 "--include-editable" if editable is None else "--editable" if editable else "--exclude-editable",

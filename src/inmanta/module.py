@@ -391,9 +391,9 @@ class CfgParser(RawParser):
                 raise InvalidMetadata(msg=str(e)) from e
         except KeyError as e:
             if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Metadata defined in {source.name} doesn't have a metadata section.") from e
+                raise InvalidMetadata(msg=f"Metadata file {source.name} doesn't have a metadata section.") from e
             else:
-                raise InvalidMetadata(msg="Metadata doesn't have a metadata section.") from e
+                raise InvalidMetadata(msg="Metadata file doesn't have a metadata section.") from e
 
 
 T = TypeVar("T", bound="Metadata")
