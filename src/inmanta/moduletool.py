@@ -19,19 +19,23 @@ import argparse
 import inspect
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Iterable, List, Mapping, Optional
+from typing import TYPE_CHECKING, Iterable, List, Mapping, Optional, Set
 
 import texttable
 import yaml
 from cookiecutter.main import cookiecutter
 from pkg_resources import parse_version
 
+import build
+import build.env
 from inmanta import env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
@@ -333,6 +337,24 @@ class ModuleTool(ModuleLikeTool):
             default=None,
         )
 
+        build = subparser.add_parser("build", help="Build a Python package from a V2 module.")
+        build.add_argument(
+            "path",
+            help="The path to the module that should be built",
+            nargs="?",
+        )
+        build.add_argument(
+            "-o", "--output-dir", help="The directory where the Python package will be stored.", default=None, dest="output_dir"
+        )
+
+    def build(self, path: Optional[str] = None, output_dir: Optional[str] = None) -> None:
+        if path is not None:
+            path = os.path.abspath(path)
+        else:
+            path = os.getcwd()
+        module_path_root = ModuleV2.get_module_dir(path)
+        V2ModuleBuilder(module_path_root).build(output_dir)
+
     def get_project_for_module(self, module):
         try:
             return self.get_project()
@@ -631,3 +653,97 @@ version: 0.0.1dev0"""
         finally:
             if close:
                 outfile.close()
+
+
+class ModuleBuildFailedError(Exception):
+    def __init__(self, msg: str, *args, **kwargs) -> None:
+        self.msg = msg
+        super(ModuleBuildFailedError, self).__init__(msg, *args, **kwargs)
+
+    def __str__(self) -> str:
+        return self.msg
+
+
+class V2ModuleBuilder:
+    def __init__(self, module_path: str) -> None:
+        """
+        :raises InvalidModuleException: The given module_path doesn't reference a valid module.
+        :raises ModuleBuildFailedError: Module build was unsuccessful.
+        """
+        self._module = ModuleV2(project=None, path=os.path.abspath(module_path))
+
+    def build(self, output_directory: Optional[str] = None) -> None:
+        if output_directory is None:
+            output_directory = os.path.join(self._module.path, "dist")
+        if os.path.exists(output_directory):
+            if not os.path.isdir(output_directory):
+                raise ModuleBuildFailedError(msg=f"Given output directory is not a directory: {output_directory}")
+            if os.listdir(output_directory):
+                raise ModuleBuildFailedError(msg=f"Non-empty output directory {output_directory}")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Copy module to temporary directory to perform the build
+            build_path = os.path.join(tmpdir, "module")
+            shutil.copytree(self._module.path, build_path)
+            self._move_data_files_into_namespace_package_dir(build_path)
+            path_to_wheel = self._build_v2_module(build_path, output_directory)
+            self._verify_wheel(build_path, path_to_wheel)
+
+    def _verify_wheel(self, build_path: str, path_to_wheel: str) -> None:
+        """
+        Verify whether there were files in the python package on disk that were not packaged
+        in the given wheel and log a warning if such a file exists.
+        """
+        rel_path_namespace_package = os.path.join("inmanta_plugins", self._module.name)
+        abs_path_namespace_package = os.path.join(build_path, rel_path_namespace_package)
+        files_in_python_package_dir = self._get_files_in_directory(abs_path_namespace_package)
+        with zipfile.ZipFile(path_to_wheel) as z:
+            dir_prefix = f"{rel_path_namespace_package}/"
+            files_in_wheel = set(
+                info.filename[len(dir_prefix) :]
+                for info in z.infolist()
+                if not info.is_dir() and info.filename.startswith(dir_prefix)
+            )
+        unpackaged_files = files_in_python_package_dir - files_in_wheel
+        if unpackaged_files:
+            LOGGER.warning(
+                f"The following files are present in the {rel_path_namespace_package} directory on disk, but were not "
+                f"packaged: {list(unpackaged_files)}. Update you setup.cfg file if they need to be packaged."
+            )
+
+    def _get_files_in_directory(self, directory: str) -> Set[str]:
+        """
+        Return the relative paths to all the files in all subdirectories of the given directory.
+        """
+        if not os.path.isdir(directory):
+            raise Exception(f"{directory} is not a directory")
+        result = set()
+        for (dirpath, dirnames, filenames) in os.walk(directory):
+            relative_paths_to_filenames = set(os.path.relpath(os.path.join(dirpath, f), directory) for f in filenames)
+            result = result | relative_paths_to_filenames
+        return result
+
+    def _move_data_files_into_namespace_package_dir(self, build_path: str) -> None:
+        """
+        Copy all files that have to be packaged into the Python package of the module
+        """
+        python_pkg_dir = os.path.join(build_path, "inmanta_plugins", self._module.name)
+        for dir_name in ["model", "files", "templates"]:
+            fq_dir_name = os.path.join(build_path, dir_name)
+            if os.path.exists(fq_dir_name):
+                shutil.move(fq_dir_name, python_pkg_dir)
+        metadata_file = os.path.join(build_path, "setup.cfg")
+        shutil.copy(metadata_file, python_pkg_dir)
+
+    def _build_v2_module(self, build_path: str, output_directory: str) -> str:
+        """
+        Build v2 module using PEP517 package builder.
+        """
+        try:
+            with build.env.IsolatedEnvBuilder() as env:
+                distribution = "wheel"
+                builder = build.ProjectBuilder(srcdir=build_path, python_executable=env.executable, scripts_dir=env.scripts_dir)
+                env.install(builder.build_system_requires)
+                env.install(builder.get_requires_for_build(distribution=distribution))
+                return builder.build(distribution=distribution, output_directory=output_directory)
+        except Exception:
+            raise ModuleBuildFailedError(msg="Module build failed")
