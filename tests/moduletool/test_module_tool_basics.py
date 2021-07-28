@@ -23,7 +23,6 @@ import subprocess
 import sys
 import warnings
 from typing import Iterator, Type
-from unittest.mock import patch
 
 import py
 import pytest
@@ -42,8 +41,7 @@ from test_app_cli import app
 def tmp_working_dir(tmpdir: py.path.local) -> Iterator[py.path.local]:
     cwd = os.getcwd()
     os.chdir(str(tmpdir))
-    with patch("os.curdir", new=str(tmpdir)):
-        yield tmpdir
+    yield tmpdir
     os.chdir(cwd)
 
 

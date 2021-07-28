@@ -266,6 +266,5 @@ requires:
     modp = os.path.join(coroot, "libs/modC")
     app(["project", "install"])
     os.chdir(modp)
-    os.curdir = modp
     app(["module", "freeze"])
     verify()
