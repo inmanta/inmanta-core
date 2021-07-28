@@ -204,14 +204,14 @@ def test_module_install(tmpdir: py.path.local, modules_dir: str, editable: bool,
     venv.create(tmpdir, with_pip=True)
     pip: str = os.path.join(tmpdir, "bin", "pip")
 
-    def is_installed(name: str, editable: Optional[bool] = None) -> None:
+    def is_installed(name: str, only_editable: bool = False) -> None:
         out: str = subprocess.check_output(
             [
                 pip,
                 "list",
                 "--format",
                 "json",
-                "--include-editable" if editable is None else "--editable" if editable else "--exclude-editable",
+                *(["--editable"] if only_editable else []),
             ]
         ).decode()
         packages: List[Dict[str, str]] = pydantic.parse_raw_as(List[Dict[str, str]], out)
@@ -219,4 +219,6 @@ def test_module_install(tmpdir: py.path.local, modules_dir: str, editable: bool,
 
     assert not is_installed(python_module_name)
     run_module_install(os.path.join(tmpdir, "bin", "python"), module_path, editable, set_path_argument)
-    assert is_installed(python_module_name, editable)
+    assert is_installed(python_module_name, True) == editable
+    if not editable:
+        assert is_installed(python_module_name, False)
