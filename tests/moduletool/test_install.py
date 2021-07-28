@@ -19,7 +19,7 @@ import argparse
 import os
 import subprocess
 import venv
-from typing import Dict, List, Optional
+from typing import Dict, List
 from unittest.mock import patch
 
 import py
