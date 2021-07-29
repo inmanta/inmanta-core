@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import argparse
 import inspect
 import logging
 import os
@@ -35,6 +36,7 @@ from pkg_resources import parse_version
 
 import build
 import build.env
+from inmanta import env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
@@ -80,7 +82,7 @@ def set_yaml_order_preserving():
 class ModuleLikeTool(object):
     """Shared code for modules and projects """
 
-    def execute(self, cmd, args):
+    def execute(self, cmd: Optional[str], args: argparse.Namespace):
         """
         Execute the given subcommand
         """
@@ -191,6 +193,7 @@ class ProjectTool(ModuleLikeTool):
         init.add_argument(
             "--default", help="Use default parameters for the project generation", action="store_true", default=False
         )
+        subparser.add_parser("install", help="Install all modules required for this project")
 
     def freeze(self, outfile, recursive, operator):
         """
@@ -246,6 +249,13 @@ class ProjectTool(ModuleLikeTool):
             no_input=default,
         )
 
+    def install(self):
+        """
+        Install all modules the project requires.
+        """
+        # This currently only installs v1 modules. #3083 will add the v2 install
+        self.get_project(load=True)
+
 
 class ModuleTool(ModuleLikeTool):
     """
@@ -271,7 +281,9 @@ class ModuleTool(ModuleLikeTool):
 
         subparser.add_parser("update", help="Update all modules used in this project")
 
-        subparser.add_parser("install", help="Install all modules required for this this project")
+        install: ArgumentParser = subparser.add_parser("install", help="Install a module.")
+        install.add_argument("-e", "--editable", action="store_true", help="Install in editable mode.")
+        install.add_argument("path", nargs="?", help="The path to the module.")
 
         subparser.add_parser("status", help="Run a git status on all modules and report")
 
@@ -335,13 +347,16 @@ class ModuleTool(ModuleLikeTool):
             "-o", "--output-dir", help="The directory where the Python package will be stored.", default=None, dest="output_dir"
         )
 
-    def build(self, path: Optional[str] = None, output_dir: Optional[str] = None) -> None:
+    def build(self, path: Optional[str] = None, output_dir: Optional[str] = None) -> str:
+        """
+        Build a v2 module and return the path to the build artifact.
+        """
         if path is not None:
             path = os.path.abspath(path)
         else:
             path = os.getcwd()
         module_path_root = ModuleV2.get_module_dir(path)
-        V2ModuleBuilder(module_path_root).build(output_dir)
+        return V2ModuleBuilder(module_path_root).build(output_dir)
 
     def get_project_for_module(self, module):
         try:
@@ -527,17 +542,22 @@ version: 0.0.1dev0"""
         if last_failure is not None and not done:
             raise last_failure
 
-    def install(self, module=None, project=None):
+    def install(self, editable: bool = False, path: Optional[str] = None):
         """
-        Install all modules the project requires or a single module without its dependencies
+        Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the
+        context of a project.
         """
-        if project is None:
-            project = self.get_project(False)
 
-        if module is None:
-            project.load()
+        def install(install_path: str) -> None:
+            env.ProcessEnv.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
+
+        module_path: str = ModuleV2.get_module_dir(os.path.abspath(path) if path is not None else os.getcwd())
+        if editable:
+            install(module_path)
         else:
-            project.load_module(module)
+            with tempfile.TemporaryDirectory() as build_dir:
+                build_artifact: str = self.build(module_path, build_dir)
+                install(build_artifact)
 
     def status(self, module=None):
         """
@@ -655,7 +675,10 @@ class V2ModuleBuilder:
         """
         self._module = ModuleV2(project=None, path=os.path.abspath(module_path))
 
-    def build(self, output_directory: Optional[str] = None) -> None:
+    def build(self, output_directory: Optional[str] = None) -> str:
+        """
+        Build the module and return the path to the build artifact.
+        """
         if output_directory is None:
             output_directory = os.path.join(self._module.path, "dist")
         if os.path.exists(output_directory):
@@ -670,6 +693,7 @@ class V2ModuleBuilder:
             self._move_data_files_into_namespace_package_dir(build_path)
             path_to_wheel = self._build_v2_module(build_path, output_directory)
             self._verify_wheel(build_path, path_to_wheel)
+            return path_to_wheel
 
     def _verify_wheel(self, build_path: str, path_to_wheel: str) -> None:
         """
