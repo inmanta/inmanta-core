@@ -101,7 +101,7 @@ class SourceInfo(object):
         from inmanta.module import Project
 
         if self._requires is None:
-            self._requires = Project.get().modules[self._get_module_name()].get_python_requirements_as_list()
+            self._requires = Project.get().modules[self._get_module_name()].get_python_requirements()
         return self._requires
 
 
@@ -323,17 +323,17 @@ class PluginModuleLoader(FileLoader):
         return os.path.basename(self.path) == "__init__.py"
 
     @classmethod
-    def convert_relative_path_to_module(cls, path: str) -> str:
+    def convert_relative_path_to_module(cls, module_name: str, path: str) -> str:
         """
-        Returns the fully qualified module name given a path, relative to the module directory.
+        Returns the fully qualified module name given a path, relative to the plugins directory of the module.
         For example
-            convert_relative_path_to_module("my_mod/plugins/my_submod")
-            == convert_relative_path_to_module("my_mod/plugins/my_submod.py")
-            == convert_relative_path_to_module("my_mod/plugins/my_submod/__init__.py")
-            == "inmanta_plugins.my_mod.my_submod".
+            convert_relative_path_to_module("xxx/yyy")
+            == convert_relative_path_to_module("xxx/yyy.py")
+            == convert_relative_path_to_module("xxx/yyy/__init__.py")
+            == "inmanta_plugins.<module-name>.xxx.yyy".
         """
         if path.startswith("/"):
-            raise Exception("Error parsing module path: expected relative path, got %s" % path)
+            raise Exception(f"Error parsing module path: expected relative path, got {path}")
 
         def split(path: str) -> Iterator[str]:
             """
@@ -351,9 +351,6 @@ class PluginModuleLoader(FileLoader):
         if parts == []:
             return const.PLUGINS_PACKAGE
 
-        if len(parts) == 1 or parts[1] != PLUGIN_DIR:
-            raise Exception("Error parsing module path: expected 'some_module/%s/some_submodule', got %s" % (PLUGIN_DIR, path))
-
         def strip_py(module: List[str]) -> List[str]:
             """
             Strip __init__.py or .py file extension from module parts.
@@ -367,11 +364,7 @@ class PluginModuleLoader(FileLoader):
                 return list(chain(init, [last[:-3]]))
             return module
 
-        top_level_inmanta_module: str = parts[0]
-        inmanta_submodule: List[str] = parts[2:]
-
-        # my_mod/plugins/tail -> inmanta_plugins.my_mod.tail
-        return ".".join(chain([const.PLUGINS_PACKAGE, top_level_inmanta_module], strip_py(inmanta_submodule)))
+        return ".".join(chain([const.PLUGINS_PACKAGE, module_name], strip_py(parts)))
 
     @classmethod
     def convert_module_to_relative_path(cls, full_mod_name: str) -> str:
@@ -422,33 +415,53 @@ class PluginModuleFinder(Finder):
     Custom module finder which handles all the imports for the package inmanta_plugins.
     """
 
-    def __init__(self, modulepaths: List[str]) -> None:
-        self._modulepaths = modulepaths
+    def __init__(self, modulepaths: List[str], modules_to_ignore: List[str] = []) -> None:
+        self._modulepaths = list(modulepaths)
+        self._modules_to_ignore = list(modules_to_ignore)
 
     def add_module_paths(self, paths: List[str]) -> None:
         for p in paths:
             if p not in self._modulepaths:
                 self._modulepaths.append(p)
 
+    def set_modules_to_ignore(self, modules_to_ignore: List[str]) -> None:
+        self._modules_to_ignore = list(modules_to_ignore)
+
     def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[PluginModuleLoader]:
-        if fullname == const.PLUGINS_PACKAGE or fullname.startswith(f"{const.PLUGINS_PACKAGE}."):
+        """
+        :param fullname: A fully qualified path to the module or package to be imported.
+        """
+        if self._should_handle_import(fullname):
             LOGGER.debug("Loading module: %s", fullname)
             return PluginModuleLoader(self._modulepaths, fullname)
         return None
 
+    def _should_handle_import(self, fq_import_path: str) -> bool:
+        if fq_import_path == const.PLUGINS_PACKAGE:
+            return True
+        elif fq_import_path.startswith(f"{const.PLUGINS_PACKAGE}."):
+            name_inmanta_module = fq_import_path.split(".", maxsplit=1)[1]
+            return name_inmanta_module not in self._modules_to_ignore
+        else:
+            return False
 
-def configure_module_finder(modulepaths: List[str]) -> None:
+
+def configure_module_finder(modulepaths: List[str], modules_to_ignore: List[str] = []) -> None:
     """
     Setup a custom module loader to handle imports in .py files of the modules.
+
+    :param modulepaths: The directories where the module finder should look for modules.
+    :param modules_to_ignore: Don't use the module finder for modules with these names.
     """
     for finder in sys.meta_path:
         # PluginModuleFinder already present in sys.meta_path.
         if isinstance(finder, PluginModuleFinder):
             finder.add_module_paths(modulepaths)
+            finder.set_modules_to_ignore(modules_to_ignore)
             return
 
     # PluginModuleFinder not yet present in sys.meta_path.
-    module_finder = PluginModuleFinder(modulepaths)
+    module_finder = PluginModuleFinder(modulepaths, modules_to_ignore)
     sys.meta_path.insert(0, module_finder)
 
 

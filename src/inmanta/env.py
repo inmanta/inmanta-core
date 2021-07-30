@@ -106,6 +106,9 @@ class VirtualEnv(object):
 
         return True
 
+    def is_using_virtual_env(self) -> bool:
+        return self.__using_venv
+
     def use_virtual_env(self) -> None:
         """
         Use the virtual environment
@@ -353,3 +356,9 @@ python -m pip $@
             LOGGER.debug("%s: %s", cmd, output.decode())
 
         return {r["name"]: r["version"] for r in json.loads(output.decode())}
+
+    def is_package_installed(self, pkg_name: str) -> bool:
+        if not self.__using_venv:
+            raise Exception(f"Not using venv {self.__using_venv}. use_virtual_env() should be called first.")
+        installed_packages: Dict[str, str] = self._get_installed_packages(self.virtual_python)
+        return pkg_name in installed_packages
