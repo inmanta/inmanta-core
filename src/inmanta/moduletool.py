@@ -340,11 +340,16 @@ class ModuleTool(ModuleLikeTool):
         build = subparser.add_parser("build", help="Build a Python package from a V2 module.")
         build.add_argument(
             "path",
-            help="The path to the module that should be built",
+            help="The path to the module that should be built. By default, the current working directory is used.",
             nargs="?",
         )
         build.add_argument(
-            "-o", "--output-dir", help="The directory where the Python package will be stored.", default=None, dest="output_dir"
+            "-o",
+            "--output-dir",
+            help="The directory where the Python package will be stored. By default, the ./dist directory "
+            "in the root of the module is used.",
+            default=None,
+            dest="output_dir",
         )
 
     def build(self, path: Optional[str] = None, output_dir: Optional[str] = None) -> str:
