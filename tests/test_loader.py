@@ -29,7 +29,6 @@ from pytest import fixture
 from inmanta import loader
 from inmanta.loader import ModuleSource, SourceInfo
 from inmanta.module import Project
-from inmanta.moduletool import ModuleTool
 
 
 def test_code_manager():
@@ -39,8 +38,8 @@ def test_code_manager():
     Project.set(project)
     project.load()
 
-    ModuleTool().install("single_plugin_file")
-    ModuleTool().install("multiple_plugin_files")
+    project.load_module("single_plugin_file")
+    project.load_module("multiple_plugin_files")
     import inmanta_plugins.multiple_plugin_files.handlers as multi
     import inmanta_plugins.single_plugin_file as single
 

@@ -15,34 +15,57 @@
 
     Contact: code@inmanta.com
 """
+import argparse
 import os
 import subprocess
+import venv
+from typing import Dict, List
+from unittest.mock import patch
 
+import py
+import pydantic
 import pytest
 
 from inmanta import module
 from inmanta.ast import CompilerException, ModuleNotFoundException
 from inmanta.config import Config
-from inmanta.moduletool import ModuleTool
+from inmanta.moduletool import ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 
 
-def test_bad_checkout(modules_dir, modules_repo):
-    coroot = os.path.join(modules_dir, "badproject")
+def run_module_install(python_path: str, module_path: str, editable: bool, set_path_argument: bool) -> None:
+    """
+    Install the Inmanta module (v2) using the `inmanta module install` command.
+
+    :param python_path: Path to the Python executable for the environment to install the module in.
+    :param module_path: Path to the inmanta module
+    :param editable: Install the module in editable mode (pip install -e).
+    :param set_path_argument: If true provide the module_path via the path argument, otherwise the module path is set via cwd.
+    """
+    if not set_path_argument:
+        os.chdir(module_path)
+    with patch("inmanta.env.ProcessEnv.env_path", new=python_path):
+        ModuleTool().execute("install", argparse.Namespace(editable=editable, path=module_path if set_path_argument else None))
+
+
+def test_bad_checkout(git_modules_dir, modules_repo):
+    coroot = os.path.join(git_modules_dir, "badproject")
     subprocess.check_output(
-        ["git", "clone", os.path.join(modules_dir, "repos", "badproject")], cwd=modules_dir, stderr=subprocess.STDOUT
+        ["git", "clone", os.path.join(git_modules_dir, "repos", "badproject")], cwd=git_modules_dir, stderr=subprocess.STDOUT
     )
     os.chdir(coroot)
     Config.load_config()
 
     with pytest.raises(ModuleNotFoundException):
-        ModuleTool().execute("install", [])
+        ProjectTool().execute("install", [])
 
 
-def test_bad_setup(modules_dir, modules_repo):
-    coroot = os.path.join(modules_dir, "badprojectx")
+def test_bad_setup(git_modules_dir, modules_repo):
+    coroot = os.path.join(git_modules_dir, "badprojectx")
     subprocess.check_output(
-        ["git", "clone", os.path.join(modules_dir, "repos", "badproject"), coroot], cwd=modules_dir, stderr=subprocess.STDOUT
+        ["git", "clone", os.path.join(git_modules_dir, "repos", "badproject"), coroot],
+        cwd=git_modules_dir,
+        stderr=subprocess.STDOUT,
     )
     os.chdir(coroot)
     Config.load_config()
@@ -50,22 +73,22 @@ def test_bad_setup(modules_dir, modules_repo):
     mod1 = os.path.join(coroot, "libs", "mod1")
     os.makedirs(mod1)
     subprocess.check_output(
-        ["git", "clone", os.path.join(modules_dir, "repos", "mod2"), mod1], cwd=modules_dir, stderr=subprocess.STDOUT
+        ["git", "clone", os.path.join(git_modules_dir, "repos", "mod2"), mod1], cwd=git_modules_dir, stderr=subprocess.STDOUT
     )
 
     with pytest.raises(ModuleNotFoundException):
         ModuleTool().execute("verify", [])
 
 
-def test_complex_checkout(modules_dir, modules_repo):
-    coroot = os.path.join(modules_dir, "testproject")
+def test_complex_checkout(git_modules_dir, modules_repo):
+    coroot = os.path.join(git_modules_dir, "testproject")
     subprocess.check_output(
-        ["git", "clone", os.path.join(modules_dir, "repos", "testproject")], cwd=modules_dir, stderr=subprocess.STDOUT
+        ["git", "clone", os.path.join(git_modules_dir, "repos", "testproject")], cwd=git_modules_dir, stderr=subprocess.STDOUT
     )
     os.chdir(coroot)
     Config.load_config()
 
-    ModuleTool().execute("install", [])
+    ProjectTool().execute("install", [])
     expected = ["mod1", "mod2", "mod3", "mod6", "mod7"]
     for i in expected:
         dirname = os.path.join(coroot, "libs", i)
@@ -81,23 +104,23 @@ def test_complex_checkout(modules_dir, modules_repo):
     ModuleTool().execute("push", [])
 
 
-def test_for_git_failures(modules_dir, modules_repo):
-    coroot = os.path.join(modules_dir, "testproject2")
+def test_for_git_failures(git_modules_dir, modules_repo):
+    coroot = os.path.join(git_modules_dir, "testproject2")
     subprocess.check_output(
-        ["git", "clone", os.path.join(modules_dir, "repos", "testproject"), "testproject2"],
-        cwd=modules_dir,
+        ["git", "clone", os.path.join(git_modules_dir, "repos", "testproject"), "testproject2"],
+        cwd=git_modules_dir,
         stderr=subprocess.STDOUT,
     )
     os.chdir(coroot)
     Config.load_config()
 
-    ModuleTool().execute("install", [])
+    ProjectTool().execute("install", [])
 
     gp = module.gitprovider
     module.gitprovider = BadModProvider(gp, os.path.join(coroot, "libs", "mod6"))
     try:
         # test all tools, perhaps isolate to other test case
-        ModuleTool().execute("install", [])
+        ProjectTool().execute("install", [])
         ModuleTool().execute("list", [])
         ModuleTool().execute("update", [])
         ModuleTool().execute("status", [])
@@ -106,11 +129,11 @@ def test_for_git_failures(modules_dir, modules_repo):
         module.gitprovider = gp
 
 
-def test_install_for_git_failures(modules_dir, modules_repo):
-    coroot = os.path.join(modules_dir, "testproject3")
+def test_install_for_git_failures(git_modules_dir, modules_repo):
+    coroot = os.path.join(git_modules_dir, "testproject3")
     subprocess.check_output(
-        ["git", "clone", os.path.join(modules_dir, "repos", "testproject"), "testproject3"],
-        cwd=modules_dir,
+        ["git", "clone", os.path.join(git_modules_dir, "repos", "testproject"), "testproject3"],
+        cwd=git_modules_dir,
         stderr=subprocess.STDOUT,
     )
     os.chdir(coroot)
@@ -120,54 +143,84 @@ def test_install_for_git_failures(modules_dir, modules_repo):
     module.gitprovider = BadModProvider(gp, os.path.join(coroot, "libs", "mod6"))
     try:
         with pytest.raises(ModuleNotFoundException):
-            ModuleTool().execute("install", [])
+            ProjectTool().execute("install", [])
     finally:
         module.gitprovider = gp
 
 
-def test_for_repo_without_versions(modules_dir, modules_repo):
-    coroot = os.path.join(modules_dir, "noverproject")
+def test_for_repo_without_versions(git_modules_dir, modules_repo):
+    coroot = os.path.join(git_modules_dir, "noverproject")
     subprocess.check_output(
-        ["git", "clone", os.path.join(modules_dir, "repos", "noverproject")], cwd=modules_dir, stderr=subprocess.STDOUT
+        ["git", "clone", os.path.join(git_modules_dir, "repos", "noverproject")], cwd=git_modules_dir, stderr=subprocess.STDOUT
     )
     os.chdir(coroot)
     Config.load_config()
 
-    ModuleTool().execute("install", [])
+    ProjectTool().execute("install", [])
 
 
-def test_bad_dep_checkout(modules_dir, modules_repo):
-    coroot = os.path.join(modules_dir, "baddep")
+def test_bad_dep_checkout(git_modules_dir, modules_repo):
+    coroot = os.path.join(git_modules_dir, "baddep")
     subprocess.check_output(
-        ["git", "clone", os.path.join(modules_dir, "repos", "baddep")], cwd=modules_dir, stderr=subprocess.STDOUT
+        ["git", "clone", os.path.join(git_modules_dir, "repos", "baddep")], cwd=git_modules_dir, stderr=subprocess.STDOUT
     )
     os.chdir(coroot)
     Config.load_config()
 
     with pytest.raises(CompilerException):
-        ModuleTool().execute("install", [])
+        ProjectTool().execute("install", [])
 
 
-def test_master_checkout(modules_dir, modules_repo):
-    coroot = install_project(modules_dir, "masterproject")
+def test_master_checkout(git_modules_dir, modules_repo):
+    coroot = install_project(git_modules_dir, "masterproject")
 
-    ModuleTool().execute("install", [])
+    ProjectTool().execute("install", [])
 
     dirname = os.path.join(coroot, "libs", "mod8")
     assert os.path.exists(os.path.join(dirname, "devsignal"))
     assert os.path.exists(os.path.join(dirname, "mastersignal"))
 
 
-def test_dev_checkout(modules_dir, modules_repo):
-    coroot = os.path.join(modules_dir, "devproject")
+def test_dev_checkout(git_modules_dir, modules_repo):
+    coroot = os.path.join(git_modules_dir, "devproject")
     subprocess.check_output(
-        ["git", "clone", os.path.join(modules_dir, "repos", "devproject")], cwd=modules_dir, stderr=subprocess.STDOUT
+        ["git", "clone", os.path.join(git_modules_dir, "repos", "devproject")], cwd=git_modules_dir, stderr=subprocess.STDOUT
     )
     os.chdir(coroot)
     Config.load_config()
 
-    ModuleTool().execute("install", [])
+    ProjectTool().execute("install", [])
 
     dirname = os.path.join(coroot, "libs", "mod8")
     assert os.path.exists(os.path.join(dirname, "devsignal"))
     assert not os.path.exists(os.path.join(dirname, "mastersignal"))
+
+
+@pytest.mark.parametrize("editable", [True, False])
+@pytest.mark.parametrize("set_path_argument", [True, False])
+def test_module_install(tmpdir: py.path.local, modules_dir: str, editable: bool, set_path_argument: bool) -> None:
+    module_path: str = os.path.join(modules_dir, "minimalv2module")
+    python_module_name: str = "inmanta-module-minimalv2module"
+    venv.create(tmpdir, with_pip=True)
+    pip: str = os.path.join(tmpdir, "bin", "pip")
+    # default pip version is not compatible with module install flow
+    subprocess.check_output([pip, "install", "-U", "pip"])
+
+    def is_installed(name: str, only_editable: bool = False) -> bool:
+        out: str = subprocess.check_output(
+            [
+                pip,
+                "list",
+                "--format",
+                "json",
+                *(["--editable"] if only_editable else []),
+            ]
+        ).decode()
+        packages: List[Dict[str, str]] = pydantic.parse_raw_as(List[Dict[str, str]], out)
+        return any(package["name"] == name for package in packages)
+
+    assert not is_installed(python_module_name)
+    run_module_install(os.path.join(tmpdir, "bin", "python"), module_path, editable, set_path_argument)
+    assert is_installed(python_module_name, True) == editable
+    if not editable:
+        assert is_installed(python_module_name, False)

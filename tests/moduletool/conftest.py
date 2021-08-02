@@ -35,14 +35,14 @@ from moduletool.common import (
 
 
 @pytest.fixture(scope="session")
-def modules_dir():
+def git_modules_dir():
     tempdir = tempfile.mkdtemp()
     yield tempdir
     shutil.rmtree(tempdir)
 
 
 @pytest.fixture(scope="session")
-def modules_repo(modules_dir):
+def modules_repo(git_modules_dir):
     """
     +--------+-------------+----------+
     | Name   | Requires    | Versions |
@@ -95,7 +95,7 @@ def modules_repo(modules_dir):
     +--------+-------------+----------+
     |        |             | 3.3.dev  |
     +--------+-------------+----------+"""
-    tempdir = modules_dir
+    tempdir = git_modules_dir
 
     reporoot = os.path.join(tempdir, "repos")
     os.makedirs(reporoot)
