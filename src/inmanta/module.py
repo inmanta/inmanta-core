@@ -1173,6 +1173,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return out
 
+
 @stable_api
 class ModuleGeneration(enum.Enum):
     """

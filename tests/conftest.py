@@ -738,6 +738,16 @@ async def off_main_thread(func):
     return await asyncio.get_event_loop().run_in_executor(None, func)
 
 
+class ModuleInstall:
+
+    def __init__(self, module_path: str, dev_install: bool) -> None:
+        """
+        Represents a module that should be installed from a module path.
+        """
+        self.module_path = module_path
+        self.dev_install = dev_install
+
+
 class SnippetCompilationTest(KeepOnFail):
     def setUpClass(self):
         self.libs = tempfile.mkdtemp()
@@ -754,7 +764,7 @@ class SnippetCompilationTest(KeepOnFail):
         # reset cwd
         os.chdir(self.cwd)
 
-    def setup_func(self, module_dir):
+    def setup_func(self, module_dir: Optional[str]):
         # init project
         self._keep = False
         self.project_dir = tempfile.mkdtemp()
@@ -770,10 +780,17 @@ class SnippetCompilationTest(KeepOnFail):
         self.keep_shared = True
         return {"env": self.env, "libs": self.libs, "project": self.project_dir}
 
-    def setup_for_snippet(self, snippet, autostd=True):
+    def setup_for_snippet(self, snippet, autostd=True, install_v2_modules: List[ModuleInstall] = []) -> None:
+        """
+        :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
+        """
         self.setup_for_snippet_external(snippet)
-        Project.set(Project(self.project_dir, autostd=autostd))
+        project = Project(self.project_dir, autostd=autostd)
+        Project.set(project)
         loader.unload_inmanta_plugins()
+
+        for mod in install_v2_modules:
+
 
     def reset(self):
         Project.set(Project(self.project_dir, autostd=Project.get().autostd))
@@ -879,6 +896,16 @@ def snippetcompiler(inmanta_config, snippetcompiler_global, modules_dir):
     yield snippetcompiler_global
     snippetcompiler_global.tear_down_func()
 
+@pytest.fixture(scope="function")
+def snippetcompiler_no_module_dir(inmanta_config, snippetcompiler_global):
+    """
+    Create a snippetcompile without attaching module_dir to the module path
+    of the project.
+    """
+    compiler.config.feature_compiler_cache.set("True")
+    snippetcompiler_global.setup_func(module_dir=None)
+    yield snippetcompiler_global
+    snippetcompiler_global.tear_down_func()
 
 @pytest.fixture(scope="function")
 def snippetcompiler_clean(modules_dir):
