@@ -900,6 +900,7 @@ class Project(ModuleLike[ProjectMetadata]):
         if not self.loaded:
             if not self.is_using_virtual_env():
                 self.use_virtual_env()
+            loader.PluginModuleFinder.configure_module_finder(self.modulepath, modules_to_ignore=[])
             self.get_complete_ast()
             self.loaded = True
             self.verify()
@@ -1033,7 +1034,7 @@ class Project(ModuleLike[ProjectMetadata]):
             raise InvalidModuleException("Could not load module %s" % module_name) from e
 
     def install_module(self, module_name: str) -> "ModuleV1":
-        # THis method only supports ModuleV1, support for ModuleV2 will be added in #3083
+        # This method only supports ModuleV1, support for ModuleV2 will be added in #3083
         reqs = self.collect_requirements()
         if module_name in reqs:
             return ModuleV1.install(self, module_name, reqs[module_name], install_mode=self._install_mode)
@@ -1042,7 +1043,6 @@ class Project(ModuleLike[ProjectMetadata]):
                 self, module_name, list(parse_requirements(module_name)), install_mode=self._install_mode
             )
 
-
     def load_plugins(self) -> None:
         """
         Load all plug-ins
@@ -1050,14 +1050,10 @@ class Project(ModuleLike[ProjectMetadata]):
         if not self.loaded:
             LOGGER.warning("loading plugins on project that has not been loaded completely")
 
-        names_v2_modules = [mod.name for mod in self.modulepath if isinstance(mod, ModuleV2)]
-        loader.configure_module_finder(self.modulepath, modules_to_ignore=names_v2_modules)
-
         for module in self.modules.values():
             module.load_plugins()
 
     def verify(self) -> None:
-        # TODO: Also verify that no dependency is installed twice (V1 + V2)
         # verify module dependencies
         result = True
         result &= self.verify_requires()
@@ -1718,8 +1714,12 @@ class ModuleV2(Module[ModuleV2Metadata]):
             return None
         fq_module_path = f"{const.PLUGINS_PACKAGE}.{module_name}"
 
-        # TODO: Unload module if it was loaded before
+        # Ensure that this module cannot be loaded as a V1 module. V2 modules always take precedence
+        loader.PluginModuleFinder.get_module_finder().add_module_to_ignore(module_name)
+        # Unload this module in case it was already loaded
+        loader.unload_inmanta_plugins(module_name)
         try:
+            # Load the V2 module to obtain the installation directory
             mod = importlib.import_module(fq_module_path)
         except ModuleNotFoundError:
             raise Exception(f"Package {pkg_name} is installed but {fq_module_path} cannot be imported")

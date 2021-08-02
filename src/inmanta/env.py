@@ -359,6 +359,6 @@ python -m pip $@
 
     def is_package_installed(self, pkg_name: str) -> bool:
         if not self.__using_venv:
-            raise Exception(f"Not using venv {self.__using_venv}. use_virtual_env() should be called first.")
+            raise Exception(f"Not using compiler venv. use_virtual_env() should be called first.")
         installed_packages: Dict[str, str] = self._get_installed_packages(self.virtual_python)
         return pkg_name in installed_packages

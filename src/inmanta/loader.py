@@ -186,7 +186,7 @@ class CodeLoader(object):
         self.__check_dir()
 
         mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
-        configure_module_finder([mod_dir])
+        PluginModuleFinder.configure_module_finder(modulepaths=[mod_dir])
 
     def __check_dir(self) -> None:
         """
@@ -415,17 +415,44 @@ class PluginModuleFinder(Finder):
     Custom module finder which handles all the imports for the package inmanta_plugins.
     """
 
+    MODULE_FINDER: "PluginModuleFinder" = None
+
     def __init__(self, modulepaths: List[str], modules_to_ignore: List[str] = []) -> None:
         self._modulepaths = list(modulepaths)
         self._modules_to_ignore = list(modules_to_ignore)
+
+    @classmethod
+    def get_module_finder(cls) -> "PluginModuleFinder":
+        if cls.MODULE_FINDER is not None:
+            return cls.MODULE_FINDER
+        raise Exception("No PluginModuleFinder configure. Call configure_module_finder() first.")
+
+    @classmethod
+    def configure_module_finder(cls, modulepaths: List[str], modules_to_ignore: List[str] = []) -> None:
+        """
+        Setup a custom module loader to handle imports in .py files of the modules.
+
+        :param modulepaths: The directories where the module finder should look for modules.
+        :param modules_to_ignore: The module that should not be handled by the module finder.
+        """
+        if cls.MODULE_FINDER is not None:
+            # PluginModuleFinder already present in sys.meta_path
+            cls.MODULE_FINDER.add_module_paths(modulepaths)
+            cls.MODULE_FINDER._modules_to_ignore = list(modules_to_ignore)
+            return
+
+        # PluginModuleFinder not yet present in sys.meta_path.
+        module_finder = PluginModuleFinder(modulepaths, modules_to_ignore)
+        sys.meta_path.insert(0, module_finder)
+        cls.MODULE_FINDER = module_finder
 
     def add_module_paths(self, paths: List[str]) -> None:
         for p in paths:
             if p not in self._modulepaths:
                 self._modulepaths.append(p)
 
-    def set_modules_to_ignore(self, modules_to_ignore: List[str]) -> None:
-        self._modules_to_ignore = list(modules_to_ignore)
+    def add_module_to_ignore(self, module_to_ignore: str) -> None:
+        self._modules_to_ignore.append(module_to_ignore)
 
     def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[PluginModuleLoader]:
         """
@@ -446,30 +473,17 @@ class PluginModuleFinder(Finder):
             return False
 
 
-def configure_module_finder(modulepaths: List[str], modules_to_ignore: List[str] = []) -> None:
+def unload_inmanta_plugins(module_name: Optional[str] = None) -> None:
     """
-    Setup a custom module loader to handle imports in .py files of the modules.
+    Unload the entire inmanta_plugins package or a specific module when module_name is provided
 
-    :param modulepaths: The directories where the module finder should look for modules.
-    :param modules_to_ignore: Don't use the module finder for modules with these names.
+    :param module_name: Only unload this specific inmanta module.
     """
-    for finder in sys.meta_path:
-        # PluginModuleFinder already present in sys.meta_path.
-        if isinstance(finder, PluginModuleFinder):
-            finder.add_module_paths(modulepaths)
-            finder.set_modules_to_ignore(modules_to_ignore)
-            return
-
-    # PluginModuleFinder not yet present in sys.meta_path.
-    module_finder = PluginModuleFinder(modulepaths, modules_to_ignore)
-    sys.meta_path.insert(0, module_finder)
-
-
-def unload_inmanta_plugins():
-    """
-    Unload the inmanta_plugins package.
-    """
+    if module_name:
+        pkg_to_unload = f"{const.PLUGINS_PACKAGE}.{module_name}"
+    else:
+        pkg_to_unload = const.PLUGINS_PACKAGE
     loaded_modules = sys.modules.keys()
-    modules_to_unload = [k for k in loaded_modules if k == const.PLUGINS_PACKAGE or k.startswith(f"{const.PLUGINS_PACKAGE}.")]
+    modules_to_unload = [k for k in loaded_modules if k == pkg_to_unload or k.startswith(pkg_to_unload)]
     for k in modules_to_unload:
         del sys.modules[k]
