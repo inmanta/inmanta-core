@@ -89,7 +89,7 @@ Each Handler should override 4 methods of the CRUDHandler:
 
 1. :meth:`~inmanta.agent.handler.CRUDHandler.read_resource` to read the current state of the system.
 2. :meth:`~inmanta.agent.handler.CRUDHandler.create_resource` to create the resource if it doesn't exist.
-3. :meth:`~inmanta.agent.handler.CRUDHandler.update_resource` to update the resources when required.
+3. :meth:`~inmanta.agent.handler.CRUDHandler.update_resource` to update the resource when required.
 4. :meth:`~inmanta.agent.handler.CRUDHandler.delete_resource` to delete the resource when required.
 
 The context (See :class:`~inmanta.agent.handler.HandlerContext`) passed to most methods is used to
