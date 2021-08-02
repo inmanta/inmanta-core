@@ -346,8 +346,7 @@ class ModuleTool(ModuleLikeTool):
         build.add_argument(
             "-o",
             "--output-dir",
-            help="The directory where the Python package will be stored. By default, the ./dist directory "
-            "in the root of the module is used.",
+            help="The directory where the Python package will be stored. Default: <module_root>/dist",
             default=None,
             dest="output_dir",
         )
