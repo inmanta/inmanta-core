@@ -17,7 +17,7 @@ A South Bound integration always consists of three parts:
   * a :term:`resource<resource>` that serializes the entities and captures all information required to enforce the :term:`desired state`.
   * a :term:`handler<handler>`: the python code required to enforce the desired state.
 
-.. image:: images/handler_flow.svg
+.. image:: images/handler_flow.*
 
 * In the *compiler*, a model is constructed that consists of entities. The entities can be related to each other.
 * The *exporter* will search for all :term:`entities<entity>` that can be directly deployed by a :term:`handler<handler>`. These are the :term:`resources<resource>`. Resources are self-contained and can not refer to any other entity or resource.
