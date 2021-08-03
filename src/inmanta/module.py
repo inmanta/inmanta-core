@@ -25,6 +25,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import traceback
 from abc import ABC, abstractmethod
 from functools import lru_cache
@@ -1158,6 +1159,16 @@ class Project(ModuleLike[ProjectMetadata]):
         return out
 
 
+class DummyProject(Project):
+    """ Placeholder project that does nothing """
+
+    def __init__(self):
+        super().__init__(tempfile.gettempdir())
+
+    def _get_metadata_from_disk(self) -> ProjectMetadata:
+        return ProjectMetadata(name="DUMMY")
+
+
 @stable_api
 class ModuleGeneration(enum.Enum):
     """
@@ -1502,6 +1513,16 @@ class ModuleV1(Module[ModuleV1Metadata]):
             reqe = req[0]
             reqs.append(reqe)
         return reqs
+
+    def get_all_requires(self) -> List[str]:
+        """
+        :return: all modules required by an import from any sub-modules, with all constraints applied
+        """
+        # get all constraints
+        spec: Dict[str, Optional[Requirement]] = {req.project_name: req for req in self.requires()}
+        # find all imports
+        imports = {imp.name.split("::")[0] for subm in self.get_all_submodules() for imp in self.get_imports(subm)}
+        return sorted([str(spec[r]) if spec.get(r) else r for r in imports])
 
     @classmethod
     def install(

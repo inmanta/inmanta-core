@@ -807,12 +807,10 @@ build-backend = "setuptools.build_meta"
         config.add_section("options")
 
         # add requirements
-        if self._module.metadata.requires or self._module.get_python_requirements_as_list():
-            requires = [f"{ModuleV2.PKG_NAME_PREFIX}{req}" for req in self._module.metadata.requires]
+        if self._module.get_all_requires() or self._module.get_python_requirements_as_list():
+            requires = [f"{ModuleV2.PKG_NAME_PREFIX}{req}" for req in self._module.get_all_requires()]
             requires += self._module.get_python_requirements_as_list()
             config.set("options", "install_requires", "\n".join(requires))
-
-        # TODO convert implicit imports into dependencies
 
         # Make setuptools work
         config["options"]["zip_safe"] = "False"
