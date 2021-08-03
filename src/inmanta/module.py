@@ -32,6 +32,7 @@ from io import BytesIO, TextIOBase
 from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
+from types import ModuleType
 from typing import (
     Any,
     Dict,
@@ -226,17 +227,54 @@ class CLIGitProvider(GitProvider):
 gitprovider = CLIGitProvider()
 
 
-class ModuleRepo(object):
+class ModuleRepo:
+    def path_for(self, name: str) -> Optional[str]:
+        raise NotImplementedError("Abstract method")
+
+
+class ModuleV2Repo(ModuleRepo):
+    def install(self, name: str, constraint: Requirement) -> bool:
+        raise NotImplementedError("Abstract method")
+
+
+class PythonRepo(ModuleRepo):
+    def __init__(self, url: str) -> None:
+        self.url: str = url
+
+    # TODO: does this need to return bool? Is this ever used as a composite? Might be better to support multiple urls
+    def install(self, module: Requirement) -> bool:
+        if module.key.startswith(ModuleV2.PKG_NAME_PREFIX):
+            raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
+        requirement: Requirement = Requirement.parse(f"{ModuleV2.PKG_NAME_PREFIX}{str(module)}")
+        try:
+            env.ProcessEnv.install_from_index([requirement], self.url)
+        except Exception:
+            # TODO: except any exception?
+            return False
+        return True
+
+    def path_for(self, name: str) -> Optional[str]:
+        if name.startswith(ModuleV2.PKG_NAME_PREFIX):
+            raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
+        package: str = f"{ModuleV2.PKG_NAME_PREFIX}{name}"
+        module: ModuleType
+        try:
+            module = importlib.import_module(package)
+        except ModuleNotFoundError:
+            return None
+        try:
+            return ModuleLike.get_first_directory_containing_file(os.path.dirname(module.__file__), ModuleV2.MODULE_FILE)
+        except FileNotFoundError:
+            return None
+
+
+class ModuleV1Repo(ModuleRepo):
     def clone(self, name: str, dest: str) -> bool:
         raise NotImplementedError("Abstract method")
 
-    def path_for(self, name: str) -> Optional[str]:
-        # same class is used for search parh and remote repos, perhaps not optimal
-        raise NotImplementedError("Abstract method")
 
-
-class CompositeModuleRepo(ModuleRepo):
-    def __init__(self, children: List[ModuleRepo]) -> None:
+class CompositeModuleRepo(ModuleV1Repo):
+    def __init__(self, children: List[ModuleV1Repo]) -> None:
         self.children = children
 
     def clone(self, name: str, dest: str) -> bool:
@@ -253,7 +291,7 @@ class CompositeModuleRepo(ModuleRepo):
         return None
 
 
-class LocalFileRepo(ModuleRepo):
+class LocalFileRepo(ModuleV1Repo):
     def __init__(self, root: str, parent_root: Optional[str] = None) -> None:
         if parent_root is None:
             self.root = os.path.abspath(root)
@@ -275,7 +313,7 @@ class LocalFileRepo(ModuleRepo):
         return None
 
 
-class RemoteRepo(ModuleRepo):
+class RemoteRepo(ModuleV1Repo):
     def __init__(self, baseurl: str) -> None:
         self.baseurl = baseurl
 
@@ -296,6 +334,7 @@ class RemoteRepo(ModuleRepo):
 
 
 def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, RemoteRepo]:
+    # TODO: make pypi repo
     # check that the second char is not a colon (windows)
     if ":" in path and path[1] != ":":
         return RemoteRepo(path)
@@ -814,6 +853,7 @@ class Project(ModuleLike[ProjectMetadata]):
         self.main_file = main_file
 
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
+        # TODO: rename resolver and externalResolver to resolver_v1 and external_resolver_v1 respectively
         self.resolver = CompositeModuleRepo([make_repo(x) for x in self.modulepath])
         self.repolist = [x.url for x in self._metadata.repo]
         self.externalResolver = CompositeModuleRepo([make_repo(x, root=path) for x in self.repolist])
@@ -832,7 +872,7 @@ class Project(ModuleLike[ProjectMetadata]):
             venv_path = os.path.abspath(venv_path)
         self.virtualenv = env.VirtualEnv(venv_path)
         self.loaded = False
-        self.modules: Dict[str, ModuleV1] = {}
+        self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
 
@@ -952,7 +992,7 @@ class Project(ModuleLike[ProjectMetadata]):
         self.load()
         return self.modules
 
-    def get_module(self, full_module_name: str) -> "ModuleV1":
+    def get_module(self, full_module_name: str) -> "Module":
         parts = full_module_name.split("::")
         module_name = parts[0]
 
@@ -1001,16 +1041,19 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return out
 
-    def load_module(self, module_name: str) -> "ModuleV1":
+    def load_module(self, module_name: str) -> "Module":
         try:
             path = self.resolver.path_for(module_name)
             if path is not None:
+                # TODO: create ModuleV2 depending on repo: perhaps visit the repo instance to create the module object?
                 module = ModuleV1(self, path)
             else:
                 reqs = self.collect_requirements()
                 if module_name in reqs:
+                    # TODO: same here: visit the repo instance
                     module = ModuleV1.install(self, module_name, reqs[module_name], install_mode=self._install_mode)
                 else:
+                    # TODO: same here: visit the repo instance
                     module = ModuleV1.install(
                         self, module_name, list(parse_requirements(module_name)), install_mode=self._install_mode
                     )
@@ -1641,3 +1684,6 @@ class ModuleV2(Module[ModuleV2Metadata]):
     @classmethod
     def get_metadata_file_schema_type(cls) -> Type[ModuleV2Metadata]:
         return ModuleV2Metadata
+
+    # TODO: implement requires method? No, this is inherent to the Python package. Find a way to use this only for v1 instead,
+    #   perhaps isinstance in collect_requirements?

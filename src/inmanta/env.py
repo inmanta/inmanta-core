@@ -40,6 +40,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from packaging.requirements import InvalidRequirement
+    from pkg_resources import Requirement  # noqa: F401
 else:
     from pkg_resources.extern.packaging.requirements import InvalidRequirement
 
@@ -58,6 +59,23 @@ class ProcessEnv:
     """
 
     env_path: str = sys.executable
+
+    @classmethod
+    def install_from_index(cls, requirements: List[Requirement], index_url: Optional[str] = None) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # work in temp dir to prevent accidental matches of local package directories
+            subprocess.check_call(
+                [
+                    cls.env_path,
+                    "-m",
+                    "pip",
+                    "install",
+                    *(str(requirement) for requirement in requirements),
+                    *(["--index-url", index_url] if index_url is not None else []),
+                ],
+                cwd=tmpdir,
+            )
+        raise NotImplementedError()
 
     @classmethod
     def install_from_source(cls, paths: List[LocalPackagePath]) -> None:
