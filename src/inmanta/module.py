@@ -529,6 +529,13 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
     def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
         return re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", r"\g<1>" + new_version + r"\g<2>", source)
 
+    def to_v2(self) -> "ModuleV2Metadata":
+        values = self.dict()
+        del values["compiler_version"]
+        del values["requires"]
+        values["name"] = ModuleV2.PKG_NAME_PREFIX + values["name"]
+        return ModuleV2Metadata(**values)
+
 
 @stable_api
 class ModuleV2Metadata(ModuleMetadata):
@@ -561,6 +568,13 @@ class ModuleV2Metadata(ModuleMetadata):
     @classmethod
     def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
         return re.sub(r"(\[metadata\][^\[]*\s*version\s*=\s*)[^\"'}\s\[]+", r"\g<1>" + new_version, source)
+
+    def to_config(self) -> configparser.ConfigParser:
+        out = configparser.ConfigParser()
+        out.add_section("metadata")
+        for k, v in self.dict().items():
+            out.set("metadata", k, str(v))
+        return out
 
 
 @stable_api

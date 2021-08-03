@@ -1,0 +1,8 @@
+name: elaboratev1module
+license: Apache 2.0
+version: 1.0
+description: |
+    This is test module with
+    a long description
+requires:
+    - mod1 == 1.0

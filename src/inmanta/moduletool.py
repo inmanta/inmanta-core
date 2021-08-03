@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import argparse
+import configparser
 import inspect
 import logging
 import os
@@ -758,3 +759,66 @@ class V2ModuleBuilder:
                 return builder.build(distribution=distribution, output_directory=output_directory)
         except Exception:
             raise ModuleBuildFailedError(msg="Module build failed")
+
+
+class ModuleConverter:
+    def __init__(self, module: ModuleV1) -> None:
+        self._module = module
+
+    def convert(self, output_directory: str) -> None:
+        # validate input
+        if os.path.exists(output_directory):
+            if not os.path.isdir(output_directory):
+                raise ModuleBuildFailedError(msg=f"Given output directory is not a directory: {output_directory}")
+            if os.listdir(output_directory):
+                raise ModuleBuildFailedError(msg=f"Non-empty output directory {output_directory}")
+
+        output_directory = os.path.abspath(output_directory)
+
+        # copy all files
+        shutil.copytree(self._module.path, output_directory, dirs_exist_ok=True)
+
+        # remove module.yaml
+        os.remove(os.path.join(output_directory, self._module.MODULE_FILE))
+
+        # move plugins
+        old_plugins = os.path.join(output_directory, "plugins")
+        new_plugins = os.path.join(output_directory, "inmanta_plugins", self._module.name)
+        shutil.move(old_plugins, new_plugins)
+
+        # write out pyproject.toml
+        with open(os.path.join(output_directory, "pyproject.toml"), "w") as fh:
+            fh.write(self.get_pyproject())
+
+        # write our setup.cfg
+        with open(os.path.join(output_directory, "setup.cfg"), "w") as fh:
+            self.get_setup_cfg().write(fh)
+
+    def get_pyproject(self) -> str:
+        return """[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+"""
+
+    def get_setup_cfg(self) -> configparser.ConfigParser:
+        # convert main config
+        config = self._module.metadata.to_v2().to_config()
+
+        config.add_section("options")
+
+        # add requirements
+        if self._module.metadata.requires or self._module.get_python_requirements_as_list():
+            requires = [f"{ModuleV2.PKG_NAME_PREFIX}{req}" for req in self._module.metadata.requires]
+            requires += self._module.get_python_requirements_as_list()
+            config.set("options", "install_requires", "\n".join(requires))
+
+        # TODO convert implicit imports into dependencies
+
+        # Make setuptools work
+        config["options"]["zip_safe"] = "False"
+        config["options"]["include_package_data"] = "True"
+        config["options"]["packages"] = "find_namespace:"
+        config.add_section("options.package_data")
+        config["options.package_data"]["*"] = "files/*, model/*, templates/*, setup.cfg"
+
+        return config
