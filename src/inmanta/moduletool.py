@@ -42,6 +42,7 @@ from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
 from inmanta.module import (
+    DummyProject,
     FreezeOperator,
     InstallMode,
     Module,
@@ -360,8 +361,18 @@ class ModuleTool(ModuleLikeTool):
             path = os.path.abspath(path)
         else:
             path = os.getcwd()
-        module_path_root = ModuleV2.get_module_dir(path)
-        return V2ModuleBuilder(module_path_root).build(output_dir)
+
+        module = self.construct_module(DummyProject(), path)
+
+        if output_dir is None:
+            output_dir = os.path.join(path, "dist")
+
+        if isinstance(module, ModuleV1):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                ModuleConverter(module).convert(tmpdir)
+                return V2ModuleBuilder(tmpdir).build(output_dir)
+        else:
+            return V2ModuleBuilder(path).build(output_dir)
 
     def get_project_for_module(self, module):
         try:
@@ -370,20 +381,24 @@ class ModuleTool(ModuleLikeTool):
             # see #721
             return None
 
+    def construct_module(self, project: Optional[Project], path: str) -> Module:
+        """ Construct a V1 or V2 module from a folder"""
+        try:
+            return ModuleV2(project, path)
+        except ModuleMetadataFileNotFound as e:
+            try:
+                return ModuleV1(project, path)
+            except ModuleMetadataFileNotFound:
+                # ignore this exception in favor of the v2 one
+                pass
+            raise e
+
     def get_module(self, module: str = None, project=None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
             project = self.get_project_for_module(module)
             path: str = os.path.realpath(os.curdir)
-            try:
-                return ModuleV2(project, path)
-            except ModuleMetadataFileNotFound as e:
-                try:
-                    return ModuleV1(project, path)
-                except ModuleMetadataFileNotFound:
-                    # ignore this exception in favor of the v2 one
-                    pass
-                raise e
+            self.construct_module(project, path)
         else:
             project = self.get_project(load=True)
             return project.get_module(module)
@@ -680,12 +695,10 @@ class V2ModuleBuilder:
         """
         self._module = ModuleV2(project=None, path=os.path.abspath(module_path))
 
-    def build(self, output_directory: Optional[str] = None) -> str:
+    def build(self, output_directory: str = None) -> str:
         """
         Build the module and return the path to the build artifact.
         """
-        if output_directory is None:
-            output_directory = os.path.join(self._module.path, "dist")
         if os.path.exists(output_directory):
             if not os.path.isdir(output_directory):
                 raise ModuleBuildFailedError(msg=f"Given output directory is not a directory: {output_directory}")

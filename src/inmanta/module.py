@@ -1521,7 +1521,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
         # get all constraints
         spec: Dict[str, Optional[Requirement]] = {req.project_name: req for req in self.requires()}
         # find all imports
-        imports = {imp.name.split("::")[0] for subm in self.get_all_submodules() for imp in self.get_imports(subm)}
+        imports = {imp.name.split("::")[0] for subm in sorted(self.get_all_submodules()) for imp in self.get_imports(subm)}
         return sorted([str(spec[r]) if spec.get(r) else r for r in imports])
 
     @classmethod
