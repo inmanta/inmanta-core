@@ -59,7 +59,7 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-def set_yaml_order_preserving():
+def set_yaml_order_preserving() -> None:
     """
     Set yaml modules to be order preserving.
 
@@ -84,7 +84,7 @@ def set_yaml_order_preserving():
 class ModuleLikeTool(object):
     """Shared code for modules and projects """
 
-    def execute(self, cmd: Optional[str], args: argparse.Namespace):
+    def execute(self, cmd: Optional[str], args: argparse.Namespace) -> None:
         """
         Execute the given subcommand
         """
@@ -101,7 +101,7 @@ class ModuleLikeTool(object):
                 msg = f"{cmd} does not exist."
             raise ShowUsageException(msg)
 
-    def get_project(self, load=False) -> Project:
+    def get_project(self, load: bool = False) -> Project:
         project = Project.get()
         if load:
             project.load()
@@ -165,7 +165,7 @@ class ModuleLikeTool(object):
 
 class ProjectTool(ModuleLikeTool):
     @classmethod
-    def parser_config(cls, parser: ArgumentParser):
+    def parser_config(cls, parser: ArgumentParser) -> None:
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
         freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml")
         freeze.add_argument(
@@ -197,7 +197,7 @@ class ProjectTool(ModuleLikeTool):
         )
         subparser.add_parser("install", help="Install all modules required for this project")
 
-    def freeze(self, outfile, recursive, operator):
+    def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: Optional[str]) -> None:
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
         """
@@ -398,7 +398,7 @@ class ModuleTool(ModuleLikeTool):
         if module is None:
             project = self.get_project_for_module(module)
             path: str = os.path.realpath(os.curdir)
-            self.construct_module(project, path)
+            return self.construct_module(project, path)
         else:
             project = self.get_project(load=True)
             return project.get_module(module)

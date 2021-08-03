@@ -25,8 +25,8 @@ import zipfile
 from typing import Optional
 
 import pytest
-
 from pytest import MonkeyPatch
+
 from inmanta import moduletool
 from inmanta.module import ModuleMetadataFileNotFound
 from inmanta.moduletool import V2ModuleBuilder

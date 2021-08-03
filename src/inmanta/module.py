@@ -1162,7 +1162,7 @@ class Project(ModuleLike[ProjectMetadata]):
 class DummyProject(Project):
     """ Placeholder project that does nothing """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(tempfile.gettempdir())
 
     def _get_metadata_from_disk(self) -> ProjectMetadata:
@@ -1399,13 +1399,13 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)
         return loader.PluginModuleLoader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
 
-    def versions(self):
+    def versions(self) -> List["Version"]:
         """
         Provide a list of all versions available in the repository
         """
         versions = gitprovider.get_all_tags(self._path)
 
-        def try_parse(x):
+        def try_parse(x: str) -> "Optional[Version]":
             try:
                 return parse_version(x)
             except Exception:
@@ -1519,7 +1519,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
         :return: all modules required by an import from any sub-modules, with all constraints applied
         """
         # get all constraints
-        spec: Dict[str, Optional[Requirement]] = {req.project_name: req for req in self.requires()}
+        spec: Dict[str, Optional["Requirement"]] = {req.project_name: req for req in self.requires()}
         # find all imports
         imports = {imp.name.split("::")[0] for subm in sorted(self.get_all_submodules()) for imp in self.get_imports(subm)}
         return sorted([str(spec[r]) if spec.get(r) else r for r in imports])
