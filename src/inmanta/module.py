@@ -227,54 +227,48 @@ class CLIGitProvider(GitProvider):
 gitprovider = CLIGitProvider()
 
 
-class ModuleRepo:
+class ModuleSource:
     def path_for(self, name: str) -> Optional[str]:
         raise NotImplementedError("Abstract method")
 
 
-class ModuleV2Repo(ModuleRepo):
+class ModuleV2Source(ModuleSource):
     def install(self, name: str, constraint: Requirement) -> bool:
         raise NotImplementedError("Abstract method")
 
 
-class PythonRepo(ModuleRepo):
-    def __init__(self, url: str) -> None:
-        self.url: str = url
+class PythonSource(ModuleV2Source):
+    def __init__(self, urls: List[str]) -> None:
+        self.urls: List[str] = urls
 
-    # TODO: does this need to return bool? Is this ever used as a composite? Might be better to support multiple urls
     def install(self, module: Requirement) -> bool:
         if module.key.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
         requirement: Requirement = Requirement.parse(f"{ModuleV2.PKG_NAME_PREFIX}{str(module)}")
         try:
-            env.ProcessEnv.install_from_index([requirement], self.url)
-        except Exception:
-            # TODO: except any exception?
+            env.ProcessEnv.install_from_indexes([requirement], self.urls)
+        except env.PackageNotFound:
             return False
         return True
 
     def path_for(self, name: str) -> Optional[str]:
         if name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
-        package: str = f"{ModuleV2.PKG_NAME_PREFIX}{name}"
-        module: ModuleType
+        package: str = f"inmanta-plugins.{name}"
+        init: Optional[str] = env.ProcessEnv.get_module_file(namespace_package)
         try:
-            module = importlib.import_module(package)
-        except ModuleNotFoundError:
-            return None
-        try:
-            return ModuleLike.get_first_directory_containing_file(os.path.dirname(module.__file__), ModuleV2.MODULE_FILE)
+            return ModuleLike.get_first_directory_containing_file(os.path.dirname(init), ModuleV2.MODULE_FILE)
         except FileNotFoundError:
             return None
 
 
-class ModuleV1Repo(ModuleRepo):
+class ModuleRepo(ModuleSource):
     def clone(self, name: str, dest: str) -> bool:
         raise NotImplementedError("Abstract method")
 
 
-class CompositeModuleRepo(ModuleV1Repo):
-    def __init__(self, children: List[ModuleV1Repo]) -> None:
+class CompositeModuleRepo(ModuleRepo):
+    def __init__(self, children: List[ModuleRepo]) -> None:
         self.children = children
 
     def clone(self, name: str, dest: str) -> bool:
@@ -291,7 +285,7 @@ class CompositeModuleRepo(ModuleV1Repo):
         return None
 
 
-class LocalFileRepo(ModuleV1Repo):
+class LocalFileRepo(ModuleRepo):
     def __init__(self, root: str, parent_root: Optional[str] = None) -> None:
         if parent_root is None:
             self.root = os.path.abspath(root)
@@ -313,7 +307,7 @@ class LocalFileRepo(ModuleV1Repo):
         return None
 
 
-class RemoteRepo(ModuleV1Repo):
+class RemoteRepo(ModuleRepo):
     def __init__(self, baseurl: str) -> None:
         self.baseurl = baseurl
 

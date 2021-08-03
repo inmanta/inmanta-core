@@ -17,6 +17,7 @@
 """
 
 import hashlib
+import importlib
 import json
 import logging
 import os
@@ -27,6 +28,7 @@ import sys
 import tempfile
 import venv
 from dataclasses import dataclass
+from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
@@ -47,6 +49,10 @@ else:
 LOGGER = logging.getLogger(__name__)
 
 
+class PackageNotFound(Exception):
+    pass
+
+
 @dataclass
 class LocalPackagePath:
     path: str
@@ -58,24 +64,39 @@ class ProcessEnv:
     Class to represent the Python environment this process is running in.
     """
 
-    env_path: str = sys.executable
+    python_path: str = sys.executable
 
     @classmethod
-    def install_from_index(cls, requirements: List[Requirement], index_url: Optional[str] = None) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # work in temp dir to prevent accidental matches of local package directories
-            subprocess.check_call(
+    def install_from_indexes(cls, requirements: List[Requirement], index_urls: Optional[List[str]] = None) -> None:
+        index_args: List[str] = (
+            None if index_urls is None
+            else ["--index-url", index_urls[0], *chain.from_iterable(["--extra-index-url", url] for url in index_urls[1:])]
+            if index_urls
+            else ["--no-index"]
+        )
+        try:
+            subprocess.run(
                 [
-                    cls.env_path,
+                    cls.python_path,
                     "-m",
                     "pip",
                     "install",
                     *(str(requirement) for requirement in requirements),
                     *(["--index-url", index_url] if index_url is not None else []),
                 ],
-                cwd=tmpdir,
+                stderr=subprocess.PIPE,
             )
-        raise NotImplementedError()
+        except CalledProcessError as e:
+            stderr: str = e.stderr.decode()
+            not_found: List[str] = [
+                requirement.project_name for requirement in requirements
+                if f"No matching distribution found for {requirement.project_name}" in stderr
+            ]
+            if not_found:
+                raise PackageNotFound(
+                    "Packages %s were not found in the given indexes." % ", ".join(not_found)
+                )
+            raise e
 
     @classmethod
     def install_from_source(cls, paths: List[LocalPackagePath]) -> None:
@@ -86,17 +107,22 @@ class ProcessEnv:
             raise Exception("install_from_source requires at least one package to install")
         # make sure we only try to install from a local source
         explicit_paths: Iterator[LocalPackagePath] = (
-            LocalPackagePath(path=os.path.join(".", path.path), editable=path.editable) for path in paths
+            LocalPackagePath(path=os.path.join(".", path.path, ""), editable=path.editable) for path in paths
         )
         subprocess.check_call(
             [
-                cls.env_path,
+                cls.python_path,
                 "-m",
                 "pip",
                 "install",
                 *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in explicit_paths),
             ]
         )
+
+    @classmethod
+    def get_module_file(cls, module: str) -> Optional[str]:
+        spec: Optional[ModuleSpec] = importlib.util.find_spec(module)
+        return spec.origin if spec is not None else None
 
 
 class VirtualEnv(object):
