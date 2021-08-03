@@ -785,11 +785,12 @@ class ModuleConverter:
                 raise ModuleBuildFailedError(msg=f"Given output directory is not a directory: {output_directory}")
             if os.listdir(output_directory):
                 raise ModuleBuildFailedError(msg=f"Non-empty output directory {output_directory}")
+            os.rmdir(output_directory)
 
         output_directory = os.path.abspath(output_directory)
 
         # copy all files
-        shutil.copytree(self._module.path, output_directory, dirs_exist_ok=True)
+        shutil.copytree(self._module.path, output_directory)
 
         # remove module.yaml
         os.remove(os.path.join(output_directory, self._module.MODULE_FILE))
