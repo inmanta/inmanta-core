@@ -256,7 +256,12 @@ class ModuleSource(Generic[TModule]):
 
     @abstractmethod
     def install(self, project: Optional[Project], module_spec: List[Requirement]) -> Optional[TModule]:
-        # TODO: docstring
+        """
+        Attempt to install a module given a module spec.
+
+        :param project: The project associated with the module, if any.
+        :param module_spec: The module specification including any constraints on its version.
+        """
         raise NotImplementedError("Abstract method")
 
     def path_for(self, name: str) -> Optional[str]:
@@ -321,8 +326,7 @@ class ModuleRepo(ModuleSource[ModuleV1]):
         if path is not None:
             return self.from_path(project, path)
         else:
-            # TODO: don't use project._install_mode private var
-            return ModuleV1.install(self, module_name, module_spec, install_mode=project._install_mode)
+            return ModuleV1.install(self, module_name, module_spec, install_mode=project.install_mode)
 
     @classmethod
     def from_path(cls, project: Optional[Project], path: str) -> ModuleV1:
@@ -942,7 +946,7 @@ class Project(ModuleLike[ProjectMetadata]):
         return metadata.name
 
     @property
-    def _install_mode(self) -> InstallMode:
+    def install_mode(self) -> InstallMode:
         return self._metadata.install_mode
 
     @property
@@ -1053,15 +1057,21 @@ class Project(ModuleLike[ProjectMetadata]):
         self.load()
         return self.modules
 
-    # TODO: is legacy_mode a good name?
-    def get_module(self, full_module_name: str, legacy_mode: bool = False) -> "Module":
-        # TODO: docstring
+    def get_module(self, full_module_name: str, v1_mode: bool = False) -> "Module":
+        """
+        Get a module instance for a given module name. Caches modules by top level name for later access.
+
+        :param full_module_name: The full name of the module. If this is a submodule, the corresponding top level module is
+            used.
+        :param v1_mode: Behave in a v1 compatible way: modules are installed on the fly and dependencies on v1 modules are
+            allowed.
+        """
         parts = full_module_name.split("::")
         module_name = parts[0]
 
         if module_name in self.modules:
             return self.modules[module_name]
-        return self.load_module(module_name, legacy_mode)
+        return self.load_module(module_name, v1_mode)
 
     def load_module_recursive(self) -> List[Tuple[str, List[Statement], BasicBlock]]:
         """
@@ -1072,7 +1082,7 @@ class Project(ModuleLike[ProjectMetadata]):
         out = []
 
         # get imports
-        # TODO: differentiate between v1 imports and others and pass `load_module` `legacy_mode` argument accordingly
+        # TODO: differentiate between v1 imports and others and pass `load_module` `v1_mode` argument accordingly
         #   Not sure if the AST needs to be loaded at this point for v2. This might be part of Arnaud's ticket instead.
         imports = [x for x in self.get_imports()]
 
@@ -1088,7 +1098,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
             try:
                 # get module
-                module = self.get_module(module_name, legacy_mode=True)
+                module = self.get_module(module_name, v1_mode=True)
                 # get NS
                 for i in range(1, len(parts) + 1):
                     subs = "::".join(parts[0:i])
@@ -1106,10 +1116,13 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return out
 
-    def load_module(self, module_name: str, legacy_mode: bool = False) -> "Module":
-        # TODO: docstring
+    def load_module(self, module_name: str, v1_mode: bool = False) -> "Module":
         """
+        Get a module instance for a given module name.
 
+        :param module_name: The name of the module.
+        :param v1_mode: Behave in a v1 compatible way: modules are installed on the fly and dependencies on v1 modules are
+            allowed.
         """
         reqs: Mapping[str, List[Requirement]] = self.collect_requirements()
         module_reqs: List[Requirement] = (
@@ -1119,8 +1132,8 @@ class Project(ModuleLike[ProjectMetadata]):
 
         module: Optional[Module]
         try:
-            module = self.module_source.get_module(self, module_reqs, install=legacy_mode)
-            if module is None and legacy_mode:
+            module = self.module_source.get_module(self, module_reqs, install=v1_mode)
+            if module is None and v1_mode:
                 module = self.resolver.get_module(self, module_reqs, install=True)
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
@@ -1377,8 +1390,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         for impor in todo:
             if impor not in out:
-                # TODO: legacy_mode=True only if this module is v1
-                mainmod = self._project.get_module(impor, legacy_mode=True)
+                mainmod = self._project.get_module(impor, v1_mode=self.GENERATION == ModuleGeneration.V1)
                 version = mainmod.version
                 # track submodules for cycle avoidance
                 out[impor] = mode + " " + version

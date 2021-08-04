@@ -460,10 +460,10 @@ version: 0.0.1dev0"""
                 specs[name] = []
 
             try:
-                if project._install_mode == InstallMode.master:
+                if project.install_mode == InstallMode.master:
                     reqv = "master"
                 else:
-                    release_only = project._install_mode == InstallMode.release
+                    release_only = project.install_mode == InstallMode.release
                     versions = ModuleV1.get_suitable_version_for(name, specs[name], mod._path, release_only=release_only)
                     if versions is None:
                         reqv = "None"
@@ -504,7 +504,7 @@ version: 0.0.1dev0"""
             for module in modules:
                 spec = specs.get(module, [])
                 try:
-                    ModuleV1.update(my_project, module, spec, install_mode=my_project._install_mode)
+                    ModuleV1.update(my_project, module, spec, install_mode=my_project.install_mode)
                 except Exception:
                     LOGGER.exception("Failed to update module %s", module)
 
