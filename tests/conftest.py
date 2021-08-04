@@ -19,6 +19,7 @@ import asyncio
 import concurrent
 import csv
 import datetime
+import importlib
 import json
 import logging
 import os
@@ -66,6 +67,8 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
+from inmanta.moduletool import ModuleTool
+from inmanta.env import LocalPackagePath
 
 # Import the utils module differently when conftest is put into the inmanta_tests packages
 if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
@@ -284,12 +287,9 @@ async def clean_reset(create_db, clean_db):
     reset_all_objects()
     config.Config._reset()
     methods = inmanta.protocol.common.MethodProperties.methods.copy()
-    loader.unload_inmanta_plugins()
     yield
     inmanta.protocol.common.MethodProperties.methods = methods
     config.Config._reset()
-    reset_all_objects()
-    loader.unload_inmanta_plugins()
 
 
 def reset_all_objects():
@@ -301,6 +301,7 @@ def reset_all_objects():
     handler.Commander.reset()
     Project._project = None
     unknown_parameters.clear()
+    loader.PluginModuleFinder.reset()
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -738,16 +739,6 @@ async def off_main_thread(func):
     return await asyncio.get_event_loop().run_in_executor(None, func)
 
 
-class ModuleInstall:
-
-    def __init__(self, module_path: str, dev_install: bool) -> None:
-        """
-        Represents a module that should be installed from a module path.
-        """
-        self.module_path = module_path
-        self.dev_install = dev_install
-
-
 class SnippetCompilationTest(KeepOnFail):
     def setUpClass(self):
         self.libs = tempfile.mkdtemp()
@@ -780,17 +771,25 @@ class SnippetCompilationTest(KeepOnFail):
         self.keep_shared = True
         return {"env": self.env, "libs": self.libs, "project": self.project_dir}
 
-    def setup_for_snippet(self, snippet, autostd=True, install_v2_modules: List[ModuleInstall] = []) -> None:
+    def setup_for_snippet(self, snippet, autostd=True, install_v2_modules: List[LocalPackagePath] = []) -> None:
         """
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
         """
         self.setup_for_snippet_external(snippet)
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
-        loader.unload_inmanta_plugins()
+        project.use_virtual_env()
+        self._install_v2_modules(project, install_v2_modules)
 
+    def _install_v2_modules(self, project: Project, install_v2_modules: List[LocalPackagePath] = []) -> None:
+        module_tool = ModuleTool()
         for mod in install_v2_modules:
-
+            with tempfile.TemporaryDirectory() as build_dir:
+                if mod.editable:
+                    install_path = mod.path
+                else:
+                    install_path = module_tool.build(mod.path, build_dir)
+                project.install_in_compiler_venv(path=install_path, editable=mod.editable)
 
     def reset(self):
         Project.set(Project(self.project_dir, autostd=Project.get().autostd))

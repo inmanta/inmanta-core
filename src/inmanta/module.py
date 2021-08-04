@@ -50,6 +50,7 @@ from typing import (
     TypeVar,
     Union,
 )
+from importlib.machinery import ModuleSpec
 
 import yaml
 from pkg_resources import parse_requirements, parse_version
@@ -1023,6 +1024,8 @@ class Project(ModuleLike[ProjectMetadata]):
             if v2_module:
                 # V2 takes precedence when a V1 and a V2 are installed at the same time
                 module = v2_module
+                loader.PluginModuleFinder.get_module_finder().ignore_module(module_name)
+                loader.unload_inmanta_plugins(module_name)
             elif v1_module:
                 module = v1_module
             else:
@@ -1042,6 +1045,11 @@ class Project(ModuleLike[ProjectMetadata]):
             return ModuleV1.install(
                 self, module_name, list(parse_requirements(module_name)), install_mode=self._install_mode
             )
+
+    def install_in_compiler_venv(self, path: str, editable: bool) -> None:
+        if not self.is_using_virtual_env():
+            self.virtualenv.use_virtual_env()
+        self.virtualenv.install(path=path, editable=editable)
 
     def load_plugins(self) -> None:
         """
@@ -1068,14 +1076,6 @@ class Project(ModuleLike[ProjectMetadata]):
         Use the virtual environment
         """
         self.virtualenv.use_virtual_env()
-
-    def is_package_installed(self, package_name: str) -> bool:
-        """
-        Check whether the given package is installed in the compiler venv.
-        """
-        if not self.is_using_virtual_env():
-            raise Exception("Compiler venv not yet activated.")
-        return self.virtualenv.is_package_installed(package_name)
 
     def sorted_modules(self) -> list:
         """
@@ -1284,9 +1284,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             )
             return False
         return True
-
-    def get_metadata_file_path(self) -> str:
-        return os.path.join(self._path, self.MODULE_FILE)
 
     @lru_cache()
     def get_ast(self, name: str) -> Tuple[List[Statement], BasicBlock]:
@@ -1524,6 +1521,9 @@ class ModuleV1(Module[ModuleV1Metadata]):
         else:
             return None
 
+    def get_metadata_file_path(self) -> str:
+        return os.path.join(self._path, self.MODULE_FILE)
+
     @classmethod
     def get_name_from_metadata(cls, metadata: ModuleV1Metadata) -> str:
         return metadata.name
@@ -1710,27 +1710,29 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     @classmethod
     def get_installed_module(cls, project: Project, module_name: str) -> Optional["ModuleV2"]:
-        pkg_name = cls.get_package_name_for(module_name)
-        if not project.is_package_installed(pkg_name):
-            return None
         fq_module_path = f"{const.PLUGINS_PACKAGE}.{module_name}"
-
-        # Ensure that this module cannot be loaded as a V1 module. V2 modules always take precedence
-        loader.PluginModuleFinder.get_module_finder().add_module_to_ignore(module_name)
-        # Unload this module in case it was already loaded
-        loader.unload_inmanta_plugins(module_name)
+        module_finder = loader.PluginModuleFinder.get_module_finder()
         try:
-            # Load the V2 module to obtain the installation directory
-            mod = importlib.import_module(fq_module_path)
-        except ModuleNotFoundError:
-            raise Exception(f"Package {pkg_name} is installed but {fq_module_path} cannot be imported")
-        else:
-            pkg_installation_dir = os.path.dirname(mod.__file__)
+            module_finder.ignore_module(module_name)
+            loader.unload_inmanta_plugins(module_name)
+            spec: Optional[ModuleSpec] = importlib.util.find_spec(fq_module_path)
+        finally:
+            module_finder.unignore_module(module_name)
+        if spec is not None and spec.origin is not None:
+            pkg_installation_dir = os.path.abspath(os.path.dirname(spec.origin))
             return cls(project, pkg_installation_dir)
+        else:
+            return None
 
     @classmethod
     def get_package_name_for(cls, module_name: str) -> str:
         return f"{cls.PKG_NAME_PREFIX}{module_name}"
+
+    def get_metadata_file_path(self) -> str:
+        if self._is_dev_installed_module():
+            return os.path.normpath(os.path.join(self._path, os.pardir, os.pardir, ModuleV2.MODULE_FILE))
+        else:
+            return os.path.join(self._path, ModuleV2.MODULE_FILE)
 
     @classmethod
     def get_name_from_metadata(cls, metadata: ModuleV2Metadata) -> str:

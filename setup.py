@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, find_namespace_packages
 from os import path
 
 requires = [
@@ -30,7 +30,7 @@ requires = [
 ]
 
 # Package a dummy extensions so that the namespace package for extensions is not empty
-namespace_packages = ["inmanta_ext.core"]
+namespace_packages = ["inmanta_ext.core"] + find_namespace_packages(include=['inmanta_plugins.*'])
 
 # read the contents of your README file
 this_directory = path.abspath(path.dirname(__file__))

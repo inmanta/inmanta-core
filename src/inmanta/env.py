@@ -97,6 +97,7 @@ class VirtualEnv(object):
         self.__using_venv: bool = False
         self._parent_python: Optional[str] = None
         self._packages_installed_in_parent_env: Optional[Dict[str, str]] = None
+        self._site_packages_dir: Optional[str] = None
 
     def get_package_installed_in_parent_env(self) -> Optional[Dict[str, str]]:
         if self._packages_installed_in_parent_env is None:
@@ -173,17 +174,17 @@ class VirtualEnv(object):
         if sys.platform == "win32":
             binpath = os.path.abspath(os.path.join(self.env_path, "Scripts"))
             base = os.path.dirname(binpath)
-            site_packages = os.path.join(base, "Lib", "site-packages")
+            self._site_packages_dir = os.path.join(base, "Lib", "site-packages")
         else:
             binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
             base = os.path.dirname(binpath)
-            site_packages = os.path.join(base, "lib", "python%s" % sys.version[:3], "site-packages")
+            self._site_packages_dir = os.path.join(base, "lib", "python%s" % sys.version[:3], "site-packages")
 
         old_os_path = os.environ.get("PATH", "")
         os.environ["PATH"] = binpath + os.pathsep + old_os_path
         prev_sys_path = list(sys.path)
 
-        site.addsitedir(site_packages)
+        site.addsitedir(self._site_packages_dir)
         sys.real_prefix = sys.prefix
         sys.prefix = base
         # Move the added items to the front of the path:
@@ -394,8 +395,25 @@ python -m pip $@
 
         return {r["name"]: r["version"] for r in json.loads(output.decode())}
 
-    def is_package_installed(self, pkg_name: str) -> bool:
-        if not self.__using_venv:
-            raise Exception(f"Not using compiler venv. use_virtual_env() should be called first.")
-        installed_packages: Dict[str, str] = self._get_installed_packages(self.virtual_python)
-        return pkg_name in installed_packages
+    def install(self, path: str, editable: bool) -> None:
+        cmd_base: List["str"] = [self.virtual_python, "-m", "pip", "install"]
+        if editable:
+            cmd = cmd_base + ["-e", path]
+        else:
+            cmd = cmd_base + [path]
+
+        output: bytes = b""  # Make sure the var is always defined in the except bodies
+        try:
+            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except CalledProcessError as e:
+            LOGGER.error("%s: %s", cmd, e.output.decode())
+            raise
+        except Exception:
+            LOGGER.error("%s: %s", cmd, output.decode())
+            raise
+        else:
+            LOGGER.debug("%s: %s", cmd, output.decode())
+
+        # Make sure that the .pth files in the site-packages directory are processed.
+        # This is required to make editable installs work.
+        site.addsitedir(self._site_packages_dir)

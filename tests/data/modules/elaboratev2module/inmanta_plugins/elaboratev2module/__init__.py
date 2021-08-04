@@ -2,5 +2,5 @@ from inmanta.plugins import plugin
 
 
 @plugin("print_message")
-def printf(message: "any"):
+def print_message(message: "string"):
     print(message)

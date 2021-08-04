@@ -292,9 +292,7 @@ class PluginModuleLoader(FileLoader):
     A custom module loader which imports the modules in the inmanta_plugins package.
     """
 
-    def __init__(self, modulepaths: List[str], fullname: str) -> None:
-        self._modulepaths = modulepaths
-        path_to_module = self._get_path_to_module(fullname)
+    def __init__(self, path_to_module: str, fullname: str) -> None:
         super(PluginModuleLoader, self).__init__(fullname, path_to_module)
         self.path: str
 
@@ -390,22 +388,6 @@ class PluginModuleLoader(FileLoader):
 
         return os.path.join(*module_parts)
 
-    def _get_path_to_module(self, fullname: str) -> str:
-        relative_path: str = self.convert_module_to_relative_path(fullname)
-        # special case: top-level package
-        if relative_path == "":
-            return ""
-        for module_path in self._modulepaths:
-            path_to_module = os.path.join(module_path, relative_path)
-            if os.path.exists(f"{path_to_module}.py"):
-                return f"{path_to_module}.py"
-            if os.path.isdir(path_to_module):
-                path_to_module = os.path.join(path_to_module, "__init__.py")
-                if os.path.exists(path_to_module):
-                    return path_to_module
-
-        raise ImportError(f"Cannot find module {fullname} in {self._modulepaths}")
-
     def _loading_top_level_package(self):
         return self.path == ""
 
@@ -426,6 +408,17 @@ class PluginModuleFinder(Finder):
         if cls.MODULE_FINDER is not None:
             return cls.MODULE_FINDER
         raise Exception("No PluginModuleFinder configure. Call configure_module_finder() first.")
+
+    @classmethod
+    def reset(cls) -> None:
+        """
+        Remove the PluginModuleFinder from sys.meta_path and unload the inmanta_plugins package.
+        """
+        if cls.MODULE_FINDER is not None and cls.MODULE_FINDER in sys.meta_path:
+            sys.meta_path.remove(cls.MODULE_FINDER)
+        unload_inmanta_plugins()
+        cls.MODULE_FINDER = None
+        importlib.invalidate_caches()
 
     @classmethod
     def configure_module_finder(cls, modulepaths: List[str], modules_to_ignore: List[str] = []) -> None:
@@ -451,8 +444,12 @@ class PluginModuleFinder(Finder):
             if p not in self._modulepaths:
                 self._modulepaths.append(p)
 
-    def add_module_to_ignore(self, module_to_ignore: str) -> None:
-        self._modules_to_ignore.append(module_to_ignore)
+    def ignore_module(self, module_name: str) -> None:
+        self._modules_to_ignore.append(module_name)
+
+    def unignore_module(self, module_name: str) -> None:
+        if module_name in self._modules_to_ignore:
+            self._modules_to_ignore.remove(module_name)
 
     def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[PluginModuleLoader]:
         """
@@ -460,17 +457,38 @@ class PluginModuleFinder(Finder):
         """
         if self._should_handle_import(fullname):
             LOGGER.debug("Loading module: %s", fullname)
-            return PluginModuleLoader(self._modulepaths, fullname)
+            path_to_module = self._get_path_to_module(fullname)
+            if path_to_module:
+                return PluginModuleLoader(path_to_module, fullname)
+            else:
+                # The given module is not present in self.modulepath.
+                return None
         return None
 
     def _should_handle_import(self, fq_import_path: str) -> bool:
         if fq_import_path == const.PLUGINS_PACKAGE:
-            return True
+            return False
         elif fq_import_path.startswith(f"{const.PLUGINS_PACKAGE}."):
             name_inmanta_module = fq_import_path.split(".", maxsplit=1)[1]
             return name_inmanta_module not in self._modules_to_ignore
         else:
             return False
+
+    def _get_path_to_module(self, fullname: str) -> Optional[str]:
+        relative_path: str = PluginModuleLoader.convert_module_to_relative_path(fullname)
+        # special case: top-level package
+        if relative_path == "":
+            return ""
+        for module_path in self._modulepaths:
+            path_to_module = os.path.join(module_path, relative_path)
+            if os.path.exists(f"{path_to_module}.py"):
+                return f"{path_to_module}.py"
+            if os.path.isdir(path_to_module):
+                path_to_module = os.path.join(path_to_module, "__init__.py")
+                if os.path.exists(path_to_module):
+                    return path_to_module
+
+        return None
 
 
 def unload_inmanta_plugins(module_name: Optional[str] = None) -> None:
@@ -487,3 +505,5 @@ def unload_inmanta_plugins(module_name: Optional[str] = None) -> None:
     modules_to_unload = [k for k in loaded_modules if k == pkg_to_unload or k.startswith(pkg_to_unload)]
     for k in modules_to_unload:
         del sys.modules[k]
+    if modules_to_unload:
+        importlib.invalidate_caches()
