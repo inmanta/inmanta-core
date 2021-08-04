@@ -915,13 +915,12 @@ class Project(ModuleLike[ProjectMetadata]):
         self.main_file = main_file
 
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
-        # TODO: rename resolver and externalResolver to resolver_v1 and external_resolver_v1 respectively (or module_source_v1, ...)
         self.module_source: ModuleV2Source = ModuleV2Source(
             [repo.url for repo in self.repolist if repo.type == ModuleRepoType.package]
         )
-        self.resolver = CompositeModuleRepo([make_repo(x) for x in self.modulepath])
+        self.resolver_v1 = CompositeModuleRepo([make_repo(x) for x in self.modulepath])
         self.repolist = [x.url for x in self._metadata.repo]
-        self.externalResolver = CompositeModuleRepo([make_repo(x, root=path) for x in self.repolist])
+        self.external_resolver_v1 = CompositeModuleRepo([make_repo(x, root=path) for x in self.repolist])
 
         if self._metadata.downloadpath is not None:
             self._metadata.downloadpath = os.path.abspath(os.path.join(path, self._metadata.downloadpath))
@@ -1134,7 +1133,7 @@ class Project(ModuleLike[ProjectMetadata]):
         try:
             module = self.module_source.get_module(self, module_reqs, install=v1_mode)
             if module is None and v1_mode:
-                module = self.resolver.get_module(self, module_reqs, install=True)
+                module = self.resolver_v1.get_module(self, module_reqs, install=True)
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
 
@@ -1626,7 +1625,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
         Install a module, return module object
         """
         # verify presence in module path
-        path = project.resolver.path_for(modulename)
+        path = project.resolver_v1.path_for(modulename)
         if path is not None:
             # if exists, report
             LOGGER.info("module %s already found at %s", modulename, path)
@@ -1638,7 +1637,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
                     f"Can not install module {modulename} because 'downloadpath' is not set in {project.PROJECT_FILE}"
                 )
             path = os.path.join(project.downloadpath, modulename)
-            result = project.externalResolver.clone(modulename, project.downloadpath)
+            result = project.external_resolver_v1.clone(modulename, project.downloadpath)
             if not result:
                 raise InvalidModuleException("could not locate module with name: %s" % modulename)
 
@@ -1658,7 +1657,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
         Update a module, return module object
         """
         if path is None:
-            mypath = project.resolver.path_for(modulename)
+            mypath = project.resolver_v1.path_for(modulename)
             assert mypath is not None, f"trying to update module {modulename} not found on disk "
         else:
             mypath = path
