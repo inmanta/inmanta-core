@@ -822,7 +822,8 @@ build-backend = "setuptools.build_meta"
 
         # add requirements
         if self._module.get_all_requires() or self._module.get_python_requirements_as_list():
-            requires = [f"{ModuleV2.PKG_NAME_PREFIX}{req}" for req in self._module.get_all_requires()]
+            ordered_requirements = sorted([str(r) for r in self._module.get_all_requires()])
+            requires = [f"{ModuleV2.PKG_NAME_PREFIX}{req}" for req in ordered_requirements]
             requires += self._module.get_python_requirements_as_list()
             config.set("options", "install_requires", "\n".join(requires))
 

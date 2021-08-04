@@ -29,7 +29,7 @@ def test_module_conversion(tmpdir):
     dummyproject = DummyProject()
     module_in = ModuleV1(dummyproject, path)
 
-    assert module_in.get_all_requires() == ["mod1==1.0", "mod2", "std"]
+    assert sorted([str(r) for r in module_in.get_all_requires()]) == ["mod1==1.0", "mod2", "std"]
 
     ModuleConverter(module_in).convert(tmpdir)
 

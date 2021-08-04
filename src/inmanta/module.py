@@ -52,7 +52,7 @@ from typing import (
 )
 
 import yaml
-from pkg_resources import parse_requirements, parse_version
+from pkg_resources import Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, validator
 
 import inmanta.warnings
@@ -74,7 +74,6 @@ except ImportError:
 
 
 if TYPE_CHECKING:
-    from pkg_resources import Requirement  # noqa: F401
     from pkg_resources.packaging.version import Version  # noqa: F401
 
 
@@ -1514,15 +1513,15 @@ class ModuleV1(Module[ModuleV1Metadata]):
             reqs.append(reqe)
         return reqs
 
-    def get_all_requires(self) -> List[str]:
+    def get_all_requires(self) -> List[Requirement]:
         """
         :return: all modules required by an import from any sub-modules, with all constraints applied
         """
         # get all constraints
-        spec: Dict[str, "Requirement"] = {req.project_name: req for req in self.requires()}
+        spec: Dict[str, Requirement] = {req.project_name: req for req in self.requires()}
         # find all imports
         imports = {imp.name.split("::")[0] for subm in sorted(self.get_all_submodules()) for imp in self.get_imports(subm)}
-        return sorted([str(spec[r]) if spec.get(r) else r for r in imports])
+        return [spec[r] if spec.get(r) else Requirement.parse(r) for r in imports]
 
     @classmethod
     def install(
