@@ -19,11 +19,12 @@ import configparser
 import os
 import shutil
 
+import pytest
 from pytest import MonkeyPatch
 
 from inmanta import moduletool
 from inmanta.module import DummyProject, ModuleV1, ModuleV2Metadata
-from inmanta.moduletool import ModuleConverter
+from inmanta.moduletool import ModuleConverter, ModuleVersionException
 
 
 def test_module_conversion(tmpdir):
@@ -58,6 +59,9 @@ def test_module_conversion_in_place_cli(tmpdir, monkeypatch: MonkeyPatch):
     monkeypatch.chdir(tmpdir)
     moduletool.ModuleTool().v1tov2(None)
     assert_v2_module(module_name, tmpdir)
+
+    with pytest.raises(ModuleVersionException):
+        moduletool.ModuleTool().v1tov2(None)
 
 
 def assert_v2_module(module_name, tmpdir):
