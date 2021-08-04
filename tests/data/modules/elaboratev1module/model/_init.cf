@@ -1,0 +1,3 @@
+import mod1
+
+std::print("Hello world")
