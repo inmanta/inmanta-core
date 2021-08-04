@@ -695,7 +695,7 @@ class V2ModuleBuilder:
         """
         self._module = ModuleV2(project=None, path=os.path.abspath(module_path))
 
-    def build(self, output_directory: str = None) -> str:
+    def build(self, output_directory: str) -> str:
         """
         Build the module and return the path to the build artifact.
         """
@@ -789,11 +789,19 @@ class ModuleConverter:
 
         output_directory = os.path.abspath(output_directory)
 
+        # convert meta-data (also preforms validation, so we do it first to fail fast)
+        setup_cfg = self.get_setup_cfg()
+
         # copy all files
         shutil.copytree(self._module.path, output_directory)
 
         # remove module.yaml
         os.remove(os.path.join(output_directory, self._module.MODULE_FILE))
+
+        # remove requirements.txt
+        req = os.path.join(output_directory, "requirements.txt")
+        if os.path.exists(req):
+            os.remove(req)
 
         # move plugins
         old_plugins = os.path.join(output_directory, "plugins")
@@ -806,7 +814,7 @@ class ModuleConverter:
 
         # write our setup.cfg
         with open(os.path.join(output_directory, "setup.cfg"), "w") as fh:
-            self.get_setup_cfg().write(fh)
+            setup_cfg.write(fh)
 
     def get_pyproject(self) -> str:
         return """[build-system]

@@ -164,4 +164,4 @@ def test_build_invalid_module(tmpdir):
     os.remove(setup_cfg_file)
 
     with pytest.raises(ModuleMetadataFileNotFound, match=f"Metadata file {setup_cfg_file} does not exist"):
-        V2ModuleBuilder(module_copy_dir).build()
+        V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
