@@ -21,6 +21,7 @@ import enum
 import glob
 import importlib
 import logging
+import more_itertools
 import os
 import re
 import subprocess
@@ -82,6 +83,9 @@ LOGGER = logging.getLogger(__name__)
 
 Path = NewType("Path", str)
 ModuleName = NewType("ModuleName", str)
+
+
+TModule = TypeVar("TModule", bound="Module")
 
 
 @stable_api
@@ -227,29 +231,64 @@ class CLIGitProvider(GitProvider):
 gitprovider = CLIGitProvider()
 
 
-class ModuleSource:
+class ModuleSource(Generic[TModule]):
+    def get_module(
+        self, project: Optional[Project], module_spec: List[Requirement], install: bool = False
+    ) -> Optional[TModule]:
+        # TODO: think about scenarios where this is called multiple times with different specs. Impossible?
+        #   In any case, the current docstring specifies "ignored if module is already installed"
+        """
+        Returns the appropriate module instance for a given module spec.
+
+        :param project: The project associated with the module, if any.
+        :param module_spec: The module specification including any constraints on its version. Ignored if module
+            is already installed.
+        :param install: Whether to attempt to install the module if it hasn't been installed yet.
+        """
+        module_name: str = self._get_module_name(module_spec)
+        path: Optional[str] = self.path_for(module_name)
+        if path is not None:
+            return self.from_path(project, path)
+        elif install:
+            return self.module_source.install(project, module_spec)
+        else:
+            return None
+
+    @abstractmethod
+    def install(self, project: Optional[Project], module_spec: List[Requirement]) -> Optional[TModule]:
+        # TODO: docstring
+        raise NotImplementedError("Abstract method")
+
     def path_for(self, name: str) -> Optional[str]:
         raise NotImplementedError("Abstract method")
 
-
-class ModuleV2Source(ModuleSource):
-    def install(self, name: str, constraint: Requirement) -> bool:
+    @classmethod
+    @abstractmethod
+    def from_path(cls, project: Optional[Project], path: str) -> TModule:
         raise NotImplementedError("Abstract method")
 
+    def _get_module_name(self, module_spec: List[Requirement]) -> str:
+        module_names: Set[str] = {req.key for req in module_spec}
+        module_name: str = more_itertools.one(
+            module_names,
+            too_short=ValueError("module_spec should contain at least one requirement"),
+            too_long=ValueError("module_spec should contain requirements for exactly one module"),
+        )
+        return module_name
 
-class PythonSource(ModuleV2Source):
+
+class ModuleV2Source(ModuleSource[ModuleV2]):
     def __init__(self, urls: List[str]) -> None:
         self.urls: List[str] = urls
 
-    def install(self, module: Requirement) -> bool:
-        if module.key.startswith(ModuleV2.PKG_NAME_PREFIX):
-            raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
-        requirement: Requirement = Requirement.parse(f"{ModuleV2.PKG_NAME_PREFIX}{str(module)}")
+    def install(self, project: Optional[Project], module_spec: List[Requirement]) -> Optional[ModuleV2]:
+        module_name: str = self._get_module_name(module_spec)
+        requirements: List[Requirement] = [Requirement.parse(f"{ModuleV2.PKG_NAME_PREFIX}{str(req)}") for req in module_spec]
         try:
-            env.ProcessEnv.install_from_indexes([requirement], self.urls)
+            env.ProcessEnv.install_from_indexes(requirements, self.urls)
         except env.PackageNotFound:
-            return False
-        return True
+            return None
+        return self.from_path(project, self.path_for(module_name))
 
     def path_for(self, name: str) -> Optional[str]:
         if name.startswith(ModuleV2.PKG_NAME_PREFIX):
@@ -261,10 +300,33 @@ class PythonSource(ModuleV2Source):
         except FileNotFoundError:
             return None
 
+    @classmethod
+    def from_path(cls, project: Optional[Project], path: str) -> ModuleV2:
+        return ModuleV2(self, project, path)
 
-class ModuleRepo(ModuleSource):
+    def _get_module_name(self, module_spec: List[Requirement]) -> str:
+        module_name: str = super()._get_module_name(module_spec)
+        if module_name.startswith(ModuleV2.PKG_NAME_PREFIX.lower()):
+            raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
+        return module_name
+
+
+class ModuleRepo(ModuleSource[ModuleV1]):
     def clone(self, name: str, dest: str) -> bool:
         raise NotImplementedError("Abstract method")
+
+    def install(self, project: Optional[Project], module_spec: List[Requirement]) -> Optional[ModuleV1]:
+        module_name: str = self._get_module_name(module_spec)
+        path: Optional[str] = self.path_for(module_name)
+        if path is not None:
+            return self.from_path(project, path)
+        else:
+            # TODO: don't use project._install_mode private var
+            return ModuleV1.install(self, module_name, module_spec, install_mode=project._install_mode)
+
+    @classmethod
+    def from_path(cls, project: Optional[Project], path: str) -> ModuleV1:
+        return ModuleV1(self, project, path)
 
 
 class CompositeModuleRepo(ModuleRepo):
@@ -328,7 +390,9 @@ class RemoteRepo(ModuleRepo):
 
 
 def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, RemoteRepo]:
-    # TODO: make pypi repo
+    """
+    Returns the appropriate `ModuleRepo` instance (v1) for the given path.
+    """
     # check that the second char is not a colon (windows)
     if ":" in path and path[1] != ":":
         return RemoteRepo(path)
@@ -847,7 +911,10 @@ class Project(ModuleLike[ProjectMetadata]):
         self.main_file = main_file
 
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
-        # TODO: rename resolver and externalResolver to resolver_v1 and external_resolver_v1 respectively
+        # TODO: rename resolver and externalResolver to resolver_v1 and external_resolver_v1 respectively (or module_source_v1, ...)
+        self.module_source: ModuleV2Source = ModuleV2Source(
+            [repo.url for repo in self.repolist if repo.type == ModuleRepoType.package]
+        )
         self.resolver = CompositeModuleRepo([make_repo(x) for x in self.modulepath])
         self.repolist = [x.url for x in self._metadata.repo]
         self.externalResolver = CompositeModuleRepo([make_repo(x, root=path) for x in self.repolist])
@@ -986,13 +1053,15 @@ class Project(ModuleLike[ProjectMetadata]):
         self.load()
         return self.modules
 
-    def get_module(self, full_module_name: str) -> "Module":
+    # TODO: is legacy_mode a good name?
+    def get_module(self, full_module_name: str, legacy_mode: bool = False) -> "Module":
+        # TODO: docstring
         parts = full_module_name.split("::")
         module_name = parts[0]
 
         if module_name in self.modules:
             return self.modules[module_name]
-        return self.load_module(module_name)
+        return self.load_module(module_name, legacy_mode)
 
     def load_module_recursive(self) -> List[Tuple[str, List[Statement], BasicBlock]]:
         """
@@ -1003,6 +1072,8 @@ class Project(ModuleLike[ProjectMetadata]):
         out = []
 
         # get imports
+        # TODO: differentiate between v1 imports and others and pass `load_module` `legacy_mode` argument accordingly
+        #   Not sure if the AST needs to be loaded at this point for v2. This might be part of Arnaud's ticket instead.
         imports = [x for x in self.get_imports()]
 
         done = set()  # type: Set[str]
@@ -1017,7 +1088,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
             try:
                 # get module
-                module = self.get_module(module_name)
+                module = self.get_module(module_name, legacy_mode=True)
                 # get NS
                 for i in range(1, len(parts) + 1):
                     subs = "::".join(parts[0:i])
@@ -1035,26 +1106,32 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return out
 
-    def load_module(self, module_name: str) -> "Module":
+    def load_module(self, module_name: str, legacy_mode: bool = False) -> "Module":
+        # TODO: docstring
+        """
+
+        """
+        reqs: Mapping[str, List[Requirement]] = self.collect_requirements()
+        module_reqs: List[Requirement] = (
+            list(reqs[module_name]) if module_name in reqs
+            else [Requirement.parse(module_name)]
+        )
+
+        module: Optional[Module]
         try:
-            path = self.resolver.path_for(module_name)
-            if path is not None:
-                # TODO: create ModuleV2 depending on repo: perhaps visit the repo instance to create the module object?
-                module = ModuleV1(self, path)
-            else:
-                reqs = self.collect_requirements()
-                if module_name in reqs:
-                    # TODO: same here: visit the repo instance
-                    module = ModuleV1.install(self, module_name, reqs[module_name], install_mode=self._install_mode)
-                else:
-                    # TODO: same here: visit the repo instance
-                    module = ModuleV1.install(
-                        self, module_name, list(parse_requirements(module_name)), install_mode=self._install_mode
-                    )
-            self.modules[module_name] = module
-            return module
+            module = self.module_source.get_module(self, module_reqs, install=legacy_mode)
+            if module is None and legacy_mode:
+                module = self.resolver.get_module(self, module_reqs, install=True)
         except Exception as e:
-            raise InvalidModuleException("Could not load module %s" % module_name) from e
+            raise InvalidModuleException(f"Could not load module {module_name}") from e
+
+        if module is None:
+            raise CompilerException(
+                f"Could not find module {module_name}. Please make sure to install it by running `inmanta project install."
+            )
+
+        self.modules[module_name] = module
+        return module
 
     def load_plugins(self) -> None:
         """
@@ -1108,7 +1185,7 @@ class Project(ModuleLike[ProjectMetadata]):
             reqs.append(reqe)
         return reqs
 
-    def collect_requirements(self) -> "Mapping[str, Iterable[Requirement]]":
+    def collect_requirements(self) -> "Mapping[str, List[Requirement]]":
         """
         Collect the list of all requirements of all modules in the project.
         """
@@ -1189,9 +1266,6 @@ class ModuleGeneration(enum.Enum):
 
     V1: int = 1
     V2: int = 2
-
-
-TModule = TypeVar("TModule", bound="Module")
 
 
 @stable_api
@@ -1303,7 +1377,8 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         for impor in todo:
             if impor not in out:
-                mainmod = self._project.get_module(impor)
+                # TODO: legacy_mode=True only if this module is v1
+                mainmod = self._project.get_module(impor, legacy_mode=True)
                 version = mainmod.version
                 # track submodules for cycle avoidance
                 out[impor] = mode + " " + version
