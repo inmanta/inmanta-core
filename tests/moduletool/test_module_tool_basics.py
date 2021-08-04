@@ -30,7 +30,7 @@ import yaml
 from pkg_resources import Requirement, parse_version
 
 from inmanta import module
-from inmanta.module import InvalidMetadata, MetadataDeprecationWarning, Project
+from inmanta.module import InvalidMetadata, InvalidModuleException, MetadataDeprecationWarning, Project
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
@@ -125,7 +125,7 @@ install_requires =
 
 def test_get_module_metadata_file_not_found(tmp_working_dir: py.path.local):
     mt = ModuleTool()
-    with pytest.raises(module.ModuleMetadataFileNotFound, match="setup.cfg does not exist"):
+    with pytest.raises(module.InvalidModuleException, match="No module can be found at "):
         mt.get_module()
 
 
@@ -334,8 +334,12 @@ version: non_pep440_value
 compiler_version: 2017.2
     """
     )
-    with pytest.raises(InvalidMetadata, match="Version non_pep440_value is not PEP440 compliant"):
+    with pytest.raises(InvalidModuleException) as e:
         module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
+
+    cause = e.value.__cause__
+    assert isinstance(cause, InvalidMetadata)
+    assert "Version non_pep440_value is not PEP440 compliant" in cause.msg
 
 
 @pytest.mark.asyncio
@@ -347,8 +351,12 @@ test:
  second
 """
     )
-    with pytest.raises(InvalidMetadata, match=f"Invalid yaml syntax in {inmanta_module_v1.get_metadata_file_path()}"):
+    with pytest.raises(InvalidModuleException) as e:
         module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
+
+    cause = e.value.__cause__
+    assert isinstance(cause, InvalidMetadata)
+    assert f"Invalid yaml syntax in {inmanta_module_v1.get_metadata_file_path()}" in cause.msg
 
 
 @pytest.mark.asyncio
@@ -414,8 +422,12 @@ requires:
     std: ip
         """
     )
-    with pytest.raises(InvalidMetadata, match="Invalid legacy requires"):
+    with pytest.raises(InvalidModuleException) as e:
         module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
+
+    cause = e.value.__cause__
+    assert isinstance(cause, InvalidMetadata)
+    assert f"Invalid legacy requires" in cause.msg
 
 
 @pytest.mark.asyncio
