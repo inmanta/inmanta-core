@@ -17,8 +17,11 @@
 """
 import configparser
 import os
-import sys
+import shutil
 
+from pytest import MonkeyPatch
+
+from inmanta import moduletool
 from inmanta.module import DummyProject, ModuleV1, ModuleV2Metadata
 from inmanta.moduletool import ModuleConverter
 
@@ -33,8 +36,37 @@ def test_module_conversion(tmpdir):
 
     ModuleConverter(module_in).convert(tmpdir)
 
+    assert_v2_module(module_name, tmpdir)
+
+
+def test_module_conversion_in_place(tmpdir):
+    module_name = "elaboratev1module"
+    tmpdir = os.path.join(tmpdir, module_name)
+    path = os.path.normpath(os.path.join(__file__, os.pardir, os.pardir, "data", "modules", module_name))
+    shutil.copytree(path, tmpdir)
+    dummyproject = DummyProject()
+    module_in = ModuleV1(dummyproject, tmpdir)
+    ModuleConverter(module_in).convert_in_place()
+    assert_v2_module(module_name, tmpdir)
+
+
+def test_module_conversion_in_place_cli(tmpdir, monkeypatch: MonkeyPatch):
+    module_name = "elaboratev1module"
+    tmpdir = os.path.join(tmpdir, module_name)
+    path = os.path.normpath(os.path.join(__file__, os.pardir, os.pardir, "data", "modules", module_name))
+    shutil.copytree(path, tmpdir)
+    monkeypatch.chdir(tmpdir)
+    moduletool.ModuleTool().v1tov2(None)
+    assert_v2_module(module_name, tmpdir)
+
+
+def assert_v2_module(module_name, tmpdir):
     assert os.path.exists(os.path.join(tmpdir, "setup.cfg"))
     assert os.path.exists(os.path.join(tmpdir, "pyproject.toml"))
+
+    assert not os.path.exists(os.path.join(tmpdir, "requirements.txt"))
+    assert not os.path.exists(os.path.join(tmpdir, "module.yml"))
+
     assert os.path.exists(os.path.join(tmpdir, "model", "_init.cf"))
     assert os.path.exists(os.path.join(tmpdir, "files", "test.txt"))
     assert os.path.exists(os.path.join(tmpdir, "templates", "template.txt.j2"))
@@ -42,7 +74,6 @@ def test_module_conversion(tmpdir):
     assert os.path.exists(os.path.join(tmpdir, "inmanta_plugins", module_name, "__init__.py"))
     assert os.path.exists(os.path.join(tmpdir, "inmanta_plugins", module_name, "other_module.py"))
     assert os.path.exists(os.path.join(tmpdir, "inmanta_plugins", module_name, "subpkg", "__init__.py"))
-
     with open(os.path.join(tmpdir, "setup.cfg"), "r") as fh:
         content = fh.read()
         meta = ModuleV2Metadata.parse(content)
@@ -51,7 +82,6 @@ def test_module_conversion(tmpdir):
 
         raw_content = configparser.ConfigParser()
         raw_content.read_string(content)
-        raw_content.write(sys.stdout)
         assert (
             raw_content["options"]["install_requires"].strip()
             == """inmanta-module-mod1==1.0
