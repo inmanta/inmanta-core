@@ -76,6 +76,13 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
       cookiecutter~=1.7.0
       cryptography>1.0,<3.5
 
+    zip_safe=False
+    include_package_data=True
+    packages=find_namespace:
+
+    [options.package_data]
+    *=files/*, model/*, templates/*, setup.cfg
+
 
 * The ``metadata`` section defines the following fields:
 
@@ -86,6 +93,8 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
 * Dependencies to other Inmanta modules and dependencies to external Python libraries can be defined using the
   ``install_requires`` config option in the ``options`` section of the ``setup.cfg`` file. These version specs use `PEP440
   syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
+
+* All other config is required for ``setuptools`` to correctly build the package. It is documented `here <https://setuptools.readthedocs.io/en/latest/userguide/declarative_config.html>`_.
 
 A full list of all available options can be found in :ref:`here<modules_v2_setup_cfg>`.
 

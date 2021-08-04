@@ -25,6 +25,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import traceback
 from abc import ABC, abstractmethod
 from functools import lru_cache
@@ -53,7 +54,7 @@ from typing import (
 from importlib.machinery import ModuleSpec
 
 import yaml
-from pkg_resources import parse_requirements, parse_version
+from pkg_resources import Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, validator
 
 import inmanta.warnings
@@ -75,7 +76,6 @@ except ImportError:
 
 
 if TYPE_CHECKING:
-    from pkg_resources import Requirement  # noqa: F401
     from pkg_resources.packaging.version import Version  # noqa: F401
 
 
@@ -535,6 +535,13 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
     def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
         return re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", r"\g<1>" + new_version + r"\g<2>", source)
 
+    def to_v2(self) -> "ModuleV2Metadata":
+        values = self.dict()
+        del values["compiler_version"]
+        del values["requires"]
+        values["name"] = ModuleV2.PKG_NAME_PREFIX + values["name"]
+        return ModuleV2Metadata(**values)
+
 
 @stable_api
 class ModuleV2Metadata(ModuleMetadata):
@@ -569,6 +576,13 @@ class ModuleV2Metadata(ModuleMetadata):
     @classmethod
     def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
         return re.sub(r"(\[metadata\][^\[]*\s*version\s*=\s*)[^\"'}\s\[]+", r"\g<1>" + new_version, source)
+
+    def to_config(self) -> configparser.ConfigParser:
+        out = configparser.ConfigParser()
+        out.add_section("metadata")
+        for k, v in self.dict().items():
+            out.set("metadata", k, str(v))
+        return out
 
 
 @stable_api
@@ -1174,6 +1188,16 @@ class Project(ModuleLike[ProjectMetadata]):
         return out
 
 
+class DummyProject(Project):
+    """ Placeholder project that does nothing """
+
+    def __init__(self) -> None:
+        super().__init__(tempfile.gettempdir())
+
+    def _get_metadata_from_disk(self) -> ProjectMetadata:
+        return ProjectMetadata(name="DUMMY")
+
+
 @stable_api
 class ModuleGeneration(enum.Enum):
     """
@@ -1439,13 +1463,13 @@ class Module(ModuleLike[TModuleMetadata], ABC):
                 exception.set_location(Location(e.path, e.lineno if e.lineno is not None else 0))
                 raise exception
 
-    def versions(self):
+    def versions(self) -> List["Version"]:
         """
         Provide a list of all versions available in the repository
         """
         versions = gitprovider.get_all_tags(self._path)
 
-        def try_parse(x):
+        def try_parse(x: str) -> "Optional[Version]":
             try:
                 return parse_version(x)
             except Exception:
@@ -1535,6 +1559,30 @@ class ModuleV1(Module[ModuleV1Metadata]):
         constrained.
         """
         return str(self._metadata.compiler_version)
+
+    def requires(self) -> "List[Requirement]":
+        """
+        Get the requires for this module
+        """
+        # filter on import stmt
+        reqs = []
+        for spec in self._metadata.requires:
+            req = [x for x in parse_requirements(spec)]
+            if len(req) > 1:
+                print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
+            reqe = req[0]
+            reqs.append(reqe)
+        return reqs
+
+    def get_all_requires(self) -> List[Requirement]:
+        """
+        :return: all modules required by an import from any sub-modules, with all constraints applied
+        """
+        # get all constraints
+        spec: Dict[str, Requirement] = {req.project_name: req for req in self.requires()}
+        # find all imports
+        imports = {imp.name.split("::")[0] for subm in sorted(self.get_all_submodules()) for imp in self.get_imports(subm)}
+        return [spec[r] if spec.get(r) else Requirement.parse(r) for r in imports]
 
     @classmethod
     def install(

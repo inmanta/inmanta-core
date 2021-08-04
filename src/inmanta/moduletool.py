@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import argparse
+import configparser
 import inspect
 import logging
 import os
@@ -41,6 +42,7 @@ from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
 from inmanta.module import (
+    DummyProject,
     FreezeOperator,
     InstallMode,
     Module,
@@ -57,7 +59,7 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-def set_yaml_order_preserving():
+def set_yaml_order_preserving() -> None:
     """
     Set yaml modules to be order preserving.
 
@@ -82,7 +84,7 @@ def set_yaml_order_preserving():
 class ModuleLikeTool(object):
     """Shared code for modules and projects """
 
-    def execute(self, cmd: Optional[str], args: argparse.Namespace):
+    def execute(self, cmd: Optional[str], args: argparse.Namespace) -> None:
         """
         Execute the given subcommand
         """
@@ -99,7 +101,7 @@ class ModuleLikeTool(object):
                 msg = f"{cmd} does not exist."
             raise ShowUsageException(msg)
 
-    def get_project(self, load=False) -> Project:
+    def get_project(self, load: bool = False) -> Project:
         project = Project.get()
         if load:
             project.load()
@@ -163,7 +165,7 @@ class ModuleLikeTool(object):
 
 class ProjectTool(ModuleLikeTool):
     @classmethod
-    def parser_config(cls, parser: ArgumentParser):
+    def parser_config(cls, parser: ArgumentParser) -> None:
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
         freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml")
         freeze.add_argument(
@@ -195,7 +197,7 @@ class ProjectTool(ModuleLikeTool):
         )
         subparser.add_parser("install", help="Install all modules required for this project")
 
-    def freeze(self, outfile, recursive, operator):
+    def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: Optional[str]) -> None:
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
         """
@@ -340,11 +342,15 @@ class ModuleTool(ModuleLikeTool):
         build = subparser.add_parser("build", help="Build a Python package from a V2 module.")
         build.add_argument(
             "path",
-            help="The path to the module that should be built",
+            help="The path to the module that should be built. By default, the current working directory is used.",
             nargs="?",
         )
         build.add_argument(
-            "-o", "--output-dir", help="The directory where the Python package will be stored.", default=None, dest="output_dir"
+            "-o",
+            "--output-dir",
+            help="The directory where the Python package will be stored. Default: <module_root>/dist",
+            default=None,
+            dest="output_dir",
         )
 
     def build(self, path: Optional[str] = None, output_dir: Optional[str] = None) -> str:
@@ -355,8 +361,18 @@ class ModuleTool(ModuleLikeTool):
             path = os.path.abspath(path)
         else:
             path = os.getcwd()
-        module_path_root = ModuleV2.get_module_dir(path)
-        return V2ModuleBuilder(module_path_root).build(output_dir)
+
+        module = self.construct_module(DummyProject(), path)
+
+        if output_dir is None:
+            output_dir = os.path.join(path, "dist")
+
+        if isinstance(module, ModuleV1):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                ModuleConverter(module).convert(tmpdir)
+                return V2ModuleBuilder(tmpdir).build(output_dir)
+        else:
+            return V2ModuleBuilder(path).build(output_dir)
 
     def get_project_for_module(self, module):
         try:
@@ -365,20 +381,24 @@ class ModuleTool(ModuleLikeTool):
             # see #721
             return None
 
+    def construct_module(self, project: Optional[Project], path: str) -> Module:
+        """ Construct a V1 or V2 module from a folder"""
+        try:
+            return ModuleV2(project, path)
+        except ModuleMetadataFileNotFound as e:
+            try:
+                return ModuleV1(project, path)
+            except ModuleMetadataFileNotFound:
+                # ignore this exception in favor of the v2 one
+                pass
+            raise e
+
     def get_module(self, module: str = None, project=None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
             project = self.get_project_for_module(module)
             path: str = os.path.realpath(os.curdir)
-            try:
-                return ModuleV2(project, path)
-            except ModuleMetadataFileNotFound as e:
-                try:
-                    return ModuleV1(project, path)
-                except ModuleMetadataFileNotFound:
-                    # ignore this exception in favor of the v2 one
-                    pass
-                raise e
+            return self.construct_module(project, path)
         else:
             project = self.get_project(load=True)
             return project.get_module(module)
@@ -675,12 +695,10 @@ class V2ModuleBuilder:
         """
         self._module = ModuleV2(project=None, path=os.path.abspath(module_path))
 
-    def build(self, output_directory: Optional[str] = None) -> str:
+    def build(self, output_directory: str) -> str:
         """
         Build the module and return the path to the build artifact.
         """
-        if output_directory is None:
-            output_directory = os.path.join(self._module.path, "dist")
         if os.path.exists(output_directory):
             if not os.path.isdir(output_directory):
                 raise ModuleBuildFailedError(msg=f"Given output directory is not a directory: {output_directory}")
@@ -754,3 +772,74 @@ class V2ModuleBuilder:
                 return builder.build(distribution=distribution, output_directory=output_directory)
         except Exception:
             raise ModuleBuildFailedError(msg="Module build failed")
+
+
+class ModuleConverter:
+    def __init__(self, module: ModuleV1) -> None:
+        self._module = module
+
+    def convert(self, output_directory: str) -> None:
+        # validate input
+        if os.path.exists(output_directory):
+            if not os.path.isdir(output_directory):
+                raise ModuleBuildFailedError(msg=f"Given output directory is not a directory: {output_directory}")
+            if os.listdir(output_directory):
+                raise ModuleBuildFailedError(msg=f"Non-empty output directory {output_directory}")
+            os.rmdir(output_directory)
+
+        output_directory = os.path.abspath(output_directory)
+
+        # convert meta-data (also preforms validation, so we do it first to fail fast)
+        setup_cfg = self.get_setup_cfg()
+
+        # copy all files
+        shutil.copytree(self._module.path, output_directory)
+
+        # remove module.yaml
+        os.remove(os.path.join(output_directory, self._module.MODULE_FILE))
+
+        # remove requirements.txt
+        req = os.path.join(output_directory, "requirements.txt")
+        if os.path.exists(req):
+            os.remove(req)
+
+        # move plugins
+        old_plugins = os.path.join(output_directory, "plugins")
+        new_plugins = os.path.join(output_directory, "inmanta_plugins", self._module.name)
+        shutil.move(old_plugins, new_plugins)
+
+        # write out pyproject.toml
+        with open(os.path.join(output_directory, "pyproject.toml"), "w") as fh:
+            fh.write(self.get_pyproject())
+
+        # write our setup.cfg
+        with open(os.path.join(output_directory, "setup.cfg"), "w") as fh:
+            setup_cfg.write(fh)
+
+    def get_pyproject(self) -> str:
+        return """[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+"""
+
+    def get_setup_cfg(self) -> configparser.ConfigParser:
+        # convert main config
+        config = self._module.metadata.to_v2().to_config()
+
+        config.add_section("options")
+
+        # add requirements
+        if self._module.get_all_requires() or self._module.get_python_requirements_as_list():
+            ordered_requirements = sorted([str(r) for r in self._module.get_all_requires()])
+            requires = [f"{ModuleV2.PKG_NAME_PREFIX}{req}" for req in ordered_requirements]
+            requires += self._module.get_python_requirements_as_list()
+            config.set("options", "install_requires", "\n".join(requires))
+
+        # Make setuptools work
+        config["options"]["zip_safe"] = "False"
+        config["options"]["include_package_data"] = "True"
+        config["options"]["packages"] = "find_namespace:"
+        config.add_section("options.package_data")
+        config["options.package_data"]["*"] = "files/*, model/*, templates/*, setup.cfg"
+
+        return config
