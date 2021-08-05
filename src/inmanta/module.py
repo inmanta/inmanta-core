@@ -235,14 +235,12 @@ class ModuleSource(Generic[TModule]):
     def get_module(
         self, project: Optional[Project], module_spec: List[Requirement], install: bool = False
     ) -> Optional[TModule]:
-        # TODO: think about scenarios where this is called multiple times with different specs. Impossible?
-        #   In any case, the current docstring specifies "ignored if module is already installed"
         """
         Returns the appropriate module instance for a given module spec.
 
         :param project: The project associated with the module, if any.
         :param module_spec: The module specification including any constraints on its version. Ignored if module
-            is already installed.
+            is already installed. In this case, the project is responsible for verifying constraint compatibility.
         :param install: Whether to attempt to install the module if it hasn't been installed yet.
         """
         module_name: str = self._get_module_name(module_spec)
@@ -1074,7 +1072,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
     def load_module_recursive(self) -> List[Tuple[str, List[Statement], BasicBlock]]:
         """
-        Load a specific module and all submodules into this project
+        Load a specific module and all submodules into this project.
 
         For each module, return a triple of name, statements, basicblock
         """
@@ -1082,7 +1080,6 @@ class Project(ModuleLike[ProjectMetadata]):
 
         # get imports
         # TODO: differentiate between v1 imports and others and pass `load_module` `v1_mode` argument accordingly
-        #   Not sure if the AST needs to be loaded at this point for v2. This might be part of Arnaud's ticket instead.
         imports = [x for x in self.get_imports()]
 
         done = set()  # type: Set[str]
@@ -1162,6 +1159,7 @@ class Project(ModuleLike[ProjectMetadata]):
         result = True
         result &= self.verify_requires()
         if not result:
+            # TODO: update message to state inmanta modules update needs to be run
             raise CompilerException("Not all module dependencies have been met.")
 
     def use_virtual_env(self) -> None:
@@ -1220,6 +1218,8 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return {name: get_spec(name) for name in imports}
 
+    # TODO: this is called at project load. Does this suffice for v2? Feasible to implement for v2?
+    #   combine `pip check` for v2 -> v2 with v1 constraints check against `pip freeze` for v1 -> v2?
     def verify_requires(self) -> bool:
         """
         Check if all the required modules for this module have been loaded

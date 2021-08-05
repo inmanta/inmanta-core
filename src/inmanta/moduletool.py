@@ -253,6 +253,7 @@ class ProjectTool(ModuleLikeTool):
         """
         Install all modules the project requires.
         """
+        # TODO
         # This currently only installs v1 modules. #3083 will add the v2 install
         self.get_project(load=True)
 
@@ -489,6 +490,7 @@ version: 0.0.1dev0"""
                 t.add_row(row)
             print(t.draw())
 
+    # TODO: extend this method
     def update(self, module: str = None, project: Project = None):
         """
         Update all modules from their source
