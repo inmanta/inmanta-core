@@ -991,6 +991,13 @@ class Project(ModuleLike[ProjectMetadata]):
         plugins.PluginMeta.clear()
         loader.unload_inmanta_plugins()
 
+    def install_modules(self) -> None:
+        """
+        Installs all modules, both v1 and v2.
+        """
+        self.load_module_recursive(install=True)
+        self.load()
+
     def load(self) -> None:
         if not self.loaded:
             self.get_complete_ast()
@@ -1054,47 +1061,60 @@ class Project(ModuleLike[ProjectMetadata]):
         self.load()
         return self.modules
 
-    def get_module(self, full_module_name: str, v1_mode: bool = False) -> "Module":
+    def get_module(self, full_module_name: str, install: bool = False, allow_v1: bool = False) -> "Module":
         """
         Get a module instance for a given module name. Caches modules by top level name for later access.
 
         :param full_module_name: The full name of the module. If this is a submodule, the corresponding top level module is
             used.
-        :param v1_mode: Behave in a v1 compatible way: modules are installed on the fly and dependencies on v1 modules are
-            allowed.
+        :param install: Run in install mode, installing any modules that have not yet been installed, instead of only
+            installing v1 modules.
+        :param allow_v1: Allow this module to be loaded as v1.
         """
         parts = full_module_name.split("::")
         module_name = parts[0]
 
         if module_name in self.modules:
             return self.modules[module_name]
-        return self.load_module(module_name, v1_mode)
+        return self.load_module(module_name, install=install, allow_v1=allow_v1)
 
-    def load_module_recursive(self) -> List[Tuple[str, List[Statement], BasicBlock]]:
+    def load_module_recursive(self, install: bool = False) -> List[Tuple[str, List[Statement], BasicBlock]]:
         """
         Load a specific module and all submodules into this project.
 
         For each module, return a triple of name, statements, basicblock
+
+        :param install: Run in install mode, installing modules that have not yet been installed, instead of only
+            installing v1 modules.
         """
-        out = []
+        ast_by_top_level_mod: Dict[str, Tuple[str, List[Statement], BasicBlock]] = {}
 
         # get imports
-        # TODO: differentiate between v1 imports and others and pass `load_module` `v1_mode` argument accordingly
-        imports = [x for x in self.get_imports()]
+        # differentiate between imports by v2 modules and imports by project and v1 because v2 is not allowed to import v1
+        v2_imports: List[DefineImport] = []
+        v1_imports: List[DefineImport] = [x for x in self.get_imports()]
 
-        done = set()  # type: Set[str]
-        while len(imports) > 0:
-            imp = imports.pop()
+        done: Set[str] = set()
+        while len(v2_imports) > 0 or len(v1_imports) > 0:
+            imp: DefineImport
+            v1_mode: bool
+            imp, v1_mode = (v2_imports.pop(), False) if len(v2_imports > 0) else (v1_imports.pop(), True)
             ns = imp.name
-            if ns in done:
-                continue
 
             parts = ns.split("::")
             module_name = parts[0]
 
+            if ns in done:
+                if not v1_mode and self.module_source.path_for(module_name) is None:
+                    # module was installed in v1 mode, which is not allowed when a v2 depends on it => reload
+                    v2_imports.extend(sub for sub, _, _ in ast_by_top_level_mod[module_name])
+                    del ast_by_top_level_mod[module_name]
+                else:
+                    continue
+
             try:
                 # get module
-                module = self.get_module(module_name, v1_mode=True)
+                module = self.get_module(module_name, install=install, allow_v1=v1_mode)
                 # get NS
                 for i in range(1, len(parts) + 1):
                     subs = "::".join(parts[0:i])
@@ -1106,19 +1126,21 @@ class Project(ModuleLike[ProjectMetadata]):
                     out.append((subs, nstmt, nb))
 
                     # get imports and add to list
+                    imports: List[DefineImport] = v1_imports if module.GENERATION == ModuleGeneration.V1 else v2_imports
                     imports.extend(module.get_imports(subs))
             except InvalidModuleException as e:
                 raise ModuleNotFoundException(ns, imp, e)
 
-        return out
+        return list(out.values())
 
-    def load_module(self, module_name: str, v1_mode: bool = False) -> "Module":
+    def load_module(self, module_name: str, install: bool = False, allow_v1: bool = False) -> "Module":
         """
         Get a module instance for a given module name.
 
         :param module_name: The name of the module.
-        :param v1_mode: Behave in a v1 compatible way: modules are installed on the fly and dependencies on v1 modules are
-            allowed.
+        :param install: Run in install mode, installing any modules that have not yet been installed, instead of only
+            installing v1 modules.
+        :param allow_v1: Allow this module to be loaded as v1.
         """
         reqs: Mapping[str, List[Requirement]] = self.collect_requirements()
         module_reqs: List[Requirement] = (
@@ -1128,8 +1150,8 @@ class Project(ModuleLike[ProjectMetadata]):
 
         module: Optional[Module]
         try:
-            module = self.module_source.get_module(self, module_reqs, install=v1_mode)
-            if module is None and v1_mode:
+            module = self.module_source.get_module(self, module_reqs, install=install)
+            if module is None and allow_v1:
                 module = self.resolver_v1.get_module(self, module_reqs, install=True)
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
@@ -1159,8 +1181,7 @@ class Project(ModuleLike[ProjectMetadata]):
         result = True
         result &= self.verify_requires()
         if not result:
-            # TODO: update message to state inmanta modules update needs to be run
-            raise CompilerException("Not all module dependencies have been met.")
+            raise CompilerException("Not all module dependencies have been met. Run `inmanta modules update` to resolve this.")
 
     def use_virtual_env(self) -> None:
         """
@@ -1195,7 +1216,7 @@ class Project(ModuleLike[ProjectMetadata]):
             reqs.append(reqe)
         return reqs
 
-    def collect_requirements(self) -> "Mapping[str, List[Requirement]]":
+    def collect_requirements(self) -> "Dict[str, List[Requirement]]":
         """
         Collect the list of all requirements of all modules in the project.
         """
@@ -1206,15 +1227,15 @@ class Project(ModuleLike[ProjectMetadata]):
             merge_specs(specs, reqs)
         return specs
 
-    def collect_imported_requirements(self) -> "Mapping[str, Iterable[Requirement]]":
+    def collect_imported_requirements(self) -> "Dict[str, List[Requirement]]":
         imports = set([x.name.split("::")[0] for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
         imports.add("std")
-        specs = self.collect_requirements()
+        specs: Dict[str, List[Requirement]] = self.collect_requirements()
 
-        def get_spec(name: str) -> "Iterable[Requirement]":
+        def get_spec(name: str) -> "List[Requirement]":
             if name in specs:
                 return specs[name]
-            return parse_requirements(name)
+            return [Requirement.parse(name)]
 
         return {name: get_spec(name) for name in imports}
 
@@ -1389,7 +1410,8 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         for impor in todo:
             if impor not in out:
-                mainmod = self._project.get_module(impor, v1_mode=self.GENERATION == ModuleGeneration.V1)
+                v1_mode: bool = self.GENERATION == ModuleGeneration.V1
+                mainmod = self._project.get_module(impor, install=v1_mode, allow_v1=v1_mode)
                 version = mainmod.version
                 # track submodules for cycle avoidance
                 out[impor] = mode + " " + version

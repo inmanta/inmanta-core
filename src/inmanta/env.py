@@ -67,7 +67,9 @@ class ProcessEnv:
     python_path: str = sys.executable
 
     @classmethod
-    def install_from_indexes(cls, requirements: List[Requirement], index_urls: Optional[List[str]] = None) -> None:
+    def install_from_indexes(
+        cls, requirements: List[Requirement], index_urls: Optional[List[str]] = None, upgrade: bool = False
+    ) -> None:
         index_args: List[str] = (
             None if index_urls is None
             else ["--index-url", index_urls[0], *chain.from_iterable(["--extra-index-url", url] for url in index_urls[1:])]
@@ -81,6 +83,7 @@ class ProcessEnv:
                     "-m",
                     "pip",
                     "install",
+                    *(["--upgrade"] if upgrade else []),
                     *(str(requirement) for requirement in requirements),
                     *(["--index-url", index_url] if index_url is not None else []),
                 ],

@@ -44,6 +44,7 @@ from inmanta.module import (
     FreezeOperator,
     InstallMode,
     Module,
+    ModuleGeneration,
     ModuleMetadataFileNotFound,
     ModuleV1,
     ModuleV2,
@@ -253,9 +254,8 @@ class ProjectTool(ModuleLikeTool):
         """
         Install all modules the project requires.
         """
-        # TODO
-        # This currently only installs v1 modules. #3083 will add the v2 install
-        self.get_project(load=True)
+        project: Project = self.get_project(load=False)
+        project.install_modules()
 
 
 class ModuleTool(ModuleLikeTool):
@@ -490,8 +490,7 @@ version: 0.0.1dev0"""
                 t.add_row(row)
             print(t.draw())
 
-    # TODO: extend this method
-    def update(self, module: str = None, project: Project = None):
+    def update(self, module: Optional[str] = None, project: Optional[Project] = None):
         """
         Update all modules from their source
         """
@@ -502,13 +501,23 @@ version: 0.0.1dev0"""
         else:
             my_project = project
 
-        def do_update(specs: "Mapping[str, Iterable[Requirement]]", modules: List[str]) -> None:
-            for module in modules:
-                spec = specs.get(module, [])
+        def do_update(specs: "Dict[str, List[Requirement]]", modules: List[str]) -> None:
+            v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
+
+            python_specs: List[Requirement] = [
+                module_spec
+                for module, module_specs in specs
+                for module_spec in module_specs
+                if module in v2_modules
+            ]
+            env.install_from_indexes(python_specs, my_project.module_source.urls, upgrade=True)
+
+            for v1_module in set(modules).difference(v2_modules):
+                spec = specs.get(v1_module, [])
                 try:
-                    ModuleV1.update(my_project, module, spec, install_mode=my_project.install_mode)
+                    ModuleV1.update(my_project, v1_module, spec, install_mode=my_project.install_mode)
                 except Exception:
-                    LOGGER.exception("Failed to update module %s", module)
+                    LOGGER.exception("Failed to update module %s", v1_module)
 
         attempt = 0
         done = False
@@ -520,7 +529,7 @@ version: 0.0.1dev0"""
                 # get AST
                 my_project.get_complete_ast()
                 # get current full set of requirements
-                specs = my_project.collect_imported_requirements()
+                specs: Dict[str, List[Requirement]] = my_project.collect_imported_requirements()
                 if module is None:
                     modules = list(specs.keys())
                 else:
