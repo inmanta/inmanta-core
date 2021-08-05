@@ -538,9 +538,10 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
     def to_v2(self) -> "ModuleV2Metadata":
         values = self.dict()
         del values["compiler_version"]
+        install_requires = values["requires"]
         del values["requires"]
         values["name"] = ModuleV2.PKG_NAME_PREFIX + values["name"]
-        return ModuleV2Metadata(**values)
+        return ModuleV2Metadata(**values, install_requires=install_requires)
 
 
 @stable_api
@@ -581,7 +582,8 @@ class ModuleV2Metadata(ModuleMetadata):
         out = configparser.ConfigParser()
         out.add_section("metadata")
         for k, v in self.dict().items():
-            out.set("metadata", k, str(v))
+            if k != "install_requires":
+                out.set("metadata", k, str(v))
         return out
 
 
@@ -898,6 +900,7 @@ class Project(ModuleLike[ProjectMetadata]):
         """
         if cls._project is None:
             cls._project = Project(cls.get_project_dir(os.curdir), main_file=main_file)
+            loader.PluginModuleFinder.configure_module_finder(cls._project.modulepath, modules_to_ignore=[])
 
         return cls._project
 
@@ -910,12 +913,12 @@ class Project(ModuleLike[ProjectMetadata]):
         os.chdir(project._path)
         plugins.PluginMeta.clear()
         loader.unload_inmanta_plugins()
+        loader.PluginModuleFinder.configure_module_finder(cls._project.modulepath, modules_to_ignore=[])
 
     def load(self) -> None:
         if not self.loaded:
             if not self.is_using_virtual_env():
                 self.use_virtual_env()
-            loader.PluginModuleFinder.configure_module_finder(self.modulepath, modules_to_ignore=[])
             self.get_complete_ast()
             self.loaded = True
             self.verify()
@@ -1167,7 +1170,7 @@ class Project(ModuleLike[ProjectMetadata]):
         """
         Collect the list of all python requirements off all modules in this project
         """
-        reqs = chain.from_iterable([mod.get_python_requirements() for mod in self.modules.values()])
+        reqs = chain.from_iterable([mod.get_python_requirements_as_list() for mod in self.modules.values()])
         return list(set(reqs))
 
     def get_root_namespace(self) -> Namespace:
@@ -1516,7 +1519,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         print()
 
     @abstractmethod
-    def get_python_requirements(self) -> List[str]:
+    def get_python_requirements_as_list(self) -> List[str]:
         """
         Return the python requirements specified by the module.
         """
@@ -1730,11 +1733,11 @@ class ModuleV1(Module[ModuleV1Metadata]):
 
     def get_module_requirements(self) -> List[str]:
         module_requirements_in_requirements_txt = [
-            req for req in self.get_python_requirements() if req.startswith(ModuleV2.PKG_NAME_PREFIX)
+            req for req in self.get_python_requirements_as_list() if req.startswith(ModuleV2.PKG_NAME_PREFIX)
         ]
         return list(self.metadata.requires) + module_requirements_in_requirements_txt
 
-    def get_python_requirements(self) -> List[str]:
+    def get_python_requirements_as_list(self) -> List[str]:
         file = os.path.join(self._path, "requirements.txt")
         if os.path.exists(file):
             with open(file, "r", encoding="utf-8") as fd:
@@ -1760,12 +1763,21 @@ class ModuleV2(Module[ModuleV2Metadata]):
     def get_installed_module(cls, project: Project, module_name: str) -> Optional["ModuleV2"]:
         fq_module_path = f"{const.PLUGINS_PACKAGE}.{module_name}"
         module_finder = loader.PluginModuleFinder.get_module_finder()
+        was_module_ignored_by_v1_loader = module_finder.is_ignoring(module_name)
+        was_module_loaded = fq_module_path in sys.modules
         try:
             module_finder.ignore_module(module_name)
-            loader.unload_inmanta_plugins(module_name)
-            spec: Optional[ModuleSpec] = importlib.util.find_spec(fq_module_path)
+            if was_module_loaded:
+                # Unload the module if it was loaded. Otherwise find_spec()
+                # may return a v1 module.
+                loader.unload_inmanta_plugins(module_name)
+            spec = importlib.util.find_spec(fq_module_path)
         finally:
-            module_finder.unignore_module(module_name)
+            # Restore loader state and imported state
+            if not was_module_ignored_by_v1_loader:
+                module_finder.unignore_module(module_name)
+            if was_module_loaded:
+                importlib.import_module(fq_module_path)
         if spec is not None and spec.origin is not None:
             pkg_installation_dir = os.path.abspath(os.path.dirname(spec.origin))
             return cls(project, pkg_installation_dir)
@@ -1800,10 +1812,13 @@ class ModuleV2(Module[ModuleV2Metadata]):
             return os.path.join(self._path, Module.MODEL_DIR)
 
     def _is_dev_installed_module(self) -> bool:
-        return not os.path.exists(os.path.join(self._path, self.MODULE_FILE))
+        return (
+            not os.path.exists(os.path.join(self._path, ModuleV2.MODULE_FILE)) and
+            os.path.exists(os.path.normpath(os.path.join(self._path, os.pardir, os.pardir, ModuleV2.MODULE_FILE)))
+        )
 
     def get_module_requirements(self) -> List[str]:
-        return [req for req in self.get_python_requirements() if req.startswith(self.PKG_NAME_PREFIX)]
+        return [req for req in self.get_python_requirements_as_list() if req.startswith(self.PKG_NAME_PREFIX)]
 
-    def get_python_requirements(self) -> List[str]:
+    def get_python_requirements_as_list(self) -> List[str]:
         return list(self.metadata.install_requires)

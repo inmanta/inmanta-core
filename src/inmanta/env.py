@@ -323,7 +323,7 @@ python -m pip $@
             if os.path.exists(path):
                 os.remove(path)
 
-        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+        self._notify_change()
 
     def _read_current_requirements_hash(self) -> str:
         """
@@ -414,6 +414,14 @@ python -m pip $@
         else:
             LOGGER.debug("%s: %s", cmd, output.decode())
 
+        self._notify_change()
+
+    def _notify_change(self) -> None:
+        """
+        This method must be called when a package is installed or removed from the virtual environment
+        in order for Python to detect the change.
+        """
+        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
         # Make sure that the .pth files in the site-packages directory are processed.
         # This is required to make editable installs work.
         site.addsitedir(self._site_packages_dir)

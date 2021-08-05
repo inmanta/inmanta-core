@@ -101,7 +101,7 @@ class SourceInfo(object):
         from inmanta.module import Project
 
         if self._requires is None:
-            self._requires = Project.get().modules[self._get_module_name()].get_python_requirements()
+            self._requires = Project.get().modules[self._get_module_name()].get_python_requirements_as_list()
         return self._requires
 
 
@@ -407,7 +407,7 @@ class PluginModuleFinder(Finder):
     def get_module_finder(cls) -> "PluginModuleFinder":
         if cls.MODULE_FINDER is not None:
             return cls.MODULE_FINDER
-        raise Exception("No PluginModuleFinder configure. Call configure_module_finder() first.")
+        raise Exception("No PluginModuleFinder configured. Call configure_module_finder() first.")
 
     @classmethod
     def reset(cls) -> None:
@@ -418,7 +418,6 @@ class PluginModuleFinder(Finder):
             sys.meta_path.remove(cls.MODULE_FINDER)
         unload_inmanta_plugins()
         cls.MODULE_FINDER = None
-        importlib.invalidate_caches()
 
     @classmethod
     def configure_module_finder(cls, modulepaths: List[str], modules_to_ignore: List[str] = []) -> None:
@@ -451,6 +450,9 @@ class PluginModuleFinder(Finder):
         if module_name in self._modules_to_ignore:
             self._modules_to_ignore.remove(module_name)
 
+    def is_ignoring(self, module_name: str) -> bool:
+        return module_name in self._modules_to_ignore
+
     def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[PluginModuleLoader]:
         """
         :param fullname: A fully qualified path to the module or package to be imported.
@@ -469,7 +471,7 @@ class PluginModuleFinder(Finder):
         if fq_import_path == const.PLUGINS_PACKAGE:
             return False
         elif fq_import_path.startswith(f"{const.PLUGINS_PACKAGE}."):
-            name_inmanta_module = fq_import_path.split(".", maxsplit=1)[1]
+            name_inmanta_module = fq_import_path.split(".")[1]
             return name_inmanta_module not in self._modules_to_ignore
         else:
             return False
