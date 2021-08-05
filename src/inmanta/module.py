@@ -1240,8 +1240,6 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return {name: get_spec(name) for name in imports}
 
-    # TODO: this is called at project load. Does this suffice for v2? Feasible to implement for v2?
-    #   combine `pip check` for v2 -> v2 with v1 constraints check against `pip freeze` for v1 -> v2?
     def verify_requires(self) -> bool:
         """
         Check if all the required modules for this module have been loaded
@@ -1252,7 +1250,17 @@ class Project(ModuleLike[ProjectMetadata]):
 
         good = True
 
-        for name, spec in self.collect_requirements().items():
+        requirements: Dict[str, List[Requirement]] = self.collect_requirements()
+        v2_requirements: Dict[str, List[Requirement]] = {
+            name: spec for name, spec in requirements
+            if self.module_source.path_for(name) is not None
+        }
+        v1_requirements: Dict[str, List[Requirement]] = {
+            name: spec for name, spec in requirements
+            if name not in v2_requirements
+        }
+
+        for name, spec in v1_requirements:
             if name not in imports:
                 continue
             module = modules[name]
@@ -1261,6 +1269,11 @@ class Project(ModuleLike[ProjectMetadata]):
                 if version not in r:
                     LOGGER.warning("requirement %s on module %s not fullfilled, now at version %s" % (r, name, version))
                     good = False
+
+        good &= env.ProcessEnv.check(
+            in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"),
+            constraints=[f"{ModuleV2.PKG_NAME_PREFIX}{req}" for req in chain.from_iterable(v2_requirements.values())],
+        )
 
         return good
 

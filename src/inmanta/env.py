@@ -30,8 +30,9 @@ import venv
 from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
 from itertools import chain
+from packaging import version
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple
 
 import pkg_resources
 
@@ -121,6 +122,62 @@ class ProcessEnv:
                 *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in explicit_paths),
             ]
         )
+
+    @classmethod
+    def check(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
+        """
+        Check this Python environment for compatible dependencies in installed packages.
+
+        :param in_scope: A full pattern representing the package names that are considered in scope for the installed packages'
+            compatibility check. If constraints are supplied, those are always checked, regardless of this pattern.
+        :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
+            packages meet the given constraints. This is insterpreted as a list of constraints, not a list of requirements: if
+            one of the constraints' package is not installed the check succeeds.
+        """
+
+        def check_installed() -> List[str]:
+            process: subprocess.CompletedProcess = subprocess.run(
+                [
+                    cls.python_path,
+                    "-m",
+                    "pip",
+                    "check",
+                ],
+                stdout=subprocess.PIPE,
+            )
+            # returncodes 0 and 1 are expected
+            if process.returncode == 0:
+                return []
+            elif process.returncode == 1:
+                stdout: str = process.stdout.decode()
+                return [
+                    line for line in stdout.splitlines()
+                    if pattern.fullmatch(line.split()[0])
+                ]
+            else:
+                process.check_returncode()
+            return []
+
+        def check_constraints() -> Iterator[Tuple[Requirement, version.Version]]:
+            if constraints is None:
+                return iter(())
+
+            installed_packages: Dict[str, version.Version] = {
+                name.lower(): version for name, version in get_installed_packages(cls.python_path).items()
+            }
+            return (
+                constraint, installed_packages[constraint.key]
+                if constraint.key in installed_packages and installed_packages[constraint.key] not in constraint
+            )
+
+        incompatibilities: List[str] = check_installed()
+        for incompatibility in incompatibilities:
+            LOGGER.warning("Incompatibility in Python environment: {incompatibility}")
+        constraint_violations: List[Tuple[Requirement, version.Version]] = list(check_constraints())
+        for constraint, v in constraint_violations:
+            LOGGER.warning(f"Incompatibility between constraint {constraint} and installed version {v}")
+
+        return len(incompatibilities) == 0 and len(constraint_violations) == 0
 
     @classmethod
     def get_module_file(cls, module: str) -> Optional[str]:
@@ -418,22 +475,26 @@ python -m pip $@
 
     @classmethod
     def _get_installed_packages(cls, python_interpreter: str) -> Dict[str, str]:
-        """Return a list of all installed packages in the site-packages of a python interpreter.
-        :param python_interpreter: The python interpreter to get the packages for
-        :return: A dict with package names as keys and versions as values
-        """
-        cmd = [python_interpreter, "-m", "pip", "list", "--format", "json"]
-        output = b""
-        try:
-            environment = os.environ.copy()
-            output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, env=environment)
-        except CalledProcessError as e:
-            LOGGER.error("%s: %s", cmd, e.output.decode())
-            raise
-        except Exception:
-            LOGGER.error("%s: %s", cmd, output.decode())
-            raise
-        else:
-            LOGGER.debug("%s: %s", cmd, output.decode())
+        return {name: str(version) for name, version in get_installed_packages(python_interpreter).items()}
 
-        return {r["name"]: r["version"] for r in json.loads(output.decode())}
+
+def get_installed_packages(cls, python_interpreter: str) -> Dict[str, version.Version]:
+    """Return a list of all installed packages in the site-packages of a python interpreter.
+    :param python_interpreter: The python interpreter to get the packages for
+    :return: A dict with package names as keys and versions as values
+    """
+    cmd = [python_interpreter, "-m", "pip", "list", "--format", "json"]
+    output = b""
+    try:
+        environment = os.environ.copy()
+        output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, env=environment)
+    except CalledProcessError as e:
+        LOGGER.error("%s: %s", cmd, e.output.decode())
+        raise
+    except Exception:
+        LOGGER.error("%s: %s", cmd, output.decode())
+        raise
+    else:
+        LOGGER.debug("%s: %s", cmd, output.decode())
+
+    return {r["name"]: version.Version(r["version"]) for r in json.loads(output.decode())}
