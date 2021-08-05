@@ -98,10 +98,11 @@ class SourceInfo(object):
     @property
     def requires(self) -> List[str]:
         """List of python requirements associated with this source file"""
-        from inmanta.module import Project
+        from inmanta.module import Project, Module, ModuleV1
 
         if self._requires is None:
-            self._requires = Project.get().modules[self._get_module_name()].get_python_requirements_as_list()
+            module: Module = Project.get().modules[self._get_module_name()].get_python_requirements_as_list()
+            self._requires = module.get_python_requirements_as_list if isinstance(module, ModuleV1) else []
         return self._requires
 
 

@@ -1218,13 +1218,14 @@ class Project(ModuleLike[ProjectMetadata]):
 
     def collect_requirements(self) -> "Dict[str, List[Requirement]]":
         """
-        Collect the list of all requirements of all modules in the project.
+        Collect the list of all requirements of all V1 modules in the project.
         """
         specs = {}  # type: Dict[str, List[Requirement]]
         merge_specs(specs, self.requires())
         for module in self.modules.values():
-            reqs = module.requires()
-            merge_specs(specs, reqs)
+            if isinstance(module, ModuleV1):
+                reqs = module.requires()
+                merge_specs(specs, reqs)
         return specs
 
     def collect_imported_requirements(self) -> "Dict[str, List[Requirement]]":
@@ -1265,9 +1266,13 @@ class Project(ModuleLike[ProjectMetadata]):
 
     def collect_python_requirements(self) -> List[str]:
         """
-        Collect the list of all python requirements off all modules in this project
+        Collect the list of all python requirements off all V1 modules in this project
         """
-        req_files = [x.strip() for x in [mod.get_python_requirements() for mod in self.modules.values()] if x is not None]
+        req_files = [
+            x.strip() for x in [
+                mod.get_python_requirements() for mod in self.modules.values() if isinstance(mod, ModuleV1)
+            ] if x is not None
+        ]
         req_lines = [x for x in "\n".join(req_files).split("\n") if len(x.strip()) > 0]
         req_lines = self._remove_comments(req_lines)
         req_lines = self._remove_line_continuations(req_lines)
@@ -1571,28 +1576,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             print("done")
         print()
 
-    def get_python_requirements(self) -> Optional[str]:
-        """
-        Install python requirements with pip in a virtual environment
-        """
-        file = os.path.join(self._path, "requirements.txt")
-        if os.path.exists(file):
-            with open(file, "r", encoding="utf-8") as fd:
-                return fd.read()
-        else:
-            return None
-
-    @lru_cache()
-    def get_python_requirements_as_list(self) -> List[str]:
-        raw = self.get_python_requirements()
-        if raw is None:
-            return []
-        else:
-            requirements_lines = [y for y in [x.strip() for x in raw.split("\n")] if len(y) != 0]
-            requirements_lines = self._remove_comments(requirements_lines)
-            requirements_lines = self._remove_line_continuations(requirements_lines)
-            return requirements_lines
-
     def execute_command(self, cmd: str) -> None:
         print("executing %s on %s in %s" % (cmd, self.name, self._path))
         print("=" * 10)
@@ -1769,6 +1752,28 @@ class ModuleV1(Module[ModuleV1Metadata]):
     def get_metadata_file_schema_type(cls) -> Type[ModuleV1Metadata]:
         return ModuleV1Metadata
 
+    def get_python_requirements(self) -> Optional[str]:
+        """
+        Install python requirements with pip in a virtual environment
+        """
+        file = os.path.join(self._path, "requirements.txt")
+        if os.path.exists(file):
+            with open(file, "r", encoding="utf-8") as fd:
+                return fd.read()
+        else:
+            return None
+
+    @lru_cache()
+    def get_python_requirements_as_list(self) -> List[str]:
+        raw = self.get_python_requirements()
+        if raw is None:
+            return []
+        else:
+            requirements_lines = [y for y in [x.strip() for x in raw.split("\n")] if len(y) != 0]
+            requirements_lines = self._remove_comments(requirements_lines)
+            requirements_lines = self._remove_line_continuations(requirements_lines)
+            return requirements_lines
+
 
 @stable_api
 class ModuleV2(Module[ModuleV2Metadata]):
@@ -1786,6 +1791,3 @@ class ModuleV2(Module[ModuleV2Metadata]):
     @classmethod
     def get_metadata_file_schema_type(cls) -> Type[ModuleV2Metadata]:
         return ModuleV2Metadata
-
-    # TODO: implement requires method? No, this is inherent to the Python package. Find a way to use this only for v1 instead,
-    #   perhaps isinstance in collect_requirements?
