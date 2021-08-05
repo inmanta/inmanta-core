@@ -86,7 +86,7 @@ def set_yaml_order_preserving() -> None:
 
 class ModuleVersionException(CLIException):
     def __init__(self, msg: str) -> None:
-        super().__init__(msg, exitcode=5)
+        super().__init__(5, msg)
 
 
 class ModuleLikeTool(object):
@@ -824,10 +824,10 @@ class ModuleConverter:
             setup_cfg.read(os.path.join(output_directory, "setup.cfg"))
 
         if os.path.exists(os.path.join(output_directory, "pyproject.toml")):
-            raise CLIException("pyproject.toml already exists, aborting. Please remove/rename this file", exitcode=1)
+            raise CLIException(1, "pyproject.toml already exists, aborting. Please remove/rename this file")
 
         if os.path.exists(os.path.join(output_directory, "inmanta_plugins")):
-            raise CLIException("inmanta_plugins folder already exists, aborting. Please remove/rename this file", exitcode=1)
+            raise CLIException(1, "inmanta_plugins folder already exists, aborting. Please remove/rename this file")
 
         setup_cfg = self.get_setup_cfg(setup_cfg)
         self._do_update(output_directory, setup_cfg)
