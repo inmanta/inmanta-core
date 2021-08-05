@@ -19,7 +19,6 @@ import asyncio
 import concurrent
 import csv
 import datetime
-import importlib
 import json
 import logging
 import os
@@ -58,8 +57,10 @@ from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
+from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import Project
+from inmanta.moduletool import ModuleTool
 from inmanta.postgresproc import PostgresProc
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
@@ -67,8 +68,6 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
-from inmanta.moduletool import ModuleTool
-from inmanta.env import LocalPackagePath
 
 # Import the utils module differently when conftest is put into the inmanta_tests packages
 if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
@@ -276,6 +275,7 @@ def deactive_venv():
             os.environ["PYTHONPATH"] = old_pythonpath
         else:
             del os.environ["PYTHONPATH"]
+    loader.PluginModuleFinder.reset()
 
 
 def reset_metrics():
@@ -301,7 +301,6 @@ def reset_all_objects():
     handler.Commander.reset()
     Project._project = None
     unknown_parameters.clear()
-    loader.PluginModuleFinder.reset()
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -895,6 +894,7 @@ def snippetcompiler(inmanta_config, snippetcompiler_global, modules_dir):
     yield snippetcompiler_global
     snippetcompiler_global.tear_down_func()
 
+
 @pytest.fixture(scope="function")
 def snippetcompiler_no_module_dir(inmanta_config, snippetcompiler_global):
     """
@@ -905,6 +905,7 @@ def snippetcompiler_no_module_dir(inmanta_config, snippetcompiler_global):
     snippetcompiler_global.setup_func(module_dir=None)
     yield snippetcompiler_global
     snippetcompiler_global.tear_down_func()
+
 
 @pytest.fixture(scope="function")
 def snippetcompiler_clean(modules_dir):

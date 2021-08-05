@@ -396,6 +396,12 @@ python -m pip $@
         return {r["name"]: r["version"] for r in json.loads(output.decode())}
 
     def install(self, path: str, editable: bool) -> None:
+        if not self.__using_venv:
+            raise Exception(f"Not using venv {self.__using_venv}. use_virtual_env() should be called first.")
+
+        # Make mypy happy
+        assert self.virtual_python is not None
+
         cmd_base: List["str"] = [self.virtual_python, "-m", "pip", "install"]
         if editable:
             cmd = cmd_base + ["-e", path]
@@ -421,6 +427,8 @@ python -m pip $@
         This method must be called when a package is installed or removed from the virtual environment
         in order for Python to detect the change.
         """
+        # Make mypy happy
+        assert self._site_packages_dir is not None
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
         # Make sure that the .pth files in the site-packages directory are processed.
         # This is required to make editable installs work.

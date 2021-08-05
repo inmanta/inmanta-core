@@ -15,18 +15,22 @@
 
     Contact: code@inmanta.com
 """
-import pytest
-import py
 import os
-from inmanta.env import LocalPackagePath
 import shutil
+from configparser import ConfigParser
+from typing import List
+
+import py
+import pytest
+
 from inmanta.compiler.config import feature_compiler_cache
+from inmanta.env import LocalPackagePath
+from inmanta.module import ModuleV1, ModuleV2, Project
+from inmanta.moduletool import DummyProject, ModuleConverter
 
 
 @pytest.mark.parametrize("editable_install", [True, False])
-def test_v2_module_loading(
-    editable_install: bool, tmpdir: py.path.local, snippetcompiler_no_module_dir, capsys
-) -> None:
+def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippetcompiler_no_module_dir, capsys) -> None:
     # Work around caching problem in venv
     feature_compiler_cache.set("False")
 
@@ -40,35 +44,86 @@ def test_v2_module_loading(
         f"""
             import {module_name}
 
-            {module_name}::print_message("hello world")
+            {module_name}::print_message("Hello world")
         """,
         autostd=False,
         install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=editable_install)],
     )
 
     snippetcompiler_no_module_dir.do_export()
-    assert "hello world" in capsys.readouterr().out
+    assert "Hello world" in capsys.readouterr().out
 
 
-# def test_v1_and_v2_module_installed_simultaneously(tmpdir: py.path.local, snippetcompiler, capsys) -> None:
-#     # Work around caching problem in venv
-#     feature_compiler_cache.set("False")
-#     #
-#     module_name = "elaboratev2module"
-#     # module_dir = os.path.normpath(os.path.join(__file__, os.pardir, "data", "modules", module_name))
-#     # module_copy_dir = os.path.join(tmpdir, "module")
-#     # shutil.copytree(module_dir, module_copy_dir)
-#     # assert os.path.isdir(module_copy_dir)
-#
-#     snippetcompiler.setup_for_snippet(
-#         f"""
-#             import {module_name}
-#
-#             {module_name}::print_message("hello world")
-#         """,
-#         autostd=False,
-#         # install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=editable_install)],
-#     )
-#
-#     snippetcompiler.do_export()
-#     assert "hello world" in capsys.readouterr().out
+def test_v1_and_v2_module_installed_simultaneously(tmpdir: py.path.local, snippetcompiler, capsys, caplog) -> None:
+    """
+    When a module is installed both in V1 and V2 format, ensure that:
+       * A warning is logged
+       * The V2 module is loaded and not the V1 module.
+    """
+    # Work around caching problem in venv
+    feature_compiler_cache.set("False")
+
+    module_name = "elaboratev1module"
+
+    def compile_and_verify(
+        expected_message: str, expect_warning: bool, install_v2_modules: List[LocalPackagePath] = []
+    ) -> None:
+        snippetcompiler.setup_for_snippet(f"import {module_name}", install_v2_modules=install_v2_modules)
+        caplog.clear()
+        snippetcompiler.do_export()
+        assert expected_message in capsys.readouterr().out
+        got_warning = f"Module {module_name} is installed as a V1 module and a V2 module" in caplog.text
+        assert got_warning == expect_warning
+
+    # Run compile. Only a V1 module is installed in the module path
+    expected_message = "Hello world"
+    compile_and_verify(expected_message=expected_message, expect_warning=False)
+    assert isinstance(Project.get().modules[module_name], ModuleV1)
+
+    # Convert V1 module to V2 module and install it as well
+    module_dir = os.path.normpath(os.path.join(__file__, os.pardir, "data", "modules", module_name))
+    v1_module_dir = os.path.join(tmpdir, "v1_module")
+    shutil.copytree(module_dir, v1_module_dir)
+    assert os.path.isdir(v1_module_dir)
+    v2_module_dir = os.path.join(tmpdir, "v2_module")
+    module = ModuleV1(project=DummyProject(), path=v1_module_dir)
+    ModuleConverter(module).convert(output_directory=v2_module_dir)
+
+    # Remove dependency Python dependencies on inmanta modules
+    # => Get the as V1 modules from the module path
+    config_parser = ConfigParser()
+    setup_cfg_file = os.path.join(v2_module_dir, "setup.cfg")
+    config_parser.read(setup_cfg_file)
+    install_requires = [x.strip() for x in config_parser.get("options", "install_requires").split("\n")]
+    install_requires.remove("inmanta-module-std")
+    install_requires.remove("inmanta-module-mod1==1.0")
+    install_requires.remove("inmanta-module-mod2")
+    config_parser.set("options", "install_requires", "\n".join(install_requires))
+    with open(setup_cfg_file, "w") as fd:
+        config_parser.write(fd)
+
+    # Run compile again. V1 version and V2 version are installed simultaneously
+    compile_and_verify(
+        expected_message=expected_message,
+        expect_warning=True,
+        install_v2_modules=[LocalPackagePath(path=v2_module_dir, editable=False)],
+    )
+    assert isinstance(Project.get().modules[module_name], ModuleV2)
+
+
+def test_v1_module_depends_on_v1_and_v2_module(tmpdir: py.path.local, snippetcompiler, capsys) -> None:
+    module_dir = os.path.normpath(os.path.join(__file__, os.pardir, "data", "modules", "elaboratev2module"))
+    module_copy_dir = os.path.join(tmpdir, "module")
+    shutil.copytree(module_dir, module_copy_dir)
+    assert os.path.isdir(module_copy_dir)
+
+    module_name = "v1_module_depends_on_v1_and_v2_module"
+    snippetcompiler.setup_for_snippet(
+        f"import {module_name}",
+        install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=False)],
+    )
+
+    snippetcompiler.do_export()
+    output = capsys.readouterr().out
+    assert "Print from v2 module" in output
+    assert "Hello world" in output

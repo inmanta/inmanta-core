@@ -29,8 +29,8 @@ import tempfile
 import traceback
 from abc import ABC, abstractmethod
 from functools import lru_cache
-from itertools import chain
 from io import BytesIO, TextIOBase
+from itertools import chain
 from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
@@ -51,14 +51,13 @@ from typing import (
     TypeVar,
     Union,
 )
-from importlib.machinery import ModuleSpec
 
 import yaml
 from pkg_resources import Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, validator
 
 import inmanta.warnings
-from inmanta import env, loader, plugins, const
+from inmanta import const, env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, ModuleNotFoundException, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
@@ -560,6 +559,7 @@ class ModuleV2Metadata(ModuleMetadata):
       Valid values are [==, ~=, >=]. *Default is '~='*
     :param install_requires: The Python packages this module depends on.
     """
+
     install_requires: List[str]
 
     _raw_parser: Type[CfgParser] = CfgParser
@@ -1059,9 +1059,7 @@ class Project(ModuleLike[ProjectMetadata]):
         if module_name in reqs:
             return ModuleV1.install(self, module_name, reqs[module_name], install_mode=self._install_mode)
         else:
-            return ModuleV1.install(
-                self, module_name, list(parse_requirements(module_name)), install_mode=self._install_mode
-            )
+            return ModuleV1.install(self, module_name, list(parse_requirements(module_name)), install_mode=self._install_mode)
 
     def install_in_compiler_venv(self, path: str, editable: bool) -> None:
         if not self.is_using_virtual_env():
@@ -1161,7 +1159,7 @@ class Project(ModuleLike[ProjectMetadata]):
             version = parse_version(str(module.version))
             for r in spec:
                 if version not in r:
-                    LOGGER.warning("requirement %s on module %s not fullfilled, now at version %s" % (r, name, version))
+                    LOGGER.warning("requirement %s on module %s not fulfilled, now at version %s" % (r, name, version))
                     good = False
 
         return good
@@ -1306,9 +1304,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         version should match the tag
         """
         if not os.path.exists(os.path.join(self._path, ".git")):
-            LOGGER.warning(
-                "Module %s is not version controlled, we recommend you do this as soon as possible.", self.name
-            )
+            LOGGER.warning("Module %s is not version controlled, we recommend you do this as soon as possible.", self.name)
             return False
         return True
 
@@ -1393,7 +1389,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         files = self._get_model_files(self.model_dir)
 
         for f in files:
-            name = f[len(self.model_dir) + 1: -3]
+            name = f[len(self.model_dir) + 1 : -3]
             parts = name.split("/")
             if parts[-1] == "_init":
                 parts = parts[:-1]
@@ -1439,9 +1435,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             return iter(())
 
         if not os.path.exists(os.path.join(plugin_dir, "__init__.py")):
-            raise CompilerException(
-                f"Directory {plugin_dir} should be a valid python package with a __init__.py file"
-            )
+            raise CompilerException(f"Directory {plugin_dir} should be a valid python package with a __init__.py file")
         return (
             (
                 Path(file_name),
@@ -1543,9 +1537,11 @@ class ModuleV1(Module[ModuleV1Metadata]):
     @classmethod
     def get_installed_module(cls, project: Project, module_name: str) -> Optional["ModuleV1"]:
         path = project.resolver.path_for(module_name)
-        if path is not None:
+        if path is None:
+            return None
+        try:
             return cls(project, path)
-        else:
+        except InvalidModuleException:
             return None
 
     def get_metadata_file_path(self) -> str:
@@ -1778,10 +1774,12 @@ class ModuleV2(Module[ModuleV2Metadata]):
                 module_finder.unignore_module(module_name)
             if was_module_loaded:
                 importlib.import_module(fq_module_path)
-        if spec is not None and spec.origin is not None:
+        if spec is None or spec.origin is None:
+            return None
+        try:
             pkg_installation_dir = os.path.abspath(os.path.dirname(spec.origin))
             return cls(project, pkg_installation_dir)
-        else:
+        except InvalidModuleException:
             return None
 
     @classmethod
@@ -1796,7 +1794,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     @classmethod
     def get_name_from_metadata(cls, metadata: ModuleV2Metadata) -> str:
-        return metadata.name[len(cls.PKG_NAME_PREFIX):]
+        return metadata.name[len(cls.PKG_NAME_PREFIX) :]
 
     @classmethod
     def get_metadata_file_schema_type(cls) -> Type[ModuleV2Metadata]:
@@ -1812,9 +1810,8 @@ class ModuleV2(Module[ModuleV2Metadata]):
             return os.path.join(self._path, Module.MODEL_DIR)
 
     def _is_dev_installed_module(self) -> bool:
-        return (
-            not os.path.exists(os.path.join(self._path, ModuleV2.MODULE_FILE)) and
-            os.path.exists(os.path.normpath(os.path.join(self._path, os.pardir, os.pardir, ModuleV2.MODULE_FILE)))
+        return not os.path.exists(os.path.join(self._path, ModuleV2.MODULE_FILE)) and os.path.exists(
+            os.path.normpath(os.path.join(self._path, os.pardir, os.pardir, ModuleV2.MODULE_FILE))
         )
 
     def get_module_requirements(self) -> List[str]:
