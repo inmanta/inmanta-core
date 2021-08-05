@@ -86,7 +86,7 @@ def set_yaml_order_preserving() -> None:
 
 class ModuleVersionException(CLIException):
     def __init__(self, msg: str) -> None:
-        super().__init__(5, msg)
+        super().__init__(msg, exitcode=5)
 
 
 class ModuleLikeTool(object):
@@ -410,7 +410,7 @@ class ModuleTool(ModuleLikeTool):
             except (ModuleMetadataFileNotFound, InvalidMetadata, InvalidModuleException):
                 raise InvalidModuleException(f"No module can be found at {path}")
 
-    def get_module(self, module: str = None, project: Project = None) -> Module:
+    def get_module(self, module: str = None, project: Optional[Project] = None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
             project = self.get_project_for_module(module)
@@ -824,10 +824,10 @@ class ModuleConverter:
             setup_cfg.read(os.path.join(output_directory, "setup.cfg"))
 
         if os.path.exists(os.path.join(output_directory, "pyproject.toml")):
-            raise CLIException(1, "pyproject.toml already exists, aborting. Please remove/rename this file")
+            raise CLIException("pyproject.toml already exists, aborting. Please remove/rename this file", exitcode=1)
 
         if os.path.exists(os.path.join(output_directory, "inmanta_plugins")):
-            raise CLIException(1, "inmanta_plugins folder already exists, aborting. Please remove/rename this file")
+            raise CLIException("inmanta_plugins folder already exists, aborting. Please remove/rename this file", exitcode=1)
 
         setup_cfg = self.get_setup_cfg(setup_cfg)
         self._do_update(output_directory, setup_cfg)

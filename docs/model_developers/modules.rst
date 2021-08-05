@@ -195,7 +195,7 @@ To convert a V1 module to the V2 format, execute the following command in the mo
 
 .. code-block:: bash
 
-   inmanta modules v1tov2
+   inmanta module v1tov2
 
 Inmanta module template
 #######################
