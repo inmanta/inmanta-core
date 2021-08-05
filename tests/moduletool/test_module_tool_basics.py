@@ -427,7 +427,7 @@ requires:
 
     cause = e.value.__cause__
     assert isinstance(cause, InvalidMetadata)
-    assert f"Invalid legacy requires" in cause.msg
+    assert "Invalid legacy requires" in cause.msg
 
 
 @pytest.mark.asyncio
