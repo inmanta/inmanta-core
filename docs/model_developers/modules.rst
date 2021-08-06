@@ -188,6 +188,15 @@ To specify specific version are required, constraints can be added to the requir
 
 A full list of all available options can be found in :ref:`here<module_yml>`.
 
+Convert a module from V1 to V2 format
+#####################################
+
+To convert a V1 module to the V2 format, execute the following command in the module folder
+
+.. code-block:: bash
+
+   inmanta module v1tov2
+
 Inmanta module template
 #######################
 

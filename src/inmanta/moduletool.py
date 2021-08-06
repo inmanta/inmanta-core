@@ -28,6 +28,7 @@ import time
 import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
+from configparser import ConfigParser
 from typing import TYPE_CHECKING, Iterable, List, Mapping, Optional, Set
 
 import texttable
@@ -45,6 +46,8 @@ from inmanta.module import (
     DummyProject,
     FreezeOperator,
     InstallMode,
+    InvalidMetadata,
+    InvalidModuleException,
     Module,
     ModuleMetadataFileNotFound,
     ModuleV1,
@@ -79,6 +82,11 @@ def set_yaml_order_preserving() -> None:
 
     yaml.add_representer(OrderedDict, dict_representer)
     yaml.add_constructor(_mapping_tag, dict_constructor)
+
+
+class ModuleVersionException(CLIException):
+    def __init__(self, msg: str) -> None:
+        super().__init__(msg, exitcode=5)
 
 
 class ModuleLikeTool(object):
@@ -204,7 +212,7 @@ class ProjectTool(ModuleLikeTool):
         try:
             project = self.get_project(load=True)
         except Exception:
-            raise CLIException(1, "Could not load project")
+            raise CLIException("Could not load project", exitcode=1)
 
         if recursive is None:
             recursive = project.freeze_recursive
@@ -353,6 +361,17 @@ class ModuleTool(ModuleLikeTool):
             dest="output_dir",
         )
 
+        subparser.add_parser("v1tov2", help="Convert a V1 module to a V2 module in place")
+
+    def v1tov2(self, module: str) -> None:
+        """
+        Convert a V1 module to a V2 module in place
+        """
+        module = self.get_module(module)
+        if not isinstance(module, ModuleV1):
+            raise ModuleVersionException(f"Expected a v1 module, but found v{module.GENERATION.value} module")
+        ModuleConverter(module).convert_in_place()
+
     def build(self, path: Optional[str] = None, output_dir: Optional[str] = None) -> str:
         """
         Build a v2 module and return the path to the build artifact.
@@ -374,26 +393,24 @@ class ModuleTool(ModuleLikeTool):
         else:
             return V2ModuleBuilder(path).build(output_dir)
 
-    def get_project_for_module(self, module):
+    def get_project_for_module(self, module: str) -> Project:
         try:
             return self.get_project()
         except Exception:
             # see #721
-            return None
+            return DummyProject()
 
     def construct_module(self, project: Optional[Project], path: str) -> Module:
         """ Construct a V1 or V2 module from a folder"""
         try:
             return ModuleV2(project, path)
-        except ModuleMetadataFileNotFound as e:
+        except (ModuleMetadataFileNotFound, InvalidMetadata, InvalidModuleException):
             try:
                 return ModuleV1(project, path)
-            except ModuleMetadataFileNotFound:
-                # ignore this exception in favor of the v2 one
-                pass
-            raise e
+            except (ModuleMetadataFileNotFound, InvalidMetadata, InvalidModuleException):
+                raise InvalidModuleException(f"No module can be found at {path}")
 
-    def get_module(self, module: str = None, project=None) -> Module:
+    def get_module(self, module: str = None, project: Optional[Project] = None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
             project = self.get_project_for_module(module)
@@ -795,23 +812,41 @@ class ModuleConverter:
         # copy all files
         shutil.copytree(self._module.path, output_directory)
 
+        self._do_update(output_directory, setup_cfg)
+
+    def convert_in_place(self) -> None:
+        output_directory = os.path.abspath(self._module.path)
+
+        setup_cfg = ConfigParser()
+
+        if os.path.exists(os.path.join(output_directory, "setup.cfg")):
+            LOGGER.warning("setup.cfg file already exists, merging. This will remove all comments from the file")
+            setup_cfg.read(os.path.join(output_directory, "setup.cfg"))
+
+        if os.path.exists(os.path.join(output_directory, "pyproject.toml")):
+            raise CLIException("pyproject.toml already exists, aborting. Please remove/rename this file", exitcode=1)
+
+        if os.path.exists(os.path.join(output_directory, "inmanta_plugins")):
+            raise CLIException("inmanta_plugins folder already exists, aborting. Please remove/rename this file", exitcode=1)
+
+        setup_cfg = self.get_setup_cfg(setup_cfg)
+        self._do_update(output_directory, setup_cfg)
+
+    def _do_update(self, output_directory: str, setup_cfg: ConfigParser) -> None:
         # remove module.yaml
         os.remove(os.path.join(output_directory, self._module.MODULE_FILE))
-
         # remove requirements.txt
         req = os.path.join(output_directory, "requirements.txt")
         if os.path.exists(req):
             os.remove(req)
-
         # move plugins
         old_plugins = os.path.join(output_directory, "plugins")
         new_plugins = os.path.join(output_directory, "inmanta_plugins", self._module.name)
         shutil.move(old_plugins, new_plugins)
-
         # write out pyproject.toml
+
         with open(os.path.join(output_directory, "pyproject.toml"), "w") as fh:
             fh.write(self.get_pyproject())
-
         # write our setup.cfg
         with open(os.path.join(output_directory, "setup.cfg"), "w") as fh:
             setup_cfg.write(fh)
@@ -822,9 +857,9 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 """
 
-    def get_setup_cfg(self) -> configparser.ConfigParser:
+    def get_setup_cfg(self, config_in: Optional[configparser.ConfigParser] = None) -> configparser.ConfigParser:
         # convert main config
-        config = self._module.metadata.to_v2().to_config()
+        config = self._module.metadata.to_v2().to_config(config_in)
 
         config.add_section("options")
 

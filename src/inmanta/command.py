@@ -18,7 +18,7 @@
 
 
 class CLIException(Exception):
-    def __init__(self, exitcode: int, *args, **kwargs):
+    def __init__(self, *args, exitcode: int, **kwargs):
         self.exitcode = exitcode
         super(CLIException, self).__init__(*args, **kwargs)
 

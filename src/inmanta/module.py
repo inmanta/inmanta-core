@@ -578,9 +578,15 @@ class ModuleV2Metadata(ModuleMetadata):
     def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
         return re.sub(r"(\[metadata\][^\[]*\s*version\s*=\s*)[^\"'}\s\[]+", r"\g<1>" + new_version, source)
 
-    def to_config(self) -> configparser.ConfigParser:
-        out = configparser.ConfigParser()
-        out.add_section("metadata")
+    def to_config(self, inp: Optional[configparser.ConfigParser] = None) -> configparser.ConfigParser:
+        if inp:
+            out = inp
+        else:
+            out = configparser.ConfigParser()
+
+        if not out.has_section("metadata"):
+            out.add_section("metadata")
+
         for k, v in self.dict().items():
             if k != "install_requires":
                 out.set("metadata", k, str(v))
@@ -1536,7 +1542,10 @@ class ModuleV1(Module[ModuleV1Metadata]):
     GENERATION = ModuleGeneration.V1
 
     def __init__(self, project: Optional[Project], path: str):
-        super(ModuleV1, self).__init__(project, path)
+        try:
+            super(ModuleV1, self).__init__(project, path)
+        except InvalidMetadata as e:
+            raise InvalidModuleException(f"The module found at {path} is not a valid V1 module") from e
 
     @classmethod
     def get_installed_module(cls, project: Project, module_name: str) -> Optional["ModuleV1"]:
@@ -1743,7 +1752,10 @@ class ModuleV2(Module[ModuleV2Metadata]):
     PKG_NAME_PREFIX = "inmanta-module-"
 
     def __init__(self, project: Optional[Project], path: str):
-        super(ModuleV2, self).__init__(project, path)
+        try:
+            super(ModuleV2, self).__init__(project, path)
+        except InvalidMetadata as e:
+            raise InvalidModuleException(f"The module found at {path} is not a valid V2 module") from e
 
     @classmethod
     def get_installed_module(cls, project: Project, module_name: str) -> Optional["ModuleV2"]:
