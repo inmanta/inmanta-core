@@ -1107,7 +1107,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
     def requires(self) -> "List[Requirement]":
         """
-        Get the requires for this module
+        Get the requires for this project
         """
         # filter on import stmt
         reqs = []
@@ -1261,6 +1261,9 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         raise NotImplementedError()
 
     def requires(self) -> "List[Requirement]":
+        """
+        Return all requirements this module has to other modules as a list of Requirements.
+        """
         reqs = []
         for spec in self.get_module_requirements():
             req = [x for x in parse_requirements(spec)]
@@ -1405,6 +1408,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
     def _get_plugin_dir(self) -> Optional[str]:
         """
         Return directory containing the python files which define handlers and plugins.
+        If no such directory is defined, this method returns None.
         """
         raise NotImplementedError()
 
@@ -1558,20 +1562,6 @@ class ModuleV1(Module[ModuleV1Metadata]):
         constrained.
         """
         return str(self._metadata.compiler_version)
-
-    def requires(self) -> "List[Requirement]":
-        """
-        Get the requires for this module
-        """
-        # filter on import stmt
-        reqs = []
-        for spec in self._metadata.requires:
-            req = [x for x in parse_requirements(spec)]
-            if len(req) > 1:
-                print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
-            reqe = req[0]
-            reqs.append(reqe)
-        return reqs
 
     def get_all_requires(self) -> List[Requirement]:
         """

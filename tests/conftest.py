@@ -290,6 +290,7 @@ async def clean_reset(create_db, clean_db):
     yield
     inmanta.protocol.common.MethodProperties.methods = methods
     config.Config._reset()
+    reset_all_objects()
 
 
 def reset_all_objects():

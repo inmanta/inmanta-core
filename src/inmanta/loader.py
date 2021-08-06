@@ -293,6 +293,11 @@ class PluginModuleLoader(FileLoader):
     """
 
     def __init__(self, path_to_module: str, fullname: str) -> None:
+        """
+        :param path_to_module: Path to the file on disk that belongs to the import `fullname`. This should be an empty
+                               string when the top-level package inmanta_plugins is imported.
+        :param fullname: A fully qualified path to the module or package to be imported
+        """
         super(PluginModuleLoader, self).__init__(fullname, path_to_module)
         self.path: str
 
@@ -369,6 +374,7 @@ class PluginModuleLoader(FileLoader):
         """
         Returns path to the module, relative to the module directory. Does not differentiate between modules and packages.
         For example convert_module_to_relative_path("inmanta_plugins.my_mod.my_submod") == "my_mod/plugins/my_submod".
+        An empty string is returned when `full_mod_name` contains `inmanta_plugins`.
         """
         full_module_parts = full_mod_name.split(".")
         if full_module_parts[0] != const.PLUGINS_PACKAGE:
@@ -455,7 +461,7 @@ class PluginModuleFinder(Finder):
 
     def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[PluginModuleLoader]:
         """
-        :param fullname: A fully qualified path to the module or package to be imported.
+        :param fullname: A fully qualified import path to the module or package to be imported.
         """
         if self._should_handle_import(fullname):
             LOGGER.debug("Loading module: %s", fullname)
@@ -477,6 +483,12 @@ class PluginModuleFinder(Finder):
             return False
 
     def _get_path_to_module(self, fullname: str) -> Optional[str]:
+        """
+        Return the path to the file in the module path that belongs to the module given by `fullname`.
+        None is returned when the given module is not present in the module path.
+
+        :param fullname: A fully-qualified import path to an module.
+        """
         relative_path: str = PluginModuleLoader.convert_module_to_relative_path(fullname)
         # special case: top-level package
         if relative_path == "":

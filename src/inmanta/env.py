@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from itertools import chain
 from subprocess import CalledProcessError
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
+import importlib
 
 import pkg_resources
 
@@ -398,6 +399,8 @@ python -m pip $@
     def install(self, path: str, editable: bool) -> None:
         if not self.__using_venv:
             raise Exception(f"Not using venv {self.__using_venv}. use_virtual_env() should be called first.")
+        if editable and not os.path.isdir(path):
+            raise Exception(f"An editable install was requested, but {path} is not a source directory")
 
         # Make mypy happy
         assert self.virtual_python is not None
@@ -433,3 +436,4 @@ python -m pip $@
         # Make sure that the .pth files in the site-packages directory are processed.
         # This is required to make editable installs work.
         site.addsitedir(self._site_packages_dir)
+        importlib.invalidate_caches()
