@@ -72,7 +72,7 @@ class ProcessEnv:
         cls, requirements: List[Requirement], index_urls: Optional[List[str]] = None, upgrade: bool = False
     ) -> None:
         index_args: List[str] = (
-            None if index_urls is None
+            [] if index_urls is None
             else ["--index-url", index_urls[0], *chain.from_iterable(["--extra-index-url", url] for url in index_urls[1:])]
             if index_urls
             else ["--no-index"]
@@ -86,7 +86,7 @@ class ProcessEnv:
                     "install",
                     *(["--upgrade"] if upgrade else []),
                     *(str(requirement) for requirement in requirements),
-                    *(["--index-url", index_url] if index_url is not None else []),
+                    *index_args,
                 ],
                 stderr=subprocess.PIPE,
             )
@@ -152,7 +152,7 @@ class ProcessEnv:
                 stdout: str = process.stdout.decode()
                 return [
                     line for line in stdout.splitlines()
-                    if pattern.fullmatch(line.split()[0])
+                    if in_scope.fullmatch(line.split()[0])
                 ]
             else:
                 process.check_returncode()
@@ -166,7 +166,8 @@ class ProcessEnv:
                 name.lower(): version for name, version in get_installed_packages(cls.python_path).items()
             }
             return (
-                constraint, installed_packages[constraint.key]
+                (constraint, installed_packages[constraint.key])
+                for constraint in constraints
                 if constraint.key in installed_packages and installed_packages[constraint.key] not in constraint
             )
 
@@ -478,7 +479,7 @@ python -m pip $@
         return {name: str(version) for name, version in get_installed_packages(python_interpreter).items()}
 
 
-def get_installed_packages(cls, python_interpreter: str) -> Dict[str, version.Version]:
+def get_installed_packages(python_interpreter: str) -> Dict[str, version.Version]:
     """Return a list of all installed packages in the site-packages of a python interpreter.
     :param python_interpreter: The python interpreter to get the packages for
     :return: A dict with package names as keys and versions as values

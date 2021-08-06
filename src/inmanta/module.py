@@ -29,8 +29,10 @@ import sys
 import tempfile
 import traceback
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from functools import lru_cache
 from io import BytesIO, TextIOBase
+from itertools import chain
 from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
@@ -297,7 +299,7 @@ class ModuleV2Source(ModuleSource[ModuleV2]):
         if name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
         package: str = f"inmanta_plugins.{name}"
-        init: Optional[str] = env.ProcessEnv.get_module_file(namespace_package)
+        init: Optional[str] = env.ProcessEnv.get_module_file(package)
         try:
             return ModuleLike.get_first_directory_containing_file(os.path.dirname(init), ModuleV2.MODULE_FILE)
         except FileNotFoundError:
@@ -305,7 +307,7 @@ class ModuleV2Source(ModuleSource[ModuleV2]):
 
     @classmethod
     def from_path(cls, project: Optional[Project], path: str) -> ModuleV2:
-        return ModuleV2(self, project, path)
+        return ModuleV2(project, path)
 
     def _get_module_name(self, module_spec: List[Requirement]) -> str:
         module_name: str = super()._get_module_name(module_spec)
@@ -328,7 +330,7 @@ class ModuleRepo(ModuleSource[ModuleV1]):
 
     @classmethod
     def from_path(cls, project: Optional[Project], path: str) -> ModuleV1:
-        return ModuleV1(self, project, path)
+        return ModuleV1(project, path)
 
 
 class CompositeModuleRepo(ModuleRepo):
@@ -1108,7 +1110,7 @@ class Project(ModuleLike[ProjectMetadata]):
         :param install: Run in install mode, installing modules that have not yet been installed, instead of only
             installing v1 modules.
         """
-        ast_by_top_level_mod: Dict[str, Tuple[str, List[Statement], BasicBlock]] = {}
+        ast_by_top_level_mod: Dict[str, List[Tuple[str, List[Statement], BasicBlock]]] = defaultdict(list)
 
         # get imports
         # differentiate between imports by v2 modules and imports by project and v1 because v2 is not allowed to import v1
@@ -1144,7 +1146,7 @@ class Project(ModuleLike[ProjectMetadata]):
                     (nstmt, nb) = module.get_ast(subs)
 
                     done.add(subs)
-                    out.append((subs, nstmt, nb))
+                    ast_by_top_level_mod[module_name].append((subs, nstmt, nb))
 
                     # get imports and add to list
                     imports: List[DefineImport] = v1_imports if module.GENERATION == ModuleGeneration.V1 else v2_imports
@@ -1152,7 +1154,7 @@ class Project(ModuleLike[ProjectMetadata]):
             except InvalidModuleException as e:
                 raise ModuleNotFoundException(ns, imp, e)
 
-        return list(out.values())
+        return list(chain.from_iterable(ast_by_top_level_mod.values()))
 
     def load_module(self, module_name: str, install: bool = False, allow_v1: bool = False) -> "Module":
         """
