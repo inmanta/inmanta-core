@@ -17,7 +17,7 @@
 """
 
 import hashlib
-import importlib
+import importlib.util
 import json
 import logging
 import os
@@ -30,6 +30,7 @@ import venv
 from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
 from itertools import chain
+from pkg_resources import Requirement
 from subprocess import CalledProcessError
 from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple
 
@@ -43,8 +44,6 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from pkg_resources import Requirement  # noqa: F401
-
     from packaging.requirements import InvalidRequirement
 else:
     from pkg_resources.extern.packaging.requirements import InvalidRequirement
@@ -81,7 +80,7 @@ class ProcessEnv:
             else ["--no-index"]
         )
         try:
-            subprocess.run(
+            process: subprocess.CompletedProcess = subprocess.run(
                 [
                     cls.python_path,
                     "-m",
@@ -93,6 +92,7 @@ class ProcessEnv:
                 ],
                 stderr=subprocess.PIPE,
             )
+            process.check_returncode()
         except CalledProcessError as e:
             stderr: str = e.stderr.decode()
             not_found: List[str] = [
@@ -181,7 +181,11 @@ class ProcessEnv:
 
     @classmethod
     def get_module_file(cls, module: str) -> Optional[str]:
-        spec: Optional[ModuleSpec] = importlib.util.find_spec(module)
+        spec: Optional[ModuleSpec]
+        try:
+            spec = importlib.util.find_spec(module)
+        except ModuleNotFoundError:
+            spec = None
         return spec.origin if spec is not None else None
 
 

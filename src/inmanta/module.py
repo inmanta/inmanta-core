@@ -249,7 +249,7 @@ class ModuleSource(Generic[TModule]):
         if path is not None:
             return self.from_path(project, path)
         elif install:
-            return self.module_source.install(project, module_spec)
+            return self.install(project, module_spec)
         else:
             return None
 
@@ -292,13 +292,18 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             env.ProcessEnv.install_from_indexes(requirements, self.urls)
         except env.PackageNotFound:
             return None
-        return self.from_path(project, self.path_for(module_name))
+        path: Optional[str] = self.path_for(module_name)
+        if path is None:
+            raise Exception(f"Inconsistent state: installed module {module_name} but it does not exist in the Python environment.")
+        return self.from_path(project, path)
 
     def path_for(self, name: str) -> Optional[str]:
         if name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
         package: str = f"inmanta_plugins.{name}"
         init: Optional[str] = env.ProcessEnv.get_module_file(package)
+        if init is None:
+            return None
         try:
             return ModuleLike.get_first_directory_containing_file(os.path.dirname(init), ModuleV2.MODULE_FILE)
         except FileNotFoundError:
@@ -325,7 +330,7 @@ class ModuleRepo(ModuleSource["ModuleV1"]):
         if path is not None:
             return self.from_path(project, path)
         else:
-            return ModuleV1.install(self, module_name, module_spec, install_mode=project.install_mode)
+            return ModuleV1.install(project, module_name, module_spec, install_mode=project.install_mode)
 
     @classmethod
     def from_path(cls, project: Optional["Project"], path: str) -> "ModuleV1":
@@ -696,13 +701,6 @@ class ModuleRepoInfo(BaseModel):
     url: str
     type: ModuleRepoType = ModuleRepoType.git
 
-    @validator("type")
-    @classmethod
-    def validate_type(cls, v: object) -> object:
-        if v == ModuleRepoType.package:
-            raise ValueError("Repository type `package` is not yet supported.")
-        return v
-
 
 @stable_api
 class ProjectMetadata(Metadata, MetadataFieldRequires):
@@ -936,11 +934,12 @@ class Project(ModuleLike[ProjectMetadata]):
 
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
         self.module_source: ModuleV2Source = ModuleV2Source(
-            [repo.url for repo in self.repolist if repo.type == ModuleRepoType.package]
+            [repo.url for repo in self._metadata.repo if repo.type == ModuleRepoType.package]
         )
         self.resolver_v1 = CompositeModuleRepo([make_repo(x) for x in self.modulepath])
-        self.repolist = [x.url for x in self._metadata.repo]
-        self.external_resolver_v1 = CompositeModuleRepo([make_repo(x, root=path) for x in self.repolist])
+        self.external_resolver_v1 = CompositeModuleRepo(
+            [make_repo(repo.url, root=path) for repo in self._metadata.repo if repo.type == ModuleRepoType.git]
+        )
 
         if self._metadata.downloadpath is not None:
             self._metadata.downloadpath = os.path.abspath(os.path.join(path, self._metadata.downloadpath))
@@ -1120,7 +1119,7 @@ class Project(ModuleLike[ProjectMetadata]):
         while len(v2_imports) > 0 or len(v1_imports) > 0:
             imp: DefineImport
             v1_mode: bool
-            imp, v1_mode = (v2_imports.pop(), False) if len(v2_imports > 0) else (v1_imports.pop(), True)
+            imp, v1_mode = (v2_imports.pop(), False) if len(v2_imports) > 0 else (v1_imports.pop(), True)
             ns = imp.name
 
             parts = ns.split("::")
@@ -1177,7 +1176,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
         if module is None:
             raise CompilerException(
-                f"Could not find module {module_name}. Please make sure to install it by running `inmanta project install."
+                f"Could not find module {module_name}. Please make sure to install it by running `inmanta project install`."
             )
 
         self.modules[module_name] = module
