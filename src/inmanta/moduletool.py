@@ -725,6 +725,7 @@ class V2ModuleBuilder:
             # Copy module to temporary directory to perform the build
             build_path = os.path.join(tmpdir, "module")
             shutil.copytree(self._module.path, build_path)
+            self._ensure_plugins(build_path)
             self._move_data_files_into_namespace_package_dir(build_path)
             path_to_wheel = self._build_v2_module(build_path, output_directory)
             self._verify_wheel(build_path, path_to_wheel)
@@ -751,6 +752,14 @@ class V2ModuleBuilder:
                 f"The following files are present in the {rel_path_namespace_package} directory on disk, but were not "
                 f"packaged: {list(unpackaged_files)}. Update you setup.cfg file if they need to be packaged."
             )
+
+    def _ensure_plugins(self, build_path: str) -> None:
+        plugins_folder = os.path.join(build_path, "inmanta_plugins", self._module.name)
+        if not os.path.exists(plugins_folder):
+            os.makedirs(plugins_folder)
+        init_file = os.path.join(plugins_folder, "__init__.py")
+        if not os.path.exists(init_file):
+            open(init_file, "w").close()
 
     def _get_files_in_directory(self, directory: str) -> Set[str]:
         """
@@ -839,10 +848,15 @@ class ModuleConverter:
         req = os.path.join(output_directory, "requirements.txt")
         if os.path.exists(req):
             os.remove(req)
-        # move plugins
+        # move plugins or create
         old_plugins = os.path.join(output_directory, "plugins")
         new_plugins = os.path.join(output_directory, "inmanta_plugins", self._module.name)
-        shutil.move(old_plugins, new_plugins)
+        if os.path.exists(old_plugins):
+            shutil.move(old_plugins, new_plugins)
+        else:
+            os.makedirs(new_plugins)
+            with open(os.path.join(new_plugins, "__init__.py"), "w"):
+                pass
         # write out pyproject.toml
 
         with open(os.path.join(output_directory, "pyproject.toml"), "w") as fh:
