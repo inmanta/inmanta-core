@@ -49,6 +49,7 @@ from inmanta.module import (
     InvalidMetadata,
     InvalidModuleException,
     Module,
+    ModuleGeneration,
     ModuleMetadataFileNotFound,
     ModuleV1,
     ModuleV2,
@@ -369,7 +370,7 @@ class ModuleTool(ModuleLikeTool):
         """
         module = self.get_module(module)
         if not isinstance(module, ModuleV1):
-            raise ModuleVersionException(f"Expected a v1 module, but found v{module.GENERATION.value} module")
+            raise ModuleVersionException(f"Expected a v1 module, but found v{module.ModuleGeneration.value} module")
         ModuleConverter(module).convert_in_place()
 
     def build(self, path: Optional[str] = None, output_dir: Optional[str] = None) -> str:
@@ -588,8 +589,13 @@ version: 0.0.1dev0"""
         def install(install_path: str) -> None:
             env.ProcessEnv.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
 
-        module_path: str = ModuleV2.get_module_dir(os.path.abspath(path) if path is not None else os.getcwd())
+        module_path: str = os.path.abspath(path) if path is not None else os.getcwd()
+        module: Module = self.construct_module(None, module_path)
         if editable:
+            if module.GENERATION == ModuleGeneration.V1:
+                raise ModuleVersionException(
+                    "Can not install v1 modules in-place. You can upgrade your module with `inmanta module v1tov2`."
+                )
             install(module_path)
         else:
             with tempfile.TemporaryDirectory() as build_dir:
