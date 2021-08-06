@@ -579,7 +579,7 @@ class ModuleV2Metadata(ModuleMetadata):
             out.add_section("metadata")
 
         for k, v in self.dict().items():
-            if v:
+            if v is not None:
                 out.set("metadata", k, str(v))
 
         return out
