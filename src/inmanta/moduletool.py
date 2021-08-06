@@ -594,7 +594,7 @@ version: 0.0.1dev0"""
         if editable:
             if module.GENERATION == ModuleGeneration.V1:
                 raise ModuleVersionException(
-                    "Can not install v1 modules in-place. You can upgrade your module with `inmanta module v1tov2`."
+                    "Can not install v1 modules in editable mode. You can upgrade your module with `inmanta module v1tov2`."
                 )
             install(module_path)
         else:
