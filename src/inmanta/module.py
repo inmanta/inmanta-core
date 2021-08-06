@@ -296,7 +296,7 @@ class ModuleV2Source(ModuleSource[ModuleV2]):
     def path_for(self, name: str) -> Optional[str]:
         if name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
-        package: str = f"inmanta-plugins.{name}"
+        package: str = f"inmanta_plugins.{name}"
         init: Optional[str] = env.ProcessEnv.get_module_file(namespace_package)
         try:
             return ModuleLike.get_first_directory_containing_file(os.path.dirname(init), ModuleV2.MODULE_FILE)

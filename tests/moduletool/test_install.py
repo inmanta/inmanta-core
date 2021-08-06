@@ -17,6 +17,8 @@
 """
 import argparse
 import os
+import re
+import shutil
 import subprocess
 import venv
 from typing import Dict, List
@@ -25,8 +27,9 @@ from unittest.mock import patch
 import py
 import pydantic
 import pytest
+import yaml
 
-from inmanta import module
+from inmanta import env, module
 from inmanta.ast import CompilerException, ModuleNotFoundException
 from inmanta.config import Config
 from inmanta.moduletool import ModuleTool, ProjectTool
@@ -224,3 +227,50 @@ def test_module_install(tmpdir: py.path.local, modules_dir: str, editable: bool,
     assert is_installed(python_module_name, True) == editable
     if not editable:
         assert is_installed(python_module_name, False)
+
+
+# TODO: test same setup trying to compile without install
+def test_project_install(tmpdir: py.path.local, projects_dir: str, modules_dir: str) -> None:
+    venv_dir: str = os.path.join(tmpdir, ".env")
+    venv.create(venv_dir, with_pip=True)
+    pip: str = os.path.join(venv_dir, "bin", "pip")
+    # default pip version is not compatible with module install flow
+    subprocess.check_output([pip, "install", "-U", "pip"])
+
+    # set up module
+    module_name: str = "minimalv2module"
+    fq_mod_name: str = f"inmanta_plugins.{module_name}"
+    module_path: str = os.path.join(modules_dir, module_name)
+    pip_index_path: str = os.path.join(tmpdir, dist)
+    ModuleTool().build(path=module_path, output_dir=pip_index_path)
+
+    # set up project
+    project_path: str = os.path.join(tmpdir, "project")
+    shutil.copytree(os.path.join(projects_dir, "simple_project"), project_path)
+    project_config_path: str = os.path.join(project_path, module.Project.PROJECT_FILE)
+    metadata: module.ProjectMetadata
+    with open(os.path.join(project_path, module.Project.PROJECT_FILE), "r+") as fh:
+        metadata = module.ProjectMetadata.parse(project_config_path.read())
+        metadata.repo = [
+            module.ModuleRepoInfo(type=module.ModuleRepoType.package, url=pip_index_path),
+            module.ModuleRepoInfo(type=module.ModuleRepoType.git, url="https://github.com/inmanta/"),
+        ]
+        fh.seek(0)
+        fh.write(yaml.dump(metadata.dict()))
+        fh.truncate()
+    with open(os.path.join(project_path, "main.cf"), "w") as fh:
+        fh.write(f"import {module_name}")
+
+    os.chdir(project_path)
+    with patch("inmanta.env.ProcessEnv.env_path", new=os.path.join(venv_dir, "bin", "python")):
+        assert env.ProcessEnv.get_module_file(fq_mod_name) is None
+        ProjectTool().execute("install")
+        env_module_file: Optional[str] = env.ProcessEnv.get_module_file(fq_mod_name)
+        assert env_module_file is not None
+        assert re.fullmatch(
+            os.path.join(venv_dir, "lib", r"python3\.\d+", "site-packages", *fq_mod_name.split("."), r"__init__\.py"),
+            env_module_file,
+        )
+        v1_mod_dir: str = os.path.join(project_path, metadata.downloadpath)
+        assert os.path.exists(v1_mod_dir)
+        assert os.path.listdir(v1_mod_dir) == ["std"]

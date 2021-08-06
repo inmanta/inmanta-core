@@ -895,6 +895,11 @@ def modules_dir():
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules")
 
 
+@pytest.fixture(scope="session")
+def projects_dir():
+    yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+
+
 class CLI(object):
     async def run(self, *args, **kwargs):
         # set column width very wide so lines are not wrapped
