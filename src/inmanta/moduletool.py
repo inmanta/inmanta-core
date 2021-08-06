@@ -370,7 +370,7 @@ class ModuleTool(ModuleLikeTool):
         """
         module = self.get_module(module)
         if not isinstance(module, ModuleV1):
-            raise ModuleVersionException(f"Expected a v1 module, but found v{module.ModuleGeneration.value} module")
+            raise ModuleVersionException(f"Expected a v1 module, but found v{module.GENERATION.value} module")
         ModuleConverter(module).convert_in_place()
 
     def build(self, path: Optional[str] = None, output_dir: Optional[str] = None) -> str:
