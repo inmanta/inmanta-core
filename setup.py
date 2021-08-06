@@ -30,7 +30,7 @@ requires = [
 ]
 
 # Package a dummy extensions so that the namespace package for extensions is not empty
-namespace_packages = ["inmanta_ext.core"] + find_namespace_packages(include=['inmanta_plugins.*'])
+namespace_packages = ["inmanta_ext.core"]
 
 # read the contents of your README file
 this_directory = path.abspath(path.dirname(__file__))
