@@ -537,7 +537,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
     def to_v2(self) -> "ModuleV2Metadata":
         values = self.dict()
         del values["compiler_version"]
-        install_requires = values["requires"]
+        install_requires = [f"{ModuleV2.PKG_NAME_PREFIX}{r}" for r in values["requires"]]
         del values["requires"]
         values["name"] = ModuleV2.PKG_NAME_PREFIX + values["name"]
         return ModuleV2Metadata(**values, install_requires=install_requires)
@@ -1456,7 +1456,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
     def load_plugins(self) -> None:
         """
-        Load all python files from a configuration module
+        Load all plug-ins from a configuration module
         """
         for _, fq_mod_name in self.get_plugin_files():
             try:
@@ -1552,10 +1552,8 @@ class ModuleV1(Module[ModuleV1Metadata]):
         path = project.resolver.path_for(module_name)
         if path is None:
             return None
-        try:
+        else:
             return cls(project, path)
-        except InvalidModuleException:
-            return None
 
     def get_metadata_file_path(self) -> str:
         return os.path.join(self._path, self.MODULE_FILE)

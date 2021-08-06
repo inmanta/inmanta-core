@@ -30,12 +30,14 @@ from inmanta.moduletool import DummyProject, ModuleConverter
 
 
 @pytest.mark.parametrize("editable_install", [True, False])
-def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippetcompiler_no_module_dir, capsys) -> None:
+def test_v2_module_loading(
+    editable_install: bool, tmpdir: py.path.local, snippetcompiler_no_module_dir, capsys, modules_v2_dir: str
+) -> None:
     # Work around caching problem in venv
     feature_compiler_cache.set("False")
 
     module_name = "elaboratev2module"
-    module_dir = os.path.normpath(os.path.join(__file__, os.pardir, "data", "modules", module_name))
+    module_dir = os.path.join(modules_v2_dir, module_name)
     module_copy_dir = os.path.join(tmpdir, "module")
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)
@@ -54,7 +56,9 @@ def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippe
     assert "Hello world" in capsys.readouterr().out
 
 
-def test_v1_and_v2_module_installed_simultaneously(tmpdir: py.path.local, snippetcompiler, capsys, caplog) -> None:
+def test_v1_and_v2_module_installed_simultaneously(
+    tmpdir: py.path.local, snippetcompiler, capsys, caplog, modules_dir: str
+) -> None:
     """
     When a module is installed both in V1 and V2 format, ensure that:
        * A warning is logged
@@ -81,7 +85,7 @@ def test_v1_and_v2_module_installed_simultaneously(tmpdir: py.path.local, snippe
     assert isinstance(Project.get().modules[module_name], ModuleV1)
 
     # Convert V1 module to V2 module and install it as well
-    module_dir = os.path.normpath(os.path.join(__file__, os.pardir, "data", "modules", module_name))
+    module_dir = os.path.join(modules_dir, module_name)
     v1_module_dir = os.path.join(tmpdir, "v1_module")
     shutil.copytree(module_dir, v1_module_dir)
     assert os.path.isdir(v1_module_dir)
@@ -111,8 +115,8 @@ def test_v1_and_v2_module_installed_simultaneously(tmpdir: py.path.local, snippe
     assert isinstance(Project.get().modules[module_name], ModuleV2)
 
 
-def test_v1_module_depends_on_v1_and_v2_module(tmpdir: py.path.local, snippetcompiler, capsys) -> None:
-    module_dir = os.path.normpath(os.path.join(__file__, os.pardir, "data", "modules", "elaboratev2module"))
+def test_v1_module_depends_on_v1_and_v2_module(tmpdir: py.path.local, snippetcompiler, capsys, modules_v2_dir: str) -> None:
+    module_dir = os.path.join(modules_v2_dir, "elaboratev2module")
     module_copy_dir = os.path.join(tmpdir, "module")
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)

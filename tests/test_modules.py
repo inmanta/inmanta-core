@@ -66,3 +66,22 @@ class TestModuleName(unittest.TestCase):
     def tearDown(self):
         self.log.removeHandler(self.handler)
         self.handler.close()
+
+
+def test_to_v2():
+    """
+    Test whether the `to_v2()` method of `ModuleV1Metadata` works correctly.
+    """
+    v1_metadata = module.ModuleV1Metadata(
+        name="test",
+        description="A description",
+        version="1.2.3",
+        license="Apache 2.0",
+        compiler_version="4.5.6",
+        requires=["mod1", "mod2"],
+    )
+    v2_metadata = v1_metadata.to_v2()
+    for attr_name in ["description", "version", "license"]:
+        assert v1_metadata.__getattribute__(attr_name) == v2_metadata.__getattribute__(attr_name)
+    assert f"{module.ModuleV2.PKG_NAME_PREFIX}{v1_metadata.name}" == v2_metadata.name
+    assert [f"{module.ModuleV2.PKG_NAME_PREFIX}{req}" for req in v1_metadata.requires] == v2_metadata.install_requires

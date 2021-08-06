@@ -466,7 +466,7 @@ class PluginModuleFinder(Finder):
         if self._should_handle_import(fullname):
             LOGGER.debug("Loading module: %s", fullname)
             path_to_module = self._get_path_to_module(fullname)
-            if path_to_module:
+            if path_to_module is not None:
                 return PluginModuleLoader(path_to_module, fullname)
             else:
                 # The given module is not present in self.modulepath.
