@@ -17,6 +17,7 @@
 """
 
 import hashlib
+import importlib
 import json
 import logging
 import os
@@ -30,7 +31,6 @@ from dataclasses import dataclass
 from itertools import chain
 from subprocess import CalledProcessError
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
-import importlib
 
 import pkg_resources
 
