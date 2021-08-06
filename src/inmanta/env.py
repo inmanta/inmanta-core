@@ -30,11 +30,12 @@ import venv
 from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
 from itertools import chain
-from packaging import version
 from subprocess import CalledProcessError
 from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple
 
 import pkg_resources
+
+from packaging import version
 
 try:
     from typing import TYPE_CHECKING
@@ -42,8 +43,9 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from packaging.requirements import InvalidRequirement
     from pkg_resources import Requirement  # noqa: F401
+
+    from packaging.requirements import InvalidRequirement
 else:
     from pkg_resources.extern.packaging.requirements import InvalidRequirement
 
@@ -72,7 +74,8 @@ class ProcessEnv:
         cls, requirements: List[Requirement], index_urls: Optional[List[str]] = None, upgrade: bool = False
     ) -> None:
         index_args: List[str] = (
-            [] if index_urls is None
+            []
+            if index_urls is None
             else ["--index-url", index_urls[0], *chain.from_iterable(["--extra-index-url", url] for url in index_urls[1:])]
             if index_urls
             else ["--no-index"]
@@ -93,13 +96,12 @@ class ProcessEnv:
         except CalledProcessError as e:
             stderr: str = e.stderr.decode()
             not_found: List[str] = [
-                requirement.project_name for requirement in requirements
+                requirement.project_name
+                for requirement in requirements
                 if f"No matching distribution found for {requirement.project_name}" in stderr
             ]
             if not_found:
-                raise PackageNotFound(
-                    "Packages %s were not found in the given indexes." % ", ".join(not_found)
-                )
+                raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
             raise e
 
     @classmethod
@@ -150,10 +152,7 @@ class ProcessEnv:
                 return []
             elif process.returncode == 1:
                 stdout: str = process.stdout.decode()
-                return [
-                    line for line in stdout.splitlines()
-                    if in_scope.fullmatch(line.split()[0])
-                ]
+                return [line for line in stdout.splitlines() if in_scope.fullmatch(line.split()[0])]
             else:
                 process.check_returncode()
             return []

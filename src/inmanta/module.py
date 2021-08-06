@@ -21,7 +21,6 @@ import enum
 import glob
 import importlib
 import logging
-import more_itertools
 import os
 import re
 import subprocess
@@ -36,7 +35,6 @@ from itertools import chain
 from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
-from types import ModuleType
 from typing import (
     Any,
     Dict,
@@ -55,6 +53,7 @@ from typing import (
     Union,
 )
 
+import more_itertools
 import yaml
 from pkg_resources import Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, validator
@@ -235,7 +234,7 @@ gitprovider = CLIGitProvider()
 
 class ModuleSource(Generic[TModule]):
     def get_module(
-        self, project: Optional[Project], module_spec: List[Requirement], install: bool = False
+        self, project: Optional["Project"], module_spec: List[Requirement], install: bool = False
     ) -> Optional[TModule]:
         """
         Returns the appropriate module instance for a given module spec.
@@ -255,7 +254,7 @@ class ModuleSource(Generic[TModule]):
             return None
 
     @abstractmethod
-    def install(self, project: Optional[Project], module_spec: List[Requirement]) -> Optional[TModule]:
+    def install(self, project: Optional["Project"], module_spec: List[Requirement]) -> Optional[TModule]:
         """
         Attempt to install a module given a module spec.
 
@@ -269,7 +268,7 @@ class ModuleSource(Generic[TModule]):
 
     @classmethod
     @abstractmethod
-    def from_path(cls, project: Optional[Project], path: str) -> TModule:
+    def from_path(cls, project: Optional["Project"], path: str) -> TModule:
         raise NotImplementedError("Abstract method")
 
     def _get_module_name(self, module_spec: List[Requirement]) -> str:
@@ -282,11 +281,11 @@ class ModuleSource(Generic[TModule]):
         return module_name
 
 
-class ModuleV2Source(ModuleSource[ModuleV2]):
+class ModuleV2Source(ModuleSource["ModuleV2"]):
     def __init__(self, urls: List[str]) -> None:
         self.urls: List[str] = urls
 
-    def install(self, project: Optional[Project], module_spec: List[Requirement]) -> Optional[ModuleV2]:
+    def install(self, project: Optional["Project"], module_spec: List[Requirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [Requirement.parse(f"{ModuleV2.PKG_NAME_PREFIX}{str(req)}") for req in module_spec]
         try:
@@ -306,7 +305,7 @@ class ModuleV2Source(ModuleSource[ModuleV2]):
             return None
 
     @classmethod
-    def from_path(cls, project: Optional[Project], path: str) -> ModuleV2:
+    def from_path(cls, project: Optional["Project"], path: str) -> "ModuleV2":
         return ModuleV2(project, path)
 
     def _get_module_name(self, module_spec: List[Requirement]) -> str:
@@ -316,11 +315,11 @@ class ModuleV2Source(ModuleSource[ModuleV2]):
         return module_name
 
 
-class ModuleRepo(ModuleSource[ModuleV1]):
+class ModuleRepo(ModuleSource["ModuleV1"]):
     def clone(self, name: str, dest: str) -> bool:
         raise NotImplementedError("Abstract method")
 
-    def install(self, project: Optional[Project], module_spec: List[Requirement]) -> Optional[ModuleV1]:
+    def install(self, project: Optional["Project"], module_spec: List[Requirement]) -> Optional["ModuleV1"]:
         module_name: str = self._get_module_name(module_spec)
         path: Optional[str] = self.path_for(module_name)
         if path is not None:
@@ -329,7 +328,7 @@ class ModuleRepo(ModuleSource[ModuleV1]):
             return ModuleV1.install(self, module_name, module_spec, install_mode=project.install_mode)
 
     @classmethod
-    def from_path(cls, project: Optional[Project], path: str) -> ModuleV1:
+    def from_path(cls, project: Optional["Project"], path: str) -> "ModuleV1":
         return ModuleV1(project, path)
 
 
@@ -1166,10 +1165,7 @@ class Project(ModuleLike[ProjectMetadata]):
         :param allow_v1: Allow this module to be loaded as v1.
         """
         reqs: Mapping[str, List[Requirement]] = self.collect_requirements()
-        module_reqs: List[Requirement] = (
-            list(reqs[module_name]) if module_name in reqs
-            else [Requirement.parse(module_name)]
-        )
+        module_reqs: List[Requirement] = list(reqs[module_name]) if module_name in reqs else [Requirement.parse(module_name)]
 
         module: Optional[Module]
         try:
@@ -1275,12 +1271,10 @@ class Project(ModuleLike[ProjectMetadata]):
 
         requirements: Dict[str, List[Requirement]] = self.collect_requirements()
         v2_requirements: Dict[str, List[Requirement]] = {
-            name: spec for name, spec in requirements
-            if self.module_source.path_for(name) is not None
+            name: spec for name, spec in requirements if self.module_source.path_for(name) is not None
         }
         v1_requirements: Dict[str, List[Requirement]] = {
-            name: spec for name, spec in requirements
-            if name not in v2_requirements
+            name: spec for name, spec in requirements if name not in v2_requirements
         }
 
         for name, spec in v1_requirements:
@@ -1305,9 +1299,9 @@ class Project(ModuleLike[ProjectMetadata]):
         Collect the list of all python requirements off all V1 modules in this project
         """
         req_files = [
-            x.strip() for x in [
-                mod.get_python_requirements() for mod in self.modules.values() if isinstance(mod, ModuleV1)
-            ] if x is not None
+            x.strip()
+            for x in [mod.get_python_requirements() for mod in self.modules.values() if isinstance(mod, ModuleV1)]
+            if x is not None
         ]
         req_lines = [x for x in "\n".join(req_files).split("\n") if len(x.strip()) > 0]
         req_lines = self._remove_comments(req_lines)
@@ -1681,7 +1675,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
         cls,
         project: Project,
         modulename: str,
-        requirements: "Iterable[Requirement]",
+        requirements: Iterable[Requirement],
         install: bool = True,
         install_mode: InstallMode = InstallMode.release,
     ) -> "ModuleV1":
@@ -1712,7 +1706,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
         cls,
         project: Project,
         modulename: str,
-        requirements: "Iterable[Requirement]",
+        requirements: Iterable[Requirement],
         path: str = None,
         fetch: bool = True,
         install_mode: InstallMode = InstallMode.release,
@@ -1750,7 +1744,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
 
     @classmethod
     def get_suitable_version_for(
-        cls, modulename: str, requirements: "Iterable[Requirement]", path: str, release_only: bool = True
+        cls, modulename: str, requirements: Iterable[Requirement], path: str, release_only: bool = True
     ) -> "Optional[Version]":
         versions = gitprovider.get_all_tags(path)
 

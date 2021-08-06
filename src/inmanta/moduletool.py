@@ -29,7 +29,7 @@ import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import ConfigParser
-from typing import TYPE_CHECKING, Iterable, List, Mapping, Optional, Set
+from typing import TYPE_CHECKING, Dict, List, Optional, Set
 
 import texttable
 import yaml
@@ -49,7 +49,6 @@ from inmanta.module import (
     InvalidMetadata,
     InvalidModuleException,
     Module,
-    ModuleGeneration,
     ModuleMetadataFileNotFound,
     ModuleV1,
     ModuleV2,
@@ -538,10 +537,7 @@ version: 0.0.1dev0"""
             v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
 
             python_specs: List[Requirement] = [
-                module_spec
-                for module, module_specs in specs
-                for module_spec in module_specs
-                if module in v2_modules
+                module_spec for module, module_specs in specs for module_spec in module_specs if module in v2_modules
             ]
             env.install_from_indexes(python_specs, my_project.module_source.urls, upgrade=True)
 

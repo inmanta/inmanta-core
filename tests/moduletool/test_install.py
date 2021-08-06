@@ -21,7 +21,7 @@ import re
 import shutil
 import subprocess
 import venv
-from typing import Dict, List
+from typing import Dict, List, Optional
 from unittest.mock import patch
 
 import py
@@ -241,7 +241,7 @@ def test_project_install(tmpdir: py.path.local, projects_dir: str, modules_dir: 
     module_name: str = "minimalv2module"
     fq_mod_name: str = f"inmanta_plugins.{module_name}"
     module_path: str = os.path.join(modules_dir, module_name)
-    pip_index_path: str = os.path.join(tmpdir, dist)
+    pip_index_path: str = os.path.join(tmpdir, "dist")
     ModuleTool().build(path=module_path, output_dir=pip_index_path)
 
     # set up project
