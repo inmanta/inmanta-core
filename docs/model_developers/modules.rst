@@ -76,6 +76,13 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
       cookiecutter~=1.7.0
       cryptography>1.0,<3.5
 
+    zip_safe=False
+    include_package_data=True
+    packages=find_namespace:
+
+    [options.package_data]
+    *=files/*, model/*, templates/*, setup.cfg
+
 
 * The ``metadata`` section defines the following fields:
 
@@ -86,6 +93,8 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
 * Dependencies to other Inmanta modules and dependencies to external Python libraries can be defined using the
   ``install_requires`` config option in the ``options`` section of the ``setup.cfg`` file. These version specs use `PEP440
   syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
+
+* All other config is required for ``setuptools`` to correctly build the package. It is documented `here <https://setuptools.readthedocs.io/en/latest/userguide/declarative_config.html>`_.
 
 A full list of all available options can be found in :ref:`here<modules_v2_setup_cfg>`.
 
@@ -178,6 +187,15 @@ To specify specific version are required, constraints can be added to the requir
 ``source`` indicates the authoritative repository where the module is maintained.
 
 A full list of all available options can be found in :ref:`here<module_yml>`.
+
+Convert a module from V1 to V2 format
+#####################################
+
+To convert a V1 module to the V2 format, execute the following command in the module folder
+
+.. code-block:: bash
+
+   inmanta module v1tov2
 
 Inmanta module template
 #######################

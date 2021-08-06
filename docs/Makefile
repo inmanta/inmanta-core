@@ -10,9 +10,21 @@ BUILDDIR      = build
 endif
 SOURCEDIR	  = .
 #IMAGEDIRS can be a list of directories that contain SVG files and are relative to the SOURCEDIR
-IMAGEDIRS     = _static
+IMAGEDIRS     = _static model_developers/images
 
 # SVG to PDF conversion
+# support inkscape versions <1.0 and >1.0
+# https://wiki.inkscape.org/wiki/Using_the_Command_Line#Deprecations_and_Replacements
+ifeq ($(shell inkscape --version | cut -d " " -f 2 | cut -d "." -f 1),0)
+SVG2PDF_FILE = -f
+SVG2PDF_PDF = -A
+SVG2PDF_PNG = -e
+else
+SVG2PDF_FILE =
+SVG2PDF_PDF = --export-type=pdf -o
+SVG2PDF_PNG = --export-type=png -o
+endif
+
 SVG2PDF       = inkscape
 SVG2PDF_FLAGS =
 
@@ -174,10 +186,10 @@ openapi:
 
 # Pattern rule for converting SVG to PDF
 %.pdf: %.svg
-	$(SVG2PDF) -f $< -A $@
+	$(SVG2PDF) $(SVG2PDF_FILE) $< $(SVG2PDF_PDF) $@
 
 %.png: %.svg
-	$(SVG2PDF) -f $< -e $@
+	$(SVG2PDF) $(SVG2PDF_FILE) $< $(SVG2PDF_PNG) $@
 
 # Build a list of SVG files to convert to PDFs
 PDFs := $(foreach dir, $(IMAGEDIRS), $(patsubst %.svg,%.pdf,$(wildcard $(SOURCEDIR)/$(dir)/*.svg)))

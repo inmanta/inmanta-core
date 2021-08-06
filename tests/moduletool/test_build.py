@@ -25,9 +25,17 @@ import zipfile
 from typing import Optional
 
 import pytest
+from pytest import MonkeyPatch
 
+from inmanta import moduletool
 from inmanta.module import ModuleMetadataFileNotFound
 from inmanta.moduletool import V2ModuleBuilder
+
+
+def run_module_build_soft(module_path: str, set_path_argument: bool, output_dir: Optional[str] = None) -> None:
+    if not set_path_argument:
+        module_path = None
+    moduletool.ModuleTool().build(module_path, output_dir)
 
 
 def run_module_build(module_path: str, set_path_argument: bool, output_dir: Optional[str] = None) -> None:
@@ -55,9 +63,10 @@ def run_module_build(module_path: str, set_path_argument: bool, output_dir: Opti
         ("minimalv2module", False),
         ("elaboratev2module", True),
         ("elaboratev2module", False),
+        ("elaboratev1module", False),
     ],
 )
-def test_build_v2_module(tmpdir, module_name: str, set_path_argument: bool) -> None:
+def test_build_v2_module(tmpdir, module_name: str, set_path_argument: bool, monkeypatch: MonkeyPatch) -> None:
     """
     Build a V2 package and verify that the required files are present in the resulting wheel.
     """
@@ -66,7 +75,9 @@ def test_build_v2_module(tmpdir, module_name: str, set_path_argument: bool) -> N
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)
 
-    run_module_build(module_copy_dir, set_path_argument)
+    if not set_path_argument:
+        monkeypatch.chdir(module_copy_dir)
+    run_module_build_soft(module_copy_dir, set_path_argument)
 
     dist_dir = os.path.join(module_copy_dir, "dist")
     dist_dir_content = os.listdir(dist_dir)
@@ -82,7 +93,7 @@ def test_build_v2_module(tmpdir, module_name: str, set_path_argument: bool) -> N
     assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "__init__.py"))
     assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "_init.cf"))
 
-    if module_name == "elaboratev2module":
+    if "elaborate" in module_name:
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "files", "test.txt"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "templates", "template.txt.j2"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "other.cf"))
@@ -132,7 +143,7 @@ def test_build_v2_module_incomplete_package_data(tmpdir, caplog) -> None:
         config_parser.write(fd)
 
     with caplog.at_level(logging.WARNING):
-        V2ModuleBuilder(module_copy_dir).build()
+        V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
         assert (
             "The following files are present in the inmanta_plugins/minimalv2module directory on disk, but were not "
             "packaged: ['model/_init.cf']. Update you setup.cfg file if they need to be packaged."
@@ -153,4 +164,4 @@ def test_build_invalid_module(tmpdir):
     os.remove(setup_cfg_file)
 
     with pytest.raises(ModuleMetadataFileNotFound, match=f"Metadata file {setup_cfg_file} does not exist"):
-        V2ModuleBuilder(module_copy_dir).build()
+        V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
