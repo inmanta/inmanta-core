@@ -343,7 +343,6 @@ print(json.dumps({"origin": spec.origin}) if spec is not None else "null")
         origin: Optional[str]
 
     def find_spec(module: str) -> Optional[ModuleSpecMock]:
-        print(module)
         return pydantic.parse_raw_as(
             Optional[ModuleSpecMock], subprocess.check_output([str(python_path), find_spec_script, module]).decode()
         )
@@ -357,10 +356,10 @@ print(json.dumps({"origin": spec.origin}) if spec is not None else "null")
             module.Project.get().autostd = False
             ProjectTool().execute("install", [])
             for fq_mod_name in fq_mod_names:
-                print("fq_mod_name", fq_mod_name)
                 env_module_file: Optional[str] = env.ProcessEnv.get_module_file(fq_mod_name)
                 assert env_module_file is not None
                 assert re.fullmatch(
+                    # TODO: this path is OS dependant, see inmanta.env.VirtualEnv._activate_that
                     os.path.join(venv_dir, "lib", r"python3\.\d+", "site-packages", *fq_mod_name.split("."), r"__init__\.py"),
                     env_module_file,
                 )
