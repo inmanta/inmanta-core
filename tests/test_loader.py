@@ -19,7 +19,6 @@ import hashlib
 import inspect
 import os
 import shutil
-import sys
 from typing import List, Optional, Set
 
 import py
@@ -204,10 +203,9 @@ def test():
 
 @fixture(scope="function")
 def module_path(tmpdir):
-    module_finder = loader.PluginModuleFinder([str(tmpdir)])
-    sys.meta_path.insert(0, module_finder)
+    loader.PluginModuleFinder.configure_module_finder(modulepaths=[str(tmpdir)])
     yield str(tmpdir)
-    sys.meta_path.remove(module_finder)
+    loader.PluginModuleFinder.reset()
 
 
 def test_venv_path(tmpdir: py.path.local):
@@ -254,12 +252,12 @@ def test_venv_path(tmpdir: py.path.local):
         assert os.path.exists(os.path.join(p, "bin", "python"))
 
 
-def test_module_loader(module_path, tmpdir, capsys):
+def test_module_loader(module_path: str, capsys, modules_dir: str):
     """
     Verify that the loader.PluginModuleFinder and loader.PluginModuleLoader load modules correctly.
     """
-    origin_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "submodule")
-    mod_dir = tmpdir.join(os.path.basename(origin_mod_dir))
+    origin_mod_dir = os.path.join(modules_dir, "submodule")
+    mod_dir = os.path.join(module_path, os.path.basename(origin_mod_dir))
     shutil.copytree(origin_mod_dir, mod_dir)
 
     capsys.readouterr()  # Clear buffers
@@ -293,6 +291,36 @@ def test_module_loader(module_path, tmpdir, capsys):
 
     with pytest.raises(ImportError):
         from inmanta_plugins.tests import doesnotexist  # NOQA
+
+
+def test_module_loader_ignore_module(module_path: str, capsys, modules_dir: str):
+    module_name = "submodule"
+    origin_mod_dir = os.path.join(modules_dir, module_name)
+    mod_dir = os.path.join(module_path, module_name)
+    shutil.copytree(origin_mod_dir, mod_dir)
+
+    capsys.readouterr()  # Clear buffers
+
+    # Assert error with module ignored by Finder
+    module_finder = loader.PluginModuleFinder.get_module_finder()
+    assert not module_finder.is_ignoring(module_name)
+    module_finder.ignore_module(module_name)
+    assert module_finder.is_ignoring(module_name)
+    with pytest.raises(ImportError):
+        from inmanta_plugins.submodule import test
+    with pytest.raises(UnboundLocalError):
+        test()
+    (stdout, stderr) = capsys.readouterr()
+    assert stdout.count(f"#loading inmanta_plugins.{module_name}#") == 0
+
+    # Assert import succeeds when module is not ignored by Finder.
+    module_finder.unignore_module(module_name)
+    assert not module_finder.is_ignoring(module_name)
+    from inmanta_plugins.submodule import test
+
+    assert test() == "test"
+    (stdout, stderr) = capsys.readouterr()
+    assert stdout.count(f"#loading inmanta_plugins.{module_name}#") == 1
 
 
 def test_plugin_loading_on_project_load(tmpdir, capsys):
