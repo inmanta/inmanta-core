@@ -18,8 +18,10 @@
 import configparser
 import os
 import shutil
+import subprocess
 
 import pytest
+from pkg_resources import Requirement
 from pytest import MonkeyPatch
 
 from inmanta import moduletool
@@ -60,6 +62,26 @@ def test_module_conversion_in_place_minimal(tmpdir):
     module_in = ModuleV1(dummyproject, tmpdir)
     ModuleConverter(module_in).convert_in_place()
     assert_v2_module(module_name, tmpdir, minimal=True)
+
+
+def test_issue_3159_conversion_std_module_add_self_to_dependencies(tmpdir):
+    """
+    Ensure that the conversion of the std module from a V1 to a V2 module,
+    doesn't include the std module as a requirement in the setup.cfg file.
+    """
+    clone_dir = os.path.join(tmpdir, "std")
+    subprocess.check_call(["git", "clone", "https://github.com/inmanta/std.git", clone_dir])
+    dummyproject = DummyProject()
+    module_in = ModuleV1(dummyproject, clone_dir)
+    ModuleConverter(module_in).convert_in_place()
+
+    setup_cfg_file = os.path.join(clone_dir, "setup.cfg")
+    parser = configparser.ConfigParser()
+    parser.read(setup_cfg_file)
+    assert parser.has_option("options", "install_requires")
+    install_requires = [Requirement.parse(r) for r in parser.get("options", "install_requires").split("\n") if r]
+    pkg_names = [r.name for r in install_requires]
+    assert "inmanta-module-std" not in pkg_names
 
 
 def test_module_conversion_in_place_cli(tmpdir, monkeypatch: MonkeyPatch):
