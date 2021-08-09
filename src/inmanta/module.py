@@ -1758,7 +1758,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
     def get_installed_module(cls, project: Project, module_name: str) -> Optional["ModuleV2"]:
         fq_module_path = f"{const.PLUGINS_PACKAGE}.{module_name}"
         module_finder = loader.PluginModuleFinder.get_module_finder()
-        was_module_ignored_by_v1_loader = module_finder.is_ignoring(module_name)
+        was_module_ignored_by_v1_loader = module_finder.is_ignored(module_name)
         was_module_loaded = fq_module_path in sys.modules
         try:
             module_finder.ignore_module(module_name)

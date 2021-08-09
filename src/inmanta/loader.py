@@ -465,7 +465,7 @@ class PluginModuleFinder(Finder):
         if module_name in self._modules_to_ignore:
             self._modules_to_ignore.remove(module_name)
 
-    def is_ignoring(self, module_name: str) -> bool:
+    def is_ignored(self, module_name: str) -> bool:
         return module_name in self._modules_to_ignore
 
     def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[PluginModuleLoader]:

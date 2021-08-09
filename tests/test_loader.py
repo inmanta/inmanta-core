@@ -303,9 +303,9 @@ def test_module_loader_ignore_module(module_path: str, capsys, modules_dir: str)
 
     # Assert error with module ignored by Finder
     module_finder = loader.PluginModuleFinder.get_module_finder()
-    assert not module_finder.is_ignoring(module_name)
+    assert not module_finder.is_ignored(module_name)
     module_finder.ignore_module(module_name)
-    assert module_finder.is_ignoring(module_name)
+    assert module_finder.is_ignored(module_name)
     with pytest.raises(ImportError):
         from inmanta_plugins.submodule import test
     with pytest.raises(UnboundLocalError):
@@ -315,7 +315,7 @@ def test_module_loader_ignore_module(module_path: str, capsys, modules_dir: str)
 
     # Assert import succeeds when module is not ignored by Finder.
     module_finder.unignore_module(module_name)
-    assert not module_finder.is_ignoring(module_name)
+    assert not module_finder.is_ignored(module_name)
     from inmanta_plugins.submodule import test
 
     assert test() == "test"
