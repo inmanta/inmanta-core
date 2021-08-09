@@ -1315,7 +1315,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         (statements, block) = self.get_ast(name)
         imports = [x for x in statements if isinstance(x, DefineImport)]
-        if self._project.autostd:
+        if self.name != "std" and self._project.autostd:
             std_locatable = LocatableString("std", Range("internal", 0, 0, 0, 0), 0, block.namespace)
             imports.insert(0, DefineImport(std_locatable, std_locatable))
         return imports
