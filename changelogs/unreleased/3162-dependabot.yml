@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump build from 0.5.1 to 0.6.0.post1
+destination-branches:
+- master
+sections: {}
