@@ -22,6 +22,7 @@ import datetime
 import json
 import logging
 import os
+import py
 import queue
 import random
 import re
@@ -34,6 +35,7 @@ import tempfile
 import time
 import traceback
 import uuid
+import venv
 from typing import AsyncIterator, Dict, List, Optional, Tuple
 
 import asyncpg
@@ -997,3 +999,17 @@ async def mocked_compiler_service_block(server, monkeypatch):
     monkey_patch_compiler_service(monkeypatch, server, True, runner_queue)
 
     yield runner_queue
+
+
+@pytest.fixture
+def tmpvenv(tmpdir: py.path.local) -> Tuple[py.path.local, py.path.local]:
+    """
+    Creates a venv with the latest pip in `${tmpdir}/.env` where `${tmpdir}` is the directory returned by the `tmpdir` fixture.
+
+    :return: A tuple of the paths to the venv and the Python executable respectively.
+    """
+    venv_dir: py.path.local = tmpdir.join(".venv")
+    python_path: py.path.local = venv_dir.join("bin", "python")
+    venv.create(venv_dir, with_pip=True)
+    subprocess.check_output([str(python_path), "-m", "pip", "install", "-U", "pip"])
+    return venv_dir, python_path

@@ -19,12 +19,12 @@ import argparse
 import json
 import os
 import re
+import setuptools
 import shutil
 import subprocess
-import venv
 from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 from unittest.mock import patch
 
 import py
@@ -205,18 +205,18 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 
 @pytest.mark.parametrize("editable", [True, False])
 @pytest.mark.parametrize("set_path_argument", [True, False])
-def test_module_install(tmpdir: py.path.local, modules_dir: str, editable: bool, set_path_argument: bool) -> None:
+def test_module_install(tmpvenv: py.path.local, modules_dir: str, editable: bool, set_path_argument: bool) -> None:
+    venv_dir, python_path = tmpvenv
+
     module_path: str = os.path.join(modules_dir, "minimalv2module")
     python_module_name: str = "inmanta-module-minimalv2module"
-    venv.create(tmpdir, with_pip=True)
-    pip: str = os.path.join(tmpdir, "bin", "pip")
-    # default pip version is not compatible with module install flow
-    subprocess.check_output([pip, "install", "-U", "pip"])
 
     def is_installed(name: str, only_editable: bool = False) -> bool:
         out: str = subprocess.check_output(
             [
-                pip,
+                python_path,
+                "-m",
+                "pip",
                 "list",
                 "--format",
                 "json",
@@ -227,54 +227,94 @@ def test_module_install(tmpdir: py.path.local, modules_dir: str, editable: bool,
         return any(package["name"] == name for package in packages)
 
     assert not is_installed(python_module_name)
-    run_module_install(os.path.join(tmpdir, "bin", "python"), module_path, editable, set_path_argument)
+    run_module_install(python_path, module_path, editable, set_path_argument)
     assert is_installed(python_module_name, True) == editable
     if not editable:
         assert is_installed(python_module_name, False)
 
 
-# TODO: split this up and test more edge cases!
-# TODO: test same setup trying to compile without install
-def test_project_install(tmpdir: py.path.local, projects_dir: str, modules_dir: str) -> None:
-    venv_dir: str = os.path.join(tmpdir, ".env")
-    python_path: str = os.path.join(venv_dir, "bin", "python")
-    venv.create(venv_dir, with_pip=True)
-    # default pip version is not compatible with module install flow
-    subprocess.check_output([python_path, "-m", "pip", "install", "-U", "pip"])
+def create_local_module_package_index(module_paths: Iterable[str], artifact_path: str) -> Tuple[str, List[str]]:
+    """
+    Creates a local pip index for one or more v2 modules. The modules are built and published to the index.
+    Returns the corresponding fully qualified Python module names.
 
-    # set up module
-    module_name: str = "minimalv2module"
-    fq_mod_name: str = f"inmanta_plugins.{module_name}"
-    module_path: str = os.path.join(modules_dir, module_name)
-    dist_path: str = os.path.join(tmpdir, "dist")
-    ModuleTool().build(path=module_path, output_dir=dist_path)
-    dir2pi(argv=["dir2pi", dist_path])
-    pip_index_path: str = os.path.join(dist_path, "simple")
+    :param module_paths: The paths to the modules to include in the index.
+    :param artifact_path: The path to place any artifacts in.
+    :return: A tuple of the path to the index and a list of the fully qualified Python module names.
+    """
+    fq_mod_names: List[str] = []
+    for path in module_paths:
+        ModuleTool().build(path=path, output_dir=artifact_path)
+        fq_mod_names.extend(f"inmanta_plugins.{pkg}" for pkg in setuptools.find_packages(os.path.join(path, "inmanta_plugins")))
+    dir2pi(argv=["dir2pi", artifact_path])
+    return os.path.join(artifact_path, "simple"), fq_mod_names
 
-    # set up project
-    project_path: str = os.path.join(tmpdir, "project")
-    shutil.copytree(os.path.join(projects_dir, "simple_project"), project_path)
-    project_config_path: str = os.path.join(project_path, module.Project.PROJECT_FILE)
+
+def setup_simple_project(
+    projects_dir: str, path: str, imports: List[str], *, index_urls: Optional[List[str]] = None, github_source: bool = True
+) -> module.ProjectMetadata:
+    """
+    Set up a simple project that imports the given modules and declares the given Python indexes as module sources.
+
+    :param projects_dir: The path to the test projects directory. This is used as a source for the initial project frame.
+    :param path: The path to the directory to create the project in.
+    :param imports: The modules to import in the project.
+    :param index_urls: The urls to any Python indexes to declare as module source.
+    :param github_source: Whether to add the inmanta github as a module source.
+    """
+    shutil.copytree(os.path.join(projects_dir, "simple_project"), path)
+    project_config_path: str = os.path.join(path, module.Project.PROJECT_FILE)
     metadata: module.ProjectMetadata
-    with open(os.path.join(project_path, module.Project.PROJECT_FILE), "r+") as fh:
+    with open(os.path.join(path, module.Project.PROJECT_FILE), "r+") as fh:
         metadata = module.ProjectMetadata.parse(fh.read())
         metadata.repo = [
-            module.ModuleRepoInfo(type=module.ModuleRepoType.package, url=pip_index_path),
-            module.ModuleRepoInfo(type=module.ModuleRepoType.git, url="https://github.com/inmanta/"),
+            *(module.ModuleRepoInfo(type=module.ModuleRepoType.package, url=index) for index in index_urls),
+            *(
+                [module.ModuleRepoInfo(type=module.ModuleRepoType.git, url="https://github.com/inmanta/")]
+                if github_source
+                else []
+            ),
         ]
         fh.seek(0)
         # use BaseModel.json instead of BaseModel.dict to correctly serialize attributes
         fh.write(yaml.dump(json.loads(metadata.json())))
         fh.truncate()
-    with open(os.path.join(project_path, "main.cf"), "w") as fh:
-        fh.write(
-            f"""
-import std
-import {module_name}
-            """
-        )
+    with open(os.path.join(path, "main.cf"), "w") as fh:
+        fh.write("\n".join(f"import {module_name}" for module_name in imports))
+    return metadata
 
-    # set up importlib mock
+
+# TODO: test compilation? Not part of moduletool => compiler tests? Also test trying to compiler without install.
+# TODO: test more edge cases!
+@pytest.mark.parametrize(
+    "install_module_names, module_dependencies",
+    [
+        (["minimalv2module"], []),
+        (["minimalv2module", "elaboratev2module_extension"], ["elaboratev2module"]),
+    ]
+)
+def test_project_install(
+    tmpvenv: Tuple[py.path.local, py.path.local],
+    tmpdir: py.path.local,
+    projects_dir: str,
+    modules_dir: str,
+    install_module_names: List[str],
+    module_dependencies: List[str],
+) -> None:
+    venv_dir, python_path = tmpvenv
+
+    # set up project and modules
+    pip_index_path, fq_mod_names = create_local_module_package_index(
+        (os.path.join(modules_dir, module_name) for module_name in install_module_names), os.path.join(tmpdir, ".index")
+    )
+    fq_mod_names.extend(f"inmanta_plugins.{dep}" for dep in module_dependencies)
+    project_path: str = os.path.join(tmpdir, "project")
+    metadata: module.ProjectMetadata = setup_simple_project(
+        projects_dir, project_path, ["std", *install_module_names], index_urls=[pip_index_path]
+    )
+
+    # TODO: this is a hack, additionally it probably won't work with the module loading since it uses importlib to load
+    # set up importlib mock to have it run against the mocked active environment
     find_spec_script: str = os.path.join(tmpdir, "find_spec.py")
     with open(find_spec_script, "w") as fh:
         fh.write(
@@ -296,7 +336,7 @@ except ModuleNotFoundError:
 print(json.dumps({"origin": spec.origin}) if spec is not None else "null")
             """
         )
-    subprocess.check_output([python_path, "-m", "pip", "install", "importlib"])
+    subprocess.check_output([str(python_path), "-m", "pip", "install", "importlib"])
 
     @dataclass
     class ModuleSpecMock:
@@ -305,22 +345,25 @@ print(json.dumps({"origin": spec.origin}) if spec is not None else "null")
     def find_spec(module: str) -> Optional[ModuleSpecMock]:
         print(module)
         return pydantic.parse_raw_as(
-            Optional[ModuleSpecMock], subprocess.check_output([python_path, find_spec_script, module]).decode()
+            Optional[ModuleSpecMock], subprocess.check_output([str(python_path), find_spec_script, module]).decode()
         )
 
     os.chdir(project_path)
-    with patch("inmanta.env.ProcessEnv.python_path", new=python_path):
+    with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
         with patch("importlib.util.find_spec", new=find_spec):
-            assert env.ProcessEnv.get_module_file(fq_mod_name) is None
+            for fq_mod_name in fq_mod_names:
+                assert env.ProcessEnv.get_module_file(fq_mod_name) is None
             # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
             module.Project.get().autostd = False
             ProjectTool().execute("install", [])
-            env_module_file: Optional[str] = env.ProcessEnv.get_module_file(fq_mod_name)
-            assert env_module_file is not None
-            assert re.fullmatch(
-                os.path.join(venv_dir, "lib", r"python3\.\d+", "site-packages", *fq_mod_name.split("."), r"__init__\.py"),
-                env_module_file,
-            )
+            for fq_mod_name in fq_mod_names:
+                print("fq_mod_name", fq_mod_name)
+                env_module_file: Optional[str] = env.ProcessEnv.get_module_file(fq_mod_name)
+                assert env_module_file is not None
+                assert re.fullmatch(
+                    os.path.join(venv_dir, "lib", r"python3\.\d+", "site-packages", *fq_mod_name.split("."), r"__init__\.py"),
+                    env_module_file,
+                )
             v1_mod_dir: str = os.path.join(project_path, metadata.downloadpath)
             assert os.path.exists(v1_mod_dir)
             assert os.listdir(v1_mod_dir) == ["std"]

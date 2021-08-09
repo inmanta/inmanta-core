@@ -726,8 +726,6 @@ class V2ModuleBuilder:
         if os.path.exists(output_directory):
             if not os.path.isdir(output_directory):
                 raise ModuleBuildFailedError(msg=f"Given output directory is not a directory: {output_directory}")
-            if os.listdir(output_directory):
-                raise ModuleBuildFailedError(msg=f"Non-empty output directory {output_directory}")
         with tempfile.TemporaryDirectory() as tmpdir:
             # Copy module to temporary directory to perform the build
             build_path = os.path.join(tmpdir, "module")
