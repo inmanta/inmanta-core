@@ -306,20 +306,11 @@ python -m pip $@
 
             assert self.virtual_python is not None
             cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-r", path]
-            output: bytes = b""  # Make sure the var is always defined in the except bodies
             try:
-                output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-            except CalledProcessError as e:
-                LOGGER.error("%s: %s", cmd, e.output.decode())
-                LOGGER.error("requirements: %s", requirements_file)
-                raise
+                self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
             except Exception:
-                LOGGER.error("%s: %s", cmd, output.decode())
                 LOGGER.error("requirements: %s", requirements_file)
                 raise
-            else:
-                LOGGER.debug("%s: %s", cmd, output.decode())
-
         finally:
             if os.path.exists(path):
                 os.remove(path)
@@ -381,22 +372,15 @@ python -m pip $@
         :return: A dict with package names as keys and versions as values
         """
         cmd = [python_interpreter, "-m", "pip", "list", "--format", "json"]
-        output = b""
-        try:
-            environment = os.environ.copy()
-            output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, env=environment)
-        except CalledProcessError as e:
-            LOGGER.error("%s: %s", cmd, e.output.decode())
-            raise
-        except Exception:
-            LOGGER.error("%s: %s", cmd, output.decode())
-            raise
-        else:
-            LOGGER.debug("%s: %s", cmd, output.decode())
-
-        return {r["name"]: r["version"] for r in json.loads(output.decode())}
+        output = cls._run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
+        return {r["name"]: r["version"] for r in json.loads(output)}
 
     def install(self, path: str, editable: bool) -> None:
+        """
+        Install a package in the virtual environment.
+
+        This call by-passes the cache. It's only used by the tests via the `snippetcompiler*` fixtures.
+        """
         if not self.__using_venv:
             raise Exception(f"Not using venv {self.__using_venv}. use_virtual_env() should be called first.")
         if editable and not os.path.isdir(path):
@@ -411,9 +395,16 @@ python -m pip $@
         else:
             cmd = cmd_base + [path]
 
+        self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
+        self._notify_change()
+
+    @classmethod
+    def _run_command_and_log_output(
+        cls, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: int = None
+    ) -> str:
         output: bytes = b""  # Make sure the var is always defined in the except bodies
         try:
-            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+            output = subprocess.check_output(cmd, stderr=stderr, env=env)
         except CalledProcessError as e:
             LOGGER.error("%s: %s", cmd, e.output.decode())
             raise
@@ -422,8 +413,7 @@ python -m pip $@
             raise
         else:
             LOGGER.debug("%s: %s", cmd, output.decode())
-
-        self._notify_change()
+            return output.decode()
 
     def _notify_change(self) -> None:
         """

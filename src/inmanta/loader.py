@@ -289,7 +289,8 @@ class PluginModuleLoadException(Exception):
 
 class PluginModuleLoader(FileLoader):
     """
-    A custom module loader which imports the modules in the inmanta_plugins package.
+    A custom module loader which imports the V1 modules in the inmanta_plugins namespace package.
+    V2 modules are loaded using the standard Python loader.
     """
 
     def __init__(self, path_to_module: str, fullname: str) -> None:
@@ -400,12 +401,19 @@ class PluginModuleLoader(FileLoader):
 
 class PluginModuleFinder(Finder):
     """
-    Custom module finder which handles all the imports for the package inmanta_plugins.
+    Custom module finder which handles V1 Inmanta modules. V2 modules are handled using the standard Python finder.
+
+    This finder is stored as the fist entry in `meta_path`, before the default Python finders. As such, this finder should be
+    configured to ignore certain modules when these modules are V2 modules.
     """
 
     MODULE_FINDER: "PluginModuleFinder" = None
 
     def __init__(self, modulepaths: List[str], modules_to_ignore: List[str] = []) -> None:
+        """
+        :param modulepaths: The module paths for the inmanta project.
+        :param modules_to_ignore: The modules that should be ignored by this finder.
+        """
         self._modulepaths = list(modulepaths)
         self._modules_to_ignore = list(modules_to_ignore)
 
@@ -428,7 +436,8 @@ class PluginModuleFinder(Finder):
     @classmethod
     def configure_module_finder(cls, modulepaths: List[str], modules_to_ignore: List[str] = []) -> None:
         """
-        Setup a custom module loader to handle imports in .py files of the modules.
+        Setup a custom module loader to handle imports in .py files of the modules. This finder will be stored
+        as the first finder in sys.meta_path.
 
         :param modulepaths: The directories where the module finder should look for modules.
         :param modules_to_ignore: The module that should not be handled by the module finder.
