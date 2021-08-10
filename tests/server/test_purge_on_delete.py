@@ -22,7 +22,7 @@ from datetime import datetime
 
 import pytest
 
-from inmanta import config, const, data
+from inmanta import const, data
 from inmanta.agent.agent import Agent
 from inmanta.export import unknown_parameters
 from inmanta.util import get_compiler_version
