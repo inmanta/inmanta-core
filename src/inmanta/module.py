@@ -1078,7 +1078,7 @@ class Project(ModuleLike[ProjectMetadata]):
         main_ns = Namespace("__config__", self.root_ns)
         return self._load_file(main_ns, os.path.join(self.project_path, self.main_file))
 
-    def get_modules(self) -> Dict[str, "ModuleV1"]:
+    def get_modules(self) -> Dict[str, "Module"]:
         self.load()
         return self.modules
 
@@ -1275,6 +1275,10 @@ class Project(ModuleLike[ProjectMetadata]):
         v1_requirements: Dict[str, List[Requirement]] = {
             name: spec for name, spec in requirements if name not in v2_requirements
         }
+
+        # TODO: for each ModuleV1 instance in self.modules, check that self.module_source.path_for(m) returns None.
+        #   If it doesn't, this means the module was installed as v2 as an unintended side effect. The v1 code was loaded
+        #   instead, but the plugin loader would load the v2 code, which presents an inconsistency. If this is the case, fail.
 
         for name, spec in v1_requirements:
             if name not in imports:
