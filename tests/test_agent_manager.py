@@ -817,7 +817,6 @@ async def test_agent_actions(server, client, async_finalizer):
     await asyncio.gather(start_agent(env1_id, ["agent1", "agent2"]), start_agent(env2_id, ["agent1"]))
 
     async def assert_agents_paused(expected_statuses: Dict[Tuple[UUID, str], bool]) -> None:
-
         async def _does_expected_status_match_actual_status() -> bool:
             for (env_id, agent_name), paused in expected_statuses.items():
                 # Check in-memory session state
@@ -855,9 +854,7 @@ async def test_agent_actions(server, client, async_finalizer):
                     live_session = agent_manager.tid_endpoint_to_session[(env_id, agent_name)]
                     agent_instance: Optional[data.AgentInstance] = await data.AgentInstance.get_by_id(agent_from_db.primary)
                     if agent_instance is None:
-                        LOGGER.info(
-                            "Agent %s in environment %s is not paused, but no AgentInstance exists", agent_name, env_id
-                        )
+                        LOGGER.info("Agent %s in environment %s is not paused, but no AgentInstance exists", agent_name, env_id)
                         return False
                     if agent_instance.process != live_session.id:
                         LOGGER.info(
