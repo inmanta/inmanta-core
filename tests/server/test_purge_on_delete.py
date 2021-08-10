@@ -140,8 +140,6 @@ async def test_purge_on_delete_requires(client, server, environment, clienthelpe
 
 @pytest.mark.asyncio(timeout=20)
 async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, server, environment, snippetcompiler):
-    config.Config.set("compiler_rest_transport", "request_timeout", "1")
-
     snippetcompiler.setup_for_snippet(
         """
     h = std::Host(name="test", os=std::linux)

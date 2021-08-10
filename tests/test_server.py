@@ -601,8 +601,6 @@ async def test_batched_code_upload(
     server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
 ):
     """Test uploading all code definitions at once"""
-    config.Config.set("compiler_rest_transport", "request_timeout", "1")
-
     snippetcompiler.setup_for_snippet(
         """
     h = std::Host(name="test", os=std::linux)
