@@ -27,6 +27,7 @@ import queue
 import random
 import re
 import shutil
+import site
 import socket
 import string
 import subprocess
@@ -36,7 +37,7 @@ import time
 import traceback
 import uuid
 import venv
-from typing import AsyncIterator, Dict, List, Optional, Tuple
+from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple
 
 import asyncpg
 import pkg_resources
@@ -1002,9 +1003,10 @@ async def mocked_compiler_service_block(server, monkeypatch):
 
 
 @pytest.fixture
-def tmpvenv(tmpdir: py.path.local) -> Tuple[py.path.local, py.path.local]:
+def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
     """
-    Creates a venv with the latest pip in `${tmpdir}/.env` where `${tmpdir}` is the directory returned by the `tmpdir` fixture.
+    Creates and activates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the
+    `tmpdir` fixture. The venv is activated within the currently running process.
 
     :return: A tuple of the paths to the venv and the Python executable respectively.
     """
@@ -1012,4 +1014,46 @@ def tmpvenv(tmpdir: py.path.local) -> Tuple[py.path.local, py.path.local]:
     python_path: py.path.local = venv_dir.join("bin", "python")
     venv.create(venv_dir, with_pip=True)
     subprocess.check_output([str(python_path), "-m", "pip", "install", "-U", "pip"])
-    return venv_dir, python_path
+
+    # adapted from https://github.com/pypa/virtualenv/blob/9569493453a39d63064ed7c20653987ba15c99e5/src/virtualenv/activation/python/activate_this.py
+    # MIT license
+    # Copyright (c) 2007 Ian Bicking and Contributors
+    # Copyright (c) 2009 Ian Bicking, The Open Planning Project
+    # Copyright (c) 2011-2016 The virtualenv developers
+    # Copyright (c) 2020-202x The virtualenv developers
+    binpath: str
+    base: str
+    site_packages: str
+    if sys.platform == "win32":
+        binpath = os.path.abspath(os.path.join(str(venv_dir), "Scripts"))
+        base = os.path.dirname(binpath)
+        site_packages = os.path.join(base, "Lib", "site-packages")
+    else:
+        binpath = os.path.abspath(os.path.join(str(venv_dir), "bin"))
+        base = os.path.dirname(binpath)
+        site_packages = os.path.join(base, "lib", "python%s" % sys.version[:3], "site-packages")
+
+    # prepend bin to PATH (this file is inside the bin directory)
+    old_os_path: Optional[str] = os.environ.get("PATH", None)
+    os.environ["PATH"] = os.pathsep.join([binpath] + (old_os_path.split(os.pathsep) if old_os_path is not None else []))
+    old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
+    os.environ["VIRTUAL_ENV"] = base  # virtual env is right above bin directory
+
+    # add the virtual environments libraries to the host python import mechanism
+    old_sys_path: List[str] = sys.path
+    prev_length = len(sys.path)
+    site.addsitedir(site_packages)
+    sys.path[:] = sys.path[prev_length:] + sys.path[0:prev_length]
+
+    old_sys_prefix: str = sys.prefix
+    sys.real_prefix = sys.prefix
+    sys.prefix = base
+
+    yield (venv_dir, python_path)
+
+    if old_os_path is not None:
+        os.environ["PATH"] = old_os_path
+    if old_os_venv is not None:
+        os.environ["VIRTUAL_ENV"] = old_os_venv
+    sys.path = old_sys_path
+    sys.prefix = sys.real_prefix

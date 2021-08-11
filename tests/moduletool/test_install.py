@@ -22,6 +22,7 @@ import re
 import setuptools
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -33,7 +34,7 @@ import pytest
 import yaml
 from libpip2pi.commands import dir2pi
 
-from inmanta import env, module
+from inmanta import env, loader, module
 from inmanta.ast import CompilerException, ModuleNotFoundException
 from inmanta.config import Config
 from inmanta.moduletool import ModuleTool, ProjectTool
@@ -301,7 +302,9 @@ def test_project_install(
     install_module_names: List[str],
     module_dependencies: List[str],
 ) -> None:
+    # TODO: somehow this test fails when parent venv contains inmanta_plugins in site-packages, even if empty
     venv_dir, python_path = tmpvenv
+    subprocess.check_output([str(python_path), "-m", "pip", "install", "importlib"])
 
     # set up project and modules
     pip_index_path, fq_mod_names = create_local_module_package_index(
@@ -313,56 +316,50 @@ def test_project_install(
         projects_dir, project_path, ["std", *install_module_names], index_urls=[pip_index_path]
     )
 
-    # TODO: this is a hack, additionally it probably won't work with the module loading since it uses importlib to load
-    # set up importlib mock to have it run against the mocked active environment
-    find_spec_script: str = os.path.join(tmpdir, "find_spec.py")
-    with open(find_spec_script, "w") as fh:
-        fh.write(
-            """
-import json
-import sys
-from typing import Optional
-
-import importlib.util
-from importlib.machinery import ModuleSpec
-
-
-spec: Optional[ModuleSpec]
-try:
-    spec = importlib.util.find_spec(sys.argv[1])
-except ModuleNotFoundError:
-    spec = None
-
-print(json.dumps({"origin": spec.origin}) if spec is not None else "null")
-            """
-        )
-    subprocess.check_output([str(python_path), "-m", "pip", "install", "importlib"])
-
-    @dataclass
-    class ModuleSpecMock:
-        origin: Optional[str]
-
-    def find_spec(module: str) -> Optional[ModuleSpecMock]:
-        return pydantic.parse_raw_as(
-            Optional[ModuleSpecMock], subprocess.check_output([str(python_path), find_spec_script, module]).decode()
-        )
-
     os.chdir(project_path)
     with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
-        with patch("importlib.util.find_spec", new=find_spec):
-            for fq_mod_name in fq_mod_names:
-                assert env.ProcessEnv.get_module_file(fq_mod_name) is None
-            # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
-            module.Project.get().autostd = False
-            ProjectTool().execute("install", [])
-            for fq_mod_name in fq_mod_names:
-                env_module_file: Optional[str] = env.ProcessEnv.get_module_file(fq_mod_name)
-                assert env_module_file is not None
-                assert re.fullmatch(
-                    # TODO: this path is OS dependant, see inmanta.env.VirtualEnv._activate_that
-                    os.path.join(venv_dir, "lib", r"python3\.\d+", "site-packages", *fq_mod_name.split("."), r"__init__\.py"),
-                    env_module_file,
-                )
-            v1_mod_dir: str = os.path.join(project_path, metadata.downloadpath)
-            assert os.path.exists(v1_mod_dir)
-            assert os.listdir(v1_mod_dir) == ["std"]
+        for fq_mod_name in fq_mod_names:
+            assert env.ProcessEnv.get_module_file(fq_mod_name) is None
+        # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
+        module.Project.get().autostd = False
+        ProjectTool().execute("install", [])
+        sys.meta_path = [finder for finder in sys.meta_path if not isinstance(finder, loader.PluginModuleFinder)]
+        loader.unload_inmanta_plugins()
+        for fq_mod_name in fq_mod_names:
+            env_module_file: Optional[str] = env.ProcessEnv.get_module_file(fq_mod_name)
+            assert env_module_file is not None
+            assert re.fullmatch(
+                # TODO: this path is OS dependent, see inmanta.env.VirtualEnv._activate_that
+                os.path.join(str(venv_dir), "lib", r"python3\.\d+", "site-packages", *fq_mod_name.split("."), r"__init__\.py"),
+                env_module_file,
+            )
+        v1_mod_dir: str = os.path.join(project_path, metadata.downloadpath)
+        assert os.path.exists(v1_mod_dir)
+        assert os.listdir(v1_mod_dir) == ["std"]
+
+
+#TODO: clean up and move test to test ProcessEnv/tmpvenv behavior?
+def test_env_importlib(tmpvenv: Tuple[py.path.local, py.path.local], tmpdir: py.path.local, projects_dir: str, modules_dir: str) -> None:
+    import pkg_resources
+    from pkg_resources import Requirement
+
+    venv_dir, python_path = tmpvenv
+
+    # set up project and modules
+    pip_index_path, fq_mod_names = create_local_module_package_index(
+        (os.path.join(modules_dir, module_name) for module_name in ["minimalv2module"]), os.path.join(tmpdir, ".index")
+    )
+    fq_mod_names.extend(f"inmanta_plugins.{dep}" for dep in [])
+    project_path: str = os.path.join(tmpdir, "project")
+    metadata: module.ProjectMetadata = setup_simple_project(
+        projects_dir, project_path, ["std", *["minimalv2module"]], index_urls=[pip_index_path]
+    )
+
+    with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
+        assert env.ProcessEnv.get_module_file("tinykernel") is None
+        assert env.ProcessEnv.get_module_file("inmanta_plugins.minimalv2module") is None
+        env.ProcessEnv.install_from_indexes([Requirement.parse("tinykernel")])
+        env.ProcessEnv.install_from_indexes([Requirement.parse("inmanta-module-minimalv2module")], index_urls=[pip_index_path])
+        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+        assert env.ProcessEnv.get_module_file("tinykernel") is not None
+        assert env.ProcessEnv.get_module_file("inmanta_plugins.minimalv2module") is not None
