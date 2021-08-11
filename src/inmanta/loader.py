@@ -353,7 +353,7 @@ class PluginModuleLoader(FileLoader):
         parts: List[str] = list(split(path))
 
         if parts == []:
-            return const.PLUGINS_PACKAGE
+            return f"{const.PLUGINS_PACKAGE}.{module_name}"
 
         def strip_py(module: List[str]) -> List[str]:
             """
