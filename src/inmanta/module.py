@@ -234,12 +234,12 @@ gitprovider = CLIGitProvider()
 
 class ModuleSource(Generic[TModule]):
     def get_module(
-        self, project: Optional["Project"], module_spec: List[Requirement], install: bool = False
+        self, project: "Project", module_spec: List[Requirement], install: bool = False
     ) -> Optional[TModule]:
         """
         Returns the appropriate module instance for a given module spec.
 
-        :param project: The project associated with the module, if any.
+        :param project: The project associated with the module.
         :param module_spec: The module specification including any constraints on its version. Ignored if module
             is already installed. In this case, the project is responsible for verifying constraint compatibility.
         :param install: Whether to attempt to install the module if it hasn't been installed yet.
@@ -254,11 +254,11 @@ class ModuleSource(Generic[TModule]):
             return None
 
     @abstractmethod
-    def install(self, project: Optional["Project"], module_spec: List[Requirement]) -> Optional[TModule]:
+    def install(self, project: "Project", module_spec: List[Requirement]) -> Optional[TModule]:
         """
         Attempt to install a module given a module spec.
 
-        :param project: The project associated with the module, if any.
+        :param project: The project associated with the module.
         :param module_spec: The module specification including any constraints on its version.
         """
         raise NotImplementedError("Abstract method")
@@ -324,7 +324,7 @@ class ModuleRepo(ModuleSource["ModuleV1"]):
     def clone(self, name: str, dest: str) -> bool:
         raise NotImplementedError("Abstract method")
 
-    def install(self, project: Optional["Project"], module_spec: List[Requirement]) -> Optional["ModuleV1"]:
+    def install(self, project: "Project", module_spec: List[Requirement]) -> Optional["ModuleV1"]:
         module_name: str = self._get_module_name(module_spec)
         path: Optional[str] = self.path_for(module_name)
         if path is not None:
@@ -1111,44 +1111,56 @@ class Project(ModuleLike[ProjectMetadata]):
         ast_by_top_level_mod: Dict[str, List[Tuple[str, List[Statement], BasicBlock]]] = defaultdict(list)
 
         # get imports
-        # differentiate between imports by v2 modules and imports by project and v1 because v2 is not allowed to import v1
-        v2_imports: List[DefineImport] = []
-        v1_imports: List[DefineImport] = [x for x in self.get_imports()]
+        imports: Set[DefineImport] = {x for x in self.get_imports()}
 
-        done: Set[str] = set()
-        while len(v2_imports) > 0 or len(v1_imports) > 0:
-            imp: DefineImport
-            v1_mode: bool
-            imp, v1_mode = (v2_imports.pop(), False) if len(v2_imports) > 0 else (v1_imports.pop(), True)
-            ns = imp.name
+        v2_modules: Set[str] = set()
+        done: Dict[str, Dict[str, DefineImport]] = defaultdict(dict)
+
+        def require_v2(module_name: str) -> None:
+            """
+            Promote a module to v2, requiring it to be loaded as v2.
+            """
+            if module_name in v2_modules:
+                # already v2
+                return
+            v2_modules.add(module_name)
+            if module_name in done and len(done[module_name]) > 0:
+                # some submodules already loaded as v1 => reload
+                imports.update(done[module_name].values())
+                del done[module_name]
+                del ast_by_top_level_mod[module_name]
+
+        while len(imports) > 0:
+            imp: DefineImport = imports.pop()
+            ns: str = imp.name
 
             parts = ns.split("::")
-            module_name = parts[0]
+            module_name: str = parts[0]
+            v1_mode: bool = module_name not in v2_modules
 
-            if ns in done:
-                if not v1_mode and self.module_source.path_for(module_name) is None:
-                    # module was installed in v1 mode, which is not allowed when a v2 depends on it => reload
-                    v2_imports.extend(sub for sub, _, _ in ast_by_top_level_mod[module_name])
-                    del ast_by_top_level_mod[module_name]
-                else:
-                    continue
+            if ns in done[module_name]:
+                continue
 
             try:
                 # get module
-                module = self.get_module(module_name, install=install, allow_v1=v1_mode)
+                module: Module = self.get_module(module_name, install=install, allow_v1=v1_mode)
                 # get NS
                 for i in range(1, len(parts) + 1):
                     subs = "::".join(parts[0:i])
-                    if subs in done:
+                    if subs in done[module_name]:
                         continue
                     (nstmt, nb) = module.get_ast(subs)
 
-                    done.add(subs)
+                    done[module_name][subs] = imp
                     ast_by_top_level_mod[module_name].append((subs, nstmt, nb))
 
                     # get imports and add to list
-                    imports: List[DefineImport] = v1_imports if module.GENERATION == ModuleGeneration.V1 else v2_imports
-                    imports.extend(module.get_imports(subs))
+                    subs_imports: List[DefineImport] = module.get_imports(subs)
+                    imports.update(subs_imports)
+                    if not v1_mode:
+                        # TODO: test this behavior!
+                        for dep_module_name in (subs_imp.name.split("::")[0] for subs_imp in subs_imports):
+                            require_v2(dep_module_name)
             except InvalidModuleException as e:
                 raise ModuleNotFoundException(ns, imp, e)
 
@@ -1192,7 +1204,8 @@ class Project(ModuleLike[ProjectMetadata]):
         loader.configure_module_finder(self.modulepath)
 
         for module in self.modules.values():
-            module.load_plugins()
+            if isinstance(module, ModuleV1):
+                module.load_plugins()
 
     def verify(self) -> None:
         # verify module dependencies
