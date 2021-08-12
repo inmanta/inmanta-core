@@ -27,6 +27,7 @@ import subprocess
 import sys
 import tempfile
 import traceback
+import types
 from abc import ABC, abstractmethod
 from functools import lru_cache
 from io import BytesIO, TextIOBase
@@ -52,6 +53,7 @@ from typing import (
     Union,
 )
 
+import more_itertools
 import yaml
 from pkg_resources import Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, validator
@@ -67,8 +69,6 @@ from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.stable_api import stable_api
 from inmanta.util import get_compiler_version
 from packaging import version
-import types
-import more_itertools
 
 try:
     from typing import TYPE_CHECKING
@@ -1135,19 +1135,19 @@ class Project(ModuleLike[ProjectMetadata]):
 
     def _ensure_consistently_loading_v1_and_v2(self) -> bool:
         """
-            During the initial compilation of a project, a transient issue might occur where the model files
-            of a certain module are loaded from the V1 version of that module and the plugins from the V2 version of that
-            module.
+        During the initial compilation of a project, a transient issue might occur where the model files
+        of a certain module are loaded from the V1 version of that module and the plugins from the V2 version of that
+        module.
 
-            Scenario: A certain module A only exists as a V1 module in the module path of a project and not in the python path.
-                      During the loading phase of the compiler, the model files of A are loaded from that V1 module.
-                      Later on in the loading phase, another module B installs module A as a V2 modules as well via its
-                      Python dependencies. This way the plugins of module A from the V2 module instead of the from the V1
-                      module.
+        Scenario: A certain module A only exists as a V1 module in the module path of a project and not in the python path.
+                  During the loading phase of the compiler, the model files of A are loaded from that V1 module.
+                  Later on in the loading phase, another module B installs module A as a V2 modules as well via its
+                  Python dependencies. This way the plugins of module A from the V2 module instead of the from the V1
+                  module.
 
-            A re-run of the compiler resolves this issue, because the V2 module version is present in the Python path at the
-            start of the second compile. V2 modules always take precedence over V1 modules when both are installed at the
-            same time.
+        A re-run of the compiler resolves this issue, because the V2 module version is present in the Python path at the
+        start of the second compile. V2 modules always take precedence over V1 modules when both are installed at the
+        same time.
         """
         result = True
         v1_modules = [mod for mod in self.modules.values() if isinstance(mod, ModuleV1)]
@@ -1449,7 +1449,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         (statements, block) = self.get_ast(name)
         imports = [x for x in statements if isinstance(x, DefineImport)]
-        if self._project.autostd:
+        if self.name != "std" and self._project.autostd:
             std_locatable = LocatableString("std", Range("internal", 0, 0, 0, 0), 0, block.namespace)
             imports.insert(0, DefineImport(std_locatable, std_locatable))
         return imports

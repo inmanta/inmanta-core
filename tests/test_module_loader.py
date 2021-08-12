@@ -26,7 +26,6 @@ from inmanta.compiler.config import feature_compiler_cache
 from inmanta.env import LocalPackagePath
 from inmanta.module import ModuleV1, ModuleV2, Project
 from inmanta.moduletool import DummyProject, ModuleConverter
-from inmanta import loader
 
 
 @pytest.mark.parametrize("editable_install", [True, False])
