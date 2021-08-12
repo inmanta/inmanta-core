@@ -536,10 +536,10 @@ version: 0.0.1dev0"""
         def do_update(specs: "Dict[str, List[Requirement]]", modules: List[str]) -> None:
             v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
 
-            python_specs: List[Requirement] = [
+            v2_python_specs: List[Requirement] = [
                 module_spec for module, module_specs in specs for module_spec in module_specs if module in v2_modules
             ]
-            env.install_from_indexes(python_specs, my_project.module_source.urls, upgrade=True)
+            env.install_from_indexes(v2_python_specs, my_project.module_source.urls, upgrade=True)
 
             for v1_module in set(modules).difference(v2_modules):
                 spec = specs.get(v1_module, [])
