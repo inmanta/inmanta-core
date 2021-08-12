@@ -324,6 +324,7 @@ def test_project_install(
         # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
         module.Project.get().autostd = False
         ProjectTool().execute("install", [])
+        # TODO: these two lines might not be required
         sys.meta_path = [finder for finder in sys.meta_path if not isinstance(finder, loader.PluginModuleFinder)]
         loader.unload_inmanta_plugins()
         for fq_mod_name in fq_mod_names:

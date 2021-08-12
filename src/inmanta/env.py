@@ -183,6 +183,7 @@ class ProcessEnv:
     def get_module_file(cls, module: str) -> Optional[str]:
         spec: Optional[ModuleSpec]
         try:
+            # TODO: this uses sys.meta_path to find modules. This gets modified to be able to load v1 which might cause issues. Test!
             spec = importlib.util.find_spec(module)
         except ModuleNotFoundError:
             spec = None

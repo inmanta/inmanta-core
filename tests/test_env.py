@@ -18,13 +18,16 @@
 import glob
 import logging
 import os
+import py
 import subprocess
 import sys
+from pkg_resources import Requirement
 from subprocess import CalledProcessError
+from typing import Tuple
 
 import pytest
 
-from inmanta import env
+from inmanta import env, loader
 from utils import LogSequence
 
 
@@ -152,3 +155,22 @@ def test_gen_req_file(tmpdir):
         'lorem == 0.1.1, > 0.1 ; python_version < "3.7" and platform_machine == "x86_64" and platform_system == "Linux"'
         in req_lines
     )
+
+
+@pytest.mark.parametrize("v1_plugin_loader", [True, False])
+def test_processenv_get_module_file_simple(
+    tmpdir: py.path.local, tmpvenv: Tuple[py.path.local, py.path.local], v1_plugin_loader: bool
+) -> None:
+    venv_dir, python_path = tmpvenv
+    package_name: str = "more-itertools"
+    module_name: str = package_name.lower()
+    if v1_plugin_loader:
+        loader.configure_module_finder([str(tmpdir)])
+    env.ProcessEnv.get_module_file(module_name) is None
+    env.ProcessEnv.install_from_indexes([Requirement.parse(package_name)])
+    env.ProcessEnv.get_module_file(module_name) is not None
+    # TODO: verify get_module_file path?
+
+# TODO: test with inmanta_plugins package, both with and without v1 present in modulepath
+
+# TODO: test other ProcessEnv methods
