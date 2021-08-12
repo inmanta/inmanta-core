@@ -263,6 +263,7 @@ def deactive_venv():
     old_prefix = sys.prefix
     old_path = list(sys.path)
     old_pythonpath = os.environ.get("PYTHONPATH", None)
+    old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
 
     yield
 
@@ -276,6 +277,8 @@ def deactive_venv():
             os.environ["PYTHONPATH"] = old_pythonpath
         else:
             del os.environ["PYTHONPATH"]
+    if old_os_venv is not None:
+        os.environ["VIRTUAL_ENV"] = old_os_venv
 
 
 def reset_metrics():
@@ -1003,7 +1006,7 @@ async def mocked_compiler_service_block(server, monkeypatch):
 
 
 @pytest.fixture
-def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
+def tmpvenv(deactive_venv, tmpdir: py.path.local) -> Tuple[py.path.local, py.path.local]:
     """
     Creates and activates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the
     `tmpdir` fixture. The venv is activated within the currently running process.
@@ -1034,26 +1037,15 @@ def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.loca
         site_packages = os.path.join(base, "lib", "python%s" % sys.version[:3], "site-packages")
 
     # prepend bin to PATH (this file is inside the bin directory)
-    old_os_path: Optional[str] = os.environ.get("PATH", None)
-    os.environ["PATH"] = os.pathsep.join([binpath] + (old_os_path.split(os.pathsep) if old_os_path is not None else []))
-    old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
+    os.environ["PATH"] = os.pathsep.join([binpath] + os.environ.get("PATH", "").split(os.pathsep))
     os.environ["VIRTUAL_ENV"] = base  # virtual env is right above bin directory
 
     # add the virtual environments libraries to the host python import mechanism
-    old_sys_path: List[str] = sys.path
     prev_length = len(sys.path)
     site.addsitedir(site_packages)
     sys.path[:] = sys.path[prev_length:] + sys.path[0:prev_length]
 
-    old_sys_prefix: str = sys.prefix
     sys.real_prefix = sys.prefix
     sys.prefix = base
 
-    yield (venv_dir, python_path)
-
-    if old_os_path is not None:
-        os.environ["PATH"] = old_os_path
-    if old_os_venv is not None:
-        os.environ["VIRTUAL_ENV"] = old_os_venv
-    sys.path = old_sys_path
-    sys.prefix = sys.real_prefix
+    return (venv_dir, python_path)
