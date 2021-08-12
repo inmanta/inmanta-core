@@ -21,9 +21,11 @@ import os
 import py
 import subprocess
 import sys
+from packaging import version
 from pkg_resources import Requirement
 from subprocess import CalledProcessError
-from typing import Tuple
+from typing import Optional, Tuple
+from unittest.mock import patch
 
 import pytest
 
@@ -157,6 +159,24 @@ def test_gen_req_file(tmpdir):
     )
 
 
+@pytest.mark.parametrize("version", [None, version.Version("8.6.0")])
+def test_processenv_install_from_indexes(
+    tmpvenv: Tuple[py.path.local, py.path.local], version: Optional[version.Version]
+) -> None:
+    venv_dir, python_path = tmpvenv
+    package_name: str = "more-itertools"
+    assert package_name not in env.get_installed_packages(python_path)
+    with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
+        env.ProcessEnv.install_from_indexes([Requirement.parse(package_name + (f"=={version}" if version is not None else ""))])
+    installed: Dict[str, version.Version] = env.get_installed_packages(python_path)
+    assert package_name in installed
+    if version is not None:
+        assert installed[package_name] == version
+
+
+# TODO: test ProcessEnv.install_from_source?
+
+
 @pytest.mark.parametrize("v1_plugin_loader", [True, False])
 def test_processenv_get_module_file_simple(
     tmpdir: py.path.local, tmpvenv: Tuple[py.path.local, py.path.local], v1_plugin_loader: bool
@@ -166,11 +186,12 @@ def test_processenv_get_module_file_simple(
     module_name: str = package_name.lower()
     if v1_plugin_loader:
         loader.configure_module_finder([str(tmpdir)])
-    env.ProcessEnv.get_module_file(module_name) is None
-    env.ProcessEnv.install_from_indexes([Requirement.parse(package_name)])
-    env.ProcessEnv.get_module_file(module_name) is not None
+    with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
+        env.ProcessEnv.get_module_file(module_name) is None
+        env.ProcessEnv.install_from_indexes([Requirement.parse(package_name)])
+        env.ProcessEnv.get_module_file(module_name) is not None
     # TODO: verify get_module_file path?
 
-# TODO: test with inmanta_plugins package, both with and without v1 present in modulepath
+# TODO: test with inmanta_plugins package, both with and without v1 present in modulepath and without v1 loader
 
-# TODO: test other ProcessEnv methods
+# TODO: test ProcessEnv.check
