@@ -167,7 +167,7 @@ class ProcessEnv:
             return (
                 (constraint, installed_packages[constraint.key])
                 for constraint in constraints
-                if constraint.key in installed_packages and installed_packages[constraint.key] not in constraint
+                if constraint.key in installed_packages and str(installed_packages[constraint.key]) not in constraint
             )
 
         incompatibilities: List[str] = check_installed()

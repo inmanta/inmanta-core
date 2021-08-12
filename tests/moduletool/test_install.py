@@ -291,6 +291,7 @@ def setup_simple_project(
     "install_module_names, module_dependencies",
     [
         (["minimalv2module"], []),
+        # TODO: _ vs - enforcement in module.py, see thread on slack
         (["minimalv2module", "elaboratev2module_extension"], ["elaboratev2module"]),
     ]
 )

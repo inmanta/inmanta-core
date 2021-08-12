@@ -1283,17 +1283,17 @@ class Project(ModuleLike[ProjectMetadata]):
 
         requirements: Dict[str, List[Requirement]] = self.collect_requirements()
         v2_requirements: Dict[str, List[Requirement]] = {
-            name: spec for name, spec in requirements if self.module_source.path_for(name) is not None
+            name: spec for name, spec in requirements.items() if self.module_source.path_for(name) is not None
         }
         v1_requirements: Dict[str, List[Requirement]] = {
-            name: spec for name, spec in requirements if name not in v2_requirements
+            name: spec for name, spec in requirements.items() if name not in v2_requirements
         }
 
         # TODO: for each ModuleV1 instance in self.modules, check that self.module_source.path_for(m) returns None.
         #   If it doesn't, this means the module was installed as v2 as an unintended side effect. The v1 code was loaded
         #   instead, but the plugin loader would load the v2 code, which presents an inconsistency. If this is the case, fail.
 
-        for name, spec in v1_requirements:
+        for name, spec in v1_requirements.items():
             if name not in imports:
                 continue
             module = modules[name]
@@ -1305,7 +1305,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
         good &= env.ProcessEnv.check(
             in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"),
-            constraints=[f"{ModuleV2.PKG_NAME_PREFIX}{req}" for req in chain.from_iterable(v2_requirements.values())],
+            constraints=[Requirement.parse(f"{ModuleV2.PKG_NAME_PREFIX}{req}") for req in chain.from_iterable(v2_requirements.values())],
         )
 
         return good
