@@ -399,7 +399,9 @@ python -m pip $@
         self._notify_change()
 
     @classmethod
-    def _run_command_and_log_output(cls, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: int = None) -> str:
+    def _run_command_and_log_output(
+        cls, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None
+    ) -> str:
         output: bytes = b""  # Make sure the var is always defined in the except bodies
         try:
             output = subprocess.check_output(cmd, stderr=stderr, env=env)

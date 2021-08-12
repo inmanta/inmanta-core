@@ -1540,19 +1540,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
                 )
                 raise PluginModuleLoadException(e, self.name, fq_mod_name, path_to_file, lineno).to_compiler_exception()
 
-    # # This method is not part of core's stable API but it is currently used by pytest-inmanta (inmanta/pytest-inmanta#76)
-    # def _get_fq_mod_name_for_py_file(self, py_file) -> str:
-    #     """
-    #     Returns the fully qualified Python module name for a path to a python file in the plugins directory.
-    #
-    #     :param py_file: Absolute path to the python file in the plugins directory of the module.
-    #     """
-    #     plugins_dir = self.get_plugin_dir()
-    #     assert plugins_dir is not None
-    #     rel_py_file_from_plugins_dir = os.path.relpath(py_file, start=plugins_dir)
-    #     rel_py_file_with_v1_path_prefix = os.path.join(self.name, "plugins", rel_py_file_from_plugins_dir)
-    #     return loader.PluginModuleLoader.convert_relative_path_to_module(rel_py_file_with_v1_path_prefix)
-
     # This method is not part of core's stable API but it is currently used by pytest-inmanta (inmanta/pytest-inmanta#76)
     def _get_fq_mod_name_for_py_file(self, py_file: str, plugin_dir: str, mod_name: str) -> str:
         """
