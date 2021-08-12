@@ -17,7 +17,6 @@
 """
 import os
 import shutil
-from configparser import ConfigParser
 from typing import List
 
 import py
@@ -27,6 +26,7 @@ from inmanta.compiler.config import feature_compiler_cache
 from inmanta.env import LocalPackagePath
 from inmanta.module import ModuleV1, ModuleV2, Project
 from inmanta.moduletool import DummyProject, ModuleConverter
+from inmanta import loader
 
 
 @pytest.mark.parametrize("editable_install", [True, False])
@@ -57,7 +57,7 @@ def test_v2_module_loading(
 
 
 def test_v1_and_v2_module_installed_simultaneously(
-    tmpdir: py.path.local, snippetcompiler, capsys, caplog, modules_dir: str
+    tmpdir: py.path.local, snippetcompiler_clean, capsys, caplog, modules_dir: str
 ) -> None:
     """
     When a module is installed both in V1 and V2 format, ensure that:
@@ -67,21 +67,21 @@ def test_v1_and_v2_module_installed_simultaneously(
     # Work around caching problem in venv
     feature_compiler_cache.set("False")
 
-    module_name = "elaboratev1module"
+    module_name = "v1_print_plugin"
 
     def compile_and_verify(
         expected_message: str, expect_warning: bool, install_v2_modules: List[LocalPackagePath] = []
     ) -> None:
-        snippetcompiler.setup_for_snippet(f"import {module_name}", install_v2_modules=install_v2_modules)
+        snippetcompiler_clean.setup_for_snippet(f"import {module_name}", install_v2_modules=install_v2_modules, autostd=False)
         caplog.clear()
-        snippetcompiler.do_export()
+        snippetcompiler_clean.do_export()
         assert expected_message in capsys.readouterr().out
         got_warning = f"Module {module_name} is installed as a V1 module and a V2 module" in caplog.text
         assert got_warning == expect_warning
 
     # Run compile. Only a V1 module is installed in the module path
-    expected_message = "Hello world"
-    compile_and_verify(expected_message=expected_message, expect_warning=False)
+    expected_message_v1 = "Hello world"
+    compile_and_verify(expected_message=expected_message_v1, expect_warning=False)
     assert isinstance(Project.get().modules[module_name], ModuleV1)
 
     # Convert V1 module to V2 module and install it as well
@@ -90,25 +90,22 @@ def test_v1_and_v2_module_installed_simultaneously(
     shutil.copytree(module_dir, v1_module_dir)
     assert os.path.isdir(v1_module_dir)
     v2_module_dir = os.path.join(tmpdir, "v2_module")
-    module = ModuleV1(project=DummyProject(), path=v1_module_dir)
+    module = ModuleV1(project=DummyProject(autostd=False), path=v1_module_dir)
     ModuleConverter(module).convert(output_directory=v2_module_dir)
 
-    # Remove dependency Python dependencies on inmanta modules
-    # => Get the as V1 modules from the module path
-    config_parser = ConfigParser()
-    setup_cfg_file = os.path.join(v2_module_dir, "setup.cfg")
-    config_parser.read(setup_cfg_file)
-    install_requires = [x.strip() for x in config_parser.get("options", "install_requires").split("\n")]
-    install_requires.remove("inmanta-module-std")
-    install_requires.remove("inmanta-module-mod1==1.0")
-    install_requires.remove("inmanta-module-mod2")
-    config_parser.set("options", "install_requires", "\n".join(install_requires))
-    with open(setup_cfg_file, "w") as fd:
-        config_parser.write(fd)
+    # Print a different message in the V2 module, to detect which of both gets loaded
+    expected_message_v2 = "Other message"
+    with open(os.path.join(v2_module_dir, "model", "_init.cf"), "r+") as fd:
+        content = fd.read()
+        assert expected_message_v1 in content
+        content = content.replace(expected_message_v1, expected_message_v2)
+        assert expected_message_v2 in content
+        fd.seek(0)
+        fd.write(content)
 
     # Run compile again. V1 version and V2 version are installed simultaneously
     compile_and_verify(
-        expected_message=expected_message,
+        expected_message=expected_message_v2,
         expect_warning=True,
         install_v2_modules=[LocalPackagePath(path=v2_module_dir, editable=False)],
     )

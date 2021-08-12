@@ -67,6 +67,8 @@ from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.stable_api import stable_api
 from inmanta.util import get_compiler_version
 from packaging import version
+import types
+import more_itertools
 
 try:
     from typing import TYPE_CHECKING
@@ -136,6 +138,53 @@ class ProjectNotFoundException(CompilerException):
     """
     This exception is raised when inmanta is unable to find a valid project
     """
+
+
+class PluginModuleLoadException(Exception):
+    """
+    Exception representing an error during plugin module loading.
+    """
+
+    def __init__(self, cause: Exception, module: str, fq_import: str, path: str, lineno: Optional[int]) -> None:
+        """
+        :param cause: The exception raise by the import.
+        :param module: The name of the Inmanta module.
+        :param fq_import: The fully qualified import to the Python module for which the loading failed.
+        :param path: The path to the file on disk that belongs to `fq_import`.
+        :param lineno: Optionally, the line number in `path` that causes the loading issue.
+        """
+        self.cause: Exception = cause
+        self.module: str = module
+        self.fq_import: str = fq_import
+        self.path: str = path
+        self.lineno: Optional[int] = lineno
+        lineno_suffix = f":{self.lineno}" if self.lineno is not None else ""
+        super().__init__(
+            "%s while loading plugin module %s at %s: %s"
+            % (
+                self.get_cause_type_name(),
+                self.module,
+                f"{self.path}{lineno_suffix}",
+                self.cause,
+            )
+        )
+
+    def get_cause_type_name(self) -> str:
+        module: Optional[str] = type(self.cause).__module__
+        name: str = type(self.cause).__qualname__
+        return name if module is None or module == "builtins" else "%s.%s" % (module, name)
+
+    def to_compiler_exception(self) -> CompilerException:
+        module: Optional[str] = type(self.cause).__module__
+        name: str = type(self.cause).__qualname__
+        cause_type_name = name if module is None or module == "builtins" else "%s.%s" % (module, name)
+
+        exception = CompilerException(
+            f"Unable to load all plug-ins for module {self.module}:"
+            f"\n\t{cause_type_name} while loading plugin module {self.fq_import}: {self.cause}"
+        )
+        exception.set_location(Location(self.path, self.lineno if self.lineno is not None else 0))
+        return exception
 
 
 class GitProvider(object):
@@ -905,7 +954,7 @@ class Project(ModuleLike[ProjectMetadata]):
         """
         if cls._project is None:
             cls._project = Project(cls.get_project_dir(os.curdir), main_file=main_file)
-            loader.PluginModuleFinder.configure_module_finder(cls._project.modulepath, modules_to_ignore=[])
+            loader.PluginModuleFinder.configure_module_finder(cls._project.modulepath)
 
         return cls._project
 
@@ -918,7 +967,7 @@ class Project(ModuleLike[ProjectMetadata]):
         os.chdir(project._path)
         plugins.PluginMeta.clear()
         loader.unload_inmanta_plugins()
-        loader.PluginModuleFinder.configure_module_finder(cls._project.modulepath, modules_to_ignore=[])
+        loader.PluginModuleFinder.configure_module_finder(cls._project.modulepath)
 
     def load(self) -> None:
         if not self.loaded:
@@ -1037,22 +1086,17 @@ class Project(ModuleLike[ProjectMetadata]):
         if not self.is_using_virtual_env():
             self.virtualenv.use_virtual_env()
         try:
-            v1_module = ModuleV1.get_installed_module(self, module_name)
             v2_module = ModuleV2.get_installed_module(self, module_name)
+            v1_module = ModuleV1.get_installed_module(self, module_name)
 
             if v1_module and v2_module:
                 LOGGER.warning("Module %s is installed as a V1 module and a V2 module", module_name)
 
-            if v2_module:
-                # V2 takes precedence when a V1 and a V2 are installed at the same time
-                module = v2_module
-                loader.PluginModuleFinder.get_module_finder().ignore_module(module_name)
-                loader.unload_inmanta_plugins(module_name)
-            elif v1_module:
-                module = v1_module
-            else:
-                # Module is not yet installed, install it.
+            try:
+                module = next(elem for elem in [v2_module, v1_module] if elem is not None)
+            except StopIteration:
                 module = self.install_module(module_name)
+
             self.modules[module_name] = module
             return module
         except Exception as e:
@@ -1085,8 +1129,45 @@ class Project(ModuleLike[ProjectMetadata]):
         # verify module dependencies
         result = True
         result &= self.verify_requires()
+        result &= self._ensure_consistently_loading_v1_and_v2()
         if not result:
             raise CompilerException("Not all module dependencies have been met.")
+
+    def _ensure_consistently_loading_v1_and_v2(self) -> bool:
+        """
+            During the initial compilation of a project, a transient issue might occur where the model files
+            of a certain module are loaded from the V1 version of that module and the plugins from the V2 version of that
+            module.
+
+            Scenario: A certain module A only exists as a V1 module in the module path of a project and not in the python path.
+                      During the loading phase of the compiler, the model files of A are loaded from that V1 module.
+                      Later on in the loading phase, another module B installs module A as a V2 modules as well via its
+                      Python dependencies. This way the plugins of module A from the V2 module instead of the from the V1
+                      module.
+
+            A re-run of the compiler resolves this issue, because the V2 module version is present in the Python path at the
+            start of the second compile. V2 modules always take precedence over V1 modules when both are installed at the
+            same time.
+        """
+        result = True
+        v1_modules = [mod for mod in self.modules.values() if isinstance(mod, ModuleV1)]
+        for v1_mod in v1_modules:
+            fq_mod_import = f"{const.PLUGINS_PACKAGE}.{v1_mod.name}"
+            try:
+                python_mod = importlib.import_module(fq_mod_import)
+            except ModuleNotFoundError:
+                # This case should never occur. Delegate error handling to load_plugins()
+                # to ensure a consistent error message is used for all module loading problems.
+                continue
+            else:
+                if os.path.dirname(python_mod.__file__) != v1_mod.get_plugin_dir():
+                    LOGGER.error(
+                        "Module %s was loaded inconsistently. The model files were loaded from the V1 module, while "
+                        "the plugins were loaded from the V2 module. This is a transient issue. Re-run the compiler to "
+                        "resolve it."
+                    )
+                    result = False
+        return result
 
     def is_using_virtual_env(self) -> bool:
         return self.virtualenv.is_using_virtual_env()
@@ -1197,8 +1278,8 @@ class Project(ModuleLike[ProjectMetadata]):
 class DummyProject(Project):
     """ Placeholder project that does nothing """
 
-    def __init__(self) -> None:
-        super().__init__(tempfile.gettempdir())
+    def __init__(self, autostd: bool = True) -> None:
+        super().__init__(tempfile.gettempdir(), autostd=autostd)
 
     def _get_metadata_from_disk(self) -> ProjectMetadata:
         return ProjectMetadata(name="DUMMY")
@@ -1410,7 +1491,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         return modules
 
     @abstractmethod
-    def _get_plugin_dir(self) -> Optional[str]:
+    def get_plugin_dir(self) -> Optional[str]:
         """
         Return directory containing the python files which define handlers and plugins.
         If no such directory is defined, this method returns None.
@@ -1424,21 +1505,11 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         raise NotImplementedError()
 
-    # This method is not part of core's stable API but it is currently used by pytest-inmanta (inmanta/pytest-inmanta#76)
-    def _get_fq_mod_name_for_py_file(self, py_file) -> str:
-        """
-        Returns the fully qualified Python module name for a path to a python file in the plugins directory.
-
-        :param py_file: Absolute path to the python file in the plugins directory of the module.
-        """
-        rel_py_file = os.path.relpath(py_file, start=self._get_plugin_dir())
-        return loader.PluginModuleLoader.convert_relative_path_to_module(self.name, rel_py_file)
-
     def get_plugin_files(self) -> Iterator[Tuple[Path, ModuleName]]:
         """
         Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
         """
-        plugin_dir: Optional[str] = self._get_plugin_dir()
+        plugin_dir: Optional[str] = self.get_plugin_dir()
 
         if plugin_dir is None:
             return iter(())
@@ -1448,7 +1519,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         return (
             (
                 Path(file_name),
-                ModuleName(self._get_fq_mod_name_for_py_file(file_name)),
+                ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self.name)),
             )
             for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True)
         )
@@ -1457,17 +1528,41 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         Load all plug-ins from a configuration module
         """
-        for _, fq_mod_name in self.get_plugin_files():
+        for path_to_file, fq_mod_name in self.get_plugin_files():
+            LOGGER.debug("Loading module %s", fq_mod_name)
             try:
-                LOGGER.debug("Loading module %s", fq_mod_name)
                 importlib.import_module(fq_mod_name)
-            except loader.PluginModuleLoadException as e:
-                exception = CompilerException(
-                    f"Unable to load all plug-ins for module {self.name}:"
-                    f"\n\t{e.get_cause_type_name()} while loading plugin module {e.module}: {e.cause}"
+            except Exception as e:
+                tb: Optional[types.TracebackType] = sys.exc_info()[2]
+                stack: traceback.StackSummary = traceback.extract_tb(tb)
+                lineno: Optional[int] = more_itertools.first(
+                    (frame.lineno for frame in reversed(stack) if frame.filename == path_to_file), None
                 )
-                exception.set_location(Location(e.path, e.lineno if e.lineno is not None else 0))
-                raise exception
+                raise PluginModuleLoadException(e, self.name, fq_mod_name, path_to_file, lineno).to_compiler_exception()
+
+    # # This method is not part of core's stable API but it is currently used by pytest-inmanta (inmanta/pytest-inmanta#76)
+    # def _get_fq_mod_name_for_py_file(self, py_file) -> str:
+    #     """
+    #     Returns the fully qualified Python module name for a path to a python file in the plugins directory.
+    #
+    #     :param py_file: Absolute path to the python file in the plugins directory of the module.
+    #     """
+    #     plugins_dir = self.get_plugin_dir()
+    #     assert plugins_dir is not None
+    #     rel_py_file_from_plugins_dir = os.path.relpath(py_file, start=plugins_dir)
+    #     rel_py_file_with_v1_path_prefix = os.path.join(self.name, "plugins", rel_py_file_from_plugins_dir)
+    #     return loader.PluginModuleLoader.convert_relative_path_to_module(rel_py_file_with_v1_path_prefix)
+
+    # This method is not part of core's stable API but it is currently used by pytest-inmanta (inmanta/pytest-inmanta#76)
+    def _get_fq_mod_name_for_py_file(self, py_file: str, plugin_dir: str, mod_name: str) -> str:
+        """
+        Returns the fully qualified Python module name for an inmanta module.
+        :param py_file: The Python file for the module, relative to the plugin directory.
+        :param plugin_dir: The plugin directory relative to the inmanta module's root directory.
+        :param mod_name: The top-level name of this module.
+        """
+        rel_py_file = os.path.relpath(py_file, start=plugin_dir)
+        return loader.PluginModuleLoader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
 
     def versions(self) -> List["Version"]:
         """
@@ -1714,7 +1809,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
     def get_metadata_file_schema_type(cls) -> Type[ModuleV1Metadata]:
         return ModuleV1Metadata
 
-    def _get_plugin_dir(self) -> Optional[str]:
+    def get_plugin_dir(self) -> Optional[str]:
         plugins_dir = os.path.join(self._path, loader.PLUGIN_DIR)
         if not os.path.exists(plugins_dir):
             return None
@@ -1757,22 +1852,11 @@ class ModuleV2(Module[ModuleV2Metadata]):
     @classmethod
     def get_installed_module(cls, project: Project, module_name: str) -> Optional["ModuleV2"]:
         fq_module_path = f"{const.PLUGINS_PACKAGE}.{module_name}"
-        module_finder = loader.PluginModuleFinder.get_module_finder()
-        was_module_ignored_by_v1_loader = module_finder.is_ignored(module_name)
-        was_module_loaded = fq_module_path in sys.modules
-        try:
-            module_finder.ignore_module(module_name)
-            if was_module_loaded:
-                # Unload the module if it was loaded. Otherwise find_spec()
-                # may return a v1 module.
-                loader.unload_inmanta_plugins(module_name)
-            spec = importlib.util.find_spec(fq_module_path)
-        finally:
-            # Restore loader state and imported state
-            if not was_module_ignored_by_v1_loader:
-                module_finder.unignore_module(module_name)
-            if was_module_loaded:
-                importlib.import_module(fq_module_path)
+        if fq_module_path in sys.modules:
+            # importlib.util.find_spec() can only determine the module spec correctly
+            # when the module was not loaded yet.
+            raise Exception(f"Module {fq_module_path} was already loaded")
+        spec = importlib.util.find_spec(fq_module_path)
         if spec is None or spec.origin is None:
             return None
         try:
@@ -1799,7 +1883,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
     def get_metadata_file_schema_type(cls) -> Type[ModuleV2Metadata]:
         return ModuleV2Metadata
 
-    def _get_plugin_dir(self) -> str:
+    def get_plugin_dir(self) -> str:
         return self._path
 
     def _get_model_dir(self) -> str:

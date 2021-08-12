@@ -57,22 +57,28 @@ def run_module_build(module_path: str, set_path_argument: bool, output_dir: Opti
 
 
 @pytest.mark.parametrize(
-    "module_name,set_path_argument",
+    "module_name, is_v2_module, set_path_argument",
     [
-        ("minimalv2module", True),
-        ("minimalv2module", False),
-        ("elaboratev2module", True),
-        ("elaboratev2module", False),
-        ("elaboratev1module", False),
+        ("minimalv2module", True, True),
+        ("minimalv2module", True, False),
+        ("elaboratev2module", True, True),
+        ("elaboratev2module", True, False),
+        ("elaboratev1module", False, False),
     ],
 )
 def test_build_v2_module(
-    tmpdir, module_name: str, set_path_argument: bool, monkeypatch: MonkeyPatch, modules_dir: str, modules_v2_dir: str
+    tmpdir,
+    module_name: str,
+    is_v2_module: bool,
+    set_path_argument: bool,
+    monkeypatch: MonkeyPatch,
+    modules_dir: str,
+    modules_v2_dir: str,
 ) -> None:
     """
     Build a V2 package and verify that the required files are present in the resulting wheel.
     """
-    if "v2module" in module_name:
+    if is_v2_module:
         module_dir = os.path.join(modules_v2_dir, module_name)
     else:
         module_dir = os.path.join(modules_dir, module_name)

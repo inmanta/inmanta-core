@@ -203,6 +203,10 @@ def test():
 
 @fixture(scope="function")
 def module_path(tmpdir):
+    """
+    Remark: Don't use this fixture in combination with instances of the Project class
+            or the CodeLoader class as it would reset the config of the PluginModuleFinder.
+    """
     loader.PluginModuleFinder.configure_module_finder(modulepaths=[str(tmpdir)])
     yield str(tmpdir)
     loader.PluginModuleFinder.reset()
@@ -291,36 +295,6 @@ def test_module_loader(module_path: str, capsys, modules_dir: str):
 
     with pytest.raises(ImportError):
         from inmanta_plugins.tests import doesnotexist  # NOQA
-
-
-def test_module_loader_ignore_module(module_path: str, capsys, modules_dir: str):
-    module_name = "submodule"
-    origin_mod_dir = os.path.join(modules_dir, module_name)
-    mod_dir = os.path.join(module_path, module_name)
-    shutil.copytree(origin_mod_dir, mod_dir)
-
-    capsys.readouterr()  # Clear buffers
-
-    # Assert error with module ignored by Finder
-    module_finder = loader.PluginModuleFinder.get_module_finder()
-    assert not module_finder.is_ignored(module_name)
-    module_finder.ignore_module(module_name)
-    assert module_finder.is_ignored(module_name)
-    with pytest.raises(ImportError):
-        from inmanta_plugins.submodule import test
-    with pytest.raises(UnboundLocalError):
-        test()
-    (stdout, stderr) = capsys.readouterr()
-    assert stdout.count(f"#loading inmanta_plugins.{module_name}#") == 0
-
-    # Assert import succeeds when module is not ignored by Finder.
-    module_finder.unignore_module(module_name)
-    assert not module_finder.is_ignored(module_name)
-    from inmanta_plugins.submodule import test
-
-    assert test() == "test"
-    (stdout, stderr) = capsys.readouterr()
-    assert stdout.count(f"#loading inmanta_plugins.{module_name}#") == 1
 
 
 def test_plugin_loading_on_project_load(tmpdir, capsys):
