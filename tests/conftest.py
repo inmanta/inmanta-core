@@ -287,10 +287,12 @@ async def clean_reset(create_db, clean_db):
     reset_all_objects()
     config.Config._reset()
     methods = inmanta.protocol.common.MethodProperties.methods.copy()
+    loader.unload_inmanta_plugins()
     yield
     inmanta.protocol.common.MethodProperties.methods = methods
     config.Config._reset()
     reset_all_objects()
+    loader.unload_inmanta_plugins()
 
 
 def reset_all_objects():
@@ -892,18 +894,6 @@ def snippetcompiler(inmanta_config, snippetcompiler_global, modules_dir):
     # Test with compiler cache enabled
     compiler.config.feature_compiler_cache.set("True")
     snippetcompiler_global.setup_func(modules_dir)
-    yield snippetcompiler_global
-    snippetcompiler_global.tear_down_func()
-
-
-@pytest.fixture(scope="function")
-def snippetcompiler_no_module_dir(inmanta_config, snippetcompiler_global):
-    """
-    Create a snippetcompile without attaching module_dir to the module path
-    of the project.
-    """
-    compiler.config.feature_compiler_cache.set("True")
-    snippetcompiler_global.setup_func(module_dir=None)
     yield snippetcompiler_global
     snippetcompiler_global.tear_down_func()
 

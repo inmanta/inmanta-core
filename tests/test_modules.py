@@ -20,6 +20,9 @@ import logging
 import os
 import unittest
 from unittest import mock
+import shutil
+from typing import List
+from inmanta.env import LocalPackagePath
 
 import pytest
 
@@ -85,3 +88,64 @@ def test_to_v2():
         assert v1_metadata.__getattribute__(attr_name) == v2_metadata.__getattribute__(attr_name)
     assert f"{module.ModuleV2.PKG_NAME_PREFIX}{v1_metadata.name}" == v2_metadata.name
     assert [f"{module.ModuleV2.PKG_NAME_PREFIX}{req}" for req in v1_metadata.requires] == v2_metadata.install_requires
+
+
+def test_is_versioned(snippetcompiler_clean, modules_dir: str, modules_v2_dir: str, caplog, tmpdir) -> None:
+    """
+    Test whether the warning regarding non-versioned modules is given correctly.
+    """
+    # Disable modules_dir
+    snippetcompiler_clean.modules_dir = None
+
+    def compile_and_assert_warning(
+        module_name: str, needs_versioning_warning: bool, install_v2_modules: List[LocalPackagePath] = []
+    ) -> None:
+        snippetcompiler_clean.setup_for_snippet(
+            f"import {module_name}", autostd=False, install_v2_modules=install_v2_modules
+        )
+        caplog.clear()
+        snippetcompiler_clean.do_export()
+        warning_message = f"Module {module_name} is not version controlled, we recommend you do this as soon as possible."
+        assert (warning_message in caplog.text) is needs_versioning_warning
+
+    # V1 module
+    module_name_v1 = "mod1"
+    module_dir = os.path.join(modules_dir, module_name_v1)
+    module_copy_dir = os.path.join(snippetcompiler_clean.libs, module_name_v1)
+    shutil.copytree(module_dir, module_copy_dir)
+    dot_git_dir = os.path.join(module_copy_dir, ".git")
+    assert not os.path.exists(dot_git_dir)
+    compile_and_assert_warning(module_name_v1, needs_versioning_warning=True)
+    os.mkdir(dot_git_dir)
+    compile_and_assert_warning(module_name_v1, needs_versioning_warning=False)
+
+    # V2 module
+    module_name_v2 = "elaboratev2module"
+    module_dir = os.path.join(modules_v2_dir, module_name_v2)
+    module_copy_dir = os.path.join(tmpdir, module_name_v2)
+    shutil.copytree(module_dir, module_copy_dir)
+    dot_git_dir = os.path.join(module_copy_dir, ".git")
+    assert not os.path.exists(dot_git_dir)
+    # Non-editable install can never be checked for versioning
+    compile_and_assert_warning(
+        module_name_v2,
+        needs_versioning_warning=False,
+        install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=False)]
+    )
+    compile_and_assert_warning(
+        module_name_v2,
+        needs_versioning_warning=True,
+        install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=True)]
+    )
+    os.mkdir(dot_git_dir)
+    # Non-editable install can never be checked for versioning
+    compile_and_assert_warning(
+        module_name_v2,
+        needs_versioning_warning=False,
+        install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=False)]
+    )
+    compile_and_assert_warning(
+        module_name_v2,
+        needs_versioning_warning=False,
+        install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=True)]
+    )

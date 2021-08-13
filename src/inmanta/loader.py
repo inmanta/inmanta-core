@@ -390,11 +390,10 @@ class PluginModuleFinder(Finder):
     @classmethod
     def reset(cls) -> None:
         """
-        Remove the PluginModuleFinder from sys.meta_path and unload the inmanta_plugins package.
+        Remove the PluginModuleFinder from sys.meta_path.
         """
         if cls.MODULE_FINDER is not None and cls.MODULE_FINDER in sys.meta_path:
             sys.meta_path.remove(cls.MODULE_FINDER)
-        unload_inmanta_plugins()
         cls.MODULE_FINDER = None
 
     @classmethod
@@ -439,7 +438,7 @@ class PluginModuleFinder(Finder):
         Return the path to the file in the module path that belongs to the module given by `fullname`.
         None is returned when the given module is not present in the module path.
 
-        :param fullname: A fully-qualified import path to an module.
+        :param fullname: A fully-qualified import path to a module.
         """
         relative_path: str = PluginModuleLoader.convert_module_to_relative_path(fullname)
         # special case: top-level package

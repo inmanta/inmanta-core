@@ -30,10 +30,12 @@ from inmanta.moduletool import DummyProject, ModuleConverter
 
 @pytest.mark.parametrize("editable_install", [True, False])
 def test_v2_module_loading(
-    editable_install: bool, tmpdir: py.path.local, snippetcompiler_no_module_dir, capsys, modules_v2_dir: str
+    editable_install: bool, tmpdir: py.path.local, snippetcompiler, capsys, modules_v2_dir: str
 ) -> None:
     # Work around caching problem in venv
     feature_compiler_cache.set("False")
+    # Disable modules_dir
+    snippetcompiler.modules_dir = None
 
     module_name = "elaboratev2module"
     module_dir = os.path.join(modules_v2_dir, module_name)
@@ -41,7 +43,7 @@ def test_v2_module_loading(
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)
 
-    snippetcompiler_no_module_dir.setup_for_snippet(
+    snippetcompiler.setup_for_snippet(
         f"""
             import {module_name}
 
@@ -51,7 +53,7 @@ def test_v2_module_loading(
         install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=editable_install)],
     )
 
-    snippetcompiler_no_module_dir.do_export()
+    snippetcompiler.do_export()
     assert "Hello world" in capsys.readouterr().out
 
 

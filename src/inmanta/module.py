@@ -147,7 +147,7 @@ class PluginModuleLoadException(Exception):
 
     def __init__(self, cause: Exception, module: str, fq_import: str, path: str, lineno: Optional[int]) -> None:
         """
-        :param cause: The exception raise by the import.
+        :param cause: The exception raised by the import.
         :param module: The name of the Inmanta module.
         :param fq_import: The fully qualified import to the Python module for which the loading failed.
         :param path: The path to the file on disk that belongs to `fq_import`.
@@ -993,6 +993,8 @@ class Project(ModuleLike[ProjectMetadata]):
                 else:
                     self.load_plugins()
 
+            self._ensure_consistently_loaded_v1_and_v2()
+
     @lru_cache()
     def get_ast(self) -> Tuple[List[Statement], BasicBlock]:
         return self.__load_ast()
@@ -1129,11 +1131,10 @@ class Project(ModuleLike[ProjectMetadata]):
         # verify module dependencies
         result = True
         result &= self.verify_requires()
-        result &= self._ensure_consistently_loading_v1_and_v2()
         if not result:
             raise CompilerException("Not all module dependencies have been met.")
 
-    def _ensure_consistently_loading_v1_and_v2(self) -> bool:
+    def _ensure_consistently_loaded_v1_and_v2(self) -> bool:
         """
         During the initial compilation of a project, a transient issue might occur where the model files
         of a certain module are loaded from the V1 version of that module and the plugins from the V2 version of that
@@ -1142,8 +1143,8 @@ class Project(ModuleLike[ProjectMetadata]):
         Scenario: A certain module A only exists as a V1 module in the module path of a project and not in the python path.
                   During the loading phase of the compiler, the model files of A are loaded from that V1 module.
                   Later on in the loading phase, another module B installs module A as a V2 modules as well via its
-                  Python dependencies. This way the plugins of module A from the V2 module instead of the from the V1
-                  module.
+                  Python dependencies. This way the plugins of module A are loaded from the V2 module instead of the from
+                  the V1 module.
 
         A re-run of the compiler resolves this issue, because the V2 module version is present in the Python path at the
         start of the second compile. V2 modules always take precedence over V1 modules when both are installed at the
@@ -1164,7 +1165,8 @@ class Project(ModuleLike[ProjectMetadata]):
                     LOGGER.error(
                         "Module %s was loaded inconsistently. The model files were loaded from the V1 module, while "
                         "the plugins were loaded from the V2 module. This is a transient issue. Re-run the compiler to "
-                        "resolve it."
+                        "resolve it.",
+                        v1_mod.name,
                     )
                     result = False
         return result
@@ -1327,7 +1329,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             )
 
         self._project: Optional[Project] = project
-        self.is_versioned()
+        self.ensure_versioned()
         self.model_dir = self._get_model_dir()
 
     @classmethod
@@ -1386,13 +1388,13 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
     version = property(get_version)
 
-    def is_versioned(self) -> bool:
+    def ensure_versioned(self) -> bool:
         """
         Check if this module is versioned, and if so the version number in the module file should
         have a tag. If the version has + the current revision can be a child otherwise the current
         version should match the tag
         """
-        if not os.path.exists(os.path.join(self._path, ".git")):
+        if not os.path.exists(os.path.join(self.path, ".git")):
             LOGGER.warning("Module %s is not version controlled, we recommend you do this as soon as possible.", self.name)
             return False
         return True
@@ -1498,12 +1500,11 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         raise NotImplementedError()
 
-    @abstractmethod
     def _get_model_dir(self) -> str:
         """
         Return a path to the model directory of the module.
         """
-        raise NotImplementedError()
+        return os.path.join(self.path, Module.MODEL_DIR)
 
     def get_plugin_files(self) -> Iterator[Tuple[Path, ModuleName]]:
         """
@@ -1637,7 +1638,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
             return cls(project, path)
 
     def get_metadata_file_path(self) -> str:
-        return os.path.join(self._path, self.MODULE_FILE)
+        return os.path.join(self.path, self.MODULE_FILE)
 
     @classmethod
     def get_name_from_metadata(cls, metadata: ModuleV1Metadata) -> str:
@@ -1802,9 +1803,6 @@ class ModuleV1(Module[ModuleV1Metadata]):
             return None
         return plugins_dir
 
-    def _get_model_dir(self) -> str:
-        return os.path.join(self._path, Module.MODEL_DIR)
-
     def get_module_requirements(self) -> List[str]:
         module_requirements_in_requirements_txt = [
             req for req in self.get_python_requirements_as_list() if req.startswith(ModuleV2.PKG_NAME_PREFIX)
@@ -1830,11 +1828,19 @@ class ModuleV2(Module[ModuleV2Metadata]):
     GENERATION = ModuleGeneration.V2
     PKG_NAME_PREFIX = "inmanta-module-"
 
-    def __init__(self, project: Optional[Project], path: str):
+    def __init__(self, project: Optional[Project], path: str, is_editable_install: bool = False) -> None:
+        self._is_editable_install = is_editable_install
         try:
             super(ModuleV2, self).__init__(project, path)
         except InvalidMetadata as e:
             raise InvalidModuleException(f"The module found at {path} is not a valid V2 module") from e
+
+    def ensure_versioned(self) -> None:
+        if self._is_editable_install:
+            super(ModuleV2, self).ensure_versioned()
+        else:
+            # Only editable installs can be checked for versioning
+            pass
 
     @classmethod
     def get_installed_module(cls, project: Project, module_name: str) -> Optional["ModuleV2"]:
@@ -1848,7 +1854,11 @@ class ModuleV2(Module[ModuleV2Metadata]):
             return None
         try:
             pkg_installation_dir = os.path.abspath(os.path.dirname(spec.origin))
-            return cls(project, pkg_installation_dir)
+            if os.path.exists(os.path.join(pkg_installation_dir, cls.MODULE_FILE)):
+                return cls(project, pkg_installation_dir, is_editable_install=False)
+            else:
+                module_root_dir = os.path.normpath(os.path.join(pkg_installation_dir, os.pardir, os.pardir))
+                return cls(project, module_root_dir, is_editable_install=True)
         except InvalidModuleException:
             return None
 
@@ -1857,10 +1867,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
         return f"{cls.PKG_NAME_PREFIX}{module_name}"
 
     def get_metadata_file_path(self) -> str:
-        if self._is_dev_installed_module():
-            return os.path.normpath(os.path.join(self._path, os.pardir, os.pardir, ModuleV2.MODULE_FILE))
-        else:
-            return os.path.join(self._path, ModuleV2.MODULE_FILE)
+        return os.path.join(self.path, ModuleV2.MODULE_FILE)
 
     @classmethod
     def get_name_from_metadata(cls, metadata: ModuleV2Metadata) -> str:
@@ -1871,18 +1878,10 @@ class ModuleV2(Module[ModuleV2Metadata]):
         return ModuleV2Metadata
 
     def get_plugin_dir(self) -> str:
-        return self._path
-
-    def _get_model_dir(self) -> str:
-        if self._is_dev_installed_module():
-            return os.path.normpath(os.path.join(self._path, os.pardir, os.pardir, Module.MODEL_DIR))
+        if self._is_editable_install:
+            return os.path.join(self.path, const.PLUGINS_PACKAGE, self.name)
         else:
-            return os.path.join(self._path, Module.MODEL_DIR)
-
-    def _is_dev_installed_module(self) -> bool:
-        return not os.path.exists(os.path.join(self._path, ModuleV2.MODULE_FILE)) and os.path.exists(
-            os.path.normpath(os.path.join(self._path, os.pardir, os.pardir, ModuleV2.MODULE_FILE))
-        )
+            return self.path
 
     def get_module_requirements(self) -> List[str]:
         return [req for req in self.get_python_requirements_as_list() if req.startswith(self.PKG_NAME_PREFIX)]
