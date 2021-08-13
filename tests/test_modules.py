@@ -18,16 +18,16 @@
 
 import logging
 import os
-import unittest
-from unittest import mock
 import shutil
+import unittest
 from typing import List
-from inmanta.env import LocalPackagePath
+from unittest import mock
 
 import pytest
 
 from _io import StringIO
 from inmanta import module
+from inmanta.env import LocalPackagePath
 
 
 def test_module():
@@ -100,9 +100,7 @@ def test_is_versioned(snippetcompiler_clean, modules_dir: str, modules_v2_dir: s
     def compile_and_assert_warning(
         module_name: str, needs_versioning_warning: bool, install_v2_modules: List[LocalPackagePath] = []
     ) -> None:
-        snippetcompiler_clean.setup_for_snippet(
-            f"import {module_name}", autostd=False, install_v2_modules=install_v2_modules
-        )
+        snippetcompiler_clean.setup_for_snippet(f"import {module_name}", autostd=False, install_v2_modules=install_v2_modules)
         caplog.clear()
         snippetcompiler_clean.do_export()
         warning_message = f"Module {module_name} is not version controlled, we recommend you do this as soon as possible."
@@ -130,22 +128,22 @@ def test_is_versioned(snippetcompiler_clean, modules_dir: str, modules_v2_dir: s
     compile_and_assert_warning(
         module_name_v2,
         needs_versioning_warning=False,
-        install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=False)]
+        install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=False)],
     )
     compile_and_assert_warning(
         module_name_v2,
         needs_versioning_warning=True,
-        install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=True)]
+        install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=True)],
     )
     os.mkdir(dot_git_dir)
     # Non-editable install can never be checked for versioning
     compile_and_assert_warning(
         module_name_v2,
         needs_versioning_warning=False,
-        install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=False)]
+        install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=False)],
     )
     compile_and_assert_warning(
         module_name_v2,
         needs_versioning_warning=False,
-        install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=True)]
+        install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=True)],
     )
