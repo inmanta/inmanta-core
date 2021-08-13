@@ -17,6 +17,7 @@
 """
 
 import hashlib
+import importlib
 import json
 import logging
 import os
@@ -97,6 +98,7 @@ class VirtualEnv(object):
         self.__using_venv: bool = False
         self._parent_python: Optional[str] = None
         self._packages_installed_in_parent_env: Optional[Dict[str, str]] = None
+        self._site_packages_dir: Optional[str] = None
 
     def get_package_installed_in_parent_env(self) -> Optional[Dict[str, str]]:
         if self._packages_installed_in_parent_env is None:
@@ -143,6 +145,9 @@ class VirtualEnv(object):
 
         return True
 
+    def is_using_virtual_env(self) -> bool:
+        return self.__using_venv
+
     def use_virtual_env(self) -> None:
         """
         Use the virtual environment
@@ -170,17 +175,17 @@ class VirtualEnv(object):
         if sys.platform == "win32":
             binpath = os.path.abspath(os.path.join(self.env_path, "Scripts"))
             base = os.path.dirname(binpath)
-            site_packages = os.path.join(base, "Lib", "site-packages")
+            self._site_packages_dir = os.path.join(base, "Lib", "site-packages")
         else:
             binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
             base = os.path.dirname(binpath)
-            site_packages = os.path.join(base, "lib", "python%s" % sys.version[:3], "site-packages")
+            self._site_packages_dir = os.path.join(base, "lib", "python%s" % sys.version[:3], "site-packages")
 
         old_os_path = os.environ.get("PATH", "")
         os.environ["PATH"] = binpath + os.pathsep + old_os_path
         prev_sys_path = list(sys.path)
 
-        site.addsitedir(site_packages)
+        site.addsitedir(self._site_packages_dir)
         sys.real_prefix = sys.prefix
         sys.prefix = base
         # Move the added items to the front of the path:
@@ -301,25 +306,16 @@ python -m pip $@
 
             assert self.virtual_python is not None
             cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-r", path]
-            output: bytes = b""  # Make sure the var is always defined in the except bodies
             try:
-                output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-            except CalledProcessError as e:
-                LOGGER.error("%s: %s", cmd, e.output.decode())
-                LOGGER.error("requirements: %s", requirements_file)
-                raise
+                self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
             except Exception:
-                LOGGER.error("%s: %s", cmd, output.decode())
                 LOGGER.error("requirements: %s", requirements_file)
                 raise
-            else:
-                LOGGER.debug("%s: %s", cmd, output.decode())
-
         finally:
             if os.path.exists(path):
                 os.remove(path)
 
-        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+        self._notify_change()
 
     def _read_current_requirements_hash(self) -> str:
         """
@@ -376,10 +372,39 @@ python -m pip $@
         :return: A dict with package names as keys and versions as values
         """
         cmd = [python_interpreter, "-m", "pip", "list", "--format", "json"]
-        output = b""
+        output = cls._run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
+        return {r["name"]: r["version"] for r in json.loads(output)}
+
+    def install(self, path: str, editable: bool) -> None:
+        """
+        Install a package in the virtual environment.
+
+        This call by-passes the cache. It's only used by the tests via the `snippetcompiler*` fixtures.
+        """
+        if not self.__using_venv:
+            raise Exception(f"Not using venv {self.__using_venv}. use_virtual_env() should be called first.")
+        if editable and not os.path.isdir(path):
+            raise Exception(f"An editable install was requested, but {path} is not a source directory")
+
+        # Make mypy happy
+        assert self.virtual_python is not None
+
+        cmd_base: List["str"] = [self.virtual_python, "-m", "pip", "install"]
+        if editable:
+            cmd = cmd_base + ["-e", path]
+        else:
+            cmd = cmd_base + [path]
+
+        self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
+        self._notify_change()
+
+    @classmethod
+    def _run_command_and_log_output(
+        cls, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None
+    ) -> str:
+        output: bytes = b""  # Make sure the var is always defined in the except bodies
         try:
-            environment = os.environ.copy()
-            output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, env=environment)
+            output = subprocess.check_output(cmd, stderr=stderr, env=env)
         except CalledProcessError as e:
             LOGGER.error("%s: %s", cmd, e.output.decode())
             raise
@@ -388,5 +413,17 @@ python -m pip $@
             raise
         else:
             LOGGER.debug("%s: %s", cmd, output.decode())
+            return output.decode()
 
-        return {r["name"]: r["version"] for r in json.loads(output.decode())}
+    def _notify_change(self) -> None:
+        """
+        This method must be called when a package is installed or removed from the virtual environment
+        in order for Python to detect the change.
+        """
+        # Make mypy happy
+        assert self._site_packages_dir is not None
+        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+        # Make sure that the .pth files in the site-packages directory are processed.
+        # This is required to make editable installs work.
+        site.addsitedir(self._site_packages_dir)
+        importlib.invalidate_caches()

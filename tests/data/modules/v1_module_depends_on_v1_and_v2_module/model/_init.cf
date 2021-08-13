@@ -1,0 +1,5 @@
+import elaboratev2module
+elaboratev2module::Printer(message="Print from v2 module")
+
+# This call will print "Hello world"
+import elaboratev1module

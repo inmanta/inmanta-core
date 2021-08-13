@@ -198,8 +198,8 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 
 @pytest.mark.parametrize("editable", [True, False])
 @pytest.mark.parametrize("set_path_argument", [True, False])
-def test_module_install(tmpdir: py.path.local, modules_dir: str, editable: bool, set_path_argument: bool) -> None:
-    module_path: str = os.path.join(modules_dir, "minimalv2module")
+def test_module_install(tmpdir: py.path.local, modules_v2_dir: str, editable: bool, set_path_argument: bool) -> None:
+    module_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     python_module_name: str = "inmanta-module-minimalv2module"
     venv.create(tmpdir, with_pip=True)
     pip: str = os.path.join(tmpdir, "bin", "pip")

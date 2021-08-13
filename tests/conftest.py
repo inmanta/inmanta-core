@@ -57,8 +57,10 @@ from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
+from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import Project
+from inmanta.moduletool import ModuleTool
 from inmanta.postgresproc import PostgresProc
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
@@ -273,6 +275,7 @@ def deactive_venv():
             os.environ["PYTHONPATH"] = old_pythonpath
         else:
             del os.environ["PYTHONPATH"]
+    loader.PluginModuleFinder.reset()
 
 
 def reset_metrics():
@@ -754,7 +757,7 @@ class SnippetCompilationTest(KeepOnFail):
         # reset cwd
         os.chdir(self.cwd)
 
-    def setup_func(self, module_dir):
+    def setup_func(self, module_dir: Optional[str]):
         # init project
         self._keep = False
         self.project_dir = tempfile.mkdtemp()
@@ -770,10 +773,25 @@ class SnippetCompilationTest(KeepOnFail):
         self.keep_shared = True
         return {"env": self.env, "libs": self.libs, "project": self.project_dir}
 
-    def setup_for_snippet(self, snippet, autostd=True):
+    def setup_for_snippet(self, snippet, autostd=True, install_v2_modules: List[LocalPackagePath] = []) -> None:
+        """
+        :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
+        """
         self.setup_for_snippet_external(snippet)
-        Project.set(Project(self.project_dir, autostd=autostd))
-        loader.unload_inmanta_plugins()
+        project = Project(self.project_dir, autostd=autostd)
+        Project.set(project)
+        project.use_virtual_env()
+        self._install_v2_modules(project, install_v2_modules)
+
+    def _install_v2_modules(self, project: Project, install_v2_modules: List[LocalPackagePath] = []) -> None:
+        module_tool = ModuleTool()
+        for mod in install_v2_modules:
+            with tempfile.TemporaryDirectory() as build_dir:
+                if mod.editable:
+                    install_path = mod.path
+                else:
+                    install_path = module_tool.build(mod.path, build_dir)
+                project.install_in_compiler_venv(path=install_path, editable=mod.editable)
 
     def reset(self):
         Project.set(Project(self.project_dir, autostd=Project.get().autostd))
@@ -893,6 +911,11 @@ def snippetcompiler_clean(modules_dir):
 @pytest.fixture(scope="session")
 def modules_dir():
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules")
+
+
+@pytest.fixture(scope="session")
+def modules_v2_dir():
+    yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules_v2")
 
 
 class CLI(object):
