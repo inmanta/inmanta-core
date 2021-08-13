@@ -1330,7 +1330,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         self._project: Optional[Project] = project
         self.ensure_versioned()
-        self.model_dir = self._get_model_dir()
+        self.model_dir = os.path.join(self.path, Module.MODEL_DIR)
 
     @classmethod
     @abstractmethod
@@ -1388,16 +1388,12 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
     version = property(get_version)
 
-    def ensure_versioned(self) -> bool:
+    def ensure_versioned(self) -> None:
         """
-        Check if this module is versioned, and if so the version number in the module file should
-        have a tag. If the version has + the current revision can be a child otherwise the current
-        version should match the tag
+        Check if this module is versioned using Git. If not a warning is logged.
         """
         if not os.path.exists(os.path.join(self.path, ".git")):
             LOGGER.warning("Module %s is not version controlled, we recommend you do this as soon as possible.", self.name)
-            return False
-        return True
 
     @lru_cache()
     def get_ast(self, name: str) -> Tuple[List[Statement], BasicBlock]:
@@ -1499,12 +1495,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         If no such directory is defined, this method returns None.
         """
         raise NotImplementedError()
-
-    def _get_model_dir(self) -> str:
-        """
-        Return a path to the model directory of the module.
-        """
-        return os.path.join(self.path, Module.MODEL_DIR)
 
     def get_plugin_files(self) -> Iterator[Tuple[Path, ModuleName]]:
         """

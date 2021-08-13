@@ -265,7 +265,7 @@ class PluginModuleLoader(FileLoader):
 
     def __init__(self, fullname: str, path_to_module: str) -> None:
         """
-        :param fullname: A fully qualified path to the module or package to be imported
+        :param fullname: A fully qualified import path to the module or package to be imported
         :param path_to_module: Path to the file on disk that belongs to the import `fullname`. This should be an empty
                                string when the top-level package inmanta_plugins is imported.
         """
