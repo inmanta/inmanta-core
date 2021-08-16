@@ -1,4 +1,4 @@
-inmanta-dev-dependencies[pytest,async,core,sphinx]==1.50.0
+inmanta-dev-dependencies[pytest,async,core,sphinx]==1.51.0
 bumpversion==0.6.0
 openapi_spec_validator==0.2.10
 types-PyYAML==5.4.6
