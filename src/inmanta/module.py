@@ -954,7 +954,6 @@ class Project(ModuleLike[ProjectMetadata]):
         """
         if cls._project is None:
             cls._project = Project(cls.get_project_dir(os.curdir), main_file=main_file)
-            loader.PluginModuleFinder.configure_module_finder(cls._project.modulepath)
 
         return cls._project
 
@@ -967,7 +966,6 @@ class Project(ModuleLike[ProjectMetadata]):
         os.chdir(project._path)
         plugins.PluginMeta.clear()
         loader.unload_inmanta_plugins()
-        loader.PluginModuleFinder.configure_module_finder(cls._project.modulepath)
 
     def load(self) -> None:
         if not self.loaded:
@@ -976,6 +974,7 @@ class Project(ModuleLike[ProjectMetadata]):
             self.get_complete_ast()
             self.loaded = True
             self.verify()
+
             try:
                 self.load_plugins()
             except CompilerException:
@@ -1123,6 +1122,9 @@ class Project(ModuleLike[ProjectMetadata]):
         """
         if not self.loaded:
             LOGGER.warning("loading plugins on project that has not been loaded completely")
+
+        # ensure the loader is properly configured
+        loader.PluginModuleFinder.configure_module_finder(self.modulepath)
 
         for module in self.modules.values():
             module.load_plugins()
