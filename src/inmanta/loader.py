@@ -101,8 +101,8 @@ class SourceInfo(object):
         from inmanta.module import Module, ModuleV1, Project
 
         if self._requires is None:
-            module: Module = Project.get().modules[self._get_module_name()].get_python_requirements_as_list()
-            self._requires = module.get_python_requirements_as_list if isinstance(module, ModuleV1) else []
+            module: Module = Project.get().modules[self._get_module_name()]
+            self._requires = module.get_python_requirements_as_list() if isinstance(module, ModuleV1) else []
         return self._requires
 
 
