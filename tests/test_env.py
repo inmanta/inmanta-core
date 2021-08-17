@@ -19,12 +19,13 @@ import glob
 import logging
 import os
 import py
+import pydantic
 import subprocess
 import sys
 from packaging import version
 from pkg_resources import Requirement
 from subprocess import CalledProcessError
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from unittest.mock import patch
 
 import pytest
@@ -174,7 +175,35 @@ def test_processenv_install_from_indexes(
         assert installed[package_name] == version
 
 
-# TODO: test ProcessEnv.install_from_source?
+def test_processenv_install_from_indexes_conflicting_reqs(tmpvenv: Tuple[py.path.local, py.path.local]) -> None:
+    venv_dir, python_path = tmpvenv
+    package_name: str = "more-itertools"
+    with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
+        with pytest.raises(subprocess.CalledProcessError) as e:
+            env.ProcessEnv.install_from_indexes([Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]])
+        assert "conflicting dependencies" in e.value.stderr.decode()
+    assert package_name not in env.get_installed_packages(python_path)
+
+
+@pytest.mark.parametrize("editable", [True, False])
+def test_processenv_install_from_source(
+    tmpdir: py.path.local, tmpvenv: Tuple[py.path.local, py.path.local], modules_dir: str, editable: bool
+) -> None:
+    venv_dir, python_path = tmpvenv
+    package_name: str = "inmanta-module-minimalv2module"
+    project_dir: str = os.path.join(modules_dir, "minimalv2module")
+    assert package_name not in env.get_installed_packages(python_path)
+    with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
+        env.ProcessEnv.install_from_source([env.LocalPackagePath(path=project_dir, editable=editable)])
+    assert package_name in env.get_installed_packages(python_path)
+    if editable:
+        assert any(
+            package["name"] == package_name
+            for package in pydantic.parse_raw_as(
+                List[Dict[str, str]],
+                subprocess.check_output([python_path, "-m", "pip", "list", "--editable", "--format", "json"]).decode(),
+            )
+        )
 
 
 @pytest.mark.parametrize("v1_plugin_loader", [True, False])
