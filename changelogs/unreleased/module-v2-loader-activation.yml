@@ -1,0 +1,4 @@
+---
+description: Move loader activation to a more intuitive place
+change-type: minor
+destination-branches: [master]
