@@ -16,6 +16,7 @@
     Contact: bart@inmanta.com
 """
 import glob
+import importlib
 import logging
 import os
 import py
@@ -30,7 +31,7 @@ from unittest.mock import patch
 
 import pytest
 
-from inmanta import env, loader
+from inmanta import env, loader, module
 from utils import LogSequence
 
 
@@ -161,14 +162,14 @@ def test_gen_req_file(tmpdir):
 
 
 @pytest.mark.parametrize("version", [None, version.Version("8.6.0")])
-def test_processenv_install_from_indexes(
+def test_processenv_install_from_index(
     tmpvenv: Tuple[py.path.local, py.path.local], version: Optional[version.Version]
 ) -> None:
     venv_dir, python_path = tmpvenv
     package_name: str = "more-itertools"
     assert package_name not in env.get_installed_packages(python_path)
     with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
-        env.ProcessEnv.install_from_indexes([Requirement.parse(package_name + (f"=={version}" if version is not None else ""))])
+        env.ProcessEnv.install_from_index([Requirement.parse(package_name + (f"=={version}" if version is not None else ""))])
     installed: Dict[str, version.Version] = env.get_installed_packages(python_path)
     assert package_name in installed
     if version is not None:
@@ -180,7 +181,7 @@ def test_processenv_install_from_indexes_conflicting_reqs(tmpvenv: Tuple[py.path
     package_name: str = "more-itertools"
     with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
         with pytest.raises(subprocess.CalledProcessError) as e:
-            env.ProcessEnv.install_from_indexes([Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]])
+            env.ProcessEnv.install_from_index([Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]])
         assert "conflicting dependencies" in e.value.stderr.decode()
     assert package_name not in env.get_installed_packages(python_path)
 
@@ -206,21 +207,48 @@ def test_processenv_install_from_source(
         )
 
 
+# v1 plugin loader overrides loader paths so verify that it doesn't interfere with ProcessEnv installs
 @pytest.mark.parametrize("v1_plugin_loader", [True, False])
-def test_processenv_get_module_file_simple(
-    tmpdir: py.path.local, tmpvenv: Tuple[py.path.local, py.path.local], v1_plugin_loader: bool
+# make sure installation works regardless of whether we install a dependency of inmanta-core (wich is already installed in
+# the encapsulating development venv), a new package or an inmanta module
+# TODO: this currently fails but might start succeeding when master has been merged
+@pytest.mark.parametrize("package_name", ["tinykernel", "more-itertools", "inmanta-module-minimalv2module"])
+def test_processenv_get_module_file(
+    local_module_package_index: str,
+    tmpdir: py.path.local,
+    modules_dir: str,
+    tmpvenv: Tuple[py.path.local, py.path.local],
+    v1_plugin_loader: bool,
+    package_name: str,
 ) -> None:
     venv_dir, python_path = tmpvenv
-    package_name: str = "more-itertools"
-    module_name: str = package_name.lower()
+
+    if package_name.startswith(module.ModuleV2.PKG_NAME_PREFIX):
+        module_name = "inmanta_plugins." + package_name[len(module.ModuleV2.PKG_NAME_PREFIX):].replace("-", "_")
+        index = str(local_module_package_index)
+    else:
+        module_name = package_name.replace("-", "_")
+        index = None
+
+    # unload module if already loaded from encapsulating development venv
+    if module_name in sys.modules:
+        loaded = [sub for sub in sys.modules.keys() if sub.startswith(module_name)]
+        for sub in loaded:
+            del sys.modules[sub]
+    importlib.invalidate_caches()
+
     if v1_plugin_loader:
         loader.configure_module_finder([str(tmpdir)])
-    with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
-        env.ProcessEnv.get_module_file(module_name) is None
-        env.ProcessEnv.install_from_indexes([Requirement.parse(package_name)])
-        env.ProcessEnv.get_module_file(module_name) is not None
-    # TODO: verify get_module_file path?
 
-# TODO: test with inmanta_plugins package, both with and without v1 present in modulepath and without v1 loader
+    with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
+        assert env.ProcessEnv.get_module_file(module_name) is None
+        env.ProcessEnv.install_from_index([Requirement.parse(package_name)], index_urls=[index] if index is not None else None)
+        assert package_name in env.get_installed_packages(python_path)
+        module_file: Optional[str] = env.ProcessEnv.get_module_file(module_name)
+        assert module_file is not None
+        assert module_file == os.path.join(env.ProcessEnv.get_site_packages_dir(), *module_name.split("."), "__init__.py")
+        importlib.import_module(module_name)
+        assert module_name in sys.modules
+        assert sys.modules[module_name].__file__ == module_file
 
 # TODO: test ProcessEnv.check

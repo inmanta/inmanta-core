@@ -289,7 +289,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [Requirement.parse(f"{ModuleV2.PKG_NAME_PREFIX}{str(req)}") for req in module_spec]
         try:
-            env.ProcessEnv.install_from_indexes(requirements, self.urls)
+            env.ProcessEnv.install_from_index(requirements, self.urls)
         except env.PackageNotFound:
             return None
         path: Optional[str] = self.path_for(module_name)

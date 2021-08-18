@@ -69,7 +69,16 @@ class ProcessEnv:
     python_path: str = sys.executable
 
     @classmethod
-    def install_from_indexes(
+    def get_site_packages_dir(cls) -> str:
+        env_dir: str = os.path.dirname(os.path.dirname(cls.python_path))
+        return (
+            os.path.join(env_dir, "Lib", "site-packages")
+            if sys.platform == "win32"
+            else os.path.join(env_dir, "lib", "python%s" % sys.version[:3], "site-packages")
+        )
+
+    @classmethod
+    def install_from_index(
         cls, requirements: List[Requirement], index_urls: Optional[List[str]] = None, upgrade: bool = False
     ) -> None:
         index_args: List[str] = (
@@ -93,6 +102,7 @@ class ProcessEnv:
                 stderr=subprocess.PIPE,
             )
             process.check_returncode()
+            # TODO: other install methods patch pkg_resources.working_set, do we need to do so here as well?
         except CalledProcessError as e:
             stderr: str = e.stderr.decode()
             not_found: List[str] = [
@@ -124,6 +134,7 @@ class ProcessEnv:
                 *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in explicit_paths),
             ]
         )
+        # TODO: other install methods patch pkg_resources.working_set, do we need to do so here as well?
 
     @classmethod
     def check(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
@@ -184,8 +195,12 @@ class ProcessEnv:
         spec: Optional[ModuleSpec]
         try:
             # TODO: this uses sys.meta_path to find modules. This gets modified to be able to load v1 which might cause issues. Test!
+            #   it probably does as inmanta.loader.PluginModuleLoader is checked, meaning not just the active env is checked.
+            #   On the other hand, after the loading stage this makes sense, and if this is called before v1 plugin loading there
+            #   should be no issue. Remove this comment once this method has been tested with v1 module in module path.
             spec = importlib.util.find_spec(module)
-        except ModuleNotFoundError:
+        # inmanta.loader.PluginModuleLoader raises ImportError if module is not found
+        except (ImportError, ModuleNotFoundError):
             spec = None
         return spec.origin if spec is not None else None
 

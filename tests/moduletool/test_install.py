@@ -19,20 +19,17 @@ import argparse
 import json
 import os
 import re
-import setuptools
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
-from importlib.machinery import ModuleSpec
-from typing import Dict, Iterable, List, Optional, Tuple
+from itertools import chain
+from typing import Dict, List, Optional, Tuple
 from unittest.mock import patch
 
 import py
 import pydantic
 import pytest
 import yaml
-from libpip2pi.commands import dir2pi
 
 from inmanta import env, loader, module
 from inmanta.ast import CompilerException, ModuleNotFoundException
@@ -234,23 +231,6 @@ def test_module_install(tmpvenv: py.path.local, modules_dir: str, editable: bool
         assert is_installed(python_module_name, False)
 
 
-def create_local_module_package_index(module_paths: Iterable[str], artifact_path: str) -> Tuple[str, List[str]]:
-    """
-    Creates a local pip index for one or more v2 modules. The modules are built and published to the index.
-    Returns the corresponding fully qualified Python module names.
-
-    :param module_paths: The paths to the modules to include in the index.
-    :param artifact_path: The path to place any artifacts in.
-    :return: A tuple of the path to the index and a list of the fully qualified Python module names.
-    """
-    fq_mod_names: List[str] = []
-    for path in module_paths:
-        ModuleTool().build(path=path, output_dir=artifact_path)
-        fq_mod_names.extend(f"inmanta_plugins.{pkg}" for pkg in setuptools.find_packages(os.path.join(path, "inmanta_plugins")))
-    dir2pi(argv=["dir2pi", artifact_path])
-    return os.path.join(artifact_path, "simple"), fq_mod_names
-
-
 def setup_simple_project(
     projects_dir: str, path: str, imports: List[str], *, index_urls: Optional[List[str]] = None, github_source: bool = True
 ) -> module.ProjectMetadata:
@@ -296,6 +276,7 @@ def setup_simple_project(
     ]
 )
 def test_project_install(
+    local_module_package_index: str,
     tmpvenv: Tuple[py.path.local, py.path.local],
     tmpdir: py.path.local,
     projects_dir: str,
@@ -303,18 +284,15 @@ def test_project_install(
     install_module_names: List[str],
     module_dependencies: List[str],
 ) -> None:
-    # TODO: somehow this test fails when parent venv contains inmanta_plugins in site-packages, even if empty
     venv_dir, python_path = tmpvenv
-    subprocess.check_output([str(python_path), "-m", "pip", "install", "importlib"])
+    fq_mod_names: List[str] = [
+        "inmanta_plugins." + mod.replace("-", "_") for mod in chain(install_module_names, module_dependencies)
+    ]
 
     # set up project and modules
-    pip_index_path, fq_mod_names = create_local_module_package_index(
-        (os.path.join(modules_dir, module_name) for module_name in install_module_names), os.path.join(tmpdir, ".index")
-    )
-    fq_mod_names.extend(f"inmanta_plugins.{dep}" for dep in module_dependencies)
     project_path: str = os.path.join(tmpdir, "project")
     metadata: module.ProjectMetadata = setup_simple_project(
-        projects_dir, project_path, ["std", *install_module_names], index_urls=[pip_index_path]
+        projects_dir, project_path, ["std", *install_module_names], index_urls=[local_module_package_index]
     )
 
     os.chdir(project_path)
@@ -324,44 +302,15 @@ def test_project_install(
         # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
         module.Project.get().autostd = False
         ProjectTool().execute("install", [])
-        # TODO: these two lines might not be required
+        # TODO: these next two lines are probably not required once master has been merged in
         sys.meta_path = [finder for finder in sys.meta_path if not isinstance(finder, loader.PluginModuleFinder)]
         loader.unload_inmanta_plugins()
         for fq_mod_name in fq_mod_names:
             env_module_file: Optional[str] = env.ProcessEnv.get_module_file(fq_mod_name)
             assert env_module_file is not None
-            assert re.fullmatch(
-                # TODO: this path is OS dependent, see inmanta.env.VirtualEnv._activate_that
-                os.path.join(str(venv_dir), "lib", r"python3\.\d+", "site-packages", *fq_mod_name.split("."), r"__init__\.py"),
-                env_module_file,
+            assert env_module_file == os.path.join(
+                env.ProcessEnv.get_site_packages_dir(), *fq_mod_name.split("."), "__init__.py"
             )
         v1_mod_dir: str = os.path.join(project_path, metadata.downloadpath)
         assert os.path.exists(v1_mod_dir)
         assert os.listdir(v1_mod_dir) == ["std"]
-
-
-#TODO: clean up and move test to test ProcessEnv/tmpvenv behavior?
-def test_env_importlib(tmpvenv: Tuple[py.path.local, py.path.local], tmpdir: py.path.local, projects_dir: str, modules_dir: str) -> None:
-    import pkg_resources
-    from pkg_resources import Requirement
-
-    venv_dir, python_path = tmpvenv
-
-    # set up project and modules
-    pip_index_path, fq_mod_names = create_local_module_package_index(
-        (os.path.join(modules_dir, module_name) for module_name in ["minimalv2module"]), os.path.join(tmpdir, ".index")
-    )
-    fq_mod_names.extend(f"inmanta_plugins.{dep}" for dep in [])
-    project_path: str = os.path.join(tmpdir, "project")
-    metadata: module.ProjectMetadata = setup_simple_project(
-        projects_dir, project_path, ["std", *["minimalv2module"]], index_urls=[pip_index_path]
-    )
-
-    with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
-        assert env.ProcessEnv.get_module_file("tinykernel") is None
-        assert env.ProcessEnv.get_module_file("inmanta_plugins.minimalv2module") is None
-        env.ProcessEnv.install_from_indexes([Requirement.parse("tinykernel")])
-        env.ProcessEnv.install_from_indexes([Requirement.parse("inmanta-module-minimalv2module")], index_urls=[pip_index_path])
-        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
-        assert env.ProcessEnv.get_module_file("tinykernel") is not None
-        assert env.ProcessEnv.get_module_file("inmanta_plugins.minimalv2module") is not None
