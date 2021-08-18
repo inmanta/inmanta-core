@@ -87,6 +87,36 @@ ModuleName = NewType("ModuleName", str)
 
 
 TModule = TypeVar("TModule", bound="Module")
+TInmantaModuleRequirement = TypeVar("TInmantaModuleRequirement", bound="InmantaModuleRequirement")
+
+
+class InmantaModuleRequirement:
+    def __init__(self, requirement: Requirement) -> str:
+        self._requirement: Requirement = requirement
+
+    @property
+    def project_name(self) -> str:
+        # Requirement converts all "_" to "-". Inmanta modules use "_"
+        return self._requirement.project_name.replace("-", "_")
+
+    @property
+    def key(self) -> str:
+        # Requirement converts all "_" to "-". Inmanta modules use "_"
+        return self._requirement.key.replace("-", "_")
+
+    @property
+    def specifier(self):
+        return self._requirement.specifier
+
+    def __str__(self) -> str:
+        # Requirement.__str__ does not convert underscores
+        return str(self._requirement)
+
+    @classmethod
+    def parse(cls: TInmantaModuleRequirement, spec: str) -> TInmantaModuleRequirement:
+        if "-" in spec:
+            raise ValueError("Invalid inmanta module requirement: inmanta module names use '_', not '-'")
+        return cls(Requirement.parse(spec))
 
 
 @stable_api
@@ -234,7 +264,7 @@ gitprovider = CLIGitProvider()
 
 class ModuleSource(Generic[TModule]):
     def get_module(
-        self, project: "Project", module_spec: List[Requirement], install: bool = False
+        self, project: "Project", module_spec: List[InmantaModuleRequirement], install: bool = False
     ) -> Optional[TModule]:
         """
         Returns the appropriate module instance for a given module spec.
@@ -254,7 +284,7 @@ class ModuleSource(Generic[TModule]):
             return None
 
     @abstractmethod
-    def install(self, project: "Project", module_spec: List[Requirement]) -> Optional[TModule]:
+    def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional[TModule]:
         """
         Attempt to install a module given a module spec.
 
@@ -264,6 +294,9 @@ class ModuleSource(Generic[TModule]):
         raise NotImplementedError("Abstract method")
 
     def path_for(self, name: str) -> Optional[str]:
+        """
+        Returns the path to the module root directory. Should be called prior to configuring the module finder for v1 modules.
+        """
         raise NotImplementedError("Abstract method")
 
     @classmethod
@@ -271,7 +304,7 @@ class ModuleSource(Generic[TModule]):
     def from_path(cls, project: Optional["Project"], path: str) -> TModule:
         raise NotImplementedError("Abstract method")
 
-    def _get_module_name(self, module_spec: List[Requirement]) -> str:
+    def _get_module_name(self, module_spec: List[InmantaModuleRequirement]) -> str:
         module_names: Set[str] = {req.key for req in module_spec}
         module_name: str = more_itertools.one(
             module_names,
@@ -285,22 +318,45 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def __init__(self, urls: List[str]) -> None:
         self.urls: List[str] = urls
 
-    def install(self, project: Optional["Project"], module_spec: List[Requirement]) -> Optional["ModuleV2"]:
+    @classmethod
+    def get_python_package_name(cls, module_name: str) -> str:
+        return ModuleV2.PKG_NAME_PREFIX + module_name.replace("_", "-")
+
+    @classmethod
+    def get_python_package_requirement(cls, module_req: InmantaModuleRequirement) -> Requirement:
+        return Requirement.parse(str(module_req).replace(module_req.project_name, cls.get_python_package_name(module_req.project_name)))
+
+    @classmethod
+    def get_namespace_package_name(cls, module_name: str) -> str:
+        return "inmanta_plugins." + module_name
+
+    def install(self, project: Optional["Project"], module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
-        requirements: List[Requirement] = [Requirement.parse(f"{ModuleV2.PKG_NAME_PREFIX}{str(req)}") for req in module_spec]
+        requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
         try:
             env.ProcessEnv.install_from_index(requirements, self.urls)
         except env.PackageNotFound:
             return None
         path: Optional[str] = self.path_for(module_name)
         if path is None:
-            raise Exception(f"Inconsistent state: installed module {module_name} but it does not exist in the Python environment.")
+            python_package: str = self.get_python_package_name(module_name)
+            namespace_package: str = self.get_namespace_package_name(module_name)
+            raise InvalidModuleException(
+                f"{python_package} does not contain a {namespace_package} module."
+            )
         return self.from_path(project, path)
 
     def path_for(self, name: str) -> Optional[str]:
+        """
+        Returns the path to the module root directory. Should be called prior to configuring the module finder for v1 modules.
+        """
+        if any(isinstance(finder, loader.PluginModuleFinder) for finder in sys.meta_path):
+            raise Exception(
+                "Invalid state: ModuleV2Source.path_for should not be called once the v1 module finder has been configured."
+            )
         if name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
-        package: str = f"inmanta_plugins.{name}"
+        package: str = self.get_namespace_package_name(name)
         init: Optional[str] = env.ProcessEnv.get_module_file(package)
         if init is None:
             return None
@@ -313,9 +369,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def from_path(cls, project: Optional["Project"], path: str) -> "ModuleV2":
         return ModuleV2(project, path)
 
-    def _get_module_name(self, module_spec: List[Requirement]) -> str:
+    def _get_module_name(self, module_spec: List[InmantaModuleRequirement]) -> str:
         module_name: str = super()._get_module_name(module_spec)
-        if module_name.startswith(ModuleV2.PKG_NAME_PREFIX.lower()):
+        if module_name.startswith(ModuleV2.PKG_NAME_PREFIX.replace("-", "_")):
             raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
         return module_name
 
@@ -324,7 +380,7 @@ class ModuleRepo(ModuleSource["ModuleV1"]):
     def clone(self, name: str, dest: str) -> bool:
         raise NotImplementedError("Abstract method")
 
-    def install(self, project: "Project", module_spec: List[Requirement]) -> Optional["ModuleV1"]:
+    def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV1"]:
         module_name: str = self._get_module_name(module_spec)
         path: Optional[str] = self.path_for(module_name)
         if path is not None:
@@ -408,7 +464,7 @@ def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, Rem
         return LocalFileRepo(path, parent_root=root)
 
 
-def merge_specs(mainspec: "Dict[str, List[Requirement]]", new: "List[Requirement]") -> None:
+def merge_specs(mainspec: "Dict[str, List[InmantaModuleRequirement]]", new: "List[InmantaModuleRequirement]") -> None:
     """Merge two maps str->[T] by concatting their lists."""
     for req in new:
         key = req.project_name
@@ -638,7 +694,8 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
         values = self.dict()
         del values["compiler_version"]
         del values["requires"]
-        values["name"] = ModuleV2.PKG_NAME_PREFIX + values["name"]
+        # TODO: add test for _ -> - conversion
+        values["name"] = ModuleV2Source.get_python_package_name(values["name"])
         return ModuleV2Metadata(**values)
 
 
@@ -668,6 +725,8 @@ class ModuleV2Metadata(ModuleMetadata):
         """
         if not v.startswith(ModuleV2.PKG_NAME_PREFIX) or not len(v) > len(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError(f'The name field should follow the format "{ModuleV2.PKG_NAME_PREFIX}<module-name>"')
+        if "_" in v:
+            raise ValueError("Module names should not contain underscores, use '-' instead.")
         return v
 
     @classmethod
@@ -1168,15 +1227,18 @@ class Project(ModuleLike[ProjectMetadata]):
 
     def load_module(self, module_name: str, install: bool = False, allow_v1: bool = False) -> "Module":
         """
-        Get a module instance for a given module name.
+        Get a module instance for a given module name. Should be called prior to configuring the module finder to include v1
+        modules.
 
         :param module_name: The name of the module.
         :param install: Run in install mode, installing any modules that have not yet been installed, instead of only
             installing v1 modules.
         :param allow_v1: Allow this module to be loaded as v1.
         """
-        reqs: Mapping[str, List[Requirement]] = self.collect_requirements()
-        module_reqs: List[Requirement] = list(reqs[module_name]) if module_name in reqs else [Requirement.parse(module_name)]
+        reqs: Mapping[str, List[InmantaModuleRequirement]] = self.collect_requirements()
+        module_reqs: List[InmantaModuleRequirement] = (
+            list(reqs[module_name]) if module_name in reqs else [InmantaModuleRequirement.parse(module_name)]
+        )
 
         module: Optional[Module]
         try:
@@ -1233,7 +1295,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return mod_list
 
-    def requires(self) -> "List[Requirement]":
+    def requires(self) -> "List[InmantaModuleRequirement]":
         """
         Get the requires for this module
         """
@@ -1247,11 +1309,11 @@ class Project(ModuleLike[ProjectMetadata]):
             reqs.append(reqe)
         return reqs
 
-    def collect_requirements(self) -> "Dict[str, List[Requirement]]":
+    def collect_requirements(self) -> "Dict[str, List[InmantaModuleRequirement]]":
         """
         Collect the list of all requirements of all V1 modules in the project.
         """
-        specs = {}  # type: Dict[str, List[Requirement]]
+        specs = {}  # type: Dict[str, List[InmantaModuleRequirement]]
         merge_specs(specs, self.requires())
         for module in self.modules.values():
             if isinstance(module, ModuleV1):
@@ -1259,15 +1321,15 @@ class Project(ModuleLike[ProjectMetadata]):
                 merge_specs(specs, reqs)
         return specs
 
-    def collect_imported_requirements(self) -> "Dict[str, List[Requirement]]":
+    def collect_imported_requirements(self) -> "Dict[str, List[InmantaModuleRequirement]]":
         imports = set([x.name.split("::")[0] for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
         imports.add("std")
-        specs: Dict[str, List[Requirement]] = self.collect_requirements()
+        specs: Dict[str, List[InmantaModuleRequirement]] = self.collect_requirements()
 
-        def get_spec(name: str) -> "List[Requirement]":
+        def get_spec(name: str) -> "List[InmantaModuleRequirement]":
             if name in specs:
                 return specs[name]
-            return [Requirement.parse(name)]
+            return [InmantaModuleRequirement.parse(name)]
 
         return {name: get_spec(name) for name in imports}
 
@@ -1281,11 +1343,11 @@ class Project(ModuleLike[ProjectMetadata]):
 
         good = True
 
-        requirements: Dict[str, List[Requirement]] = self.collect_requirements()
-        v2_requirements: Dict[str, List[Requirement]] = {
+        requirements: Dict[str, List[InmantaModuleRequirement]] = self.collect_requirements()
+        v2_requirements: Dict[str, List[InmantaModuleRequirement]] = {
             name: spec for name, spec in requirements.items() if self.module_source.path_for(name) is not None
         }
-        v1_requirements: Dict[str, List[Requirement]] = {
+        v1_requirements: Dict[str, List[InmantaModuleRequirement]] = {
             name: spec for name, spec in requirements.items() if name not in v2_requirements
         }
 
@@ -1305,7 +1367,9 @@ class Project(ModuleLike[ProjectMetadata]):
 
         good &= env.ProcessEnv.check(
             in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"),
-            constraints=[Requirement.parse(f"{ModuleV2.PKG_NAME_PREFIX}{req}") for req in chain.from_iterable(v2_requirements.values())],
+            constraints=[
+                ModuleV2Source.get_python_package_requirement for req in chain.from_iterable(v2_requirements.values())
+            ],
         )
 
         return good
@@ -1662,9 +1726,11 @@ class ModuleV1(Module[ModuleV1Metadata]):
         """
         return str(self._metadata.compiler_version)
 
-    def requires(self) -> "List[Requirement]":
+    # TODO: on master requires returns a mix of Python package requirements and inmanta module requirements
+    def requires(self) -> "List[InmantaModuleRequirement]":
         """
-        Get the requires for this module
+        Get the requires for this module. This is a list of requirements on inmanta modules, not the corresponding Python
+        packages, i.e. my_module>=1 instead of inmanta-module-my-module>=1.
         """
         # filter on import stmt
         reqs = []
@@ -1676,22 +1742,22 @@ class ModuleV1(Module[ModuleV1Metadata]):
             reqs.append(reqe)
         return reqs
 
-    def get_all_requires(self) -> List[Requirement]:
+    def get_all_requires(self) -> List[InmantaModuleRequirement]:
         """
         :return: all modules required by an import from any sub-modules, with all constraints applied
         """
         # get all constraints
-        spec: Dict[str, Requirement] = {req.project_name: req for req in self.requires()}
+        spec: Dict[str, InmantaModuleRequirement] = {req.project_name: req for req in self.requires()}
         # find all imports
         imports = {imp.name.split("::")[0] for subm in sorted(self.get_all_submodules()) for imp in self.get_imports(subm)}
-        return [spec[r] if spec.get(r) else Requirement.parse(r) for r in imports]
+        return [spec[r] if spec.get(r) else InmantaModuleRequirement.parse(r) for r in imports]
 
     @classmethod
     def install(
         cls,
         project: Project,
         modulename: str,
-        requirements: Iterable[Requirement],
+        requirements: Iterable[InmantaModuleRequirement],
         install: bool = True,
         install_mode: InstallMode = InstallMode.release,
     ) -> "ModuleV1":
@@ -1722,7 +1788,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
         cls,
         project: Project,
         modulename: str,
-        requirements: Iterable[Requirement],
+        requirements: Iterable[InmantaModuleRequirement],
         path: str = None,
         fetch: bool = True,
         install_mode: InstallMode = InstallMode.release,
@@ -1760,7 +1826,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
 
     @classmethod
     def get_suitable_version_for(
-        cls, modulename: str, requirements: Iterable[Requirement], path: str, release_only: bool = True
+        cls, modulename: str, requirements: Iterable[InmantaModuleRequirement], path: str, release_only: bool = True
     ) -> "Optional[Version]":
         versions = gitprovider.get_all_tags(path)
 
@@ -1858,7 +1924,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     @classmethod
     def get_name_from_metadata(cls, metadata: ModuleV2Metadata) -> str:
-        return metadata.name[len(cls.PKG_NAME_PREFIX) :]
+        return metadata.name[len(cls.PKG_NAME_PREFIX) :].replace("-", "_")
 
     @classmethod
     def get_metadata_file_schema_type(cls) -> Type[ModuleV2Metadata]:

@@ -244,7 +244,6 @@ def setup_simple_project(
     :param github_source: Whether to add the inmanta github as a module source.
     """
     shutil.copytree(os.path.join(projects_dir, "simple_project"), path)
-    project_config_path: str = os.path.join(path, module.Project.PROJECT_FILE)
     metadata: module.ProjectMetadata
     with open(os.path.join(path, module.Project.PROJECT_FILE), "r+") as fh:
         metadata = module.ProjectMetadata.parse(fh.read())
@@ -271,7 +270,7 @@ def setup_simple_project(
     "install_module_names, module_dependencies",
     [
         (["minimalv2module"], []),
-        # TODO: _ vs - enforcement in module.py, see thread on slack
+        # include module with _ to make sure that works as well
         (["minimalv2module", "elaboratev2module_extension"], ["elaboratev2module"]),
     ]
 )
@@ -286,7 +285,7 @@ def test_project_install(
 ) -> None:
     venv_dir, python_path = tmpvenv
     fq_mod_names: List[str] = [
-        "inmanta_plugins." + mod.replace("-", "_") for mod in chain(install_module_names, module_dependencies)
+        f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)
     ]
 
     # set up project and modules
