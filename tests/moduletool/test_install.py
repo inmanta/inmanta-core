@@ -203,14 +203,11 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 
 @pytest.mark.parametrize("editable", [True, False])
 @pytest.mark.parametrize("set_path_argument", [True, False])
-def test_module_install(tmpdir: py.path.local, modules_v2_dir: str, editable: bool, set_path_argument: bool) -> None:
+def test_module_install(tmpvenv: py.path.local, modules_v2_dir: str, editable: bool, set_path_argument: bool) -> None:
+    venv_dir, python_path = tmpvenv
+
     module_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     python_module_name: str = "inmanta-module-minimalv2module"
-
-    venv.create(tmpdir, with_pip=True)
-    python_path: str = os.path.join(tmpdir, "bin", "python")
-    # default pip version is not compatible with module install flow
-    subprocess.check_output([python_path, "-m", "pip", "install", "-U", "pip"])
 
     def is_installed(name: str, only_editable: bool = False) -> bool:
         out: str = subprocess.check_output(
@@ -279,13 +276,13 @@ def setup_simple_project(
 )
 def test_project_install(
     local_module_package_index: str,
-    tmpvenv: Tuple[py.path.local, py.path.local],
+        tmpvenv_active,
     tmpdir: py.path.local,
     projects_dir: str,
     install_module_names: List[str],
     module_dependencies: List[str],
 ) -> None:
-    venv_dir, python_path = tmpvenv
+    venv_dir, python_path = tmpvenv_active
     fq_mod_names: List[str] = [
         f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)
     ]

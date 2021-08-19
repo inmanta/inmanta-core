@@ -1033,9 +1033,9 @@ async def mocked_compiler_service_block(server, monkeypatch):
 
 
 @pytest.fixture
-def tmpvenv(deactive_venv, tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
+def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
     """
-    Creates and activates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the
+    Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the
     `tmpdir` fixture. The venv is activated within the currently running process. This venv is completely decoupled from the
     active development venv. As a result, any attempts to load new modules from the development venv will fail until cleanup.
 
@@ -1045,6 +1045,19 @@ def tmpvenv(deactive_venv, tmpdir: py.path.local) -> Iterator[Tuple[py.path.loca
     python_path: py.path.local = venv_dir.join("bin", "python")
     venv.create(venv_dir, with_pip=True)
     subprocess.check_output([str(python_path), "-m", "pip", "install", "-U", "pip"])
+    yield (venv_dir, python_path)
+
+
+@pytest.fixture
+def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
+    """
+    Activates the venv created by the `tmpvenv` fixture within the currently running process. This venv is completely decoupled
+    from the active development venv. As a result, any attempts to load new modules from the development venv will fail until
+    cleanup.
+
+    :return: A tuple of the paths to the venv and the Python executable respectively.
+    """
+    venv_dir, python_path = tmpvenv
 
     # adapted from
     # https://github.com/pypa/virtualenv/blob/9569493453a39d63064ed7c20653987ba15c99e5/src/virtualenv/activation/python/activate_this.py
@@ -1084,7 +1097,7 @@ def tmpvenv(deactive_venv, tmpdir: py.path.local) -> Iterator[Tuple[py.path.loca
     package_dir: str = os.path.join(site_packages, const.PLUGINS_PACKAGE)
     os.makedirs(package_dir)
 
-    yield (venv_dir, python_path)
+    yield tmpvenv
 
     def module_in_prefix(module: ModuleType, prefix: str) -> bool:
         file: Optional[str] = getattr(module, "__file__", None)

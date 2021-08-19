@@ -163,9 +163,9 @@ def test_gen_req_file(tmpdir):
 
 @pytest.mark.parametrize("version", [None, version.Version("8.6.0")])
 def test_processenv_install_from_index(
-    tmpvenv: Tuple[py.path.local, py.path.local], version: Optional[version.Version]
+    tmpvenv_active, version: Optional[version.Version]
 ) -> None:
-    venv_dir, python_path = tmpvenv
+    venv_dir, python_path = tmpvenv_active
     package_name: str = "more-itertools"
     assert package_name not in env.get_installed_packages(python_path)
     with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
@@ -176,8 +176,8 @@ def test_processenv_install_from_index(
         assert installed[package_name] == version
 
 
-def test_processenv_install_from_indexes_conflicting_reqs(tmpvenv: Tuple[py.path.local, py.path.local]) -> None:
-    venv_dir, python_path = tmpvenv
+def test_processenv_install_from_indexes_conflicting_reqs(tmpvenv_active) -> None:
+    venv_dir, python_path = tmpvenv_active
     package_name: str = "more-itertools"
     with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
         with pytest.raises(subprocess.CalledProcessError) as e:
@@ -188,9 +188,9 @@ def test_processenv_install_from_indexes_conflicting_reqs(tmpvenv: Tuple[py.path
 
 @pytest.mark.parametrize("editable", [True, False])
 def test_processenv_install_from_source(
-    tmpdir: py.path.local, tmpvenv: Tuple[py.path.local, py.path.local], modules_v2_dir: str, editable: bool
+    tmpdir: py.path.local, tmpvenv_active, modules_v2_dir: str, editable: bool
 ) -> None:
-    venv_dir, python_path = tmpvenv
+    venv_dir, python_path = tmpvenv_active
     package_name: str = "inmanta-module-minimalv2module"
     project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
     assert package_name not in env.get_installed_packages(python_path)
@@ -215,11 +215,11 @@ def test_processenv_install_from_source(
 def test_processenv_get_module_file(
     local_module_package_index: str,
     tmpdir: py.path.local,
-    tmpvenv: Tuple[py.path.local, py.path.local],
+    tmpvenv_active,
     v1_plugin_loader: bool,
     package_name: str,
 ) -> None:
-    venv_dir, python_path = tmpvenv
+    venv_dir, python_path = tmpvenv_active
 
     if package_name.startswith(module.ModuleV2.PKG_NAME_PREFIX):
         module_name = "inmanta_plugins." + package_name[len(module.ModuleV2.PKG_NAME_PREFIX):].replace("-", "_")
