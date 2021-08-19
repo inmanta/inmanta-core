@@ -1,0 +1,5 @@
+---
+description: Fix bug where the std module gets a dependency to itself when it is converted to a v2 module using the `inmanta module v1tov2` command.
+issue-nr: 3159
+change-type: patch
+destination-branches: [master]

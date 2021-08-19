@@ -79,7 +79,7 @@ def test_project_freeze_bad(git_modules_dir, modules_repo, capsys, caplog):
 
     assert len(err) == 0, err
     assert len(out) == 0, out
-    assert "requirement mod2<2016 on module mod2 not fullfilled, now at version 2016.1" in caplog.text
+    assert "requirement mod2<2016 on module mod2 not fulfilled, now at version 2016.1" in caplog.text
 
     assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
 

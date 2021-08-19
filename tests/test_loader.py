@@ -19,7 +19,6 @@ import hashlib
 import inspect
 import os
 import shutil
-import sys
 from typing import List, Optional, Set
 
 import py
@@ -204,10 +203,13 @@ def test():
 
 @fixture(scope="function")
 def module_path(tmpdir):
-    module_finder = loader.PluginModuleFinder([str(tmpdir)])
-    sys.meta_path.insert(0, module_finder)
+    """
+    Remark: Don't use this fixture in combination with instances of the Project class
+            or the CodeLoader class as it would reset the config of the PluginModuleFinder.
+    """
+    loader.PluginModuleFinder.configure_module_finder(modulepaths=[str(tmpdir)])
     yield str(tmpdir)
-    sys.meta_path.remove(module_finder)
+    loader.PluginModuleFinder.reset()
 
 
 def test_venv_path(tmpdir: py.path.local):
@@ -254,12 +256,12 @@ def test_venv_path(tmpdir: py.path.local):
         assert os.path.exists(os.path.join(p, "bin", "python"))
 
 
-def test_module_loader(module_path, tmpdir, capsys):
+def test_module_loader(module_path: str, capsys, modules_dir: str):
     """
     Verify that the loader.PluginModuleFinder and loader.PluginModuleLoader load modules correctly.
     """
-    origin_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "submodule")
-    mod_dir = tmpdir.join(os.path.basename(origin_mod_dir))
+    origin_mod_dir = os.path.join(modules_dir, "submodule")
+    mod_dir = os.path.join(module_path, os.path.basename(origin_mod_dir))
     shutil.copytree(origin_mod_dir, mod_dir)
 
     capsys.readouterr()  # Clear buffers

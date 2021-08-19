@@ -1,0 +1,7 @@
+---
+description: Added V2 package loader
+issue-nr: 3051
+change-type: major
+destination-branches: [master]
+sections:
+  feature: "{{description}}"

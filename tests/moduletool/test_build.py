@@ -57,22 +57,32 @@ def run_module_build(module_path: str, set_path_argument: bool, output_dir: Opti
 
 
 @pytest.mark.parametrize(
-    "module_name,set_path_argument",
+    "module_name, is_v2_module, set_path_argument",
     [
-        ("minimalv2module", True),
-        ("minimalv2module", False),
-        ("elaboratev2module", True),
-        ("elaboratev2module", False),
-        ("elaboratev1module", False),
+        ("minimalv2module", True, True),
+        ("minimalv2module", True, False),
+        ("elaboratev2module", True, True),
+        ("elaboratev2module", True, False),
+        ("elaboratev1module", False, False),
     ],
 )
 def test_build_v2_module(
-    tmpdir, modules_dir: str, modules_v2_dir: str, module_name: str, set_path_argument: bool, monkeypatch: MonkeyPatch
+    tmpdir,
+    modules_dir: str,
+    modules_v2_dir: str,
+    module_name: str,
+    is_v2_module: bool,
+    set_path_argument: bool,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     """
     Build a V2 package and verify that the required files are present in the resulting wheel.
     """
-    module_dir = os.path.normpath(os.path.join(modules_dir if "v1" in module_name else modules_v2_dir, module_name))
+    module_dir: str
+    if is_v2_module:
+        module_dir = os.path.join(modules_v2_dir, module_name)
+    else:
+        module_dir = os.path.join(modules_dir, module_name)
     module_copy_dir = os.path.join(tmpdir, "module")
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)
@@ -107,7 +117,7 @@ def test_build_v2_module_set_output_directory(tmpdir, modules_v2_dir: str) -> No
     """
     Verify that the output_dir argument of the `inmanta module build` command works correctly.
     """
-    module_dir = os.path.normpath(os.path.join(modules_v2_dir, "minimalv2module"))
+    module_dir = os.path.join(modules_v2_dir, "minimalv2module")
     module_copy_dir = os.path.join(tmpdir, "module")
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)
@@ -125,7 +135,7 @@ def test_build_v2_module_incomplete_package_data(tmpdir, modules_v2_dir: str, ca
     Verify that a warning is shown when a data file present in module namespace package is not packaged, because
     it's not mentioned in the `options.package_data` section of the setup.cfg
     """
-    module_dir = os.path.normpath(os.path.join(modules_v2_dir, "minimalv2module"))
+    module_dir = os.path.join(modules_v2_dir, "minimalv2module")
     module_copy_dir = os.path.join(tmpdir, "module")
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)
@@ -150,7 +160,7 @@ def test_build_invalid_module(tmpdir, modules_v2_dir: str):
     """
     Execute a build when the setup.cfg file is missing
     """
-    module_dir = os.path.normpath(os.path.join(modules_v2_dir, "minimalv2module"))
+    module_dir = os.path.join(modules_v2_dir, "minimalv2module")
     module_copy_dir = os.path.join(tmpdir, "module")
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)
