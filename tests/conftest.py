@@ -64,7 +64,7 @@ from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
-from inmanta.env import LocalPackagePath
+from inmanta.env import LocalPackagePath, ProcessEnv
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import Project
 from inmanta.moduletool import ModuleTool
@@ -759,6 +759,7 @@ class SnippetCompilationTest(KeepOnFail):
         config.Config.load_config()
         self.cwd = os.getcwd()
         self.keep_shared = False
+        self.process_env_backup: Optional[str] = None
 
     def tearDownClass(self):
         if not self.keep_shared:
@@ -772,11 +773,14 @@ class SnippetCompilationTest(KeepOnFail):
         self._keep = False
         self.project_dir = tempfile.mkdtemp()
         self.modules_dir = module_dir
+        self.process_env_backup = ProcessEnv.python_path
         os.symlink(self.env, os.path.join(self.project_dir, ".env"))
 
     def tear_down_func(self):
         if not self._keep:
             shutil.rmtree(self.project_dir)
+        assert self.process_env_backup is not None
+        ProcessEnv.python_path = self.process_env_backup
 
     def keep(self):
         self._keep = True
@@ -788,9 +792,13 @@ class SnippetCompilationTest(KeepOnFail):
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
         """
         self.setup_for_snippet_external(snippet)
+        loader.unload_inmanta_plugins()
+        loader.PluginModuleFinder.reset()
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
         project.use_virtual_env()
+        assert project.virtualenv.virtual_python is not None
+        ProcessEnv.python_path = project.virtualenv.virtual_python
         self._install_v2_modules(project, install_v2_modules)
 
     def _install_v2_modules(self, project: Project, install_v2_modules: List[LocalPackagePath] = []) -> None:
@@ -806,6 +814,7 @@ class SnippetCompilationTest(KeepOnFail):
     def reset(self):
         Project.set(Project(self.project_dir, autostd=Project.get().autostd))
         loader.unload_inmanta_plugins()
+        loader.PluginModuleFinder.reset()
 
     def setup_for_snippet_external(self, snippet):
         if self.modules_dir:

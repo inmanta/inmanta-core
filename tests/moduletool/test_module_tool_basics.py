@@ -27,10 +27,10 @@ from typing import Iterator, Type
 import py
 import pytest
 import yaml
-from pkg_resources import Requirement, parse_version
+from pkg_resources import parse_version
 
 from inmanta import module
-from inmanta.module import InvalidMetadata, InvalidModuleException, MetadataDeprecationWarning, Project
+from inmanta.module import InmantaModuleRequirement, InvalidMetadata, InvalidModuleException, MetadataDeprecationWarning, Project
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
@@ -369,7 +369,7 @@ requires:
         """
     )
     mod: module.Module = module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
-    assert mod.requires() == [Requirement.parse("std"), Requirement.parse("ip > 1.0.0")]
+    assert mod.requires() == [InmantaModuleRequirement.parse("std"), InmantaModuleRequirement.parse("ip > 1.0.0")]
 
 
 def test_module_requires_single(inmanta_module_v1):
@@ -382,7 +382,7 @@ requires: std > 1.0.0
         """
     )
     mod: module.Module = module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
-    assert mod.requires() == [Requirement.parse("std > 1.0.0")]
+    assert mod.requires() == [InmantaModuleRequirement.parse("std > 1.0.0")]
 
 
 def test_module_requires_legacy(inmanta_module_v1):
@@ -403,7 +403,7 @@ requires:
         warning = w[0]
         assert issubclass(warning.category, MetadataDeprecationWarning)
         assert "yaml dictionary syntax for specifying module requirements has been deprecated" in str(warning.message)
-    assert mod.requires() == [Requirement.parse("std"), Requirement.parse("ip > 1.0.0")]
+    assert mod.requires() == [InmantaModuleRequirement.parse("std"), InmantaModuleRequirement.parse("ip > 1.0.0")]
 
 
 def test_module_requires_legacy_invalid(inmanta_module_v1):

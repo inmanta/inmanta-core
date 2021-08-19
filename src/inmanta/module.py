@@ -111,6 +111,11 @@ class InmantaModuleRequirement:
     def specifier(self):
         return self._requirement.specifier
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, InmantaModuleRequirement):
+            return NotImplemented
+        return self.project_name == other.project_name and self._requirement == other._requirement
+
     def __contains__(self, version: str) -> bool:
         return version in self._requirement
 
@@ -1305,6 +1310,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return list(chain.from_iterable(ast_by_top_level_mod.values()))
 
+    # TODO: add test for this method?
     def load_module(self, module_name: str, install: bool = False, allow_v1: bool = False) -> "Module":
         """
         Get a module instance for a given module name. Should be called prior to configuring the module finder to include v1
