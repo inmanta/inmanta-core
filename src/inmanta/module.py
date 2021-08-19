@@ -1356,8 +1356,7 @@ class Project(ModuleLike[ProjectMetadata]):
         loader.PluginModuleFinder.configure_module_finder(self.modulepath)
 
         for module in self.modules.values():
-            if isinstance(module, ModuleV1):
-                module.load_plugins()
+            module.load_plugins()
 
     def verify(self) -> None:
         # verify module dependencies
@@ -1440,14 +1439,13 @@ class Project(ModuleLike[ProjectMetadata]):
 
     def collect_requirements(self) -> "Dict[str, List[InmantaModuleRequirement]]":
         """
-        Collect the list of all module requirements of all V1 modules in the project.
+        Collect the list of all module requirements of all modules in the project.
         """
         specs: Dict[str, List[InmantaModuleRequirement]] = {}
         merge_specs(specs, self.requires())
         for module in self.modules.values():
-            if isinstance(module, ModuleV1):
-                reqs = module.requires()
-                merge_specs(specs, reqs)
+            reqs = module.requires()
+            merge_specs(specs, reqs)
         return specs
 
     def collect_imported_requirements(self) -> "Dict[str, List[InmantaModuleRequirement]]":
@@ -1462,36 +1460,41 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return {name: get_spec(name) for name in imports}
 
+    # TODO: test this method
     def verify_requires(self) -> bool:
         """
         Check if all the required modules for this module have been loaded
         """
         LOGGER.info("verifying project")
         imports = set([x.name for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
-        modules = self.modules
 
         good = True
 
-        requirements: Dict[str, List[InmantaModuleRequirement]] = self.collect_requirements()
-        v2_requirements: Dict[str, List[InmantaModuleRequirement]] = {
-            name: spec for name, spec in requirements.items() if self.module_source.path_for(name) is not None
-        }
-        v1_requirements: Dict[str, List[InmantaModuleRequirement]] = {
-            name: spec for name, spec in requirements.items() if name not in v2_requirements
-        }
+        for name, module in self.modules.items():
+            if module.GENERATION == ModuleGeneration.V1 and self.module_source.path_for(name) is not None:
+                LOGGER.warning(
+                    "Module %s was installed installed as v1 but later pulled in as v2 a dependency as v2."
+                    " Continuing would lead to inconsistent behavior. A rerun should resolve this issue.",
+                    name,
+                )
+                good = False
 
-        # TODO: for each ModuleV1 instance in self.modules, check that self.module_source.path_for(m) returns None.
-        #   If it doesn't, this means the module was installed as v2 as an unintended side effect. The v1 code was loaded
-        #   instead, but the plugin loader would load the v2 code, which presents an inconsistency. If this is the case, fail.
+        requirements: Dict[str, List[InmantaModuleRequirement]] = self.collect_requirements()
+        v1_requirements: Dict[str, List[InmantaModuleRequirement]] = {
+            name: spec for name, spec in requirements.items() if self.modules[name].GENERATION == ModuleGeneration.V1
+        }
+        v2_requirements: Dict[str, List[InmantaModuleRequirement]] = {
+            name: spec for name, spec in requirements.items() if name not in v1_requirements
+        }
 
         for name, spec in v1_requirements.items():
             if name not in imports:
                 continue
-            module = modules[name]
+            module = self.modules[name]
             version = parse_version(str(module.version))
             for r in spec:
                 if version not in r:
-                    LOGGER.warning("requirement %s on module %s not fulfilled, now at version %s" % (r, name, version))
+                    LOGGER.warning("requirement %s on module %s not fulfilled, now at version %s", r, name, version)
                     good = False
 
         good &= env.ProcessEnv.check(

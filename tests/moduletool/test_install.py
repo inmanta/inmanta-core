@@ -21,7 +21,6 @@ import os
 import shutil
 import subprocess
 import sys
-import venv
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
 from unittest.mock import patch
@@ -203,7 +202,9 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 
 @pytest.mark.parametrize("editable", [True, False])
 @pytest.mark.parametrize("set_path_argument", [True, False])
-def test_module_install(tmpvenv: py.path.local, modules_v2_dir: str, editable: bool, set_path_argument: bool) -> None:
+def test_module_install(
+    tmpvenv: Tuple[py.path.local, py.path.local], modules_v2_dir: str, editable: bool, set_path_argument: bool
+) -> None:
     venv_dir, python_path = tmpvenv
 
     module_path: str = os.path.join(modules_v2_dir, "minimalv2module")
@@ -276,7 +277,7 @@ def setup_simple_project(
 )
 def test_project_install(
     local_module_package_index: str,
-        tmpvenv_active,
+    tmpvenv_active: Tuple[py.path.local, py.path.local],
     tmpdir: py.path.local,
     projects_dir: str,
     install_module_names: List[str],
@@ -300,9 +301,6 @@ def test_project_install(
         # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
         module.Project.get().autostd = False
         ProjectTool().execute("install", [])
-        # TODO: these next two lines are probably not required once master has been merged in
-        sys.meta_path = [finder for finder in sys.meta_path if not isinstance(finder, loader.PluginModuleFinder)]
-        loader.unload_inmanta_plugins()
         for fq_mod_name in fq_mod_names:
             env_module_file: Optional[str] = env.ProcessEnv.get_module_file(fq_mod_name)
             assert env_module_file is not None

@@ -163,7 +163,7 @@ def test_gen_req_file(tmpdir):
 
 @pytest.mark.parametrize("version", [None, version.Version("8.6.0")])
 def test_processenv_install_from_index(
-    tmpvenv_active, version: Optional[version.Version]
+    tmpvenv_active: Tuple[py.path.local, py.path.local], version: Optional[version.Version]
 ) -> None:
     venv_dir, python_path = tmpvenv_active
     package_name: str = "more-itertools"
@@ -176,7 +176,7 @@ def test_processenv_install_from_index(
         assert installed[package_name] == version
 
 
-def test_processenv_install_from_indexes_conflicting_reqs(tmpvenv_active) -> None:
+def test_processenv_install_from_indexes_conflicting_reqs(tmpvenv_active: Tuple[py.path.local, py.path.local]) -> None:
     venv_dir, python_path = tmpvenv_active
     package_name: str = "more-itertools"
     with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
@@ -188,7 +188,7 @@ def test_processenv_install_from_indexes_conflicting_reqs(tmpvenv_active) -> Non
 
 @pytest.mark.parametrize("editable", [True, False])
 def test_processenv_install_from_source(
-    tmpdir: py.path.local, tmpvenv_active, modules_v2_dir: str, editable: bool
+    tmpdir: py.path.local, tmpvenv_active: Tuple[py.path.local, py.path.local], modules_v2_dir: str, editable: bool
 ) -> None:
     venv_dir, python_path = tmpvenv_active
     package_name: str = "inmanta-module-minimalv2module"
@@ -215,7 +215,7 @@ def test_processenv_install_from_source(
 def test_processenv_get_module_file(
     local_module_package_index: str,
     tmpdir: py.path.local,
-    tmpvenv_active,
+    tmpvenv_active: Tuple[py.path.local, py.path.local],
     v1_plugin_loader: bool,
     package_name: str,
 ) -> None:
