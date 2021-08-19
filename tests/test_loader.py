@@ -212,8 +212,8 @@ def module_path(tmpdir):
     loader.PluginModuleFinder.reset()
 
 
-def test_venv_path(tmpdir: py.path.local):
-    original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
+def test_venv_path(tmpdir: py.path.local, projects_dir: str):
+    original_project_dir: str = os.path.join(projects_dir, "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
     shutil.copytree(original_project_dir, project_dir)
 
@@ -223,7 +223,8 @@ def test_venv_path(tmpdir: py.path.local):
         else:
             project: Project = Project(project_dir, venv_path=venv_path)
         Project.set(project)
-        project.load()
+        # don't load full project, only AST so we don't have to deal with module finder cleanup
+        project.load_module_recursive()
 
     # Use default venv dir
     default_venv_dir = os.path.join(project_dir, ".env")

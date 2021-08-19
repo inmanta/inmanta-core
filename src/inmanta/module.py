@@ -319,6 +319,7 @@ class CLIGitProvider(GitProvider):
 gitprovider = CLIGitProvider()
 
 
+# TODO: test all relevant module source methods, including editable install detection
 class ModuleSource(Generic[TModule]):
     def get_module(
         self, project: "Project", module_spec: List[InmantaModuleRequirement], install: bool = False
@@ -362,7 +363,7 @@ class ModuleSource(Generic[TModule]):
         raise NotImplementedError("Abstract method")
 
     def _get_module_name(self, module_spec: List[InmantaModuleRequirement]) -> str:
-        module_names: Set[str] = {req.key for req in module_spec}
+        module_names: Set[str] = {req.project_name for req in module_spec}
         module_name: str = more_itertools.one(
             module_names,
             too_short=ValueError("module_spec should contain at least one requirement"),
