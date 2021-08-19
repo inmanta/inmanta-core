@@ -55,7 +55,7 @@ from typing import (
 
 import more_itertools
 import yaml
-from pkg_resources import Requirement, parse_requirements, parse_version
+from pkg_resources import Distribution, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, validator
 
 import inmanta.warnings
@@ -91,7 +91,7 @@ TInmantaModuleRequirement = TypeVar("TInmantaModuleRequirement", bound="InmantaM
 
 
 class InmantaModuleRequirement:
-    def __init__(self, requirement: Requirement) -> str:
+    def __init__(self, requirement: Requirement) -> None:
         self._requirement: Requirement = requirement
 
     @property
@@ -108,12 +108,15 @@ class InmantaModuleRequirement:
     def specifier(self):
         return self._requirement.specifier
 
+    def __contains__(self, dist_or_version: Union[Distribution, str]) -> bool:
+        return dist_or_version in self._requirement
+
     def __str__(self) -> str:
         # Requirement.__str__ does not convert underscores
         return str(self._requirement)
 
     @classmethod
-    def parse(cls: TInmantaModuleRequirement, spec: str) -> TInmantaModuleRequirement:
+    def parse(cls: Type[TInmantaModuleRequirement], spec: str) -> TInmantaModuleRequirement:
         if "-" in spec:
             raise ValueError("Invalid inmanta module requirement: inmanta module names use '_', not '-'")
         return cls(Requirement.parse(spec))
@@ -324,7 +327,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     @classmethod
     def get_python_package_requirement(cls, module_req: InmantaModuleRequirement) -> Requirement:
-        return Requirement.parse(str(module_req).replace(module_req.project_name, cls.get_python_package_name(module_req.project_name)))
+        return Requirement.parse(
+            str(module_req).replace(module_req.project_name, cls.get_python_package_name(module_req.project_name))
+        )
 
     @classmethod
     def get_namespace_package_name(cls, module_name: str) -> str:
@@ -1305,7 +1310,7 @@ class Project(ModuleLike[ProjectMetadata]):
             req = [x for x in parse_requirements(spec)]
             if len(req) > 1:
                 print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
-            reqe = req[0]
+            reqe = InmantaModuleRequirement(req[0])
             reqs.append(reqe)
         return reqs
 
@@ -1368,7 +1373,7 @@ class Project(ModuleLike[ProjectMetadata]):
         good &= env.ProcessEnv.check(
             in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"),
             constraints=[
-                ModuleV2Source.get_python_package_requirement for req in chain.from_iterable(v2_requirements.values())
+                ModuleV2Source.get_python_package_requirement(req) for req in chain.from_iterable(v2_requirements.values())
             ],
         )
 
@@ -1738,7 +1743,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
             req = [x for x in parse_requirements(spec)]
             if len(req) > 1:
                 print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
-            reqe = req[0]
+            reqe = InmantaModuleRequirement(req[0])
             reqs.append(reqe)
         return reqs
 

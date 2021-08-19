@@ -223,7 +223,7 @@ class VirtualEnv(object):
         self._packages_installed_in_parent_env: Optional[Dict[str, str]] = None
 
     def get_package_installed_in_parent_env(self) -> Optional[Dict[str, str]]:
-        if self._packages_installed_in_parent_env is None:
+        if self._packages_installed_in_parent_env is None and self._parent_python is not None:
             self._packages_installed_in_parent_env = self._get_installed_packages(self._parent_python)
 
         return self._packages_installed_in_parent_env

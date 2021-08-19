@@ -45,6 +45,7 @@ from inmanta.const import MAX_UPDATE_ATTEMPT
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
+    InmantaModuleRequirement,
     InstallMode,
     InvalidMetadata,
     InvalidModuleException,
@@ -52,6 +53,7 @@ from inmanta.module import (
     ModuleMetadataFileNotFound,
     ModuleV1,
     ModuleV2,
+    ModuleV2Source,
     Project,
     gitprovider,
 )
@@ -533,13 +535,16 @@ version: 0.0.1dev0"""
         else:
             my_project = project
 
-        def do_update(specs: "Dict[str, List[Requirement]]", modules: List[str]) -> None:
+        def do_update(specs: "Dict[str, List[InmantaModuleRequirement]]", modules: List[str]) -> None:
             v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
 
             v2_python_specs: List[Requirement] = [
-                module_spec for module, module_specs in specs for module_spec in module_specs if module in v2_modules
+                ModuleV2Source.get_python_package_requirement(module_spec)
+                for module, module_specs in specs.items()
+                for module_spec in module_specs
+                if module in v2_modules
             ]
-            env.install_from_indexes(v2_python_specs, my_project.module_source.urls, upgrade=True)
+            env.ProcessEnv.install_from_index(v2_python_specs, my_project.module_source.urls, upgrade=True)
 
             for v1_module in set(modules).difference(v2_modules):
                 spec = specs.get(v1_module, [])
@@ -558,7 +563,7 @@ version: 0.0.1dev0"""
                 # get AST
                 my_project.get_complete_ast()
                 # get current full set of requirements
-                specs: Dict[str, List[Requirement]] = my_project.collect_imported_requirements()
+                specs: Dict[str, List[InmantaModuleRequirement]] = my_project.collect_imported_requirements()
                 if module is None:
                     modules = list(specs.keys())
                 else:
