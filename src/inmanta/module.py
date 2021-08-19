@@ -1081,7 +1081,6 @@ class Project(ModuleLike[ProjectMetadata]):
         Installs all modules, both v1 and v2.
         """
         self.load_module_recursive(install=True)
-        self.load()
 
     def load(self) -> None:
         if not self.loaded:

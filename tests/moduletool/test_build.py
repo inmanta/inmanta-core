@@ -66,11 +66,13 @@ def run_module_build(module_path: str, set_path_argument: bool, output_dir: Opti
         ("elaboratev1module", False),
     ],
 )
-def test_build_v2_module(tmpdir, module_name: str, set_path_argument: bool, monkeypatch: MonkeyPatch) -> None:
+def test_build_v2_module(
+    tmpdir, modules_dir: str, modules_v2_dir: str, module_name: str, set_path_argument: bool, monkeypatch: MonkeyPatch
+) -> None:
     """
     Build a V2 package and verify that the required files are present in the resulting wheel.
     """
-    module_dir = os.path.normpath(os.path.join(__file__, os.pardir, os.pardir, "data", "modules", module_name))
+    module_dir = os.path.normpath(os.path.join(modules_dir if "v1" in module_name else modules_v2_dir, module_name))
     module_copy_dir = os.path.join(tmpdir, "module")
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)
@@ -100,18 +102,12 @@ def test_build_v2_module(tmpdir, module_name: str, set_path_argument: bool, monk
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "other_module.py"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "subpkg", "__init__.py"))
 
-    # A second invocation of the build command should raise an exception
-    # because the dist directory already exists
-    with pytest.raises(subprocess.CalledProcessError) as excinfo:
-        run_module_build(module_copy_dir, set_path_argument)
-    assert f"Non-empty output directory {dist_dir}" in excinfo.value.stdout.decode()
 
-
-def test_build_v2_module_set_output_directory(tmpdir) -> None:
+def test_build_v2_module_set_output_directory(tmpdir, modules_v2_dir: str) -> None:
     """
     Verify that the output_dir argument of the `inmanta module build` command works correctly.
     """
-    module_dir = os.path.normpath(os.path.join(__file__, os.pardir, os.pardir, "data", "modules", "minimalv2module"))
+    module_dir = os.path.normpath(os.path.join(modules_v2_dir, "minimalv2module"))
     module_copy_dir = os.path.join(tmpdir, "module")
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)
@@ -124,12 +120,12 @@ def test_build_v2_module_set_output_directory(tmpdir) -> None:
     assert not os.path.exists(os.path.join(module_copy_dir, "dist"))
 
 
-def test_build_v2_module_incomplete_package_data(tmpdir, caplog) -> None:
+def test_build_v2_module_incomplete_package_data(tmpdir, modules_v2_dir: str, caplog) -> None:
     """
     Verify that a warning is shown when a data file present in module namespace package is not packaged, because
     it's not mentioned in the `options.package_data` section of the setup.cfg
     """
-    module_dir = os.path.normpath(os.path.join(__file__, os.pardir, os.pardir, "data", "modules", "minimalv2module"))
+    module_dir = os.path.normpath(os.path.join(modules_v2_dir, "minimalv2module"))
     module_copy_dir = os.path.join(tmpdir, "module")
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)
@@ -150,11 +146,11 @@ def test_build_v2_module_incomplete_package_data(tmpdir, caplog) -> None:
         ) in caplog.messages
 
 
-def test_build_invalid_module(tmpdir):
+def test_build_invalid_module(tmpdir, modules_v2_dir: str):
     """
     Execute a build when the setup.cfg file is missing
     """
-    module_dir = os.path.normpath(os.path.join(__file__, os.pardir, os.pardir, "data", "modules", "minimalv2module"))
+    module_dir = os.path.normpath(os.path.join(modules_v2_dir, "minimalv2module"))
     module_copy_dir = os.path.join(tmpdir, "module")
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)

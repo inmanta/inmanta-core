@@ -203,10 +203,10 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 
 @pytest.mark.parametrize("editable", [True, False])
 @pytest.mark.parametrize("set_path_argument", [True, False])
-def test_module_install(tmpvenv: py.path.local, modules_dir: str, editable: bool, set_path_argument: bool) -> None:
+def test_module_install(tmpvenv: py.path.local, modules_v2_dir: str, editable: bool, set_path_argument: bool) -> None:
     venv_dir, python_path = tmpvenv
 
-    module_path: str = os.path.join(modules_dir, "minimalv2module")
+    module_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     python_module_name: str = "inmanta-module-minimalv2module"
 
     def is_installed(name: str, only_editable: bool = False) -> bool:
@@ -279,7 +279,6 @@ def test_project_install(
     tmpvenv: Tuple[py.path.local, py.path.local],
     tmpdir: py.path.local,
     projects_dir: str,
-    modules_dir: str,
     install_module_names: List[str],
     module_dependencies: List[str],
 ) -> None:

@@ -524,6 +524,7 @@ version: 0.0.1dev0"""
                 t.add_row(row)
             print(t.draw())
 
+    # TODO: test this command
     def update(self, module: Optional[str] = None, project: Optional[Project] = None):
         """
         Update all modules from their source
@@ -544,7 +545,8 @@ version: 0.0.1dev0"""
                 for module_spec in module_specs
                 if module in v2_modules
             ]
-            env.ProcessEnv.install_from_index(v2_python_specs, my_project.module_source.urls, upgrade=True)
+            if v2_python_specs:
+                env.ProcessEnv.install_from_index(v2_python_specs, my_project.module_source.urls, upgrade=True)
 
             for v1_module in set(modules).difference(v2_modules):
                 spec = specs.get(v1_module, [])
