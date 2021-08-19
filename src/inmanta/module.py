@@ -1152,6 +1152,7 @@ class Project(ModuleLike[ProjectMetadata]):
         Installs all modules, both v1 and v2.
         """
         self.load_module_recursive(install=True)
+        self.verify()
 
     def load(self) -> None:
         if not self.loaded:
@@ -1360,8 +1361,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
     def verify(self) -> None:
         # verify module dependencies
-        result = True
-        result &= self.verify_requires()
+        result: bool = self.verify_requires()
         if not result:
             raise CompilerException("Not all module dependencies have been met. Run `inmanta modules update` to resolve this.")
 

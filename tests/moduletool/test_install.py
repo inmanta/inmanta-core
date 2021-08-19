@@ -18,10 +18,10 @@
 import argparse
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
+import venv
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
 from unittest.mock import patch
@@ -172,7 +172,7 @@ def test_bad_dep_checkout(git_modules_dir, modules_repo):
     os.chdir(coroot)
     Config.load_config()
 
-    with pytest.raises(CompilerException):
+    with pytest.raises(CompilerException, match="Not all module dependencies have been met"):
         ProjectTool().execute("install", [])
 
 
@@ -203,11 +203,14 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 
 @pytest.mark.parametrize("editable", [True, False])
 @pytest.mark.parametrize("set_path_argument", [True, False])
-def test_module_install(tmpvenv: py.path.local, modules_v2_dir: str, editable: bool, set_path_argument: bool) -> None:
-    venv_dir, python_path = tmpvenv
-
+def test_module_install(tmpdir: py.path.local, modules_v2_dir: str, editable: bool, set_path_argument: bool) -> None:
     module_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     python_module_name: str = "inmanta-module-minimalv2module"
+
+    venv.create(tmpdir, with_pip=True)
+    python_path: str = os.path.join(tmpdir, "bin", "python")
+    # default pip version is not compatible with module install flow
+    subprocess.check_output([python_path, "-m", "pip", "install", "-U", "pip"])
 
     def is_installed(name: str, only_editable: bool = False) -> bool:
         out: str = subprocess.check_output(
