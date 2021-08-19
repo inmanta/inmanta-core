@@ -441,7 +441,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     @classmethod
     def from_path(cls, project: Optional["Project"], path: str) -> "ModuleV2":
-        return ModuleV2(project, path)
+        return ModuleV2(project, path, is_editable_install=os.path.exists(os.path.join(path, const.PLUGINS_PACKAGE)))
 
     def _get_module_name(self, module_spec: List[InmantaModuleRequirement]) -> str:
         module_name: str = super()._get_module_name(module_spec)
