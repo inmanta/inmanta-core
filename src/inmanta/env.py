@@ -430,7 +430,7 @@ python -m pip $@
             assert self.virtual_python is not None
             cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-r", path]
             try:
-                self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
+                run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
             except Exception:
                 LOGGER.error("requirements: %s", requirements_file)
                 raise
@@ -518,25 +518,8 @@ python -m pip $@
         else:
             cmd = cmd_base + [path]
 
-        self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
+        run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
         self._notify_change()
-
-    @classmethod
-    def _run_command_and_log_output(
-        cls, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None
-    ) -> str:
-        output: bytes = b""  # Make sure the var is always defined in the except bodies
-        try:
-            output = subprocess.check_output(cmd, stderr=stderr, env=env)
-        except CalledProcessError as e:
-            LOGGER.error("%s: %s", cmd, e.output.decode())
-            raise
-        except Exception:
-            LOGGER.error("%s: %s", cmd, output.decode())
-            raise
-        else:
-            LOGGER.debug("%s: %s", cmd, output.decode())
-            return output.decode()
 
     def _notify_change(self) -> None:
         """
@@ -560,5 +543,20 @@ def get_installed_packages(python_interpreter: str) -> Dict[str, version.Version
     :return: A dict with package names as keys and versions as values
     """
     cmd = [python_interpreter, "-m", "pip", "list", "--format", "json"]
-    output = cls._run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
+    output = run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
     return {r["name"]: version.Version(r["version"]) for r in json.loads(output)}
+
+
+def run_command_and_log_output(cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None) -> str:
+    output: bytes = b""  # Make sure the var is always defined in the except bodies
+    try:
+        output = subprocess.check_output(cmd, stderr=stderr, env=env)
+    except CalledProcessError as e:
+        LOGGER.error("%s: %s", cmd, e.output.decode())
+        raise
+    except Exception:
+        LOGGER.error("%s: %s", cmd, output.decode())
+        raise
+    else:
+        LOGGER.debug("%s: %s", cmd, output.decode())
+        return output.decode()

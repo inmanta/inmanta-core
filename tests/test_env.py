@@ -188,11 +188,11 @@ def test_processenv_install_from_indexes_conflicting_reqs(tmpvenv: Tuple[py.path
 
 @pytest.mark.parametrize("editable", [True, False])
 def test_processenv_install_from_source(
-    tmpdir: py.path.local, tmpvenv: Tuple[py.path.local, py.path.local], modules_dir: str, editable: bool
+    tmpdir: py.path.local, tmpvenv: Tuple[py.path.local, py.path.local], modules_v2_dir: str, editable: bool
 ) -> None:
     venv_dir, python_path = tmpvenv
     package_name: str = "inmanta-module-minimalv2module"
-    project_dir: str = os.path.join(modules_dir, "minimalv2module")
+    project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
     assert package_name not in env.get_installed_packages(python_path)
     with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
         env.ProcessEnv.install_from_source([env.LocalPackagePath(path=project_dir, editable=editable)])
@@ -211,12 +211,10 @@ def test_processenv_install_from_source(
 @pytest.mark.parametrize("v1_plugin_loader", [True, False])
 # make sure installation works regardless of whether we install a dependency of inmanta-core (wich is already installed in
 # the encapsulating development venv), a new package or an inmanta module
-# TODO: this currently fails but might start succeeding when master has been merged
 @pytest.mark.parametrize("package_name", ["tinykernel", "more-itertools", "inmanta-module-minimalv2module"])
 def test_processenv_get_module_file(
     local_module_package_index: str,
     tmpdir: py.path.local,
-    modules_dir: str,
     tmpvenv: Tuple[py.path.local, py.path.local],
     v1_plugin_loader: bool,
     package_name: str,
@@ -238,7 +236,7 @@ def test_processenv_get_module_file(
     importlib.invalidate_caches()
 
     if v1_plugin_loader:
-        loader.configure_module_finder([str(tmpdir)])
+        loader.PluginModuleFinder.configure_module_finder([str(tmpdir)])
 
     with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
         assert env.ProcessEnv.get_module_file(module_name) is None

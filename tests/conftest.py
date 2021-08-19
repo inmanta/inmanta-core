@@ -38,6 +38,7 @@ import time
 import traceback
 import uuid
 import venv
+from importlib.machinery import ModuleSpec
 from types import ModuleType
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple
 
@@ -1078,6 +1079,10 @@ def tmpvenv(deactive_venv, tmpdir: py.path.local) -> Iterator[Tuple[py.path.loca
 
     sys.real_prefix = sys.prefix
     sys.prefix = base
+
+    # patch inmanta_plugins namespace path so importlib.util.find_spec("inmanta_plugins") includes the venv path
+    package_dir: str = os.path.join(site_packages, const.PLUGINS_PACKAGE)
+    os.makedirs(package_dir)
 
     yield (venv_dir, python_path)
 

@@ -391,7 +391,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     @classmethod
     def get_namespace_package_name(cls, module_name: str) -> str:
-        return "inmanta_plugins." + module_name
+        return f"{const.PLUGINS_PACKAGE}.{module_name}"
 
     def install(self, project: Optional["Project"], module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
