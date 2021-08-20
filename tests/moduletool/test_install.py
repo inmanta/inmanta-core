@@ -20,6 +20,7 @@ import json
 import os
 import shutil
 import subprocess
+from importlib.abc import Loader
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
 from unittest.mock import patch
@@ -29,7 +30,7 @@ import pydantic
 import pytest
 import yaml
 
-from inmanta import env, module
+from inmanta import env, loader, module
 from inmanta.ast import CompilerException, ModuleNotFoundException
 from inmanta.config import Config
 from inmanta.moduletool import ModuleTool, ProjectTool
@@ -299,7 +300,9 @@ def test_project_install(
         module.Project.get().autostd = False
         ProjectTool().execute("install", [])
         for fq_mod_name in fq_mod_names:
-            env_module_file: Optional[str] = env.ProcessEnv.get_module_file(fq_mod_name)
+            module_info: Optional[Tuple[str, Loader]] = env.ProcessEnv.get_module_file(fq_mod_name)
+            env_module_file, module_loader = module_info
+            assert not isinstance(module_loader, loader.PluginModuleLoader)
             assert env_module_file is not None
             assert env_module_file == os.path.join(
                 env.ProcessEnv.get_site_packages_dir(), *fq_mod_name.split("."), "__init__.py"

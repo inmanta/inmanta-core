@@ -375,7 +375,7 @@ class ModuleSource(Generic[TModule]):
 
 class ModuleV2Source(ModuleSource["ModuleV2"]):
     def __init__(self, urls: List[str]) -> None:
-        self.urls: List[str] = urls
+        self.urls: List[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
 
     @classmethod
     def get_python_package_name(cls, module_name: str) -> str:
