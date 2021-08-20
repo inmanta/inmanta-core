@@ -275,6 +275,38 @@ class ResourceAction(BaseModel):
     send_event: Optional[bool]
 
 
+class LogLine(BaseModel):
+    class Config:
+        """
+        Pydantic config.
+        """
+
+        # Override the setting from the BaseModel class as such that the level field is
+        # serialises using the name of the enum instead of its value. This is required
+        # to make sure that data sent to the API endpoints are serialized consistently using the name of the enum.
+        use_enum_values = False
+
+    @pydantic.validator("level", pre=True)
+    def level_from_enum_attribute(cls, v: object) -> object:
+        """
+        Ensure that a LogLine object can be instantiated using pydantic when the level field
+        is represented using the name of the enum instead of its value. This is required to
+        make sure that a serialized version of this object passes pydantic validation.
+        """
+        if isinstance(v, str):
+            try:
+                return const.LogLevel[v]
+            except KeyError:
+                raise ValueError(f"Invalid enum value {v}. Valid values: {','.join([x.name for x in const.LogLevel])}")
+        return v
+
+    level: const.LogLevel
+    msg: str
+    args: List[Optional[ArgumentTypes]] = []
+    kwargs: Dict[str, Optional[ArgumentTypes]] = {}
+    timestamp: datetime.datetime
+
+
 class ResourceIdDetails(BaseModel):
     resource_type: ResourceType
     agent: str
@@ -309,8 +341,8 @@ class PagingBoundaries:
         self,
         start: Union[datetime.datetime, int, str],
         end: Union[datetime.datetime, int, str],
-        first_id: Union[uuid.UUID, str],
-        last_id: Union[uuid.UUID, str],
+        first_id: Optional[Union[uuid.UUID, str]],
+        last_id: Optional[Union[uuid.UUID, str]],
     ) -> None:
         self.start = start
         self.end = end
@@ -351,3 +383,8 @@ class ResourceHistory(BaseModel):
     attributes: JsonType
     attribute_hash: str
     requires: List[ResourceIdStr]
+
+
+class ResourceLog(LogLine):
+    action_id: uuid.UUID
+    action: const.ResourceAction
