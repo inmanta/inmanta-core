@@ -23,6 +23,7 @@ import subprocess
 from importlib.abc import Loader
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
+from unittest.mock import patch
 
 import py
 import pydantic
@@ -302,9 +303,7 @@ def test_project_install(
         env_module_file, module_loader = module_info
         assert not isinstance(module_loader, loader.PluginModuleLoader)
         assert env_module_file is not None
-        assert env_module_file == os.path.join(
-            env.ProcessEnv.get_site_packages_dir(), *fq_mod_name.split("."), "__init__.py"
-        )
+        assert env_module_file == os.path.join(env.ProcessEnv.get_site_packages_dir(), *fq_mod_name.split("."), "__init__.py")
     v1_mod_dir: str = os.path.join(project_path, metadata.downloadpath)
     assert os.path.exists(v1_mod_dir)
     assert os.listdir(v1_mod_dir) == ["std"]

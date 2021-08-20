@@ -39,8 +39,8 @@ def test_code_manager(tmpdir: py.path.local):
     Project.set(project)
     project.load()
 
-    project.load_module("single_plugin_file")
-    project.load_module("multiple_plugin_files")
+    project.load_module("single_plugin_file", allow_v1=True)
+    project.load_module("multiple_plugin_files", allow_v1=True)
     import inmanta_plugins.multiple_plugin_files.handlers as multi
     import inmanta_plugins.single_plugin_file as single
 
