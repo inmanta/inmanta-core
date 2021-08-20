@@ -31,6 +31,7 @@ import types
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from functools import lru_cache
+from importlib.abc import Loader
 from io import BytesIO, TextIOBase
 from itertools import chain
 from subprocess import CalledProcessError
@@ -419,15 +420,16 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         """
         Returns the path to the module root directory. Should be called prior to configuring the module finder for v1 modules.
         """
-        if any(isinstance(finder, loader.PluginModuleFinder) for finder in sys.meta_path):
-            raise Exception(
-                "Invalid state: ModuleV2Source.path_for should not be called once the v1 module finder has been configured."
-            )
         if name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
         package: str = self.get_namespace_package_name(name)
-        init: Optional[str] = env.ProcessEnv.get_module_file(package)
-        if init is None:
+        mod_spec: Optional[Tuple[str, Loader]] = env.ProcessEnv.get_module_file(package)
+        if mod_spec is None:
+            return None
+        init, mod_loader = mod_spec
+        if isinstance(mod_loader, loader.PluginModuleLoader):
+            # TODO: test this behavior
+            # module was found in the environment but it is associated with the v1 module loader
             return None
         pkg_installation_dir = os.path.abspath(os.path.dirname(init))
         if os.path.exists(os.path.join(pkg_installation_dir, ModuleV2.MODULE_FILE)):
@@ -1526,7 +1528,7 @@ class Project(ModuleLike[ProjectMetadata]):
     def get_freeze(self, mode: str = "==", recursive: bool = False) -> Dict[str, str]:
         # collect in scope modules
         if not recursive:
-            modules = {m.name: m for m in (self.get_module(imp.name) for imp in self.get_imports())}
+            modules = {m.name: m for m in (self.get_module(imp.name, allow_v1=True) for imp in self.get_imports())}
         else:
             modules = self.get_modules()
 

@@ -28,6 +28,7 @@ import sys
 import tempfile
 import venv
 from dataclasses import dataclass
+from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from pkg_resources import Requirement
@@ -191,18 +192,20 @@ class ProcessEnv:
         return len(incompatibilities) == 0 and len(constraint_violations) == 0
 
     @classmethod
-    def get_module_file(cls, module: str) -> Optional[str]:
+    def get_module_file(cls, module: str) -> Optional[Tuple[str, Loader]]:
+        """
+        Get the location of the init file for a Python module within the active environment.
+
+        :return: A tuple of the path and the associated loader, if the module is found.
+        """
         spec: Optional[ModuleSpec]
         try:
-            # TODO: this uses sys.meta_path to find modules. This gets modified to be able to load v1 which might cause issues. Test!
-            #   it probably does as inmanta.loader.PluginModuleLoader is checked, meaning not just the active env is checked.
-            #   On the other hand, after the loading stage this makes sense, and if this is called before v1 plugin loading there
-            #   should be no issue. Remove this comment once this method has been tested with v1 module in module path.
             spec = importlib.util.find_spec(module)
         # inmanta.loader.PluginModuleLoader raises ImportError if module is not found
         except (ImportError, ModuleNotFoundError):
             spec = None
-        return spec.origin if spec is not None else None
+        # TODO: test with v1 loader
+        return (spec.origin, spec.loader) if spec is not None else None
 
 
 class VirtualEnv(object):

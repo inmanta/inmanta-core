@@ -40,7 +40,6 @@ def test_freeze_basic(git_modules_dir, modules_repo):
         "modJ": "== 3.2",
     }
 
-    # TODO: these tests are failing because get_freeze leads to calling ModuleV2Source.get_module after the module finder is configured. Solution would be to allow this, just check the path against the libs dir.
     assert cmod.get_freeze("modC::a", recursive=False, mode="==") == {"std": "== 3.2", "modI": "== 3.2"}
 
 
