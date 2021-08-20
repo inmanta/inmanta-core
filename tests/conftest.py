@@ -1063,8 +1063,13 @@ def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[Tuple[py.p
     Activates the venv created by the `tmpvenv` fixture within the currently running process. This venv is completely decoupled
     from the active development venv. As a result, any attempts to load new modules from the development venv will fail until
     cleanup. If using this fixture, it should always be listed before other fixtures that are expected to live in this
-    environment context because its setup and teardown will then wrap the dependent setup and teardown. The snippetcompiler
-    especially should always come after this one.
+    environment context because its setup and teardown will then wrap the dependent setup and teardown. This works because
+    pytest fixture setup and teardown use LIFO semantics
+    (https://docs.pytest.org/en/6.2.x/fixture.html#yield-fixtures-recommended). The snippetcompiler fixturein particular should
+    always come after this one.
+
+    This fixture has a huge side effect that affects the running Python process. For a venv fixture that does not affect the
+    running process, check out tmpvenv.
 
     :return: A tuple of the paths to the venv and the Python executable respectively.
     """
