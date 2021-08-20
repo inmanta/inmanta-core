@@ -309,8 +309,8 @@ class PagingBoundaries:
         self,
         start: Union[datetime.datetime, int, str],
         end: Union[datetime.datetime, int, str],
-        first_id: Union[uuid.UUID, str],
-        last_id: Union[uuid.UUID, str],
+        first_id: Optional[Union[uuid.UUID, str]],
+        last_id: Optional[Union[uuid.UUID, str]],
     ) -> None:
         self.start = start
         self.end = end
@@ -351,3 +351,8 @@ class ResourceHistory(BaseModel):
     attributes: JsonType
     attribute_hash: str
     requires: List[ResourceIdStr]
+
+
+class ResourceLog(LogLine):
+    action_id: uuid.UUID
+    action: const.ResourceAction

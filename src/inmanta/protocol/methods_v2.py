@@ -499,3 +499,58 @@ def resource_history(
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for sorting or paging are not valid
     """
+
+
+@typedmethod(
+    path="/resource/<rid>/logs", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def resource_logs(
+    tid: uuid.UUID,
+    rid: model.ResourceIdStr,
+    limit: Optional[int] = None,
+    start: Optional[datetime.datetime] = None,
+    end: Optional[datetime.datetime] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "timestamp.desc",
+) -> List[model.ResourceLog]:
+    """
+    Get the logs of a specific resource
+    :param tid: The id of the environment this resource belongs to
+    :param rid: The id of the resource
+    :param limit: Limit the number of instances that are returned
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned logs.
+                Filters should be specified with the syntax `?filter.<filter_key>=value`,
+                for example `?filter.minimal_log_level=INFO`
+                It's also possible to provide multiple values for the same filter, in this case resources are returned,
+                if they match any of these filter values.
+                For example: `?filter.action=pull&filter.action=deploy` returns logs with either of the actions
+                pull or deploy.
+                Multiple different filters narrow the results however (they are treated as an 'AND' operator).
+                For example `filter.minimal_log_level=INFO&filter.action=deploy` returns logs
+                with 'deploy' action, where the 'log_level' is at least 'INFO'.
+                The following options are available:
+                action: filter by the action of the log
+                timestamp: return the logs matching the timestamp constraints. Valid constraints are of the form
+                    "<lt|le|gt|ge>:<x>". The expected format is YYYY-MM-DDTHH:mm:ss.ssssss, so an ISO-8601 datetime string,
+                    in UTC timezone. For example:
+                    `?filter.timestamp=ge:2021-08-18T09:21:30.568353&filter.timestamp=lt:2021-08-18T10:21:30.568353`.
+                    Multiple constraints can be specified, in which case only log messages that match all constraints will be
+                    returned.
+                message: filter by the content of the log messages. Partial matches are allowed. (case-insensitive)
+                minimal_log_level: filter by the log level of the log messages. The filter specifies the minimal level,
+                so messages with either this level, or a higher severity level are going to be included in the result.
+                For example, for `filter.minimal_log_level=INFO`, the log messages with level `INFO, WARNING, ERROR, CRITICAL`
+                all match the query.
+    :param sort: Return the results sorted according to the parameter value.
+                It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `timestamp.desc`
+                (case insensitive).
+                The only sorting by `timestamp` is supported.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching resource logs
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
