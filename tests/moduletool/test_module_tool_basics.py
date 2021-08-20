@@ -30,7 +30,13 @@ import yaml
 from pkg_resources import parse_version
 
 from inmanta import module
-from inmanta.module import InmantaModuleRequirement, InvalidMetadata, InvalidModuleException, MetadataDeprecationWarning, Project
+from inmanta.module import (
+    InmantaModuleRequirement,
+    InvalidMetadata,
+    InvalidModuleException,
+    MetadataDeprecationWarning,
+    Project,
+)
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject

@@ -385,7 +385,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def get_inmanta_module_name(cls, python_package_name: str) -> str:
         if not python_package_name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError(f"Invalid python package name: should start with {ModuleV2.PKG_NAME_PREFIX}")
-        result: str = python_package_name[len(ModuleV2.PKG_NAME_PREFIX):].replace("-", "_")
+        result: str = python_package_name[len(ModuleV2.PKG_NAME_PREFIX) :].replace("-", "_")
         if not result:
             raise ValueError("Invalid python package name: empty module name part.")
         return result
@@ -411,9 +411,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         if path is None:
             python_package: str = self.get_python_package_name(module_name)
             namespace_package: str = self.get_namespace_package_name(module_name)
-            raise InvalidModuleException(
-                f"{python_package} does not contain a {namespace_package} module."
-            )
+            raise InvalidModuleException(f"{python_package} does not contain a {namespace_package} module.")
         return self.from_path(project, path)
 
     def path_for(self, name: str) -> Optional[str]:

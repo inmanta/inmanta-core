@@ -19,20 +19,20 @@ import glob
 import importlib
 import logging
 import os
-import py
-import pydantic
 import subprocess
 import sys
 from importlib.abc import Loader
-from packaging import version
-from pkg_resources import Requirement
 from subprocess import CalledProcessError
 from typing import Dict, List, Optional, Tuple
 from unittest.mock import patch
 
+import py
+import pydantic
 import pytest
+from pkg_resources import Requirement
 
 from inmanta import env, loader, module
+from packaging import version
 from utils import LogSequence
 
 
@@ -223,7 +223,7 @@ def test_processenv_get_module_file(
     venv_dir, python_path = tmpvenv_active
 
     if package_name.startswith(module.ModuleV2.PKG_NAME_PREFIX):
-        module_name = "inmanta_plugins." + package_name[len(module.ModuleV2.PKG_NAME_PREFIX):].replace("-", "_")
+        module_name = "inmanta_plugins." + package_name[len(module.ModuleV2.PKG_NAME_PREFIX) :].replace("-", "_")
         index = str(local_module_package_index)
     else:
         module_name = package_name.replace("-", "_")
@@ -251,5 +251,6 @@ def test_processenv_get_module_file(
         importlib.import_module(module_name)
         assert module_name in sys.modules
         assert sys.modules[module_name].__file__ == module_file
+
 
 # TODO: test ProcessEnv.check

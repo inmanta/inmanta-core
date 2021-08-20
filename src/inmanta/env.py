@@ -31,11 +31,11 @@ from dataclasses import dataclass
 from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
-from pkg_resources import Requirement
 from subprocess import CalledProcessError
 from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple
 
 import pkg_resources
+from pkg_resources import Requirement
 
 from packaging import version
 

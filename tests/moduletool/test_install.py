@@ -20,7 +20,6 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
 from unittest.mock import patch
@@ -30,7 +29,7 @@ import pydantic
 import pytest
 import yaml
 
-from inmanta import env, loader, module
+from inmanta import env, module
 from inmanta.ast import CompilerException, ModuleNotFoundException
 from inmanta.config import Config
 from inmanta.moduletool import ModuleTool, ProjectTool
@@ -273,7 +272,7 @@ def setup_simple_project(
         (["minimalv2module"], []),
         # include module with _ to make sure that works as well
         (["minimalv2module", "elaboratev2module_extension"], ["elaboratev2module"]),
-    ]
+    ],
 )
 def test_project_install(
     local_module_package_index: str,
@@ -284,9 +283,7 @@ def test_project_install(
     module_dependencies: List[str],
 ) -> None:
     venv_dir, python_path = tmpvenv_active
-    fq_mod_names: List[str] = [
-        f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)
-    ]
+    fq_mod_names: List[str] = [f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)]
 
     # set up project and modules
     project_path: str = os.path.join(tmpdir, "project")

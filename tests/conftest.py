@@ -23,7 +23,6 @@ import importlib
 import json
 import logging
 import os
-import py
 import queue
 import random
 import re
@@ -38,18 +37,17 @@ import time
 import traceback
 import uuid
 import venv
-from importlib.machinery import ModuleSpec
 from types import ModuleType
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple
 
 import asyncpg
 import pkg_resources
 import psutil
+import py
 import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from libpip2pi.commands import dir2pi
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
@@ -75,6 +73,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
+from libpip2pi.commands import dir2pi
 
 # Import the utils module differently when conftest is put into the inmanta_tests packages
 if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
@@ -1112,9 +1111,7 @@ def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[Tuple[py.p
         file: Optional[str] = getattr(module, "__file__", None)
         return file.startswith(prefix) if file is not None else False
 
-    loaded_modules: List[str] = [
-        mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, base)
-    ]
+    loaded_modules: List[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, base)]
     for mod_name in loaded_modules:
         del sys.modules[mod_name]
     importlib.invalidate_caches()
