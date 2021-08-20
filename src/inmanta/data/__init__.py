@@ -138,6 +138,16 @@ OrderStr = NewType("OrderStr", str)
 """
 
 
+class PagingOrder(str, enum.Enum):
+    ASC = "ASC"
+    DESC = "DESC"
+
+    def invert(self) -> "PagingOrder":
+        if self == PagingOrder.ASC:
+            return PagingOrder.DESC
+        return PagingOrder.ASC
+
+
 class InvalidSort(Exception):
     def __init__(self, message: str, *args) -> None:
         super(InvalidSort, self).__init__(message, *args)
@@ -150,7 +160,7 @@ class DatabaseOrder(metaclass=ABCMeta):
     def __init__(
         self,
         order_by_column: ColumnNameStr,
-        order: OrderStr,
+        order: PagingOrder,
         order_by_column_type: Union[Type[datetime.datetime], Type[int], Type[str]],
     ) -> None:
         """The order_by_column and order parameters should be validated"""
@@ -162,7 +172,7 @@ class DatabaseOrder(metaclass=ABCMeta):
         """The validated column name string as it should be used in the database queries"""
         return self.order_by_column
 
-    def get_order(self) -> OrderStr:
+    def get_order(self) -> PagingOrder:
         """ The order string representing the direction the results should be sorted by"""
         return self.order
 
@@ -618,6 +628,23 @@ class BaseDocument(object, metaclass=DocumentMeta):
             raise RuntimeError(f"{order_by_column} is not a valid field name.")
 
         return ColumnNameStr(order_by_column), OrderStr(order)
+
+    @classmethod
+    def _validate_order_strict(cls, order_by_column: str, order: str) -> Tuple[ColumnNameStr, PagingOrder]:
+        """Validate the correct values for order ('ASC' or 'DESC')  and if the order column is an existing column name
+        :param order_by_column: The name of the column to order by
+        :param order: The sorting order.
+        :return:
+        """
+        for o in order.split(" "):
+            possible = ["ASC", "DESC"]
+            if o not in possible:
+                raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
+
+        if order_by_column not in cls._fields:
+            raise RuntimeError(f"{order_by_column} is not a valid field name.")
+
+        return ColumnNameStr(order_by_column), PagingOrder[order]
 
     @classmethod
     async def get_list(
@@ -2305,14 +2332,14 @@ class ResourceAction(BaseDocument):
         return ColumnNameStr(name)
 
     @classmethod
-    def _validate_order(cls, order_by_column: str, order: str) -> Tuple[ColumnNameStr, OrderStr]:
-        """Validate the correct values for order and if the order column is an existing column name
+    def _validate_order_strict(cls, order_by_column: str, order: str) -> Tuple[ColumnNameStr, PagingOrder]:
+        """Validate the correct values for order ('ASC' or 'DESC') and if the order column is an existing column name
         :param order_by_column: The name of the column to order by
         :param order: The sorting order.
         :return:
         """
         for o in order.split(" "):
-            possible = ["ASC", "DESC", "NULLS", "FIRST", "LAST"]
+            possible = ["ASC", "DESC"]
             if o not in possible:
                 raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
 
@@ -2321,7 +2348,7 @@ class ResourceAction(BaseDocument):
         if order_by_column not in valid_field_names:
             raise RuntimeError(f"{order_by_column} is not a valid field name.")
 
-        return ColumnNameStr(order_by_column), OrderStr(order)
+        return ColumnNameStr(order_by_column), PagingOrder[order]
 
     @classmethod
     def _get_resource_logs_base_query(
@@ -2375,12 +2402,9 @@ class ResourceAction(BaseDocument):
         values.extend(base_query_values)
         if len(filter_statements) > 0:
             db_query += cls._join_filter_statements(filter_statements)
-        backward_paging = ("ASC" in order and end) or ("DESC" in order and start)
+        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
         if backward_paging:
-            if "ASC" in order:
-                backward_paging_order = order.replace("ASC", "DESC")
-            else:
-                backward_paging_order = order.replace("DESC", "ASC")
+            backward_paging_order = order.invert().name
 
             db_query += f" ORDER BY {order_by_column} {backward_paging_order}"
         else:
@@ -2620,9 +2644,10 @@ class ResourceOrder(DatabaseOrder):
         match = cls.valid_sort_pattern.match(sort)
         if match and len(match.groups()) == 2:
             order_by_column = match.groups()[0].lower()
-            validated_order_by_column, validated_order = Resource._validate_order(
+            validated_order_by_column, validated_order = Resource._validate_order_strict(
                 order_by_column=order_by_column, order=match.groups()[1].upper()
             )
+
             return ResourceOrder(order_by_column=validated_order_by_column, order=validated_order, order_by_column_type=str)
         raise InvalidSort(f"Sort parameter invalid: {sort}")
 
@@ -2650,7 +2675,7 @@ class ResourceHistoryOrder(DatabaseOrder):
         if match and len(match.groups()) == 2:
             order_by_column = match.groups()[0].lower()
             # Sorting based on the date of the configuration model
-            validated_order_by_column, validated_order = ConfigurationModel._validate_order(
+            validated_order_by_column, validated_order = ConfigurationModel._validate_order_strict(
                 order_by_column=order_by_column, order=match.groups()[1].upper()
             )
             return ResourceHistoryOrder(
@@ -2672,7 +2697,7 @@ class ResourceLogOrder(DatabaseOrder):
         match = cls.valid_sort_pattern.match(sort)
         if match and len(match.groups()) == 2:
             order_by_column = match.groups()[0].lower()
-            validated_order_by_column, validated_order = ResourceAction._validate_order(
+            validated_order_by_column, validated_order = ResourceAction._validate_order_strict(
                 order_by_column=order_by_column, order=match.groups()[1].upper()
             )
             return ResourceLogOrder(
@@ -3011,12 +3036,9 @@ class Resource(BaseDocument):
         values.append(base_query_values)
         if len(filter_statements) > 0:
             db_query += cls._join_filter_statements(filter_statements)
-        backward_paging = ("ASC" in order and end) or ("DESC" in order and start)
+        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
         if backward_paging:
-            if "ASC" in order:
-                backward_paging_order = order.replace("ASC", "DESC")
-            else:
-                backward_paging_order = order.replace("DESC", "ASC")
+            backward_paging_order = order.invert().name
 
             db_query += f" ORDER BY {order_by_column} {backward_paging_order}, resource_version_id {backward_paging_order}"
         else:
@@ -3354,13 +3376,9 @@ class Resource(BaseDocument):
         if len(filter_statements) > 0:
             query += cls._join_filter_statements(filter_statements)
         values.extend(base_query_values)
-        backward_paging = ("ASC" in order and end) or ("DESC" in order and start)
-
+        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
         if backward_paging:
-            if "ASC" in order:
-                backward_paging_order = order.replace("ASC", "DESC")
-            else:
-                backward_paging_order = order.replace("DESC", "ASC")
+            backward_paging_order = order.invert().name
 
             query += f" ORDER BY {order_by_column} {backward_paging_order}, attribute_hash {backward_paging_order}"
         else:

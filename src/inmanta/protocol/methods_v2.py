@@ -638,7 +638,8 @@ def resource_logs(
                 The following options are available:
                 action: filter by the action of the log
                 timestamp: return the logs matching the timestamp constraints. Valid constraints are of the form
-                    "<lt|le|gt|ge>:<x>". For example
+                    "<lt|le|gt|ge>:<x>". The expected format is YYYY-MM-DDTHH:mm:ss.ssssss, so an ISO-8601 datetime string,
+                    in UTC timezone. For example:
                     `?filter.timestamp=ge:2021-08-18T09:21:30.568353&filter.timestamp=lt:2021-08-18T10:21:30.568353`.
                     Multiple constraints can be specified, in which case only log messages that match all constraints will be
                     returned.
