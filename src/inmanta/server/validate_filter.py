@@ -15,12 +15,16 @@
 
     Contact: code@inmanta.com
 """
+import datetime
 from abc import ABC, abstractmethod
-from typing import Dict, Generic, List, Optional, Type, TypeVar
+from typing import Dict, Generic, List, Optional, Tuple, Type, TypeVar
 
-from pydantic import BaseModel, Extra, ValidationError
+import dateutil
+import more_itertools
+from pydantic import BaseModel, Extra, ValidationError, validator
 
-from inmanta.data import QueryFilter, QueryType
+from inmanta import const
+from inmanta.data import DateRangeConstraint, QueryFilter, QueryType, RangeOperator
 from inmanta.data.model import ReleasedResourceState
 
 
@@ -89,5 +93,93 @@ class ResourceFilterValidator(FilterValidator):
             query["resource_id_value"] = (QueryType.CONTAINS_PARTIAL, validated_filter.resource_id_value)
         if validated_filter.status:
             query["status"] = (QueryType.CONTAINS, validated_filter.status)
+
+        return query
+
+
+def parse_range_value_to_date(single_constraint: str, value: str) -> datetime.datetime:
+    try:
+        datetime_obj: datetime.datetime = dateutil.parser.isoparse(value)
+    except ValueError:
+        raise ValueError("Invalid range constraint %s: '%s' is not a valid datetime" % (single_constraint, value))
+    else:
+        return datetime_obj if datetime_obj.tzinfo is not None else datetime_obj.replace(tzinfo=datetime.timezone.utc)
+
+
+class ResourceLogFilterModel(FilterModel):
+    minimal_log_level: Optional[const.LogLevel]
+    timestamp: Optional[DateRangeConstraint]
+    message: Optional[List[str]]
+    action: Optional[List[const.ResourceAction]]
+
+    @validator("minimal_log_level", pre=True)
+    @classmethod
+    def _deleted_single(cls, v: object) -> object:
+        """
+        Transform list values to their single element value.
+        """
+        if isinstance(v, list):
+            try:
+                return const.LogLevel[
+                    more_itertools.one(
+                        v,
+                        too_short=ValueError("Empty 'minimal_log_level' filter provided"),
+                        too_long=ValueError(f"Multiple values provided for 'minimal_log_level' filter: {v}"),
+                    ).upper()
+                ]
+            except KeyError:
+                raise ValueError(f"{v} is not a valid log level")
+        return v
+
+    @validator("timestamp", pre=True)
+    @classmethod
+    def parse_range_operator(cls, v: object) -> List[Tuple[RangeOperator, datetime.datetime]]:
+        """
+        Transform list of "<lt|le|gt|ge>:<x>" constraint specifiers to typed objects.
+        """
+
+        def transform_single(single: str) -> Tuple[RangeOperator, datetime.datetime]:
+            split: List[str] = single.split(":", maxsplit=1)
+            if len(split) != 2:
+                raise ValueError("Invalid range constraint %s, expected '<lt|le|gt|ge>:<x>`" % single)
+            operator: RangeOperator
+            try:
+                operator = RangeOperator.parse(split[0])
+            except ValueError:
+                raise ValueError(
+                    "Invalid range operator %s in constraint %s, expected one of lt, le, gt, ge" % (split[0], single)
+                )
+            bound = parse_range_value_to_date(single, split[1])
+            return (operator, bound)
+
+        if isinstance(v, str):
+            return [transform_single(v)]
+
+        if isinstance(v, list) and all(isinstance(x, str) for x in v):
+            return [transform_single(x) for x in v]
+
+        raise ValueError(f"value is not a valid list of range constraints: {str(v)}")
+
+
+def get_log_levels_for_filter(minimal_log_level: const.LogLevel) -> List[str]:
+    return [level.name for level in const.LogLevel if level.value >= minimal_log_level.value]
+
+
+class ResourceLogFilterValidator(FilterValidator):
+    @property
+    def model(self) -> Type[ResourceLogFilterModel]:
+        return ResourceLogFilterModel
+
+    def process_filters(self, filter: Dict[str, List[str]]) -> Dict[str, QueryFilter]:
+        validated_filter: ResourceLogFilterModel = self.validate_filters(filter)
+        query: Dict[str, QueryFilter] = {}
+        if validated_filter.minimal_log_level:
+            query["level"] = (QueryType.CONTAINS, get_log_levels_for_filter(validated_filter.minimal_log_level))
+        if validated_filter.timestamp:
+            query["timestamp"] = (QueryType.RANGE, validated_filter.timestamp)
+        if validated_filter.message:
+            query["msg"] = (QueryType.CONTAINS_PARTIAL, validated_filter.message)
+        if validated_filter.action:
+            query["action"] = (QueryType.CONTAINS, validated_filter.action)
 
         return query

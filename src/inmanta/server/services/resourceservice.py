@@ -38,12 +38,15 @@ from inmanta.data.model import (
     ResourceDetails,
     ResourceHistory,
     ResourceIdStr,
+    ResourceLog,
     ResourceType,
     ResourceVersionIdStr,
 )
 from inmanta.data.paging import (
     ResourceHistoryPagingCountsProvider,
     ResourceHistoryPagingHandler,
+    ResourceLogPagingCountsProvider,
+    ResourceLogPagingHandler,
     ResourcePagingCountsProvider,
     ResourcePagingHandler,
 )
@@ -56,7 +59,7 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, 
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
-from inmanta.server.validate_filter import InvalidFilter, ResourceFilterValidator
+from inmanta.server.validate_filter import InvalidFilter, ResourceFilterValidator, ResourceLogFilterValidator
 from inmanta.types import Apireturn, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -997,3 +1000,51 @@ class ResourceService(protocol.ServerSlice):
             has_prev=metadata.before > 0,
         )
         return ReturnValueWithMeta(response=history, links=links if links else {}, metadata=vars(metadata))
+
+    @protocol.handle(methods_v2.resource_logs, env="tid")
+    async def resource_logs(
+        self,
+        env: data.Environment,
+        rid: ResourceIdStr,
+        limit: Optional[int] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "timestamp.desc",
+    ) -> ReturnValue[List[ResourceLog]]:
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+        try:
+            resource_order = data.ResourceLogOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(ResourceLogFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+        try:
+            dtos = await data.ResourceAction.get_logs_paged(
+                resource_order, limit, env.id, rid, start=start, end=end, connection=None, **query
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+        paging_handler = ResourceLogPagingHandler(ResourceLogPagingCountsProvider(data.ResourceAction, rid), rid)
+        metadata = await paging_handler.prepare_paging_metadata(env.id, dtos, query, limit, resource_order)
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            filter,
+            resource_order,
+            limit,
+            first_id=None,
+            last_id=None,
+            start=start,
+            end=end,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
