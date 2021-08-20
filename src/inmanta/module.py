@@ -376,6 +376,7 @@ class ModuleSource(Generic[TModule]):
 class ModuleV2Source(ModuleSource["ModuleV2"]):
     def __init__(self, urls: List[str]) -> None:
         self.urls: List[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
+        env.ProcessEnv.init_namespace(const.PLUGINS_PACKAGE)
 
     @classmethod
     def get_python_package_name(cls, module_name: str) -> str:
@@ -401,6 +402,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return f"{const.PLUGINS_PACKAGE}.{module_name}"
 
     def install(self, project: Optional["Project"], module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
+        env.ProcessEnv.init_namespace(const.PLUGINS_PACKAGE)
         module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
         try:
@@ -1333,7 +1335,7 @@ class Project(ModuleLike[ProjectMetadata]):
         try:
             module = self.module_source.get_module(self, module_reqs, install=install)
             if module is not None and self.resolver_v1.path_for(module_name) is not None:
-                LOGGER.warning("Module %s is installed as a V1 module and a V2 module", module_name)
+                LOGGER.warning("Module %s is installed as a V1 module and a V2 module: V1 will be ignored.", module_name)
             if module is None and allow_v1:
                 module = self.resolver_v1.get_module(self, module_reqs, install=True)
         except Exception as e:

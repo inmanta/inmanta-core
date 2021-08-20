@@ -39,6 +39,7 @@ import uuid
 import venv
 from types import ModuleType
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple
+from unittest.mock import patch
 
 import asyncpg
 import pkg_resources
@@ -1061,7 +1062,9 @@ def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[Tuple[py.p
     """
     Activates the venv created by the `tmpvenv` fixture within the currently running process. This venv is completely decoupled
     from the active development venv. As a result, any attempts to load new modules from the development venv will fail until
-    cleanup.
+    cleanup. If using this fixture, it should always be listed before other fixtures that are expected to live in this
+    environment context because its setup and teardown will then wrap the dependent setup and teardown. The snippetcompiler
+    especially should always come after this one.
 
     :return: A tuple of the paths to the venv and the Python executable respectively.
     """
@@ -1101,11 +1104,12 @@ def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[Tuple[py.p
     sys.real_prefix = sys.prefix
     sys.prefix = base
 
-    # patch inmanta_plugins namespace path so importlib.util.find_spec("inmanta_plugins") includes the venv path
-    package_dir: str = os.path.join(site_packages, const.PLUGINS_PACKAGE)
-    os.makedirs(package_dir)
+    # patch ProcessEnv to recognize this environment as the active one
+    with patch("inmanta.env.ProcessEnv.python_path", new=python_path):
+        # patch inmanta_plugins namespace path so importlib.util.find_spec("inmanta_plugins") includes the venv path
+        ProcessEnv.init_namespace(const.PLUGINS_PACKAGE)
 
-    yield tmpvenv
+        yield tmpvenv
 
     def module_in_prefix(module: ModuleType, prefix: str) -> bool:
         file: Optional[str] = getattr(module, "__file__", None)

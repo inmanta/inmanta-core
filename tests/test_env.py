@@ -24,7 +24,6 @@ import sys
 from importlib.abc import Loader
 from subprocess import CalledProcessError
 from typing import Dict, List, Optional, Tuple
-from unittest.mock import patch
 
 import py
 import pydantic
@@ -169,8 +168,7 @@ def test_processenv_install_from_index(
     venv_dir, python_path = tmpvenv_active
     package_name: str = "more-itertools"
     assert package_name not in env.get_installed_packages(python_path)
-    with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
-        env.ProcessEnv.install_from_index([Requirement.parse(package_name + (f"=={version}" if version is not None else ""))])
+    env.ProcessEnv.install_from_index([Requirement.parse(package_name + (f"=={version}" if version is not None else ""))])
     installed: Dict[str, version.Version] = env.get_installed_packages(python_path)
     assert package_name in installed
     if version is not None:
@@ -180,10 +178,9 @@ def test_processenv_install_from_index(
 def test_processenv_install_from_indexes_conflicting_reqs(tmpvenv_active: Tuple[py.path.local, py.path.local]) -> None:
     venv_dir, python_path = tmpvenv_active
     package_name: str = "more-itertools"
-    with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
-        with pytest.raises(subprocess.CalledProcessError) as e:
-            env.ProcessEnv.install_from_index([Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]])
-        assert "conflicting dependencies" in e.value.stderr.decode()
+    with pytest.raises(subprocess.CalledProcessError) as e:
+        env.ProcessEnv.install_from_index([Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]])
+    assert "conflicting dependencies" in e.value.stderr.decode()
     assert package_name not in env.get_installed_packages(python_path)
 
 
@@ -195,8 +192,7 @@ def test_processenv_install_from_source(
     package_name: str = "inmanta-module-minimalv2module"
     project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
     assert package_name not in env.get_installed_packages(python_path)
-    with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
-        env.ProcessEnv.install_from_source([env.LocalPackagePath(path=project_dir, editable=editable)])
+    env.ProcessEnv.install_from_source([env.LocalPackagePath(path=project_dir, editable=editable)])
     assert package_name in env.get_installed_packages(python_path)
     if editable:
         assert any(
@@ -239,18 +235,17 @@ def test_processenv_get_module_file(
     if v1_plugin_loader:
         loader.PluginModuleFinder.configure_module_finder([str(tmpdir)])
 
-    with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
-        assert env.ProcessEnv.get_module_file(module_name) is None
-        env.ProcessEnv.install_from_index([Requirement.parse(package_name)], index_urls=[index] if index is not None else None)
-        assert package_name in env.get_installed_packages(python_path)
-        module_info: Optional[Tuple[str, Loader]] = env.ProcessEnv.get_module_file(module_name)
-        assert module_info is not None
-        module_file, mod_loader = module_info
-        assert not isinstance(mod_loader, loader.PluginModuleLoader)
-        assert module_file == os.path.join(env.ProcessEnv.get_site_packages_dir(), *module_name.split("."), "__init__.py")
-        importlib.import_module(module_name)
-        assert module_name in sys.modules
-        assert sys.modules[module_name].__file__ == module_file
+    assert env.ProcessEnv.get_module_file(module_name) is None
+    env.ProcessEnv.install_from_index([Requirement.parse(package_name)], index_urls=[index] if index is not None else None)
+    assert package_name in env.get_installed_packages(python_path)
+    module_info: Optional[Tuple[str, Loader]] = env.ProcessEnv.get_module_file(module_name)
+    assert module_info is not None
+    module_file, mod_loader = module_info
+    assert not isinstance(mod_loader, loader.PluginModuleLoader)
+    assert module_file == os.path.join(env.ProcessEnv.get_site_packages_dir(), *module_name.split("."), "__init__.py")
+    importlib.import_module(module_name)
+    assert module_name in sys.modules
+    assert sys.modules[module_name].__file__ == module_file
 
 
 # TODO: test ProcessEnv.check

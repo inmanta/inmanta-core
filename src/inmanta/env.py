@@ -207,6 +207,24 @@ class ProcessEnv:
         # TODO: test with v1 loader
         return (spec.origin, spec.loader) if spec is not None else None
 
+    @classmethod
+    def init_namespace(cls, namespace: str) -> None:
+        """
+        Make sure importer will be able to find the namespace packages for this namespace that will get installed in the
+        process venv. This method needs to be called before the importer caches the search paths, so make sure to call it
+        before calling get_module_file for this namespace.
+
+        :param namespace: The namespace to initialize.
+        """
+        path: str = os.path.join(cls.get_site_packages_dir(), namespace)
+        os.makedirs(path, exist_ok=True)
+        spec: Optional[ModuleSpec] = importlib.util.find_spec(namespace)
+        if spec is None or path not in spec.submodule_search_locations:
+            raise Exception(
+                "Invalid state: trying to init namespace after it has been loaded. Make sure to call this method before calling"
+                " get_module_file for this namespace."
+            )
+
 
 class VirtualEnv(object):
     """

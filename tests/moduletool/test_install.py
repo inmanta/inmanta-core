@@ -23,7 +23,6 @@ import subprocess
 from importlib.abc import Loader
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
-from unittest.mock import patch
 
 import py
 import pydantic
@@ -293,20 +292,19 @@ def test_project_install(
     )
 
     os.chdir(project_path)
-    with patch("inmanta.env.ProcessEnv.python_path", new=str(python_path)):
-        for fq_mod_name in fq_mod_names:
-            assert env.ProcessEnv.get_module_file(fq_mod_name) is None
-        # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
-        module.Project.get().autostd = False
-        ProjectTool().execute("install", [])
-        for fq_mod_name in fq_mod_names:
-            module_info: Optional[Tuple[str, Loader]] = env.ProcessEnv.get_module_file(fq_mod_name)
-            env_module_file, module_loader = module_info
-            assert not isinstance(module_loader, loader.PluginModuleLoader)
-            assert env_module_file is not None
-            assert env_module_file == os.path.join(
-                env.ProcessEnv.get_site_packages_dir(), *fq_mod_name.split("."), "__init__.py"
-            )
-        v1_mod_dir: str = os.path.join(project_path, metadata.downloadpath)
-        assert os.path.exists(v1_mod_dir)
-        assert os.listdir(v1_mod_dir) == ["std"]
+    for fq_mod_name in fq_mod_names:
+        assert env.ProcessEnv.get_module_file(fq_mod_name) is None
+    # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
+    module.Project.get().autostd = False
+    ProjectTool().execute("install", [])
+    for fq_mod_name in fq_mod_names:
+        module_info: Optional[Tuple[str, Loader]] = env.ProcessEnv.get_module_file(fq_mod_name)
+        env_module_file, module_loader = module_info
+        assert not isinstance(module_loader, loader.PluginModuleLoader)
+        assert env_module_file is not None
+        assert env_module_file == os.path.join(
+            env.ProcessEnv.get_site_packages_dir(), *fq_mod_name.split("."), "__init__.py"
+        )
+    v1_mod_dir: str = os.path.join(project_path, metadata.downloadpath)
+    assert os.path.exists(v1_mod_dir)
+    assert os.listdir(v1_mod_dir) == ["std"]
