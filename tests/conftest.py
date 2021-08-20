@@ -19,7 +19,7 @@ import asyncio
 import concurrent
 import csv
 import datetime
-import importlib
+import importlib.util
 import json
 import logging
 import os
@@ -797,9 +797,18 @@ class SnippetCompilationTest(KeepOnFail):
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
         project.use_virtual_env()
+        self._patch_process_env(project)
+        self._install_v2_modules(project, install_v2_modules)
+
+    def _patch_process_env(self, project: Project) -> None:
+        """
+        Patch ProcessEnv to accomodate the SnippetCompilationTest's switching between active environments within a single
+        running process.
+        """
         assert project.virtualenv.virtual_python is not None
         ProcessEnv.python_path = project.virtualenv.virtual_python
-        self._install_v2_modules(project, install_v2_modules)
+        path: str = os.path.join(ProcessEnv.get_site_packages_dir(), const.PLUGINS_PACKAGE)
+        os.makedirs(path, exist_ok=True)
 
     def _install_v2_modules(self, project: Project, install_v2_modules: List[LocalPackagePath] = []) -> None:
         module_tool = ModuleTool()

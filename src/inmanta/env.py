@@ -556,14 +556,15 @@ python -m pip $@
         importlib.invalidate_caches()
 
 
-def get_installed_packages(python_interpreter: str) -> Dict[str, version.Version]:
+def get_installed_packages(python_interpreter: str, only_editable: bool = False) -> Dict[str, version.Version]:
     """
     Return a list of all installed packages in the site-packages of a python interpreter.
 
     :param python_interpreter: The python interpreter to get the packages for
+    :param only_editable: List only packages installed in editable mode.
     :return: A dict with package names as keys and versions as values
     """
-    cmd = [python_interpreter, "-m", "pip", "list", "--format", "json"]
+    cmd = [python_interpreter, "-m", "pip", "list", "--format", "json", *(["--editable"] if only_editable else [])]
     output = run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
     return {r["name"]: version.Version(r["version"]) for r in json.loads(output)}
 

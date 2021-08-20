@@ -22,11 +22,10 @@ import shutil
 import subprocess
 from importlib.abc import Loader
 from itertools import chain
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 from unittest.mock import patch
 
 import py
-import pydantic
 import pytest
 import yaml
 
@@ -203,27 +202,17 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 @pytest.mark.parametrize("editable", [True, False])
 @pytest.mark.parametrize("set_path_argument", [True, False])
 def test_module_install(
-    tmpvenv: Tuple[py.path.local, py.path.local], modules_v2_dir: str, editable: bool, set_path_argument: bool
+    tmpvenv_active: Tuple[py.path.local, py.path.local], modules_v2_dir: str, editable: bool, set_path_argument: bool
 ) -> None:
-    venv_dir, python_path = tmpvenv
+    venv_dir, python_path = tmpvenv_active
+    # build command requires virtualenv package
+    subprocess.check_call([python_path, "-m", "pip", "install", "virtualenv"])
 
     module_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     python_module_name: str = "inmanta-module-minimalv2module"
 
     def is_installed(name: str, only_editable: bool = False) -> bool:
-        out: str = subprocess.check_output(
-            [
-                python_path,
-                "-m",
-                "pip",
-                "list",
-                "--format",
-                "json",
-                *(["--editable"] if only_editable else []),
-            ]
-        ).decode()
-        packages: List[Dict[str, str]] = pydantic.parse_raw_as(List[Dict[str, str]], out)
-        return any(package["name"] == name for package in packages)
+        return name in env.get_installed_packages(python_path, only_editable=only_editable)
 
     assert not is_installed(python_module_name)
     run_module_install(python_path, module_path, editable, set_path_argument)
