@@ -18,11 +18,12 @@
 import inspect
 import json
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Type, Union
 from uuid import UUID
 
 import pytest
 from openapi_spec_validator import openapi_v3_spec_validator
+from pydantic.main import BaseModel
 from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
 
 from inmanta.const import ResourceAction
@@ -347,14 +348,25 @@ def test_openapi_types_uuid():
 def test_openapi_types_anyurl():
     type_converter = OpenApiTypeConverter()
 
+    def conformance_test(openapi_type: Schema, the_type: Type):
+        class Sub(BaseModel):
+            the_field: the_type
+
+        pydantic_result = type_converter._handle_pydantic_model(Sub).properties["the_field"]
+        pydantic_result.title = None
+        assert openapi_type == pydantic_result
+
     openapi_type = type_converter.get_openapi_type(AnyUrl)
     assert openapi_type == Schema(type="string", format="uri")
+    conformance_test(openapi_type, AnyUrl)
 
     openapi_type = type_converter.get_openapi_type(AnyHttpUrl)
     assert openapi_type == Schema(type="string", format="uri")
+    conformance_test(openapi_type, AnyHttpUrl)
 
     openapi_type = type_converter.get_openapi_type(PostgresDsn)
     assert openapi_type == Schema(type="string", format="uri")
+    conformance_test(openapi_type, PostgresDsn)
 
 
 def test_openapi_types_env_setting():
