@@ -792,7 +792,6 @@ class SnippetCompilationTest(KeepOnFail):
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
         """
         self.setup_for_snippet_external(snippet)
-        loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
