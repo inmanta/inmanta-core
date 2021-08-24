@@ -24,11 +24,11 @@ from enum import Enum
 from typing import Callable, Dict, List, Optional, Type, Union
 
 import typing_inspect  # type: ignore
-from pydantic.main import BaseModel
 from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
 
 from inmanta import types, util
+from inmanta.data.model import BaseModel
 from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.model import (
     Components,
@@ -198,11 +198,11 @@ class OpenApiTypeConverter:
         type_args = typing_inspect.get_args(type_annotation, evaluate=True)
         return Schema(type="object", additionalProperties=self.get_openapi_type(type_args[1]))
 
-    def _handle_pydantic_model(self, type_annotation: Type) -> Schema:
+    def _handle_pydantic_model(self, type_annotation: Type, by_alias: bool = True) -> Schema:
         # JsonSchema stores the model (and sub-model) definitions at #/definitions,
         # but OpenAPI requires them to be placed at "#/components/schemas/"
         # The ref_prefix changes the references, but the actual schemas are still at #/definitions
-        schema = model_schema(type_annotation, by_alias=True, ref_prefix="#/components/schemas/")
+        schema = model_schema(type_annotation, by_alias=by_alias, ref_prefix="#/components/schemas/")
         if "definitions" in schema.keys():
             definitions = schema.pop("definitions")
             if self.components.schemas is not None:
@@ -219,31 +219,15 @@ class OpenApiTypeConverter:
         return Schema(type="array", items=self.get_openapi_type(list_member_type[0]))
 
     def get_openapi_type(self, type_annotation: Type) -> Schema:
-        type_origin = typing_inspect.get_origin(type_annotation)
+        class Sub(BaseModel):
+            the_field: type_annotation
 
-        if typing_inspect.is_union_type(type_annotation):
-            return self._handle_union_type(type_annotation)
+            class Config:
+                arbitrary_types_allowed=True
 
-        if inspect.isclass(type_annotation) and issubclass(type_annotation, BaseModel):
-            return self._handle_pydantic_model(type_annotation)
-
-        if inspect.isclass(type_annotation) and issubclass(type_annotation, Enum):
-            return self._handle_enums(type_annotation)
-
-        if inspect.isclass(type_origin) and issubclass(type_origin, typing.Mapping):
-            return self._handle_dictionary(type_annotation)
-
-        if inspect.isclass(type_origin) and issubclass(type_origin, typing.Sequence):
-            return self._handle_list(type_annotation)
-
-        if inspect.isclass(type_annotation) and issubclass(type_annotation, AnyUrl):
-            # AnyUrl or any of its subclass is a string, with uri format
-            # Handeling it here avoids the need to add AnyUrl and all of its subclasses
-            # to python_to_openapi_types dict.
-            return Schema(type="string", format="uri")
-
-        # Fallback to primitive types
-        return self.python_to_openapi_types.get(type_annotation, Schema(type="object"))
+        pydantic_result = self._handle_pydantic_model(Sub).properties["the_field"]
+        pydantic_result.title = None
+        return pydantic_result
 
 
 class ArgOptionHandler:

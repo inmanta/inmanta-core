@@ -58,6 +58,15 @@ class BaseModel(pydantic.BaseModel):
         # This is useful to serialise model.dict() later
         use_enum_values = True
 
+        @staticmethod
+        def schema_extra(schema, model):
+            # from https://github.com/samuelcolvin/pydantic/issues/1270
+            for prop, value in schema.get('properties', {}).items():
+                # retrieve right field from alias or name
+                field = [x for x in model.__fields__.values() if x.alias == prop][0]
+                if field.allow_none:
+                    value['nullable'] = True
+
 
 class ExtensionStatus(BaseModel):
     """

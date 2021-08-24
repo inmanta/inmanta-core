@@ -18,6 +18,7 @@
 import inspect
 import json
 from datetime import datetime
+from pprint import pprint
 from typing import Dict, List, Optional, Union
 from uuid import UUID
 
@@ -27,7 +28,7 @@ from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
 
 from inmanta.const import ResourceAction
 from inmanta.data import model
-from inmanta.data.model import EnvironmentSetting
+from inmanta.data.model import EnvironmentSetting, BaseModel
 from inmanta.protocol import method
 from inmanta.protocol.common import ArgOption, BaseHttpException, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.converter import (
@@ -37,7 +38,7 @@ from inmanta.protocol.openapi.converter import (
     OpenApiTypeConverter,
     OperationHandler,
 )
-from inmanta.protocol.openapi.model import MediaType, Schema
+from inmanta.protocol.openapi.model import MediaType, Schema, SchemaBase
 from inmanta.server import SLICE_SERVER
 
 
@@ -160,6 +161,7 @@ async def test_generate_openapi_definition(server, feature_manager):
     openapi_json = openapi.generate_openapi_json()
     assert openapi_json
     openapi_parsed = json.loads(openapi_json)
+    print(openapi_json)
     openapi_v3_spec_validator.validate(openapi_parsed)
 
 
@@ -219,13 +221,14 @@ def test_openapi_types_base_model():
     openapi_type = type_converter.get_openapi_type_of_parameter(
         inspect.Parameter("param", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=model.Environment)
     )
+    print(openapi_type)
     assert openapi_type.required == ["id", "name", "project_id", "repo_url", "repo_branch", "settings", "halted"]
 
 
 def test_openapi_types_union():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(Union[str, bytes])
-    assert openapi_type == Schema(anyOf=[Schema(type="string"), Schema(type="string", format="binary")])
+    assert openapi_type == Schema(anyOf=[SchemaBase(type="string"), SchemaBase(type="string", format="binary")])
 
 
 def test_openapi_types_optional():
@@ -285,6 +288,7 @@ def test_openapi_types_dict_of_union():
 def test_openapi_types_optional_union():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(Optional[Union[int, str]])
+    pprint(openapi_type)
     assert len(openapi_type.anyOf) == 2
     assert openapi_type.nullable
 
@@ -347,14 +351,25 @@ def test_openapi_types_uuid():
 def test_openapi_types_anyurl():
     type_converter = OpenApiTypeConverter()
 
+    def conformance_test(openapi_type, the_type):
+        class Sub(BaseModel):
+            the_field: the_type
+
+        pydantic_result = type_converter._handle_pydantic_model(Sub).properties["the_field"]
+        pydantic_result.title = None
+        assert openapi_type == pydantic_result
+
     openapi_type = type_converter.get_openapi_type(AnyUrl)
     assert openapi_type == Schema(type="string", format="uri")
+    conformance_test(openapi_type, AnyUrl)
 
     openapi_type = type_converter.get_openapi_type(AnyHttpUrl)
     assert openapi_type == Schema(type="string", format="uri")
+    conformance_test(openapi_type, AnyHttpUrl)
 
     openapi_type = type_converter.get_openapi_type(PostgresDsn)
     assert openapi_type == Schema(type="string", format="uri")
+    conformance_test(openapi_type, PostgresDsn)
 
 
 def test_openapi_types_env_setting():
