@@ -453,9 +453,10 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return module_name
 
 
-class ModuleRepo(ModuleSource["ModuleV1"]):
-    def clone(self, name: str, dest: str) -> bool:
-        raise NotImplementedError("Abstract method")
+class ModuleV1Source(ModuleSource["ModuleV1"]):
+    def __init__(self, local_repo: "ModuleRepo", remote_repo: "ModuleRepo") -> None:
+        self.local_repo: ModuleRepo = local_repo
+        self.remote_repo: ModuleRepo = remote_repo
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV1"]:
         module_name: str = self._get_module_name(module_spec)
@@ -463,11 +464,32 @@ class ModuleRepo(ModuleSource["ModuleV1"]):
         if path is not None:
             return self.from_path(project, path)
         else:
-            return ModuleV1.install(project, module_name, module_spec, install_mode=project.install_mode)
+            if project.downloadpath is None:
+                raise CompilerException(
+                    f"Can not install module {module_name} because 'downloadpath' is not set in {project.PROJECT_FILE}"
+                )
+            download_path: str = os.path.join(project.downloadpath, module_name)
+            result = self.remote_repo.clone(module_name, project.downloadpath)
+            if not result:
+                raise InvalidModuleException("could not locate module with name: %s" % module_name)
+
+            return ModuleV1.update(project, module_name, module_spec, download_path, False, install_mode=project.install_mode)
+
+    def path_for(self, name: str) -> Optional[str]:
+        return self.local_repo.path_for(name)
 
     @classmethod
     def from_path(cls, project: Optional["Project"], path: str) -> "ModuleV1":
         return ModuleV1(project, path)
+
+
+class ModuleRepo:
+    def clone(self, name: str, dest: str) -> bool:
+        raise NotImplementedError("Abstract method")
+
+    def path_for(self, name: str) -> Optional[str]:
+        # same class is used for search parh and remote repos, perhaps not optimal
+        raise NotImplementedError("Abstract method")
 
 
 class CompositeModuleRepo(ModuleRepo):
@@ -1079,9 +1101,11 @@ class Project(ModuleLike[ProjectMetadata]):
         self.module_source: ModuleV2Source = ModuleV2Source(
             [repo.url for repo in self._metadata.repo if repo.type == ModuleRepoType.package]
         )
-        self.resolver_v1 = CompositeModuleRepo([make_repo(x) for x in self.modulepath])
-        self.external_resolver_v1 = CompositeModuleRepo(
-            [make_repo(repo.url, root=path) for repo in self._metadata.repo if repo.type == ModuleRepoType.git]
+        self.module_source_v1: ModuleV1Source = ModuleV1Source(
+            local_repo=CompositeModuleRepo([make_repo(x) for x in self.modulepath]),
+            remote_repo=CompositeModuleRepo(
+                [make_repo(repo.url, root=path) for repo in self._metadata.repo if repo.type == ModuleRepoType.git]
+            ),
         )
 
         if self._metadata.downloadpath is not None:
@@ -1334,10 +1358,10 @@ class Project(ModuleLike[ProjectMetadata]):
         module: Optional[Module]
         try:
             module = self.module_source.get_module(self, module_reqs, install=install)
-            if module is not None and self.resolver_v1.path_for(module_name) is not None:
+            if module is not None and self.module_source_v1.path_for(module_name) is not None:
                 LOGGER.warning("Module %s is installed as a V1 module and a V2 module: V1 will be ignored.", module_name)
             if module is None and allow_v1:
-                module = self.resolver_v1.get_module(self, module_reqs, install=True)
+                module = self.module_source_v1.get_module(self, module_reqs, install=True)
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
 
@@ -1898,37 +1922,6 @@ class ModuleV1(Module[ModuleV1Metadata]):
         return [spec[r] if spec.get(r) else InmantaModuleRequirement.parse(r) for r in imports]
 
     @classmethod
-    def install(
-        cls,
-        project: Project,
-        modulename: str,
-        requirements: Iterable[InmantaModuleRequirement],
-        install: bool = True,
-        install_mode: InstallMode = InstallMode.release,
-    ) -> "ModuleV1":
-        """
-        Install a module, return module object
-        """
-        # verify presence in module path
-        path = project.resolver_v1.path_for(modulename)
-        if path is not None:
-            # if exists, report
-            LOGGER.info("module %s already found at %s", modulename, path)
-            gitprovider.fetch(path)
-        else:
-            # otherwise install
-            if project.downloadpath is None:
-                raise CompilerException(
-                    f"Can not install module {modulename} because 'downloadpath' is not set in {project.PROJECT_FILE}"
-                )
-            path = os.path.join(project.downloadpath, modulename)
-            result = project.external_resolver_v1.clone(modulename, project.downloadpath)
-            if not result:
-                raise InvalidModuleException("could not locate module with name: %s" % modulename)
-
-        return cls.update(project, modulename, requirements, path, False, install_mode=install_mode)
-
-    @classmethod
     def update(
         cls,
         project: Project,
@@ -1942,7 +1935,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
         Update a module, return module object
         """
         if path is None:
-            mypath = project.resolver_v1.path_for(modulename)
+            mypath = project.module_source_v1.path_for(modulename)
             assert mypath is not None, f"trying to update module {modulename} not found on disk "
         else:
             mypath = path
