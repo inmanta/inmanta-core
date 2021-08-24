@@ -103,7 +103,6 @@ class ProcessEnv:
                 stderr=subprocess.PIPE,
             )
             process.check_returncode()
-            # TODO: other install methods patch pkg_resources.working_set, do we need to do so here as well?
         except CalledProcessError as e:
             stderr: str = e.stderr.decode()
             not_found: List[str] = [
@@ -114,6 +113,8 @@ class ProcessEnv:
             if not_found:
                 raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
             raise e
+        else:
+            pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
     @classmethod
     def install_from_source(cls, paths: List[LocalPackagePath]) -> None:
@@ -135,7 +136,7 @@ class ProcessEnv:
                 *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in explicit_paths),
             ]
         )
-        # TODO: other install methods patch pkg_resources.working_set, do we need to do so here as well?
+        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
     @classmethod
     def check(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
