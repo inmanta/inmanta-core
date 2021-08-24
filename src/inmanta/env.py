@@ -123,8 +123,9 @@ class ProcessEnv:
         """
         if len(paths) == 0:
             raise Exception("install_from_source requires at least one package to install")
-        # make sure we only try to install from a local source
         explicit_paths: Iterator[LocalPackagePath] = (
+            # make sure we only try to install from a local source: add leading `./` and trailing `/` to explicitly tell pip
+            # we're pointing to a local directory.
             LocalPackagePath(path=os.path.join(".", path.path, ""), editable=path.editable) for path in paths
         )
         subprocess.check_call(
