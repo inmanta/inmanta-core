@@ -270,6 +270,7 @@ def deactive_venv():
     old_path = list(sys.path)
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
+    old_process_env: str = ProcessEnv.python_path
 
     yield
 
@@ -285,6 +286,7 @@ def deactive_venv():
             del os.environ["PYTHONPATH"]
     if old_os_venv is not None:
         os.environ["VIRTUAL_ENV"] = old_os_venv
+    ProcessEnv.python_path = old_process_env
     loader.PluginModuleFinder.reset()
 
 
@@ -759,7 +761,6 @@ class SnippetCompilationTest(KeepOnFail):
         config.Config.load_config()
         self.cwd = os.getcwd()
         self.keep_shared = False
-        self.process_env_backup: Optional[str] = None
 
     def tearDownClass(self):
         if not self.keep_shared:
@@ -773,14 +774,11 @@ class SnippetCompilationTest(KeepOnFail):
         self._keep = False
         self.project_dir = tempfile.mkdtemp()
         self.modules_dir = module_dir
-        self.process_env_backup = ProcessEnv.python_path
         os.symlink(self.env, os.path.join(self.project_dir, ".env"))
 
     def tear_down_func(self):
         if not self._keep:
             shutil.rmtree(self.project_dir)
-        assert self.process_env_backup is not None
-        ProcessEnv.python_path = self.process_env_backup
 
     def keep(self):
         self._keep = True
