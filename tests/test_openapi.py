@@ -23,6 +23,7 @@ from uuid import UUID
 
 import pytest
 from openapi_spec_validator import openapi_v3_spec_validator
+from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
 
 from inmanta.const import ResourceAction
 from inmanta.data import model
@@ -341,6 +342,19 @@ def test_openapi_types_uuid():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(UUID)
     assert openapi_type == Schema(type="string", format="uuid")
+
+
+def test_openapi_types_anyurl():
+    type_converter = OpenApiTypeConverter()
+
+    openapi_type = type_converter.get_openapi_type(AnyUrl)
+    assert openapi_type == Schema(type="string", format="uri")
+
+    openapi_type = type_converter.get_openapi_type(AnyHttpUrl)
+    assert openapi_type == Schema(type="string", format="uri")
+
+    openapi_type = type_converter.get_openapi_type(PostgresDsn)
+    assert openapi_type == Schema(type="string", format="uri")
 
 
 def test_openapi_types_env_setting():
