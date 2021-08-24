@@ -223,20 +223,15 @@ class OpenApiTypeConverter:
 
         if typing_inspect.is_union_type(type_annotation):
             return self._handle_union_type(type_annotation)
-
-        if inspect.isclass(type_annotation) and issubclass(type_annotation, BaseModel):
+        elif inspect.isclass(type_annotation) and issubclass(type_annotation, BaseModel):
             return self._handle_pydantic_model(type_annotation)
-
-        if inspect.isclass(type_annotation) and issubclass(type_annotation, Enum):
+        elif inspect.isclass(type_annotation) and issubclass(type_annotation, Enum):
             return self._handle_enums(type_annotation)
-
-        if inspect.isclass(type_origin) and issubclass(type_origin, typing.Mapping):
+        elif inspect.isclass(type_origin) and issubclass(type_origin, typing.Mapping):
             return self._handle_dictionary(type_annotation)
-
-        if inspect.isclass(type_origin) and issubclass(type_origin, typing.Sequence):
+        elif inspect.isclass(type_origin) and issubclass(type_origin, typing.Sequence):
             return self._handle_list(type_annotation)
-
-        if inspect.isclass(type_annotation) and issubclass(type_annotation, AnyUrl):
+        elif inspect.isclass(type_annotation) and issubclass(type_annotation, AnyUrl):
             # AnyUrl or any of its subclass is a string, with uri format
             # Handeling it here avoids the need to add AnyUrl and all of its subclasses
             # to python_to_openapi_types dict.
