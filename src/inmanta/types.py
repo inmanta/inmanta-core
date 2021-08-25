@@ -20,7 +20,6 @@
 import builtins
 import uuid
 from datetime import datetime
-from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
 import typing_inspect

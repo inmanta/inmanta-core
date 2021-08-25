@@ -28,7 +28,7 @@ from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
 
 from inmanta.const import ResourceAction
 from inmanta.data import model
-from inmanta.data.model import EnvironmentSetting, BaseModel
+from inmanta.data.model import BaseModel, EnvironmentSetting
 from inmanta.protocol import method
 from inmanta.protocol.common import ArgOption, BaseHttpException, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.converter import (

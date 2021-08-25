@@ -17,17 +17,12 @@
 """
 import inspect
 import json
-import typing
-import uuid
-from datetime import datetime
-from enum import Enum
 from typing import Callable, Dict, List, Optional, Type, Union
 
-import typing_inspect  # type: ignore
 from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
 
-from inmanta import types, util
+from inmanta import util
 from inmanta.data.model import BaseModel
 from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.model import (

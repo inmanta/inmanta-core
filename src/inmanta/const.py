@@ -16,7 +16,8 @@
     Contact: code@inmanta.com
 """
 
-from enum import Enum
+from enum import Enum, IntEnum
+from typing import List, Tuple
 
 from inmanta.stable_api import stable_api
 
@@ -155,7 +156,7 @@ class AgentTriggerMethod(str, Enum):
 
 
 @stable_api
-class LogLevel(Enum):
+class LogLevel(IntEnum):
     """
     Log levels used for various parts of the inmanta orchestrator.
     """
@@ -169,10 +170,73 @@ class LogLevel(Enum):
     NOTSET = 0
 
 
+class StrLogLevel(str, Enum):
+    """
+    Log levels as strings.
+    """
+
+    CRITICAL = "CRITICAL"
+    ERROR = "ERROR"
+    WARNING = "WARNING"
+    INFO = "INFO"
+    DEBUG = "DEBUG"
+    TRACE = "TRACE"
+    NOTSET = "NOSET"
+
+    @classmethod
+    def conversion_pairs(cls) -> List[Tuple["StrLogLevel", LogLevel]]:
+        return [
+            (cls.CRITICAL, LogLevel.CRITICAL),
+            (cls.ERROR, LogLevel.ERROR),
+            (cls.WARNING, LogLevel.WARNING),
+            (cls.INFO, LogLevel.INFO),
+            (cls.DEBUG, LogLevel.DEBUG),
+            (cls.TRACE, LogLevel.TRACE),
+            (cls.NOTSET, LogLevel.NOTSET),
+        ]
+
+    @classmethod
+    def to_int(cls, log_level: "StrLogLevel") -> LogLevel:
+        """
+        Take a string formated log level, and convert it to an integer formated log level
+        """
+        str_to_int = {str_log: int_log for str_log, int_log in cls.conversion_pairs()}
+
+        if log_level not in str_to_int:
+            raise ValueError(
+                "The provided log level doesn't match any of the accepted ones."
+                f"'{log_level}' not in {list(str_to_int.keys())}"
+            )
+
+        return str_to_int[log_level]
+
+    @classmethod
+    def from_int(cls, log_level: LogLevel) -> "StrLogLevel":
+        """
+        Take an integer formated log level, and convert it to a string formated log level
+        """
+        int_to_str = {int_log: str_log for str_log, int_log in cls.conversion_pairs()}
+
+        if log_level not in int_to_str:
+            raise ValueError(
+                "The provided log level doesn't match any of the accepted ones."
+                f"'{log_level}' not in {list(int_to_str.keys())}"
+            )
+
+        return int_to_str[log_level]
+
+
 INMANTA_URN = "urn:inmanta:"
 
 
-class Compilestate(Enum):
+class Compilestate(IntEnum):
+    """
+    Compile state, whether the compile did succeed or not
+
+    SUCCESS=1
+    FAILED=2
+    """
+
     success = 1
     failed = 2
 

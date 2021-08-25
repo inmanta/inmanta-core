@@ -77,6 +77,7 @@ class Schema(SchemaBase):
     properties: Optional[Dict[str, Union["Schema", SchemaBase]]] = None
     additionalProperties: Optional[Union["Schema", SchemaBase, bool]] = None
 
+
 Schema.update_forward_refs()
 
 

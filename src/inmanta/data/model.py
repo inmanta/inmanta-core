@@ -61,11 +61,11 @@ class BaseModel(pydantic.BaseModel):
         @staticmethod
         def schema_extra(schema, model):
             # from https://github.com/samuelcolvin/pydantic/issues/1270
-            for prop, value in schema.get('properties', {}).items():
+            for prop, value in schema.get("properties", {}).items():
                 # retrieve right field from alias or name
                 field = [x for x in model.__fields__.values() if x.alias == prop][0]
                 if field.allow_none:
-                    value['nullable'] = True
+                    value["nullable"] = True
 
 
 class ExtensionStatus(BaseModel):
@@ -313,11 +313,17 @@ class ResourceIdDetails(BaseModel):
     resource_id_value: str
 
 
-class OrphanedResource(Enum):
+class OrphanedResource(str, Enum):
     orphaned = "orphaned"
 
 
-ReleasedResourceState = Enum("ReleasedResourceState", [(i.name, i.value) for i in chain(const.ResourceState, OrphanedResource)])
+class StrEnum(str, Enum):
+    """Enum where members are also (and must be) strs"""
+
+
+ReleasedResourceState = StrEnum(
+    "ReleasedResourceState", [(i.name, i.value) for i in chain(const.ResourceState, OrphanedResource)]
+)
 
 
 class LatestReleasedResource(BaseModel):
