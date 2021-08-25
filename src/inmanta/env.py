@@ -195,7 +195,7 @@ class ProcessEnv:
         return len(incompatibilities) == 0 and len(constraint_violations) == 0
 
     @classmethod
-    def get_module_file(cls, module: str) -> Optional[Tuple[str, Loader]]:
+    def get_module_file(cls, module: str) -> Optional[Tuple[Optional[str], Loader]]:
         """
         Get the location of the init file for a Python module within the active environment.
 

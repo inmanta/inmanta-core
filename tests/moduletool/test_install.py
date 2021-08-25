@@ -288,7 +288,7 @@ def test_project_install(
     module.Project.get().autostd = False
     ProjectTool().execute("install", [])
     for fq_mod_name in fq_mod_names:
-        module_info: Optional[Tuple[str, Loader]] = env.ProcessEnv.get_module_file(fq_mod_name)
+        module_info: Optional[Tuple[Optional[str], Loader]] = env.ProcessEnv.get_module_file(fq_mod_name)
         env_module_file, module_loader = module_info
         assert not isinstance(module_loader, loader.PluginModuleLoader)
         assert env_module_file is not None

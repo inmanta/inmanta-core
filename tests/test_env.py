@@ -238,9 +238,10 @@ def test_processenv_get_module_file(
     assert env.ProcessEnv.get_module_file(module_name) is None
     env.ProcessEnv.install_from_index([Requirement.parse(package_name)], index_urls=[index] if index is not None else None)
     assert package_name in env.get_installed_packages(python_path)
-    module_info: Optional[Tuple[str, Loader]] = env.ProcessEnv.get_module_file(module_name)
+    module_info: Optional[Tuple[Optional[str], Loader]] = env.ProcessEnv.get_module_file(module_name)
     assert module_info is not None
     module_file, mod_loader = module_info
+    assert module_file is not None
     assert not isinstance(mod_loader, loader.PluginModuleLoader)
     assert module_file == os.path.join(env.ProcessEnv.get_site_packages_dir(), *module_name.split("."), "__init__.py")
     importlib.import_module(module_name)

@@ -423,7 +423,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         if name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
         package: str = self.get_namespace_package_name(name)
-        mod_spec: Optional[Tuple[str, Loader]] = env.ProcessEnv.get_module_file(package)
+        mod_spec: Optional[Tuple[Optional[str], Loader]] = env.ProcessEnv.get_module_file(package)
         if mod_spec is None:
             return None
         init, mod_loader = mod_spec
@@ -431,6 +431,8 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             # TODO: test this behavior
             # module was found in the environment but it is associated with the v1 module loader
             return None
+        if init is None:
+            raise Exception(f"Package {package} was installed but no __init__.py file could be found.")
         pkg_installation_dir = os.path.abspath(os.path.dirname(init))
         if os.path.exists(os.path.join(pkg_installation_dir, ModuleV2.MODULE_FILE)):
             # normal install: __init__.py is in module root
