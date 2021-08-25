@@ -180,9 +180,9 @@ class ProcessEnv:
                 dist.key: version.Version(dist.version) for dist in pkg_resources.working_set
             }
             return (
-                (constraint, installed_packages.get(constraint.key, None))
+                (constraint, installed_versions.get(constraint.key, None))
                 for constraint in constraints
-                if constraint.key not in installed_packages or str(installed_packages[constraint.key]) not in constraint
+                if constraint.key not in installed_versions or str(installed_versions[constraint.key]) not in constraint
             )
 
         incompatibilities: List[str] = check_installed()
