@@ -152,17 +152,17 @@ class ProcessEnv:
             packages meet the given constraints. All listed packages are expected to be installed.
         """
 
-        dist: DistInfoDistribution
+        dist_info: DistInfoDistribution
         # add all requirements of all in scope packages installed in this environment
         all_constraints: Set[Requirement] = set(constraints if constraints is not None else []).union(
-            req
-            for dist in pkg_resources.working_set
-            if in_scope.fullmatch(dist.key)
-            for req in dist.requires()
+            requirement
+            for dist_info in pkg_resources.working_set
+            if in_scope.fullmatch(dist_info.key)
+            for requirement in dist_info.requires()
         )
 
         installed_versions: Dict[str, version.Version] = {
-            dist.key: version.Version(dist.version) for dist in pkg_resources.working_set
+            dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set
         }
         constraint_violations: List[Tuple[Requirement, Optional[version.Version]]] = [
             (constraint, installed_versions.get(constraint.key, None))
