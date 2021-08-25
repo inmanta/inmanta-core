@@ -1283,8 +1283,9 @@ class Project(ModuleLike[ProjectMetadata]):
         """
         ast_by_top_level_mod: Dict[str, List[Tuple[str, List[Statement], BasicBlock]]] = defaultdict(list)
 
-        # get imports
-        imports: Set[DefineImport] = {x for x in self.get_imports()}
+        # get imports: don't use a set because this collection is used to drive control flow and we want to keep control flow as
+        # deterministic as possible
+        imports: List[DefineImport] = [x for x in self.get_imports()]
 
         v2_modules: Set[str] = set()
         done: Dict[str, Dict[str, DefineImport]] = defaultdict(dict)
@@ -1299,7 +1300,7 @@ class Project(ModuleLike[ProjectMetadata]):
             v2_modules.add(module_name)
             if module_name in done and len(done[module_name]) > 0:
                 # some submodules already loaded as v1 => reload
-                imports.update(done[module_name].values())
+                imports.extend(done[module_name].values())
                 del done[module_name]
                 del ast_by_top_level_mod[module_name]
 
@@ -1329,7 +1330,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
                     # get imports and add to list
                     subs_imports: List[DefineImport] = module.get_imports(subs)
-                    imports.update(subs_imports)
+                    imports.extend(subs_imports)
                     if not v1_mode:
                         # TODO: test this behavior!
                         for dep_module_name in (subs_imp.name.split("::")[0] for subs_imp in subs_imports):
