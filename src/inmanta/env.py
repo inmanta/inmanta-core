@@ -146,53 +146,33 @@ class ProcessEnv:
         Check this Python environment for compatible dependencies in installed packages.
 
         :param in_scope: A full pattern representing the package names that are considered in scope for the installed packages'
-            compatibility check. If constraints are supplied, those are always checked, regardless of this pattern.
+            compatibility check. Matched against an all-lowercase package name. If constraints are supplied, those are always
+            checked, regardless of this pattern.
         :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
             packages meet the given constraints. All listed packages are expected to be installed.
         """
 
-        def check_installed() -> List[str]:
-            process: subprocess.CompletedProcess = subprocess.run(
-                [
-                    cls.python_path,
-                    "-m",
-                    "pip",
-                    "check",
-                ],
-                stdout=subprocess.PIPE,
-            )
-            # returncodes 0 and 1 are expected
-            if process.returncode == 0:
-                return []
-            elif process.returncode == 1:
-                stdout: str = process.stdout.decode()
-                return [line for line in stdout.splitlines() if in_scope.fullmatch(line.split()[0])]
-            else:
-                process.check_returncode()
-            return []
+        dist: DistInfoDistribution
+        # add all requirements of all in scope packages installed in this environment
+        all_constraints: Set[Requirement] = set(constraints if constraints is not None else []).union(
+            req
+            for dist in pkg_resources.working_set
+            if in_scope.fullmatch(dist.key)
+            for req in dist.requires()
+        )
 
-        def check_constraints() -> Iterator[Tuple[Requirement, Optional[version.Version]]]:
-            if constraints is None:
-                return iter(())
+        installed_versions: Dict[str, version.Version] = {
+            dist.key: version.Version(dist.version) for dist in pkg_resources.working_set
+        }
+        constraint_violations: List[Tuple[Requirement, Optional[version.Version]]] = [
+            (constraint, installed_versions.get(constraint.key, None))
+            for constraint in all_constraints
+            if constraint.key not in installed_versions or str(installed_versions[constraint.key]) not in constraint
+        ]
 
-            dist: DistInfoDistribution
-            installed_versions: Dict[str, version.Version] = {
-                dist.key: version.Version(dist.version) for dist in pkg_resources.working_set
-            }
-            return (
-                (constraint, installed_versions.get(constraint.key, None))
-                for constraint in constraints
-                if constraint.key not in installed_versions or str(installed_versions[constraint.key]) not in constraint
-            )
-
-        incompatibilities: List[str] = check_installed()
-        for incompatibility in incompatibilities:
-            LOGGER.warning("Incompatibility in Python environment: {incompatibility}")
-        constraint_violations: List[Tuple[Requirement, Optional[version.Version]]] = list(check_constraints())
         for constraint, v in constraint_violations:
             LOGGER.warning(f"Incompatibility between constraint {constraint} and installed version {v}")
-
-        return len(incompatibilities) == 0 and len(constraint_violations) == 0
+        return len(constraint_violations) == 0
 
     @classmethod
     def get_module_file(cls, module: str) -> Optional[Tuple[Optional[str], Loader]]:
