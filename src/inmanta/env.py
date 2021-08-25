@@ -35,7 +35,7 @@ from subprocess import CalledProcessError
 from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple
 
 import pkg_resources
-from pkg_resources import Requirement
+from pkg_resources import DistInfoDistribution, Requirement
 
 from packaging import version
 
@@ -176,13 +176,14 @@ class ProcessEnv:
             if constraints is None:
                 return iter(())
 
-            installed_packages: Dict[str, version.Version] = {
-                name.lower(): version for name, version in get_installed_packages(cls.python_path).items()
+            dist: DistInfoDistribution
+            installed_versions: Dict[str, version.Version] = {
+                dist.key: version.Version(dist.version) for dist in pkg_resources.working_set
             }
             return (
-                (constraint, installed_packages[constraint.key])
+                (constraint, installed_versions[constraint.key])
                 for constraint in constraints
-                if constraint.key in installed_packages and str(installed_packages[constraint.key]) not in constraint
+                if constraint.key in installed_versions and str(installed_versions[constraint.key]) not in constraint
             )
 
         incompatibilities: List[str] = check_installed()
