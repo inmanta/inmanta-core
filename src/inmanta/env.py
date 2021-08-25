@@ -148,8 +148,7 @@ class ProcessEnv:
         :param in_scope: A full pattern representing the package names that are considered in scope for the installed packages'
             compatibility check. If constraints are supplied, those are always checked, regardless of this pattern.
         :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
-            packages meet the given constraints. This is insterpreted as a list of constraints, not a list of requirements: if
-            one of the constraints' package is not installed the check succeeds.
+            packages meet the given constraints. All listed packages are expected to be installed.
         """
 
         def check_installed() -> List[str]:
@@ -172,7 +171,7 @@ class ProcessEnv:
                 process.check_returncode()
             return []
 
-        def check_constraints() -> Iterator[Tuple[Requirement, version.Version]]:
+        def check_constraints() -> Iterator[Tuple[Requirement, Optional[version.Version]]]:
             if constraints is None:
                 return iter(())
 
@@ -181,15 +180,15 @@ class ProcessEnv:
                 dist.key: version.Version(dist.version) for dist in pkg_resources.working_set
             }
             return (
-                (constraint, installed_versions[constraint.key])
+                (constraint, installed_packages.get(constraint.key, None))
                 for constraint in constraints
-                if constraint.key in installed_versions and str(installed_versions[constraint.key]) not in constraint
+                if constraint.key not in installed_packages or str(installed_packages[constraint.key]) not in constraint
             )
 
         incompatibilities: List[str] = check_installed()
         for incompatibility in incompatibilities:
             LOGGER.warning("Incompatibility in Python environment: {incompatibility}")
-        constraint_violations: List[Tuple[Requirement, version.Version]] = list(check_constraints())
+        constraint_violations: List[Tuple[Requirement, Optional[version.Version]]] = list(check_constraints())
         for constraint, v in constraint_violations:
             LOGGER.warning(f"Incompatibility between constraint {constraint} and installed version {v}")
 
