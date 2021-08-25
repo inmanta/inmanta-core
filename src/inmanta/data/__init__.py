@@ -28,6 +28,7 @@ import warnings
 from abc import ABCMeta
 from collections import defaultdict
 from configparser import RawConfigParser
+from itertools import chain
 from typing import (
     Any,
     Callable,
@@ -82,8 +83,28 @@ class QueryType(str, enum.Enum):
     CONTAINS = enum.auto()
     IS_NOT_NULL = enum.auto()
     CONTAINS_PARTIAL = enum.auto()
+    RANGE = enum.auto()
 
 
+class RangeOperator(enum.Enum):
+    LT = "<"
+    LE = "<="
+    GT = ">"
+    GE = ">="
+
+    @property
+    def pg_value(self) -> str:
+        return self.value
+
+    @classmethod
+    def parse(cls, text: str) -> "RangeOperator":
+        try:
+            return cls[text.upper()]
+        except KeyError:
+            raise ValueError(f"Failed to parse {text} as a RangeOperator")
+
+
+DateRangeConstraint = List[Tuple[RangeOperator, datetime.datetime]]
 QueryFilter = Tuple[QueryType, object]
 
 
@@ -117,6 +138,16 @@ OrderStr = NewType("OrderStr", str)
 """
 
 
+class PagingOrder(str, enum.Enum):
+    ASC = "ASC"
+    DESC = "DESC"
+
+    def invert(self) -> "PagingOrder":
+        if self == PagingOrder.ASC:
+            return PagingOrder.DESC
+        return PagingOrder.ASC
+
+
 class InvalidSort(Exception):
     def __init__(self, message: str, *args) -> None:
         super(InvalidSort, self).__init__(message, *args)
@@ -129,7 +160,7 @@ class DatabaseOrder(metaclass=ABCMeta):
     def __init__(
         self,
         order_by_column: ColumnNameStr,
-        order: OrderStr,
+        order: PagingOrder,
         order_by_column_type: Union[Type[datetime.datetime], Type[int], Type[str]],
     ) -> None:
         """The order_by_column and order parameters should be validated"""
@@ -141,7 +172,7 @@ class DatabaseOrder(metaclass=ABCMeta):
         """The validated column name string as it should be used in the database queries"""
         return self.order_by_column
 
-    def get_order(self) -> OrderStr:
+    def get_order(self) -> PagingOrder:
         """ The order string representing the direction the results should be sorted by"""
         return self.order
 
@@ -599,6 +630,23 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return ColumnNameStr(order_by_column), OrderStr(order)
 
     @classmethod
+    def _validate_order_strict(cls, order_by_column: str, order: str) -> Tuple[ColumnNameStr, PagingOrder]:
+        """Validate the correct values for order ('ASC' or 'DESC')  and if the order column is an existing column name
+        :param order_by_column: The name of the column to order by
+        :param order: The sorting order.
+        :return:
+        """
+        for o in order.split(" "):
+            possible = ["ASC", "DESC"]
+            if o not in possible:
+                raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
+
+        if order_by_column not in cls._fields:
+            raise RuntimeError(f"{order_by_column} is not a valid field name.")
+
+        return ColumnNameStr(order_by_column), PagingOrder[order]
+
+    @classmethod
     async def get_list(
         cls: Type[TBaseDocument],
         order_by_column: str = None,
@@ -760,6 +808,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 (filter_statement, filter_values) = cls.get_contains_partial_filter(
                     key, value, index_count, col_name_prefix=col_name_prefix
                 )
+            elif query_type == QueryType.RANGE:
+                (filter_statement, filter_values) = cls.get_range_filter(
+                    key, value, index_count, col_name_prefix=col_name_prefix
+                )
 
             filter_statements.append(filter_statement)
             values.extend(filter_values)
@@ -811,11 +863,43 @@ class BaseDocument(object, metaclass=DocumentMeta):
         collection.
         """
         cls.validate_field_name(name)
-        filter_statement = f"{name} LIKE ANY (${str(index)})"
+        filter_statement = f"{name} ILIKE ANY (${str(index)})"
         filter_statement = cls._add_column_name_prefix_if_needed(filter_statement, col_name_prefix)
         value = cls._get_value(value)
         value = [f"%{v}%" for v in value]
         return (filter_statement, [value])
+
+    @classmethod
+    def get_range_filter(
+        cls, name: str, value: DateRangeConstraint, index: int, col_name_prefix: str = None
+    ) -> Tuple[str, List[object]]:
+        """
+        Returns a tuple of a PostgresQL statement and any query arguments to filter on values that match a given range
+        constraint.
+        """
+        filter_statement: str
+        values: List[object]
+        (filter_statement, values) = cls._combine_filter_statements(
+            (
+                cls._add_column_name_prefix_if_needed(
+                    f"{name} {operator.pg_value} ${str(index + i)}",
+                    col_name_prefix,
+                ),
+                [cls._get_value(bound)],
+            )
+            for i, (operator, bound) in enumerate(value)
+        )
+        return (filter_statement, [cls._get_value(v) for v in values])
+
+    @staticmethod
+    def _combine_filter_statements(statements_and_values: Iterable[Tuple[str, List[object]]]) -> Tuple[str, List[object]]:
+        statements: Tuple[str]
+        values: Tuple[List[object]]
+        filter_statements, values = zip(*statements_and_values)  # type: ignore
+        return (
+            " AND ".join(s for s in filter_statements if s != ""),
+            list(chain.from_iterable(values)),
+        )
 
     @classmethod
     def _add_start_filter(
@@ -923,6 +1007,50 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 f"The last_id parameter should be used in combination with the end parameter. "
                 f"Received last_id: {last_id}, start: {start}, end: {end}"
             )
+
+    @classmethod
+    def _get_item_count_query_conditions(
+        cls,
+        database_order: DatabaseOrder,
+        id_column_name: ColumnNameStr,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[Any] = None,
+        end: Optional[Any] = None,
+        **query: Tuple[QueryType, object],
+    ) -> Tuple[str, List[object], List[str]]:
+        order_by_column = database_order.get_order_by_db_column_name()
+        order = database_order.get_order()
+        (common_filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
+
+        if "ASC" in order:
+            before_filter_statements, before_values = cls._add_end_filter(
+                len(values), order_by_column, id_column_name, end, last_id
+            )
+            values.extend(before_values)
+            after_filter_statements, after_values = cls._add_start_filter(
+                len(values), order_by_column, id_column_name, start, first_id
+            )
+            values.extend(after_values)
+        else:
+            before_filter_statements, before_values = cls._add_start_filter(
+                len(values), order_by_column, id_column_name, start, first_id
+            )
+            values.extend(before_values)
+            after_filter_statements, after_values = cls._add_end_filter(
+                len(values), order_by_column, id_column_name, end, last_id
+            )
+            values.extend(after_values)
+        before_filter = cls._join_filter_statements(before_filter_statements)
+        after_filter = cls._join_filter_statements(after_filter_statements)
+
+        select_clause = (
+            f"SELECT COUNT({id_column_name}) as count_total, "
+            f"COUNT({id_column_name}) filter ({before_filter}) as count_before, "
+            f"COUNT({id_column_name}) filter ({after_filter}) as count_after "
+        )
+
+        return select_clause, values, common_filter_statements
 
     async def delete(self, connection: asyncpg.connection.Connection = None) -> None:
         """
@@ -2195,6 +2323,150 @@ class ResourceAction(BaseDocument):
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
     @classmethod
+    def validate_field_name(cls, name: str) -> ColumnNameStr:
+        """Check if the name is a valid database column name for the current type"""
+        valid_field_names = list(cls._fields.keys())
+        valid_field_names.extend(["timestamp", "level", "msg"])
+        if name not in valid_field_names:
+            raise InvalidFieldNameException(f"{name} is not valid for a query on {cls.table_name()}")
+        return ColumnNameStr(name)
+
+    @classmethod
+    def _validate_order_strict(cls, order_by_column: str, order: str) -> Tuple[ColumnNameStr, PagingOrder]:
+        """Validate the correct values for order ('ASC' or 'DESC') and if the order column is an existing column name
+        :param order_by_column: The name of the column to order by
+        :param order: The sorting order.
+        :return:
+        """
+        for o in order.split(" "):
+            possible = ["ASC", "DESC"]
+            if o not in possible:
+                raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
+
+        valid_field_names = list(cls._fields.keys())
+        valid_field_names.extend(["timestamp", "level", "msg"])
+        if order_by_column not in valid_field_names:
+            raise RuntimeError(f"{order_by_column} is not a valid field name.")
+
+        return ColumnNameStr(order_by_column), PagingOrder[order]
+
+    @classmethod
+    def _get_resource_logs_base_query(
+        cls,
+        select_clause: str,
+        environment: uuid.UUID,
+        resource_id: m.ResourceIdStr,
+        offset: int,
+    ) -> Tuple[str, List[object]]:
+        query = f"""{select_clause}
+                    FROM
+                    (SELECT action_id, action, (unnested_message ->> 'timestamp')::timestamptz as timestamp,
+                    unnested_message ->> 'level' as level,
+                    unnested_message ->> 'msg' as msg,
+                    unnested_message
+                    FROM {cls.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
+                    WHERE environment = ${offset} AND rvid LIKE ${offset + 1}) unnested
+                    """
+        values = [cls._get_value(environment), cls._get_value(f"{resource_id}%")]
+        return query, values
+
+    @classmethod
+    async def get_logs_paged(
+        cls,
+        database_order: DatabaseOrder,
+        limit: int,
+        environment: uuid.UUID,
+        resource_id: m.ResourceIdStr,
+        start: Optional[Any] = None,
+        end: Optional[Any] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        **query: Tuple[QueryType, object],
+    ):
+        order_by_column = database_order.get_order_by_db_column_name()
+        order = database_order.get_order()
+        filter_statements, values = cls._get_list_query_pagination_parameters(
+            database_order=database_order,
+            id_column=ColumnNameStr("resource_version_id"),
+            first_id=None,
+            last_id=None,
+            start=start,
+            end=end,
+            **query,
+        )
+        db_query, base_query_values = cls._get_resource_logs_base_query(
+            select_clause="SELECT action_id, action, timestamp, unnested_message ",
+            environment=environment,
+            resource_id=resource_id,
+            offset=len(values) + 1,
+        )
+        values.extend(base_query_values)
+        if len(filter_statements) > 0:
+            db_query += cls._join_filter_statements(filter_statements)
+        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
+        if backward_paging:
+            backward_paging_order = order.invert().name
+
+            db_query += f" ORDER BY {order_by_column} {backward_paging_order}"
+        else:
+            db_query += f" ORDER BY {order_by_column} {order}"
+        if limit is not None:
+            if limit > DBLIMIT:
+                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
+            elif limit > 0:
+                db_query += " LIMIT " + str(limit)
+
+        if backward_paging:
+            db_query = f"""SELECT * FROM ({db_query}) AS matching_records
+                                ORDER BY matching_records.{order_by_column} {order}"""
+
+        records = cast(Iterable[Record], await cls.select_query(db_query, values, no_obj=True, connection=connection))
+        logs = []
+        for record in records:
+            message = json.loads(record["unnested_message"])
+            logs.append(
+                m.ResourceLog(
+                    action_id=record["action_id"],
+                    action=record["action"],
+                    timestamp=record["timestamp"],
+                    level=message.get("level"),
+                    msg=message.get("msg"),
+                    args=message.get("args"),
+                    kwargs=message.get("kwargs"),
+                )
+            )
+        return logs
+
+    @classmethod
+    def _get_paging_resource_log_item_count_query(
+        cls,
+        environment: uuid.UUID,
+        resource_id: m.ResourceIdStr,
+        database_order: DatabaseOrder,
+        id_column_name: ColumnNameStr,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[Any] = None,
+        end: Optional[Any] = None,
+        **query: Tuple[QueryType, object],
+    ) -> Tuple[str, List[object]]:
+        select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
+            database_order, id_column_name, first_id, last_id, start, end, **query
+        )
+
+        sql_query, base_query_values = cls._get_resource_logs_base_query(
+            select_clause=select_clause,
+            environment=environment,
+            resource_id=resource_id,
+            offset=len(values) + 1,
+        )
+        values.extend(base_query_values)
+
+        if len(common_filter_statements) > 0:
+            sql_query += cls._join_filter_statements(common_filter_statements)
+
+        return sql_query, values
+
+    @classmethod
     async def get(cls, action_id, connection: Optional[asyncpg.connection.Connection] = None):
         return await cls.get_one(action_id=action_id, connection=connection)
 
@@ -2372,9 +2644,10 @@ class ResourceOrder(DatabaseOrder):
         match = cls.valid_sort_pattern.match(sort)
         if match and len(match.groups()) == 2:
             order_by_column = match.groups()[0].lower()
-            validated_order_by_column, validated_order = Resource._validate_order(
+            validated_order_by_column, validated_order = Resource._validate_order_strict(
                 order_by_column=order_by_column, order=match.groups()[1].upper()
             )
+
             return ResourceOrder(order_by_column=validated_order_by_column, order=validated_order, order_by_column_type=str)
         raise InvalidSort(f"Sort parameter invalid: {sort}")
 
@@ -2402,11 +2675,33 @@ class ResourceHistoryOrder(DatabaseOrder):
         if match and len(match.groups()) == 2:
             order_by_column = match.groups()[0].lower()
             # Sorting based on the date of the configuration model
-            validated_order_by_column, validated_order = ConfigurationModel._validate_order(
+            validated_order_by_column, validated_order = ConfigurationModel._validate_order_strict(
                 order_by_column=order_by_column, order=match.groups()[1].upper()
             )
             return ResourceHistoryOrder(
                 order_by_column=validated_order_by_column, order=validated_order, order_by_column_type=str
+            )
+        raise InvalidSort(f"Sort parameter invalid: {sort}")
+
+
+class ResourceLogOrder(DatabaseOrder):
+    """ Represents the ordering by which resource logs should be sorted"""
+
+    valid_sort_pattern: Pattern = re.compile("^(timestamp)\\.(asc|desc)$", re.IGNORECASE)
+
+    @classmethod
+    def parse_from_string(
+        cls,
+        sort: str,
+    ) -> "ResourceLogOrder":
+        match = cls.valid_sort_pattern.match(sort)
+        if match and len(match.groups()) == 2:
+            order_by_column = match.groups()[0].lower()
+            validated_order_by_column, validated_order = ResourceAction._validate_order_strict(
+                order_by_column=order_by_column, order=match.groups()[1].upper()
+            )
+            return ResourceLogOrder(
+                order_by_column=validated_order_by_column, order=validated_order, order_by_column_type=datetime.datetime
             )
         raise InvalidSort(f"Sort parameter invalid: {sort}")
 
@@ -2741,12 +3036,9 @@ class Resource(BaseDocument):
         values.append(base_query_values)
         if len(filter_statements) > 0:
             db_query += cls._join_filter_statements(filter_statements)
-        backward_paging = ("ASC" in order and end) or ("DESC" in order and start)
+        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
         if backward_paging:
-            if "ASC" in order:
-                backward_paging_order = order.replace("ASC", "DESC")
-            else:
-                backward_paging_order = order.replace("DESC", "ASC")
+            backward_paging_order = order.invert().name
 
             db_query += f" ORDER BY {order_by_column} {backward_paging_order}, resource_version_id {backward_paging_order}"
         else:
@@ -3084,13 +3376,9 @@ class Resource(BaseDocument):
         if len(filter_statements) > 0:
             query += cls._join_filter_statements(filter_statements)
         values.extend(base_query_values)
-        backward_paging = ("ASC" in order and end) or ("DESC" in order and start)
-
+        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
         if backward_paging:
-            if "ASC" in order:
-                backward_paging_order = order.replace("ASC", "DESC")
-            else:
-                backward_paging_order = order.replace("DESC", "ASC")
+            backward_paging_order = order.invert().name
 
             query += f" ORDER BY {order_by_column} {backward_paging_order}, attribute_hash {backward_paging_order}"
         else:
@@ -3122,50 +3410,6 @@ class Resource(BaseDocument):
             )
             for record in result
         ]
-
-    @classmethod
-    def _get_item_count_query_conditions(
-        cls,
-        database_order: DatabaseOrder,
-        id_column_name: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Tuple[QueryType, object],
-    ) -> Tuple[str, List[object], List[str]]:
-        order_by_column = database_order.get_order_by_db_column_name()
-        order = database_order.get_order()
-        (common_filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
-
-        if "ASC" in order:
-            before_filter_statements, before_values = cls._add_end_filter(
-                len(values), order_by_column, id_column_name, end, last_id
-            )
-            values.extend(before_values)
-            after_filter_statements, after_values = cls._add_start_filter(
-                len(values), order_by_column, id_column_name, start, first_id
-            )
-            values.extend(after_values)
-        else:
-            before_filter_statements, before_values = cls._add_start_filter(
-                len(values), order_by_column, id_column_name, start, first_id
-            )
-            values.extend(before_values)
-            after_filter_statements, after_values = cls._add_end_filter(
-                len(values), order_by_column, id_column_name, end, last_id
-            )
-            values.extend(after_values)
-        before_filter = cls._join_filter_statements(before_filter_statements)
-        after_filter = cls._join_filter_statements(after_filter_statements)
-
-        select_clause = (
-            f"SELECT COUNT({id_column_name}) as count_total, "
-            f"COUNT({id_column_name}) filter ({before_filter}) as count_before, "
-            f"COUNT({id_column_name}) filter ({after_filter}) as count_after "
-        )
-
-        return select_clause, values, common_filter_statements
 
     @classmethod
     def _get_paging_history_item_count_query(
