@@ -155,48 +155,12 @@ class OpenApiTypeConverter:
     Lookup for OpenAPI types corresponding to python types
     """
 
-    components = Components(schemas={})
-
-    python_to_openapi_types = {
-        bool: Schema(type="boolean"),
-        int: Schema(type="integer"),
-        str: Schema(type="string"),
-        tuple: Schema(type="array", items=Schema()),
-        list: Schema(type="array", items=Schema()),
-        dict: Schema(type="object"),
-        float: Schema(type="number", format="float"),
-        bytes: Schema(type="string", format="binary"),
-        datetime: Schema(type="string", format="date-time"),
-        uuid.UUID: Schema(type="string", format="uuid"),
-        typing.Any: Schema(),
-        types.StrictNonIntBool: Schema(type="boolean"),
-    }
+    def __init__(self):
+        self.components = Components(schemas={})
 
     def get_openapi_type_of_parameter(self, parameter_type: inspect.Parameter) -> Schema:
         type_annotation = parameter_type.annotation
         return self.get_openapi_type(type_annotation)
-
-    def _is_none_type(self, type_annotation: Type) -> bool:
-        return inspect.isclass(type_annotation) and issubclass(type_annotation, type(None))
-
-    def _handle_union_type(self, type_annotation: Type) -> Schema:
-        # An Optional is always a Union
-        type_args = typing_inspect.get_args(type_annotation, evaluate=True)
-        openapi_types = [self.get_openapi_type(type_arg) for type_arg in type_args if not self._is_none_type(type_arg)]
-        none_type_in_type_args = len(openapi_types) < len(type_args)
-        if none_type_in_type_args:
-            if len(openapi_types) == 1:
-                openapi_type = openapi_types[0].copy(deep=True)
-                # An Optional in the OpenAPI Schema is nullable
-                openapi_type.nullable = True
-                return openapi_type
-            return Schema(anyOf=openapi_types, nullable=True)
-        # A Union type can be expressed as a schema that matches any of the type arguments
-        return Schema(anyOf=openapi_types)
-
-    def _handle_dictionary(self, type_annotation: Type) -> Schema:
-        type_args = typing_inspect.get_args(type_annotation, evaluate=True)
-        return Schema(type="object", additionalProperties=self.get_openapi_type(type_args[1]))
 
     def _handle_pydantic_model(self, type_annotation: Type, by_alias: bool = True) -> Schema:
         # JsonSchema stores the model (and sub-model) definitions at #/definitions,
@@ -209,21 +173,12 @@ class OpenApiTypeConverter:
                 self.components.schemas.update(definitions)
         return Schema(**schema)
 
-    def _handle_enums(self, type_annotation: Type) -> Schema:
-        enum_keys = [name for name in type_annotation.__members__.keys()]
-        return Schema(type="string", enum=enum_keys)
-
-    def _handle_list(self, type_annotation: Type) -> Schema:
-        # Type argument is always present, see protocol.common.MethodProperties._validate_type_arg()
-        list_member_type = typing_inspect.get_args(type_annotation, evaluate=True)
-        return Schema(type="array", items=self.get_openapi_type(list_member_type[0]))
-
     def get_openapi_type(self, type_annotation: Type) -> Schema:
         class Sub(BaseModel):
             the_field: type_annotation
 
             class Config:
-                arbitrary_types_allowed=True
+                arbitrary_types_allowed = True
 
         pydantic_result = self._handle_pydantic_model(Sub).properties["the_field"]
         pydantic_result.title = None
