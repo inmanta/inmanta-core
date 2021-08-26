@@ -192,7 +192,6 @@ async def test_generate_openapi_definition(server, feature_manager):
     openapi_json = openapi.generate_openapi_json()
     assert openapi_json
     openapi_parsed = json.loads(openapi_json)
-    print(openapi_json)
     openapi_v3_spec_validator.validate(openapi_parsed)
 
 
@@ -323,7 +322,6 @@ def test_openapi_types_dict_of_union():
 def test_openapi_types_optional_union():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(Optional[Union[int, str]])
-    print(openapi_type)
     assert len(openapi_type.anyOf) == 2
     assert openapi_type.nullable
 

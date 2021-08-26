@@ -37,15 +37,16 @@ old_field_type_schema = pydantic.schema.field_type_schema
 def patch_pydantic_field_type_schema() -> None:
     """
     This ugly patch fixes the serialization of models containing Optional in them.
+    https://github.com/samuelcolvin/pydantic/issues/1270
     """
 
-    def evil_patch(field: ModelField, **kwargs):
+    def patch_nullable(field: ModelField, **kwargs):
         f_schema, definitions, nested_models = old_field_type_schema(field, **kwargs)
         if field.allow_none:
             f_schema["nullable"] = True
         return f_schema, definitions, nested_models
 
-    pydantic.schema.field_type_schema = evil_patch
+    pydantic.schema.field_type_schema = patch_nullable
 
 
 def validator_timezone_aware_timestamps(value: object) -> object:
