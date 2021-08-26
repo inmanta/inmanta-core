@@ -233,7 +233,7 @@ def test_processenv_get_module_file(
     importlib.invalidate_caches()
 
     if v1_plugin_loader:
-        loader.PluginModuleFinder.configure_module_finder([str(tmpdir)])
+        loader.PluginModuleFinder.configure_module_finder([os.path.join(str(tmpdir), "libs")])
 
     assert env.ProcessEnv.get_module_file(module_name) is None
     env.ProcessEnv.install_from_index([Requirement.parse(package_name)], index_urls=[index] if index is not None else None)
@@ -244,6 +244,30 @@ def test_processenv_get_module_file(
     assert module_file is not None
     assert not isinstance(mod_loader, loader.PluginModuleLoader)
     assert module_file == os.path.join(env.ProcessEnv.get_site_packages_dir(), *module_name.split("."), "__init__.py")
+    importlib.import_module(module_name)
+    assert module_name in sys.modules
+    assert sys.modules[module_name].__file__ == module_file
+
+
+def test_processenv_get_module_file_editable_namespace_package(
+    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    modules_v2_dir: str,
+) -> None:
+    venv_dir, python_path = tmpvenv_active
+
+    package_name: str = "inmanta-module-minimalv2module"
+    module_name: str = "inmanta_plugins.minimalv2module"
+
+    assert env.ProcessEnv.get_module_file(module_name) is None
+    project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
+    env.ProcessEnv.install_from_source([env.LocalPackagePath(path=project_dir, editable=True)])
+    assert package_name in env.get_installed_packages(python_path)
+    module_info: Optional[Tuple[Optional[str], Loader]] = env.ProcessEnv.get_module_file(module_name)
+    assert module_info is not None
+    module_file, mod_loader = module_info
+    assert module_file is not None
+    assert not isinstance(mod_loader, loader.PluginModuleLoader)
+    assert module_file == os.path.join(modules_v2_dir, "minimalv2module", *module_name.split("."), "__init__.py")
     importlib.import_module(module_name)
     assert module_name in sys.modules
     assert sys.modules[module_name].__file__ == module_file

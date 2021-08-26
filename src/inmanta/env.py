@@ -114,7 +114,7 @@ class ProcessEnv:
                 raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
             raise e
         else:
-            pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+            cls._notify_change()
 
     @classmethod
     def install_from_source(cls, paths: List[LocalPackagePath]) -> None:
@@ -138,7 +138,7 @@ class ProcessEnv:
                 *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in explicit_paths),
             ]
         )
-        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+        cls._notify_change()
 
     @classmethod
     def check(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
@@ -207,6 +207,18 @@ class ProcessEnv:
                 "Invalid state: trying to init namespace after it has been loaded. Make sure to call this method before calling"
                 " get_module_file for this namespace."
             )
+
+    @classmethod
+    def _notify_change(cls) -> None:
+        """
+        This method must be called when a package is installed or removed from the environment in order for Python to detect
+        the change.
+        """
+        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+        # Make sure that the .pth files in the site-packages directory are processed.
+        # This is required to make editable installs work.
+        site.addsitedir(cls.get_site_packages_dir())
+        importlib.invalidate_caches()
 
 
 class VirtualEnv(object):
