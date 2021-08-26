@@ -40,37 +40,40 @@ from inmanta.protocol.openapi.converter import (
 )
 from inmanta.protocol.openapi.model import MediaType, Schema, SchemaBase
 from inmanta.server import SLICE_SERVER
+from inmanta.server.extensions import FeatureManager
+from inmanta.server.protocol import Server
 
 
-def call_fixed(self: openapi_spec_validator.decorators.DerefValidatorDecorator, func):
-    """
-    This is a monkey fix for the openapi_spec_validator, to allow it to validate the schema of a reference.
-    To differentiate references from schema of a reference, we simply check the type of the reference.  If it
-    is not a str, it can not be a reference.
-    """
+@pytest.fixture
+def patch_openapi_spec_validator(monkeypatch: pytest.MonkeyPatch) -> None:
+    def call_fixed(self: openapi_spec_validator.decorators.DerefValidatorDecorator, func):
+        """
+        This is a monkey fix for the openapi_spec_validator, to allow it to validate the schema of a reference.
+        To differentiate references from schema of a reference, we simply check the type of the reference.  If it
+        is not a str, it can not be a reference.
+        """
 
-    def wrapped(validator, schema_element, instance, schema):
-        if not isinstance(instance, dict) or "$ref" not in instance or not isinstance(instance["$ref"], str):
-            for res in func(validator, schema_element, instance, schema):
-                yield res
-            return
-
-        ref = instance["$ref"]
-
-        # ref already visited
-        if ref in self.visiting:
-            return
-
-        self._attach_scope(instance)
-        with self.visiting.visit(ref):
-            with self.instance_resolver.resolving(ref) as target:
-                for res in func(validator, schema_element, target, schema):
+        def wrapped(validator, schema_element, instance, schema):
+            if not isinstance(instance, dict) or "$ref" not in instance or not isinstance(instance["$ref"], str):
+                for res in func(validator, schema_element, instance, schema):
                     yield res
+                return
 
-    return wrapped
+            ref = instance["$ref"]
 
+            # ref already visited
+            if ref in self.visiting:
+                return
 
-openapi_spec_validator.decorators.DerefValidatorDecorator.__call__ = call_fixed
+            self._attach_scope(instance)
+            with self.visiting.visit(ref):
+                with self.instance_resolver.resolving(ref) as target:
+                    for res in func(validator, schema_element, target, schema):
+                        yield res
+
+        return wrapped
+
+    monkeypatch.setattr(openapi_spec_validator.decorators.DerefValidatorDecorator, "__call__", call_fixed)
 
 
 class DummyException(BaseHttpException):
@@ -79,7 +82,7 @@ class DummyException(BaseHttpException):
 
 
 @pytest.fixture
-def feature_manager(server):
+def feature_manager(server: Server) -> FeatureManager:
     return server.get_slice(SLICE_SERVER).feature_manager
 
 
@@ -186,7 +189,7 @@ def api_methods_fixture(clean_reset):
 
 
 @pytest.mark.asyncio
-async def test_generate_openapi_definition(server, feature_manager):
+async def test_generate_openapi_definition(server: Server, feature_manager: FeatureManager, patch_openapi_spec_validator: None):
     global_url_map = server._transport.get_global_url_map(server.get_slices().values())
     openapi = OpenApiConverter(global_url_map, feature_manager)
     openapi_json = openapi.generate_openapi_json()
@@ -668,7 +671,7 @@ def test_get_operation_partial_documentation(api_methods_fixture):
 
 
 @pytest.mark.asyncio
-async def test_openapi_endpoint(client):
+async def test_openapi_endpoint(client, patch_openapi_spec_validator: None):
     result = await client.get_api_docs("openapi")
     assert result.code == 200
     openapi_spec = result.result["data"]
