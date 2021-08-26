@@ -95,7 +95,7 @@ class Environment:
         Return a list of all installed packages in the site-packages of a python interpreter.
 
         :param python_interpreter: The python interpreter to get the packages for
-       :param only_editable: List only packages installed in editable mode.
+        :param only_editable: List only packages installed in editable mode.
         :return: A dict with package names as keys and versions as values
         """
         cmd = [self.python_path, "-m", "pip", "list", "--format", "json", *(["--editable"] if only_editable else [])]
@@ -160,7 +160,9 @@ class Environment:
         )
 
     @classmethod
-    def _run_command_and_log_output(cls, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None) -> str:
+    def _run_command_and_log_output(
+        cls, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None
+    ) -> str:
         output: bytes = b""  # Make sure the var is always defined in the except bodies
         try:
             output = subprocess.check_output(cmd, stderr=stderr, env=env)

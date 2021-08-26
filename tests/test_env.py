@@ -99,9 +99,7 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     venv = env.VirtualEnv(tmpdir)
     venv.use_virtual_env()
 
-    installed_packages = list(
-        env.Environment(python_path=venv._parent_python).get_installed_packages().keys()
-    )
+    installed_packages = list(env.Environment(python_path=venv._parent_python).get_installed_packages().keys())
 
     # verify that the venv sees all parent packages
     assert not set(parent_installed) - set(installed_packages)
