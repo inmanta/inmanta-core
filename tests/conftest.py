@@ -287,7 +287,6 @@ def deactive_venv():
     if old_os_venv is not None:
         os.environ["VIRTUAL_ENV"] = old_os_venv
     env.process_env.__init__(python_path=old_process_env)
-    env.process_env.notify_change()
     loader.PluginModuleFinder.reset()
 
 
