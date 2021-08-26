@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Union
 from uuid import UUID
 
+import openapi_spec_validator.decorators
 import pytest
 from openapi_spec_validator import openapi_v3_spec_validator
 from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
@@ -41,6 +42,37 @@ from inmanta.protocol.openapi.model import MediaType, Schema, SchemaBase
 from inmanta.server import SLICE_SERVER
 
 
+def call_fixed(self: openapi_spec_validator.decorators.DerefValidatorDecorator, func):
+    """
+    This is a monkey fix for the openapi_spec_validator, to allow it to validate the schema of a reference.
+    To differentiate references from schema of a reference, we simply check the type of the reference.  If it
+    is not a str, it can not be a reference.
+    """
+
+    def wrapped(validator, schema_element, instance, schema):
+        if not isinstance(instance, dict) or "$ref" not in instance or not isinstance(instance["$ref"], str):
+            for res in func(validator, schema_element, instance, schema):
+                yield res
+            return
+
+        ref = instance["$ref"]
+
+        # ref already visited
+        if ref in self.visiting:
+            return
+
+        self._attach_scope(instance)
+        with self.visiting.visit(ref):
+            with self.instance_resolver.resolving(ref) as target:
+                for res in func(validator, schema_element, target, schema):
+                    yield res
+
+    return wrapped
+
+
+openapi_spec_validator.decorators.DerefValidatorDecorator.__call__ = call_fixed
+
+
 class DummyException(BaseHttpException):
     def __init__(self):
         super(DummyException, self).__init__(status_code=405)
@@ -54,7 +86,7 @@ def feature_manager(server):
 @pytest.fixture(scope="function")
 def api_methods_fixture(clean_reset):
     @method(path="/simpleoperation", client_types=["api", "agent"], envelope=True)
-    def post_method() -> object:
+    def post_method() -> str:
         return ""
 
     @method(path="/simpleoperation", client_types=["agent"], operation="GET")
@@ -197,7 +229,7 @@ def test_return_value(api_methods_fixture):
 
     json_response_content = operation_handler._build_return_value_wrapper(MethodProperties.methods["post_method"][0])
     assert json_response_content == {
-        "application/json": MediaType(schema=Schema(type="object", properties={"data": Schema(type="object")}))
+        "application/json": MediaType(schema=Schema(type="object", properties={"data": Schema(type="string")}))
     }
 
 

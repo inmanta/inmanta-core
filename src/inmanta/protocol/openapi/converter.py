@@ -186,6 +186,12 @@ class OpenApiTypeConverter:
         return pydantic_result
 
     def resolve_reference(self, reference: str) -> Optional[Schema]:
+        """
+        Get a schema from its reference, if this schema exists.  If it doesn't exist, None is
+        returned instead.
+
+        :param reference: The reference to the schema
+        """
         ref_match = self.ref_regex.match(reference)
         if not ref_match:
             return None
