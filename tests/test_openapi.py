@@ -249,10 +249,12 @@ def test_openapi_types_list():
 def test_openapi_types_enum():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(List[ResourceAction])
-    assert openapi_type == Schema(type="array", items=Schema(ref=type_converter.ref_prefix + "ResourceAction"))
-    assert Schema(type_converter.components["ResourceAction"]) == Schema(
-        type="string", enum=["store", "push", "pull", "deploy", "dryrun", "getfact", "other"]
-    )
+    assert openapi_type.type == "array"
+    assert openapi_type.items.ref == type_converter.ref_prefix + "ResourceAction"
+
+    resource_action_type = Schema(**type_converter.components.schemas["ResourceAction"])
+    assert resource_action_type.type == "string"
+    assert resource_action_type.enum == ["store", "push", "pull", "deploy", "dryrun", "getfact", "other"]
 
 
 def test_openapi_types_dict():
