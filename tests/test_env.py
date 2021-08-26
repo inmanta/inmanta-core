@@ -274,7 +274,7 @@ def test_active_env_get_module_file(
 
     assert env.ActiveEnv.get_module_file(module_name) is None
     env.process_env.install_from_index([Requirement.parse(package_name)], index_urls=[index] if index is not None else None)
-    assert package_name in env.ActiveEnv.get_installed_packages()
+    assert package_name in env.process_env.get_installed_packages()
     module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
     assert module_info is not None
     module_file, mod_loader = module_info
