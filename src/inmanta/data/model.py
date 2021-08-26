@@ -22,11 +22,30 @@ from itertools import chain
 from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
+import pydantic.schema
+from pydantic.fields import ModelField
 
 import inmanta.ast.export as ast_export
 from inmanta import const
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
+
+# This reference to the actual pydantic field_type_schema method is only loaded once
+old_field_type_schema = pydantic.schema.field_type_schema
+
+
+def patch_pydantic_field_type_schema() -> None:
+    """
+    This ugly patch fixes the serialization of models containing Optional in them.
+    """
+
+    def evil_patch(field: ModelField, **kwargs):
+        f_schema, definitions, nested_models = old_field_type_schema(field, **kwargs)
+        if field.allow_none:
+            f_schema["nullable"] = True
+        return f_schema, definitions, nested_models
+
+    pydantic.schema.field_type_schema = evil_patch
 
 
 def validator_timezone_aware_timestamps(value: object) -> object:
@@ -57,15 +76,6 @@ class BaseModel(pydantic.BaseModel):
         # Populate models with the value property of enums, rather than the raw enum.
         # This is useful to serialise model.dict() later
         use_enum_values = True
-
-        @staticmethod
-        def schema_extra(schema, model):
-            # from https://github.com/samuelcolvin/pydantic/issues/1270
-            for prop, value in schema.get("properties", {}).items():
-                # retrieve right field from alias or name
-                field = [x for x in model.__fields__.values() if x.alias == prop][0]
-                if field.allow_none:
-                    value["nullable"] = True
 
 
 class ExtensionStatus(BaseModel):

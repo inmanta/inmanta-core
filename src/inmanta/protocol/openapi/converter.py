@@ -17,13 +17,14 @@
 """
 import inspect
 import json
+import re
 from typing import Callable, Dict, List, Optional, Type, Union
 
 from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
 
 from inmanta import util
-from inmanta.data.model import BaseModel
+from inmanta.data.model import BaseModel, patch_pydantic_field_type_schema
 from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.model import (
     Components,
@@ -152,6 +153,11 @@ class OpenApiTypeConverter:
 
     def __init__(self):
         self.components = Components(schemas={})
+        self.ref_prefix = "#/components/schemas/"
+        self.ref_regex = re.compile(self.ref_prefix + r"(.*)")
+
+        # Applying some monkey patching to pydantic
+        patch_pydantic_field_type_schema()
 
     def get_openapi_type_of_parameter(self, parameter_type: inspect.Parameter) -> Schema:
         type_annotation = parameter_type.annotation
@@ -161,7 +167,7 @@ class OpenApiTypeConverter:
         # JsonSchema stores the model (and sub-model) definitions at #/definitions,
         # but OpenAPI requires them to be placed at "#/components/schemas/"
         # The ref_prefix changes the references, but the actual schemas are still at #/definitions
-        schema = model_schema(type_annotation, by_alias=by_alias, ref_prefix="#/components/schemas/")
+        schema = model_schema(type_annotation, by_alias=by_alias, ref_prefix=self.ref_prefix)
         if "definitions" in schema.keys():
             definitions = schema.pop("definitions")
             if self.components.schemas is not None:
@@ -178,6 +184,15 @@ class OpenApiTypeConverter:
         pydantic_result = self._handle_pydantic_model(Sub).properties["the_field"]
         pydantic_result.title = None
         return pydantic_result
+
+    def resolve_reference(self, reference: str) -> Optional[Schema]:
+        ref_match = self.ref_regex.match(reference)
+        if not ref_match:
+            return None
+
+        ref_key = ref_match.group(1)
+        schema = self.components.schemas[ref_key]
+        return Schema(**schema)
 
 
 class ArgOptionHandler:
