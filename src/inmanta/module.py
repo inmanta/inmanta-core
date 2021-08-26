@@ -376,7 +376,7 @@ class ModuleSource(Generic[TModule]):
 class ModuleV2Source(ModuleSource["ModuleV2"]):
     def __init__(self, urls: List[str]) -> None:
         self.urls: List[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
-        env.ProcessEnv.init_namespace(const.PLUGINS_PACKAGE)
+        env.process_env.init_namespace(const.PLUGINS_PACKAGE)
 
     @classmethod
     def get_python_package_name(cls, module_name: str) -> str:
@@ -402,11 +402,11 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return f"{const.PLUGINS_PACKAGE}.{module_name}"
 
     def install(self, project: Optional["Project"], module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
-        env.ProcessEnv.init_namespace(const.PLUGINS_PACKAGE)
+        env.process_env.init_namespace(const.PLUGINS_PACKAGE)
         module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
         try:
-            env.ProcessEnv.install_from_index(requirements, self.urls)
+            env.process_env.install_from_index(requirements, self.urls)
         except env.PackageNotFound:
             return None
         path: Optional[str] = self.path_for(module_name)
@@ -423,7 +423,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         if name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
         package: str = self.get_namespace_package_name(name)
-        mod_spec: Optional[Tuple[Optional[str], Loader]] = env.ProcessEnv.get_module_file(package)
+        mod_spec: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(package)
         if mod_spec is None:
             return None
         init, mod_loader = mod_spec
@@ -1533,7 +1533,7 @@ class Project(ModuleLike[ProjectMetadata]):
                     LOGGER.warning("requirement %s on module %s not fulfilled, now at version %s", r, name, version)
                     good = False
 
-        good &= env.ProcessEnv.check(
+        good &= env.ActiveEnv.check(
             in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"),
             constraints=[
                 ModuleV2Source.get_python_package_requirement(req) for req in chain.from_iterable(v2_requirements.values())

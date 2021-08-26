@@ -47,8 +47,13 @@ def run_module_install(python_path: str, module_path: str, editable: bool, set_p
     """
     if not set_path_argument:
         os.chdir(module_path)
-    with patch("inmanta.env.ProcessEnv.python_path", new=python_path):
+    # patch env.process_env
+    old_process_env: str = env.process_env.python_path
+    env.process_env.__init__(python_path=python_path)
+    try:
         ModuleTool().execute("install", argparse.Namespace(editable=editable, path=module_path if set_path_argument else None))
+    finally:
+        env.process_env.__init__(python_path=old_process_env)
 
 
 def test_bad_checkout(git_modules_dir, modules_repo):
@@ -212,7 +217,7 @@ def test_module_install(
     python_module_name: str = "inmanta-module-minimalv2module"
 
     def is_installed(name: str, only_editable: bool = False) -> bool:
-        return name in env.get_installed_packages(python_path, only_editable=only_editable)
+        return name in env.process_env.get_installed_packages(only_editable=only_editable)
 
     assert not is_installed(python_module_name)
     run_module_install(python_path, module_path, editable, set_path_argument)
@@ -283,16 +288,16 @@ def test_project_install(
 
     os.chdir(project_path)
     for fq_mod_name in fq_mod_names:
-        assert env.ProcessEnv.get_module_file(fq_mod_name) is None
+        assert env.process_env.get_module_file(fq_mod_name) is None
     # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
     module.Project.get().autostd = False
     ProjectTool().execute("install", [])
     for fq_mod_name in fq_mod_names:
-        module_info: Optional[Tuple[Optional[str], Loader]] = env.ProcessEnv.get_module_file(fq_mod_name)
+        module_info: Optional[Tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
         env_module_file, module_loader = module_info
         assert not isinstance(module_loader, loader.PluginModuleLoader)
         assert env_module_file is not None
-        assert env_module_file == os.path.join(env.ProcessEnv.get_site_packages_dir(), *fq_mod_name.split("."), "__init__.py")
+        assert env_module_file == os.path.join(env.process_env.site_packages_dir, *fq_mod_name.split("."), "__init__.py")
     v1_mod_dir: str = os.path.join(project_path, metadata.downloadpath)
     assert os.path.exists(v1_mod_dir)
     assert os.listdir(v1_mod_dir) == ["std"]

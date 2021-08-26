@@ -548,7 +548,7 @@ version: 0.0.1dev0"""
                 if module in v2_modules
             ]
             if v2_python_specs:
-                env.ProcessEnv.install_from_index(v2_python_specs, my_project.module_source.urls, upgrade=True)
+                env.process_env.install_from_index(v2_python_specs, my_project.module_source.urls, upgrade=True)
 
             for v1_module in set(modules).difference(v2_modules):
                 spec = specs.get(v1_module, [])
@@ -602,7 +602,7 @@ version: 0.0.1dev0"""
         """
 
         def install(install_path: str) -> None:
-            env.ProcessEnv.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
+            env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
 
         module_path: str = os.path.abspath(path) if path is not None else os.getcwd()
         module: Module = self.construct_module(None, module_path)

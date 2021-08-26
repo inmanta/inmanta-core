@@ -62,25 +62,48 @@ class LocalPackagePath:
     editable: bool = False
 
 
-class ProcessEnv:
+class Environment:
     """
-    Class to represent the Python environment this process is running in.
+    A generic Python environment.
     """
 
-    python_path: str = sys.executable
-
-    @classmethod
-    def get_site_packages_dir(cls) -> str:
-        env_dir: str = os.path.dirname(os.path.dirname(cls.python_path))
-        return (
-            os.path.join(env_dir, "Lib", "site-packages")
+    def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
+        if env_path is None == python_path is None:
+            raise ValueError("Exactly one of `env_path` and `python_path` needs to be specified")
+        self.env_path: str
+        self.python_path: str
+        if env_path is not None:
+            python_name: str = os.path.basename(sys.executable)
+            self.env_path = env_path
+            self.python_path = (
+                os.path.join(self.env_path, "Scripts", python_name)
+                if sys.platform == "win32"
+                else os.path.join(self.env_path, "bin", python_name)
+            )
+        else:
+            assert python_path is not None
+            self.python_path = python_path
+            self.env_path = os.path.dirname(os.path.dirname(self.python_path))
+        self.site_packages_dir: str = (
+            os.path.join(self.env_path, "Lib", "site-packages")
             if sys.platform == "win32"
-            else os.path.join(env_dir, "lib", "python%s" % sys.version[:3], "site-packages")
+            else os.path.join(self.env_path, "lib", "python%s" % sys.version[:3], "site-packages")
         )
 
-    @classmethod
+    def get_installed_packages(self, only_editable: bool = False) -> Dict[str, version.Version]:
+        """
+        Return a list of all installed packages in the site-packages of a python interpreter.
+
+        :param python_interpreter: The python interpreter to get the packages for
+       :param only_editable: List only packages installed in editable mode.
+        :return: A dict with package names as keys and versions as values
+        """
+        cmd = [self.python_path, "-m", "pip", "list", "--format", "json", *(["--editable"] if only_editable else [])]
+        output = self._run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
+        return {r["name"]: version.Version(r["version"]) for r in json.loads(output)}
+
     def install_from_index(
-        cls, requirements: List[Requirement], index_urls: Optional[List[str]] = None, upgrade: bool = False
+        self, requirements: List[Requirement], index_urls: Optional[List[str]] = None, upgrade: bool = False
     ) -> None:
         index_args: List[str] = (
             []
@@ -90,9 +113,9 @@ class ProcessEnv:
             else ["--no-index"]
         )
         try:
-            process: subprocess.CompletedProcess = subprocess.run(
+            self._run_command_and_log_output(
                 [
-                    cls.python_path,
+                    self.python_path,
                     "-m",
                     "pip",
                     "install",
@@ -102,7 +125,6 @@ class ProcessEnv:
                 ],
                 stderr=subprocess.PIPE,
             )
-            process.check_returncode()
         except CalledProcessError as e:
             stderr: str = e.stderr.decode()
             not_found: List[str] = [
@@ -113,11 +135,8 @@ class ProcessEnv:
             if not_found:
                 raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
             raise e
-        else:
-            cls.notify_change()
 
-    @classmethod
-    def install_from_source(cls, paths: List[LocalPackagePath]) -> None:
+    def install_from_source(self, paths: List[LocalPackagePath]) -> None:
         """
         Install one or more packages from source. Any path arguments should be local paths to a package directory.
         """
@@ -129,16 +148,48 @@ class ProcessEnv:
             LocalPackagePath(path=os.path.join(".", path.path, ""), editable=path.editable)
             for path in paths
         )
-        subprocess.check_call(
+        self._run_command_and_log_output(
             [
-                cls.python_path,
+                self.python_path,
                 "-m",
                 "pip",
                 "install",
                 *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in explicit_paths),
-            ]
+            ],
+            stderr=subprocess.PIPE,
         )
-        cls.notify_change()
+
+    @classmethod
+    def _run_command_and_log_output(cls, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None) -> str:
+        output: bytes = b""  # Make sure the var is always defined in the except bodies
+        try:
+            output = subprocess.check_output(cmd, stderr=stderr, env=env)
+        except CalledProcessError as e:
+            LOGGER.error("%s: %s", cmd, e.output.decode())
+            raise
+        except Exception:
+            LOGGER.error("%s: %s", cmd, output.decode())
+            raise
+        else:
+            LOGGER.debug("%s: %s", cmd, output.decode())
+            return output.decode()
+
+
+class ActiveEnv(Environment):
+    """
+    The active Python environment. Method implementations assume this environment is active when they're called.
+    Activating another environment that inherits from this one is allowed.
+    """
+
+    def install_from_index(
+        self, requirements: List[Requirement], index_urls: Optional[List[str]] = None, upgrade: bool = False
+    ) -> None:
+        super().install_from_index(requirements, index_urls, upgrade)
+        self.notify_change()
+
+    def install_from_source(self, paths: List[LocalPackagePath]) -> None:
+        super().install_from_source(paths)
+        self.notify_change()
 
     @classmethod
     def check(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
@@ -191,8 +242,7 @@ class ProcessEnv:
         # TODO: test with v1 loader
         return (spec.origin, spec.loader) if spec is not None else None
 
-    @classmethod
-    def init_namespace(cls, namespace: str) -> None:
+    def init_namespace(self, namespace: str) -> None:
         """
         Make sure importer will be able to find the namespace packages for this namespace that will get installed in the
         process venv. This method needs to be called before the importer caches the search paths, so make sure to call it
@@ -200,19 +250,16 @@ class ProcessEnv:
 
         :param namespace: The namespace to initialize.
         """
-        path: str = os.path.join(cls.get_site_packages_dir(), namespace)
+        path: str = os.path.join(self.site_packages_dir, namespace)
         os.makedirs(path, exist_ok=True)
         spec: Optional[ModuleSpec] = importlib.util.find_spec(namespace)
-        if spec is None or path not in spec.submodule_search_locations:
+        if spec is None or spec.submodule_search_locations is None or path not in spec.submodule_search_locations:
             raise Exception(
                 "Invalid state: trying to init namespace after it has been loaded. Make sure to call this method before calling"
                 " get_module_file for this namespace."
             )
 
-    # TODO: there's some duplication between this class and VirtualEnv. Is this acceptable because VirtualEnv will be phased out
-    #   or should we introduce a common parent class?
-    @classmethod
-    def notify_change(cls) -> None:
+    def notify_change(self) -> None:
         """
         This method must be called when a package is installed or removed from the environment in order for Python to detect
         the change.
@@ -220,11 +267,17 @@ class ProcessEnv:
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
         # Make sure that the .pth files in the site-packages directory are processed.
         # This is required to make editable installs work.
-        site.addsitedir(cls.get_site_packages_dir())
+        site.addsitedir(self.site_packages_dir)
         importlib.invalidate_caches()
 
 
-class VirtualEnv(object):
+process_env: ActiveEnv = ActiveEnv(python_path=sys.executable)
+"""
+Singleton representing the Python environment this process is running in.
+"""
+
+
+class VirtualEnv(ActiveEnv):
     """
     Creates and uses a virtual environment for this process
     """
@@ -234,19 +287,13 @@ class VirtualEnv(object):
 
     def __init__(self, env_path: str) -> None:
         LOGGER.info("Creating new virtual environment in %s", env_path)
+        super().__init__(env_path=env_path)
         self.env_path: str = env_path
         self.virtual_python: Optional[str] = None
         self.__cache_done: Set[str] = set()
         self.__using_venv: bool = False
         self._parent_python: Optional[str] = None
         self._packages_installed_in_parent_env: Optional[Dict[str, str]] = None
-        self._site_packages_dir: Optional[str] = None
-
-    def get_package_installed_in_parent_env(self) -> Optional[Dict[str, str]]:
-        if self._packages_installed_in_parent_env is None and self._parent_python is not None:
-            self._packages_installed_in_parent_env = self._get_installed_packages(self._parent_python)
-
-        return self._packages_installed_in_parent_env
 
     def _init_env(self) -> bool:
         """
@@ -257,12 +304,7 @@ class VirtualEnv(object):
         python_name = os.path.basename(sys.executable)
 
         # check if the virtual env exists
-        if sys.platform == "win32":
-            python_bin = os.path.join(self.env_path, "Scripts", python_name)
-        else:
-            python_bin = os.path.join(self.env_path, "bin", python_name)
-
-        if not os.path.exists(python_bin):
+        if not os.path.exists(self.python_path):
             # venv requires some care when the .env folder already exists
             # https://docs.python.org/3/library/venv.html
             if not os.path.exists(self.env_path):
@@ -283,7 +325,7 @@ class VirtualEnv(object):
             LOGGER.debug("Created a new virtualenv at %s", self.env_path)
 
         # set the path to the python and the pip executables
-        self.virtual_python = python_bin
+        self.virtual_python = self.python_path
 
         return True
 
@@ -303,7 +345,7 @@ class VirtualEnv(object):
         self._activate_that()
 
         # patch up pkg
-        self._notify_change()
+        self.notify_change()
 
         self.__using_venv = True
 
@@ -314,20 +356,13 @@ class VirtualEnv(object):
         # Copyright (c) 2009 Ian Bicking, The Open Planning Project
         # Copyright (c) 2011-2016 The virtualenv developers
 
-        if sys.platform == "win32":
-            binpath = os.path.abspath(os.path.join(self.env_path, "Scripts"))
-            base = os.path.dirname(binpath)
-            self._site_packages_dir = os.path.join(base, "Lib", "site-packages")
-        else:
-            binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
-            base = os.path.dirname(binpath)
-            self._site_packages_dir = os.path.join(base, "lib", "python%s" % sys.version[:3], "site-packages")
-
+        binpath: str = os.path.dirname(self.python_path)
+        base: str = os.path.dirname(binpath)
         old_os_path = os.environ.get("PATH", "")
         os.environ["PATH"] = binpath + os.pathsep + old_os_path
         prev_sys_path = list(sys.path)
 
-        site.addsitedir(self._site_packages_dir)
+        site.addsitedir(self.site_packages_dir)
         sys.real_prefix = sys.prefix
         sys.prefix = base
         # Move the added items to the front of the path:
@@ -449,7 +484,7 @@ python -m pip $@
             assert self.virtual_python is not None
             cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-r", path]
             try:
-                run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
+                self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
             except Exception:
                 LOGGER.error("requirements: %s", requirements_file)
                 raise
@@ -457,7 +492,7 @@ python -m pip $@
             if os.path.exists(path):
                 os.remove(path)
 
-        self._notify_change()
+        self.notify_change()
 
     def _read_current_requirements_hash(self) -> str:
         """
@@ -507,16 +542,6 @@ python -m pip $@
         for x in requirements_list:
             self.__cache_done.add(x)
 
-    @classmethod
-    def _get_installed_packages(cls, python_interpreter: str) -> Dict[str, str]:
-        """
-        Return a list of all installed packages in the site-packages of a python interpreter.
-
-        :param python_interpreter: The python interpreter to get the packages for
-        :return: A dict with package names as keys and versions as values
-        """
-        return {name: str(version) for name, version in get_installed_packages(python_interpreter).items()}
-
     def install(self, path: str, editable: bool) -> None:
         """
         Install a package in the virtual environment.
@@ -537,46 +562,5 @@ python -m pip $@
         else:
             cmd = cmd_base + [path]
 
-        run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
-        self._notify_change()
-
-    def _notify_change(self) -> None:
-        """
-        This method must be called when a package is installed or removed from the virtual environment
-        in order for Python to detect the change.
-        """
-        # Make mypy happy
-        assert self._site_packages_dir is not None
-        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
-        # Make sure that the .pth files in the site-packages directory are processed.
-        # This is required to make editable installs work.
-        site.addsitedir(self._site_packages_dir)
-        importlib.invalidate_caches()
-
-
-def get_installed_packages(python_interpreter: str, only_editable: bool = False) -> Dict[str, version.Version]:
-    """
-    Return a list of all installed packages in the site-packages of a python interpreter.
-
-    :param python_interpreter: The python interpreter to get the packages for
-    :param only_editable: List only packages installed in editable mode.
-    :return: A dict with package names as keys and versions as values
-    """
-    cmd = [python_interpreter, "-m", "pip", "list", "--format", "json", *(["--editable"] if only_editable else [])]
-    output = run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
-    return {r["name"]: version.Version(r["version"]) for r in json.loads(output)}
-
-
-def run_command_and_log_output(cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None) -> str:
-    output: bytes = b""  # Make sure the var is always defined in the except bodies
-    try:
-        output = subprocess.check_output(cmd, stderr=stderr, env=env)
-    except CalledProcessError as e:
-        LOGGER.error("%s: %s", cmd, e.output.decode())
-        raise
-    except Exception:
-        LOGGER.error("%s: %s", cmd, output.decode())
-        raise
-    else:
-        LOGGER.debug("%s: %s", cmd, output.decode())
-        return output.decode()
+        self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
+        self.notify_change()

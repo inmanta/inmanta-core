@@ -93,13 +93,15 @@ def test_install_fails(tmpdir, caplog):
 def test_install_package_already_installed_in_parent_env(tmpdir):
     """Test using and installing a package that is already present in the parent virtual environment."""
     # get all packages in the parent
-    parent_installed = list(env.VirtualEnv._get_installed_packages(sys.executable).keys())
+    parent_installed = list(env.process_env.get_installed_packages().keys())
 
     # create a venv and list all packages available in the venv
     venv = env.VirtualEnv(tmpdir)
     venv.use_virtual_env()
 
-    installed_packages = list(env.VirtualEnv._get_installed_packages(venv._parent_python).keys())
+    installed_packages = list(
+        env.Environment(python_path=venv._parent_python).get_installed_packages().keys()
+    )
 
     # verify that the venv sees all parent packages
     assert not set(parent_installed) - set(installed_packages)
@@ -164,9 +166,9 @@ def test_gen_req_file(tmpdir):
 
 
 @pytest.mark.parametrize("version", [None, version.Version("8.6.0")])
-# make sure activating the compiler venv does not conflict with ProcessEnv
+# make sure activating the compiler venv does not conflict
 @pytest.mark.parametrize("active_compiler_venv", [True, False])
-def test_processenv_install_from_index(
+def test_process_env_install_from_index(
     tmpdir: str,
     tmpvenv_active: Tuple[py.path.local, py.path.local],
     version: Optional[version.Version],
@@ -176,17 +178,23 @@ def test_processenv_install_from_index(
         env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv")).use_virtual_env()
     venv_dir, python_path = tmpvenv_active
     package_name: str = "more-itertools"
-    assert package_name not in env.get_installed_packages(python_path)
-    env.ProcessEnv.install_from_index([Requirement.parse(package_name + (f"=={version}" if version is not None else ""))])
-    installed: Dict[str, version.Version] = env.get_installed_packages(python_path)
+    assert package_name not in env.process_env.get_installed_packages()
+    env.process_env.install_from_index([Requirement.parse(package_name + (f"=={version}" if version is not None else ""))])
+    installed: Dict[str, version.Version] = env.process_env.get_installed_packages()
     assert package_name in installed
     if version is not None:
         assert installed[package_name] == version
 
 
-# make sure activating the compiler venv does not conflict with ProcessEnv
+def test_process_env_install_from_index_not_found(tmpvenv_active: Tuple[py.path.local, py.path.local]) -> None:
+    venv_dir, python_path = tmpvenv_active
+    with pytest.raises(env.PackageNotFound):
+        env.process_env.install_from_index([Requirement.parse("this-package-does-not-exist")])
+
+
+# make sure activating the compiler venv does not conflict
 @pytest.mark.parametrize("active_compiler_venv", [True, False])
-def test_processenv_install_from_indexes_conflicting_reqs(
+def test_process_env_install_from_indexes_conflicting_reqs(
     tmpdir: str, tmpvenv_active: Tuple[py.path.local, py.path.local], active_compiler_venv: bool
 ) -> None:
     if active_compiler_venv:
@@ -194,15 +202,15 @@ def test_processenv_install_from_indexes_conflicting_reqs(
     venv_dir, python_path = tmpvenv_active
     package_name: str = "more-itertools"
     with pytest.raises(subprocess.CalledProcessError) as e:
-        env.ProcessEnv.install_from_index([Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]])
+        env.process_env.install_from_index([Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]])
     assert "conflicting dependencies" in e.value.stderr.decode()
-    assert package_name not in env.get_installed_packages(python_path)
+    assert package_name not in env.process_env.get_installed_packages()
 
 
 @pytest.mark.parametrize("editable", [True, False])
-# make sure activating the compiler venv does not conflict with ProcessEnv
+# make sure activating the compiler venv does not conflict
 @pytest.mark.parametrize("active_compiler_venv", [True, False])
-def test_processenv_install_from_source(
+def test_process_env_install_from_source(
     tmpdir: py.path.local,
     tmpvenv_active: Tuple[py.path.local, py.path.local],
     modules_v2_dir: str,
@@ -214,9 +222,9 @@ def test_processenv_install_from_source(
     venv_dir, python_path = tmpvenv_active
     package_name: str = "inmanta-module-minimalv2module"
     project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
-    assert package_name not in env.get_installed_packages(python_path)
-    env.ProcessEnv.install_from_source([env.LocalPackagePath(path=project_dir, editable=editable)])
-    assert package_name in env.get_installed_packages(python_path)
+    assert package_name not in env.process_env.get_installed_packages()
+    env.process_env.install_from_source([env.LocalPackagePath(path=project_dir, editable=editable)])
+    assert package_name in env.process_env.get_installed_packages()
     if editable:
         assert any(
             package["name"] == package_name
@@ -227,14 +235,14 @@ def test_processenv_install_from_source(
         )
 
 
-# v1 plugin loader overrides loader paths so verify that it doesn't interfere with ProcessEnv installs
+# v1 plugin loader overrides loader paths so verify that it doesn't interfere with env.process_env installs
 @pytest.mark.parametrize("v1_plugin_loader", [True, False])
 # make sure installation works regardless of whether we install a dependency of inmanta-core (wich is already installed in
 # the encapsulating development venv), a new package or an inmanta module
 @pytest.mark.parametrize("package_name", ["tinykernel", "more-itertools", "inmanta-module-minimalv2module"])
-# make sure activating the compiler venv does not conflict with ProcessEnv
+# make sure activating the compiler venv does not conflict
 @pytest.mark.parametrize("active_compiler_venv", [True, False])
-def test_processenv_get_module_file(
+def test_active_env_get_module_file(
     local_module_package_index: str,
     tmpdir: py.path.local,
     tmpvenv_active: Tuple[py.path.local, py.path.local],
@@ -264,23 +272,23 @@ def test_processenv_get_module_file(
     if v1_plugin_loader:
         loader.PluginModuleFinder.configure_module_finder([os.path.join(str(tmpdir), "libs")])
 
-    assert env.ProcessEnv.get_module_file(module_name) is None
-    env.ProcessEnv.install_from_index([Requirement.parse(package_name)], index_urls=[index] if index is not None else None)
-    assert package_name in env.get_installed_packages(python_path)
-    module_info: Optional[Tuple[Optional[str], Loader]] = env.ProcessEnv.get_module_file(module_name)
+    assert env.ActiveEnv.get_module_file(module_name) is None
+    env.process_env.install_from_index([Requirement.parse(package_name)], index_urls=[index] if index is not None else None)
+    assert package_name in env.ActiveEnv.get_installed_packages()
+    module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
     assert module_info is not None
     module_file, mod_loader = module_info
     assert module_file is not None
     assert not isinstance(mod_loader, loader.PluginModuleLoader)
-    assert module_file == os.path.join(env.ProcessEnv.get_site_packages_dir(), *module_name.split("."), "__init__.py")
+    assert module_file == os.path.join(env.process_env.site_packages_dir, *module_name.split("."), "__init__.py")
     importlib.import_module(module_name)
     assert module_name in sys.modules
     assert sys.modules[module_name].__file__ == module_file
 
 
-# make sure activating the compiler venv does not conflict with ProcessEnv
+# make sure activating the compiler venv does not conflict
 @pytest.mark.parametrize("active_compiler_venv", [True, False])
-def test_processenv_get_module_file_editable_namespace_package(
+def test_active_env_get_module_file_editable_namespace_package(
     tmpdir: str,
     tmpvenv_active: Tuple[py.path.local, py.path.local],
     modules_v2_dir: str,
@@ -294,11 +302,11 @@ def test_processenv_get_module_file_editable_namespace_package(
     package_name: str = "inmanta-module-minimalv2module"
     module_name: str = "inmanta_plugins.minimalv2module"
 
-    assert env.ProcessEnv.get_module_file(module_name) is None
+    assert env.ActiveEnv.get_module_file(module_name) is None
     project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
-    env.ProcessEnv.install_from_source([env.LocalPackagePath(path=project_dir, editable=True)])
-    assert package_name in env.get_installed_packages(python_path)
-    module_info: Optional[Tuple[Optional[str], Loader]] = env.ProcessEnv.get_module_file(module_name)
+    env.process_env.install_from_source([env.LocalPackagePath(path=project_dir, editable=True)])
+    assert package_name in env.process_env.get_installed_packages()
+    module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
     assert module_info is not None
     module_file, mod_loader = module_info
     assert module_file is not None
@@ -340,12 +348,12 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
                 """.strip()
             )
-        env.ProcessEnv.install_from_source([env.LocalPackagePath(path=str(tmpdir), editable=False)])
+        env.process_env.install_from_source([env.LocalPackagePath(path=str(tmpdir), editable=False)])
 
 
-# make sure activating the compiler venv does not conflict with ProcessEnv
+# make sure activating the compiler venv does not conflict
 @pytest.mark.parametrize("active_compiler_venv", [True, False])
-def test_processenv_check_basic(
+def test_active_env_check_basic(
     caplog,
     tmpdir: str,
     tmpvenv_active: str,
@@ -363,7 +371,7 @@ def test_processenv_check_basic(
     def assert_all_checks(expect_test: Tuple[bool, str] = (True, ""), expect_nonext: Tuple[bool, str] = (True, "")) -> None:
         for in_scope, expect in [(in_scope_test, expect_test), (in_scope_nonext, expect_nonext)]:
             caplog.clear()
-            assert env.ProcessEnv.check(in_scope) == expect[0]
+            assert env.ActiveEnv.check(in_scope) == expect[0]
             if not expect[0]:
                 assert expect[1] in {rec.message for rec in caplog.records}
 
@@ -378,7 +386,7 @@ def test_processenv_check_basic(
     )
 
 
-def test_processenv_check_constraints(caplog, tmpvenv_active: str) -> None:
+def test_active_env_check_constraints(caplog, tmpvenv_active: str) -> None:
     caplog.set_level(logging.WARNING)
     venv_dir, python_path = tmpvenv_active
     in_scope: Pattern[str] = re.compile("test-package-.*")
@@ -389,18 +397,18 @@ def test_processenv_check_constraints(caplog, tmpvenv_active: str) -> None:
             rec.message for rec in caplog.records
         }
 
-    assert env.ProcessEnv.check(in_scope)
+    assert env.ActiveEnv.check(in_scope)
 
     caplog.clear()
-    assert not env.ProcessEnv.check(in_scope, constraints)
+    assert not env.ActiveEnv.check(in_scope, constraints)
     check_log(None)
 
     caplog.clear()
     create_install_package("test-package-one", version.Version("1.0.0"), [])
-    assert env.ProcessEnv.check(in_scope, constraints)
+    assert env.ActiveEnv.check(in_scope, constraints)
 
     caplog.clear()
     v: version.Version = version.Version("2.0.0")
     create_install_package("test-package-one", v, [])
-    assert not env.ProcessEnv.check(in_scope, constraints)
+    assert not env.ActiveEnv.check(in_scope, constraints)
     check_log(v)

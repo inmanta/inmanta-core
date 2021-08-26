@@ -58,12 +58,12 @@ import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.compiler.config
 import inmanta.main
-from inmanta import config, const, data, loader, moduletool, protocol, resources
+from inmanta import config, const, data, env, loader, moduletool, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
-from inmanta.env import LocalPackagePath, ProcessEnv
+from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import Project
 from inmanta.moduletool import ModuleTool
@@ -270,7 +270,7 @@ def deactive_venv():
     old_path = list(sys.path)
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
-    old_process_env: str = ProcessEnv.python_path
+    old_process_env: str = env.process_env.python_path
 
     yield
 
@@ -286,8 +286,8 @@ def deactive_venv():
             del os.environ["PYTHONPATH"]
     if old_os_venv is not None:
         os.environ["VIRTUAL_ENV"] = old_os_venv
-    ProcessEnv.python_path = old_process_env
-    ProcessEnv.notify_change()
+    env.process_env.__init__(python_path=old_process_env)
+    env.process_env.notify_change()
     loader.PluginModuleFinder.reset()
 
 
@@ -800,13 +800,13 @@ class SnippetCompilationTest(KeepOnFail):
 
     def _patch_process_env(self, project: Project) -> None:
         """
-        Patch ProcessEnv to accomodate the SnippetCompilationTest's switching between active environments within a single
+        Patch env.process_env to accomodate the SnippetCompilationTest's switching between active environments within a single
         running process.
         """
         assert project.virtualenv.virtual_python is not None
-        ProcessEnv.python_path = project.virtualenv.virtual_python
-        path: str = os.path.join(ProcessEnv.get_site_packages_dir(), const.PLUGINS_PACKAGE)
-        ProcessEnv.notify_change()
+        env.process_env.__init__(python_path=project.virtualenv.virtual_python)
+        path: str = os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE)
+        env.process_env.notify_change()
         os.makedirs(path, exist_ok=True)
 
     def _install_v2_modules(self, project: Project, install_v2_modules: List[LocalPackagePath] = []) -> None:
@@ -1117,13 +1117,13 @@ def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[Tuple[py.p
     sys.real_prefix = sys.prefix
     sys.prefix = base
 
-    # patch ProcessEnv to recognize this environment as the active one
-    with patch("inmanta.env.ProcessEnv.python_path", new=python_path):
-        # patch inmanta_plugins namespace path so importlib.util.find_spec("inmanta_plugins") includes the venv path
-        ProcessEnv.init_namespace(const.PLUGINS_PACKAGE)
-        ProcessEnv.notify_change()
+    # patch env.process_env to recognize this environment as the active one, deactive_venv restores it
+    env.process_env.__init__(python_path=python_path)
+    # patch inmanta_plugins namespace path so importlib.util.find_spec("inmanta_plugins") includes the venv path
+    env.process_env.init_namespace(const.PLUGINS_PACKAGE)
+    env.process_env.notify_change()
 
-        yield tmpvenv
+    yield tmpvenv
 
     def module_in_prefix(module: ModuleType, prefix: str) -> bool:
         file: Optional[str] = getattr(module, "__file__", None)
