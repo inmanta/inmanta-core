@@ -322,7 +322,7 @@ def create_install_package(name: str, version: version.Version, requirements: Li
     Creates and installs a simple package with specified requirements. Creates package in a temporary directory and
     cleans it up after install.
 
-    :param name: Package name, may contain a single `.` for namespace package, must not contain dashes or underscores.
+    :param name: Package name.
     :param version: Version for this package.
     :param requirements: Requirements on other packages. Required packages must already be installed when calling this function.
     """
