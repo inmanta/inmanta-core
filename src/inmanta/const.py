@@ -17,7 +17,6 @@
 """
 
 from enum import Enum, IntEnum
-from typing import List, Tuple
 
 from inmanta.stable_api import stable_api
 
@@ -178,8 +177,7 @@ class LogLevel(IntEnum):
 
         if self not in int_to_str:
             raise ValueError(
-                "The provided log level doesn't match any of the accepted ones."
-                f"'{self}' not in {list(int_to_str.keys())}"
+                "The provided log level doesn't match any of the accepted ones." f"'{self}' not in {list(int_to_str.keys())}"
             )
 
         return int_to_str[self]
@@ -208,8 +206,7 @@ class StrLogLevel(str, Enum):
 
         if self not in str_to_int:
             raise ValueError(
-                "The provided log level doesn't match any of the accepted ones."
-                f"'{self}' not in {list(str_to_int.keys())}"
+                "The provided log level doesn't match any of the accepted ones." f"'{self}' not in {list(str_to_int.keys())}"
             )
 
         return str_to_int[self]
