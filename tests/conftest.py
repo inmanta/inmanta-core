@@ -287,6 +287,7 @@ def deactive_venv():
     if old_os_venv is not None:
         os.environ["VIRTUAL_ENV"] = old_os_venv
     ProcessEnv.python_path = old_process_env
+    ProcessEnv.notify_change()
     loader.PluginModuleFinder.reset()
 
 
@@ -805,6 +806,7 @@ class SnippetCompilationTest(KeepOnFail):
         assert project.virtualenv.virtual_python is not None
         ProcessEnv.python_path = project.virtualenv.virtual_python
         path: str = os.path.join(ProcessEnv.get_site_packages_dir(), const.PLUGINS_PACKAGE)
+        ProcessEnv.notify_change()
         os.makedirs(path, exist_ok=True)
 
     def _install_v2_modules(self, project: Project, install_v2_modules: List[LocalPackagePath] = []) -> None:
@@ -1119,6 +1121,7 @@ def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[Tuple[py.p
     with patch("inmanta.env.ProcessEnv.python_path", new=python_path):
         # patch inmanta_plugins namespace path so importlib.util.find_spec("inmanta_plugins") includes the venv path
         ProcessEnv.init_namespace(const.PLUGINS_PACKAGE)
+        ProcessEnv.notify_change()
 
         yield tmpvenv
 

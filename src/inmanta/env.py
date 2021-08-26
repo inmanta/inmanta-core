@@ -114,7 +114,7 @@ class ProcessEnv:
                 raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
             raise e
         else:
-            cls._notify_change()
+            cls.notify_change()
 
     @classmethod
     def install_from_source(cls, paths: List[LocalPackagePath]) -> None:
@@ -138,7 +138,7 @@ class ProcessEnv:
                 *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in explicit_paths),
             ]
         )
-        cls._notify_change()
+        cls.notify_change()
 
     @classmethod
     def check(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
@@ -150,6 +150,7 @@ class ProcessEnv:
             checked, regardless of this pattern.
         :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
             packages meet the given constraints. All listed packages are expected to be installed.
+        :return: True iff the check succeeds.
         """
 
         dist_info: DistInfoDistribution
@@ -208,8 +209,10 @@ class ProcessEnv:
                 " get_module_file for this namespace."
             )
 
+    # TODO: there's some duplication between this class and VirtualEnv. Is this acceptable because VirtualEnv will be phased out
+    #   or should we introduce a common parent class?
     @classmethod
-    def _notify_change(cls) -> None:
+    def notify_change(cls) -> None:
         """
         This method must be called when a package is installed or removed from the environment in order for Python to detect
         the change.
@@ -300,7 +303,7 @@ class VirtualEnv(object):
         self._activate_that()
 
         # patch up pkg
-        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+        self._notify_change()
 
         self.__using_venv = True
 
