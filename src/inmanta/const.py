@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from enum import Enum, IntEnum
+from enum import Enum
 
 from inmanta.stable_api import stable_api
 
@@ -155,7 +155,7 @@ class AgentTriggerMethod(str, Enum):
 
 
 @stable_api
-class LogLevel(IntEnum):
+class LogLevel(Enum):
     """
     Log levels used for various parts of the inmanta orchestrator.
     """
@@ -168,68 +168,11 @@ class LogLevel(IntEnum):
     TRACE = 3
     NOTSET = 0
 
-    @property
-    def to_str(self) -> "StrLogLevel":
-        """
-        Convert an integer formated log level into a string formated log level
-        """
-        int_to_str = {int_log: str_log for str_log, int_log in LOG_LEVEL_PAIRS}
-
-        if self not in int_to_str:
-            raise ValueError(
-                "The provided log level doesn't match any of the accepted ones." f"'{self}' not in {list(int_to_str.keys())}"
-            )
-
-        return int_to_str[self]
-
-
-@stable_api
-class StrLogLevel(str, Enum):
-    """
-    Log levels as strings.
-    """
-
-    CRITICAL = "CRITICAL"
-    ERROR = "ERROR"
-    WARNING = "WARNING"
-    INFO = "INFO"
-    DEBUG = "DEBUG"
-    TRACE = "TRACE"
-    NOTSET = "NOSET"
-
-    @property
-    def to_int(self) -> LogLevel:
-        """
-        Convert a string formated log level into an integer formated log level
-        """
-        str_to_int = {str_log: int_log for str_log, int_log in LOG_LEVEL_PAIRS}
-
-        if self not in str_to_int:
-            raise ValueError(
-                "The provided log level doesn't match any of the accepted ones." f"'{self}' not in {list(str_to_int.keys())}"
-            )
-
-        return str_to_int[self]
-
-
-LOG_LEVEL_PAIRS = (
-    (StrLogLevel.CRITICAL, LogLevel.CRITICAL),
-    (StrLogLevel.ERROR, LogLevel.ERROR),
-    (StrLogLevel.WARNING, LogLevel.WARNING),
-    (StrLogLevel.INFO, LogLevel.INFO),
-    (StrLogLevel.DEBUG, LogLevel.DEBUG),
-    (StrLogLevel.TRACE, LogLevel.TRACE),
-    (StrLogLevel.NOTSET, LogLevel.NOTSET),
-)
-"""
-Those pairs give for each string formated log level, the equivalent integer formated log level.
-"""
-
 
 INMANTA_URN = "urn:inmanta:"
 
 
-class Compilestate(IntEnum):
+class Compilestate(Enum):
     """
     Compile state, whether the compile did succeed or not
 
