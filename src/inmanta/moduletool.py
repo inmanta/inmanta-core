@@ -903,10 +903,10 @@ build-backend = "setuptools.build_meta"
         config.add_section("options")
 
         # add requirements
-        if self._module.get_all_requires() or self._module.get_python_requirements_as_list():
-            ordered_requirements = sorted([str(r) for r in self._module.get_all_requires()])
-            requires = [f"{ModuleV2.PKG_NAME_PREFIX}{req}" for req in ordered_requirements]
-            requires += self._module.get_python_requirements_as_list()
+        if self._module.get_all_requires() or self._module.get_strict_python_requirements_as_list():
+            ordered_requirements: List[InmantaModuleRequirement] = sorted([str(r) for r in self._module.get_all_requires()])
+            requires: List[Requirement] = [ModuleV2Source.get_python_package_requirement(req) for req in ordered_requirements]
+            requires += self._module.get_strict_python_requirements_as_list()
             config.set("options", "install_requires", "\n".join(requires))
 
         # Make setuptools work
