@@ -790,7 +790,7 @@ class V2ModuleBuilder:
         if not os.path.isdir(directory):
             raise Exception(f"{directory} is not a directory")
         result = set()
-        ignore = ignore if ignore is not None else {}
+        ignore = ignore if ignore is not None else set()
         for (dirpath, dirnames, filenames) in os.walk(directory):
             if os.path.basename(dirpath) in ignore:
                 continue
@@ -903,10 +903,11 @@ build-backend = "setuptools.build_meta"
         config.add_section("options")
 
         # add requirements
-        if self._module.get_all_requires() or self._module.get_strict_python_requirements_as_list():
-            ordered_requirements: List[InmantaModuleRequirement] = sorted([str(r) for r in self._module.get_all_requires()])
-            requires: List[Requirement] = [ModuleV2Source.get_python_package_requirement(req) for req in ordered_requirements]
-            requires += self._module.get_strict_python_requirements_as_list()
+        module_requirements: List[InmantaModuleRequirement] = self._module.get_all_requires()
+        python_requirements: List[str] = self._module.get_strict_python_requirements_as_list()
+        if module_requirements or python_requirements:
+            requires: List[str] = sorted([str(ModuleV2Source.get_python_package_requirement(r)) for r in module_requirements])
+            requires += python_requirements
             config.set("options", "install_requires", "\n".join(requires))
 
         # Make setuptools work
