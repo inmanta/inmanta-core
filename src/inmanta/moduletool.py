@@ -757,7 +757,7 @@ class V2ModuleBuilder:
         """
         rel_path_namespace_package = os.path.join("inmanta_plugins", self._module.name)
         abs_path_namespace_package = os.path.join(build_path, rel_path_namespace_package)
-        files_in_python_package_dir = self._get_files_in_directory(abs_path_namespace_package)
+        files_in_python_package_dir = self._get_files_in_directory(abs_path_namespace_package, ignore={"__pycache__"})
         with zipfile.ZipFile(path_to_wheel) as z:
             dir_prefix = f"{rel_path_namespace_package}/"
             files_in_wheel = set(
@@ -780,14 +780,20 @@ class V2ModuleBuilder:
         if not os.path.exists(init_file):
             open(init_file, "w").close()
 
-    def _get_files_in_directory(self, directory: str) -> Set[str]:
+    def _get_files_in_directory(self, directory: str, ignore: Optional[Set[str]] = None) -> Set[str]:
         """
         Return the relative paths to all the files in all subdirectories of the given directory.
+
+        :param directory: The directory to list the files of.
+        :param ignore: Names of subdirectories to ignore, regardless of their relative depth.
         """
         if not os.path.isdir(directory):
             raise Exception(f"{directory} is not a directory")
         result = set()
+        ignore = ignore if ignore is not None else {}
         for (dirpath, dirnames, filenames) in os.walk(directory):
+            if os.path.basename(dirpath) in ignore:
+                continue
             relative_paths_to_filenames = set(os.path.relpath(os.path.join(dirpath, f), directory) for f in filenames)
             result = result | relative_paths_to_filenames
         return result

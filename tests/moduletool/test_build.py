@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import configparser
+import importlib.util
 import logging
 import os
 import shutil
@@ -25,7 +26,9 @@ import zipfile
 from typing import Optional
 
 import pytest
+from importlib.machinery import ModuleSpec
 from pytest import MonkeyPatch
+from types import ModuleType
 
 from inmanta import moduletool
 from inmanta.module import ModuleMetadataFileNotFound
@@ -147,6 +150,17 @@ def test_build_v2_module_incomplete_package_data(tmpdir, modules_v2_dir: str, ca
     config_parser.set("options.package_data", "inmanta_plugins.minimalv2module", "setup.cfg")
     with open(setup_cfg_file, "w") as fd:
         config_parser.write(fd)
+
+    # load the module to make sure pycache files are ignored in the warning
+    source_dir: str = os.path.join(str(tmpdir), "module", "inmanta_plugins", "minimalv2module")
+    spec: ModuleSpec = importlib.util.spec_from_file_location(
+        "inmanta_plugins.minimalv2module", os.path.join(source_dir, "__init__.py")
+    )
+    mod: ModuleType = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert os.path.isfile(
+        os.path.join(source_dir, "__pycache__", "__init__.cpython-%s.pyc" % "".join(sys.version.split(".")[:2]))
+    )
 
     with caplog.at_level(logging.WARNING):
         V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
