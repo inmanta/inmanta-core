@@ -39,7 +39,6 @@ import uuid
 import venv
 from types import ModuleType
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple
-from unittest.mock import patch
 
 import asyncpg
 import pkg_resources

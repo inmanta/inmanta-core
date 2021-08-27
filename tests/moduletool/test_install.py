@@ -23,7 +23,6 @@ import subprocess
 from importlib.abc import Loader
 from itertools import chain
 from typing import List, Optional, Tuple
-from unittest.mock import patch
 
 import py
 import pytest

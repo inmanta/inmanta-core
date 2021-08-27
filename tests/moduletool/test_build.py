@@ -23,12 +23,12 @@ import shutil
 import subprocess
 import sys
 import zipfile
+from importlib.machinery import ModuleSpec
+from types import ModuleType
 from typing import Optional
 
 import pytest
-from importlib.machinery import ModuleSpec
 from pytest import MonkeyPatch
-from types import ModuleType
 
 from inmanta import moduletool
 from inmanta.module import ModuleMetadataFileNotFound

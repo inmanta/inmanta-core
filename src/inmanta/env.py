@@ -68,7 +68,7 @@ class Environment:
     """
 
     def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
-        if env_path is None == python_path is None:
+        if (env_path is None) == (python_path is None):
             raise ValueError("Exactly one of `env_path` and `python_path` needs to be specified")
         self.env_path: str
         self.python_path: str
@@ -87,6 +87,7 @@ class Environment:
         self.site_packages_dir: str = (
             os.path.join(self.env_path, "Lib", "site-packages")
             if sys.platform == "win32"
+            # TODO: this will break python3.10 support! Also check other occurrences, then write test mocking sys.version
             else os.path.join(self.env_path, "lib", "python%s" % sys.version[:3], "site-packages")
         )
 
@@ -302,8 +303,6 @@ class VirtualEnv(ActiveEnv):
         Init the virtual environment
         """
         self._parent_python = sys.executable
-
-        python_name = os.path.basename(sys.executable)
 
         # check if the virtual env exists
         if not os.path.exists(self.python_path):
