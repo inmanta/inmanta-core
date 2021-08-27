@@ -87,8 +87,9 @@ class Environment:
         self.site_packages_dir: str = (
             os.path.join(self.env_path, "Lib", "site-packages")
             if sys.platform == "win32"
-            # TODO: this will break python3.10 support! Also check other occurrences, then write test mocking sys.version
-            else os.path.join(self.env_path, "lib", "python%s" % sys.version[:3], "site-packages")
+            else os.path.join(
+                self.env_path, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
+            )
         )
 
     def get_installed_packages(self, only_editable: bool = False) -> Dict[str, version.Version]:

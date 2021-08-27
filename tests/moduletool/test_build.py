@@ -159,7 +159,9 @@ def test_build_v2_module_incomplete_package_data(tmpdir, modules_v2_dir: str, ca
     mod: ModuleType = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     assert os.path.isfile(
-        os.path.join(source_dir, "__pycache__", "__init__.cpython-%s.pyc" % "".join(sys.version.split(".")[:2]))
+        os.path.join(
+            source_dir, "__pycache__", "__init__.cpython-%s.pyc" % "".join(str(digit) for digit in sys.version_info[:2])
+        )
     )
 
     with caplog.at_level(logging.WARNING):

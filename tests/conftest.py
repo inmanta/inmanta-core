@@ -1098,7 +1098,9 @@ def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[Tuple[py.p
     else:
         binpath = os.path.abspath(os.path.join(str(venv_dir), "bin"))
         base = os.path.dirname(binpath)
-        site_packages = os.path.join(base, "lib", "python%s" % sys.version[:3], "site-packages")
+        site_packages = os.path.join(
+            base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
+        )
 
     # prepend bin to PATH (this file is inside the bin directory), exclude old venv path
     os.environ["PATH"] = os.pathsep.join(

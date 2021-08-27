@@ -26,6 +26,7 @@ import tempfile
 from importlib.abc import Loader
 from subprocess import CalledProcessError
 from typing import Dict, List, Optional, Pattern, Tuple
+from unittest.mock import patch
 
 import py
 import pydantic
@@ -161,6 +162,19 @@ def test_gen_req_file(tmpdir):
         'lorem == 0.1.1, > 0.1 ; python_version < "3.7" and platform_machine == "x86_64" and platform_system == "Linux"'
         in req_lines
     )
+
+
+def test_environment_python_version_multi_digit(tmpdir: py.path.local) -> None:
+    """
+    Make sure the constructor for env.Environment can handle multi-digit minor versions of Python to ensure compatibility with
+    Python 3.10+.
+    """
+    with patch("sys.version_info", new=(3, 123, 0)):
+        # python version is not included in path on windows
+        with patch("sys.platform", new="linux"):
+            assert env.Environment(env_path=str(tmpdir)).site_packages_dir == os.path.join(
+                str(tmpdir), "lib", "python3.123", "site-packages"
+            )
 
 
 @pytest.mark.parametrize("version", [None, version.Version("8.6.0")])
