@@ -262,7 +262,7 @@ async def test_purge_on_delete_compile_failed(client: Client, server: Server, cl
         version=version,
         resources=[],
         unknowns=[{"parameter": "a", "source": "b"}],
-        version_info={const.EXPORT_META_DATA: {const.META_DATA_COMPILE_STATE: const.Compilestate.failed}},
+        version_info={const.EXPORT_META_DATA: {const.META_DATA_COMPILE_STATE: const.Compilestate.failed.name}},
         compiler_version=get_compiler_version(),
     )
     assert result.code == 200
