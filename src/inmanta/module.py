@@ -322,6 +322,10 @@ gitprovider = CLIGitProvider()
 
 # TODO: test all relevant module source methods, including editable install detection
 class ModuleSource(Generic[TModule]):
+    def get_installed_module(self, project: "Project", module_name: str) -> Optional[TModule]:
+        path: Optional[str] = self.path_for(module_name)
+        return self.from_path(project, path) if path is not None else None
+
     def get_module(
         self, project: "Project", module_spec: List[InmantaModuleRequirement], install: bool = False
     ) -> Optional[TModule]:
@@ -334,9 +338,9 @@ class ModuleSource(Generic[TModule]):
         :param install: Whether to attempt to install the module if it hasn't been installed yet.
         """
         module_name: str = self._get_module_name(module_spec)
-        path: Optional[str] = self.path_for(module_name)
-        if path is not None:
-            return self.from_path(project, path)
+        installed: Optional[TModule] = self.get_installed_module(project, module_name)
+        if installed is not None:
+            return installed
         elif install:
             return self.install(project, module_spec)
         else:
@@ -1210,10 +1214,11 @@ class Project(ModuleLike[ProjectMetadata]):
                         # cache could be damaged, ignore it
                         self.virtualenv.install_from_list(pyreq, cache=False)
                         self.load_plugins()
+
+                    # installing new dependencies into the virtual environment might introduce new conflicts
+                    self.verify_python_environment()
                 else:
                     self.load_plugins()
-
-            self._ensure_consistently_loaded_v1_and_v2()
 
     @lru_cache()
     def get_ast(self) -> Tuple[List[Statement], BasicBlock]:
@@ -1395,47 +1400,114 @@ class Project(ModuleLike[ProjectMetadata]):
             module.load_plugins()
 
     def verify(self) -> None:
-        # verify module dependencies
-        result: bool = self.verify_requires()
-        if not result:
+        """
+        Verifies the integrity of the loaded project, with respect to both inter-module requirements and the Python environment.
+        """
+        self.verify_modules_cache()
+        self.verify_module_version_compatibility()
+        self.verify_python_requires()
+
+    def verify_python_environment(self) -> None:
+        """
+        Verifies the integrity of the loaded project with respect to the Python environment, over which the project has no
+        direct control.
+        """
+        self.verify_modules_cache()
+        self.verify_python_requires()
+
+    def verify_modules_cache(self) -> None:
+        if not self._modules_cache_is_valid():
+            raise CompilerException(
+                "Not all modules were loaded correctly as a result of transient dependencies. A recompile should load them"
+                " correctly."
+            )
+
+    def verify_module_version_compatibility(self) -> None:
+        if not self._module_versions_compatible():
             raise CompilerException("Not all module dependencies have been met. Run `inmanta modules update` to resolve this.")
 
-    def _ensure_consistently_loaded_v1_and_v2(self) -> bool:
+    def verify_python_requires(self) -> None:
         """
-        During the initial compilation of a project, a transient issue might occur where the model files
-        of a certain module are loaded from the V1 version of that module and the plugins from the V2 version of that
-        module.
-
-        Scenario: A certain module A only exists as a V1 module in the module path of a project and not in the python path.
-                  During the loading phase of the compiler, the model files of A are loaded from that V1 module.
-                  Later on in the loading phase, another module B installs module A as a V2 modules as well via its
-                  Python dependencies. This way the plugins of module A are loaded from the V2 module instead of the from
-                  the V1 module.
-
-        A re-run of the compiler resolves this issue, because the V2 module version is present in the Python path at the
-        start of the second compile. V2 modules always take precedence over V1 modules when both are installed at the
-        same time.
+        Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
         """
-        result = True
-        v1_modules = [mod for mod in self.modules.values() if isinstance(mod, ModuleV1)]
-        for v1_mod in v1_modules:
-            fq_mod_import = f"{const.PLUGINS_PACKAGE}.{v1_mod.name}"
-            try:
-                python_mod = importlib.import_module(fq_mod_import)
-            except ModuleNotFoundError:
-                # This case should never occur. Delegate error handling to load_plugins()
-                # to ensure a consistent error message is used for all module loading problems.
-                continue
+        if not env.ActiveEnv.check(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
+            raise CompilerException(
+                "Not all installed modules are compatible: requirements conflicts were found. Please resolve any conflicts"
+                " before attempting another compile. Run `pip check` to check for any incompatibilities."
+            )
+
+    def _modules_cache_is_valid(self) -> bool:
+        """
+        Verify the modules cache after changes have been made to the Python environment. Returns False if any modules
+        somehow got installed as another generation or with another version as the one that has been loaded into the AST.
+
+        When this situation occurs, the compiler state is invalid and the compile needs to either abort or attempt recovery.
+        The modules cache, from which the AST was loaded, is out of date, therefore at least a partial AST regereneration
+        would be required to recover.
+
+        Scenario's that could trigger this state:
+            1.
+                - latest v2 mod a is installed
+                - some v1 mod depends on v2 mod b, which depends on a<2
+                - during loading, after a has been loaded, mod b is installed
+                - Python downgrades transient dependency a to a<2
+            2.
+                - latest v2 mod a is installed
+                - some v1 mod depends on a<2
+                - after loading, during plugin requirements install, `pip install a<2` is run
+                - Python downgrades direct dependency a to a<2
+        In both cases, a<2 might be a valid version, but since it was installed transiently after the compiler has loaded module
+        a, steps would need to be taken to take this change into account.
+        """
+        result: bool = True
+        for name, module in self.modules.items():
+            installed: Optional[ModuleV2] = self.module_source.get_installed_module(self, name)
+            if installed is None:
+                if module.GENERATION == ModuleGeneration.V1:
+                    # Loaded module as V1 and no installed V2 module found: no issues with this module
+                    continue
+                raise CompilerException(
+                    f"Invalid state: compiler has loaded module {name} as v2 but it is nowhere to be found."
+                )
             else:
-                if os.path.dirname(python_mod.__file__) != v1_mod.get_plugin_dir():
-                    LOGGER.error(
-                        "Module %s was loaded inconsistently. The model files were loaded from the V1 module, while "
-                        "the plugins were loaded from the V2 module. This is a transient issue. Re-run the compiler to "
-                        "resolve it.",
-                        v1_mod.name,
+                if module.GENERATION == ModuleGeneration.V1:
+                    LOGGER.warning(
+                        "Compiler has loaded module %s as v1 but it has later been installed as v2 as a side effect.", name
+                    )
+                    result = False
+                elif installed.version != module.version:
+                    LOGGER.warning(
+                        "Compiler has loaded module %(name)s==%(loaded_version)s but"
+                        " %(name)s==%(installed_version)s has later been installed as a side effect.",
+                        name=name,
+                        loaded_version=module.version,
+                        installed_version=installed.version,
                     )
                     result = False
         return result
+
+    # TODO: test this method
+    def _module_versions_compatible(self) -> bool:
+        """
+        Check if all the required modules for this module have been loaded. Assumes the modules cache is valid and up to date.
+        """
+        LOGGER.info("verifying project")
+        imports = set([x.name for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
+
+        good = True
+
+        requirements: Dict[str, List[InmantaModuleRequirement]] = self.collect_requirements()
+        for name, spec in requirements.items():
+            if name not in imports:
+                continue
+            module = self.modules[name]
+            version = parse_version(str(module.version))
+            for r in spec:
+                if version not in r:
+                    LOGGER.warning("requirement %s on module %s not fulfilled, now at version %s", r, name, version)
+                    good = False
+
+        return good
 
     def is_using_virtual_env(self) -> bool:
         return self.virtualenv.is_using_virtual_env()
@@ -1495,52 +1567,6 @@ class Project(ModuleLike[ProjectMetadata]):
             return [InmantaModuleRequirement.parse(name)]
 
         return {name: get_spec(name) for name in imports}
-
-    # TODO: test this method
-    def verify_requires(self) -> bool:
-        """
-        Check if all the required modules for this module have been loaded
-        """
-        LOGGER.info("verifying project")
-        imports = set([x.name for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
-
-        good = True
-
-        for name, module in self.modules.items():
-            if module.GENERATION == ModuleGeneration.V1 and self.module_source.path_for(name) is not None:
-                LOGGER.warning(
-                    "Module %s was installed installed as v1 but later pulled in as v2 a dependency as v2."
-                    " Continuing would lead to inconsistent behavior. A rerun should resolve this issue.",
-                    name,
-                )
-                good = False
-
-        requirements: Dict[str, List[InmantaModuleRequirement]] = self.collect_requirements()
-        v1_requirements: Dict[str, List[InmantaModuleRequirement]] = {
-            name: spec for name, spec in requirements.items() if self.modules[name].GENERATION == ModuleGeneration.V1
-        }
-        v2_requirements: Dict[str, List[InmantaModuleRequirement]] = {
-            name: spec for name, spec in requirements.items() if name not in v1_requirements
-        }
-
-        for name, spec in v1_requirements.items():
-            if name not in imports:
-                continue
-            module = self.modules[name]
-            version = parse_version(str(module.version))
-            for r in spec:
-                if version not in r:
-                    LOGGER.warning("requirement %s on module %s not fulfilled, now at version %s", r, name, version)
-                    good = False
-
-        good &= env.ActiveEnv.check(
-            in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"),
-            constraints=[
-                ModuleV2Source.get_python_package_requirement(req) for req in chain.from_iterable(v2_requirements.values())
-            ],
-        )
-
-        return good
 
     def collect_python_requirements(self) -> List[str]:
         """
