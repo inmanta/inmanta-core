@@ -62,7 +62,7 @@ class LocalPackagePath:
     editable: bool = False
 
 
-class Environment:
+class PythonEnvironment:
     """
     A generic Python environment.
     """
@@ -96,7 +96,6 @@ class Environment:
         """
         Return a list of all installed packages in the site-packages of a python interpreter.
 
-        :param python_interpreter: The python interpreter to get the packages for
         :param only_editable: List only packages installed in editable mode.
         :return: A dict with package names as keys and versions as values
         """
@@ -179,7 +178,7 @@ class Environment:
             return output.decode()
 
 
-class ActiveEnv(Environment):
+class ActiveEnv(PythonEnvironment):
     """
     The active Python environment. Method implementations assume this environment is active when they're called.
     Activating another environment that inherits from this one is allowed.

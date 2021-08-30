@@ -100,7 +100,7 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     venv = env.VirtualEnv(tmpdir)
     venv.use_virtual_env()
 
-    installed_packages = list(env.Environment(python_path=venv._parent_python).get_installed_packages().keys())
+    installed_packages = list(env.PythonEnvironment(python_path=venv._parent_python).get_installed_packages().keys())
 
     # verify that the venv sees all parent packages
     assert not set(parent_installed) - set(installed_packages)
@@ -172,7 +172,7 @@ def test_environment_python_version_multi_digit(tmpdir: py.path.local) -> None:
     with patch("sys.version_info", new=(3, 123, 0)):
         # python version is not included in path on windows
         with patch("sys.platform", new="linux"):
-            assert env.Environment(env_path=str(tmpdir)).site_packages_dir == os.path.join(
+            assert env.PythonEnvironment(env_path=str(tmpdir)).site_packages_dir == os.path.join(
                 str(tmpdir), "lib", "python3.123", "site-packages"
             )
 
