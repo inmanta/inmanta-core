@@ -525,7 +525,6 @@ version: 0.0.1dev0"""
                 t.add_row(row)
             print(t.draw())
 
-    # TODO: move this to ProjectTool?
     # TODO: test this command
     def update(self, module: Optional[str] = None, project: Optional[Project] = None):
         """
