@@ -485,7 +485,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
             if not result:
                 raise InvalidModuleException("could not locate module with name: %s" % module_name)
 
-            return ModuleV1.update(project, module_name, module_spec, download_path, False, install_mode=project.install_mode)
+            return ModuleV1.update(project, module_name, module_spec, download_path, fetch=False, install_mode=project.install_mode)
 
     def path_for(self, name: str) -> Optional[str]:
         return self.local_repo.path_for(name)
