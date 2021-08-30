@@ -327,7 +327,6 @@ class CLIGitProvider(GitProvider):
 gitprovider = CLIGitProvider()
 
 
-# TODO: test all relevant module source methods, including editable install detection
 class ModuleSource(Generic[TModule]):
     def get_installed_module(self, project: "Project", module_name: str) -> Optional[TModule]:
         path: Optional[str] = self.path_for(module_name)
@@ -438,7 +437,6 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             return None
         init, mod_loader = mod_spec
         if isinstance(mod_loader, loader.PluginModuleLoader):
-            # TODO: test this behavior
             # module was found in the environment but it is associated with the v1 module loader
             return None
         if init is None:
@@ -810,7 +808,6 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
         del values["compiler_version"]
         install_requires = [ModuleV2Source.get_python_package_name(r) for r in values["requires"]]
         del values["requires"]
-        # TODO: add test for _ -> - conversion
         values["name"] = ModuleV2Source.get_python_package_name(values["name"])
         return ModuleV2Metadata(**values, install_requires=install_requires)
 
@@ -1343,7 +1340,6 @@ class Project(ModuleLike[ProjectMetadata]):
                     subs_imports: List[DefineImport] = module.get_imports(subs)
                     imports.extend(subs_imports)
                     if not v1_mode:
-                        # TODO: test this behavior!
                         for dep_module_name in (subs_imp.name.split("::")[0] for subs_imp in subs_imports):
                             require_v2(dep_module_name)
             except InvalidModuleException as e:
@@ -1351,7 +1347,6 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return list(chain.from_iterable(ast_by_top_level_mod.values()))
 
-    # TODO: add test for this method?
     def load_module(self, module_name: str, install: bool = False, allow_v1: bool = False) -> "Module":
         """
         Get a module instance for a given module name. Should be called prior to configuring the module finder to include v1
@@ -1492,7 +1487,6 @@ class Project(ModuleLike[ProjectMetadata]):
                     result = False
         return result
 
-    # TODO: test this method
     def _module_versions_compatible(self) -> bool:
         """
         Check if all the required modules for this module have been loaded. Assumes the modules cache is valid and up to date.

@@ -243,7 +243,6 @@ class ActiveEnv(Environment):
         # inmanta.loader.PluginModuleLoader raises ImportError if module is not found
         except (ImportError, ModuleNotFoundError):
             spec = None
-        # TODO: test with v1 loader
         return (spec.origin, spec.loader) if spec is not None else None
 
     def init_namespace(self, namespace: str) -> None:

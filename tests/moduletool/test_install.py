@@ -258,8 +258,6 @@ def setup_simple_project(
     return metadata
 
 
-# TODO: test compilation? Not part of moduletool => compiler tests? Also test trying to compiler without install.
-# TODO: test more edge cases!
 @pytest.mark.parametrize(
     "install_module_names, module_dependencies",
     [
