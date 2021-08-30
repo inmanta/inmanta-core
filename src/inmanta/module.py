@@ -406,7 +406,6 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return f"{const.PLUGINS_PACKAGE}.{module_name}"
 
     def install(self, project: Optional["Project"], module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
-        env.process_env.init_namespace(const.PLUGINS_PACKAGE)
         module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
         try:
