@@ -208,6 +208,10 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 def test_module_install(
     tmpvenv_active: Tuple[py.path.local, py.path.local], modules_v2_dir: str, editable: bool, set_path_argument: bool
 ) -> None:
+    """
+    Install a simple v2 module with the `inmanta module install` command. Make sure the command works with all possible values
+    for its options.
+    """
     venv_dir, python_path = tmpvenv_active
     # build command requires virtualenv package
     subprocess.check_call([python_path, "-m", "pip", "install", "virtualenv"])
@@ -274,6 +278,10 @@ def test_project_install(
     install_module_names: List[str],
     module_dependencies: List[str],
 ) -> None:
+    """
+    Install a simple inmanta project with `inmanta project install`. Make sure both v1 and v2 modules are installed
+    as expected.
+    """
     venv_dir, python_path = tmpvenv_active
     fq_mod_names: List[str] = [f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)]
 

@@ -455,6 +455,9 @@ install_requires =
 
 @pytest.mark.parametrize("underscore", [True, False])
 def test_module_v2_name_underscore(inmanta_module_v2: InmantaModule, underscore: bool):
+    """
+    Test module v2 metadata parsing with respect to module naming rules about dashes and underscores.
+    """
     separator: str = "_" if underscore else "-"
     inmanta_module_v2.write_metadata_file(
         f"""

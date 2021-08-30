@@ -186,6 +186,9 @@ def test_process_env_install_from_index(
     version: Optional[version.Version],
     active_compiler_venv: bool,
 ) -> None:
+    """
+    Install a package from a pip index into the process_env. Assert any version specs are respected.
+    """
     if active_compiler_venv:
         env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv")).use_virtual_env()
     venv_dir, python_path = tmpvenv_active
@@ -199,6 +202,9 @@ def test_process_env_install_from_index(
 
 
 def test_process_env_install_from_index_not_found(tmpvenv_active: Tuple[py.path.local, py.path.local]) -> None:
+    """
+    Attempt to install a package that does not exist from a pip index. Assert the appropriate error is raised.
+    """
     venv_dir, python_path = tmpvenv_active
     with pytest.raises(env.PackageNotFound):
         env.process_env.install_from_index([Requirement.parse("this-package-does-not-exist")])
@@ -209,6 +215,10 @@ def test_process_env_install_from_index_not_found(tmpvenv_active: Tuple[py.path.
 def test_process_env_install_from_index_conflicting_reqs(
     tmpdir: str, tmpvenv_active: Tuple[py.path.local, py.path.local], active_compiler_venv: bool
 ) -> None:
+    """
+    Attempt to install a package with conflicting version requirements from a pip index. Make sure this fails and the
+    package remains uninstalled.
+    """
     if active_compiler_venv:
         env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv")).use_virtual_env()
     venv_dir, python_path = tmpvenv_active
@@ -229,6 +239,9 @@ def test_process_env_install_from_source(
     editable: bool,
     active_compiler_venv: bool,
 ) -> None:
+    """
+    Install a package from source into the process_env. Make sure the editable option actually results in an editable install.
+    """
     if active_compiler_venv:
         env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv")).use_virtual_env()
     venv_dir, python_path = tmpvenv_active
@@ -249,8 +262,6 @@ def test_process_env_install_from_source(
 
 # v1 plugin loader overrides loader paths so verify that it doesn't interfere with env.process_env installs
 @pytest.mark.parametrize("v1_plugin_loader", [True, False])
-# make sure installation works regardless of whether we install a dependency of inmanta-core (wich is already installed in
-# the encapsulating development venv), a new package or an inmanta module (namespace package).
 @pytest.mark.parametrize("package_name", ["tinykernel", "more-itertools", "inmanta-module-minimalv2module"])
 # make sure activating the compiler venv does not conflict
 @pytest.mark.parametrize("active_compiler_venv", [True, False])
@@ -262,6 +273,11 @@ def test_active_env_get_module_file(
     package_name: str,
     active_compiler_venv: bool,
 ) -> None:
+    """
+    Test the env.ActiveEnv.get_module_file() command on a newly installed package. Make sure it works regardless of whether we
+    install a dependency of inmanta-core (wich is already installed in the encapsulating development venv), a new package or an
+    inmanta module (namespace package).
+    """
     if active_compiler_venv:
         env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv")).use_virtual_env()
 
@@ -374,6 +390,9 @@ def test_active_env_check_basic(
     tmpvenv_active: str,
     active_compiler_venv: bool,
 ) -> None:
+    """
+    Verify that the env.ActiveEnv.check() method detects all possible forms of incompatibilities within the environment.
+    """
     if active_compiler_venv:
         env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv")).use_virtual_env()
 
@@ -402,6 +421,9 @@ def test_active_env_check_basic(
 
 
 def test_active_env_check_constraints(caplog, tmpvenv_active: str) -> None:
+    """
+    Verify that the env.ActiveEnv.check() method's constraints parameter is taken into account as expected.
+    """
     caplog.set_level(logging.WARNING)
     venv_dir, python_path = tmpvenv_active
     in_scope: Pattern[str] = re.compile("test-package-.*")
