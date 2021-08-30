@@ -100,6 +100,7 @@ class InmantaModuleRequirement:
         2. Improve readability and clarity of purpose where a requirement on either a Python package or an inmanta module is
             used by distinguishing the two on a type level.
     """
+
     def __init__(self, requirement: Requirement) -> None:
         if requirement.project_name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError("InmantaModuleRequirement instances work with inmanta module names, not python package names.")
@@ -485,7 +486,9 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
             if not result:
                 raise InvalidModuleException("could not locate module with name: %s" % module_name)
 
-            return ModuleV1.update(project, module_name, module_spec, download_path, fetch=False, install_mode=project.install_mode)
+            return ModuleV1.update(
+                project, module_name, module_spec, download_path, fetch=False, install_mode=project.install_mode
+            )
 
     def path_for(self, name: str) -> Optional[str]:
         return self.local_repo.path_for(name)
