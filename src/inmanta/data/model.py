@@ -22,11 +22,31 @@ from itertools import chain
 from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
+import pydantic.schema
+from pydantic.fields import ModelField
 
 import inmanta.ast.export as ast_export
 from inmanta import const
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
+
+# This reference to the actual pydantic field_type_schema method is only loaded once
+old_field_type_schema = pydantic.schema.field_type_schema
+
+
+def patch_pydantic_field_type_schema() -> None:
+    """
+    This ugly patch fixes the serialization of models containing Optional in them.
+    https://github.com/samuelcolvin/pydantic/issues/1270
+    """
+
+    def patch_nullable(field: ModelField, **kwargs):
+        f_schema, definitions, nested_models = old_field_type_schema(field, **kwargs)
+        if field.allow_none:
+            f_schema["nullable"] = True
+        return f_schema, definitions, nested_models
+
+    pydantic.schema.field_type_schema = patch_nullable
 
 
 def validator_timezone_aware_timestamps(value: object) -> object:
@@ -304,11 +324,17 @@ class ResourceIdDetails(BaseModel):
     resource_id_value: str
 
 
-class OrphanedResource(Enum):
+class OrphanedResource(str, Enum):
     orphaned = "orphaned"
 
 
-ReleasedResourceState = Enum("ReleasedResourceState", [(i.name, i.value) for i in chain(const.ResourceState, OrphanedResource)])
+class StrEnum(str, Enum):
+    """Enum where members are also (and must be) strs"""
+
+
+ReleasedResourceState = StrEnum(
+    "ReleasedResourceState", [(i.name, i.value) for i in chain(const.ResourceState, OrphanedResource)]
+)
 
 
 class LatestReleasedResource(BaseModel):
