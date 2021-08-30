@@ -1907,6 +1907,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         Returns all Python requirements specified by the module, including requirements on V2 modules.
         """
+        raise NotImplementedError()
 
     def get_strict_python_requirements_as_list(self) -> List[str]:
         """
