@@ -93,6 +93,13 @@ TInmantaModuleRequirement = TypeVar("TInmantaModuleRequirement", bound="InmantaM
 
 
 class InmantaModuleRequirement:
+    """
+    Represents a requirement on an inmanta module. This is a wrapper around Requirement. This class is provided for the
+    following reasons:
+        1. Work around some particulars of Requirement's semantics with respect to naming conventions.
+        2. Improve readability and clarity of purpose where a requirement on either a Python package or an inmanta module is
+            used by distinguishing the two on a type level.
+    """
     def __init__(self, requirement: Requirement) -> None:
         if requirement.project_name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError("InmantaModuleRequirement instances work with inmanta module names, not python package names.")

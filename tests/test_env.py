@@ -250,7 +250,7 @@ def test_process_env_install_from_source(
 # v1 plugin loader overrides loader paths so verify that it doesn't interfere with env.process_env installs
 @pytest.mark.parametrize("v1_plugin_loader", [True, False])
 # make sure installation works regardless of whether we install a dependency of inmanta-core (wich is already installed in
-# the encapsulating development venv), a new package or an inmanta module
+# the encapsulating development venv), a new package or an inmanta module (namespace package).
 @pytest.mark.parametrize("package_name", ["tinykernel", "more-itertools", "inmanta-module-minimalv2module"])
 # make sure activating the compiler venv does not conflict
 @pytest.mark.parametrize("active_compiler_venv", [True, False])
@@ -306,6 +306,9 @@ def test_active_env_get_module_file_editable_namespace_package(
     modules_v2_dir: str,
     active_compiler_venv: bool,
 ) -> None:
+    """
+    Verify that get_module_file works after installing an editable namespace package in an active environment.
+    """
     if active_compiler_venv:
         env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv")).use_virtual_env()
 

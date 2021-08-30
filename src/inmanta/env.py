@@ -266,7 +266,8 @@ class ActiveEnv(Environment):
     def notify_change(self) -> None:
         """
         This method must be called when a package is installed or removed from the environment in order for Python to detect
-        the change.
+        the change. Namespace packages installed in editable mode in particular require this method to allow them to be found by
+        get_module_file().
         """
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
         # Make sure that the .pth files in the site-packages directory are processed.
