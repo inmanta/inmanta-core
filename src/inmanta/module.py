@@ -437,7 +437,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             return None
         init, mod_loader = mod_spec
         if isinstance(mod_loader, loader.PluginModuleLoader):
-            # module was found in the environment but it is associated with the v1 module loader
+            # Module was found in the environment but it is associated with the v1 module loader. Since the v2 loader has
+            # precedence, we can conclude the module has not been installed in v2 mode. If it were, the module could never
+            # be associated with the v1 loader.
             return None
         if init is None:
             raise Exception(f"Package {package} was installed but no __init__.py file could be found.")

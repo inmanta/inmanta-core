@@ -226,7 +226,7 @@ class ActiveEnv(PythonEnvironment):
         ]
 
         for constraint, v in constraint_violations:
-            LOGGER.warning(f"Incompatibility between constraint {constraint} and installed version {v}")
+            LOGGER.warning("Incompatibility between constraint %s and installed version %s", constraint, v)
         return len(constraint_violations) == 0
 
     @classmethod
