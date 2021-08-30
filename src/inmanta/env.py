@@ -197,7 +197,7 @@ class ActiveEnv(PythonEnvironment):
     @classmethod
     def check(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
         """
-        Check this Python environment for compatible dependencies in installed packages.
+        Check this Python environment for incompatible dependencies in installed packages.
 
         :param in_scope: A full pattern representing the package names that are considered in scope for the installed packages'
             compatibility check. Only in scope packages' dependencies will be considered for conflicts. The pattern is matched
