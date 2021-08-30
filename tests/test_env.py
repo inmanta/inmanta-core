@@ -278,8 +278,9 @@ def test_active_env_get_module_file(
     install a dependency of inmanta-core (wich is already installed in the encapsulating development venv), a new package or an
     inmanta module (namespace package).
     """
+    compiler_env: Optional[env.VirtualEnv] = env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv"))
     if active_compiler_venv:
-        env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv")).use_virtual_env()
+        compiler_env.use_virtual_env()
 
     venv_dir, python_path = tmpvenv_active
 
@@ -309,6 +310,8 @@ def test_active_env_get_module_file(
     assert module_file is not None
     assert not isinstance(mod_loader, loader.PluginModuleLoader)
     assert module_file == os.path.join(env.process_env.site_packages_dir, *module_name.split("."), "__init__.py")
+    # verify that the package was installed in the development venv, not the compiler one
+    assert compiler_env.site_packages_dir not in module_file
     importlib.import_module(module_name)
     assert module_name in sys.modules
     assert sys.modules[module_name].__file__ == module_file
