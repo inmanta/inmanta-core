@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump cryptography from 3.4.7 to 3.4.8
+destination-branches:
+- master
+sections: {}
