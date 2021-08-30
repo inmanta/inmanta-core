@@ -206,7 +206,7 @@ def test_process_env_install_from_index_not_found(tmpvenv_active: Tuple[py.path.
 
 # make sure activating the compiler venv does not conflict
 @pytest.mark.parametrize("active_compiler_venv", [True, False])
-def test_process_env_install_from_indexes_conflicting_reqs(
+def test_process_env_install_from_index_conflicting_reqs(
     tmpdir: str, tmpvenv_active: Tuple[py.path.local, py.path.local], active_compiler_venv: bool
 ) -> None:
     if active_compiler_venv:
