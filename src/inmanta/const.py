@@ -201,16 +201,13 @@ class StrLogLevel(str, Enum):
 INMANTA_URN = "urn:inmanta:"
 
 
-class Compilestate(IntEnum):
+class Compilestate(str, Enum):
     """
     Compile state, whether the compile did succeed or not
-
-    SUCCESS=1
-    FAILED=2
     """
 
-    success = 1
-    failed = 2
+    success = "success"
+    failed = "failed"
 
 
 EXPORT_META_DATA = "export_metadata"
